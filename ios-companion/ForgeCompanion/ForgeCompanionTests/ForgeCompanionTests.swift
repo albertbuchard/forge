@@ -3189,6 +3189,247 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(payload.knownPlaces.first?.label, "Work")
     }
 
+    func testWorkoutIntervalIndexMatchesLinearOverlapMatcher() {
+        let baseDate = Date(timeIntervalSince1970: 0)
+        func date(_ seconds: TimeInterval) -> Date {
+            baseDate.addingTimeInterval(seconds)
+        }
+        let intervals = [
+            HealthSyncStore.WorkoutInterval(uid: "workout-b", startDate: date(10), endDate: date(20)),
+            HealthSyncStore.WorkoutInterval(uid: "workout-a", startDate: date(0), endDate: date(100)),
+            HealthSyncStore.WorkoutInterval(uid: "workout-c", startDate: date(15), endDate: date(30))
+        ]
+        let index = HealthSyncStore.WorkoutIntervalIndex(intervals: intervals)
+
+        func linearBestUid(startDate: Date, endDate: Date) -> String? {
+            var bestUid: String?
+            var bestOverlap: TimeInterval = 0
+            for interval in intervals {
+                let overlapStart = max(startDate, interval.startDate)
+                let overlapEnd = min(endDate, interval.endDate)
+                let overlap = overlapEnd.timeIntervalSince(overlapStart)
+                if overlap > bestOverlap {
+                    bestOverlap = overlap
+                    bestUid = interval.uid
+                }
+            }
+            if let bestUid, bestOverlap > 0 {
+                return bestUid
+            }
+            return intervals.first { interval in
+                startDate >= interval.startDate && startDate <= interval.endDate
+            }?.uid
+        }
+
+        let probes: [(start: Date, end: Date)] = [
+            (date(16), date(18)),
+            (date(25), date(35)),
+            (date(15), date(15)),
+            (date(101), date(105))
+        ]
+        for probe in probes {
+            XCTAssertEqual(
+                index.bestWorkoutUid(forSampleStart: probe.start, endDate: probe.end),
+                linearBestUid(startDate: probe.start, endDate: probe.end)
+            )
+        }
+    }
+
+    func testWorkoutEvidenceBatchPlanKeepsBatchWindowAndIntervals() throws {
+        let intervals = [
+            HealthSyncStore.WorkoutInterval(
+                uid: "workout-late",
+                startDate: makeDate("2026-04-05T10:00:00.000Z"),
+                endDate: makeDate("2026-04-05T10:30:00.000Z")
+            ),
+            HealthSyncStore.WorkoutInterval(
+                uid: "workout-early",
+                startDate: makeDate("2026-04-05T08:00:00.000Z"),
+                endDate: makeDate("2026-04-05T08:45:00.000Z")
+            ),
+            HealthSyncStore.WorkoutInterval(
+                uid: "workout-long",
+                startDate: makeDate("2026-04-05T09:00:00.000Z"),
+                endDate: makeDate("2026-04-05T11:15:00.000Z")
+            )
+        ]
+
+        let plan = try XCTUnwrap(HealthSyncStore.workoutEvidenceBatchPlanForTesting(intervals: intervals))
+
+        XCTAssertEqual(plan.startDate, makeDate("2026-04-05T08:00:00.000Z"))
+        XCTAssertEqual(plan.endDate, makeDate("2026-04-05T11:15:00.000Z"))
+        XCTAssertEqual(plan.intervals.map(\.uid), ["workout-late", "workout-early", "workout-long"])
+        XCTAssertNil(HealthSyncStore.workoutEvidenceBatchPlanForTesting(intervals: []))
+    }
+
+    func testWorkoutRoutePointIndexAllocatorPreservesPerWorkoutContinuity() {
+        var allocator = HealthSyncStore.WorkoutRoutePointIndexAllocator()
+
+        XCTAssertEqual(
+            Array(allocator.reserveIndexes(forWorkoutUid: "workout-a", count: 3)),
+            [0, 1, 2]
+        )
+        XCTAssertEqual(
+            Array(allocator.reserveIndexes(forWorkoutUid: "workout-b", count: 2)),
+            [0, 1]
+        )
+        XCTAssertEqual(
+            Array(allocator.reserveIndexes(forWorkoutUid: "workout-a", count: 4)),
+            [3, 4, 5, 6]
+        )
+        XCTAssertEqual(
+            Array(allocator.reserveIndexes(forWorkoutUid: "workout-b", count: 0)),
+            []
+        )
+        XCTAssertEqual(
+            Array(allocator.reserveIndexes(forWorkoutUid: "workout-b", count: 1)),
+            [2]
+        )
+    }
+
+    func testWorkoutEvidenceTimestampFormatterKeepsFractionalIsoOutput() {
+        let date = makeDate("2026-04-05T08:44:12.345Z")
+
+        let rendered = HealthSyncStore.workoutEvidenceTimestampStringForTesting(date)
+
+        XCTAssertEqual(rendered, "2026-04-05T08:44:12.345Z")
+        XCTAssertEqual(
+            HealthSyncStore.workoutEvidenceTimestampStringForTesting(date.addingTimeInterval(0.001)),
+            "2026-04-05T08:44:12.346Z"
+        )
+    }
+
+    @MainActor
+    func testWorkoutUploadStatsCountsRawEvidenceWithoutLosingTotals() {
+        func sample(_ metricKey: String, index: Int) -> CompanionSyncPayload.WorkoutTimeSeriesSample {
+            CompanionSyncPayload.WorkoutTimeSeriesSample(
+                sourceSampleUid: "sample-\(metricKey)-\(index)",
+                seriesIndex: index,
+                metricKey: metricKey,
+                label: metricKey,
+                category: "test",
+                unit: "count",
+                value: Double(index),
+                startedAt: "2026-04-05T08:44:12.345Z",
+                endedAt: "2026-04-05T08:44:13.345Z",
+                sourceDevice: "Unit Test",
+                sourceBundleIdentifier: "test.bundle",
+                sourceProductType: "test",
+                captureMethod: "unit_test",
+                qualityFlags: [],
+                metadata: [:],
+                provenance: [:]
+            )
+        }
+
+        func routePoint(_ index: Int) -> CompanionSyncPayload.WorkoutRoutePoint {
+            CompanionSyncPayload.WorkoutRoutePoint(
+                sourceRouteUid: "route-\(index)",
+                pointIndex: index,
+                recordedAt: "2026-04-05T08:44:12.345Z",
+                latitude: 46.0,
+                longitude: 6.0,
+                altitudeMeters: nil,
+                horizontalAccuracyMeters: nil,
+                verticalAccuracyMeters: nil,
+                speedMps: nil,
+                courseDegrees: nil,
+                metadata: [:],
+                provenance: [:]
+            )
+        }
+
+        func workout(
+            id: String,
+            averageHeartRate: Double?,
+            maxHeartRate: Double?,
+            stepCount: Int?,
+            samples: [CompanionSyncPayload.WorkoutTimeSeriesSample],
+            routePoints: [CompanionSyncPayload.WorkoutRoutePoint]
+        ) -> CompanionSyncPayload.WorkoutSession {
+            CompanionSyncPayload.WorkoutSession(
+                externalUid: id,
+                workoutType: "running",
+                sourceSystem: "apple_health",
+                sourceBundleIdentifier: "com.apple.Health",
+                sourceProductType: "Watch",
+                activity: .init(
+                    sourceSystem: "apple_health",
+                    providerActivityType: "hk_workout_activity_type",
+                    providerRawValue: 52,
+                    canonicalKey: "running",
+                    canonicalLabel: "Running",
+                    familyKey: "run",
+                    familyLabel: "Run",
+                    isFallback: false
+                ),
+                details: .init(sourceSystem: "apple_health", metrics: [], events: [], components: [], metadata: [:]),
+                startedAt: "2026-04-05T08:00:00.000Z",
+                endedAt: "2026-04-05T09:00:00.000Z",
+                activeEnergyKcal: nil,
+                totalEnergyKcal: nil,
+                distanceMeters: nil,
+                stepCount: stepCount,
+                exerciseMinutes: nil,
+                averageHeartRate: averageHeartRate,
+                maxHeartRate: maxHeartRate,
+                sourceDevice: "Unit Test",
+                timeSeriesSamples: samples,
+                routePoints: routePoints,
+                captureQuality: .init(
+                    status: "partial",
+                    flags: [],
+                    heartRateSamples: 0,
+                    routePoints: routePoints.count,
+                    associatedSampleQueryUsed: false,
+                    fallbackTimeWindowUsed: false,
+                    condensedSeriesExpanded: false
+                ),
+                syncCursor: [:],
+                links: [],
+                annotations: .init(
+                    subjectiveEffort: nil,
+                    moodBefore: "",
+                    moodAfter: "",
+                    meaningText: "",
+                    plannedContext: "",
+                    socialContext: "",
+                    tags: []
+                )
+            )
+        }
+
+        let workouts = [
+            workout(
+                id: "workout-a",
+                averageHeartRate: 142,
+                maxHeartRate: 181,
+                stepCount: 1_200,
+                samples: [sample("heart_rate", index: 0), sample("distance", index: 1)],
+                routePoints: [routePoint(0), routePoint(1), routePoint(2)]
+            ),
+            workout(
+                id: "workout-b",
+                averageHeartRate: nil,
+                maxHeartRate: 170,
+                stepCount: nil,
+                samples: [sample("heart_rate", index: 2), sample("heart_rate", index: 3), sample("speed", index: 4)],
+                routePoints: [routePoint(3)]
+            )
+        ]
+
+        let stats = CompanionAppModel.workoutUploadStatsForTesting(for: workouts)
+
+        XCTAssertEqual(stats.workouts, 2)
+        XCTAssertEqual(stats.workoutsWithAverageHeartRate, 1)
+        XCTAssertEqual(stats.workoutsWithMaxHeartRate, 2)
+        XCTAssertEqual(stats.workoutsWithStepCount, 1)
+        XCTAssertEqual(stats.rawHeartRateDatapoints, 3)
+        XCTAssertEqual(stats.rawTimeSeriesDatapoints, 5)
+        XCTAssertEqual(stats.routePoints, 4)
+        XCTAssertEqual(stats.expectedUploadRecordCount, 11)
+    }
+
     func testMovementPayloadUsesFrozenReferenceDateForResumeStableChunks() throws {
         func makeStore() -> MovementSyncStore {
             MovementSyncStore(
@@ -3801,6 +4042,207 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertGreaterThan(externalUid.count, "ios-place-".count)
     }
 
+    func testHealthSyncUploadSessionDecodesLightweightStatusWithoutChunkIds() throws {
+        let data = Data(
+            """
+            {
+              "syncSessionId": "hms_light",
+              "schemaVersion": "healthkit-sync-v2",
+              "status": "running",
+              "chunkTargetBytes": 500000,
+              "chunkMaxBytes": 40000000,
+              "chunkPayloadEncoding": "payload_json_base64",
+              "acceptedPayloadEncodings": ["payload_json_base64"],
+              "supportsCompression": true,
+              "acceptedFamilies": ["workout_summaries"],
+              "progress": {
+                "chunkCount": 12,
+                "receivedCounts": { "workout_summaries": 8 },
+                "byteTotals": { "workout_summaries": 1200 },
+                "receivedBytes": 1200
+              }
+            }
+            """.utf8
+        )
+
+        let session = try JSONDecoder().decode(
+            ForgeSyncClient.HealthSyncUploadSession.self,
+            from: data
+        )
+
+        XCTAssertEqual(session.syncSessionId, "hms_light")
+        XCTAssertEqual(session.receivedChunkIds, [])
+        XCTAssertEqual(session.acceptedChunkCount, 12)
+        XCTAssertEqual(session.progress?.receivedCounts?["workout_summaries"], 8)
+    }
+
+    func testHealthSyncUploadSessionPreservesChunkIdsAcrossLightweightStatus() throws {
+        let previous = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: ["chunk-a", "chunk-b"],
+            workoutImportState: nil,
+            progress: nil
+        )
+        let lightweight = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: [],
+            workoutImportState: nil,
+            progress: nil
+        )
+
+        let preserved = lightweight.preservingReceivedChunkIds(from: previous)
+
+        XCTAssertEqual(preserved.receivedChunkIds, ["chunk-a", "chunk-b"])
+        XCTAssertEqual(preserved.receivedChunkIdSet, Set(["chunk-a", "chunk-b"]))
+    }
+
+    func testHealthSyncUploadSessionPreservesWorkoutImportUidsAcrossLightweightStatus() throws {
+        let previous = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: ["chunk-a"],
+            workoutImportState: ForgeSyncClient.HealthSyncWorkoutImportState(
+                alreadyUploadedWorkoutExternalUids: ["workout-a", "workout-b"],
+                incompleteWorkoutExternalUids: ["workout-c"],
+                alreadyUploadedWorkoutCount: 2,
+                existingWorkoutCount: 3,
+                incompleteWorkoutCount: 1,
+                staleEvidenceVersionWorkoutCount: 0,
+                heartRateSampleCount: 120,
+                timeSeriesSampleCount: 130,
+                routePointCount: 44,
+                capturedAt: "2026-06-08T18:00:00.000Z"
+            ),
+            progress: nil
+        )
+        let lightweight = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: [],
+            workoutImportState: ForgeSyncClient.HealthSyncWorkoutImportState(
+                alreadyUploadedWorkoutExternalUids: [],
+                incompleteWorkoutExternalUids: [],
+                alreadyUploadedWorkoutCount: 12,
+                existingWorkoutCount: 14,
+                incompleteWorkoutCount: 2,
+                staleEvidenceVersionWorkoutCount: 1,
+                heartRateSampleCount: 900,
+                timeSeriesSampleCount: 950,
+                routePointCount: 240,
+                capturedAt: "2026-06-08T18:10:00.000Z"
+            ),
+            progress: nil
+        )
+
+        let preserved = lightweight
+            .preservingReceivedChunkIds(from: previous)
+            .preservingWorkoutImportExternalUids(from: previous)
+
+        XCTAssertEqual(preserved.receivedChunkIds, ["chunk-a"])
+        XCTAssertEqual(
+            preserved.workoutImportState?.alreadyUploadedWorkoutExternalUids,
+            ["workout-a", "workout-b"]
+        )
+        XCTAssertEqual(
+            preserved.workoutImportState?.incompleteWorkoutExternalUids,
+            ["workout-c"]
+        )
+        XCTAssertEqual(preserved.workoutImportState?.alreadyUploadedWorkoutCount, 12)
+        XCTAssertEqual(preserved.workoutImportState?.existingWorkoutCount, 14)
+        XCTAssertEqual(preserved.workoutImportState?.incompleteWorkoutCount, 2)
+        XCTAssertEqual(preserved.workoutImportState?.timeSeriesSampleCount, 950)
+    }
+
+    func testHealthSyncUploadSessionPreservesWorkoutImportStateWhenStatusOmitsIt() throws {
+        let previous = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: ["chunk-a"],
+            workoutImportState: ForgeSyncClient.HealthSyncWorkoutImportState(
+                alreadyUploadedWorkoutExternalUids: ["workout-a"],
+                incompleteWorkoutExternalUids: ["workout-b"],
+                alreadyUploadedWorkoutCount: 1,
+                existingWorkoutCount: 2,
+                incompleteWorkoutCount: 1,
+                staleEvidenceVersionWorkoutCount: 0,
+                heartRateSampleCount: 40,
+                timeSeriesSampleCount: 50,
+                routePointCount: 10,
+                capturedAt: "2026-06-08T18:00:00.000Z"
+            ),
+            progress: nil
+        )
+        let progressOnly = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_light",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_summaries"],
+            receivedChunkIds: [],
+            workoutImportState: nil,
+            progress: ForgeSyncClient.HealthSyncChunkProgress(
+                receivedCounts: ["workout_summaries": 4],
+                byteTotals: ["workout_summaries": 4000],
+                chunkCount: 4,
+                receivedBytes: 4000
+            )
+        )
+
+        let preserved = progressOnly
+            .preservingReceivedChunkIds(from: previous)
+            .preservingWorkoutImportState(from: previous)
+
+        XCTAssertEqual(preserved.receivedChunkIds, ["chunk-a"])
+        XCTAssertEqual(
+            preserved.workoutImportState?.alreadyUploadedWorkoutExternalUids,
+            ["workout-a"]
+        )
+        XCTAssertEqual(preserved.workoutImportState?.existingWorkoutCount, 2)
+        XCTAssertEqual(preserved.progress?.chunkCount, 4)
+        XCTAssertEqual(preserved.progress?.receivedBytes, 4000)
+    }
+
     func testHealthSyncChunkWirePayloadHashesBase64PayloadBytes() throws {
         struct DictionaryHeavyPayload: Encodable {
             let vitals: Vitals
@@ -3845,8 +4287,105 @@ final class ForgeCompanionTests: XCTestCase {
         let encodedCompressed = try XCTUnwrap(wirePayload.payloadJsonDeflateBase64)
 
         XCTAssertEqual(Data(base64Encoded: encodedCompressed), compressed)
+        XCTAssertNil(wirePayload.payloadJsonBase64)
         XCTAssertLessThan(compressed.count, wirePayload.payloadData.count)
         XCTAssertEqual(wirePayload.compressedByteCount, compressed.count)
+    }
+
+    func testHealthSyncChunkWirePayloadSkipsCompressionWhenItWouldGrowPayload() throws {
+        struct TinyPayload: Encodable {
+            let samples: [String]
+        }
+        let payload = TinyPayload(samples: ["x"])
+
+        let wirePayload = try ForgeSyncClient.compressedHealthSyncChunkWirePayloadForTesting(payload)
+        let encodedRawPayload = try XCTUnwrap(wirePayload.payloadJsonBase64)
+
+        XCTAssertNil(wirePayload.compressedPayloadData)
+        XCTAssertNil(wirePayload.payloadJsonDeflateBase64)
+        XCTAssertNil(wirePayload.compressedByteCount)
+        XCTAssertEqual(Data(base64Encoded: encodedRawPayload), wirePayload.payloadData)
+    }
+
+    func testAcceptedHealthSyncChunkIdCanBeComputedBeforeWirePayloadBody() throws {
+        struct AcceptedPayload: Encodable {
+            let samples: [String]
+        }
+        let payload = AcceptedPayload(
+            samples: Array(repeating: "accepted-resume-sample", count: 1_000)
+        )
+        let syncSessionId = "hms_fast_skip"
+        let sequence = 42
+        let family = "workout_time_series"
+
+        let earlyChunkId = try ForgeSyncClient.healthSyncAcceptedChunkIdForTesting(
+            syncSessionId: syncSessionId,
+            sequence: sequence,
+            family: family,
+            payload: payload
+        )
+        let wirePayload = try ForgeSyncClient.compressedHealthSyncChunkWirePayloadForTesting(payload)
+        let wirePayloadChunkId = "\(syncSessionId)-\(String(format: "%06d", sequence))-\(family)-\(String(wirePayload.checksumSha256.prefix(20)))"
+
+        XCTAssertEqual(earlyChunkId, wirePayloadChunkId)
+        XCTAssertNotNil(wirePayload.payloadJsonDeflateBase64)
+    }
+
+    func testHealthSyncChunkRangePlannerAvoidsLinearPayloadReencoding() {
+        var optimizedSizingCalls = 0
+        let ranges = ForgeSyncClient.healthSyncChunkRangesForTesting(
+            recordCount: 12_000,
+            targetBytes: 180_000
+        ) { range in
+            optimizedSizingCalls += 1
+            return 100 + range.count * 800
+        }
+        let coveredRecords = ranges.reduce(0) { $0 + $1.count }
+        let linearSizingCalls = 12_000 - ranges.count
+
+        XCTAssertEqual(coveredRecords, 12_000)
+        XCTAssertEqual(ranges.first, 0..<224)
+        XCTAssertEqual(ranges.last?.upperBound, 12_000)
+        XCTAssertEqual(ranges.count, 54)
+        XCTAssertLessThan(optimizedSizingCalls, 1_000)
+        XCTAssertLessThan(optimizedSizingCalls * 10, linearSizingCalls)
+
+        let oversizedRecordRanges = ForgeSyncClient.healthSyncChunkRangesForTesting(
+            recordCount: 3,
+            targetBytes: 100
+        ) { range in
+            range.count * 1_000
+        }
+        XCTAssertEqual(oversizedRecordRanges, [0..<1, 1..<2, 2..<3])
+    }
+
+    func testPreparedHealthSyncChunkRangesCarrySelectedPayloadBytes() throws {
+        var encodedRanges: [Range<Int>] = []
+        let preparedRanges = try ForgeSyncClient.healthSyncPreparedChunkRangesForTesting(
+            recordCount: 12_000,
+            targetBytes: 180_000
+        ) { range in
+            encodedRanges.append(range)
+            return Data(repeating: UInt8(range.count % 251), count: 100 + range.count * 800)
+        }
+        let ranges = preparedRanges.map(\.range)
+        let coveredRecords = ranges.reduce(0) { $0 + $1.count }
+        let selectedRangesEncodedDuringPlanning = ranges.filter { encodedRanges.contains($0) }
+
+        XCTAssertEqual(coveredRecords, 12_000)
+        XCTAssertEqual(ranges.first, 0..<224)
+        XCTAssertEqual(ranges.last?.upperBound, 12_000)
+        XCTAssertEqual(ranges.count, 54)
+        XCTAssertEqual(selectedRangesEncodedDuringPlanning.count, ranges.count)
+        XCTAssertEqual(preparedRanges.first?.byteCount, 179_300)
+        XCTAssertEqual(
+            preparedRanges.last?.byteCount,
+            ranges.last.map { 100 + $0.count * 800 }
+        )
+    }
+
+    func testBackgroundHealthUploadWritesThrowawayChunkFilesDirectly() {
+        XCTAssertEqual(ForgeBackgroundUploadCoordinator.uploadBodyWriteOptions, [])
     }
 
     func testWorkoutSyncCursorUsesFrozenExportTimestampForResumeStableChunks() throws {
@@ -3968,6 +4507,10 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(session.receivedChunkIdSet, Set(["chunk-1", "chunk-2"]))
         XCTAssertEqual(
+            session.acceptedFamilySet,
+            Set(["workout_summaries", "workout_time_series", "workout_routes"])
+        )
+        XCTAssertEqual(
             session.workoutImportState?.alreadyUploadedWorkoutExternalUids,
             ["workout-a", "workout-b"]
         )
@@ -4072,6 +4615,25 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(ranges, [0..<1, 1..<2, 2..<3])
     }
 
+    func testCompletedWorkoutUUIDSetUsesFastPathForBackendUuidIds() {
+        let first = UUID()
+        let second = UUID()
+
+        let completed = HealthSyncStore.completedWorkoutUUIDSetForTesting(
+            from: [first.uuidString.lowercased(), second.uuidString]
+        )
+
+        XCTAssertEqual(completed, Set([first, second]))
+    }
+
+    func testCompletedWorkoutUUIDSetFallsBackForNonUuidBackendIds() {
+        let completed = HealthSyncStore.completedWorkoutUUIDSetForTesting(
+            from: [UUID().uuidString, "external-workout-id"]
+        )
+
+        XCTAssertNil(completed)
+    }
+
     func testHealthSyncLifecyclePolicyWaitsThroughNormalUploadGaps() {
         let startedAt = makeDate("2026-05-27T09:40:00.000Z")
         let lastChunkAt = makeDate("2026-05-27T09:43:30.000Z")
@@ -4127,6 +4689,147 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         XCTAssertNil(reason)
+    }
+
+    func testStartupBootstrapPolicySkipsDuplicateWatchRefreshAfterMovementRefresh() {
+        XCTAssertFalse(
+            CompanionAppModel.StartupBootstrapPolicy.shouldRefreshWatchAfterMovementBootstrap(
+                refreshedWatchViaMovement: true
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.StartupBootstrapPolicy.shouldRefreshWatchAfterMovementBootstrap(
+                refreshedWatchViaMovement: false
+            )
+        )
+    }
+
+    func testHealthAccessRefreshPolicySkipsOnlyRecentNonForcedChecks() {
+        let now = makeDate("2026-06-08T10:00:00.000Z")
+        let recent = now.addingTimeInterval(-1)
+        let stale = now.addingTimeInterval(-3)
+
+        XCTAssertTrue(
+            CompanionAppModel.HealthAccessRefreshPolicy.shouldSkipRecentRefresh(
+                force: false,
+                lastCompletedAt: recent,
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.HealthAccessRefreshPolicy.shouldSkipRecentRefresh(
+                force: true,
+                lastCompletedAt: recent,
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.HealthAccessRefreshPolicy.shouldSkipRecentRefresh(
+                force: false,
+                lastCompletedAt: stale,
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            CompanionAppModel.HealthAccessRefreshPolicy.shouldSkipRecentRefresh(
+                force: false,
+                lastCompletedAt: nil,
+                now: now
+            )
+        )
+    }
+
+    func testPairingRestorePersistencePolicySkipsUnchangedKeychainRewrite() {
+        let storedData = Data("pairing".utf8)
+
+        XCTAssertFalse(
+            CompanionAppModel.PairingRestorePersistencePolicy.shouldPersistRestoredPairing(
+                restoredFromKeychain: true,
+                storedData: storedData,
+                normalizedData: storedData
+            )
+        )
+    }
+
+    func testPairingRestorePersistencePolicyMigratesUserDefaultsFallback() {
+        let storedData = Data("pairing".utf8)
+
+        XCTAssertTrue(
+            CompanionAppModel.PairingRestorePersistencePolicy.shouldPersistRestoredPairing(
+                restoredFromKeychain: false,
+                storedData: storedData,
+                normalizedData: storedData
+            )
+        )
+    }
+
+    func testPairingRestorePersistencePolicyPersistsNormalizedChanges() {
+        XCTAssertTrue(
+            CompanionAppModel.PairingRestorePersistencePolicy.shouldPersistRestoredPairing(
+                restoredFromKeychain: true,
+                storedData: Data("before".utf8),
+                normalizedData: Data("after".utf8)
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.PairingRestorePersistencePolicy.shouldPersistRestoredPairing(
+                restoredFromKeychain: true,
+                storedData: Data("before".utf8),
+                normalizedData: nil
+            )
+        )
+    }
+
+    func testHealthSyncWindowPolicyScopesNormalWorkoutImportState() {
+        let syncWindowEnd = makeDate("2026-06-08T10:00:00.000Z")
+
+        XCTAssertNil(
+            CompanionAppModel.HealthSyncWindowPolicy.workoutImportStartedAfter(
+                lastSuccessfulSyncAt: nil,
+                syncWindowEnd: syncWindowEnd
+            )
+        )
+
+        XCTAssertEqual(
+            CompanionAppModel.HealthSyncWindowPolicy.workoutImportStartedAfter(
+                lastSuccessfulSyncAt: makeDate("2026-06-08T08:00:00.000Z"),
+                syncWindowEnd: syncWindowEnd
+            ),
+            makeDate("2026-06-05T08:00:00.000Z")
+        )
+
+        XCTAssertEqual(
+            CompanionAppModel.HealthSyncWindowPolicy.workoutImportStartedAfter(
+                lastSuccessfulSyncAt: makeDate("2026-05-01T08:00:00.000Z"),
+                syncWindowEnd: syncWindowEnd
+            ),
+            makeDate("2026-05-18T10:00:00.000Z")
+        )
+    }
+
+    func testHistoricalWorkoutImportRefreshPolicySkipsPerBatchStatusPolls() {
+        var batchesSinceLastRefresh = 0
+        var refreshes = 0
+        for _ in 0..<29 {
+            if CompanionAppModel.HistoricalWorkoutImportRefreshPolicy
+                .shouldRefreshBeforeBatch(
+                    batchesSinceLastRefresh: batchesSinceLastRefresh
+                ) {
+                refreshes += 1
+                batchesSinceLastRefresh = 0
+            }
+            batchesSinceLastRefresh += 1
+        }
+
+        XCTAssertEqual(refreshes, 3)
+        XCTAssertFalse(
+            CompanionAppModel.HistoricalWorkoutImportRefreshPolicy
+                .shouldRefreshBeforeBatch(batchesSinceLastRefresh: 7)
+        )
+        XCTAssertTrue(
+            CompanionAppModel.HistoricalWorkoutImportRefreshPolicy
+                .shouldRefreshBeforeBatch(batchesSinceLastRefresh: 8)
+        )
     }
 
     func testHealthSyncCompletionPolicyRefusesEmptyChunkSessionCompletion() {
@@ -4205,6 +4908,33 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(decoded.requiresWorkoutBackfill)
         XCTAssertEqual(decoded.lastReceivedChunkCount, 18)
         XCTAssertEqual(decoded.clientChunkingVersion, ForgeSyncClient.legacyHTTPHealthSyncChunkingVersion)
+    }
+
+    func testHealthSyncCheckpointProgressPersistenceIsThrottled() {
+        XCTAssertFalse(
+            CompanionAppModel.shouldPersistHealthSyncCheckpointProgress(
+                lastPersistedChunkCount: 20,
+                lastPersistedBytes: 10_000_000,
+                nextChunkCount: 29,
+                nextBytes: 14_999_999
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.shouldPersistHealthSyncCheckpointProgress(
+                lastPersistedChunkCount: 20,
+                lastPersistedBytes: 10_000_000,
+                nextChunkCount: 30,
+                nextBytes: 11_000_000
+            )
+        )
+        XCTAssertTrue(
+            CompanionAppModel.shouldPersistHealthSyncCheckpointProgress(
+                lastPersistedChunkCount: 20,
+                lastPersistedBytes: 10_000_000,
+                nextChunkCount: 21,
+                nextBytes: 15_000_000
+            )
+        )
     }
 
     func testActiveHealthSyncCheckpointIgnoresLegacyCompletedWorkoutIds() throws {
@@ -4329,6 +5059,41 @@ final class ForgeCompanionTests: XCTestCase {
             ),
             500_000
         )
+        let irohTimeSeriesLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: irohPayload,
+            estimatedBytesPerRecord: 640,
+            minimum: 500,
+            maximum: 12_000
+        )
+        let httpTimeSeriesLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: httpPayload,
+            estimatedBytesPerRecord: 640,
+            minimum: 500,
+            maximum: 12_000
+        )
+        let irohRouteLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: irohPayload,
+            estimatedBytesPerRecord: 520,
+            minimum: 500,
+            maximum: 15_000
+        )
+        let httpRouteLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: httpPayload,
+            estimatedBytesPerRecord: 520,
+            minimum: 500,
+            maximum: 15_000
+        )
+
+        XCTAssertEqual(irohTimeSeriesLimit, 281)
+        XCTAssertEqual(httpTimeSeriesLimit, 781)
+        XCTAssertEqual(irohRouteLimit, 346)
+        XCTAssertEqual(httpRouteLimit, 961)
+        XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
+        XCTAssertLessThanOrEqual(irohRouteLimit * 520, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
     }
 
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
@@ -4511,6 +5276,31 @@ final class ForgeCompanionTests: XCTestCase {
         for index in 1..<windows.count {
             XCTAssertEqual(windows[index - 1].start, windows[index].end)
         }
+    }
+
+    func testWorkoutMetricQueryBatchRangesBoundHealthKitFanout() {
+        let ranges = HealthSyncStore.workoutMetricQueryBatchRangesForTesting(
+            totalCount: 16,
+            concurrencyLimit: 4
+        )
+
+        XCTAssertEqual(ranges.map(\.count), [4, 4, 4, 4])
+        XCTAssertEqual(ranges.first, 0..<4)
+        XCTAssertEqual(ranges.last, 12..<16)
+        XCTAssertEqual(
+            HealthSyncStore.workoutMetricQueryBatchRangesForTesting(
+                totalCount: 5,
+                concurrencyLimit: 2
+            ),
+            [0..<2, 2..<4, 4..<5]
+        )
+        XCTAssertEqual(
+            HealthSyncStore.workoutMetricQueryBatchRangesForTesting(
+                totalCount: 0,
+                concurrencyLimit: 4
+            ),
+            []
+        )
     }
 
     func testCompanionDebugLogPlainTextExportUsesChronologicalLines() {

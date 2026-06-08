@@ -18,6 +18,16 @@ type DailyActivityInput = {
   lastRewardEventId: string | null;
 };
 
+type DailyActivityRow = {
+  userId: string;
+  dateKey: string;
+  timezone: string;
+  qualifyingXp: number;
+  eventCount: number;
+  firstRewardEventId: string | null;
+  lastRewardEventId: string | null;
+};
+
 type UnlockInput = {
   userId: string;
   itemId: string;
@@ -76,10 +86,44 @@ function mapCelebration(row: CelebrationRow): GamificationCelebration {
   });
 }
 
+function dailyActivityKey(row: Pick<DailyActivityRow, "dateKey" | "timezone">) {
+  return `${row.dateKey}\0${row.timezone}`;
+}
+
+function dailyActivityRowsEqual(
+  existingRows: DailyActivityRow[],
+  nextRows: DailyActivityInput[]
+) {
+  if (existingRows.length !== nextRows.length) {
+    return false;
+  }
+  const existingByKey = new Map(
+    existingRows.map((row) => [dailyActivityKey(row), row] as const)
+  );
+  for (const next of nextRows) {
+    const existing = existingByKey.get(dailyActivityKey(next));
+    if (
+      !existing ||
+      existing.userId !== next.userId ||
+      existing.qualifyingXp !== next.qualifyingXp ||
+      existing.eventCount !== next.eventCount ||
+      existing.firstRewardEventId !== next.firstRewardEventId ||
+      existing.lastRewardEventId !== next.lastRewardEventId
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function replaceGamificationDailyActivity(
   userId: string,
   rows: DailyActivityInput[]
 ) {
+  const existingRows = listGamificationDailyActivity(userId);
+  if (dailyActivityRowsEqual(existingRows, rows)) {
+    return;
+  }
   const database = getDatabase();
   const deleteRows = database.prepare(
     `DELETE FROM gamification_daily_activity WHERE user_id = ?`

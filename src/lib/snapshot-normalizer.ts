@@ -40,7 +40,32 @@ type LegacySnapshot = Partial<ForgeSnapshot> & {
   campaigns?: LegacyProjectLike[];
 };
 
-function normalizeTask(task: Partial<Task> | undefined): Task {
+type UserIndex = Map<string, UserSummary>;
+
+function findUser(usersById: UserIndex | undefined, userId: string | null) {
+  return userId ? (usersById?.get(userId) ?? null) : null;
+}
+
+function normalizeTask(
+  task: Partial<Task> | undefined,
+  usersById?: UserIndex
+): Task {
+  const userId = task?.userId ?? null;
+  const ownerUserId = task?.ownerUserId ?? task?.userId ?? null;
+  const user =
+    (task?.user as UserSummary | null | undefined) ??
+    findUser(usersById, userId);
+  const ownerUser =
+    (task?.ownerUser as UserSummary | null | undefined) ??
+    ((task?.user as UserSummary | null | undefined) ??
+      findUser(usersById, ownerUserId));
+  const assigneeUserIds = task?.assigneeUserIds ?? [];
+  const assignees =
+    task?.assignees ??
+    assigneeUserIds
+      .map((assigneeUserId) => findUser(usersById, assigneeUserId))
+      .filter((assignee): assignee is UserSummary => assignee !== null);
+
   return {
     id: task?.id ?? "",
     title: task?.title ?? "",
@@ -71,14 +96,12 @@ function normalizeTask(task: Partial<Task> | undefined): Task {
     createdAt: task?.createdAt ?? new Date(0).toISOString(),
     updatedAt: task?.updatedAt ?? new Date(0).toISOString(),
     tagIds: task?.tagIds ?? [],
-    userId: task?.userId ?? null,
-    user: (task?.user as UserSummary | null | undefined) ?? null,
-    ownerUserId: task?.ownerUserId ?? task?.userId ?? null,
-    ownerUser:
-      (task?.ownerUser as UserSummary | null | undefined) ??
-      ((task?.user as UserSummary | null | undefined) ?? null),
-    assigneeUserIds: task?.assigneeUserIds ?? [],
-    assignees: task?.assignees ?? [],
+    userId,
+    user,
+    ownerUserId,
+    ownerUser,
+    assigneeUserIds,
+    assignees,
     time: task?.time ?? {
       totalTrackedSeconds: 0,
       totalCreditedSeconds: 0,
@@ -320,7 +343,11 @@ export function normalizeForgeSnapshot(
   raw: ForgeSnapshot | LegacySnapshot
 ): ForgeSnapshot {
   const legacy = raw as LegacySnapshot;
-  const rootTasks = (raw.tasks ?? []).map(normalizeTask);
+  const rootUsers = (raw.users ?? []).map(normalizeUser);
+  const usersById = new Map(rootUsers.map((user) => [user.id, user]));
+  const rootTasks = (raw.tasks ?? []).map((task) =>
+    normalizeTask(task, usersById)
+  );
   const rootTags = (raw.tags ?? []).map(normalizeTag);
   const rootHabits = (raw.habits ?? raw.dashboard?.habits ?? []).map(
     normalizeHabit
@@ -369,7 +396,7 @@ export function normalizeForgeSnapshot(
       topGoalId: raw.metrics?.topGoalId ?? null,
       topGoalTitle: raw.metrics?.topGoalTitle ?? null
     },
-    users: (raw.users ?? []).map(normalizeUser),
+    users: rootUsers,
     strategies: (raw.strategies ?? []).map(normalizeStrategy),
     userScope: {
       selectedUserIds: raw.userScope?.selectedUserIds ?? [],
@@ -390,7 +417,9 @@ export function normalizeForgeSnapshot(
         ...normalizeGoal(goal)
       })),
       projects: dashboardProjects,
-      tasks: (raw.dashboard?.tasks ?? rootTasks).map(normalizeTask),
+      tasks: (raw.dashboard?.tasks ?? rootTasks).map((task) =>
+        normalizeTask(task, usersById)
+      ),
       habits: (raw.dashboard?.habits ?? rootHabits).map(normalizeHabit),
       tags: (raw.dashboard?.tags ?? rootTags).map(normalizeTag),
       suggestedTags: (raw.dashboard?.suggestedTags ?? []).map(normalizeTag),
@@ -398,7 +427,9 @@ export function normalizeForgeSnapshot(
       executionBuckets: (raw.dashboard?.executionBuckets ?? []).map(
         (bucket) => ({
           ...bucket,
-          tasks: (bucket.tasks ?? []).map(normalizeTask)
+          tasks: (bucket.tasks ?? []).map((task) =>
+            normalizeTask(task, usersById)
+          )
         })
       ),
       gamification: raw.dashboard?.gamification ?? {
@@ -457,7 +488,9 @@ export function normalizeForgeSnapshot(
         ...goal,
         ...normalizeGoal(goal)
       })),
-      topTasks: (raw.overview?.topTasks ?? []).map(normalizeTask),
+      topTasks: (raw.overview?.topTasks ?? []).map((task) =>
+        normalizeTask(task, usersById)
+      ),
       dueHabits: (
         raw.overview?.dueHabits ??
         raw.today?.dueHabits ??
@@ -473,7 +506,7 @@ export function normalizeForgeSnapshot(
       generatedAt: raw.today?.generatedAt ?? new Date().toISOString(),
       directive: {
         task: raw.today?.directive?.task
-          ? normalizeTask(raw.today.directive.task)
+          ? normalizeTask(raw.today.directive.task, usersById)
           : null,
         goalTitle: raw.today?.directive?.goalTitle ?? null,
         rewardXp: raw.today?.directive?.rewardXp ?? 0,
@@ -481,7 +514,9 @@ export function normalizeForgeSnapshot(
       },
       timeline: (raw.today?.timeline ?? []).map((bucket) => ({
         ...bucket,
-        tasks: (bucket.tasks ?? []).map(normalizeTask)
+        tasks: (bucket.tasks ?? []).map((task) =>
+          normalizeTask(task, usersById)
+        )
       })),
       dueHabits: (
         raw.today?.dueHabits ??
@@ -500,8 +535,12 @@ export function normalizeForgeSnapshot(
     },
     risk: {
       generatedAt: raw.risk?.generatedAt ?? new Date().toISOString(),
-      overdueTasks: (raw.risk?.overdueTasks ?? []).map(normalizeTask),
-      blockedTasks: (raw.risk?.blockedTasks ?? []).map(normalizeTask),
+      overdueTasks: (raw.risk?.overdueTasks ?? []).map((task) =>
+        normalizeTask(task, usersById)
+      ),
+      blockedTasks: (raw.risk?.blockedTasks ?? []).map((task) =>
+        normalizeTask(task, usersById)
+      ),
       neglectedGoals: raw.risk?.neglectedGoals ?? [],
       summary: raw.risk?.summary ?? ""
     },

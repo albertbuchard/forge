@@ -14,7 +14,32 @@ function mapCelebration(row) {
         seenAt: row.seen_at
     });
 }
+function dailyActivityKey(row) {
+    return `${row.dateKey}\0${row.timezone}`;
+}
+function dailyActivityRowsEqual(existingRows, nextRows) {
+    if (existingRows.length !== nextRows.length) {
+        return false;
+    }
+    const existingByKey = new Map(existingRows.map((row) => [dailyActivityKey(row), row]));
+    for (const next of nextRows) {
+        const existing = existingByKey.get(dailyActivityKey(next));
+        if (!existing ||
+            existing.userId !== next.userId ||
+            existing.qualifyingXp !== next.qualifyingXp ||
+            existing.eventCount !== next.eventCount ||
+            existing.firstRewardEventId !== next.firstRewardEventId ||
+            existing.lastRewardEventId !== next.lastRewardEventId) {
+            return false;
+        }
+    }
+    return true;
+}
 export function replaceGamificationDailyActivity(userId, rows) {
+    const existingRows = listGamificationDailyActivity(userId);
+    if (dailyActivityRowsEqual(existingRows, rows)) {
+        return;
+    }
     const database = getDatabase();
     const deleteRows = database.prepare(`DELETE FROM gamification_daily_activity WHERE user_id = ?`);
     const insertRow = database.prepare(`INSERT INTO gamification_daily_activity (

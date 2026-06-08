@@ -6611,7 +6611,7 @@ function buildAgentOnboardingPayload(request: {
       psycheOpeningQuestionRule:
         "Prefer a concrete opening question tied to the entity: ask when the value mattered, what happened the last time the pattern appeared, what cue or body signal came first before the behavior, what the belief starts saying about self or outcome, what feels most at risk inside the mode, what the part is trying to get the user to do or stop doing, or where the shift began in the incident. Reflect briefly before the question, choose one follow-up lane at a time, say what is becoming clearer before the next deeper question, and if several Psyche entities are visible hold the adjacent ones lightly until the main container is clear.",
       psycheHypothesisRule:
-        "When one concrete Psyche example is visible, a helpful hypothesis should start from evidence in the user's own example, offer one testable interpretation, name the function without blame such as protection, prediction, relief, or cost, and ask whether the danger, need, or wording fits. Use the hypothesis timing checkpoint before asking a second or third deepening question: offer a hypothesis when one concrete episode, body cue, belief sentence, behavior, or mode voice is visible and the hypothesis would change the record shape, wording, links, or next action. Do not hypothesize yet when no concrete moment is visible, the user only wants a direct mechanical save, the user is flooded or unsafe, or the only available interpretation would be diagnosis-like, an origin story, or a certainty claim. Do not present schema, mode, belief, or pattern language as a verdict. If the user corrects the hypothesis, revise it once and move toward the saveable record shape instead of asking for another broad story.",
+        "When one concrete Psyche example is visible, a helpful hypothesis should start from evidence in the user's own example, offer one testable interpretation, name the function without blame such as protection, prediction, relief, or cost, and ask whether the danger, need, or wording fits. Use the hypothesis timing checkpoint before asking a second or third deepening question: offer a hypothesis when one concrete episode, body cue, belief sentence, behavior, or mode voice is visible and the hypothesis would change the record shape, wording, links, or next action. Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For behavior_pattern, belief_entry, mode_profile, mode_guide_session, and trigger_report, the next helpful move is usually one active formulation plus one correction question, not another passive reflection. Do not hypothesize yet when no concrete moment is visible, the user only wants a direct mechanical save, the user is flooded or unsafe, or the only available interpretation would be diagnosis-like, an origin story, or a certainty claim. Do not present schema, mode, belief, or pattern language as a verdict. If the user corrects the hypothesis, revise it once and move toward the saveable record shape instead of asking for another broad story.",
       mixedIntentSequencingRule:
         "When one user message combines several Forge jobs, identify the primary job and the order of operations before asking a follow-up. If a read changes the truth of a later write, read first: Movement timeline or box detail before correction, Workbench run or node detail before editing or publishing, and Life Force overview before changing durable assumptions when the current energy picture is uncertain. If the user asks to understand and save Psyche material plus create a support record, formulate the primary Psyche record first, then derive the flashcard, note, link, task, or habit from the accepted wording. If the user already gave the concrete action, do not ask a broad lane question; say the product sequence briefly and ask only for the missing span, wording, flow, run, node, weekday, or link that changes the next action.",
       duplicateDisambiguationRule:
@@ -7322,15 +7322,52 @@ function buildV1Context(
 function compactV1ContextForShell(
   context: ReturnType<typeof buildV1Context>
 ) {
+  const stripTaskPeople = (task: Task) => {
+    const {
+      user: _user,
+      ownerUser: _ownerUser,
+      assignees: _assignees,
+      ...compactTask
+    } = task;
+    return compactTask;
+  };
+  const stripOptionalTaskPeople = (task: Task | null | undefined) =>
+    task ? stripTaskPeople(task) : task;
+
   return {
     ...context,
+    tasks: context.tasks.map(stripTaskPeople),
     dashboard: {
       ...context.dashboard,
       projects: undefined,
       tasks: undefined,
       habits: undefined,
       tags: undefined,
-      recentActivity: undefined
+      recentActivity: undefined,
+      executionBuckets: context.dashboard.executionBuckets.map((bucket) => ({
+        ...bucket,
+        tasks: bucket.tasks.map(stripTaskPeople)
+      }))
+    },
+    overview: {
+      ...context.overview,
+      topTasks: context.overview.topTasks.map(stripTaskPeople)
+    },
+    today: {
+      ...context.today,
+      directive: {
+        ...context.today.directive,
+        task: stripOptionalTaskPeople(context.today.directive.task)
+      },
+      timeline: context.today.timeline.map((bucket) => ({
+        ...bucket,
+        tasks: bucket.tasks.map(stripTaskPeople)
+      }))
+    },
+    risk: {
+      ...context.risk,
+      overdueTasks: context.risk.overdueTasks.map(stripTaskPeople),
+      blockedTasks: context.risk.blockedTasks.map(stripTaskPeople)
     },
     activity: undefined
   };
@@ -10590,7 +10627,19 @@ export async function buildServer(
     const query = z
       .object({
         sessionId: z.string().trim().min(1),
-        pairingToken: z.string().trim().min(1)
+        pairingToken: z.string().trim().min(1),
+        includeReceivedChunkIds: z
+          .enum(["true", "false"])
+          .optional()
+          .transform((value) => value !== "false"),
+        includeWorkoutImportExternalUids: z
+          .enum(["true", "false"])
+          .optional()
+          .transform((value) => value !== "false"),
+        includeWorkoutImportState: z
+          .enum(["true", "false"])
+          .optional()
+          .transform((value) => value !== "false")
       })
       .parse(request.query ?? {});
     return {

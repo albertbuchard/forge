@@ -3576,6 +3576,25 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       summaryChunkReceipt.chunk.progress.receivedCounts.workout_summaries,
       1
     );
+    const progressAfterSummary = getDatabase()
+      .prepare(
+        `SELECT received_counts_json, byte_totals_json, updated_at
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as {
+      received_counts_json: string;
+      byte_totals_json: string;
+      updated_at: string;
+    };
+    assert.equal(
+      JSON.parse(progressAfterSummary.received_counts_json).workout_summaries,
+      1
+    );
+    assert.equal(
+      JSON.parse(progressAfterSummary.byte_totals_json).workout_summaries,
+      summaryChunk.byteCount
+    );
     const progressiveWorkout = getDatabase()
       .prepare(
         `SELECT external_uid
@@ -3730,17 +3749,135 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       1
     );
 
+    const lightweightStatusResponse = await app.inject({
+      method: "GET",
+      url:
+        `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}` +
+        `?sessionId=${encodeURIComponent(qrPayload.sessionId)}` +
+        `&pairingToken=${encodeURIComponent(qrPayload.pairingToken)}` +
+        `&includeReceivedChunkIds=false` +
+        `&includeWorkoutImportExternalUids=false`
+    });
+    assert.equal(
+      lightweightStatusResponse.statusCode,
+      200,
+      lightweightStatusResponse.body
+    );
+    const lightweightStatusPayload = lightweightStatusResponse.json() as {
+      upload: {
+        receivedChunkIds: string[];
+        progress: {
+          chunkCount: number;
+          receivedCounts: Record<string, number>;
+        };
+        workoutImportState: {
+          alreadyUploadedWorkoutExternalUids: string[];
+          incompleteWorkoutExternalUids: string[];
+          existingWorkoutCount: number;
+          incompleteWorkoutCount: number;
+        };
+      };
+    };
+    assert.deepEqual(lightweightStatusPayload.upload.receivedChunkIds, []);
+    assert.equal(lightweightStatusPayload.upload.progress.chunkCount, 1);
+    assert.equal(
+      lightweightStatusPayload.upload.progress.receivedCounts.workout_summaries,
+      1
+    );
+    assert.equal(
+      lightweightStatusPayload.upload.workoutImportState.existingWorkoutCount,
+      1
+    );
+    assert.equal(
+      lightweightStatusPayload.upload.workoutImportState.incompleteWorkoutCount,
+      1
+    );
+    assert.deepEqual(
+      lightweightStatusPayload.upload.workoutImportState
+        .alreadyUploadedWorkoutExternalUids,
+      []
+    );
+    assert.deepEqual(
+      lightweightStatusPayload.upload.workoutImportState
+        .incompleteWorkoutExternalUids,
+      []
+    );
+
+    const progressOnlyStatusResponse = await app.inject({
+      method: "GET",
+      url:
+        `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}` +
+        `?sessionId=${encodeURIComponent(qrPayload.sessionId)}` +
+        `&pairingToken=${encodeURIComponent(qrPayload.pairingToken)}` +
+        `&includeReceivedChunkIds=false` +
+        `&includeWorkoutImportExternalUids=false` +
+        `&includeWorkoutImportState=false`
+    });
+    assert.equal(
+      progressOnlyStatusResponse.statusCode,
+      200,
+      progressOnlyStatusResponse.body
+    );
+    const progressOnlyStatusPayload = progressOnlyStatusResponse.json() as {
+      upload: {
+        receivedChunkIds: string[];
+        progress: {
+          chunkCount: number;
+          receivedCounts: Record<string, number>;
+        };
+        workoutImportState?: unknown;
+      };
+    };
+    assert.deepEqual(progressOnlyStatusPayload.upload.receivedChunkIds, []);
+    assert.equal(progressOnlyStatusPayload.upload.progress.chunkCount, 1);
+    assert.equal(
+      progressOnlyStatusPayload.upload.progress.receivedCounts.workout_summaries,
+      1
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        progressOnlyStatusPayload.upload,
+        "workoutImportState"
+      ),
+      false
+    );
+
     const duplicateResponse = await app.inject({
       method: "POST",
       url: `/api/v1/mobile/healthkit/sync-sessions/${syncSessionId}/chunks`,
       payload: summaryChunk
     });
     assert.equal(duplicateResponse.statusCode, 200);
+    const duplicatePayload = duplicateResponse.json() as {
+      chunk: {
+        duplicate: boolean;
+        receivedCount: number;
+        receivedBytes: number;
+      };
+    };
+    assert.equal(duplicatePayload.chunk.duplicate, true);
+    assert.equal(duplicatePayload.chunk.receivedCount, 1);
+    assert.equal(duplicatePayload.chunk.receivedBytes, summaryChunk.byteCount);
+    const progressAfterDuplicate = getDatabase()
+      .prepare(
+        `SELECT received_counts_json, byte_totals_json, updated_at
+         FROM health_mobile_sync_sessions
+         WHERE id = ?`
+      )
+      .get(syncSessionId) as {
+      received_counts_json: string;
+      byte_totals_json: string;
+      updated_at: string;
+    };
     assert.equal(
-      (duplicateResponse.json() as { chunk: { duplicate: boolean } }).chunk
-        .duplicate,
-      true
+      JSON.parse(progressAfterDuplicate.received_counts_json).workout_summaries,
+      1
     );
+    assert.equal(
+      JSON.parse(progressAfterDuplicate.byte_totals_json).workout_summaries,
+      summaryChunk.byteCount
+    );
+    assert.equal(progressAfterDuplicate.updated_at, progressAfterSummary.updated_at);
 
     const conflictResponse = await app.inject({
       method: "POST",
@@ -4432,6 +4569,22 @@ test("mobile health chunked sync applies movement chunks before final completion
       JSON.parse(storedChunk.payload_summary_json).immediateApplied,
       true
     );
+    getDatabase()
+      .prepare(
+        `UPDATE health_mobile_sync_chunks
+         SET payload_json = ?, payload_summary_json = ?
+         WHERE sync_session_id = ? AND chunk_id = ?`
+      )
+      .run(
+        JSON.stringify({ movement: { knownPlaces: "legacy-invalid-shape" } }),
+        JSON.stringify({
+          knownPlaces: 1,
+          stays: 1,
+          trips: 0
+        }),
+        syncSessionId,
+        "chunk-background-movement"
+      );
 
     const completeResponse = await app.inject({
       method: "POST",
@@ -4691,6 +4844,57 @@ test("mobile health workout import state reuses count-complete historical eviden
     assert.equal(upload.workoutImportState.staleEvidenceVersionWorkoutCount, 1);
     assert.equal(upload.workoutImportState.heartRateSampleCount, 1);
     assert.equal(upload.workoutImportState.routePointCount, 4);
+
+    const scopedStartResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/mobile/healthkit/sync-sessions",
+      payload: {
+        sessionId: qrPayload.sessionId,
+        pairingToken: qrPayload.pairingToken,
+        device: {
+          name: "Omar iPhone",
+          platform: "ios",
+          appVersion: "1.0",
+          sourceDevice: "iPhone"
+        },
+        permissions: {
+          healthKitAuthorized: true,
+          backgroundRefreshEnabled: true,
+          motionReady: false,
+          locationReady: false,
+          screenTimeReady: false
+        },
+        requestedFamilies: [
+          "workout_summaries",
+          "workout_time_series",
+          "workout_routes"
+        ],
+        metadata: {
+          workoutImportStartedAfter: "2024-04-09T00:00:00.000Z"
+        }
+      }
+    });
+    assert.equal(scopedStartResponse.statusCode, 200, scopedStartResponse.body);
+    const scopedUpload = (
+      scopedStartResponse.json() as {
+        upload: {
+          workoutImportState: {
+            alreadyUploadedWorkoutExternalUids: string[];
+            alreadyUploadedWorkoutCount: number;
+            existingWorkoutCount: number;
+            incompleteWorkoutCount: number;
+          };
+        };
+      }
+    ).upload;
+
+    assert.deepEqual(
+      scopedUpload.workoutImportState.alreadyUploadedWorkoutExternalUids,
+      ["hk-legacy-hr-and-route"]
+    );
+    assert.equal(scopedUpload.workoutImportState.alreadyUploadedWorkoutCount, 1);
+    assert.equal(scopedUpload.workoutImportState.existingWorkoutCount, 2);
+    assert.equal(scopedUpload.workoutImportState.incompleteWorkoutCount, 1);
   } finally {
     await app.close();
     closeDatabase();
@@ -11678,6 +11882,124 @@ test("task updates persist metadata and tag edits through the API", async () => 
   }
 });
 
+test("versioned task list preserves hydrated task fields from the batched path", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-task-list-hydration-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const dashboard = await app.inject({
+      method: "GET",
+      url: "/api/dashboard"
+    });
+    const payload = dashboard.json() as {
+      projects: Array<{ id: string; goalId: string }>;
+      tags: Array<{ id: string }>;
+    };
+    const project = payload.projects[0]!;
+    const tagIds = payload.tags.slice(0, 2).map((tag) => tag.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Batched list hydration task",
+        description: "Exercise listTasks batched hydration fields.",
+        status: "focus",
+        priority: "high",
+        owner: "Albert",
+        userId: "user_operator",
+        assigneeUserIds: ["user_operator"],
+        goalId: project.goalId,
+        projectId: project.id,
+        dueDate: null,
+        effort: "deep",
+        energy: "steady",
+        points: 45,
+        plannedDurationSeconds: 3_600,
+        tagIds,
+        gitRefs: [
+          {
+            refType: "commit",
+            provider: "git",
+            repository: "forge",
+            refValue: "abc123fixture",
+            displayTitle: "Fixture commit"
+          }
+        ]
+      }
+    });
+    assert.equal(created.statusCode, 201);
+    const taskId = (created.json() as { task: { id: string } }).task.id;
+
+    const adjustment = await app.inject({
+      method: "POST",
+      url: "/api/v1/work-adjustments",
+      headers: { cookie: operatorCookie },
+      payload: {
+        entityType: "task",
+        entityId: taskId,
+        deltaMinutes: 30,
+        note: "Regression fixture for list hydration."
+      }
+    });
+    assert.equal(adjustment.statusCode, 201);
+
+    const singleResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${taskId}`
+    });
+    assert.equal(singleResponse.statusCode, 200);
+    const singleTask = (
+      singleResponse.json() as {
+        task: {
+          id: string;
+          tagIds: string[];
+          gitRefs: Array<{ refValue: string }>;
+          ownerUserId: string | null;
+          assigneeUserIds: string[];
+          actionPointSummary: { spentTodayAp: number; totalCostAp: number };
+        };
+      }
+    ).task;
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks?projectId=${project.id}&limit=100`
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listedTask = (
+      listResponse.json() as {
+        tasks: Array<typeof singleTask>;
+      }
+    ).tasks.find((task) => task.id === taskId);
+    assert.ok(listedTask);
+    assert.deepEqual(
+      [...listedTask.tagIds].sort(),
+      [...singleTask.tagIds].sort()
+    );
+    assert.deepEqual(listedTask.gitRefs, singleTask.gitRefs);
+    assert.equal(listedTask.ownerUserId, singleTask.ownerUserId);
+    assert.deepEqual(listedTask.assigneeUserIds, singleTask.assigneeUserIds);
+    assert.equal(
+      listedTask.actionPointSummary.totalCostAp,
+      singleTask.actionPointSummary.totalCostAp
+    );
+    assert.equal(
+      Number(listedTask.actionPointSummary.spentTodayAp.toFixed(4)),
+      Number(singleTask.actionPointSummary.spentTodayAp.toFixed(4))
+    );
+    assert.ok(listedTask.actionPointSummary.spentTodayAp > 0);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("versioned task context exposes evidence and task-run state for inspection", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-v1-task-context-")
@@ -12205,10 +12527,11 @@ test("v1 context shell profile omits redundant dashboard collections for faster 
         recentActivity?: unknown[];
       };
       projects: unknown[];
-      tasks: unknown[];
+      tasks: Array<Record<string, unknown>>;
       habits: unknown[];
       tags: unknown[];
       activity?: unknown[];
+      users: Array<{ id: string }>;
     };
     const shellBody = shellResponse.json() as typeof fullBody;
 
@@ -12219,7 +12542,16 @@ test("v1 context shell profile omits redundant dashboard collections for faster 
     assert.equal(Object.hasOwn(shellBody.dashboard, "tags"), false);
     assert.equal(Object.hasOwn(shellBody.dashboard, "recentActivity"), false);
     assert.equal(Object.hasOwn(shellBody, "activity"), false);
+    assert.ok(shellBody.users.length >= 1);
     assert.equal(shellBody.tasks.length, fullBody.tasks.length);
+    assert.ok(shellBody.tasks.length >= 1);
+    assert.equal(Object.hasOwn(shellBody.tasks[0]!, "user"), false);
+    assert.equal(Object.hasOwn(shellBody.tasks[0]!, "ownerUser"), false);
+    assert.equal(Object.hasOwn(shellBody.tasks[0]!, "assignees"), false);
+    assert.ok(
+      typeof shellBody.tasks[0]!.userId === "string" ||
+        shellBody.tasks[0]!.userId === null
+    );
     assert.equal(shellBody.projects.length, fullBody.projects.length);
     assert.equal(shellBody.habits.length, fullBody.habits.length);
     assert.equal(shellBody.tags.length, fullBody.tags.length);

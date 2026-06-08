@@ -10,7 +10,22 @@ const EMPTY_CALENDAR_RULES = {
     allowAvailability: [],
     blockAvailability: []
 };
-function normalizeTask(task) {
+function findUser(usersById, userId) {
+    return userId ? (usersById?.get(userId) ?? null) : null;
+}
+function normalizeTask(task, usersById) {
+    const userId = task?.userId ?? null;
+    const ownerUserId = task?.ownerUserId ?? task?.userId ?? null;
+    const user = task?.user ??
+        findUser(usersById, userId);
+    const ownerUser = task?.ownerUser ??
+        (task?.user ??
+            findUser(usersById, ownerUserId));
+    const assigneeUserIds = task?.assigneeUserIds ?? [];
+    const assignees = task?.assignees ??
+        assigneeUserIds
+            .map((assigneeUserId) => findUser(usersById, assigneeUserId))
+            .filter((assignee) => assignee !== null);
     return {
         id: task?.id ?? "",
         title: task?.title ?? "",
@@ -41,13 +56,12 @@ function normalizeTask(task) {
         createdAt: task?.createdAt ?? new Date(0).toISOString(),
         updatedAt: task?.updatedAt ?? new Date(0).toISOString(),
         tagIds: task?.tagIds ?? [],
-        userId: task?.userId ?? null,
-        user: task?.user ?? null,
-        ownerUserId: task?.ownerUserId ?? task?.userId ?? null,
-        ownerUser: task?.ownerUser ??
-            (task?.user ?? null),
-        assigneeUserIds: task?.assigneeUserIds ?? [],
-        assignees: task?.assignees ?? [],
+        userId,
+        user,
+        ownerUserId,
+        ownerUser,
+        assigneeUserIds,
+        assignees,
         time: task?.time ?? {
             totalTrackedSeconds: 0,
             totalCreditedSeconds: 0,
@@ -258,6 +272,11 @@ function normalizeStrategy(strategy) {
 }
 export function normalizeForgeSnapshot(raw) {
     const legacy = raw;
+    const rootUsers = (raw.users ?? []).map(normalizeUser);
+    const usersById = new Map(rootUsers.map((user) => [user.id, user]));
+    const rootTasks = (raw.tasks ?? []).map((task) => normalizeTask(task, usersById));
+    const rootTags = (raw.tags ?? []).map(normalizeTag);
+    const rootHabits = (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit);
     const rootProjects = (legacy.projects ?? legacy.campaigns ?? []).map(normalizeProject);
     const dashboardProjects = (legacy.dashboard?.projects ??
         legacy.dashboard?.campaigns ??
@@ -292,7 +311,7 @@ export function normalizeForgeSnapshot(raw) {
             topGoalId: raw.metrics?.topGoalId ?? null,
             topGoalTitle: raw.metrics?.topGoalTitle ?? null
         },
-        users: (raw.users ?? []).map(normalizeUser),
+        users: rootUsers,
         strategies: (raw.strategies ?? []).map(normalizeStrategy),
         userScope: {
             selectedUserIds: raw.userScope?.selectedUserIds ?? [],
@@ -313,14 +332,14 @@ export function normalizeForgeSnapshot(raw) {
                 ...normalizeGoal(goal)
             })),
             projects: dashboardProjects,
-            tasks: (raw.dashboard?.tasks ?? []).map(normalizeTask),
-            habits: (raw.dashboard?.habits ?? raw.habits ?? []).map(normalizeHabit),
-            tags: (raw.dashboard?.tags ?? []).map(normalizeTag),
+            tasks: (raw.dashboard?.tasks ?? rootTasks).map((task) => normalizeTask(task, usersById)),
+            habits: (raw.dashboard?.habits ?? rootHabits).map(normalizeHabit),
+            tags: (raw.dashboard?.tags ?? rootTags).map(normalizeTag),
             suggestedTags: (raw.dashboard?.suggestedTags ?? []).map(normalizeTag),
             owners: raw.dashboard?.owners ?? [],
             executionBuckets: (raw.dashboard?.executionBuckets ?? []).map((bucket) => ({
                 ...bucket,
-                tasks: (bucket.tasks ?? []).map(normalizeTask)
+                tasks: (bucket.tasks ?? []).map((task) => normalizeTask(task, usersById))
             })),
             gamification: raw.dashboard?.gamification ?? {
                 totalXp: raw.metrics?.totalXp ?? 0,
@@ -342,7 +361,7 @@ export function normalizeForgeSnapshot(raw) {
             },
             achievements: raw.dashboard?.achievements ?? [],
             milestoneRewards: raw.dashboard?.milestoneRewards ?? [],
-            recentActivity: raw.dashboard?.recentActivity ?? [],
+            recentActivity: raw.dashboard?.recentActivity ?? raw.activity ?? [],
             notesSummaryByEntity: raw.dashboard?.notesSummaryByEntity ?? {}
         },
         overview: {
@@ -370,7 +389,7 @@ export function normalizeForgeSnapshot(raw) {
                 ...goal,
                 ...normalizeGoal(goal)
             })),
-            topTasks: (raw.overview?.topTasks ?? []).map(normalizeTask),
+            topTasks: (raw.overview?.topTasks ?? []).map((task) => normalizeTask(task, usersById)),
             dueHabits: (raw.overview?.dueHabits ??
                 raw.today?.dueHabits ??
                 raw.dashboard?.habits ??
@@ -384,7 +403,7 @@ export function normalizeForgeSnapshot(raw) {
             generatedAt: raw.today?.generatedAt ?? new Date().toISOString(),
             directive: {
                 task: raw.today?.directive?.task
-                    ? normalizeTask(raw.today.directive.task)
+                    ? normalizeTask(raw.today.directive.task, usersById)
                     : null,
                 goalTitle: raw.today?.directive?.goalTitle ?? null,
                 rewardXp: raw.today?.directive?.rewardXp ?? 0,
@@ -392,7 +411,7 @@ export function normalizeForgeSnapshot(raw) {
             },
             timeline: (raw.today?.timeline ?? []).map((bucket) => ({
                 ...bucket,
-                tasks: (bucket.tasks ?? []).map(normalizeTask)
+                tasks: (bucket.tasks ?? []).map((task) => normalizeTask(task, usersById))
             })),
             dueHabits: (raw.today?.dueHabits ??
                 raw.overview?.dueHabits ??
@@ -409,17 +428,17 @@ export function normalizeForgeSnapshot(raw) {
         },
         risk: {
             generatedAt: raw.risk?.generatedAt ?? new Date().toISOString(),
-            overdueTasks: (raw.risk?.overdueTasks ?? []).map(normalizeTask),
-            blockedTasks: (raw.risk?.blockedTasks ?? []).map(normalizeTask),
+            overdueTasks: (raw.risk?.overdueTasks ?? []).map((task) => normalizeTask(task, usersById)),
+            blockedTasks: (raw.risk?.blockedTasks ?? []).map((task) => normalizeTask(task, usersById)),
             neglectedGoals: raw.risk?.neglectedGoals ?? [],
             summary: raw.risk?.summary ?? ""
         },
         goals: (raw.goals ?? []).map(normalizeGoal),
         projects: rootProjects,
-        tags: (raw.tags ?? []).map(normalizeTag),
-        tasks: (raw.tasks ?? []).map(normalizeTask),
-        habits: (raw.habits ?? raw.dashboard?.habits ?? []).map(normalizeHabit),
-        activity: raw.activity ?? [],
+        tags: rootTags,
+        tasks: rootTasks,
+        habits: rootHabits,
+        activity: raw.activity ?? raw.dashboard?.recentActivity ?? [],
         activeTaskRuns: raw.activeTaskRuns ?? [],
         lifeForce: raw.lifeForce ?? {
             userId: "",

@@ -74,19 +74,23 @@ export function WeightLossRecentMeal({
   onLogAgain,
   onEdit,
   onDelete,
-  pending = false
+  pending = false,
+  hideMealLabel = false
 }: {
   meal: NutritionFoodLog;
   onLogAgain?: (meal: NutritionFoodLog) => void;
   onEdit?: (meal: NutritionFoodLog) => void;
   onDelete?: (meal: NutritionFoodLog) => void;
   pending?: boolean;
+  hideMealLabel?: boolean;
 }) {
   const primaryItem = meal.items[0] ?? null;
   const extraItemCount = Math.max(0, meal.items.length - 1);
   const title = primaryItem
     ? `${primaryItem.name}${extraItemCount > 0 ? ` + ${extraItemCount} more` : ""}`
-    : (meal.mealLabel ?? "Meal");
+    : hideMealLabel
+      ? "Food entry"
+      : (meal.mealLabel ?? "Meal");
   const doseSummary = meal.items
     .slice(0, 3)
     .map((item) => {
@@ -116,7 +120,9 @@ export function WeightLossRecentMeal({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          {meal.mealLabel ? <Badge tone="meta">{meal.mealLabel}</Badge> : null}
+          {meal.mealLabel && !hideMealLabel ? (
+            <Badge tone="meta">{meal.mealLabel}</Badge>
+          ) : null}
           <Badge tone="meta">{meal.totals.calories.toFixed(0)} kcal</Badge>
         </div>
       </div>

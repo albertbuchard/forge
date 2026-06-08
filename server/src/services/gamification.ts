@@ -32,7 +32,6 @@ import {
   gamificationCatalogPayloadSchema,
   gamificationProfileSchema,
   milestoneRewardSchema,
-  rewardLedgerEventSchema,
   type AchievementSignal,
   type GamificationCatalogEntry,
   type GamificationCatalogPayload,
@@ -248,14 +247,26 @@ function resolveTimezone(): string {
   );
 }
 
-function dateKeyInTimezone(value: string | Date, timezone: string): string {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const parts = new Intl.DateTimeFormat("en-CA", {
+const dateKeyFormattersByTimezone = new Map<string, Intl.DateTimeFormat>();
+
+function getDateKeyFormatter(timezone: string): Intl.DateTimeFormat {
+  const existing = dateKeyFormattersByTimezone.get(timezone);
+  if (existing) {
+    return existing;
+  }
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
-  }).formatToParts(date);
+  });
+  dateKeyFormattersByTimezone.set(timezone, formatter);
+  return formatter;
+}
+
+function dateKeyInTimezone(value: string | Date, timezone: string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = getDateKeyFormatter(timezone).formatToParts(date);
   const year = parts.find((part) => part.type === "year")?.value ?? "1970";
   const month = parts.find((part) => part.type === "month")?.value ?? "01";
   const day = parts.find((part) => part.type === "day")?.value ?? "01";
@@ -413,7 +424,7 @@ function loadScopedRewardEvents(scope: GamificationScope): RewardMetricRow[] {
   const resolveOwner = buildOwnerResolver(defaultUserId);
   return rows
     .map((row) => {
-      const event = rewardLedgerEventSchema.parse({
+      const event: RewardLedgerEvent = {
         id: row.id,
         ruleId: row.rule_id,
         eventLogId: row.event_log_id,
@@ -428,7 +439,7 @@ function loadScopedRewardEvents(scope: GamificationScope): RewardMetricRow[] {
         reversedByRewardId: row.reversed_by_reward_id,
         metadata: parseMetadata(row.metadata_json),
         createdAt: row.created_at
-      });
+      };
       return {
         ...event,
         ownerUserId: resolveOwner(event),
@@ -452,17 +463,22 @@ function syncEntityCreationRewards(scope: GamificationScope): void {
   const scopePlaceholders = scopeUserIds.map(() => "?").join(", ");
 
   for (const source of ENTITY_CREATION_REWARD_SOURCES) {
-    const scopedWhere =
+    const scopedPredicate =
       scopeUserIds.length > 0
-        ? `WHERE (
+        ? `AND (
              entity_owners.user_id IN (${scopePlaceholders})
              OR (entity_owners.user_id IS NULL AND ? IS NOT NULL)
            )`
         : "";
     const params =
       scopeUserIds.length > 0
-        ? [source.entityType, ...scopeUserIds, scopeUserIds[0] ?? null]
-        : [source.entityType];
+        ? [
+            source.entityType,
+            source.entityType,
+            ...scopeUserIds,
+            scopeUserIds[0] ?? null
+          ]
+        : [source.entityType, source.entityType];
     const rows = database
       .prepare(
         `SELECT
@@ -473,7 +489,10 @@ function syncEntityCreationRewards(scope: GamificationScope): void {
          LEFT JOIN entity_owners
            ON entity_owners.entity_type = ?
           AND entity_owners.entity_id = ${source.tableName}.id
-         ${scopedWhere}`
+         LEFT JOIN reward_ledger existing_reward
+           ON existing_reward.reversible_group = ('entity_created:' || ? || ':' || ${source.tableName}.id)
+         WHERE existing_reward.id IS NULL
+         ${scopedPredicate}`
       )
       .all(...params) as Array<{
       id: string;
@@ -1207,17 +1226,36 @@ function syncCatalog(input: {
       )
     : [];
   const isInitialBackfill = existingUnlocks.length === 0;
+  const unlocksByItemId = new Map(
+    existingUnlocks.map((unlock) => [unlock.itemId, unlock])
+  );
+  const evaluationsByItemId = new Map(
+    GAMIFICATION_CATALOG.map(
+      (item) => [item.id, evaluateCatalogItem(item, input.metricValues)] as const
+    )
+  );
   for (const item of GAMIFICATION_CATALOG) {
-    const evaluation = evaluateCatalogItem(item, input.metricValues);
-    if (userId && evaluation.met) {
+    const evaluation = evaluationsByItemId.get(item.id)!;
+    if (userId && evaluation.met && !unlocksByItemId.has(item.id)) {
+      const celebrationSeenAt = isInitialBackfill ? nowIso : null;
       const inserted = insertGamificationUnlock({
         userId,
         itemId: item.id,
         unlockedAt: nowIso,
         sourceMetric: evaluation.sourceMetric,
         sourceValue: evaluation.current,
-        celebrationSeenAt: isInitialBackfill ? nowIso : null
+        celebrationSeenAt
       });
+      if (inserted) {
+        unlocksByItemId.set(item.id, {
+          userId,
+          itemId: item.id,
+          unlockedAt: nowIso,
+          sourceMetric: evaluation.sourceMetric,
+          sourceValue: evaluation.current,
+          celebrationSeenAt
+        });
+      }
       if (inserted && !isInitialBackfill) {
         enqueueGamificationCelebration({
           id: `gce_${userId}_${item.id}`,
@@ -1270,13 +1308,8 @@ function syncCatalog(input: {
     });
   }
 
-  const unlocksByItemId = new Map(
-    (userId ? listGamificationUnlocks(userId) : existingUnlocks)
-      .filter((unlock) => catalogItemIds.has(unlock.itemId))
-      .map((unlock) => [unlock.itemId, unlock])
-  );
   const entries: GamificationCatalogEntry[] = GAMIFICATION_CATALOG.map((item) => {
-    const evaluation = evaluateCatalogItem(item, input.metricValues);
+    const evaluation = evaluationsByItemId.get(item.id)!;
     const unlock = unlocksByItemId.get(item.id);
     const readOnlyAggregateUnlock = !userId && evaluation.met;
     return {

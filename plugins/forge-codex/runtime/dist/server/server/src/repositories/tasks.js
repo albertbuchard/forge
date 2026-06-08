@@ -3,8 +3,8 @@ import { getDatabase } from "../db.js";
 import { runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { decorateOwnedEntity, inferFirstOwnedUserId, replaceEntityAssignees, setEntityOwner } from "./entity-ownership.js";
-import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
+import { decorateOwnedEntities, decorateOwnedEntity, inferFirstOwnedUserId, replaceEntityAssignees, setEntityOwner } from "./entity-ownership.js";
+import { filterDeletedEntities, filterDeletedIds, getDeletedEntityIdSet, isEntityDeleted } from "./deleted-entities.js";
 import { getGoalById } from "./goals.js";
 import { createLinkedNotes } from "./notes.js";
 import { ensureDefaultProjectForGoal, getProjectById } from "./projects.js";
@@ -13,7 +13,7 @@ import { awardTaskCompletionReward, reverseLatestTaskCompletionReward } from "./
 import { findUserByLabel, getDefaultUser, getUserById, resolveUserForMutation } from "./users.js";
 import { assertTaskRelations } from "../services/relations.js";
 import { computeWorkTime, emptyTaskTimeSummary } from "../services/work-time.js";
-import { buildTaskLifeForceFields, getTaskCompletionRequirement, upsertTaskActionProfile } from "../services/life-force.js";
+import { buildTasksLifeForceFields, buildTaskLifeForceFields, getTaskCompletionRequirement, upsertTaskActionProfile } from "../services/life-force.js";
 import { createWorkAdjustment } from "./work-adjustments.js";
 import { calendarSchedulingRulesSchema, createTaskSchema, taskSchema } from "../types.js";
 function readTaskTagIds(taskId) {
@@ -22,14 +22,32 @@ function readTaskTagIds(taskId) {
         .all(taskId);
     return filterDeletedIds("tag", rows.map((row) => row.tag_id));
 }
-function readWorkItemGitRefs(taskId) {
+function readTaskTagIdsIndex(taskIds) {
+    const index = new Map(taskIds.map((taskId) => [taskId, []]));
+    if (taskIds.length === 0) {
+        return index;
+    }
+    const placeholders = taskIds.map(() => "?").join(", ");
     const rows = getDatabase()
-        .prepare(`SELECT id, work_item_id, ref_type, provider, repository, ref_value, url, display_title, created_at, updated_at
-       FROM work_item_git_refs
-       WHERE work_item_id = ?
-       ORDER BY created_at DESC`)
-        .all(taskId);
-    return rows.map((row) => ({
+        .prepare(`SELECT task_id, tag_id
+       FROM task_tags
+       WHERE task_id IN (${placeholders})
+       ORDER BY task_id, tag_id`)
+        .all(...taskIds);
+    const deletedTagIds = getDeletedEntityIdSet("tag");
+    for (const row of rows) {
+        if (deletedTagIds.has(row.tag_id)) {
+            continue;
+        }
+        const tagIds = index.get(row.task_id);
+        if (tagIds) {
+            tagIds.push(row.tag_id);
+        }
+    }
+    return index;
+}
+function mapWorkItemGitRef(row) {
+    return {
         id: row.id,
         workItemId: row.work_item_id,
         refType: row.ref_type === "commit" ||
@@ -44,7 +62,36 @@ function readWorkItemGitRefs(taskId) {
         displayTitle: row.display_title,
         createdAt: row.created_at,
         updatedAt: row.updated_at
-    }));
+    };
+}
+function readWorkItemGitRefs(taskId) {
+    const rows = getDatabase()
+        .prepare(`SELECT id, work_item_id, ref_type, provider, repository, ref_value, url, display_title, created_at, updated_at
+       FROM work_item_git_refs
+       WHERE work_item_id = ?
+       ORDER BY created_at DESC`)
+        .all(taskId);
+    return rows.map(mapWorkItemGitRef);
+}
+function readWorkItemGitRefsIndex(taskIds) {
+    const index = new Map(taskIds.map((taskId) => [taskId, []]));
+    if (taskIds.length === 0) {
+        return index;
+    }
+    const placeholders = taskIds.map(() => "?").join(", ");
+    const rows = getDatabase()
+        .prepare(`SELECT id, work_item_id, ref_type, provider, repository, ref_value, url, display_title, created_at, updated_at
+       FROM work_item_git_refs
+       WHERE work_item_id IN (${placeholders})
+       ORDER BY work_item_id, created_at DESC`)
+        .all(...taskIds);
+    for (const row of rows) {
+        const refs = index.get(row.work_item_id);
+        if (refs) {
+            refs.push(mapWorkItemGitRef(row));
+        }
+    }
+    return index;
 }
 function replaceWorkItemGitRefs(taskId, refs) {
     if (refs === undefined) {
@@ -98,8 +145,8 @@ function assertWorkItemHierarchy(options) {
         throw new HttpError(409, "subtask_parent_invalid", "Subtasks can only live under tasks");
     }
 }
-function mapTask(row, time = emptyTaskTimeSummary()) {
-    const task = taskSchema.parse(decorateOwnedEntity("task", {
+function mapTaskBase(row, time, relations) {
+    return {
         id: row.id,
         title: row.title,
         description: row.description,
@@ -134,17 +181,23 @@ function mapTask(row, time = emptyTaskTimeSummary()) {
         completionReport: row.completion_report_json === null
             ? null
             : JSON.parse(row.completion_report_json),
-        gitRefs: readWorkItemGitRefs(row.id),
+        gitRefs: relations?.gitRefs ?? readWorkItemGitRefs(row.id),
         completedAt: row.completed_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        tagIds: readTaskTagIds(row.id),
+        tagIds: relations?.tagIds ?? readTaskTagIds(row.id),
         time
-    }));
+    };
+}
+function finalizeTask(taskInput) {
+    const task = taskSchema.parse(taskInput);
     return {
         ...task,
         ...buildTaskLifeForceFields(task, task.userId ?? undefined)
     };
+}
+function mapTask(row, time = emptyTaskTimeSummary()) {
+    return finalizeTask(decorateOwnedEntity("task", mapTaskBase(row, time)));
 }
 function replaceTaskTags(taskId, tagIds) {
     const database = getDatabase();
@@ -662,8 +715,20 @@ export function listTasks(filters = {}) {
          created_at
        ${limitSql}`)
         .all(...params);
+    const taskIds = rows.map((row) => row.id);
+    const tagIdsByTaskId = readTaskTagIdsIndex(taskIds);
+    const gitRefsByTaskId = readWorkItemGitRefsIndex(taskIds);
     const workTime = computeWorkTime();
-    return filterDeletedEntities("task", rows.map((row) => mapTask(row, workTime.taskSummaries.get(row.id) ?? emptyTaskTimeSummary())));
+    const tasks = decorateOwnedEntities("task", rows.map((row) => taskSchema.parse(mapTaskBase(row, workTime.taskSummaries.get(row.id) ?? emptyTaskTimeSummary(), {
+        tagIds: tagIdsByTaskId.get(row.id) ?? [],
+        gitRefs: gitRefsByTaskId.get(row.id) ?? []
+    }))));
+    const lifeForceFieldsByTaskId = buildTasksLifeForceFields(tasks);
+    return filterDeletedEntities("task", tasks.map((task) => ({
+        ...task,
+        ...(lifeForceFieldsByTaskId.get(task.id) ??
+            buildTaskLifeForceFields(task, task.userId ?? undefined))
+    })));
 }
 export function getTaskById(taskId) {
     if (isEntityDeleted("task", taskId)) {

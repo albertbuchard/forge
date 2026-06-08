@@ -263,6 +263,11 @@ Surface rule:
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A
   good hypothesis says what the reaction may be protecting, predicting, relieving, or
   costing, then asks whether that lands or needs correction.
+- Do not keep asking broad exploratory Psyche questions after the cue, meaning,
+  protection, payoff, or cost is already visible. For `behavior_pattern`,
+  `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the
+  next helpful move is usually one active formulation plus one correction question,
+  not another passive reflection.
 - Use the hypothesis timing checkpoint before asking a second or third deepening
   question: offer a hypothesis when one concrete episode, body cue, belief sentence,
   behavior, or mode voice is visible and the hypothesis would change the record shape,

@@ -836,6 +836,19 @@ function readEntityActionProfileRow(entityType, entityId) {
        WHERE entity_type = ? AND entity_id = ?`)
         .get(entityType, entityId);
 }
+function readEntityActionProfileRowsIndex(entityType, entityIds) {
+    if (entityIds.length === 0) {
+        return new Map();
+    }
+    const placeholders = entityIds.map(() => "?").join(", ");
+    const rows = getDatabase()
+        .prepare(`SELECT id, entity_type, entity_id, profile_json, created_at, updated_at
+       FROM entity_action_profiles
+       WHERE entity_type = ?
+         AND entity_id IN (${placeholders})`)
+        .all(entityType, ...entityIds);
+    return new Map(rows.map((row) => [row.entity_id, row]));
+}
 export function readEntityActionProfile(entityType, entityId, fallback) {
     const row = readEntityActionProfileRow(entityType, entityId);
     return row ? mapEntityProfileRow(row, fallback) : null;
@@ -1239,6 +1252,9 @@ function getOrCreateDaySnapshot(userId, date) {
 }
 export function resolveTaskActionProfile(task, lifeForceProfile) {
     const row = readEntityActionProfileRow("task", task.id);
+    return resolveTaskActionProfileFromRow(task, lifeForceProfile, row);
+}
+function resolveTaskActionProfileFromRow(task, lifeForceProfile, row) {
     const baseProfile = !row
         ? buildDefaultTaskActionProfile({
             id: `profile_task_${task.id}`,
@@ -1353,6 +1369,33 @@ function readActiveTaskRunProjectionRows(taskId) {
        WHERE task_id = ?
          AND status = 'active'`)
         .all(taskId);
+}
+function readActiveTaskRunProjectionRowsIndex(taskIds) {
+    const index = new Map(taskIds.map((taskId) => [taskId, []]));
+    if (taskIds.length === 0) {
+        return index;
+    }
+    const placeholders = taskIds.map(() => "?").join(", ");
+    const rows = getDatabase()
+        .prepare(`SELECT
+         id,
+         task_id,
+         timer_mode,
+         planned_duration_seconds,
+         claimed_at,
+         lease_expires_at,
+         status
+       FROM task_runs
+       WHERE task_id IN (${placeholders})
+         AND status = 'active'`)
+        .all(...taskIds);
+    for (const row of rows) {
+        const taskRows = index.get(row.task_id);
+        if (taskRows) {
+            taskRows.push(row);
+        }
+    }
+    return index;
 }
 function computeProjectedRemainingSeconds(row, now) {
     if (row.timer_mode !== "planned" || row.planned_duration_seconds === null) {
@@ -2600,6 +2643,62 @@ export function buildTaskLifeForceFields(task, userId) {
             projectedTotalSeconds: runtime.projectedTotalSeconds
         })
     };
+}
+export function buildTasksLifeForceFields(tasks) {
+    const fieldsByTaskId = new Map();
+    if (tasks.length === 0) {
+        return fieldsByTaskId;
+    }
+    const now = new Date();
+    const range = buildDayRange(now);
+    const taskIds = tasks.map((task) => task.id);
+    const defaultUserId = getDefaultUser().id;
+    const profileRowsByTaskId = readEntityActionProfileRowsIndex("task", taskIds);
+    const activeProjectionRowsByTaskId = readActiveTaskRunProjectionRowsIndex(taskIds);
+    const tasksByUserId = new Map();
+    for (const task of tasks) {
+        const effectiveUserId = task.userId ?? defaultUserId;
+        const userTasks = tasksByUserId.get(effectiveUserId) ?? [];
+        userTasks.push(task);
+        tasksByUserId.set(effectiveUserId, userTasks);
+    }
+    for (const [userId, userTasks] of tasksByUserId.entries()) {
+        const taskIdSet = new Set(userTasks.map((task) => task.id));
+        const lifeForceProfile = ensureLifeForceProfile(userId);
+        const todayRunSecondsByTaskId = new Map();
+        for (const row of readTaskRunRows(range, userId)) {
+            if (!taskIdSet.has(row.task_id)) {
+                continue;
+            }
+            todayRunSecondsByTaskId.set(row.task_id, (todayRunSecondsByTaskId.get(row.task_id) ?? 0) +
+                overlapSeconds(range, row, now));
+        }
+        const todayAdjustmentSecondsByTaskId = readTodayAdjustmentSecondsByTaskId(userId, range);
+        for (const task of userTasks) {
+            const profile = resolveTaskActionProfileFromRow(task, lifeForceProfile, profileRowsByTaskId.get(task.id));
+            const todayCreditedSeconds = (todayRunSecondsByTaskId.get(task.id) ?? 0) +
+                (todayAdjustmentSecondsByTaskId.get(task.id) ?? 0);
+            const spentTodayAp = (todayCreditedSeconds / 3600) * profile.sustainRateApPerHour;
+            const spentTotalAp = (task.time.totalCreditedSeconds / 3600) *
+                profile.sustainRateApPerHour;
+            const projectedTotalSeconds = task.time.totalCreditedSeconds +
+                (activeProjectionRowsByTaskId.get(task.id) ?? []).reduce((sum, row) => sum + computeProjectedRemainingSeconds(row, now), 0);
+            fieldsByTaskId.set(task.id, {
+                actionPointSummary: buildTaskActionPointSummary({
+                    plannedDurationSeconds: task.plannedDurationSeconds,
+                    totalCostAp: profile.totalCostAp,
+                    spentTodayAp,
+                    spentTotalAp
+                }),
+                splitSuggestion: buildTaskSplitSuggestion({
+                    plannedDurationSeconds: task.plannedDurationSeconds,
+                    totalTrackedSeconds: task.time.totalCreditedSeconds,
+                    projectedTotalSeconds
+                })
+            });
+        }
+    }
+    return fieldsByTaskId;
 }
 export function getTaskCompletionRequirement(task, userId) {
     const effectiveUserId = userId ?? task.userId ?? getDefaultUser().id;

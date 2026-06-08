@@ -37,11 +37,60 @@ async function loadOnboardingPayload() {
         string,
         {
           routeKeys: string[];
+          methodRoutes?: Record<string, string>;
           routeSelectionQuestions?: string[];
           notes?: string[];
         }
       >;
     };
+  };
+}
+
+async function loadAgentContractPayloads() {
+  const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-question-flow-"));
+  tempRoots.push(dataRoot);
+  const app = await buildServer({ dataRoot, taskRunWatchdog: false });
+  const [onboardingResponse, openApiResponse] = await Promise.all([
+    app.inject({
+      method: "GET",
+      url: "/api/v1/agents/onboarding"
+    }),
+    app.inject({
+      method: "GET",
+      url: "/api/v1/openapi.json"
+    })
+  ]);
+  expect(onboardingResponse.statusCode).toBe(200);
+  expect(openApiResponse.statusCode).toBe(200);
+  await app.close();
+  return {
+    onboarding: onboardingResponse.json().onboarding as {
+      entityRouteModel: {
+        specializedDomainSurfaces: Record<
+          string,
+          {
+            routeKeys: string[];
+            methodRoutes?: Record<string, string>;
+          }
+        >;
+      };
+    },
+    openApi: openApiResponse.json() as {
+      paths: Record<string, Record<string, unknown>>;
+    }
+  };
+}
+
+function normalizeOpenApiRoutePath(pathWithColonParams: string) {
+  return pathWithColonParams.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+}
+
+function parseMethodRoute(route: string) {
+  const match = /^([A-Z]+)\s+(\S+)$/.exec(route.trim());
+  expect(match, `${route} should be METHOD /path`).toBeTruthy();
+  return {
+    method: match![1].toLowerCase(),
+    path: normalizeOpenApiRoutePath(match![2])
   };
 }
 
@@ -644,6 +693,39 @@ describe("question flow simulation cycles", () => {
     );
   });
 
+  it("cycle 1 retest: specialized onboarding method routes are present in OpenAPI", async () => {
+    const { onboarding, openApi } = await loadAgentContractPayloads();
+
+    for (const surfaceKey of [
+      "movement",
+      "lifeForce",
+      "life_force",
+      "workbench"
+    ] as const) {
+      const surface =
+        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
+      expect(surface, `${surfaceKey} should exist`).toBeTruthy();
+      expect(surface.methodRoutes, `${surfaceKey} method routes`).toBeTruthy();
+
+      for (const routeKey of surface.routeKeys) {
+        const methodRoute = surface.methodRoutes?.[routeKey];
+        expect(
+          methodRoute,
+          `${surfaceKey}.${routeKey} should publish a method route`
+        ).toBeTruthy();
+        const { method, path } = parseMethodRoute(methodRoute!);
+        expect(
+          openApi.paths[path],
+          `${surfaceKey}.${routeKey} should exist in OpenAPI at ${path}`
+        ).toBeTruthy();
+        expect(
+          openApi.paths[path]?.[method],
+          `${surfaceKey}.${routeKey} should publish ${method.toUpperCase()} ${path}`
+        ).toBeTruthy();
+      }
+    }
+  });
+
   it("uses explicit specialized route-lane scenarios in every cycle", () => {
     const expectedSurfaceNames = Object.keys(specializedSurfaceRouteScenarios).sort();
 
@@ -902,6 +984,15 @@ describe("question flow simulation cycles", () => {
       /Do not make the user supply every interpretation alone/i
     );
     expect(psychePlaybook).toMatch(
+      /Do not keep asking broad exploratory questions after the cue, meaning, protection,[\s\S]*payoff, or cost is already visible/i
+    );
+    expect(psychePlaybook).toMatch(
+      /active formulation[\s\S]*one hypothesis is[\s\S]*one correction\s+question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*trigger_report[\s\S]*(empathic|passive) reflection/i
+    );
+    expect(psychePlaybook).toMatch(
       /Once a hypothesis lands or is corrected[\s\S]*saveable Forge shape/i
     );
     expect(psychePlaybook).toMatch(
@@ -966,6 +1057,12 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 2 retest: Psyche hypotheses are entity-specific, functional, and correctable", () => {
     const hypothesisMap = getSectionSlice(psychePlaybook, "Psyche Hypothesis Map");
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
 
     for (const entityType of [
       "psyche_value",
@@ -992,6 +1089,20 @@ describe("question flow simulation cycles", () => {
     expect(hypothesisMap).toMatch(/protective job[\s\S]*feared danger[\s\S]*burden/i);
     expect(hypothesisMap).toMatch(/feeling's body signature[\s\S]*urge[\s\S]*warning/i);
     expect(hypothesisMap).toMatch(/Do not flatten schema work into a loose\s+self-observation/i);
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(
+        /Do not keep asking broad exploratory Psyche questions after the cue, meaning,[\s\S]*payoff, or cost is already visible/i
+      );
+      expect(source).toMatch(
+        /behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*trigger_report[\s\S]*active formulation/i
+      );
+    }
   });
 
   it("cycle 3: all flows close efficiently, preserve only helpful questions, and avoid reopening settled formulations", () => {
@@ -1316,16 +1427,16 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile("docs/question-flow-improvement-cycles.md");
-    const latestRun = getSectionSlice(report, "2026-06-07 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-08 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-07/);
+    expect(report).toMatch(/Latest run date: 2026-06-08/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.0/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.0/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.5/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.5/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI paths/i);
-    expect(latestRun).toMatch(/44 checks/i);
+    expect(latestRun).toMatch(/21 focused checks/i);
     expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
@@ -1340,14 +1451,16 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*review-first requests[\s\S]*Review-before-write checkpoint/i
+      /Cycle 1[\s\S]*methodRoutes[\s\S]*OpenAPI/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Psyche second and\s+third turns[\s\S]*Hypothesis Timing Checkpoint/i
+      /Cycle 2[\s\S]*Psyche[\s\S]*active-formulation rule/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*older\s+adapter versions/i
     );
+    expect(latestRun).toMatch(/onboarding-method-route[\s\S]*OpenAPI validation/i);
+    expect(latestRun).toMatch(/active Psyche formulation rule/i);
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });

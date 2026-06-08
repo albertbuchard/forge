@@ -196,6 +196,14 @@ material without a usable formulation.
   question that tests or corrects it.
 - Do not make the user supply every interpretation alone. If the sequence is clear
   enough, do the formulation work in plain language and invite correction.
+- Do not keep asking broad exploratory questions after the cue, meaning, protection,
+  payoff, or cost is already visible. In those moments, the next helpful move is
+  usually one active formulation: "one hypothesis is..." followed by one correction
+  question.
+- Active formulation is especially important for `behavior_pattern`, `belief_entry`,
+  `mode_profile`, `mode_guide_session`, and `trigger_report`; those records should
+  not stop at empathic reflection when the user's example already supports a
+  functional interpretation.
 
 ## Hypothesis Timing Checkpoint
 

@@ -300,6 +300,7 @@ export function revokeOperatorSession() {
 }
 export function getForgeSnapshot(userIds) {
     const search = new URLSearchParams();
+    search.set("profile", "shell");
     appendUserIds(search, coerceUserIds(userIds));
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/context${suffix}`).then(normalizeForgeSnapshot);

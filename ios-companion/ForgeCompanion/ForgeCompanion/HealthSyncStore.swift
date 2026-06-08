@@ -95,10 +95,153 @@ actor HealthSyncStore {
         let routePointsByWorkoutUid: [String: [CompanionSyncPayload.WorkoutRoutePoint]]
     }
 
+    struct WorkoutRoutePointIndexAllocator {
+        private var nextIndexesByWorkoutUid: [String: Int] = [:]
+
+        mutating func reserveIndexes(forWorkoutUid workoutUid: String, count: Int) -> Range<Int> {
+            let lowerBound = nextIndexesByWorkoutUid[workoutUid, default: 0]
+            let upperBound = lowerBound + max(0, count)
+            nextIndexesByWorkoutUid[workoutUid] = upperBound
+            return lowerBound..<upperBound
+        }
+    }
+
+    struct WorkoutInterval {
+        let uid: String
+        let startDate: Date
+        let endDate: Date
+    }
+
+    struct WorkoutEvidenceBatchPlan {
+        let startDate: Date
+        let endDate: Date
+        let intervals: [WorkoutInterval]
+    }
+
+    struct WorkoutIntervalIndex {
+        private struct IndexedInterval {
+            let interval: WorkoutInterval
+            let originalIndex: Int
+        }
+
+        private let intervalsByStart: [IndexedInterval]
+        private let prefixMaxEndDates: [Date]
+
+        init(intervals: [WorkoutInterval]) {
+            let indexed = intervals.enumerated().map { originalIndex, interval in
+                IndexedInterval(interval: interval, originalIndex: originalIndex)
+            }
+            intervalsByStart = indexed.sorted { left, right in
+                if left.interval.startDate == right.interval.startDate {
+                    if left.interval.endDate == right.interval.endDate {
+                        return left.originalIndex < right.originalIndex
+                    }
+                    return left.interval.endDate < right.interval.endDate
+                }
+                return left.interval.startDate < right.interval.startDate
+            }
+            var maxEndDates: [Date] = []
+            maxEndDates.reserveCapacity(intervalsByStart.count)
+            var currentMaxEnd: Date?
+            for indexedInterval in intervalsByStart {
+                let endDate = indexedInterval.interval.endDate
+                if let previousMaxEnd = currentMaxEnd {
+                    let nextMaxEnd = max(previousMaxEnd, endDate)
+                    maxEndDates.append(nextMaxEnd)
+                    currentMaxEnd = nextMaxEnd
+                } else {
+                    maxEndDates.append(endDate)
+                    currentMaxEnd = endDate
+                }
+            }
+            prefixMaxEndDates = maxEndDates
+        }
+
+        func bestWorkoutUid(forSampleStart startDate: Date, endDate: Date) -> String? {
+            guard intervalsByStart.isEmpty == false else {
+                return nil
+            }
+
+            var bestUid: String?
+            var bestOverlap: TimeInterval = 0
+            var bestOriginalIndex = Int.max
+            var overlapIndex = upperBoundForStartDate(before: endDate) - 1
+            while overlapIndex >= 0 {
+                if prefixMaxEndDates[overlapIndex] <= startDate {
+                    break
+                }
+                let indexedInterval = intervalsByStart[overlapIndex]
+                let interval = indexedInterval.interval
+                let overlapStart = max(startDate, interval.startDate)
+                let overlapEnd = min(endDate, interval.endDate)
+                let overlap = overlapEnd.timeIntervalSince(overlapStart)
+                if overlap > 0,
+                   overlap > bestOverlap || (overlap == bestOverlap && indexedInterval.originalIndex < bestOriginalIndex) {
+                    bestOverlap = overlap
+                    bestUid = interval.uid
+                    bestOriginalIndex = indexedInterval.originalIndex
+                }
+                overlapIndex -= 1
+            }
+            if let bestUid {
+                return bestUid
+            }
+
+            var fallbackUid: String?
+            var fallbackOriginalIndex = Int.max
+            var fallbackIndex = upperBoundForStartDate(through: startDate) - 1
+            while fallbackIndex >= 0 {
+                if prefixMaxEndDates[fallbackIndex] < startDate {
+                    break
+                }
+                let indexedInterval = intervalsByStart[fallbackIndex]
+                let interval = indexedInterval.interval
+                if startDate >= interval.startDate,
+                   startDate <= interval.endDate,
+                   indexedInterval.originalIndex < fallbackOriginalIndex {
+                    fallbackUid = interval.uid
+                    fallbackOriginalIndex = indexedInterval.originalIndex
+                }
+                fallbackIndex -= 1
+            }
+            return fallbackUid
+        }
+
+        private func upperBoundForStartDate(before date: Date) -> Int {
+            upperBoundForStartDate(date) { startDate, date in
+                startDate < date
+            }
+        }
+
+        private func upperBoundForStartDate(through date: Date) -> Int {
+            upperBoundForStartDate(date) { startDate, date in
+                startDate <= date
+            }
+        }
+
+        private func upperBoundForStartDate(
+            _ date: Date,
+            includes: (Date, Date) -> Bool
+        ) -> Int {
+            var lowerBound = 0
+            var upperBound = intervalsByStart.count
+            while lowerBound < upperBound {
+                let midpoint = lowerBound + (upperBound - lowerBound) / 2
+                if includes(intervalsByStart[midpoint].interval.startDate, date) {
+                    lowerBound = midpoint + 1
+                } else {
+                    upperBound = midpoint
+                }
+            }
+            return lowerBound
+        }
+    }
+
     private let store = HKHealthStore()
     private let syncWindowDays = 21
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
+    private let workoutMetricQueryConcurrencyLimit = 4
     private let historicalWorkoutFirstEvidenceBatchSize = 8
     private let historicalWorkoutEvidenceBatchSize = 32
     private let historicalWorkoutBatchPrefetchLimit = 10
@@ -577,14 +720,17 @@ actor HealthSyncStore {
         if canReadHealthData {
             async let fetchedSleepData = fetchSleepPayload(startDate: startDate, endDate: endDate)
             async let fetchedVitals = fetchVitalsPayload(startDate: startDate, endDate: endDate)
+            async let fetchedWorkouts = fetchWorkoutSessionsIfNeeded(
+                includeWorkouts: includeWorkouts,
+                startDate: workoutStartDate,
+                endDate: endDate
+            )
             let fetchedSleepPayload = try await fetchedSleepData
             sleepSessions = fetchedSleepPayload.legacySessions
             sleepNights = fetchedSleepPayload.nights
             sleepSegments = fetchedSleepPayload.segments
             sleepRawRecords = fetchedSleepPayload.rawRecords
-            workouts = includeWorkouts
-                ? try await fetchWorkoutSessions(startDate: workoutStartDate, endDate: endDate)
-                : []
+            workouts = try await fetchedWorkouts
             vitals = try await fetchedVitals
         } else {
             companionDebugLog(
@@ -638,6 +784,17 @@ actor HealthSyncStore {
         )
     }
 
+    private func fetchWorkoutSessionsIfNeeded(
+        includeWorkouts: Bool,
+        startDate: Date,
+        endDate: Date
+    ) async throws -> [CompanionSyncPayload.WorkoutSession] {
+        guard includeWorkouts else {
+            return []
+        }
+        return try await fetchWorkoutSessions(startDate: startDate, endDate: endDate)
+    }
+
     func streamWorkoutSessionBatches(
         healthKitAuthorized: Bool,
         healthSyncEnabled: Bool,
@@ -677,12 +834,33 @@ actor HealthSyncStore {
             "HealthSyncStore",
             "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
         )
+        if isFullBackfill {
+            return try await streamWorkoutSessionBatchesByWindow(
+                startDate: workoutStartDate,
+                endDate: endDate,
+                batchSize: effectiveBatchSize,
+                firstBatchSize: historicalWorkoutFirstEvidenceBatchSize,
+                alreadyUploadedWorkoutExternalUids: alreadyUploadedWorkoutExternalUids,
+                onProgress: onProgress,
+                onBatch: onBatch
+            )
+        }
+
         let allWorkouts = try await queryWorkouts(startDate: workoutStartDate, endDate: endDate)
-            .sorted { $0.startDate > $1.startDate }
-        let completedWorkoutIds = Set(alreadyUploadedWorkoutExternalUids.map { $0.lowercased() })
-        let workouts = completedWorkoutIds.isEmpty
-            ? allWorkouts
-            : allWorkouts.filter { completedWorkoutIds.contains($0.uuid.uuidString.lowercased()) == false }
+        let completedWorkoutUUIDs = Self.completedWorkoutUUIDSet(
+            from: alreadyUploadedWorkoutExternalUids
+        )
+        let completedWorkoutIds = completedWorkoutUUIDs == nil
+            ? Set(alreadyUploadedWorkoutExternalUids.map { $0.lowercased() })
+            : []
+        let workouts = alreadyUploadedWorkoutExternalUids.isEmpty
+            ? allWorkouts.sorted { $0.startDate > $1.startDate }
+            : allWorkouts.filter { workout in
+                if let completedWorkoutUUIDs {
+                    return completedWorkoutUUIDs.contains(workout.uuid) == false
+                }
+                return completedWorkoutIds.contains(workout.uuid.uuidString.lowercased()) == false
+            }.sorted { $0.startDate > $1.startDate }
         let skippedWorkouts = allWorkouts.count - workouts.count
         if skippedWorkouts > 0 {
             companionDebugLog(
@@ -826,10 +1004,60 @@ actor HealthSyncStore {
         return ranges
     }
 
+    nonisolated static func workoutMetricQueryBatchRangesForTesting(
+        totalCount: Int,
+        concurrencyLimit: Int
+    ) -> [Range<Int>] {
+        workoutMetricQueryBatchRanges(
+            totalCount: totalCount,
+            concurrencyLimit: concurrencyLimit
+        )
+    }
+
+    private nonisolated static func workoutMetricQueryBatchRanges(
+        totalCount: Int,
+        concurrencyLimit: Int
+    ) -> [Range<Int>] {
+        guard totalCount > 0 else {
+            return []
+        }
+        let batchSize = max(1, concurrencyLimit)
+        var ranges: [Range<Int>] = []
+        var lowerBound = 0
+        while lowerBound < totalCount {
+            let upperBound = min(totalCount, lowerBound + batchSize)
+            ranges.append(lowerBound..<upperBound)
+            lowerBound = upperBound
+        }
+        return ranges
+    }
+
+    nonisolated static func completedWorkoutUUIDSetForTesting(from externalUids: Set<String>) -> Set<UUID>? {
+        completedWorkoutUUIDSet(from: externalUids)
+    }
+
+    private nonisolated static func completedWorkoutUUIDSet(from externalUids: Set<String>) -> Set<UUID>? {
+        guard externalUids.isEmpty == false else {
+            return nil
+        }
+        var uuids = Set<UUID>()
+        uuids.reserveCapacity(externalUids.count)
+        for externalUid in externalUids {
+            guard let uuid = UUID(uuidString: externalUid) else {
+                return nil
+            }
+            uuids.insert(uuid)
+        }
+        return uuids
+    }
+
     private func streamWorkoutSessionBatchesByWindow(
         startDate: Date,
         endDate: Date,
         batchSize: Int,
+        firstBatchSize: Int? = nil,
+        alreadyUploadedWorkoutExternalUids: Set<String> = [],
+        onProgress: ((WorkoutBatchProgress) async -> Void)? = nil,
         onBatch: @escaping ([CompanionSyncPayload.WorkoutSession], WorkoutBatchProgress) async throws -> Void
     ) async throws -> WorkoutStreamResult {
         let windows = Self.workoutStreamingWindows(startDate: startDate, endDate: endDate)
@@ -839,28 +1067,61 @@ actor HealthSyncStore {
         }
 
         let boundedBatchSize = max(1, batchSize)
+        let boundedFirstBatchSize = firstBatchSize.map { max(1, $0) }
+        let completedWorkoutUUIDs = Self.completedWorkoutUUIDSet(
+            from: alreadyUploadedWorkoutExternalUids
+        )
+        let completedWorkoutIds = completedWorkoutUUIDs == nil
+            ? Set(alreadyUploadedWorkoutExternalUids.map { $0.lowercased() })
+            : []
         var seenWorkoutIds = Set<UUID>()
         var discoveredWorkouts = 0
         var uploadedWorkouts = 0
+        var skippedWorkouts = 0
         var batchIndex = 0
+        var isFirstPendingBatch = true
 
         for (windowIndex, window) in windows.enumerated() {
             try Task.checkCancellation()
-            let windowWorkouts = try await queryWorkouts(startDate: window.start, endDate: window.end)
-                .sorted { $0.startDate > $1.startDate }
-                .filter { workout in
-                    seenWorkoutIds.insert(workout.uuid).inserted
-                }
-            discoveredWorkouts += windowWorkouts.count
+            let queriedWindowWorkouts = try await queryWorkouts(startDate: window.start, endDate: window.end)
+            var uniqueWindowWorkouts: [HKWorkout] = []
+            uniqueWindowWorkouts.reserveCapacity(queriedWindowWorkouts.count)
+            for workout in queriedWindowWorkouts where seenWorkoutIds.insert(workout.uuid).inserted {
+                uniqueWindowWorkouts.append(workout)
+            }
+            discoveredWorkouts += uniqueWindowWorkouts.count
+            let windowWorkouts = alreadyUploadedWorkoutExternalUids.isEmpty
+                ? uniqueWindowWorkouts.sorted { $0.startDate > $1.startDate }
+                : uniqueWindowWorkouts.filter { workout in
+                    if let completedWorkoutUUIDs {
+                        return completedWorkoutUUIDs.contains(workout.uuid) == false
+                    }
+                    return completedWorkoutIds.contains(workout.uuid.uuidString.lowercased()) == false
+                }.sorted { $0.startDate > $1.startDate }
+            skippedWorkouts += uniqueWindowWorkouts.count - windowWorkouts.count
+            let accountedWorkouts = skippedWorkouts + uploadedWorkouts
             companionDebugLog(
                 "HealthSyncStore",
-                "streamWorkoutSessionBatchesByWindow scanned window=\(windowIndex + 1)/\(windows.count) start=\(isoString(window.start)) end=\(isoString(window.end)) workouts=\(windowWorkouts.count) discovered=\(discoveredWorkouts)"
+                "streamWorkoutSessionBatchesByWindow scanned window=\(windowIndex + 1)/\(windows.count) start=\(isoString(window.start)) end=\(isoString(window.end)) pending=\(windowWorkouts.count) skipped=\(skippedWorkouts) discovered=\(discoveredWorkouts)"
+            )
+            await onProgress?(
+                WorkoutBatchProgress(
+                    batchIndex: batchIndex,
+                    totalBatches: 0,
+                    uploadedWorkouts: accountedWorkouts,
+                    totalWorkouts: windowIndex == windows.count - 1 ? discoveredWorkouts : nil,
+                    discoveredWorkouts: discoveredWorkouts,
+                    isScanningComplete: windowIndex == windows.count - 1
+                )
             )
 
             var lowerBound = 0
             while lowerBound < windowWorkouts.count {
                 try Task.checkCancellation()
-                let upperBound = min(windowWorkouts.count, lowerBound + boundedBatchSize)
+                let currentBatchSize = isFirstPendingBatch
+                    ? boundedFirstBatchSize ?? boundedBatchSize
+                    : boundedBatchSize
+                let upperBound = min(windowWorkouts.count, lowerBound + currentBatchSize)
                 let batchWorkouts = Array(windowWorkouts[lowerBound..<upperBound])
                 let sessions = try await mapWorkoutSessionsBounded(
                     batchWorkouts,
@@ -870,26 +1131,39 @@ actor HealthSyncStore {
                     .sorted { $0.startedAt > $1.startedAt }
                 uploadedWorkouts += sessions.count
                 batchIndex += 1
+                isFirstPendingBatch = false
+                let isFinalBatch = windowIndex == windows.count - 1 && upperBound == windowWorkouts.count
                 try await onBatch(
                     sessions,
                     WorkoutBatchProgress(
                         batchIndex: batchIndex,
                         totalBatches: 0,
-                        uploadedWorkouts: uploadedWorkouts,
-                        totalWorkouts: nil,
+                        uploadedWorkouts: skippedWorkouts + uploadedWorkouts,
+                        totalWorkouts: isFinalBatch ? discoveredWorkouts : nil,
                         discoveredWorkouts: discoveredWorkouts,
-                        isScanningComplete: windowIndex == windows.count - 1 && upperBound == windowWorkouts.count
+                        isScanningComplete: isFinalBatch
                     )
                 )
                 companionDebugLog(
                     "HealthSyncStore",
-                    "streamWorkoutSessionBatchesByWindow uploaded batch=\(batchIndex) mapped=\(sessions.count) uploaded=\(uploadedWorkouts) discovered=\(discoveredWorkouts)"
+                    "streamWorkoutSessionBatchesByWindow uploaded batch=\(batchIndex) mapped=\(sessions.count) uploaded=\(uploadedWorkouts) skipped=\(skippedWorkouts) discovered=\(discoveredWorkouts)"
                 )
                 lowerBound = upperBound
             }
         }
 
-        return WorkoutStreamResult(totalWorkouts: uploadedWorkouts, healthDataDeferred: false)
+        await onProgress?(
+            WorkoutBatchProgress(
+                batchIndex: batchIndex,
+                totalBatches: 0,
+                uploadedWorkouts: skippedWorkouts + uploadedWorkouts,
+                totalWorkouts: discoveredWorkouts,
+                discoveredWorkouts: discoveredWorkouts,
+                isScanningComplete: true
+            )
+        )
+
+        return WorkoutStreamResult(totalWorkouts: discoveredWorkouts, healthDataDeferred: false)
     }
 
     static func workoutStreamingWindows(
@@ -1372,11 +1646,17 @@ actor HealthSyncStore {
     }
 
     private func fetchWorkoutEvidenceForBatch(_ workouts: [HKWorkout]) async throws -> WorkoutEvidenceBundle {
-        guard workouts.isEmpty == false else {
+        guard let batchPlan = Self.workoutEvidenceBatchPlan(
+            for: workouts,
+            uid: { $0.uuid.uuidString.lowercased() },
+            startDate: \.startDate,
+            endDate: \.endDate
+        ) else {
             return WorkoutEvidenceBundle(timeSeriesByWorkoutUid: [:], routePointsByWorkoutUid: [:])
         }
-        let startDate = workouts.map(\.startDate).min() ?? Date()
-        let endDate = workouts.map(\.endDate).max() ?? Date()
+        let startDate = batchPlan.startDate
+        let endDate = batchPlan.endDate
+        let workoutIntervalIndex = WorkoutIntervalIndex(intervals: batchPlan.intervals)
         companionDebugLog(
             "HealthSyncStore",
             "fetchWorkoutEvidenceForBatch start workouts=\(workouts.count) start=\(isoString(startDate)) end=\(isoString(endDate))"
@@ -1384,17 +1664,17 @@ actor HealthSyncStore {
         async let heartRateSamples = fetchWorkoutHeartRateSamplesByDateRange(
             startDate: startDate,
             endDate: endDate,
-            workouts: workouts
+            workoutIntervalIndex: workoutIntervalIndex
         )
         async let metricSamples = fetchWorkoutMetricSamplesByDateRange(
             startDate: startDate,
             endDate: endDate,
-            workouts: workouts
+            workoutIntervalIndex: workoutIntervalIndex
         )
         async let routePoints = fetchWorkoutRoutePointsByDateRange(
             startDate: startDate,
             endDate: endDate,
-            workouts: workouts
+            workoutIntervalIndex: workoutIntervalIndex
         )
         let resolvedHeartRateSamples = try await heartRateSamples
         let resolvedMetricSamples = try await metricSamples
@@ -1422,10 +1702,58 @@ actor HealthSyncStore {
         )
     }
 
+    static func workoutEvidenceBatchPlanForTesting(
+        intervals: [WorkoutInterval]
+    ) -> WorkoutEvidenceBatchPlan? {
+        workoutEvidenceBatchPlan(
+            for: intervals,
+            uid: \.uid,
+            startDate: \.startDate,
+            endDate: \.endDate
+        )
+    }
+
+    private static func workoutEvidenceBatchPlan<Element>(
+        for elements: [Element],
+        uid: (Element) -> String,
+        startDate: (Element) -> Date,
+        endDate: (Element) -> Date
+    ) -> WorkoutEvidenceBatchPlan? {
+        guard let first = elements.first else {
+            return nil
+        }
+        var batchStartDate = startDate(first)
+        var batchEndDate = endDate(first)
+        var intervals: [WorkoutInterval] = []
+        intervals.reserveCapacity(elements.count)
+        for element in elements {
+            let elementStartDate = startDate(element)
+            let elementEndDate = endDate(element)
+            if elementStartDate < batchStartDate {
+                batchStartDate = elementStartDate
+            }
+            if elementEndDate > batchEndDate {
+                batchEndDate = elementEndDate
+            }
+            intervals.append(
+                WorkoutInterval(
+                    uid: uid(element),
+                    startDate: elementStartDate,
+                    endDate: elementEndDate
+                )
+            )
+        }
+        return WorkoutEvidenceBatchPlan(
+            startDate: batchStartDate,
+            endDate: batchEndDate,
+            intervals: intervals
+        )
+    }
+
     private func fetchWorkoutHeartRateSamplesByDateRange(
         startDate: Date,
         endDate: Date,
-        workouts: [HKWorkout]
+        workoutIntervalIndex: WorkoutIntervalIndex
     ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
         guard let heartRateType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
             return []
@@ -1434,7 +1762,7 @@ actor HealthSyncStore {
             type: heartRateType,
             startDate: startDate,
             endDate: endDate,
-            workouts: workouts
+            workoutIntervalIndex: workoutIntervalIndex
         )
     }
 
@@ -1442,7 +1770,7 @@ actor HealthSyncStore {
         type: HKQuantityType,
         startDate: Date,
         endDate: Date,
-        workouts: [HKWorkout]
+        workoutIntervalIndex: WorkoutIntervalIndex
     ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
         try await withCheckedThrowingContinuation { continuation in
             let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
@@ -1460,10 +1788,9 @@ actor HealthSyncStore {
                 var seriesIndexesByWorkoutUid: [String: Int] = [:]
                 let mapped = (samples as? [HKQuantitySample] ?? []).compactMap {
                     sample -> CompanionSyncPayload.WorkoutTimeSeriesSample? in
-                    guard let workoutUid = self.bestWorkoutUid(
+                    guard let workoutUid = workoutIntervalIndex.bestWorkoutUid(
                         forSampleStart: sample.startDate,
-                        endDate: sample.endDate,
-                        workouts: workouts
+                        endDate: sample.endDate
                     ) else {
                         return nil
                     }
@@ -1511,22 +1838,39 @@ actor HealthSyncStore {
     private func fetchWorkoutMetricSamplesByDateRange(
         startDate: Date,
         endDate: Date,
-        workouts: [HKWorkout]
+        workoutIntervalIndex: WorkoutIntervalIndex
     ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
-        var samples: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
-        for definition in workoutQuantityDefinitions {
-            guard let quantityType = HKQuantityType.quantityType(forIdentifier: definition.identifier) else {
-                continue
+        let queryDefinitions: [(definition: WorkoutQuantityDefinition, type: HKQuantityType)] =
+            workoutQuantityDefinitions.compactMap { definition in
+                guard let quantityType = HKQuantityType.quantityType(forIdentifier: definition.identifier) else {
+                    return nil
+                }
+                return (definition, quantityType)
             }
-            samples.append(
-                contentsOf: try await queryWorkoutQuantitySamplesByDateRange(
-                    type: quantityType,
-                    definition: definition,
-                    startDate: startDate,
-                    endDate: endDate,
-                    workouts: workouts
-                )
-            )
+        var samples: [CompanionSyncPayload.WorkoutTimeSeriesSample] = []
+        for batchRange in Self.workoutMetricQueryBatchRanges(
+            totalCount: queryDefinitions.count,
+            concurrencyLimit: workoutMetricQueryConcurrencyLimit
+        ) {
+            try await withThrowingTaskGroup(
+                of: [CompanionSyncPayload.WorkoutTimeSeriesSample].self
+            ) { group in
+                for index in batchRange {
+                    let queryDefinition = queryDefinitions[index]
+                    group.addTask {
+                        try await self.queryWorkoutQuantitySamplesByDateRange(
+                            type: queryDefinition.type,
+                            definition: queryDefinition.definition,
+                            startDate: startDate,
+                            endDate: endDate,
+                            workoutIntervalIndex: workoutIntervalIndex
+                        )
+                    }
+                }
+                for try await partial in group {
+                    samples.append(contentsOf: partial)
+                }
+            }
         }
         return samples
     }
@@ -1536,7 +1880,7 @@ actor HealthSyncStore {
         definition: WorkoutQuantityDefinition,
         startDate: Date,
         endDate: Date,
-        workouts: [HKWorkout]
+        workoutIntervalIndex: WorkoutIntervalIndex
     ) async throws -> [CompanionSyncPayload.WorkoutTimeSeriesSample] {
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<[CompanionSyncPayload.WorkoutTimeSeriesSample], Error>) in
@@ -1555,10 +1899,9 @@ actor HealthSyncStore {
                 var seriesIndexesByWorkoutUid: [String: Int] = [:]
                 let mapped = (samples as? [HKQuantitySample] ?? []).compactMap {
                     sample -> CompanionSyncPayload.WorkoutTimeSeriesSample? in
-                    guard let workoutUid = self.bestWorkoutUid(
+                    guard let workoutUid = workoutIntervalIndex.bestWorkoutUid(
                         forSampleStart: sample.startDate,
-                        endDate: sample.endDate,
-                        workouts: workouts
+                        endDate: sample.endDate
                     ) else {
                         return nil
                     }
@@ -1606,7 +1949,7 @@ actor HealthSyncStore {
     private func fetchWorkoutRoutePointsByDateRange(
         startDate: Date,
         endDate: Date,
-        workouts: [HKWorkout]
+        workoutIntervalIndex: WorkoutIntervalIndex
     ) async throws -> [CompanionSyncPayload.WorkoutRoutePoint] {
         let routeType = HKSeriesType.workoutRoute()
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: [])
@@ -1629,20 +1972,22 @@ actor HealthSyncStore {
             self.store.execute(query)
         }
         var points: [CompanionSyncPayload.WorkoutRoutePoint] = []
-        var pointIndexesByWorkoutUid: [String: Int] = [:]
+        var pointIndexAllocator = WorkoutRoutePointIndexAllocator()
         for route in routes {
-            guard let workoutUid = bestWorkoutUid(
+            guard let workoutUid = workoutIntervalIndex.bestWorkoutUid(
                 forSampleStart: route.startDate,
-                endDate: route.endDate,
-                workouts: workouts
+                endDate: route.endDate
             ) else {
                 continue
             }
             let locations = try await queryRouteLocations(route)
             let routeUid = route.uuid.uuidString.lowercased()
-            for location in locations {
-                let pointIndex = pointIndexesByWorkoutUid[workoutUid, default: 0]
-                pointIndexesByWorkoutUid[workoutUid] = pointIndex + 1
+            let pointIndexes = pointIndexAllocator.reserveIndexes(
+                forWorkoutUid: workoutUid,
+                count: locations.count
+            )
+            for (offset, location) in locations.enumerated() {
+                let pointIndex = pointIndexes.lowerBound + offset
                 points.append(
                     CompanionSyncPayload.WorkoutRoutePoint(
                         sourceRouteUid: routeUid,
@@ -1670,30 +2015,6 @@ actor HealthSyncStore {
             }
         }
         return points
-    }
-
-    private nonisolated func bestWorkoutUid(
-        forSampleStart startDate: Date,
-        endDate: Date,
-        workouts: [HKWorkout]
-    ) -> String? {
-        var bestWorkout: HKWorkout?
-        var bestOverlap: TimeInterval = 0
-        for workout in workouts {
-            let overlapStart = max(startDate, workout.startDate)
-            let overlapEnd = min(endDate, workout.endDate)
-            let overlap = overlapEnd.timeIntervalSince(overlapStart)
-            if overlap > bestOverlap {
-                bestOverlap = overlap
-                bestWorkout = workout
-            }
-        }
-        if let bestWorkout, bestOverlap > 0 {
-            return bestWorkout.uuid.uuidString.lowercased()
-        }
-        return workouts.first { workout in
-            startDate >= workout.startDate && startDate <= workout.endDate
-        }?.uuid.uuidString.lowercased()
     }
 
     private func fetchWorkoutHeartRateSamples(
@@ -1964,10 +2285,23 @@ actor HealthSyncStore {
         }
     }
 
+    nonisolated static func workoutEvidenceTimestampStringForTesting(_ date: Date) -> String {
+        isoStringNonisolated(date)
+    }
+
     private nonisolated static func isoStringNonisolated(_ date: Date) -> String {
+        threadLocalIsoFormatter().string(from: date)
+    }
+
+    private nonisolated static func threadLocalIsoFormatter() -> ISO8601DateFormatter {
+        let key = "ForgeCompanion.HealthSyncStore.iso8601DateFormatter"
+        if let formatter = Thread.current.threadDictionary[key] as? ISO8601DateFormatter {
+            return formatter
+        }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        Thread.current.threadDictionary[key] = formatter
+        return formatter
     }
 
     private func workoutCaptureFlags(

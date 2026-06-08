@@ -223,17 +223,51 @@ describe("normalizeForgeSnapshot", () => {
         neglectedGoals: [],
         summary: ""
       },
+      users: [
+        {
+          id: "user_albert",
+          kind: "human",
+          handle: "albert",
+          displayName: "Albert",
+          description: "",
+          accentColor: "#2563eb",
+          createdAt: "2026-06-08T12:00:00.000Z",
+          updatedAt: "2026-06-08T12:00:00.000Z"
+        },
+        {
+          id: "user_codex",
+          kind: "bot",
+          handle: "codex",
+          displayName: "Codex",
+          description: "",
+          accentColor: "#059669",
+          createdAt: "2026-06-08T12:00:00.000Z",
+          updatedAt: "2026-06-08T12:00:00.000Z"
+        }
+      ],
       goals: [],
       projects: [],
       tags: [{ id: "tag_shell", label: "Shell", color: "blue" }],
-      tasks: [{ id: "task_shell", title: "Shell task" }],
+      tasks: [
+        {
+          id: "task_shell",
+          title: "Shell task",
+          userId: "user_albert",
+          ownerUserId: "user_albert",
+          assigneeUserIds: ["user_codex"]
+        }
+      ],
       habits: [{ id: "habit_shell", title: "Shell habit" }],
       activity: [{ id: "activity_shell", title: "Shell activity" }],
       activeTaskRuns: []
     } as never);
 
     expect(normalized.tasks[0]?.id).toBe("task_shell");
+    expect(normalized.tasks[0]?.user?.displayName).toBe("Albert");
+    expect(normalized.tasks[0]?.ownerUser?.displayName).toBe("Albert");
+    expect(normalized.tasks[0]?.assignees?.[0]?.displayName).toBe("Codex");
     expect(normalized.dashboard.tasks[0]?.id).toBe("task_shell");
+    expect(normalized.dashboard.tasks[0]?.user?.displayName).toBe("Albert");
     expect(normalized.dashboard.habits[0]?.id).toBe("habit_shell");
     expect(normalized.dashboard.tags[0]?.id).toBe("tag_shell");
     expect(normalized.dashboard.recentActivity[0]?.id).toBe("activity_shell");

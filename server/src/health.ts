@@ -648,6 +648,11 @@ type MobileSyncChunkRow = {
   updated_at: string;
 };
 
+type MobileSyncChunkProgressRow = Pick<
+  MobileSyncChunkRow,
+  "family" | "record_count" | "byte_count"
+>;
+
 type SleepSessionRow = {
   id: string;
   external_uid: string;
@@ -3175,8 +3180,67 @@ function upsertVitalDaySummary(
   });
 }
 
-function summarizeUserHealthDay(userId: string, dateKeyValue: string) {
-  const sleeps = listSleepRows([userId]).filter(
+function nextUtcDateKey(dateKeyValue: string) {
+  return addUtcDaysToDateKey(dateKeyValue, 1);
+}
+
+function addUtcDaysToDateKey(dateKeyValue: string, days: number) {
+  const date = new Date(`${dateKeyValue}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function workoutDaySummaryMetrics(userId: string, dateKeyValue: string) {
+  const nextDateKey = nextUtcDateKey(dateKeyValue);
+  return getDatabase()
+    .prepare(
+      `SELECT COALESCE(SUM(duration_seconds), 0) AS totalWorkoutSeconds,
+              COALESCE(SUM(COALESCE(exercise_minutes, duration_seconds / 60.0)), 0) AS totalExerciseMinutes,
+              COALESCE(SUM(COALESCE(total_energy_kcal, active_energy_kcal, 0)), 0) AS totalEnergyKcal,
+              COUNT(*) AS workoutCount
+       FROM health_workout_sessions
+       WHERE user_id = ?
+         AND started_at >= ?
+         AND started_at < ?`
+    )
+    .get(
+      userId,
+      `${dateKeyValue}T00:00:00`,
+      `${nextDateKey}T00:00:00`
+    ) as {
+    totalWorkoutSeconds: number;
+    totalExerciseMinutes: number;
+    totalEnergyKcal: number;
+    workoutCount: number;
+  };
+}
+
+function sleepRowsForHealthDay(userId: string, dateKeyValue: string) {
+  const previousDateKey = addUtcDaysToDateKey(dateKeyValue, -1);
+  const nextDateKey = addUtcDaysToDateKey(dateKeyValue, 1);
+  const followingDateKey = addUtcDaysToDateKey(dateKeyValue, 2);
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT *
+         FROM health_sleep_sessions
+         WHERE user_id = ?
+           AND (
+             local_date_key = ?
+             OR (local_date_key = '' AND ended_at >= ? AND ended_at < ?)
+             OR (started_at >= ? AND started_at < ?)
+           )
+         ORDER BY ended_at DESC`
+      )
+      .all(
+        userId,
+        dateKeyValue,
+        `${dateKeyValue}T00:00:00`,
+        `${nextDateKey}T00:00:00`,
+        `${previousDateKey}T00:00:00`,
+        `${followingDateKey}T00:00:00`
+      ) as SleepSessionRow[]
+  ).filter(
     (row) =>
       sleepSessionDateKey(row) === dateKeyValue ||
       localDateKeyForTimezone(
@@ -3184,23 +3248,13 @@ function summarizeUserHealthDay(userId: string, dateKeyValue: string) {
         resolveTimeZone(row.source_timezone)
       ) === dateKeyValue
   );
-  const workouts = listWorkoutRows([userId]).filter(
-    (row) => dayKey(row.started_at) === dateKeyValue
-  );
+}
+
+function summarizeUserHealthDay(userId: string, dateKeyValue: string) {
+  const sleeps = sleepRowsForHealthDay(userId, dateKeyValue);
+  const workoutSummary = workoutDaySummaryMetrics(userId, dateKeyValue);
   const totalSleepSeconds = sleeps.reduce(
     (sum, row) => sum + row.asleep_seconds,
-    0
-  );
-  const totalWorkoutSeconds = workouts.reduce(
-    (sum, row) => sum + row.duration_seconds,
-    0
-  );
-  const totalExerciseMinutes = workouts.reduce(
-    (sum, row) => sum + (row.exercise_minutes ?? row.duration_seconds / 60),
-    0
-  );
-  const totalEnergyKcal = workouts.reduce(
-    (sum, row) => sum + (row.total_energy_kcal ?? row.active_energy_kcal ?? 0),
     0
   );
   upsertDailySummary(
@@ -3209,10 +3263,10 @@ function summarizeUserHealthDay(userId: string, dateKeyValue: string) {
     "health",
     {
       totalSleepSeconds,
-      totalWorkoutSeconds,
-      totalExerciseMinutes,
-      totalEnergyKcal,
-      workoutCount: workouts.length,
+      totalWorkoutSeconds: workoutSummary.totalWorkoutSeconds,
+      totalExerciseMinutes: workoutSummary.totalExerciseMinutes,
+      totalEnergyKcal: workoutSummary.totalEnergyKcal,
+      workoutCount: workoutSummary.workoutCount,
       sleepSessionCount: sleeps.length
     },
     {
@@ -4414,6 +4468,14 @@ function findResumableMobileSyncSessionForPairing(
 }
 
 function mobileSyncSessionProgress(syncSessionId: string) {
+  const session = readMobileSyncSession(syncSessionId);
+  if (session) {
+    return mobileSyncSessionProgressFromStoredSession(session);
+  }
+  return mobileSyncSessionProgressFromChunkRows(syncSessionId);
+}
+
+function mobileSyncSessionProgressFromChunkRows(syncSessionId: string) {
   const chunks = getDatabase()
     .prepare(
       `SELECT family, record_count, byte_count
@@ -4425,19 +4487,87 @@ function mobileSyncSessionProgress(syncSessionId: string) {
     record_count: number;
     byte_count: number;
   }>;
-  const receivedCounts: Record<string, number> = {};
-  const byteTotals: Record<string, number> = {};
-  for (const chunk of chunks) {
-    receivedCounts[chunk.family] =
-      (receivedCounts[chunk.family] ?? 0) + chunk.record_count;
-    byteTotals[chunk.family] =
-      (byteTotals[chunk.family] ?? 0) + chunk.byte_count;
+  return mobileSyncChunkProgressFromRows(chunks);
+}
+
+function mobileSyncSessionChunkCount(syncSessionId: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS chunk_count
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?`
+    )
+    .get(syncSessionId) as { chunk_count: number } | undefined;
+  return row?.chunk_count ?? 0;
+}
+
+function mobileSyncSessionProgressFromStoredSession(
+  session: MobileSyncSessionRow,
+  chunkCount = mobileSyncSessionChunkCount(session.id)
+) {
+  const receivedCounts = safeJsonParse<Record<string, number>>(
+    session.received_counts_json,
+    {}
+  );
+  const byteTotals = safeJsonParse<Record<string, number>>(
+    session.byte_totals_json,
+    {}
+  );
+  if (
+    chunkCount > 0 &&
+    Object.keys(receivedCounts).length === 0 &&
+    Object.keys(byteTotals).length === 0
+  ) {
+    return mobileSyncSessionProgressFromChunkRows(session.id);
   }
   return {
     receivedCounts,
     byteTotals,
-    chunkCount: chunks.length,
-    receivedBytes: chunks.reduce((sum, chunk) => sum + chunk.byte_count, 0)
+    chunkCount,
+    receivedBytes: Object.values(byteTotals).reduce(
+      (sum, value) => sum + (Number.isFinite(value) ? value : 0),
+      0
+    )
+  };
+}
+
+function mobileSyncSessionProgressAfterAcceptedChunk(input: {
+  session: MobileSyncSessionRow;
+  family: MobileHealthSyncFamily;
+  recordCount: number;
+  byteCount: number;
+}) {
+  const currentChunkCount = mobileSyncSessionChunkCount(input.session.id);
+  let receivedCounts = safeJsonParse<Record<string, number>>(
+    input.session.received_counts_json,
+    {}
+  );
+  let byteTotals = safeJsonParse<Record<string, number>>(
+    input.session.byte_totals_json,
+    {}
+  );
+  if (
+    currentChunkCount > 0 &&
+    Object.keys(receivedCounts).length === 0 &&
+    Object.keys(byteTotals).length === 0
+  ) {
+    const currentProgress = mobileSyncSessionProgressFromChunkRows(
+      input.session.id
+    );
+    receivedCounts = currentProgress.receivedCounts;
+    byteTotals = currentProgress.byteTotals;
+  }
+  receivedCounts[input.family] =
+    (receivedCounts[input.family] ?? 0) + input.recordCount;
+  byteTotals[input.family] = (byteTotals[input.family] ?? 0) + input.byteCount;
+  return {
+    receivedCounts,
+    byteTotals,
+    chunkCount: currentChunkCount + 1,
+    receivedBytes: Object.values(byteTotals).reduce(
+      (sum, value) => sum + (Number.isFinite(value) ? value : 0),
+      0
+    )
   };
 }
 
@@ -4512,42 +4642,67 @@ function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
   };
 }
 
-function mobileHealthWorkoutImportState(userId: string) {
+function mobileSyncSessionWorkoutImportOptions(session: MobileSyncSessionRow) {
+  const metadata = mobileSyncSessionMetadata(session).metadata ?? {};
+  const startedAfter =
+    typeof metadata.workoutImportStartedAfter === "string"
+      ? metadata.workoutImportStartedAfter.trim()
+      : "";
+  if (startedAfter.length === 0) {
+    return {};
+  }
+  const parsedStartedAfter = new Date(startedAfter);
+  if (Number.isNaN(parsedStartedAfter.getTime())) {
+    return {};
+  }
+  return {
+    startedAtOrAfter: parsedStartedAfter.toISOString()
+  };
+}
+
+function mobileHealthWorkoutImportState(
+  userId: string,
+  options: {
+    includeExternalUids?: boolean;
+    startedAtOrAfter?: string;
+  } = {}
+) {
+  const includeExternalUids = options.includeExternalUids !== false;
+  const startedAtFilter = options.startedAtOrAfter
+    ? "AND w.started_at >= ?"
+    : "";
+  const params = options.startedAtOrAfter
+    ? [userId, options.startedAtOrAfter]
+    : [userId];
   const rows = getDatabase()
     .prepare(
-      `WITH time_series_counts AS (
-         SELECT workout_id, COUNT(*) AS time_series_count
-         FROM health_workout_time_series
-         GROUP BY workout_id
-       ),
-       heart_rate_counts AS (
-         SELECT workout_id, COUNT(*) AS heart_rate_count
-         FROM health_workout_time_series
-         WHERE metric_key = 'heart_rate'
-         GROUP BY workout_id
-       ),
-       route_counts AS (
-         SELECT workout_id, COUNT(*) AS route_point_count
-         FROM health_workout_routes
-         GROUP BY workout_id
-       )
-       SELECT
+      `SELECT
          w.external_uid,
          w.derived_json,
-         COALESCE(time_series_counts.time_series_count, 0) AS time_series_count,
-         COALESCE(heart_rate_counts.heart_rate_count, 0) AS heart_rate_count,
-         COALESCE(route_counts.route_point_count, 0) AS route_point_count
+         (
+           SELECT COUNT(*)
+           FROM health_workout_time_series ts
+           WHERE ts.workout_id = w.id
+         ) AS time_series_count,
+         (
+           SELECT COUNT(*)
+           FROM health_workout_time_series ts
+           WHERE ts.workout_id = w.id AND ts.metric_key = 'heart_rate'
+         ) AS heart_rate_count,
+         (
+           SELECT COUNT(*)
+           FROM health_workout_routes r
+           WHERE r.workout_id = w.id
+         ) AS route_point_count
        FROM health_workout_sessions w
-       LEFT JOIN time_series_counts ON time_series_counts.workout_id = w.id
-       LEFT JOIN heart_rate_counts ON heart_rate_counts.workout_id = w.id
-       LEFT JOIN route_counts ON route_counts.workout_id = w.id
        WHERE w.user_id = ?
          AND w.source = 'apple_health'
          AND w.external_uid IS NOT NULL
          AND w.external_uid <> ''
+         ${startedAtFilter}
        ORDER BY w.started_at DESC`
     )
-    .all(userId) as Array<{
+    .all(...params) as Array<{
     external_uid: string;
     derived_json: string;
     time_series_count: number;
@@ -4579,7 +4734,9 @@ function mobileHealthWorkoutImportState(userId: string) {
       : false;
 
     if (evidenceCountsComplete) {
-      alreadyUploadedWorkoutExternalUids.push(row.external_uid.toLowerCase());
+      if (includeExternalUids) {
+        alreadyUploadedWorkoutExternalUids.push(row.external_uid.toLowerCase());
+      }
       timeSeriesSampleCount += actualTimeSeriesCount;
       heartRateSampleCount += actualHeartRateCount;
       routePointCount += actualRoutePointCount;
@@ -4588,14 +4745,17 @@ function mobileHealthWorkoutImportState(userId: string) {
       }
     } else {
       incompleteWorkoutCount += 1;
-      incompleteWorkoutExternalUids.push(row.external_uid.toLowerCase());
+      if (includeExternalUids) {
+        incompleteWorkoutExternalUids.push(row.external_uid.toLowerCase());
+      }
     }
   }
 
   return {
     alreadyUploadedWorkoutExternalUids,
     incompleteWorkoutExternalUids,
-    alreadyUploadedWorkoutCount: alreadyUploadedWorkoutExternalUids.length,
+    alreadyUploadedWorkoutCount:
+      rows.length - incompleteWorkoutCount,
     existingWorkoutCount: rows.length,
     incompleteWorkoutCount,
     staleEvidenceVersionWorkoutCount,
@@ -4608,7 +4768,11 @@ function mobileHealthWorkoutImportState(userId: string) {
 
 function mobileSyncSessionUploadPayload(
   session: MobileSyncSessionRow,
-  receivedChunkIds: string[]
+  receivedChunkIds: string[],
+  options: {
+    includeWorkoutImportExternalUids?: boolean;
+    includeWorkoutImportState?: boolean;
+  } = {}
 ) {
   return {
     syncSessionId: session.id,
@@ -4625,14 +4789,30 @@ function mobileSyncSessionUploadPayload(
       []
     ),
     receivedChunkIds,
-    workoutImportState: mobileHealthWorkoutImportState(session.user_id),
-    progress: mobileSyncSessionProgress(session.id)
+    ...(options.includeWorkoutImportState === false
+      ? {}
+      : {
+          workoutImportState: mobileHealthWorkoutImportState(
+            session.user_id,
+            {
+              ...mobileSyncSessionWorkoutImportOptions(session),
+              includeExternalUids: options.includeWorkoutImportExternalUids
+            }
+          )
+        }),
+    progress: mobileSyncSessionProgressFromStoredSession(session)
   };
 }
 
 export function getMobileHealthSyncSessionStatus(
   syncSessionId: string,
-  payload: { sessionId: string; pairingToken: string }
+  payload: {
+    sessionId: string;
+    pairingToken: string;
+    includeReceivedChunkIds?: boolean;
+    includeWorkoutImportExternalUids?: boolean;
+    includeWorkoutImportState?: boolean;
+  }
 ) {
   const pairing = requireValidPairing(payload.sessionId, payload.pairingToken);
   const session = readMobileSyncSession(syncSessionId);
@@ -4643,16 +4823,23 @@ export function getMobileHealthSyncSessionStatus(
       "The HealthKit sync session does not exist."
     );
   }
-  const receivedChunkIds = getDatabase()
-    .prepare(
-      `SELECT chunk_id
-       FROM health_mobile_sync_chunks
-       WHERE sync_session_id = ?
-       ORDER BY sequence ASC`
-    )
-    .all(syncSessionId)
-    .map((row) => (row as { chunk_id: string }).chunk_id);
-  return mobileSyncSessionUploadPayload(session, receivedChunkIds);
+  const receivedChunkIds =
+    payload.includeReceivedChunkIds === false
+      ? []
+      : getDatabase()
+          .prepare(
+            `SELECT chunk_id
+             FROM health_mobile_sync_chunks
+             WHERE sync_session_id = ?
+             ORDER BY sequence ASC`
+          )
+          .all(syncSessionId)
+          .map((row) => (row as { chunk_id: string }).chunk_id);
+  return mobileSyncSessionUploadPayload(session, receivedChunkIds, {
+    includeWorkoutImportState: payload.includeWorkoutImportState,
+    includeWorkoutImportExternalUids:
+      payload.includeWorkoutImportExternalUids
+  });
 }
 
 function ensureRunningMobileSyncSession(syncSessionId: string) {
@@ -4986,6 +5173,7 @@ function mobileSyncSessionMetadata(session: MobileSyncSessionRow) {
     device?: z.infer<typeof mobileHealthSyncSchema>["device"];
     permissions?: z.infer<typeof mobileHealthSyncSchema>["permissions"];
     sourceStates?: z.infer<typeof mobileHealthSyncSchema>["sourceStates"];
+    metadata?: Record<string, unknown>;
   }>(session.source_metadata_json, {});
 }
 
@@ -5011,6 +5199,7 @@ function applyWorkoutChunkImmediately(
     let createdCount = 0;
     let updatedCount = 0;
     let mergedCount = 0;
+    const dateKeysToSummarize = new Set<string>();
     getDatabase()
       .prepare(
         `INSERT INTO health_import_runs (
@@ -5038,7 +5227,10 @@ function applyWorkoutChunkImmediately(
       } else {
         updatedCount += 1;
       }
-      summarizeUserHealthDay(pairing.user_id, dayKey(workout.startedAt));
+      dateKeysToSummarize.add(dayKey(workout.startedAt));
+    }
+    for (const dateKeyValue of dateKeysToSummarize) {
+      summarizeUserHealthDay(pairing.user_id, dateKeyValue);
     }
 
     getDatabase()
@@ -5087,6 +5279,39 @@ function applyWorkoutChunkImmediately(
   });
 }
 
+function mobileSyncWorkoutRowsByExternalUid(
+  userId: string,
+  externalUids: string[]
+) {
+  const uniqueExternalUids = [...new Set(externalUids.filter(Boolean))];
+  const rowsByExternalUid = new Map<string, WorkoutSessionRow>();
+  const chunkSize = 500;
+  for (
+    let lowerBound = 0;
+    lowerBound < uniqueExternalUids.length;
+    lowerBound += chunkSize
+  ) {
+    const chunk = uniqueExternalUids.slice(lowerBound, lowerBound + chunkSize);
+    if (chunk.length === 0) {
+      continue;
+    }
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = getDatabase()
+      .prepare(
+        `SELECT *
+         FROM health_workout_sessions
+         WHERE user_id = ?
+           AND source = 'apple_health'
+           AND external_uid IN (${placeholders})`
+      )
+      .all(userId, ...chunk) as WorkoutSessionRow[];
+    for (const row of rows) {
+      rowsByExternalUid.set(row.external_uid, row);
+    }
+  }
+  return rowsByExternalUid;
+}
+
 function applyWorkoutEvidenceChunkImmediately(
   session: MobileSyncSessionRow,
   payload: z.infer<typeof mobileHealthSyncChunkPayloadSchema>
@@ -5099,16 +5324,16 @@ function applyWorkoutEvidenceChunkImmediately(
   const pairing = mobileSyncSessionPairing(session);
   runInTransaction(() => {
     const rowsToRecompute = new Map<string, WorkoutSessionRow>();
+    const rowsByExternalUid = mobileSyncWorkoutRowsByExternalUid(pairing.user_id, [
+      ...timeSeries
+        .filter((entry) => entry.samples.length > 0)
+        .map((entry) => entry.externalUid),
+      ...routes
+        .filter((entry) => entry.routePoints.length > 0)
+        .map((entry) => entry.externalUid)
+    ]);
     for (const entry of timeSeries) {
-      const row = getDatabase()
-        .prepare(
-          `SELECT *
-           FROM health_workout_sessions
-           WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`
-        )
-        .get(pairing.user_id, entry.externalUid) as
-        | WorkoutSessionRow
-        | undefined;
+      const row = rowsByExternalUid.get(entry.externalUid);
       if (!row || entry.samples.length === 0) {
         continue;
       }
@@ -5120,15 +5345,7 @@ function applyWorkoutEvidenceChunkImmediately(
       rowsToRecompute.set(row.id, row);
     }
     for (const entry of routes) {
-      const row = getDatabase()
-        .prepare(
-          `SELECT *
-           FROM health_workout_sessions
-           WHERE user_id = ? AND source = 'apple_health' AND external_uid = ?`
-        )
-        .get(pairing.user_id, entry.externalUid) as
-        | WorkoutSessionRow
-        | undefined;
+      const row = rowsByExternalUid.get(entry.externalUid);
       if (!row || entry.routePoints.length === 0) {
         continue;
       }
@@ -5141,7 +5358,11 @@ function applyWorkoutEvidenceChunkImmediately(
     }
     for (const row of rowsToRecompute.values()) {
       recomputeAndStoreWorkoutAnalytics(row);
-      summarizeUserHealthDay(pairing.user_id, dayKey(row.started_at));
+    }
+    for (const dateKeyValue of new Set(
+      [...rowsToRecompute.values()].map((row) => dayKey(row.started_at))
+    )) {
+      summarizeUserHealthDay(pairing.user_id, dateKeyValue);
     }
   });
 }
@@ -5174,6 +5395,9 @@ function markMobileHealthSyncChunkApplied(input: {
 }
 
 function mobileHealthSyncChunkWasImmediatelyApplied(chunk: MobileSyncChunkRow) {
+  if (chunk.applied_at) {
+    return true;
+  }
   const summary = safeJsonParse<Record<string, unknown>>(
     chunk.payload_summary_json,
     {}
@@ -5255,8 +5479,10 @@ function applyMobileHealthSyncChunkImmediately(
   }
 }
 
-function updateMobileSyncSessionProgress(syncSessionId: string) {
-  const progress = mobileSyncSessionProgress(syncSessionId);
+function updateMobileSyncSessionProgress(
+  syncSessionId: string,
+  progress = mobileSyncSessionProgress(syncSessionId)
+) {
   getDatabase()
     .prepare(
       `UPDATE health_mobile_sync_sessions
@@ -5402,7 +5628,7 @@ export function ingestMobileHealthSyncChunk(
         "A chunk with the same id was already accepted with different content."
       );
     }
-    const progress = updateMobileSyncSessionProgress(syncSessionId);
+    const progress = mobileSyncSessionProgressFromStoredSession(session);
     return {
       accepted: true,
       duplicate: true,
@@ -5512,6 +5738,12 @@ export function ingestMobileHealthSyncChunk(
   }
   return runInTransaction(() => {
     const now = nowIso();
+    const progress = mobileSyncSessionProgressAfterAcceptedChunk({
+      session,
+      family: parsed.family,
+      recordCount: parsed.recordCount,
+      byteCount: actualByteCount
+    });
     const payloadSummary = {
       ...summarizeChunkPayload(parsed.family, wirePayload.payload),
       clientByteCount: parsed.byteCount,
@@ -5557,7 +5789,7 @@ export function ingestMobileHealthSyncChunk(
         mode: appliedMode
       });
     }
-    const progress = updateMobileSyncSessionProgress(syncSessionId);
+    updateMobileSyncSessionProgress(syncSessionId, progress);
     return {
       accepted: true,
       duplicate: false,
@@ -5630,21 +5862,15 @@ function mergeMobileHealthSyncChunks(
   for (const chunk of chunks.sort(
     (left, right) => left.sequence - right.sequence
   )) {
-    const payload = mobileHealthSyncChunkPayloadSchema.parse(
-      safeJsonParse<Record<string, unknown>>(chunk.payload_json, {})
-    );
     const skipRecords =
       options.skipImmediatelyApplied === true &&
       mobileHealthSyncChunkWasImmediatelyApplied(chunk);
     if (skipRecords) {
-      if (payload.movement?.settings) {
-        assembled.movement.settings = payload.movement.settings;
-      }
-      if (payload.screenTime?.settings) {
-        assembled.screenTime.settings = payload.screenTime.settings;
-      }
       continue;
     }
+    const payload = mobileHealthSyncChunkPayloadSchema.parse(
+      safeJsonParse<Record<string, unknown>>(chunk.payload_json, {})
+    );
     if (payload.sleepNights) {
       assembled.sleepNights.push(...payload.sleepNights);
     }
@@ -5803,7 +6029,7 @@ function validateMobileSyncExpectedCounts(
   }
 }
 
-function mobileSyncChunkProgressFromRows(chunks: MobileSyncChunkRow[]) {
+function mobileSyncChunkProgressFromRows(chunks: MobileSyncChunkProgressRow[]) {
   const receivedCounts: Record<string, number> = {};
   const byteTotals: Record<string, number> = {};
   for (const chunk of chunks) {
@@ -5945,6 +6171,37 @@ function syncReceiptWithChunkCounts<
   };
 }
 
+function listMobileSyncCompletionChunks(syncSessionId: string) {
+  const chunks = getDatabase()
+    .prepare(
+      `SELECT id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
+              record_count, byte_count, '{}' AS payload_json,
+              payload_summary_json, received_at, applied_at, created_at, updated_at
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`
+    )
+    .all(syncSessionId) as MobileSyncChunkRow[];
+  const payloadRows = getDatabase()
+    .prepare(
+      `SELECT id, payload_json
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+         AND applied_at IS NULL`
+    )
+    .all(syncSessionId) as Array<{ id: string; payload_json: string }>;
+  if (payloadRows.length === 0) {
+    return chunks;
+  }
+  const payloadById = new Map(
+    payloadRows.map((row) => [row.id, row.payload_json])
+  );
+  for (const chunk of chunks) {
+    chunk.payload_json = payloadById.get(chunk.id) ?? "{}";
+  }
+  return chunks;
+}
+
 function markMobileSyncSessionFailed(
   session: MobileSyncSessionRow,
   error: unknown
@@ -5980,13 +6237,7 @@ export function completeMobileHealthSyncSession(
 ) {
   const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
   const session = ensureRunningMobileSyncSession(syncSessionId);
-  const chunks = getDatabase()
-    .prepare(
-      `SELECT * FROM health_mobile_sync_chunks
-       WHERE sync_session_id = ?
-       ORDER BY sequence ASC`
-    )
-    .all(syncSessionId) as MobileSyncChunkRow[];
+  const chunks = listMobileSyncCompletionChunks(syncSessionId);
   if (chunks.length === 0) {
     throw new HttpError(
       409,
@@ -6101,6 +6352,8 @@ export function ingestMobileHealthSync(
       Array<{ id: string; startedAt: string; endedAt: string }>
     >();
     const sourceRecordIdsByExternalUid = new Map<string, string>();
+    const sleepDateKeysToSummarize = new Set<string>();
+    const workoutDateKeysToSummarize = new Set<string>();
 
     for (const sleep of normalizedSleepNights) {
       const result = insertOrUpdateSleepSession(pairing, sleep);
@@ -6116,7 +6369,7 @@ export function ingestMobileHealthSync(
         endedAt: sleep.endedAt
       });
       sleepSessionsByLocalDate.set(sleep.localDateKey, group);
-      summarizeUserHealthDay(pairing.user_id, sleep.localDateKey);
+      sleepDateKeysToSummarize.add(sleep.localDateKey);
     }
 
     for (const rawRecord of normalizedSleepRawRecords) {
@@ -6191,6 +6444,9 @@ export function ingestMobileHealthSync(
         );
       }
     }
+    for (const dateKeyValue of sleepDateKeysToSummarize) {
+      summarizeUserHealthDay(pairing.user_id, dateKeyValue);
+    }
 
     for (const workout of parsed.workouts) {
       const result = insertOrUpdateWorkoutSession(pairing, workout);
@@ -6201,7 +6457,10 @@ export function ingestMobileHealthSync(
       } else {
         updatedCount += 1;
       }
-      summarizeUserHealthDay(pairing.user_id, dayKey(workout.startedAt));
+      workoutDateKeysToSummarize.add(dayKey(workout.startedAt));
+    }
+    for (const dateKeyValue of workoutDateKeysToSummarize) {
+      summarizeUserHealthDay(pairing.user_id, dateKeyValue);
     }
 
     for (const daySummary of parsed.vitals.daySummaries) {
