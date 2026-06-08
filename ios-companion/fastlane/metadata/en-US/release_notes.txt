@@ -1,5 +1,5 @@
-Forge Companion 1.0.90 fixes Forge WebView loading over Iroh pairings.
+Forge Companion 1.0.93 improves HealthKit sync recovery and Forge dashboard load speed.
 
-The embedded Forge view now preserves the exact `/forge/` path and refresh query when proxying through `forge-iroh://`, avoiding the WebKit “Frame load interrupted” failure seen after successful sync.
+HealthKit chunk uploads can now recover by resuming a compatible accepted session even when the phone has to reconnect without an explicit resume id, reducing repeated historical uploads.
 
-The Iroh WebView bridge also now returns WebKit-safe responses, follows Forge redirects explicitly, and logs scheme-handler request/response details for easier diagnosis.
+The embedded Forge overview also uses the compact health payload so the app becomes usable faster while detailed workout history remains available from the Sports view.
