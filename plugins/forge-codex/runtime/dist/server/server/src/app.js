@@ -7586,7 +7586,10 @@ export async function buildServer(options = {}) {
         return detail;
     });
     app.get("/api/v1/health/fitness", async (request) => ({
-        fitness: getFitnessViewData(resolveScopedUserIds(request.query))
+        fitness: getFitnessViewData(resolveScopedUserIds(request.query), {
+            compact: request.query.compact === "1" ||
+                request.query.compact === "true"
+        })
     }));
     app.get("/api/v1/health/training-load", async (request) => ({
         trainingLoad: getTrainingLoadViewData(resolveScopedUserIds(request.query))

@@ -1728,9 +1728,12 @@ export function getSleepView(userIds) {
 export function getSleepSessionRawDetail(sleepId) {
     return request(`/api/v1/health/sleep/${sleepId}/raw`);
 }
-export function getFitnessView(userIds) {
+export function getFitnessView(userIds, options = {}) {
     const search = new URLSearchParams();
     appendUserIds(search, coerceUserIds(userIds));
+    if (options.compact) {
+        search.set("compact", "1");
+    }
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/fitness${suffix}`);
 }
