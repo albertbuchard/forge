@@ -138,6 +138,28 @@ choice is an internal classification step, not a user-facing menu.
 - Once the lane is selected, use the exact route key internally and do not invent a
   friendlier path.
 
+## Dedicated surface verification loop
+
+Use this after a Movement, Life Force, or Workbench mutation or result-producing run.
+The dedicated route family is not finished just because a write returned `ok`.
+
+- After Movement overlays, place edits, settings changes, stay/trip repairs, or
+  deletion/invalidation work, read back the timeline, place list, settings, box
+  detail, or selection view that proves the user's practical question was answered.
+- After Life Force profile edits, weekday-template edits, or fatigue signals, read
+  the overview back when the user is making a planning decision or wants to understand
+  the practical impact of the change.
+- After Workbench flow creation/edit/deletion, saved-flow execution, one-off
+  execution, chat follow-up, or publish-related work, read back the flow detail, run
+  detail, node result, latest node output, published output, or run history that
+  matches the user's real goal.
+- Do not perform a read-back as ceremony when the user only asked for a narrow save
+  and the write response already gives enough confirmation. Use it when it changes
+  understanding, verifies a repair, or grounds the next decision.
+- In user-facing language, say what you checked: the corrected span, the weekday
+  energy picture, the flow result, the node output, or the published artifact. Keep
+  route keys and HTTP paths internal unless the user asks for implementation detail.
+
 ## Mixed-intent sequencing
 
 Use this when one user message combines several Forge jobs, such as "review this and
@@ -1934,6 +1956,9 @@ Direct action rules:
 - For known-place creation or cleanup, ask what the place should be called, what
   counts inside its boundary, and how future movement reads should use it. Use the
   dedicated place routes, not a tag or batch entity write.
+- After a Movement repair, known-place edit, settings change, overlay deletion, or
+  automatic-box invalidation, verify through the relevant dedicated read when the
+  user is trying to understand whether the movement picture is now truthful.
 
 Helpful follow-up lanes:
 
@@ -2064,6 +2089,9 @@ Direct action rules:
   then read the overview back if they want to see the updated picture.
 - After a profile or weekday-template change, read the overview back when the user is
   trying to understand the practical impact of the change, not just store it silently.
+- After a fatigue signal, profile patch, or weekday-template edit, verify through the
+  Life Force overview when the next planning decision depends on the updated energy
+  picture.
 
 Ready to act when:
 
@@ -2176,6 +2204,10 @@ Direct action rules:
 - For flow chat follow-ups, use the saved flow chat route only when the user wants to
   continue a flow-specific conversation. Do not turn a chat follow-up into a new flow
   run, note, or generic entity update unless that is what the user asks for.
+- After Workbench execution, flow edits, chat follow-ups, or publish-related work,
+  verify through the matching dedicated read: run detail, node result, latest node
+  output, flow detail, run history, or published output. Do not leave a run or edit
+  as an abstract success message when the user asked to inspect or use the result.
 
 Ready to act when:
 

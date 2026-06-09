@@ -1105,6 +1105,53 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 2 retest: specialized mutations and executions verify through dedicated reads", () => {
+    const verificationLoop = getSectionSlice(
+      entityPlaybook,
+      "Dedicated surface verification loop"
+    );
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
+
+    expect(verificationLoop).toMatch(
+      /After Movement overlays[\s\S]*place edits[\s\S]*settings changes[\s\S]*read back the timeline, place list, settings,\s+box\s+detail, or selection view/i
+    );
+    expect(verificationLoop).toMatch(
+      /After Life Force profile edits[\s\S]*weekday-template edits[\s\S]*fatigue signals[\s\S]*read\s+the overview back/i
+    );
+    expect(verificationLoop).toMatch(
+      /After Workbench flow creation\/edit\/deletion[\s\S]*saved-flow execution[\s\S]*one-off\s+execution[\s\S]*read back the flow detail,\s+run\s+detail, node result, latest node output, published output, or run history/i
+    );
+    expect(verificationLoop).toMatch(
+      /Do not perform a read-back as ceremony/i
+    );
+
+    expect(getSectionSlice(entityPlaybook, "Movement")).toMatch(
+      /known-place edit[\s\S]*settings change[\s\S]*overlay deletion[\s\S]*automatic-box invalidation[\s\S]*verify through the relevant dedicated read/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Life Force")).toMatch(
+      /fatigue signal[\s\S]*profile patch[\s\S]*weekday-template edit[\s\S]*verify through the\s+Life Force overview/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Workbench")).toMatch(
+      /Workbench execution[\s\S]*flow edits[\s\S]*chat follow-ups[\s\S]*publish-related work[\s\S]*run detail[\s\S]*node result[\s\S]*latest node\s+output[\s\S]*published output/i
+    );
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(
+        /correction, mutation, or\s+result-producing run[\s\S]*timeline or\s+place\/settings detail[\s\S]*Life Force overview[\s\S]*flow detail,\s+run\s+detail, node result, latest node output, published\s+output, or run history/i
+      );
+    }
+  });
+
   it("cycle 3: all flows close efficiently, preserve only helpful questions, and avoid reopening settled formulations", () => {
     expect(entityPlaybook).toMatch(/If no detail is still decision-relevant/i);
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
@@ -1429,16 +1476,16 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-08 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-09 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-08/);
+    expect(report).toMatch(/Latest run date: 2026-06-09/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.5/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.5/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.9/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.9/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI paths/i);
-    expect(latestRun).toMatch(/21 focused checks/i);
+    expect(latestRun).toMatch(/22 focused checks/i);
     expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
@@ -1456,13 +1503,13 @@ describe("question flow simulation cycles", () => {
       /Cycle 1[\s\S]*methodRoutes[\s\S]*OpenAPI/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Psyche[\s\S]*active-formulation rule/i
+      /Cycle 2[\s\S]*Dedicated surface verification loop/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*older\s+adapter versions/i
     );
     expect(latestRun).toMatch(/onboarding-method-route[\s\S]*OpenAPI validation/i);
-    expect(latestRun).toMatch(/active Psyche formulation rule/i);
+    expect(latestRun).toMatch(/specialized read-back verification loop/i);
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });

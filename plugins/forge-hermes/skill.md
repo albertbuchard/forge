@@ -349,7 +349,7 @@ For wiki-specific recall:
   template, published output, run detail, or node result rather than generic record
   language.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
-- After a concrete Movement, Life Force, or Workbench correction, read the relevant specialized view back when the user is trying to understand the result rather than only store it.
+- After a concrete Movement, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant specialized view back when the user is trying to understand the result rather than only store it: timeline or place/settings detail for Movement, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench.
 - In the live onboarding catalog, those domains should appear as `specialized_domain_surface`. If the route family and the catalog classification disagree, trust the specialized route family and fix the contract mismatch before guessing a CRUD path.
 - Movement lane hints: review spans through `/api/v1/movement/day`,
   `/api/v1/movement/month`, `/api/v1/movement/all-time`, `/api/v1/movement/timeline`,
