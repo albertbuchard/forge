@@ -6466,10 +6466,14 @@ function compactOperatorContext(context) {
 function compactSleep(sleep) {
     return {
         summary: sleep.summary,
+        latestNightFreshness: sleep.latestNightFreshness,
         latestNight: sleep.latestNight
             ? {
                 id: sleep.latestNight.sleepId,
                 dateKey: sleep.latestNight.dateKey,
+                expectedDateKey: sleep.latestNight.expectedDateKey,
+                isExpectedLastNight: sleep.latestNight.isExpectedLastNight,
+                freshnessStatus: sleep.latestNight.freshnessStatus,
                 startedAt: sleep.latestNight.startedAt,
                 endedAt: sleep.latestNight.endedAt,
                 sleepScore: sleep.latestNight.score,

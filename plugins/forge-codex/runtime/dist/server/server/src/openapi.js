@@ -5244,6 +5244,9 @@ export function buildOpenApiDocument() {
         additionalProperties: false,
         required: [
             "summary",
+            "latestNightFreshness",
+            "latestNight",
+            "calendarDays",
             "weeklyTrend",
             "monthlyPattern",
             "stageAverages",
@@ -5252,6 +5255,34 @@ export function buildOpenApiDocument() {
         ],
         properties: {
             summary: { type: "object", additionalProperties: true },
+            latestNightFreshness: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                    "status",
+                    "isCurrent",
+                    "expectedDateKey",
+                    "actualDateKey",
+                    "sourceTimezone",
+                    "missingDateKeys"
+                ],
+                properties: {
+                    status: {
+                        type: "string",
+                        enum: ["current", "stale", "empty", "future"]
+                    },
+                    isCurrent: { type: "boolean" },
+                    expectedDateKey: { type: "string" },
+                    actualDateKey: nullable({ type: "string" }),
+                    sourceTimezone: { type: "string" },
+                    missingDateKeys: arrayOf({ type: "string" })
+                }
+            },
+            latestNight: nullable({
+                type: "object",
+                additionalProperties: true
+            }),
+            calendarDays: arrayOf({ type: "object", additionalProperties: true }),
             weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
             monthlyPattern: arrayOf({ type: "object", additionalProperties: true }),
             stageAverages: arrayOf({ type: "object", additionalProperties: true }),
