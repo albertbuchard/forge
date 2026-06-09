@@ -1,5 +1,5 @@
-Forge Companion 1.0.94 improves HealthKit sync recovery and Forge dashboard load speed.
+Forge Companion 1.0.95 fixes sleep timing freshness and HealthKit sync recovery.
 
-HealthKit chunk uploads can now recover by resuming a compatible accepted session even when the phone has to reconnect without an explicit resume id, reducing repeated historical uploads.
+Sleep views now use the sleeper's source timezone and local wake-date to decide what "last night" means, so stale synced nights are surfaced instead of mislabeled as current.
 
-Sync completion now avoids rereading already-applied chunk payloads, so large historical HealthKit sessions finish faster on Forge while preserving resumable recovery.
+HealthKit sync now discards stale active checkpoints before starting a fresh normal sync, preventing an old upload window from completing later and hiding the newest sleep night.
