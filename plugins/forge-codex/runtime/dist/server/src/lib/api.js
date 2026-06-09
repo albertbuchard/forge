@@ -1772,6 +1772,9 @@ export function getWeightLossView(userIds, options) {
     if (options?.dayEndAt) {
         search.set("dayEndAt", options.dayEndAt);
     }
+    if (options?.timeZone) {
+        search.set("timeZone", options.timeZone);
+    }
     const suffix = search.size > 0 ? `?${search.toString()}` : "";
     return request(`/api/v1/health/weight-loss${suffix}`);
 }

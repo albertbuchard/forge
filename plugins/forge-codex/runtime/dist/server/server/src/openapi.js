@@ -5354,6 +5354,10 @@ export function buildOpenApiDocument() {
         required: ["items"],
         properties: {
             loggedAt: { type: "string", format: "date-time" },
+            timeZone: {
+                type: "string",
+                description: "IANA timezone used to derive the local dayKey when dayKey is omitted."
+            },
             mealLabel: nullable({ type: "string" }),
             source: {
                 type: "string",
@@ -5889,6 +5893,29 @@ export function buildOpenApiDocument() {
                 get: {
                     tags: ["Health"],
                     summary: "Read the Forge nutrition, weight-loss, food-effect, and body insight surface",
+                    parameters: [
+                        {
+                            name: "dateKey",
+                            in: "query",
+                            schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+                        },
+                        {
+                            name: "dayStartAt",
+                            in: "query",
+                            schema: { type: "string", format: "date-time" }
+                        },
+                        {
+                            name: "dayEndAt",
+                            in: "query",
+                            schema: { type: "string", format: "date-time" }
+                        },
+                        {
+                            name: "timeZone",
+                            in: "query",
+                            schema: { type: "string" },
+                            description: "IANA timezone used for default local-day calculation when dateKey is omitted."
+                        }
+                    ],
                     responses: {
                         "200": jsonResponse({
                             type: "object",
@@ -5939,6 +5966,10 @@ export function buildOpenApiDocument() {
                                         dayKey: {
                                             type: "string",
                                             pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+                                        },
+                                        timeZone: {
+                                            type: "string",
+                                            description: "IANA timezone used to derive the local dayKey when dayKey is omitted."
                                         },
                                         activeCaloriesKcal: {
                                             type: ["number", "null"],

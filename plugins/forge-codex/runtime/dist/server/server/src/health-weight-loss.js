@@ -107,6 +107,7 @@ export const nutritionDailyActiveCaloriesUpdateSchema = z.object({
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .optional(),
+    timeZone: z.string().trim().optional(),
     activeCaloriesKcal: z
         .union([z.null(), z.coerce.number().finite().min(0)])
         .optional(),
@@ -120,6 +121,7 @@ export const nutritionFoodLogCreateSchema = z.object({
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
         .optional(),
+    timeZone: z.string().trim().optional(),
     mealLabel: z.string().trim().default(""),
     source: z
         .enum(["manual", "search", "barcode", "chatgpt", "photo", "saved_meal"])
@@ -242,8 +244,47 @@ function newId(prefix) {
 function dayKey(value) {
     return value.slice(0, 10);
 }
-function normalizeDayKey(value, fallbackIso) {
-    return value ?? dayKey(fallbackIso);
+function resolveTimeZone(timeZone) {
+    const candidate = timeZone?.trim();
+    if (!candidate) {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    }
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(new Date());
+        return candidate;
+    }
+    catch {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    }
+}
+function localDateParts(value, timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+    const parts = formatter.formatToParts(new Date(value));
+    const read = (type) => parts.find((part) => part.type === type)?.value ?? "00";
+    return {
+        year: read("year"),
+        month: read("month"),
+        day: read("day"),
+        hour: read("hour"),
+        minute: read("minute"),
+        second: read("second")
+    };
+}
+function localDateKey(value, timeZone) {
+    const parts = localDateParts(value, resolveTimeZone(timeZone));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function normalizeDayKey(value, fallbackIso, timeZone) {
+    return value ?? localDateKey(fallbackIso, resolveTimeZone(timeZone));
 }
 function jsonString(value) {
     return JSON.stringify(value ?? null);
@@ -1058,7 +1099,7 @@ export function createNutritionFoodLog(input) {
     const parsed = nutritionFoodLogCreateSchema.parse(input);
     const userId = resolveWriteUser(parsed.userId);
     const loggedAt = parsed.loggedAt ?? nowIso();
-    const logDayKey = normalizeDayKey(parsed.dayKey, loggedAt);
+    const logDayKey = normalizeDayKey(parsed.dayKey, loggedAt, parsed.timeZone);
     const id = newId("meal");
     const now = nowIso();
     runInTransaction(() => {
@@ -1084,7 +1125,7 @@ export function patchNutritionFoodLog(logId, input) {
         return null;
     }
     const nextLoggedAt = parsed.loggedAt ?? existing.loggedAt;
-    const nextDayKey = normalizeDayKey(parsed.dayKey, nextLoggedAt);
+    const nextDayKey = normalizeDayKey(parsed.dayKey, nextLoggedAt, parsed.timeZone);
     const nextConfirmationState = parsed.confirmationState ?? existing.confirmationState;
     const now = nowIso();
     runInTransaction(() => {
@@ -1168,7 +1209,7 @@ export function updateNutritionTarget(input) {
 export function updateNutritionDailyActiveCalories(input) {
     const parsed = nutritionDailyActiveCaloriesUpdateSchema.parse(input);
     const userId = resolveWriteUser(parsed.userId);
-    const dateKey = parsed.dayKey ?? new Date().toISOString().slice(0, 10);
+    const dateKey = parsed.dayKey ?? localDateKey(new Date(), resolveTimeZone(parsed.timeZone));
     const now = nowIso();
     if (parsed.activeCaloriesKcal == null) {
         getDatabase()
@@ -1682,7 +1723,8 @@ function buildGeneratedHypotheses(logs, subjective, gut, appearance) {
 export function getWeightLossViewData(userIds, options = {}) {
     const generatedAt = new Date().toISOString();
     const userId = resolveReadUser(userIds);
-    const todayKey = options.dateKey ?? generatedAt.slice(0, 10);
+    const timeZone = resolveTimeZone(options.timeZone);
+    const todayKey = options.dateKey ?? localDateKey(generatedAt, timeZone);
     const targetRow = getDatabase()
         .prepare(`SELECT * FROM nutrition_targets WHERE user_id = ?`)
         .get(userId);

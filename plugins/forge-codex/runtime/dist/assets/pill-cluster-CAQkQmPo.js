@@ -1,1 +1,0 @@
-import{j as t}from"./vendor-Cpmju3nw.js";import{c as a}from"./index-Bm-VH90U.js";function i({children:r,className:s}){return t.jsx("div",{className:a("flex flex-wrap gap-2",s),children:r})}export{i as P};

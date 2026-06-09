@@ -3537,7 +3537,7 @@ export function ingestMobileHealthSyncChunk(syncSessionId, payload, rawPayloadJs
         if (existing.checksum_sha256 !== clientChecksum) {
             throw new HttpError(409, "chunk_checksum_mismatch", "A chunk with the same id was already accepted with different content.");
         }
-        const progress = updateMobileSyncSessionProgress(syncSessionId);
+        const progress = mobileSyncSessionProgressFromStoredSession(session);
         return {
             accepted: true,
             duplicate: true,
@@ -3920,6 +3920,30 @@ function syncReceiptWithChunkCounts(sync, chunks) {
         }
     };
 }
+function listMobileSyncCompletionChunks(syncSessionId) {
+    const chunks = getDatabase()
+        .prepare(`SELECT id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
+              record_count, byte_count, '{}' AS payload_json,
+              payload_summary_json, received_at, applied_at, created_at, updated_at
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+       ORDER BY sequence ASC`)
+        .all(syncSessionId);
+    const payloadRows = getDatabase()
+        .prepare(`SELECT id, payload_json
+       FROM health_mobile_sync_chunks
+       WHERE sync_session_id = ?
+         AND applied_at IS NULL`)
+        .all(syncSessionId);
+    if (payloadRows.length === 0) {
+        return chunks;
+    }
+    const payloadById = new Map(payloadRows.map((row) => [row.id, row.payload_json]));
+    for (const chunk of chunks) {
+        chunk.payload_json = payloadById.get(chunk.id) ?? "{}";
+    }
+    return chunks;
+}
 function markMobileSyncSessionFailed(session, error) {
     const now = nowIso();
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3939,15 +3963,7 @@ function markMobileSyncSessionFailed(session, error) {
 export function completeMobileHealthSyncSession(syncSessionId, payload) {
     const parsed = mobileHealthSyncSessionCompleteSchema.parse(payload);
     const session = ensureRunningMobileSyncSession(syncSessionId);
-    const chunks = getDatabase()
-        .prepare(`SELECT id, sync_session_id, chunk_id, sequence, family, checksum_sha256,
-              record_count, byte_count,
-              CASE WHEN applied_at IS NOT NULL THEN '{}' ELSE payload_json END AS payload_json,
-              payload_summary_json, received_at, applied_at, created_at, updated_at
-       FROM health_mobile_sync_chunks
-       WHERE sync_session_id = ?
-       ORDER BY sequence ASC`)
-        .all(syncSessionId);
+    const chunks = listMobileSyncCompletionChunks(syncSessionId);
     if (chunks.length === 0) {
         throw new HttpError(409, "missing_required_chunks", "The HealthKit sync session has no accepted chunks.");
     }

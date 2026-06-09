@@ -7668,11 +7668,15 @@ export async function buildServer(options = {}) {
             z.string().datetime().safeParse(query.dayEndAt).success
             ? query.dayEndAt
             : undefined;
+        const timeZone = typeof query.timeZone === "string" && query.timeZone.trim().length > 0
+            ? query.timeZone
+            : undefined;
         return {
             weightLoss: getWeightLossViewData(resolveScopedUserIds(query), {
                 dateKey,
                 dayStartAt,
-                dayEndAt
+                dayEndAt,
+                timeZone
             })
         };
     });
