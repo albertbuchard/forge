@@ -361,8 +361,11 @@ struct CompanionOperationalSummary {
                     || screenTimeAuthorizationStatus == "denied"
                     || screenTimeAuthorizationStatus == "unavailable"
             ))
-        if missingAuthorization || syncState == .permissionDenied || syncState == .stale {
+        if missingAuthorization || syncState == .permissionDenied {
             return .init(status: .warning, detail: "Missing authorization")
+        }
+        if syncState == .stale {
+            return .init(status: .warning, detail: "Needs refresh")
         }
         return .init(status: .ok, detail: "All core signals ready")
     }
@@ -3404,7 +3407,7 @@ final class CompanionAppModel: ObservableObject {
         case .fullAccess:
             return "HealthKit full access"
         case .customAccess:
-            return "HealthKit custom access"
+            return "HealthKit authorized"
         case .notSet:
             return "HealthKit not set"
         }

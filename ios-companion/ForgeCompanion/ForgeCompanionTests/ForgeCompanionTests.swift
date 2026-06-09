@@ -1127,6 +1127,23 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(summary.detail, "All core signals ready")
     }
 
+    func testCompanionOperationalSummaryDoesNotCallStaleSyncMissingAuthorization() {
+        let summary = CompanionOperationalSummary.derive(
+            syncState: .stale,
+            latestError: nil,
+            healthSyncEnabled: true,
+            healthAccessStatus: .customAccess,
+            movementEnabled: true,
+            movementPermissionStatus: "always",
+            movementBackgroundReady: true,
+            screenTimeEnabled: false,
+            screenTimeAuthorizationStatus: "disabled"
+        )
+
+        XCTAssertEqual(summary.status, .warning)
+        XCTAssertEqual(summary.detail, "Needs refresh")
+    }
+
     func testCompanionOperationalSummaryPromotesErrorsAboveAuthorizationWarnings() {
         let summary = CompanionOperationalSummary.derive(
             syncState: .healthy,
@@ -4986,11 +5003,11 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertEqual(
             ForgeSyncClient.irohHealthSyncChunkingVersion,
-            "iroh-v6-small-content-addressed-base"
+            "iroh-v7-balanced-content-addressed-base"
         )
     }
 
-    func testIrohHealthSyncUsesSmallerChunksThanHttpBackgroundUpload() {
+    func testIrohHealthSyncUsesBalancedChunksMatchingHttpBackgroundUpload() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_large",
             schemaVersion: "healthkit-sync-v2",
@@ -5088,9 +5105,9 @@ final class ForgeCompanionTests: XCTestCase {
             maximum: 15_000
         )
 
-        XCTAssertEqual(irohTimeSeriesLimit, 281)
+        XCTAssertEqual(irohTimeSeriesLimit, 781)
         XCTAssertEqual(httpTimeSeriesLimit, 781)
-        XCTAssertEqual(irohRouteLimit, 346)
+        XCTAssertEqual(irohRouteLimit, 961)
         XCTAssertEqual(httpRouteLimit, 961)
         XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
         XCTAssertLessThanOrEqual(irohRouteLimit * 520, ForgeSyncClient.irohHealthSyncChunkTargetBytes)

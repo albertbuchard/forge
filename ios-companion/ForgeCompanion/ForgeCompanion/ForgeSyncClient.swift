@@ -413,8 +413,8 @@ struct ForgeSyncClient {
     static let movementTimelineServerCompatibleLimit = 120
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
-    static let irohHealthSyncChunkingVersion = "iroh-v6-small-content-addressed-base"
-    static let irohHealthSyncChunkTargetBytes = 180_000
+    static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
+    static let irohHealthSyncChunkTargetBytes = 500_000
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
     private static let healthSyncMinimumCompressionBytes = 256
