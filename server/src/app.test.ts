@@ -6491,6 +6491,47 @@ test("sleep view marks older wake-date data as latest synced night, not current 
   }
 });
 
+test("sleep view freshness uses the sleeper source timezone, not a server calendar date", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-sleep-timezone-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_sleep_sessions (
+           id, external_uid, pairing_session_id, user_id, source, source_type, source_device, source_timezone, local_date_key,
+           started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds, raw_segment_count, sleep_score, regularity_score,
+           bedtime_consistency_minutes, wake_consistency_minutes, stage_breakdown_json, recovery_metrics_json, source_metrics_json,
+           links_json, annotations_json, provenance_json, derived_json, created_at, updated_at
+         )
+         VALUES ('sleep_pacific_wake', 'sleep_pacific_wake', NULL, 'user_operator', 'apple_health', 'healthkit', 'iPhone', 'America/Los_Angeles', '2026-06-08',
+           '2026-06-08T06:30:00.000Z', '2026-06-08T13:45:00.000Z', 26100, 25200, 900, 6, 82, 79, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
+      )
+      .run(
+        JSON.stringify([{ stage: "core", seconds: 25200 }]),
+        now,
+        now
+      );
+
+    const sleep = getSleepViewData(["user_operator"], {
+      now: new Date("2026-06-09T06:30:00.000Z")
+    });
+
+    assert.equal(sleep.latestNightFreshness.sourceTimezone, "America/Los_Angeles");
+    assert.equal(sleep.latestNightFreshness.expectedDateKey, "2026-06-08");
+    assert.equal(sleep.latestNightFreshness.actualDateKey, "2026-06-08");
+    assert.equal(sleep.latestNightFreshness.status, "current");
+    assert.equal(sleep.latestNight?.isExpectedLastNight, true);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("historical repaired sleep nights expose historical raw data, normalized segments, and inferred timezone", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-mobile-health-historical-sleep-")

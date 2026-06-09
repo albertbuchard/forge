@@ -1984,9 +1984,16 @@ function pickDisplaySleepSessions(sessions: MappedSleepSession[]) {
       byDateKey.set(key, session);
     }
   }
-  return [...byDateKey.values()].sort(
-    (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)
-  );
+  return [...byDateKey.values()].sort((left, right) => {
+    const dateComparison = compareDateKeys(
+      right.localDateKey || dayKey(right.endedAt),
+      left.localDateKey || dayKey(left.endedAt)
+    );
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+    return Date.parse(right.endedAt) - Date.parse(left.endedAt);
+  });
 }
 
 function buildLatestSleepNightFreshness(
