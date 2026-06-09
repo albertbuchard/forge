@@ -1426,7 +1426,9 @@ describe("question flow simulation cycles", () => {
   });
 
   it("cycle 3 report retest: durable automation report covers this full run", () => {
-    const report = readRepoFile("docs/question-flow-improvement-cycles.md");
+    const report = readRepoFile(
+      "docs/internal/audits/question-flow-improvement-cycles.md"
+    );
     const latestRun = getSectionSlice(report, "2026-06-08 Automation Pass");
 
     expect(report).toMatch(/Latest run date: 2026-06-08/);

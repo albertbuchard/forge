@@ -561,7 +561,7 @@ If you explicitly want the old laptop-driven publish path, run the same script w
 `FORGE_RELEASE_MODE=prepare` and it will still publish directly after pushing.
 
 For the exact prerequisites, tags, and GitHub secret names, use
-`docs/release-cheat-sheet.md`.
+`docs/release/release-cheat-sheet.md`.
 
 ClawHub note:
 

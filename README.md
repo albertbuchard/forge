@@ -54,6 +54,7 @@ Useful runtime commands:
 npx forge-memory status
 npx forge-memory doctor
 npx forge-memory doctor --repair
+npx forge-memory update
 npx forge-memory ui
 npx forge-memory restart
 npx forge-memory stop
@@ -84,10 +85,13 @@ iOS Simulator but not for a real phone.
 
 The short install path is intentionally the whole base setup. If you want the lower
 level networking details, read the companion transport reference in
-[`docs/companion-iroh.md`](./docs/companion-iroh.md) or the published
+[`docs/reference/companion-iroh.md`](./docs/reference/companion-iroh.md) or the published
 [Companion Transport guide](https://albertbuchard.github.io/forge/companion-transport.html).
 
 `export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
+`update` backs up the Forge data folder when appropriate, refreshes the runtime and
+selected adapters, preserves user data, and reports the backup location before making
+changes.
 
 After install, the usual local addresses are:
 
@@ -95,7 +99,7 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-Manual OpenClaw, Hermes, and Codex setup still exists for advanced cases in [`docs/openclaw-plugin.md`](./docs/openclaw-plugin.md), [`docs/hermes-plugin.md`](./docs/hermes-plugin.md), and [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md).
+Manual OpenClaw, Hermes, and Codex setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), and [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md).
 
 ## License
 
@@ -171,6 +175,14 @@ codex mcp add forge \
   -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
 codex mcp list
 ```
+
+## Documentation
+
+Start with [`docs/README.md`](./docs/README.md). Durable setup and architecture
+references live under [`docs/reference/`](./docs/reference/), release procedures live
+under [`docs/release/`](./docs/release/), and historical goals, audits, and handoffs
+are preserved under [`docs/internal/`](./docs/internal/) so they do not compete with
+the current user-facing docs.
 
 ## What Forge Covers
 

@@ -59,7 +59,7 @@ npx forge-memory pair-ios --public-url https://your-mac.tailnet.ts.net/forge/
 URLs such as `127.0.0.1` and `localhost` are rejected for physical-phone pairing.
 
 The base install stays one command on purpose. The detailed companion transport
-reference lives in the Forge repo at `docs/companion-iroh.md` and in the published
+reference lives in the Forge repo at `docs/reference/companion-iroh.md` and in the published
 docs at `https://albertbuchard.github.io/forge/companion-transport.html`. Forge
 Memory ships Forge's Iroh host source and lockfile, not native desktop binaries. When
 the Iroh fallback is selected, the installer checks for Cargo, offers to install the

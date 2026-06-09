@@ -89,4 +89,4 @@ Upstream Alleycat is GPL-3.0-only. KittyLitter is GPLv3 with additional App Stor
 Google Play distribution permission. Keeping this crate as a clean Forge implementation
 avoids importing GPL code into Forge while preserving the Iroh behavior Forge needs.
 
-More context for users and operators lives in `docs/companion-iroh.md`.
+More context for users and operators lives in `docs/reference/companion-iroh.md`.

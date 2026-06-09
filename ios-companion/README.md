@@ -102,7 +102,7 @@ routes, but Iroh QR pairing is the default. When Forge advertises `_forge._tcp`,
 can include Iroh metadata such as the node id, pair payload, and `forge-companion/1`
 ALPN alongside phone-reachable HTTPS/Tailscale API and UI hints.
 
-The deeper transport reference lives in `docs/companion-iroh.md`.
+The deeper transport reference lives in `docs/reference/companion-iroh.md`.
 
 ## App Store release automation
 
@@ -196,7 +196,7 @@ source, applies the default Apple team id when you do not override it, captures 
 managed screenshots, and then calls the same publish script the local flow uses.
 
 For the exact release tags, full prerequisites, and the combined plugin plus iOS
-release flow, use `docs/release-cheat-sheet.md`.
+release flow, use `docs/release/release-cheat-sheet.md`.
 
 ### Screenshots
 

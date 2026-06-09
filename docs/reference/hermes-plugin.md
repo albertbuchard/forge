@@ -164,7 +164,7 @@ One-time PyPI setup for CI:
   for `pypa/gh-action-pypi-publish`
 
 For the full cross-registry release reference, including tag names and GitHub secret
-names, use `docs/release-cheat-sheet.md`.
+names, use `docs/release/release-cheat-sheet.md`.
 
 If you want Hermes and OpenClaw to ship on the exact same version in one pass, use the
 shared monorepo wrapper instead:
