@@ -20,6 +20,7 @@ Useful commands:
 
 ```bash
 npx forge-memory configure
+npx forge-memory update
 npx forge-memory status
 npx forge-memory doctor
 npx forge-memory doctor --repair
@@ -71,6 +72,30 @@ printing a localhost QR that a physical iPhone cannot use.
 Install and configure run Forge doctor before finishing. `doctor --repair` creates
 missing local folders, starts or restarts the runtime when allowed, and prints concrete
 next steps without deleting Forge data.
+
+`update` is the safe upgrade path:
+
+```bash
+npx forge-memory update
+```
+
+Before touching the runtime cache or adapters, it writes a pre-update backup under
+`~/.forge/exports/forge-memory-pre-update-*.tar.gz` and prints the exact path. The
+backup excludes disposable runtime folders (`runtime`, `run`, `logs`, and prior
+`exports`) but preserves the real Forge data. If the source data is large, the CLI asks
+before creating the backup; in non-interactive automation, pass `--yes` only after you
+accept that backup. Existing Forge-related skill folders under Codex, OpenClaw, or
+Hermes are hashed and backed up before adapter updates when Forge cannot prove they are
+unchanged.
+
+Agent prompt for Codex, Hermes, or OpenClaw:
+
+```text
+Run `npx forge-memory update --yes`, verify `npx forge-memory doctor`, and report the
+backup path. Do not delete Forge data, do not remove adapters, and stop if the update
+cannot create a backup first.
+```
+
 `export` writes a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache while keeping the data folder by default; pass `--remove-data` only when you intentionally want the data deleted too.
 
 Typical first run:

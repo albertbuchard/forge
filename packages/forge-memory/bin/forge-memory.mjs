@@ -31,6 +31,8 @@ const DEFAULT_PORT = 4317;
 const DEFAULT_WEB_PORT = 3027;
 const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 const ADAPTERS = ["openclaw", "hermes", "codex"];
+const DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES = 100 * 1024 * 1024;
+const BACKUP_SKIP_TOP_LEVEL = new Set(["exports", "logs", "run", "runtime"]);
 
 const color = {
   dim: (value) => `\u001b[2m${value}\u001b[22m`,
@@ -145,6 +147,10 @@ function runtimeInstallRoot() {
   return path.join(forgeHome(), "runtime");
 }
 
+function managedSkillsManifestPath() {
+  return path.join(forgeHome(), "managed-skills.json");
+}
+
 function defaultDataRoot() {
   return forgeHome();
 }
@@ -164,6 +170,30 @@ function normalizeAdapterList(value) {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean)
     .filter((entry) => ADAPTERS.includes(entry));
+}
+
+function normalizeByteThreshold(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function updateBackupConfirmThresholdBytes() {
+  return normalizeByteThreshold(
+    process.env.FORGE_MEMORY_UPDATE_BACKUP_PROMPT_BYTES,
+    DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES
+  );
+}
+
+function formatBytes(value) {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = Number(value) || 0;
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 || amount >= 10 ? 0 : 1;
+  return `${amount.toFixed(precision)} ${units[unitIndex]}`;
 }
 
 function baseUrl(config) {
@@ -1914,16 +1944,22 @@ async function stopRuntime(config = null) {
 
 async function exportForgeData(parsed) {
   const config = await readConfig();
-  if (!fs.existsSync(config.dataRoot)) {
-    throw new Error(`Forge data folder does not exist: ${config.dataRoot}`);
-  }
-
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const requestedOutput = parsed.values.output ?? parsed.positionals[1];
   const outputPath = path.resolve(
     requestedOutput ??
       path.join(forgeHome(), "exports", `forge-memory-export-${stamp}.tar.gz`)
   );
+  return createForgeDataExport(config, {
+    outputPath,
+    json: parsed.flags.json
+  });
+}
+
+async function createForgeDataExport(config, { outputPath, json = false }) {
+  if (!fs.existsSync(config.dataRoot)) {
+    throw new Error(`Forge data folder does not exist: ${config.dataRoot}`);
+  }
   const stagingRoot = await fsp.mkdtemp(
     path.join(os.tmpdir(), "forge-memory-export-")
   );
@@ -1941,7 +1977,6 @@ async function exportForgeData(parsed) {
     }
   };
 
-  const skipTopLevel = new Set(["exports", "logs", "run", "runtime"]);
   await fsp.cp(config.dataRoot, stagingData, {
     recursive: true,
     force: false,
@@ -1949,7 +1984,7 @@ async function exportForgeData(parsed) {
     filter: (source) => {
       const relative = path.relative(config.dataRoot, source);
       if (!relative) return true;
-      return !skipTopLevel.has(relative.split(path.sep)[0]);
+      return !BACKUP_SKIP_TOP_LEVEL.has(relative.split(path.sep)[0]);
     }
   });
   if (fs.existsSync(configPath())) {
@@ -1972,7 +2007,7 @@ async function exportForgeData(parsed) {
       "tar",
       ["-czf", outputPath, "-C", stagingRoot, "."],
       {
-        stdio: parsed.flags.json ? "ignore" : "inherit"
+        stdio: json ? "ignore" : "inherit"
       }
     );
     await fsp.rm(stagingRoot, { recursive: true, force: true });
@@ -1995,6 +2030,273 @@ async function exportForgeData(parsed) {
     archive: false,
     sourceDataRoot: config.dataRoot
   };
+}
+
+async function directorySize(root, { skipTopLevel = new Set() } = {}) {
+  if (!fs.existsSync(root)) return 0;
+  let total = 0;
+  const walk = async (current) => {
+    const entries = await fsp.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolute = path.join(current, entry.name);
+      const relative = path.relative(root, absolute);
+      if (relative && skipTopLevel.has(relative.split(path.sep)[0])) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(absolute);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stat = await fsp.stat(absolute);
+      total += stat.size;
+    }
+  };
+  await walk(root);
+  return total;
+}
+
+class UpdateBackupConfirmationError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.name = "UpdateBackupConfirmationError";
+    this.code = "update_backup_confirmation_required";
+    this.detail = detail;
+    this.guidance = [
+      "Forge did not update anything because it could not create a confirmed backup first.",
+      "Rerun npx forge-memory update in an interactive terminal, or pass --yes to accept the backup.",
+      "Forge Memory updates never delete your data folder."
+    ];
+  }
+}
+
+class ManagedSkillUpdateConfirmationError extends Error {
+  constructor(message, detail = {}) {
+    super(message);
+    this.name = "ManagedSkillUpdateConfirmationError";
+    this.code = "managed_skill_update_confirmation_required";
+    this.detail = detail;
+    this.guidance = [
+      "Forge found an existing Forge-related skill folder that may contain manual edits.",
+      "Rerun npx forge-memory update in an interactive terminal and confirm, or pass --yes after reviewing the backup.",
+      "Forge backs up those skill folders before adapter updates."
+    ];
+  }
+}
+
+async function createUpdateBackup(config, parsed) {
+  const sourceBytes = await directorySize(config.dataRoot, {
+    skipTopLevel: BACKUP_SKIP_TOP_LEVEL
+  });
+  const thresholdBytes = updateBackupConfirmThresholdBytes();
+  const needsConfirmation =
+    !parsed.flags.dryRun && sourceBytes > thresholdBytes;
+  if (needsConfirmation && !parsed.flags.yes) {
+    if (!process.stdin.isTTY || parsed.flags.json) {
+      throw new UpdateBackupConfirmationError(
+        [
+          `Forge data is ${formatBytes(sourceBytes)}, above the automatic backup prompt threshold of ${formatBytes(thresholdBytes)}.`,
+          "No files were changed."
+        ].join(" "),
+        { sourceBytes, thresholdBytes, dataRoot: config.dataRoot }
+      );
+    }
+    const confirmed = await promptYesNo(
+      `Forge data is ${formatBytes(sourceBytes)}. Create a backup before updating?`,
+      true
+    );
+    if (!confirmed) {
+      throw new UpdateBackupConfirmationError(
+        "Update cancelled before any files were changed because the backup was not confirmed.",
+        { sourceBytes, thresholdBytes, dataRoot: config.dataRoot }
+      );
+    }
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputPath = path.join(
+    forgeHome(),
+    "exports",
+    `forge-memory-pre-update-${stamp}.tar.gz`
+  );
+  if (parsed.flags.dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      outputPath,
+      sourceDataRoot: config.dataRoot,
+      sourceBytes,
+      thresholdBytes,
+      archive: true
+    };
+  }
+  return {
+    ...(await createForgeDataExport(config, {
+      outputPath,
+      json: parsed.flags.json
+    })),
+    sourceBytes,
+    thresholdBytes,
+    dryRun: false
+  };
+}
+
+function candidateManagedSkillTargets(config) {
+  const candidates = [
+    ["codex", path.join(homeDir(), ".codex", "skills", "forge-openclaw")],
+    [
+      "codex",
+      path.join(homeDir(), ".codex", "skills", "forge-openclaw-plugin")
+    ],
+    ["codex", path.join(homeDir(), ".codex", "skills", "forge-memory")],
+    ["openclaw", path.join(homeDir(), ".openclaw", "skills", "forge-openclaw")],
+    [
+      "openclaw",
+      path.join(homeDir(), ".openclaw", "skills", "forge-openclaw-plugin")
+    ],
+    ["hermes", path.join(homeDir(), ".hermes", "skills", "forge")],
+    ["hermes", path.join(homeDir(), ".hermes", "skills", "forge-openclaw")]
+  ];
+  const selected = new Set(config.adapters);
+  return candidates
+    .filter(([adapter]) => selected.has(adapter))
+    .map(([adapter, targetPath]) => ({ adapter, path: targetPath }));
+}
+
+async function hashFile(filePath) {
+  return createHash("sha256")
+    .update(await fsp.readFile(filePath))
+    .digest("hex");
+}
+
+async function hashDirectoryTree(root) {
+  const entries = [];
+  const walk = async (current) => {
+    const children = await fsp.readdir(current, { withFileTypes: true });
+    children.sort((left, right) => left.name.localeCompare(right.name));
+    for (const child of children) {
+      const absolute = path.join(current, child.name);
+      const relative = path.relative(root, absolute).replaceAll(path.sep, "/");
+      if (child.isDirectory()) {
+        entries.push(`dir:${relative}`);
+        await walk(absolute);
+        continue;
+      }
+      if (child.isFile()) {
+        entries.push(`file:${relative}:${await hashFile(absolute)}`);
+        continue;
+      }
+      if (child.isSymbolicLink()) {
+        entries.push(`symlink:${relative}:${await fsp.readlink(absolute)}`);
+      }
+    }
+  };
+  await walk(root);
+  return createHash("sha256").update(entries.join("\n")).digest("hex");
+}
+
+async function readManagedSkillsManifest() {
+  return readJson(managedSkillsManifestPath(), { version: 1, skills: {} });
+}
+
+async function writeManagedSkillsManifest(targets, options = {}) {
+  const skills = {};
+  for (const target of targets) {
+    if (!fs.existsSync(target.path)) continue;
+    skills[target.path] = {
+      adapter: target.adapter,
+      hash: await hashDirectoryTree(target.path),
+      recordedAt: new Date().toISOString()
+    };
+  }
+  return writeJson(
+    managedSkillsManifestPath(),
+    { version: 1, skills },
+    { dryRun: options.dryRun, backup: true }
+  );
+}
+
+async function detectManagedSkillChanges(config) {
+  const manifest = await readManagedSkillsManifest();
+  const targets = candidateManagedSkillTargets(config).filter((target) =>
+    fs.existsSync(target.path)
+  );
+  const changes = [];
+  for (const target of targets) {
+    const currentHash = await hashDirectoryTree(target.path);
+    const previous = manifest?.skills?.[target.path];
+    if (!previous || previous.hash !== currentHash) {
+      changes.push({
+        ...target,
+        currentHash,
+        previousHash: previous?.hash ?? null,
+        reason: previous ? "modified" : "untracked"
+      });
+    }
+  }
+  return { targets, changes };
+}
+
+async function backupManagedSkillTargets(changes, parsed) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backups = [];
+  for (const change of changes) {
+    const destination = path.join(
+      forgeHome(),
+      "backups",
+      "skills",
+      stamp,
+      change.adapter,
+      path.basename(change.path)
+    );
+    backups.push({
+      ...change,
+      backupPath: destination,
+      dryRun: parsed.flags.dryRun
+    });
+    if (parsed.flags.dryRun) continue;
+    await fsp.mkdir(path.dirname(destination), { recursive: true });
+    await fsp.cp(change.path, destination, { recursive: true });
+  }
+  return backups;
+}
+
+async function prepareManagedSkillUpdates(config, parsed) {
+  const { targets, changes } = await detectManagedSkillChanges(config);
+  if (!changes.length) return { targets, changes: [], backups: [] };
+  if (parsed.flags.dryRun) {
+    const backups = await backupManagedSkillTargets(changes, parsed);
+    return { targets, changes, backups };
+  }
+  if (!parsed.flags.yes) {
+    if (!process.stdin.isTTY || parsed.flags.json) {
+      throw new ManagedSkillUpdateConfirmationError(
+        [
+          `Forge found ${changes.length} existing Forge-related skill folder(s) with unknown or manual changes.`,
+          "No update was applied after the data backup."
+        ].join(" "),
+        { changes }
+      );
+    }
+    console.log(color.yellow("Forge found skill folders with possible edits:"));
+    for (const change of changes) {
+      console.log(
+        `- ${change.path} ${color.dim(`(${change.adapter}, ${change.reason})`)}`
+      );
+    }
+    const confirmed = await promptYesNo(
+      "Back up these skill folders and continue updating adapters?",
+      true
+    );
+    if (!confirmed) {
+      throw new ManagedSkillUpdateConfirmationError(
+        "Update cancelled after the data backup because skill update was not confirmed.",
+        { changes }
+      );
+    }
+  }
+  const backups = await backupManagedSkillTargets(changes, parsed);
+  return { targets, changes, backups };
 }
 
 async function removeOpenClawAdapterConfig() {
@@ -2963,6 +3265,203 @@ async function runInstall(parsed, command) {
   }
 }
 
+async function refreshPackagedRuntimeCache(parsed) {
+  if (parsed.flags.dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      mode: "packaged",
+      removedRuntimeCache: runtimeInstallRoot(),
+      runtimePackage: RUNTIME_PACKAGE,
+      runtimePackageVersion: RUNTIME_PACKAGE_VERSION
+    };
+  }
+  await fsp.rm(runtimeInstallRoot(), { recursive: true, force: true });
+  const pluginRoot = await ensurePackagedRuntimeInstalled({
+    forceInstall: true
+  });
+  return {
+    ok: true,
+    mode: "packaged",
+    removedRuntimeCache: runtimeInstallRoot(),
+    runtimePackage: RUNTIME_PACKAGE,
+    runtimePackageVersion: RUNTIME_PACKAGE_VERSION,
+    pluginRoot
+  };
+}
+
+async function runUpdate(parsed) {
+  const currentConfig = await readConfig();
+  const adapterOverride = parsed.flags.skipAdapters
+    ? null
+    : normalizeAdapterList(parsed.values.adapters);
+  const config =
+    adapterOverride === null
+      ? currentConfig
+      : { ...currentConfig, adapters: adapterOverride };
+
+  if (!parsed.flags.json) {
+    printBanner();
+    console.log(
+      color.dim(
+        "Forge update creates a backup first, refreshes the runtime cache, then updates selected adapters."
+      )
+    );
+    console.log("");
+  }
+
+  const backup = await withProgress(
+    "Backing up Forge data before update",
+    currentConfig.dataRoot,
+    parsed.flags,
+    () => createUpdateBackup(currentConfig, parsed)
+  );
+  if (!parsed.flags.json) {
+    console.log(
+      `${color.green("Backup ready")}: ${backup.outputPath} ${color.dim(`(${formatBytes(backup.sourceBytes)} source data)`)}`
+    );
+  }
+
+  const skillPlan = await withProgress(
+    "Checking Forge-managed skill folders",
+    config.adapters.length
+      ? config.adapters.join(", ")
+      : "no selected adapters",
+    parsed.flags,
+    () => prepareManagedSkillUpdates(config, parsed)
+  );
+
+  let writeResult = null;
+  if (adapterOverride !== null) {
+    writeResult = await withProgress(
+      "Saving updated adapter selection",
+      config.adapters.length ? config.adapters.join(", ") : "none",
+      parsed.flags,
+      () => writeConfig(config, { dryRun: parsed.flags.dryRun })
+    );
+  }
+
+  const stopResult = await withProgress(
+    "Stopping Forge runtime before update",
+    "runtime cache only; data is preserved",
+    parsed.flags,
+    () =>
+      parsed.flags.dryRun
+        ? { ok: true, dryRun: true, stopped: false }
+        : stopRuntime(config)
+  );
+
+  const runtimeUpdateResult = await withProgress(
+    config.mode === "dev"
+      ? "Skipping packaged runtime refresh"
+      : "Refreshing packaged Forge runtime",
+    config.mode === "dev"
+      ? "source-backed dev install"
+      : `${RUNTIME_PACKAGE}@${RUNTIME_PACKAGE_VERSION}`,
+    parsed.flags,
+    () =>
+      config.mode === "dev"
+        ? {
+            ok: true,
+            mode: "dev",
+            skipped: true,
+            message:
+              "Dev mode uses the Forge checkout on disk; pull/build that checkout separately when needed."
+          }
+        : refreshPackagedRuntimeCache(parsed)
+  );
+
+  const adapterResults = await withProgress(
+    parsed.flags.skipAdapters || config.adapters.length === 0
+      ? "Skipping host adapter updates"
+      : "Updating selected host adapters",
+    parsed.flags.skipAdapters
+      ? "--skip-adapters"
+      : config.adapters.length
+        ? config.adapters.join(", ")
+        : "none selected",
+    parsed.flags,
+    () =>
+      parsed.flags.skipAdapters
+        ? []
+        : configureAdapters(config, { dryRun: parsed.flags.dryRun })
+  );
+
+  if (!parsed.flags.dryRun && !parsed.flags.skipAdapters) {
+    await writeManagedSkillsManifest(skillPlan.targets, {
+      dryRun: parsed.flags.dryRun
+    });
+  }
+
+  let runtimeResult = null;
+  if (!parsed.flags.noStart && !parsed.flags.dryRun) {
+    runtimeResult = await withProgress(
+      "Starting updated Forge runtime",
+      `logs: ${logPath()}`,
+      parsed.flags,
+      () => startRuntime(config)
+    );
+  } else if (parsed.flags.noStart) {
+    printStep(
+      "Runtime start skipped",
+      "run npx forge-memory restart or npx forge-memory ui when ready",
+      parsed.flags
+    );
+  }
+
+  let doctorResult = null;
+  if (!parsed.flags.noDoctor) {
+    doctorResult = await withProgress(
+      "Running Forge doctor",
+      parsed.flags.noStart ? "offline checks" : "health checks",
+      parsed.flags,
+      () =>
+        runDoctorChecks(parsed, config, {
+          repair: false,
+          noStart: parsed.flags.noStart,
+          dryRun: parsed.flags.dryRun
+        })
+    );
+  }
+
+  const summary = {
+    ok: true,
+    command: "update",
+    backup,
+    skillPlan,
+    writeResult,
+    stopResult,
+    runtimeUpdateResult,
+    adapterResults,
+    runtimeResult,
+    doctorResult,
+    dataRoot: currentConfig.dataRoot,
+    dataPreserved: true
+  };
+
+  if (parsed.flags.json) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+  console.log(color.green("Forge Memory update complete."));
+  console.log(`Backup: ${backup.outputPath}`);
+  console.log(`Data: ${currentConfig.dataRoot}`);
+  console.log(`UI: ${webUrl(config)}`);
+  if (skillPlan.backups.length > 0) {
+    console.log("Skill backups:");
+    for (const backupEntry of skillPlan.backups) {
+      console.log(`- ${backupEntry.path} -> ${backupEntry.backupPath}`);
+    }
+  }
+  if (parsed.flags.dryRun) {
+    console.log(
+      color.yellow(
+        "Dry run only; no files, runtime cache, or adapters were changed."
+      )
+    );
+  }
+}
+
 async function runStatus(parsed) {
   const config = await readConfig();
   const state = await readRuntimeState();
@@ -3518,6 +4017,7 @@ Usage:
   npx forge-memory configure
   npx forge-memory status
   npx forge-memory doctor
+  npx forge-memory update
   npx forge-memory ui
   npx forge-memory restart
   npx forge-memory stop
@@ -3530,7 +4030,7 @@ Options:
   --dev                 Use source-backed Forge runtime and adapter links
   --data-root <path>    Forge data root
   --adapters <list>     Comma list: openclaw,hermes,codex or none
-  --skip-adapters       Configure UI/runtime only
+  --skip-adapters       Skip adapter configuration/update
   --skip-pair-ios       Do not prompt or create iOS pairing
   --manual-http         Force direct HTTP/TCP for iOS pairing
   --public-url <url>    Phone-facing Tailscale/LAN/fixed URL for direct pairing; never localhost
@@ -3565,6 +4065,9 @@ async function main() {
       break;
     case "doctor":
       await runDoctor(parsed);
+      break;
+    case "update":
+      await runUpdate(parsed);
       break;
     case "start":
       console.log(

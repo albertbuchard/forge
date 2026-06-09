@@ -103,13 +103,20 @@
               <p>
                 The installer keeps the real Forge data folder explicit. You can
                 reopen the same flow later with current settings already
-                selected, export the data folder, stop the runtime, or uninstall
-                the runtime manager without deleting your data by default.
+                selected, safely update the runtime and adapters, export the
+                data folder, stop the runtime, or uninstall the runtime manager
+                without deleting your data by default.
               </p>
               <pre><code>npx forge-memory configure
+npx forge-memory update
 npx forge-memory export
 npx forge-memory stop
 npx forge-memory uninstall</code></pre>
+              <p>
+                Update always creates a pre-update backup first. If Forge sees a
+                Forge-related skill folder that may have manual edits, it asks
+                before continuing and saves a skill-folder backup too.
+              </p>
             </article>
           </div>
         </section>

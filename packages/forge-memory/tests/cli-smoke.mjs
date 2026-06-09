@@ -1255,6 +1255,104 @@ if (!Array.isArray(config.adapters) || config.adapters.length !== 0) {
   throw new Error("Expected no adapters in smoke config");
 }
 
+fs.writeFileSync(path.join(dataRoot, "update-preserved.txt"), "preserve me\n");
+const safeUpdate = run([
+  "update",
+  "--yes",
+  "--no-start",
+  "--no-doctor",
+  "--skip-adapters",
+  "--json"
+]);
+const safeUpdatePayload = JSON.parse(safeUpdate.stdout);
+if (!safeUpdatePayload.dataPreserved) {
+  throw new Error("Expected update to report preserved data");
+}
+if (!fs.existsSync(safeUpdatePayload.backup.outputPath)) {
+  throw new Error(
+    `Expected update to create backup archive ${safeUpdatePayload.backup.outputPath}`
+  );
+}
+if (!fs.existsSync(path.join(dataRoot, "update-preserved.txt"))) {
+  throw new Error("Expected update to keep existing dataRoot files");
+}
+if (safeUpdatePayload.runtimeUpdateResult.mode !== "dev") {
+  throw new Error(
+    `Expected dev-mode update to skip packaged runtime refresh, got ${safeUpdate.stdout}`
+  );
+}
+
+const largeUpdateFailure = runFailure(
+  ["update", "--json", "--no-start", "--no-doctor", "--skip-adapters"],
+  {
+    env: { ...env, FORGE_MEMORY_UPDATE_BACKUP_PROMPT_BYTES: "1" }
+  }
+);
+const largeUpdatePayload = JSON.parse(largeUpdateFailure.stderr);
+if (largeUpdatePayload.code !== "update_backup_confirmation_required") {
+  throw new Error(
+    `Expected large update to require backup confirmation, got ${largeUpdateFailure.stderr}`
+  );
+}
+
+const codexSkillPath = path.join(
+  tempHome,
+  ".codex",
+  "skills",
+  "forge-openclaw"
+);
+fs.mkdirSync(codexSkillPath, { recursive: true });
+fs.writeFileSync(path.join(codexSkillPath, "SKILL.md"), "manual edit\n");
+const skillGuardUpdate = run([
+  "update",
+  "--yes",
+  "--no-start",
+  "--no-doctor",
+  "--adapters",
+  "codex",
+  "--json"
+]);
+const skillGuardPayload = JSON.parse(skillGuardUpdate.stdout);
+if (skillGuardPayload.skillPlan.backups.length !== 1) {
+  throw new Error(
+    `Expected update to back up modified Codex skill folder, got ${skillGuardUpdate.stdout}`
+  );
+}
+const skillBackupPath = skillGuardPayload.skillPlan.backups[0].backupPath;
+if (!fs.existsSync(path.join(skillBackupPath, "SKILL.md"))) {
+  throw new Error(
+    `Expected skill backup to include SKILL.md at ${skillBackupPath}`
+  );
+}
+const managedSkillsManifestPath = path.join(
+  tempHome,
+  ".forge",
+  "managed-skills.json"
+);
+if (!fs.existsSync(managedSkillsManifestPath)) {
+  throw new Error("Expected update to record managed skill hashes");
+}
+run(
+  [
+    "update",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--no-doctor",
+    "--skip-adapters",
+    "--json"
+  ],
+  {
+    env: { ...env, FORGE_MEMORY_UPDATE_BACKUP_PROMPT_BYTES: "1" }
+  }
+);
+const configAfterSkipUpdate = JSON.parse(fs.readFileSync(configPath, "utf8"));
+if (configAfterSkipUpdate.adapters.join(",") !== "codex") {
+  throw new Error(
+    `Expected update --skip-adapters to preserve configured adapters, got ${configAfterSkipUpdate.adapters}`
+  );
+}
+
 fs.writeFileSync(
   configPath,
   `${JSON.stringify(

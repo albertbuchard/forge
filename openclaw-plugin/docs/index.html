@@ -151,6 +151,7 @@
               </p>
               <pre><code>npx forge-memory status
 npx forge-memory doctor
+npx forge-memory update
 npx forge-memory ui
 npx forge-memory restart
 npx forge-memory stop
@@ -158,9 +159,26 @@ npx forge-memory export
 npx forge-memory uninstall
 npx forge-memory pair-ios</code></pre>
               <p>
-                Export keeps a portable backup path close at hand. Uninstall
-                removes the runtime manager and cache while keeping your Forge
-                data folder unless you explicitly ask to delete it.
+                Update creates a pre-update backup, refreshes the runtime cache,
+                and updates selected adapters without deleting data. Export
+                keeps a portable backup path close at hand. Uninstall removes
+                the runtime manager and cache while keeping your Forge data
+                folder unless you explicitly ask to delete it.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Safe updates</h3>
+              <p>
+                Use the update command when you want the current runtime,
+                OpenClaw, Hermes, or Codex integration refreshed. It prints the
+                backup path before continuing and asks before overwriting any
+                Forge-related skill folder that may have manual edits.
+              </p>
+              <pre><code>npx forge-memory update</code></pre>
+              <p>
+                Agent prompt: run <code>npx forge-memory update --yes</code>,
+                verify <code>npx forge-memory doctor</code>, report the backup
+                path, and stop if Forge cannot create a backup first.
               </p>
             </article>
             <article class="card">

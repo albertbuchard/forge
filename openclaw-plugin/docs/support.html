@@ -162,9 +162,12 @@ userId:   explicit on writes</code></pre>
             <article class="card">
               <h3>Need a safe backup or clean removal</h3>
               <p>
-                Run <code>npx forge-memory export</code> before storage changes.
-                Run <code>npx forge-memory uninstall</code> to remove the
-                runtime manager and cache while keeping data by default.
+                Run <code>npx forge-memory update</code> for the normal safe
+                upgrade path; it creates a backup before refreshing runtime or
+                adapter files. Run <code>npx forge-memory export</code> before
+                manual storage changes. Run
+                <code>npx forge-memory uninstall</code> to remove the runtime
+                manager and cache while keeping data by default.
               </p>
             </article>
           </div>
