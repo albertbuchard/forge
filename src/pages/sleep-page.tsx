@@ -40,6 +40,7 @@ import type {
   SleepSessionDetailPayload,
   SleepSessionRecord,
   SleepSourceRecord,
+  SleepLatestNightFreshness,
   SleepSurfaceNight
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -550,9 +551,11 @@ function SleepPhaseTimeline({
 }
 
 function LastNightHero({
-  latestNight
+  latestNight,
+  freshness
 }: {
   latestNight: SleepSurfaceNight | null;
+  freshness: SleepLatestNightFreshness | null;
 }) {
   if (!latestNight) {
     return (
@@ -565,6 +568,17 @@ function LastNightHero({
       </Card>
     );
   }
+
+  const freshnessStatus = freshness?.status ?? latestNight.freshnessStatus;
+  const expectedDateKey = freshness?.expectedDateKey ?? latestNight.expectedDateKey;
+  const actualDateKey = freshness?.actualDateKey ?? latestNight.dateKey;
+  const isCurrent = freshness?.isCurrent ?? latestNight.isExpectedLastNight;
+  const heroLabel =
+    freshnessStatus === "future"
+      ? "Clock check"
+      : isCurrent
+        ? "Last night"
+        : "Latest synced night";
 
   return (
     <Card className="overflow-hidden border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-0">
@@ -587,7 +601,7 @@ function LastNightHero({
 
             <div>
               <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
-                Last night
+                {heroLabel}
               </div>
               <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
                 <div className="text-[clamp(2.5rem,6vw,5rem)] font-medium leading-none text-[var(--ui-ink-strong)]">
@@ -603,6 +617,14 @@ function LastNightHero({
               {latestNight.qualitySummary ? (
                 <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-medium)]">
                   {latestNight.qualitySummary}
+                </div>
+              ) : freshnessStatus === "stale" ? (
+                <div className="mt-4 max-w-2xl rounded-[16px] border border-amber-300/60 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100">
+                  Expected wake-date {expectedDateKey} in {latestNight.sourceTimezone}, but Forge has {actualDateKey}. Refresh the iPhone sync after unlock; this page checks again automatically.
+                </div>
+              ) : freshnessStatus === "future" ? (
+                <div className="mt-4 max-w-2xl rounded-[16px] border border-sky-300/60 bg-sky-100/70 px-4 py-3 text-sm leading-6 text-sky-950 dark:border-sky-400/30 dark:bg-sky-500/15 dark:text-sky-100">
+                  This sleep is dated after today in {latestNight.sourceTimezone}. Check the phone clock, timezone, and HealthKit sample dates.
                 </div>
               ) : (
                 <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
@@ -1255,7 +1277,10 @@ export function SleepPage() {
 
   const sleepQuery = useQuery({
     queryKey: ["forge-sleep", ...selectedUserIds],
-    queryFn: async () => (await getSleepView(selectedUserIds)).sleep
+    queryFn: async () => (await getSleepView(selectedUserIds)).sleep,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+    staleTime: 15_000
   });
   const rawDetailQuery = useQuery({
     queryKey: ["forge-sleep-raw", selectedSleepId],
@@ -1433,7 +1458,10 @@ export function SleepPage() {
       <PsycheSectionNav />
 
       <SleepSummaryBox>
-        <LastNightHero latestNight={sleep.latestNight} />
+        <LastNightHero
+          latestNight={sleep.latestNight}
+          freshness={sleep.latestNightFreshness}
+        />
       </SleepSummaryBox>
 
       <SleepPatternsBox>

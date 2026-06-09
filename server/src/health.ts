@@ -1083,6 +1083,14 @@ function localDateKeyForTimezone(value: string, timeZone: string) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+function compareDateKeys(left: string | null | undefined, right: string) {
+  const normalizedLeft = left?.trim();
+  if (!normalizedLeft) {
+    return -1;
+  }
+  return normalizedLeft.localeCompare(right);
+}
+
 function mergeStringLists(...groups: Array<string[] | null | undefined>) {
   return [
     ...new Set(
@@ -1979,6 +1987,37 @@ function pickDisplaySleepSessions(sessions: MappedSleepSession[]) {
   return [...byDateKey.values()].sort(
     (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)
   );
+}
+
+function buildLatestSleepNightFreshness(
+  latestNight: MappedSleepSession | null,
+  now: Date = new Date()
+) {
+  const sourceTimezone = resolveTimeZone(
+    latestNight?.sourceTimezone || defaultSleepTimeZone()
+  );
+  const expectedDateKey = localDateKeyForTimezone(
+    now.toISOString(),
+    sourceTimezone
+  );
+  const actualDateKey = latestNight?.localDateKey || null;
+  const comparison = compareDateKeys(actualDateKey, expectedDateKey);
+  const status =
+    actualDateKey === null
+      ? ("empty" as const)
+      : comparison === 0
+        ? ("current" as const)
+        : comparison > 0
+          ? ("future" as const)
+          : ("stale" as const);
+  return {
+    status,
+    isCurrent: status === "current",
+    expectedDateKey,
+    actualDateKey,
+    sourceTimezone,
+    missingDateKeys: status === "stale" ? [expectedDateKey] : []
+  };
 }
 
 function normalizeTimelineStage(
@@ -6774,7 +6813,10 @@ export function getCompanionOverview(userIds?: string[]) {
   };
 }
 
-export function getSleepViewData(userIds?: string[]) {
+export function getSleepViewData(
+  userIds?: string[],
+  options: { now?: Date } = {}
+) {
   const sessions = listSleepRows(userIds).map(mapSleepSession);
   const displaySessions = pickDisplaySleepSessions(sessions);
   const recentDisplay = displaySessions.slice(0, 30);
@@ -6782,6 +6824,10 @@ export function getSleepViewData(userIds?: string[]) {
   const monthly = recentDisplay.slice(0, 30);
   const calendarWindow = displaySessions.slice(0, 84);
   const latestNight = recentDisplay[0] ?? null;
+  const latestNightFreshness = buildLatestSleepNightFreshness(
+    latestNight,
+    options.now
+  );
   const weeklyBaseline =
     weekly.length > 1
       ? Math.round(
@@ -6872,8 +6918,14 @@ export function getSleepViewData(userIds?: string[]) {
       latestBedtime: latestNight?.startedAt ?? null,
       latestWakeTime: latestNight?.endedAt ?? null
     },
+    latestNightFreshness,
     latestNight: latestNight
-      ? buildSleepSurfaceNight(latestNight, weeklyBaseline)
+      ? {
+          ...buildSleepSurfaceNight(latestNight, weeklyBaseline),
+          expectedDateKey: latestNightFreshness.expectedDateKey,
+          isExpectedLastNight: latestNightFreshness.isCurrent,
+          freshnessStatus: latestNightFreshness.status
+        }
       : null,
     calendarDays: calendarWindow
       .map((session) => buildSleepCalendarDay(session))

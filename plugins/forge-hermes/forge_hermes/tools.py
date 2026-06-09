@@ -178,6 +178,7 @@ def _format_focus_line(context_body: Dict[str, Any]) -> Optional[str]:
 def _format_sleep_line(overview_body: Dict[str, Any]) -> Optional[str]:
     sleep = _safe_dict(overview_body.get("sleep"))
     latest = _safe_dict(sleep.get("latestNight"))
+    freshness = _safe_dict(sleep.get("latestNightFreshness"))
     summary = _safe_dict(sleep.get("summary"))
     latest_bits: list[str] = []
     latest_duration = _format_duration(latest.get("asleepSeconds"))
@@ -189,6 +190,14 @@ def _format_sleep_line(overview_body: Dict[str, Any]) -> Optional[str]:
     recovery = _normalize_text(latest.get("recoveryState") or latest.get("qualitativeState"))
     if recovery:
         latest_bits.append(recovery)
+    freshness_status = _normalize_text(freshness.get("status"))
+    if freshness_status and freshness_status not in {"current", "empty"}:
+        expected_date = _normalize_text(freshness.get("expectedDateKey"))
+        actual_date = _normalize_text(freshness.get("actualDateKey"))
+        if expected_date and actual_date:
+            latest_bits.append(f"{freshness_status}: expected {expected_date}, has {actual_date}")
+        else:
+            latest_bits.append(freshness_status)
 
     average_bits: list[str] = []
     average_duration = _format_duration(summary.get("averageSleepSeconds"))

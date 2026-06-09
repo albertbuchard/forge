@@ -522,6 +522,35 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
+    enum ActiveHealthSyncCheckpointResumePolicy {
+        static let maxCheckpointAge: TimeInterval = 20 * 60
+        static let maxWindowStaleness: TimeInterval = 20 * 60
+        static let futureClockTolerance: TimeInterval = 5 * 60
+
+        static func shouldResume(
+            checkpoint: ActiveHealthSyncCheckpoint,
+            currentChunkingVersion: String,
+            now: Date
+        ) -> Bool {
+            guard checkpoint.clientChunkingVersion == currentChunkingVersion else {
+                return false
+            }
+            guard checkpoint.requiresWorkoutBackfill == false else {
+                return false
+            }
+            guard now.timeIntervalSince(checkpoint.createdAt) <= maxCheckpointAge else {
+                return false
+            }
+            guard now.timeIntervalSince(checkpoint.windowEnd) <= maxWindowStaleness else {
+                return false
+            }
+            guard checkpoint.windowEnd.timeIntervalSince(now) <= futureClockTolerance else {
+                return false
+            }
+            return true
+        }
+    }
+
     enum HistoricalWorkoutImportRefreshPolicy {
         static let sessionStatusRefreshBatchInterval = 8
 
@@ -2624,17 +2653,22 @@ final class CompanionAppModel: ObservableObject {
         var healthDataDeferred = false
         let restoredCheckpoint = activeHealthSyncCheckpoint
         let clientChunkingVersion = ForgeSyncClient.healthSyncChunkingVersion(for: pairing)
-        let resumableCheckpoint = restoredCheckpoint?.clientChunkingVersion == clientChunkingVersion &&
-            restoredCheckpoint?.requiresWorkoutBackfill == false
-            ? restoredCheckpoint
-            : nil
+        let runStartedAt = Date()
+        let resumableCheckpoint = restoredCheckpoint.flatMap { checkpoint in
+            Self.ActiveHealthSyncCheckpointResumePolicy.shouldResume(
+                checkpoint: checkpoint,
+                currentChunkingVersion: clientChunkingVersion,
+                now: runStartedAt
+            ) ? checkpoint : nil
+        }
         if let restoredCheckpoint, resumableCheckpoint == nil {
             companionDebugLog(
                 "CompanionAppModel",
-                "discarding active health sync checkpoint session=\(restoredCheckpoint.syncSessionId) chunkingVersion=\(restoredCheckpoint.clientChunkingVersion) currentChunkingVersion=\(clientChunkingVersion)"
+                "discarding active health sync checkpoint session=\(restoredCheckpoint.syncSessionId) chunkingVersion=\(restoredCheckpoint.clientChunkingVersion) currentChunkingVersion=\(clientChunkingVersion) ageSeconds=\(Int(runStartedAt.timeIntervalSince(restoredCheckpoint.createdAt))) windowAgeSeconds=\(Int(runStartedAt.timeIntervalSince(restoredCheckpoint.windowEnd)))"
             )
+            clearActiveHealthSyncCheckpoint()
         }
-        var syncWindowEnd = resumableCheckpoint?.windowEnd ?? Date()
+        var syncWindowEnd = resumableCheckpoint?.windowEnd ?? runStartedAt
         let resumeSyncSessionId = resumableCheckpoint?.resumeSessionId
         activeSyncMode = .normal
 

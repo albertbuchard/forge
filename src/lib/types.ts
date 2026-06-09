@@ -1614,6 +1614,9 @@ export interface SleepSurfaceStageShare {
 export interface SleepSurfaceNight {
   sleepId: string;
   dateKey: string;
+  expectedDateKey: string;
+  isExpectedLastNight: boolean;
+  freshnessStatus: "current" | "stale" | "empty" | "future";
   sourceTimezone: string;
   startedAt: string;
   endedAt: string;
@@ -1635,6 +1638,15 @@ export interface SleepSurfaceNight {
   hasRawSegments: boolean;
   qualitySummary: string | null;
   stageBreakdown: SleepSurfaceStageShare[];
+}
+
+export interface SleepLatestNightFreshness {
+  status: "current" | "stale" | "empty" | "future";
+  isCurrent: boolean;
+  expectedDateKey: string;
+  actualDateKey: string | null;
+  sourceTimezone: string;
+  missingDateKeys: string[];
 }
 
 export interface SleepCalendarDay {
@@ -1744,6 +1756,7 @@ export interface SleepViewData {
     latestBedtime: string | null;
     latestWakeTime: string | null;
   };
+  latestNightFreshness: SleepLatestNightFreshness;
   latestNight: SleepSurfaceNight | null;
   calendarDays: SleepCalendarDay[];
   weeklyTrend: Array<{

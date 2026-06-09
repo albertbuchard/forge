@@ -16,6 +16,7 @@ import { deflateRawSync, deflateSync } from "node:zlib";
 import { formatLocalDateKey } from "../../src/lib/date-keys.js";
 import { buildServer } from "./app.js";
 import { closeDatabase, configureDatabase, getDatabase } from "./db.js";
+import { getSleepViewData } from "./health.js";
 import { BackgroundJobManager } from "./managers/platform/background-job-manager.js";
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { createCalendarEvent } from "./repositories/calendar.js";
@@ -6391,6 +6392,98 @@ test("sleep view collapses duplicate localDateKey nights into one calendar day a
     assert.equal(sleep.latestNight?.asleepSeconds, 28_200);
     assert.equal(sleep.sessions[0]?.id, sleep.latestNight?.sleepId);
     assert.equal(sleep.latestNight?.sleepId, sleep.calendarDays[0]?.sleepId);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("sleep view marks older wake-date data as latest synced night, not current last night", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-mobile-health-sleep-freshness-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  function insertSleep(input: {
+    id: string;
+    externalUid: string;
+    localDateKey: string;
+    startedAt: string;
+    endedAt: string;
+    asleepSeconds: number;
+    timeInBedSeconds: number;
+  }) {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO health_sleep_sessions (
+           id, external_uid, pairing_session_id, user_id, source, source_type, source_device, source_timezone, local_date_key,
+           started_at, ended_at, time_in_bed_seconds, asleep_seconds, awake_seconds, raw_segment_count, sleep_score, regularity_score,
+           bedtime_consistency_minutes, wake_consistency_minutes, stage_breakdown_json, recovery_metrics_json, source_metrics_json,
+           links_json, annotations_json, provenance_json, derived_json, created_at, updated_at
+         )
+         VALUES (?, ?, NULL, 'user_operator', 'apple_health', 'healthkit', 'Omar iPhone', 'Europe/Zurich', ?,
+           ?, ?, ?, ?, 0, 4, 80, 80, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
+      )
+      .run(
+        input.id,
+        input.externalUid,
+        input.localDateKey,
+        input.startedAt,
+        input.endedAt,
+        input.timeInBedSeconds,
+        input.asleepSeconds,
+        JSON.stringify([{ stage: "core", seconds: input.asleepSeconds }]),
+        now,
+        now
+      );
+  }
+
+  try {
+    const pinnedTuesday = new Date("2026-06-09T10:00:00.000Z");
+    insertSleep({
+      id: "sleep_monday_wake",
+      externalUid: "sleep_monday_wake",
+      localDateKey: "2026-06-08",
+      startedAt: "2026-06-07T23:45:00.000Z",
+      endedAt: "2026-06-08T05:00:00.000Z",
+      asleepSeconds: 18_900,
+      timeInBedSeconds: 19_200
+    });
+
+    const staleSleep = getSleepViewData(["user_operator"], {
+      now: pinnedTuesday
+    });
+    assert.equal(staleSleep.latestNight?.dateKey, "2026-06-08");
+    assert.equal(staleSleep.latestNight?.freshnessStatus, "stale");
+    assert.equal(staleSleep.latestNight?.isExpectedLastNight, false);
+    assert.equal(staleSleep.latestNightFreshness.status, "stale");
+    assert.equal(staleSleep.latestNightFreshness.expectedDateKey, "2026-06-09");
+    assert.equal(staleSleep.latestNightFreshness.actualDateKey, "2026-06-08");
+    assert.deepEqual(staleSleep.latestNightFreshness.missingDateKeys, [
+      "2026-06-09"
+    ]);
+
+    insertSleep({
+      id: "sleep_tuesday_wake",
+      externalUid: "sleep_tuesday_wake",
+      localDateKey: "2026-06-09",
+      startedAt: "2026-06-08T21:45:00.000Z",
+      endedAt: "2026-06-09T04:45:00.000Z",
+      asleepSeconds: 25_080,
+      timeInBedSeconds: 25_200
+    });
+
+    const currentSleep = getSleepViewData(["user_operator"], {
+      now: pinnedTuesday
+    });
+    assert.equal(currentSleep.latestNight?.dateKey, "2026-06-09");
+    assert.equal(currentSleep.latestNight?.freshnessStatus, "current");
+    assert.equal(currentSleep.latestNight?.isExpectedLastNight, true);
+    assert.equal(currentSleep.latestNightFreshness.status, "current");
+    assert.equal(currentSleep.latestNightFreshness.actualDateKey, "2026-06-09");
+    assert.deepEqual(currentSleep.latestNightFreshness.missingDateKeys, []);
   } finally {
     await app.close();
     closeDatabase();

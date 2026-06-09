@@ -4824,6 +4824,86 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testActiveHealthSyncCheckpointResumePolicyRejectsStaleBaseWindows() {
+        let now = makeDate("2026-06-09T06:30:00.000Z")
+        let freshCheckpoint = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_fresh",
+            schemaVersion: "healthkit-sync-v2",
+            requestedFamilies: ["sleep_nights", "sleep_segments"],
+            createdAt: now.addingTimeInterval(-10 * 60),
+            windowEnd: now.addingTimeInterval(-9 * 60),
+            requiresWorkoutBackfill: false,
+            lastReceivedChunkCount: 2,
+            lastReceivedBytes: 20_000,
+            clientChunkingVersion: "iroh-v7-balanced-content-addressed-base"
+        )
+
+        XCTAssertTrue(
+            CompanionAppModel.ActiveHealthSyncCheckpointResumePolicy.shouldResume(
+                checkpoint: freshCheckpoint,
+                currentChunkingVersion: "iroh-v7-balanced-content-addressed-base",
+                now: now
+            )
+        )
+
+        let staleCreatedAt = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_stale_created",
+            schemaVersion: freshCheckpoint.schemaVersion,
+            requestedFamilies: freshCheckpoint.requestedFamilies,
+            createdAt: now.addingTimeInterval(-45 * 60),
+            windowEnd: now.addingTimeInterval(-9 * 60),
+            requiresWorkoutBackfill: false,
+            lastReceivedChunkCount: freshCheckpoint.lastReceivedChunkCount,
+            lastReceivedBytes: freshCheckpoint.lastReceivedBytes,
+            clientChunkingVersion: freshCheckpoint.clientChunkingVersion
+        )
+        XCTAssertFalse(
+            CompanionAppModel.ActiveHealthSyncCheckpointResumePolicy.shouldResume(
+                checkpoint: staleCreatedAt,
+                currentChunkingVersion: freshCheckpoint.clientChunkingVersion,
+                now: now
+            )
+        )
+
+        let staleWindow = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_stale_window",
+            schemaVersion: freshCheckpoint.schemaVersion,
+            requestedFamilies: freshCheckpoint.requestedFamilies,
+            createdAt: now.addingTimeInterval(-10 * 60),
+            windowEnd: now.addingTimeInterval(-45 * 60),
+            requiresWorkoutBackfill: false,
+            lastReceivedChunkCount: freshCheckpoint.lastReceivedChunkCount,
+            lastReceivedBytes: freshCheckpoint.lastReceivedBytes,
+            clientChunkingVersion: freshCheckpoint.clientChunkingVersion
+        )
+        XCTAssertFalse(
+            CompanionAppModel.ActiveHealthSyncCheckpointResumePolicy.shouldResume(
+                checkpoint: staleWindow,
+                currentChunkingVersion: freshCheckpoint.clientChunkingVersion,
+                now: now
+            )
+        )
+
+        let oldChunkingVersion = ActiveHealthSyncCheckpoint(
+            syncSessionId: "hms_old_version",
+            schemaVersion: freshCheckpoint.schemaVersion,
+            requestedFamilies: freshCheckpoint.requestedFamilies,
+            createdAt: freshCheckpoint.createdAt,
+            windowEnd: freshCheckpoint.windowEnd,
+            requiresWorkoutBackfill: false,
+            lastReceivedChunkCount: freshCheckpoint.lastReceivedChunkCount,
+            lastReceivedBytes: freshCheckpoint.lastReceivedBytes,
+            clientChunkingVersion: "iroh-v6-small-content-addressed-base"
+        )
+        XCTAssertFalse(
+            CompanionAppModel.ActiveHealthSyncCheckpointResumePolicy.shouldResume(
+                checkpoint: oldChunkingVersion,
+                currentChunkingVersion: freshCheckpoint.clientChunkingVersion,
+                now: now
+            )
+        )
+    }
+
     func testHistoricalWorkoutImportRefreshPolicySkipsPerBatchStatusPolls() {
         var batchesSinceLastRefresh = 0
         var refreshes = 0

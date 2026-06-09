@@ -253,6 +253,9 @@ describe("SleepPage", () => {
     latestNight: {
       sleepId: latestSession.id,
       dateKey: latestSession.localDateKey,
+      expectedDateKey: latestSession.localDateKey,
+      isExpectedLastNight: true,
+      freshnessStatus: "current",
       sourceTimezone: latestSession.sourceTimezone,
       startedAt: latestSession.startedAt,
       endedAt: latestSession.endedAt,
@@ -278,6 +281,14 @@ describe("SleepPage", () => {
         { stage: "deep", seconds: 5_400, percentage: 0.2 },
         { stage: "rem", seconds: 8_400, percentage: 0.311 }
       ]
+    },
+    latestNightFreshness: {
+      status: "current",
+      isCurrent: true,
+      expectedDateKey: latestSession.localDateKey,
+      actualDateKey: latestSession.localDateKey,
+      sourceTimezone: latestSession.sourceTimezone,
+      missingDateKeys: []
     },
     calendarDays: [
       {
