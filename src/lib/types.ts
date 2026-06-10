@@ -4351,6 +4351,8 @@ export interface AgentOnboardingPayload {
     saveSuggestionTone: string;
     maxQuestionsPerTurn: number;
     psycheExplorationRule: string;
+    progressiveDisclosureRule: string;
+    writeConfirmationRule: string;
     specializedSurfaceRule: string;
     reviewShortcutRule: string;
     readModelWriteRule: string;

@@ -902,6 +902,66 @@ describe("question flow simulation cycles", () => {
     );
   });
 
+  it("cycle 1 retest: partial answers narrow the next question instead of restarting intake", () => {
+    const progressiveDisclosure = getSectionSlice(
+      entityPlaybook,
+      "Progressive disclosure after partial answers"
+    );
+    const psycheProgressiveDisclosure = getSectionSlice(
+      psychePlaybook,
+      "Psyche progressive disclosure"
+    );
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
+
+    expect(progressiveDisclosure).toMatch(
+      /operation, entity or surface, target record,[\s\S]*time span, working wording, owner or placement, route lane, and consent/i
+    );
+    expect(progressiveDisclosure).toMatch(
+      /first missing detail that[\s\S]*would\s+change the action:[\s\S]*duplicate disambiguation[\s\S]*hierarchy parent[\s\S]*weekday[\s\S]*flow, run, node/i
+    );
+    expect(progressiveDisclosure).toMatch(
+      /For normal batch entities,[\s\S]*do not ask for tags, priority, status, color, links,\s+dates, or assignees unless/i
+    );
+    expect(progressiveDisclosure).toMatch(
+      /For specialized Movement, Life Force, and Workbench work,[\s\S]*skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
+    );
+    expect(psycheProgressiveDisclosure).toMatch(
+      /offered belief sentence, value phrase, part voice, urge sentence, trigger\s+episode, event kind, emotion signature, or functional loop/i
+    );
+    expect(psycheProgressiveDisclosure).toMatch(
+      /ask one accuracy or consent\s+question instead of reopening origin, evidence, or repair/i
+    );
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(/Treat partial answers as progress/i);
+      expect(source).toMatch(
+        /operation, entity or surface, target record or time span, working\s+wording, owner or placement, route lane, and consent/i
+      );
+      expect(source).toMatch(
+        /duplicate disambiguation, hierarchy parent, time\s+window, weekday, flow, run, node, correction, link, or save consent/i
+      );
+      expect(source).toMatch(
+        /optional tags, priority, status, dates, color, links, or assignees/i
+      );
+      expect(source).toMatch(
+        /belief sentence, functional loop, part voice,\s+trigger episode, value phrase, event kind,\s+emotion signature, or flashcard message/i
+      );
+      expect(source).toMatch(
+        /ask one accuracy or consent question instead of reopening\s+origin, evidence, or repair/i
+      );
+    }
+  });
+
   it("cycle 2: all flows keep a guided reflective stance, with stronger therapist-like pacing for Psyche", () => {
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
@@ -1152,6 +1212,72 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 2 retest: write, read, and run actions close the loop without reopening intake", () => {
+    const confirmationLoop = getSectionSlice(
+      entityPlaybook,
+      "Write/read/run confirmation loop"
+    );
+    const psycheAfterSave = getSectionSlice(
+      psychePlaybook,
+      "Psyche after-save close"
+    );
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
+
+    expect(confirmationLoop).toMatch(
+      /create, update, delete, restore, run, read, or repair actions[\s\S]*close the loop/i
+    );
+    expect(confirmationLoop).toMatch(
+      /Confirm the user-facing record, action, and result[\s\S]*not the internal route/i
+    );
+    expect(confirmationLoop).toMatch(
+      /batch creates and updates[\s\S]*working title or accepted wording[\s\S]*container[\s\S]*owner or placement/i
+    );
+    expect(confirmationLoop).toMatch(
+      /optional tags, priority, status, color, links, dates, or assignees[\s\S]*left\s+provisional/i
+    );
+    expect(confirmationLoop).toMatch(
+      /task run started or\s+completed[\s\S]*work adjustment applied[\s\S]*preference judgment or signal submitted[\s\S]*questionnaire run updated or completed[\s\S]*self-observation note written/i
+    );
+    expect(confirmationLoop).toMatch(
+      /Ask a follow-up only if it changes the next action/i
+    );
+    expect(psycheAfterSave).toMatch(
+      /Confirm the accepted wording[\s\S]*first version, update, link, archive, or distinct version/i
+    );
+    expect(psycheAfterSave).toMatch(
+      /Do not reopen origin, evidence, repair, or adjacent entity mapping after the save/i
+    );
+    expect(psycheAfterSave).toMatch(
+      /one accurate sentence plus any concrete next option/i
+    );
+    expect(onboardingSource).toMatch(/writeConfirmationRule:/);
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(
+        /After create, update, delete, restore, run, read, or repair actions/i
+      );
+      expect(source).toMatch(
+        /user-facing record, action, and result[\s\S]*instead of reopening\s+intake/i
+      );
+      expect(source).toMatch(
+        /task run started or completed[\s\S]*work adjustment applied[\s\S]*preference\s+judgment or signal submitted[\s\S]*questionnaire run updated or completed/i
+      );
+      expect(source).toMatch(
+        /Psyche saves[\s\S]*accepted wording[\s\S]*first version, update, link, archive,[\s\S]*distinct version/i
+      );
+    }
+  });
+
   it("cycle 3: all flows close efficiently, preserve only helpful questions, and avoid reopening settled formulations", () => {
     expect(entityPlaybook).toMatch(/If no detail is still decision-relevant/i);
     expect(entityPlaybook).toMatch(/revise the working formulation once/i);
@@ -1321,6 +1447,9 @@ describe("question flow simulation cycles", () => {
       /AgentOnboardingPsychePlaybook[\s\S]*openingQuestion: string;[\s\S]*exampleQuestions: string\[\];/i
     );
     expect(typeSource).toMatch(
+      /interactionGuidance:[\s\S]*psycheExplorationRule: string;[\s\S]*progressiveDisclosureRule: string;[\s\S]*writeConfirmationRule: string;[\s\S]*specializedSurfaceRule: string;/i
+    );
+    expect(typeSource).toMatch(
       /specializedDomainSurfaces:[\s\S]*classification: "specialized_domain_surface";[\s\S]*aliases: string\[\];[\s\S]*summary: string;[\s\S]*routeKeys: string\[\];[\s\S]*methodRoutes: Record<string, string>;[\s\S]*routeSelectionQuestions: string\[\];/i
     );
     expect(typeSource).toMatch(
@@ -1476,17 +1605,20 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-09 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-10 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-09/);
+    expect(report).toMatch(/Latest run date: 2026-06-10/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
     expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.9/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.9/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
-    expect(latestRun).toMatch(/199 OpenAPI paths/i);
-    expect(latestRun).toMatch(/22 focused checks/i);
-    expect(latestRun).toMatch(/\/api\/v1\/strategies[\s\S]*\/api\/v1\/strategies\/\{id\}/i);
+    expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
+    expect(latestRun).toMatch(/24\s+focused checks/i);
+    expect(latestRun).toMatch(/progressiveDisclosureRule/i);
+    expect(latestRun).toMatch(/writeConfirmationRule/i);
+    expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
+    expect(latestRun).toMatch(/Psyche after-save close/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
       /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
@@ -1500,16 +1632,16 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*methodRoutes[\s\S]*OpenAPI/i
+      /Cycle 1[\s\S]*partial answers are progress/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Dedicated surface verification loop/i
+      /Cycle 2[\s\S]*Write\/read\/run confirmation loop/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*older\s+adapter versions/i
+      /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i
     );
-    expect(latestRun).toMatch(/onboarding-method-route[\s\S]*OpenAPI validation/i);
-    expect(latestRun).toMatch(/specialized read-back verification loop/i);
+    expect(latestRun).toMatch(/batch-first normal entity routing/i);
+    expect(latestRun).toMatch(/specialized route-key examples/i);
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);
   });

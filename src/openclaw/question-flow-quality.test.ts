@@ -133,6 +133,28 @@ describe("question flow quality coverage", () => {
       /For updates,[\s\S]*smallest thing[\s\S]*newly visible/i
     );
     expect(entityPlaybook).toMatch(
+      /## Progressive disclosure after partial answers/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Treat partial answers as progress[\s\S]*operation, entity or surface, target record,[\s\S]*time span, working wording, owner or placement, route lane, and consent/i
+    );
+    expect(entityPlaybook).toMatch(
+      /first missing detail that[\s\S]*would\s+change the action:[\s\S]*duplicate disambiguation[\s\S]*hierarchy parent[\s\S]*flow, run, node/i
+    );
+    expect(entityPlaybook).toMatch(
+      /do not ask for tags, priority, status, color, links,\s+dates, or assignees/i
+    );
+    expect(entityPlaybook).toMatch(
+      /skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
+    );
+    expect(psychePlaybook).toMatch(/## Psyche progressive disclosure/i);
+    expect(psychePlaybook).toMatch(
+      /offered belief sentence, value phrase, part voice, urge sentence, trigger\s+episode, event kind, emotion signature, or functional loop/i
+    );
+    expect(psychePlaybook).toMatch(
+      /ask one accuracy or consent\s+question instead of reopening origin, evidence, or repair/i
+    );
+    expect(entityPlaybook).toMatch(
       /For review requests, ask what practical question they want the read to answer/i
     );
     expect(entityPlaybook).toMatch(

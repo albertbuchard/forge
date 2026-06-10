@@ -205,6 +205,14 @@ Before asking another follow-up, run the playbook's minimum save-readiness check
 if accepted wording, meaningful body, route lane, target object or time scope, and any
 ownership or placement that changes later use are already clear, summarize once and
 write, read, run, or update instead of collecting optional fields.
+Treat partial answers as progress. Before another follow-up, identify what is
+already usable: operation, entity or surface, target record or time span, working
+wording, owner or placement, route lane, and consent. Ask only for the first missing
+detail that changes the action: duplicate disambiguation, hierarchy parent, time
+window, weekday, flow, run, node, correction, link, or save consent. Do not ask for
+optional tags, priority, status, dates, color, links, or assignees when accepted
+wording and meaningful body are enough unless that metadata changes accountability,
+retrieval, or execution.
 Use those same playbooks for action-heavy non-Psyche flows such as
 `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
 `movement`, `life_force`, or `workbench` work so Hermes starts from the user's real
@@ -232,6 +240,23 @@ the action is already obvious from the user's wording.
 If the user already named the exact correction in usable language, keep the next
 question to the one missing disambiguator that affects the write, such as the target
 record, interval, owner, or reason. If those are clear enough, stop asking and write.
+After create, update, delete, restore, run, read, or repair actions, confirm the
+user-facing record, action, and result in the user's language instead of reopening
+intake. For batch creates and updates, confirm the working title or accepted wording,
+container, and owner or placement only when those changed retrieval, accountability,
+or execution; if optional tags, priority, status, color, links, dates, or assignees
+were left provisional, say that plainly once. For action workflows, confirm the real
+product action: task run started or completed, work adjustment applied, preference
+judgment or signal submitted, questionnaire run updated or completed, calendar
+connection synced, or self-observation note written. For Psyche saves, confirm the
+accepted wording and whether it was saved as a first version, update, link, archive,
+or distinct version; do not reopen origin, evidence, repair, or adjacent entity
+mapping after the save unless that next object is already visible and materially
+useful.
+For direct Psyche saves or updates, if the user already offers a usable belief sentence, functional loop, part voice,
+trigger episode, value phrase, event kind, emotion signature, or flashcard message,
+treat it as real data and ask one accuracy or consent question instead of reopening
+origin, evidence, or repair.
 When the user wants to review, compare, inspect, or navigate an existing Forge
 record, ask what they are trying to understand first and look up the existing record
 before you reopen create or update intake.

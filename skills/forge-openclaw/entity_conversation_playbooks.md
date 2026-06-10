@@ -101,6 +101,10 @@ Forge correctly, and gather only the structure that still matters.
   opener. Move straight to the next missing clarification.
 - After a substantive answer, briefly say what is becoming clear so the user can
   correct the direction early.
+- Treat partial answers as progress. Before asking again, mark what the user already
+  supplied: the operation, container, target record or span, working wording, route
+  lane, placement, and consent. Ask only for the first missing detail that would
+  change the save, read, run, correction, or link.
 - Once the record is clear enough to name, stop exploring broadly and ask only for the
   last missing structural detail.
 - When the record is already clear enough to save, save it instead of performing a
@@ -209,6 +213,30 @@ worked.
   write at all. Do not widen into a new taxonomy choice unless the read made the
   container genuinely ambiguous.
 
+## Write/read/run confirmation loop
+
+Use this after create, update, delete, restore, run, read, or repair actions. The
+agent should close the loop in the user's language instead of reopening intake.
+
+- Confirm the user-facing record, action, and result, not the internal route. Mention
+  the route family only if the user asked for implementation detail or the agent is
+  reporting an API-contract problem.
+- For batch creates and updates, confirm the working title or accepted wording, the
+  container, and the owner or placement only when those changed later retrieval,
+  accountability, or execution.
+- If optional tags, priority, status, color, links, dates, or assignees were left
+  provisional, say that plainly once instead of asking for all of them.
+- For action workflows, confirm the real product action: task run started or
+  completed, work adjustment applied, preference judgment or signal submitted,
+  questionnaire run updated or completed, calendar connection synced, or
+  self-observation note written.
+- For specialized Movement, Life Force, and Workbench actions, pair the confirmation
+  with the dedicated verification loop only when the read-back changes understanding,
+  proves a repair, or grounds the next decision.
+- Ask a follow-up only if it changes the next action: a correction, link, schedule,
+  run, publish, enrichment, preservation choice, or UI handoff. If the action is
+  complete and no decision-relevant next step is visible, stop cleanly.
+
 ## Review-before-write checkpoint
 
 Use this when the user asks to review, guide, inspect, compare, or understand before
@@ -290,6 +318,35 @@ but not necessarily a full Psyche formulation: `questionnaire_instrument`,
   and `workout_session` use shared batch routes for normal CRUD; `questionnaire_run`
   uses questionnaire run actions; `self_observation` is note-backed; `wiki_page` uses
   the wiki routes.
+
+## Progressive disclosure after partial answers
+
+Use this when the user has already given part of the answer. The next question should
+show that you heard what is already settled.
+
+- First identify what is already usable: operation, entity or surface, target record,
+  time span, working wording, owner or placement, route lane, and consent.
+- Say the usable part back briefly, then ask only for the first missing detail that
+  would change the action: duplicate disambiguation, hierarchy parent, time
+  window, weekday, flow, run, node, correction, link, or save consent.
+- For normal batch entities, if the accepted title or distinctive wording and the
+  meaningful body are present, do not ask for tags, priority, status, color, links,
+  dates, or assignees unless that metadata changes accountability, retrieval, or
+  execution.
+- For specialized Movement, Life Force, and Workbench work, if the user's wording
+  already implies the lane, skip the route-family question and ask only for the
+  target span, place, weekday, profile field, flow, run, node, output, correction, or
+  consent that is still missing.
+- For review-first work, once the practical question and scope are clear, read before
+  asking about the possible write. Do not ask the user to design a report shape unless
+  the answer would change the read.
+- For direct Psyche saves or updates, if the user has already given a usable belief
+  sentence, functional loop, part voice, trigger episode, value phrase, event kind,
+  emotion signature, or flashcard message, ask one accuracy or consent question
+  instead of reopening origin, evidence, or repair.
+- If the remaining unknown is only decorative optional metadata, state the provisional
+  choice and act with consent. The flow should feel like progressive clarification,
+  not a restarted form.
 
 ## Conversation arc
 

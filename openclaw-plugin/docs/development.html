@@ -267,6 +267,29 @@ npm run dev:openclaw-plugin-runtime</code></pre>
                 </td>
               </tr>
               <tr>
+                <td><code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code></td>
+                <td>
+                  Build a disposable fake Forge data root for public docs
+                  screenshots. Never point it at a real Forge data root.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run media:web:docs-screenshots</code></td>
+                <td>
+                  Capture the live Forge web app into
+                  <code>openclaw-plugin/docs/assets/</code>, normally after
+                  serving Forge from the disposable screenshot data root.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run media:docs-ios</code></td>
+                <td>
+                  Regenerate the public iPhone companion docs media with
+                  docs-only fake data, without launching the simulator or
+                  touching a real companion install.
+                </td>
+              </tr>
+              <tr>
                 <td><code>npm run build:openclaw-plugin</code></td>
                 <td>
                   Bundle the published OpenClaw package with the built Forge
@@ -332,6 +355,19 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
             </article>
           </div>
           <pre><code>npm run docs:openapi</code></pre>
+          <div class="note">
+            Web app screenshots are captured from a temporary fake-data root:
+            run <code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code>,
+            serve Forge with <code>FORGE_DATA_ROOT</code> pointed there, then
+            run <code>npm run media:web:docs-screenshots</code>. The fixture
+            refuses known protected Forge data roots.
+          </div>
+          <div class="note">
+            The companion phone screenshots in <code>media/ios/</code> are
+            generated with <code>npm run media:docs-ios</code> from fake
+            documentation-only data. Use the simulator capture only for actual
+            App Store/TestFlight media preparation.
+          </div>
         </section>
 
         <section class="section" id="release-adjacent">

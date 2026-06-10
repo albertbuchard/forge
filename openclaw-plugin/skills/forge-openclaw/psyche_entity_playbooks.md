@@ -276,6 +276,28 @@ of leaving it as warm reflective prose.
 - Save through shared batch entity routes only after the user accepts the working
   wording or explicitly asks to save.
 
+## Psyche progressive disclosure
+
+Use this when the user has already supplied meaningful Psyche material. The next move
+should preserve momentum instead of making them retell the whole story.
+
+- Treat an offered belief sentence, value phrase, part voice, urge sentence, trigger
+  episode, event kind, emotion signature, or functional loop as real data, not as a
+  prompt to restart intake.
+- Say what is already usable in plain language, then ask only for the missing detail
+  that changes the record: accuracy, the cue or situation, payoff or cost, protective
+  job, linked episode, whether it is a new version or an update, or save consent.
+- If the user's wording is serviceable, keep it and refine at most one phrase. Do not
+  replace it with a prettier formulation before the user feels recognized.
+- If the user asks to update a Psyche record and already gives the new wording, ask
+  what part of the old formulation it replaces or whether it should stand as a new
+  version. Do not reopen origin, evidence, or repair unless the new meaning is still
+  unclear.
+- If the working material is already accurate enough, ask one accuracy or consent
+  question instead of reopening origin, evidence, or repair.
+- If the remaining unknown is optional therapeutic metadata, save a provisional
+  version after one accuracy check and preserve nuance in a linked note when needed.
+
 ## Psyche save-readiness checkpoint
 
 Use this before asking another deepening question. Psyche work should feel careful,
@@ -306,6 +328,23 @@ save the record instead of reopening the whole story.
   when the link is already clear or will materially improve retrieval.
 - After the minimum is present, ask one accuracy question at most: "Is this true
   enough to save as a first version?" If yes, save through shared batch CRUD.
+
+## Psyche after-save close
+
+Use this after a Psyche record is created or updated. The user should feel the
+formulation was held accurately, not that a new worksheet has started.
+
+- Confirm the accepted wording, primary container, and whether it was saved as a
+  first version, update, link, archive, or distinct version.
+- Do not reopen origin, evidence, repair, or adjacent entity mapping after the save.
+  Only offer a flashcard, note, value link, task, or habit when that next object is
+  already visible and would materially help retrieval or action.
+- If nuance was preserved in a linked note or left provisional, say that briefly and
+  keep the door open for later correction without asking another broad exploration
+  question.
+- For belief, pattern, mode, trigger report, value, event type, emotion definition,
+  or flashcard saves, the clean close is one accurate sentence plus any concrete next option
+  that genuinely follows from the user's request.
 
 ## Psyche Hypothesis Map
 
