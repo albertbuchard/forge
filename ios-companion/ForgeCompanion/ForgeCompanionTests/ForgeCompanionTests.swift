@@ -4852,6 +4852,21 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(ranges.dropFirst().dropLast().allSatisfy { $0.count == 32 })
     }
 
+    func testRecentWorkoutBatchRangesStartUploadingBeforeWholeWindowIsMapped() {
+        let ranges = HealthSyncStore.workoutBatchRanges(
+            totalCount: 21,
+            firstBatchSize: HealthSyncStore.recentWorkoutFirstEvidenceBatchSize,
+            regularBatchSize: HealthSyncStore.recentWorkoutEvidenceBatchSize
+        )
+
+        XCTAssertEqual(ranges, [
+            0..<4,
+            4..<12,
+            12..<20,
+            20..<21
+        ])
+    }
+
     func testHistoricalWorkoutBatchRangesClampInvalidSizes() {
         let ranges = HealthSyncStore.workoutBatchRanges(
             totalCount: 3,

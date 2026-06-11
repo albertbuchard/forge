@@ -242,6 +242,8 @@ actor HealthSyncStore {
     private let incrementalLookbackHours = 72
     private let workoutMappingConcurrencyLimit = 4
     private let workoutMetricQueryConcurrencyLimit = 4
+    static let recentWorkoutFirstEvidenceBatchSize = 4
+    static let recentWorkoutEvidenceBatchSize = 8
     private let historicalWorkoutFirstEvidenceBatchSize = 8
     private let historicalWorkoutEvidenceBatchSize = 32
     private let historicalWorkoutBatchPrefetchLimit = 10
@@ -830,6 +832,9 @@ actor HealthSyncStore {
         let effectiveBatchSize = isFullBackfill
             ? min(requestedBatchSize, historicalWorkoutEvidenceBatchSize)
             : requestedBatchSize
+        let firstBatchSize = isFullBackfill
+            ? historicalWorkoutFirstEvidenceBatchSize
+            : min(Self.recentWorkoutFirstEvidenceBatchSize, effectiveBatchSize)
         companionDebugLog(
             "HealthSyncStore",
             "streamWorkoutSessionBatches start start=\(isoString(workoutStartDate)) end=\(isoString(endDate)) batchSize=\(effectiveBatchSize) requestedBatchSize=\(batchSize) fullBackfill=\(isFullBackfill)"
@@ -889,7 +894,7 @@ actor HealthSyncStore {
         let boundedBatchSize = effectiveBatchSize
         let batchRanges = Self.workoutBatchRanges(
             totalCount: workouts.count,
-            firstBatchSize: isFullBackfill ? historicalWorkoutFirstEvidenceBatchSize : boundedBatchSize,
+            firstBatchSize: firstBatchSize,
             regularBatchSize: boundedBatchSize
         )
         let totalBatches = batchRanges.count

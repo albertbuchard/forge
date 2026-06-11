@@ -2809,7 +2809,7 @@ final class CompanionAppModel: ObservableObject {
                     healthSyncEnabled: healthSyncEnabled,
                     lastSuccessfulSyncAt: lastSuccessfulSyncAt,
                     syncWindowEnd: syncWindowEnd,
-                    batchSize: Int.max,
+                    batchSize: HealthSyncStore.recentWorkoutEvidenceBatchSize,
                     historicalBackfill: false,
                     alreadyUploadedWorkoutExternalUids: backendUploadedWorkoutExternalUids,
                     onProgress: nil,
