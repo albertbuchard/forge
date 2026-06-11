@@ -1,5 +1,5 @@
-Forge Companion 1.0.98 improves foreground HealthKit sync diagnostics.
+Forge Companion 1.0.99 improves foreground HealthKit sync throughput.
 
-The sync view now distinguishes completed chunk acknowledgements from chunks that are already scheduled and in flight.
+Sleep, vitals, movement, and screen-time chunks are now prepared together before foreground upload dispatch.
 
-This makes foreground HealthKit upload stalls easier to diagnose on device: when an acknowledgement is delayed, the app can show whether the upload pipe is still active or empty.
+This lets the app keep the foreground upload window fuller instead of waiting for each base data family to finish before scheduling the next one.
