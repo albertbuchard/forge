@@ -947,6 +947,13 @@ struct ForgeSyncClient {
         let chunkId: String?
     }
 
+    struct HealthSyncPreparedChunkPlan: Equatable {
+        let sequence: Int
+        let family: String
+        let recordCount: Int
+        let byteCount: Int
+    }
+
     private struct HealthSyncSessionCompleteRequest: Encodable {
         let finalCursor: [String: CompanionSyncPayload.ScalarValue]
         let expectedCounts: [String: Int]
@@ -1429,60 +1436,20 @@ struct ForgeSyncClient {
         useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler? = nil
     ) async throws -> Int {
-        var sequence = startingSequence
-        sequence = try await uploadArrayHealthSyncChunks(
-            records: payload.sleepNights,
+        let chunks = try prepareBaseHealthSyncChunks(
+            payload: payload,
             uploadSession: uploadSession,
             pairing: pairing,
-            family: "sleep_nights",
-            startingSequence: sequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        ) { SleepNightsChunkPayload(sleepNights: $0) }
-        sequence = try await uploadArrayHealthSyncChunks(
-            records: payload.sleepSegments,
+            startingSequence: startingSequence
+        )
+        return try await uploadPreparedHealthSyncChunks(
+            chunks,
             uploadSession: uploadSession,
             pairing: pairing,
-            family: "sleep_segments",
-            startingSequence: sequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        ) { SleepSegmentsChunkPayload(sleepSegments: $0) }
-        sequence = try await uploadArrayHealthSyncChunks(
-            records: payload.sleepRawRecords,
-            uploadSession: uploadSession,
-            pairing: pairing,
-            family: "sleep_raw_records",
-            startingSequence: sequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        ) { SleepRawRecordsChunkPayload(sleepRawRecords: $0) }
-        sequence = try await uploadArrayHealthSyncChunks(
-            records: payload.vitals.daySummaries,
-            uploadSession: uploadSession,
-            pairing: pairing,
-            family: "vitals",
-            startingSequence: sequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        ) { VitalsChunkPayload(vitals: .init(daySummaries: $0)) }
-        sequence = try await uploadMovementHealthSyncChunks(
-            payload.movement,
-            uploadSession: uploadSession,
-            pairing: pairing,
-            startingSequence: sequence,
+            startingSequence: startingSequence,
             useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
-        sequence = try await uploadScreenTimeHealthSyncChunks(
-            payload.screenTime,
-            uploadSession: uploadSession,
-            pairing: pairing,
-            startingSequence: sequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        )
-        return sequence
     }
 
     func uploadWorkoutHealthSyncChunks(
@@ -1649,6 +1616,150 @@ struct ForgeSyncClient {
         }
     }
 
+    private func prepareBaseHealthSyncChunks(
+        payload: CompanionSyncPayload,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) throws -> [PreparedHealthSyncChunkUpload] {
+        var sequence = startingSequence
+        var chunks: [PreparedHealthSyncChunkUpload] = []
+
+        func appendChunks<Record, Payload: Encodable>(
+            records: [Record],
+            family: String,
+            makePayload: ([Record]) -> Payload
+        ) throws {
+            let prepared = try prepareArrayHealthSyncChunks(
+                records: records,
+                uploadSession: uploadSession,
+                pairing: pairing,
+                family: family,
+                startingSequence: sequence,
+                makePayload: makePayload
+            )
+            chunks.append(contentsOf: prepared)
+            sequence += prepared.count
+        }
+
+        try appendChunks(
+            records: payload.sleepNights,
+            family: "sleep_nights"
+        ) { SleepNightsChunkPayload(sleepNights: $0) }
+        try appendChunks(
+            records: payload.sleepSegments,
+            family: "sleep_segments"
+        ) { SleepSegmentsChunkPayload(sleepSegments: $0) }
+        try appendChunks(
+            records: payload.sleepRawRecords,
+            family: "sleep_raw_records"
+        ) { SleepRawRecordsChunkPayload(sleepRawRecords: $0) }
+        try appendChunks(
+            records: payload.vitals.daySummaries,
+            family: "vitals"
+        ) { VitalsChunkPayload(vitals: .init(daySummaries: $0)) }
+        try appendChunks(
+            records: payload.movement.knownPlaces,
+            family: "movement"
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: payload.movement.settings,
+                    knownPlaces: records,
+                    stays: [],
+                    trips: []
+                )
+            )
+        }
+        try appendChunks(
+            records: payload.movement.stays,
+            family: "movement"
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: payload.movement.settings,
+                    knownPlaces: [],
+                    stays: records,
+                    trips: []
+                )
+            )
+        }
+        try appendChunks(
+            records: payload.movement.trips,
+            family: "movement"
+        ) { records in
+            MovementChunkPayload(
+                movement: .init(
+                    settings: payload.movement.settings,
+                    knownPlaces: [],
+                    stays: [],
+                    trips: records
+                )
+            )
+        }
+        try appendChunks(
+            records: payload.screenTime.daySummaries,
+            family: "screen_time"
+        ) { records in
+            ScreenTimeChunkPayload(
+                screenTime: .init(
+                    settings: payload.screenTime.settings,
+                    daySummaries: records,
+                    hourlySegments: []
+                )
+            )
+        }
+        try appendChunks(
+            records: payload.screenTime.hourlySegments,
+            family: "screen_time"
+        ) { records in
+            ScreenTimeChunkPayload(
+                screenTime: .init(
+                    settings: payload.screenTime.settings,
+                    daySummaries: [],
+                    hourlySegments: records
+                )
+            )
+        }
+        return chunks
+    }
+
+    private func prepareArrayHealthSyncChunks<Record, Payload: Encodable>(
+        records: [Record],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        family: String,
+        startingSequence: Int,
+        makePayload: ([Record]) -> Payload
+    ) throws -> [PreparedHealthSyncChunkUpload] {
+        guard records.isEmpty == false else {
+            return []
+        }
+        guard uploadSession.acceptedFamilySet.contains(family) else {
+            companionDebugLog(
+                "ForgeSyncClient",
+                "prepareArrayHealthSyncChunks skipped unsupported family=\(family) uploadSession=\(uploadSession.syncSessionId)"
+            )
+            return []
+        }
+        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let preparedRanges = try Self.healthSyncPreparedChunkRanges(
+            recordCount: records.count,
+            targetBytes: targetBytes
+        ) { range in
+            try Self.healthSyncChunkPayloadData(makePayload(Array(records[range])))
+        }
+        return preparedRanges.enumerated().map { offset, preparedRange in
+            PreparedHealthSyncChunkUpload(
+                sequence: startingSequence + offset,
+                family: family,
+                recordCount: preparedRange.range.count,
+                payloadData: preparedRange.payloadData,
+                chunkId: nil
+            )
+        }
+    }
+
     private func uploadArrayHealthSyncChunks<Record, Payload: Encodable>(
         records: [Record],
         uploadSession: HealthSyncUploadSession,
@@ -1659,38 +1770,19 @@ struct ForgeSyncClient {
         onChunkUploaded: HealthSyncChunkUploadHandler?,
         makePayload: ([Record]) -> Payload
     ) async throws -> Int {
-        var sequence = startingSequence
-        guard records.isEmpty == false else {
-            return sequence
-        }
-        guard uploadSession.acceptedFamilySet.contains(family) else {
-            companionDebugLog(
-                "ForgeSyncClient",
-                "uploadArrayHealthSyncChunks skipped unsupported family=\(family) uploadSession=\(uploadSession.syncSessionId)"
-            )
-            return sequence
-        }
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
-        let preparedRanges = try Self.healthSyncPreparedChunkRanges(
-            recordCount: records.count,
-            targetBytes: targetBytes
-        ) { range in
-            try Self.healthSyncChunkPayloadData(makePayload(Array(records[range])))
-        }
-        let chunks = preparedRanges.enumerated().map { offset, preparedRange in
-            PreparedHealthSyncChunkUpload(
-                sequence: sequence + offset,
-                family: family,
-                recordCount: preparedRange.range.count,
-                payloadData: preparedRange.payloadData,
-                chunkId: nil
-            )
-        }
+        let chunks = try prepareArrayHealthSyncChunks(
+            records: records,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            family: family,
+            startingSequence: startingSequence,
+            makePayload: makePayload
+        )
         return try await uploadPreparedHealthSyncChunks(
             chunks,
             uploadSession: uploadSession,
             pairing: pairing,
-            startingSequence: sequence,
+            startingSequence: startingSequence,
             useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
@@ -2150,6 +2242,27 @@ struct ForgeSyncClient {
             targetBytes: targetBytes,
             encodedPayloadData: encodedPayloadData
         ).map { (range: $0.range, byteCount: $0.payloadData.count) }
+    }
+
+    func baseHealthSyncPreparedChunkPlanForTesting(
+        payload: CompanionSyncPayload,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int
+    ) throws -> [HealthSyncPreparedChunkPlan] {
+        try prepareBaseHealthSyncChunks(
+            payload: payload,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: startingSequence
+        ).map {
+            HealthSyncPreparedChunkPlan(
+                sequence: $0.sequence,
+                family: $0.family,
+                recordCount: $0.recordCount,
+                byteCount: $0.payloadData.count
+            )
+        }
     }
 
     private static func healthSyncChunkRanges(

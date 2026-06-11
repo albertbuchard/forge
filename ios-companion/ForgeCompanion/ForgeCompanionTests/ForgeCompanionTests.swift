@@ -4401,6 +4401,236 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testBaseHealthSyncChunksArePreparedTogetherBeforeForegroundUpload() throws {
+        let syncClient = ForgeSyncClient()
+        let pairing = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_base",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+        let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_base",
+            schemaVersion: "healthkit-sync-v2",
+            status: "running",
+            chunkTargetBytes: 500_000,
+            chunkMaxBytes: 40_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: [
+                "sleep_nights",
+                "sleep_segments",
+                "sleep_raw_records",
+                "vitals",
+                "movement",
+                "screen_time"
+            ],
+            receivedChunkIds: [],
+            workoutImportState: nil,
+            progress: nil
+        )
+        let payload = CompanionSyncPayload(
+            sessionId: "pair_base",
+            pairingToken: "token",
+            device: .init(
+                name: "Forge Test iPhone",
+                platform: "ios",
+                appVersion: "1.0",
+                sourceDevice: "iPhone"
+            ),
+            permissions: .init(
+                healthKitAuthorized: true,
+                backgroundRefreshEnabled: true,
+                motionReady: true,
+                locationReady: true,
+                screenTimeReady: true
+            ),
+            sourceStates: .init(
+                health: .init(
+                    desiredEnabled: true,
+                    appliedEnabled: true,
+                    authorizationStatus: "approved",
+                    syncEligible: true,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                ),
+                movement: .init(
+                    desiredEnabled: true,
+                    appliedEnabled: true,
+                    authorizationStatus: "always",
+                    syncEligible: true,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                ),
+                screenTime: .init(
+                    desiredEnabled: true,
+                    appliedEnabled: true,
+                    authorizationStatus: "approved",
+                    syncEligible: true,
+                    lastObservedAt: nil,
+                    metadata: .init(values: [:])
+                )
+            ),
+            sleepSessions: [],
+            sleepNights: [
+                .init(
+                    externalUid: "night_1",
+                    startedAt: "2026-06-10T22:00:00.000Z",
+                    endedAt: "2026-06-11T06:00:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-06-11",
+                    timeInBedSeconds: 28_800,
+                    asleepSeconds: 27_000,
+                    awakeSeconds: 1_800,
+                    rawSegmentCount: 1,
+                    stageBreakdown: [.init(stage: "core", seconds: 27_000)],
+                    recoveryMetrics: [:],
+                    sourceMetrics: [:],
+                    links: [],
+                    annotations: .init(qualitySummary: "", notes: "", tags: [])
+                )
+            ],
+            sleepSegments: [
+                .init(
+                    externalUid: "segment_1",
+                    startedAt: "2026-06-10T22:00:00.000Z",
+                    endedAt: "2026-06-11T06:00:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-06-11",
+                    stage: "core",
+                    bucket: "asleep",
+                    sourceValue: 3,
+                    metadata: [:]
+                )
+            ],
+            sleepRawRecords: [
+                .init(
+                    externalUid: "raw_1",
+                    startedAt: "2026-06-10T22:00:00.000Z",
+                    endedAt: "2026-06-11T06:00:00.000Z",
+                    sourceTimezone: "Europe/Zurich",
+                    localDateKey: "2026-06-11",
+                    providerRecordType: "healthkit_sleep_sample",
+                    rawStage: "core",
+                    rawValue: 3,
+                    payload: [:],
+                    metadata: [:]
+                )
+            ],
+            workouts: [],
+            vitals: .init(daySummaries: [
+                .init(
+                    dateKey: "2026-06-11",
+                    sourceTimezone: "Europe/Zurich",
+                    metrics: [
+                        .init(
+                            metric: "heart_rate",
+                            label: "Heart Rate",
+                            category: "cardio",
+                            unit: "count/min",
+                            displayUnit: "bpm",
+                            aggregation: "daily",
+                            average: 62,
+                            minimum: 50,
+                            maximum: 120,
+                            latest: 64,
+                            total: nil,
+                            sampleCount: 12,
+                            latestSampleAt: "2026-06-11T06:00:00.000Z"
+                        )
+                    ]
+                )
+            ]),
+            movement: .init(
+                settings: .init(
+                    trackingEnabled: true,
+                    publishMode: "automatic",
+                    retentionMode: "local_and_forge",
+                    locationPermissionStatus: "authorizedAlways",
+                    motionPermissionStatus: "ready",
+                    backgroundTrackingReady: true,
+                    metadata: [:]
+                ),
+                knownPlaces: [
+                    .init(
+                        id: "place_home",
+                        externalUid: "ios-place-home",
+                        label: "Home",
+                        aliases: [],
+                        latitude: 46.2,
+                        longitude: 6.1,
+                        radiusMeters: 80,
+                        categoryTags: ["home"],
+                        visibility: "private",
+                        wikiNoteId: nil,
+                        metadata: [:]
+                    )
+                ],
+                stays: [],
+                trips: []
+            ),
+            screenTime: .init(
+                settings: .init(
+                    trackingEnabled: true,
+                    syncEnabled: true,
+                    authorizationStatus: "approved",
+                    captureState: "ready",
+                    lastCapturedDayKey: "2026-06-11",
+                    lastCaptureStartedAt: "2026-06-11T00:00:00.000Z",
+                    lastCaptureEndedAt: "2026-06-11T23:59:59.000Z",
+                    metadata: [:]
+                ),
+                daySummaries: [
+                    .init(
+                        dateKey: "2026-06-11",
+                        totalActivitySeconds: 3600,
+                        pickupCount: 12,
+                        notificationCount: 24,
+                        firstPickupAt: "2026-06-11T06:30:00.000Z",
+                        longestActivitySeconds: 900,
+                        topAppBundleIdentifiers: ["com.apple.MobileSafari"],
+                        topCategoryLabels: ["Productivity"],
+                        metadata: [:]
+                    )
+                ],
+                hourlySegments: []
+            )
+        )
+
+        let plan = try syncClient.baseHealthSyncPreparedChunkPlanForTesting(
+            payload: payload,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: 7
+        )
+
+        XCTAssertEqual(
+            plan.map(\.family),
+            [
+                "sleep_nights",
+                "sleep_segments",
+                "sleep_raw_records",
+                "vitals",
+                "movement",
+                "screen_time"
+            ]
+        )
+        XCTAssertEqual(plan.map(\.sequence), Array(7...12))
+        XCTAssertEqual(plan.map(\.recordCount), [1, 1, 1, 1, 1, 1])
+        XCTAssertTrue(plan.allSatisfy { $0.byteCount > 0 })
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: pairing,
+                useBackgroundUpload: false
+            ),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+        )
+    }
+
     func testBackgroundHealthUploadWritesThrowawayChunkFilesDirectly() {
         XCTAssertEqual(ForgeBackgroundUploadCoordinator.uploadBodyWriteOptions, [])
     }
