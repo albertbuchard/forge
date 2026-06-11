@@ -1,5 +1,5 @@
-Forge Companion 1.0.115 improves foreground HealthKit upload throughput over the Iroh tunnel.
+Forge Companion 1.0.116 keeps the Iroh bridge warm during foreground HealthKit sync.
 
-Foreground Iroh sync can now prepare chunks ahead of time and keep up to three upload requests in flight instead of serializing one request at a time.
+Foreground Iroh uploads now reuse the bridge runtime, endpoint, and connection, so concurrent chunks open lightweight streams instead of rebuilding the transport for every request.
 
-The sync panel now labels whether the active transfer is using HTTP or the Iroh tunnel, making slow waits easier to diagnose.
+Background transfers stay conservative, and stale Iroh connections are dropped automatically after stream failures so the next retry reconnects cleanly.

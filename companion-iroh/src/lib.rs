@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
+use iroh::endpoint::Connection;
 use iroh::{Endpoint, SecretKey};
 use protocol::{
     BridgeRequest, BridgeResponse, COMPANION_ALPN, FORGE_AGENT_NAME, ForgeHttpRequest,
@@ -12,6 +15,124 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub mod protocol;
 
 const MAX_FRAME_BYTES: usize = 50 * 1024 * 1024;
+
+struct FfiIrohState {
+    runtime: tokio::runtime::Runtime,
+    endpoint: Mutex<Option<Arc<Endpoint>>>,
+    connections: Mutex<HashMap<ConnectionCacheKey, Arc<Connection>>>,
+    secret_key: SecretKey,
+}
+
+static FFI_STATE: OnceLock<Result<FfiIrohState, String>> = OnceLock::new();
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ConnectionCacheKey {
+    node_id: String,
+    relay: Option<String>,
+    token: String,
+}
+
+impl ConnectionCacheKey {
+    fn from_payload(payload: &PairPayload) -> Self {
+        Self {
+            node_id: payload.node_id.clone(),
+            relay: payload.relay.clone(),
+            token: payload.token.clone(),
+        }
+    }
+}
+
+fn ffi_state() -> Result<&'static FfiIrohState, String> {
+    match FFI_STATE.get_or_init(FfiIrohState::new) {
+        Ok(state) => Ok(state),
+        Err(error) => Err(error.clone()),
+    }
+}
+
+impl FfiIrohState {
+    fn new() -> Result<Self, String> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .map_err(|error| format!("building Forge Iroh runtime: {error}"))?;
+        Ok(Self {
+            runtime,
+            endpoint: Mutex::new(None),
+            connections: Mutex::new(HashMap::new()),
+            secret_key: SecretKey::generate(),
+        })
+    }
+
+    async fn cached_endpoint(&self) -> Result<Arc<Endpoint>, String> {
+        if let Some(endpoint) = self.endpoint.lock().map_err(lock_error)?.as_ref().cloned() {
+            return Ok(endpoint);
+        }
+
+        let endpoint = Arc::new(
+            Endpoint::builder(iroh::endpoint::presets::N0)
+                .secret_key(self.secret_key.clone())
+                .bind()
+                .await
+                .map_err(|error| format!("binding Iroh endpoint: {error}"))?,
+        );
+        let mut guard = self.endpoint.lock().map_err(lock_error)?;
+        if let Some(existing) = guard.as_ref().cloned() {
+            return Ok(existing);
+        }
+        *guard = Some(endpoint.clone());
+        Ok(endpoint)
+    }
+
+    async fn cached_connection(
+        &self,
+        payload: &PairPayload,
+    ) -> Result<(ConnectionCacheKey, Arc<Connection>), String> {
+        let key = ConnectionCacheKey::from_payload(payload);
+        if let Some(connection) = self
+            .connections
+            .lock()
+            .map_err(lock_error)?
+            .get(&key)
+            .cloned()
+        {
+            return Ok((key, connection));
+        }
+
+        let endpoint = self.cached_endpoint().await?;
+        let connection = Arc::new(connect_iroh(endpoint, payload).await?);
+        let mut guard = self.connections.lock().map_err(lock_error)?;
+        if let Some(existing) = guard.get(&key).cloned() {
+            return Ok((key, existing));
+        }
+        guard.insert(key.clone(), connection.clone());
+        Ok((key, connection))
+    }
+
+    fn evict_connection(&self, key: &ConnectionCacheKey, connection: &Arc<Connection>) {
+        let Ok(mut guard) = self.connections.lock() else {
+            connection.close(
+                iroh::endpoint::VarInt::from_u32(1),
+                b"forge connection cache lock failed",
+            );
+            return;
+        };
+        if guard
+            .get(key)
+            .is_some_and(|existing| Arc::ptr_eq(existing, connection))
+        {
+            guard.remove(key);
+            connection.close(
+                iroh::endpoint::VarInt::from_u32(1),
+                b"forge request stream failed",
+            );
+        }
+    }
+}
+
+fn lock_error<T>(error: std::sync::PoisonError<T>) -> String {
+    format!("Forge Iroh client state lock poisoned: {error}")
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,12 +208,9 @@ fn into_c_string(value: String) -> *mut c_char {
 }
 
 fn run_ffi_http_request(request: FfiHttpRequest) -> Result<FfiHttpResponse, String> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("building Forge Iroh runtime: {error}"))?;
-    runtime.block_on(async move {
-        let response = send_http_request_over_iroh(request).await?;
+    let state = ffi_state()?;
+    state.runtime.block_on(async move {
+        let response = send_http_request_over_iroh(state, request).await?;
         Ok(FfiHttpResponse {
             ok: true,
             status: Some(response.status),
@@ -103,74 +221,82 @@ fn run_ffi_http_request(request: FfiHttpRequest) -> Result<FfiHttpResponse, Stri
     })
 }
 
-async fn send_http_request_over_iroh(request: FfiHttpRequest) -> Result<ForgeHttpResponse, String> {
+async fn send_http_request_over_iroh(
+    state: &FfiIrohState,
+    request: FfiHttpRequest,
+) -> Result<ForgeHttpResponse, String> {
     validate_pair_payload(&request.pair_payload)?;
     validate_proxy_path(&request.path)?;
 
-    let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
-        .secret_key(SecretKey::generate())
-        .bind()
-        .await
-        .map_err(|error| format!("binding Iroh endpoint: {error}"))?;
-    let result = async {
-        let node_id = request
-            .pair_payload
-            .node_id
-            .parse()
-            .map_err(|error| format!("parsing Iroh node id: {error}"))?;
-        let mut addr = iroh::EndpointAddr::new(node_id);
-        if let Some(relay) = request.pair_payload.relay.as_deref() {
-            addr = addr.with_relay_url(
-                relay
-                    .parse()
-                    .map_err(|error| format!("parsing Iroh relay URL: {error}"))?,
-            );
+    let (cache_key, conn) = state.cached_connection(&request.pair_payload).await?;
+    match send_request_over_connection(&conn, request).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            state.evict_connection(&cache_key, &conn);
+            Err(error)
         }
-        let conn = endpoint
-            .connect(addr, COMPANION_ALPN)
-            .await
-            .map_err(|error| format!("connecting over Forge Iroh bridge: {error}"))?;
-        let (mut send, mut recv) = conn
-            .open_bi()
-            .await
-            .map_err(|error| format!("opening Iroh stream: {error}"))?;
-        write_json_frame(
-            &mut send,
-            &BridgeRequest::Connect {
-                v: PROTOCOL_VERSION,
-                token: request.pair_payload.token.clone(),
-                agent: FORGE_AGENT_NAME.to_string(),
-            },
-        )
-        .await?;
-        let ack: BridgeResponse = read_json_frame(&mut recv).await?;
-        validate_bridge_response(&ack)?;
-        write_json_frame(
-            &mut send,
-            &ForgeHttpRequest {
-                v: PROTOCOL_VERSION,
-                method: request.method,
-                path: request.path,
-                headers: request.headers,
-                body_base64: request.body_base64,
-            },
-        )
-        .await?;
-        let response = tokio::time::timeout(
-            Duration::from_secs(60),
-            read_json_frame::<ForgeHttpResponse, _>(&mut recv),
-        )
-        .await
-        .map_err(|_| "timed out waiting for Forge Iroh response".to_string())??;
-        conn.close(
-            iroh::endpoint::VarInt::from_u32(0),
-            b"forge request complete",
-        );
-        Ok(response)
     }
-    .await;
-    endpoint.close().await;
-    result
+}
+
+async fn connect_iroh(
+    endpoint: Arc<Endpoint>,
+    payload: &PairPayload,
+) -> Result<Connection, String> {
+    let node_id = payload
+        .node_id
+        .parse()
+        .map_err(|error| format!("parsing Iroh node id: {error}"))?;
+    let mut addr = iroh::EndpointAddr::new(node_id);
+    if let Some(relay) = payload.relay.as_deref() {
+        addr = addr.with_relay_url(
+            relay
+                .parse()
+                .map_err(|error| format!("parsing Iroh relay URL: {error}"))?,
+        );
+    }
+    endpoint
+        .connect(addr, COMPANION_ALPN)
+        .await
+        .map_err(|error| format!("connecting over Forge Iroh bridge: {error}"))
+}
+
+async fn send_request_over_connection(
+    conn: &Connection,
+    request: FfiHttpRequest,
+) -> Result<ForgeHttpResponse, String> {
+    let (mut send, mut recv) = conn
+        .open_bi()
+        .await
+        .map_err(|error| format!("opening Iroh stream: {error}"))?;
+    write_json_frame(
+        &mut send,
+        &BridgeRequest::Connect {
+            v: PROTOCOL_VERSION,
+            token: request.pair_payload.token.clone(),
+            agent: FORGE_AGENT_NAME.to_string(),
+        },
+    )
+    .await?;
+    let ack: BridgeResponse = read_json_frame(&mut recv).await?;
+    validate_bridge_response(&ack)?;
+    write_json_frame(
+        &mut send,
+        &ForgeHttpRequest {
+            v: PROTOCOL_VERSION,
+            method: request.method,
+            path: request.path,
+            headers: request.headers,
+            body_base64: request.body_base64,
+        },
+    )
+    .await?;
+    let response = tokio::time::timeout(
+        Duration::from_secs(60),
+        read_json_frame::<ForgeHttpResponse, _>(&mut recv),
+    )
+    .await
+    .map_err(|_| "timed out waiting for Forge Iroh response".to_string())??;
+    Ok(response)
 }
 
 fn validate_pair_payload(payload: &PairPayload) -> Result<(), String> {
@@ -275,5 +401,48 @@ mod tests {
     #[test]
     fn proxy_path_rejects_absolute_urls() {
         assert!(validate_proxy_path("https://example.com/api/v1/health").is_err());
+    }
+
+    #[test]
+    fn ffi_reuses_runtime_and_endpoint_between_requests() {
+        let state = ffi_state().expect("ffi state");
+        let first = state
+            .runtime
+            .block_on(state.cached_endpoint())
+            .expect("first endpoint");
+        let second = state
+            .runtime
+            .block_on(state.cached_endpoint())
+            .expect("second endpoint");
+
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn connection_cache_key_tracks_remote_and_token() {
+        let payload = PairPayload {
+            v: PROTOCOL_VERSION,
+            node_id: "node-a".to_string(),
+            token: "token-a".to_string(),
+            host_name: Some("host".to_string()),
+            relay: Some("https://relay.example".to_string()),
+        };
+        let same = PairPayload {
+            host_name: None,
+            ..payload.clone()
+        };
+        let different_token = PairPayload {
+            token: "token-b".to_string(),
+            ..payload.clone()
+        };
+
+        assert_eq!(
+            ConnectionCacheKey::from_payload(&payload),
+            ConnectionCacheKey::from_payload(&same)
+        );
+        assert_ne!(
+            ConnectionCacheKey::from_payload(&payload),
+            ConnectionCacheKey::from_payload(&different_token)
+        );
     }
 }
