@@ -3365,6 +3365,7 @@ final class CompanionAppModel: ObservableObject {
             inFlightChunks: healthSyncTransferInFlightChunks,
             inFlightBytes: inFlightBytes,
             uploadWindow: healthSyncTransferUploadWindow,
+            transportLabel: pairing?.transport?.isIrohTransport == true ? "Iroh tunnel" : "HTTP",
             secondsSinceLastChunk: secondsSinceLastChunk,
             secondsSinceOldestInFlight: secondsSinceOldestInFlight,
             lastServerProcessingMs: healthSyncTransferLastServerProcessingMs,

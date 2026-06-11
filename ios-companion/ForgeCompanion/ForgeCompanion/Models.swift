@@ -1065,6 +1065,7 @@ struct SyncTransferStats: Equatable {
     let inFlightChunks: Int
     let inFlightBytes: Int
     let uploadWindow: Int
+    let transportLabel: String?
     let secondsSinceLastChunk: Int?
     let secondsSinceOldestInFlight: Int?
     let lastServerProcessingMs: Int?
@@ -1204,6 +1205,9 @@ struct CompanionSyncUploadStatus {
             parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests waiting on Forge")
         } else if transferStats.inFlightChunks > 0 {
             parts.append("\(transferStats.inFlightChunks) request waiting on Forge")
+        }
+        if let transportLabel = transferStats.transportLabel {
+            parts.append(transportLabel)
         }
         if transferStats.inFlightBytes > 0 {
             parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) in flight")

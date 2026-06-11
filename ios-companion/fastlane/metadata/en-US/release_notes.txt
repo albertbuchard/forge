@@ -1,5 +1,5 @@
-Forge Companion 1.0.114 keeps historical workout evidence preparation ahead of uploads instead of mapping one batch only after the previous upload finishes.
+Forge Companion 1.0.115 improves foreground HealthKit upload throughput over the Iroh tunnel.
 
-Historical workout imports now prefetch mapped workout batches inside each HealthKit scan window, helping the phone keep the upload pipeline fed while Forge is processing active requests.
+Foreground Iroh sync can now prepare chunks ahead of time and keep up to three upload requests in flight instead of serializing one request at a time.
 
-The sync panel now separates accepted throughput, requests waiting on Forge, and phone-side preparation so long waits are easier to diagnose without the old “ack” wording.
+The sync panel now labels whether the active transfer is using HTTP or the Iroh tunnel, making slow waits easier to diagnose.

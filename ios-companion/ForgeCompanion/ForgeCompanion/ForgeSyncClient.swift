@@ -414,9 +414,10 @@ struct ForgeSyncClient {
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
     static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
-    static let irohHealthSyncChunkTargetBytes = 500_000
+    static let irohHealthSyncChunkTargetBytes = 1_000_000
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
     static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
+    static let foregroundIrohHealthSyncChunkUploadConcurrency = 3
     static let foregroundHealthSyncChunkUploadConcurrency = 6
     static let foregroundHealthSyncPreparedChunkPrefetchWindows = 2
     static let foregroundHTTPMaximumConnectionsPerHost = 6
@@ -455,8 +456,11 @@ struct ForgeSyncClient {
             requestedBackgroundUpload: useBackgroundUpload,
             appIsForegroundActive: appIsForegroundActive
         )
-        if effectiveUseBackgroundUpload || pairing.transport?.isIrohTransport == true {
+        if effectiveUseBackgroundUpload {
             return 1
+        }
+        if pairing.transport?.isIrohTransport == true {
+            return appIsForegroundActive ? foregroundIrohHealthSyncChunkUploadConcurrency : 1
         }
         return foregroundHealthSyncChunkUploadConcurrency
     }
@@ -470,7 +474,7 @@ struct ForgeSyncClient {
             requestedBackgroundUpload: useBackgroundUpload,
             appIsForegroundActive: appIsForegroundActive
         )
-        guard effectiveUseBackgroundUpload == false, pairing.transport?.isIrohTransport != true else {
+        guard effectiveUseBackgroundUpload == false else {
             return 0
         }
         return healthSyncChunkUploadConcurrency(

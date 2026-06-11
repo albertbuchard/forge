@@ -5465,6 +5465,14 @@ final class ForgeCompanionTests: XCTestCase {
                 pairing: irohPayload,
                 useBackgroundUpload: false
             ),
+            ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: irohPayload,
+                useBackgroundUpload: true,
+                appIsForegroundActive: false
+            ),
             1
         )
     }
@@ -5591,10 +5599,10 @@ final class ForgeCompanionTests: XCTestCase {
             maximum: 15_000
         )
 
-        XCTAssertEqual(irohTimeSeriesLimit, 781)
+        XCTAssertEqual(irohTimeSeriesLimit, 1_562)
         XCTAssertEqual(backgroundHTTPTimeSeriesLimit, 781)
         XCTAssertEqual(httpTimeSeriesLimit, 2_343)
-        XCTAssertEqual(irohRouteLimit, 961)
+        XCTAssertEqual(irohRouteLimit, 1_923)
         XCTAssertEqual(backgroundHTTPRouteLimit, 961)
         XCTAssertEqual(httpRouteLimit, 2_884)
         XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
@@ -5677,8 +5685,71 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: irohPayload),
+            ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
+                * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
+                pairing: irohPayload,
+                useBackgroundUpload: true,
+                appIsForegroundActive: false
+            ),
             0
         )
+    }
+
+    func testForegroundIrohHealthSyncNoLongerSerializesUploadPipe() {
+        let irohTransport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "node",
+            relay: nil,
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "node",
+                token: "host-token",
+                hostName: "Mac",
+                relay: nil
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+        let irohPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "iroh",
+            transport: irohTransport
+        )
+
+        let previousSerializedBudgetBytes = 500_000
+        let foregroundConcurrency = ForgeSyncClient.healthSyncChunkUploadConcurrency(
+            pairing: irohPayload,
+            useBackgroundUpload: false,
+            appIsForegroundActive: true
+        )
+        let foregroundPreparedLimit = ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
+            pairing: irohPayload,
+            useBackgroundUpload: false,
+            appIsForegroundActive: true
+        )
+        let foregroundWaveBudgetBytes = foregroundConcurrency * ForgeSyncClient.irohHealthSyncChunkTargetBytes
+
+        XCTAssertEqual(foregroundConcurrency, 3)
+        XCTAssertEqual(foregroundPreparedLimit, 6)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 3_000_000)
+        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 6)
     }
 
     func testPreparedChunkSchedulerKeepsOneWindowReadyWithoutUnboundedPreparation() async throws {
@@ -5821,6 +5892,7 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 2,
                 inFlightBytes: 524_288,
                 uploadWindow: 6,
+                transportLabel: "HTTP",
                 secondsSinceLastChunk: 4,
                 secondsSinceOldestInFlight: 5,
                 lastServerProcessingMs: 1_240,
@@ -5842,6 +5914,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s average") == true)
         XCTAssertTrue(status.speedSummary?.contains("2/6 requests waiting on Forge") == true)
+        XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 5s") == true)
         XCTAssertFalse(status.speedSummary?.contains("4s since last Forge reply") == true)
@@ -5874,6 +5947,7 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 0,
                 inFlightBytes: 0,
                 uploadWindow: 6,
+                transportLabel: "HTTP",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: nil,
                 lastServerProcessingMs: 18,
@@ -5914,6 +5988,7 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 1,
                 inFlightBytes: 1_572_300,
                 uploadWindow: 6,
+                transportLabel: "Iroh tunnel",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: 30,
                 lastServerProcessingMs: 18,
@@ -5924,6 +5999,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Iroh tunnel") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 30s") == true)
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
