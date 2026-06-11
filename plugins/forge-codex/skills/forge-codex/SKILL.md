@@ -31,6 +31,14 @@ stored-entity CRUD, an action workflow, specialized CRUD, or a specialized domai
 surface. Name the path plainly enough that another Codex agent could follow it
 without guessing.
 
+Keep that route plan internal unless the user asks for implementation detail. Track
+the intent, entity or dedicated domain lane, exact tool or route key, target
+identifiers, and one missing detail privately; with the user, ask about the real
+thing: the span, place, weekday, flow, run, node, belief sentence, parent record, or
+save confirmation. Report product actions such as "saved the belief", "corrected the
+missing stay", "updated the weekday energy pattern", or "read the failed node" before
+any route-key or endpoint detail.
+
 - Batch CRUD is the default for normal stored entities, including `goal`, `project`,
   `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
@@ -284,6 +292,10 @@ Surface rule:
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A
   good hypothesis says what the reaction may be protecting, predicting, relieving, or
   costing, then asks whether that lands or needs correction.
+- For Psyche hypotheses, reduce the formulation burden. After one concrete example,
+  offer one tentative function, danger, protection, payoff, or cost hypothesis and ask
+  one fit-or-correction question. Do not make the user prove the experience, list
+  evidence, or design repair before the wording feels held.
 - Do not keep asking broad exploratory Psyche questions after the cue, meaning,
   protection, payoff, or cost is already visible. For `behavior_pattern`,
   `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the

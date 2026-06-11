@@ -256,6 +256,28 @@ example makes the hypothesis plausible, then let the user correct the danger,
 protection, payoff, cost, or wording. If the correction is usable, revise once and move
 toward the record shape instead of asking for another broad story.
 
+## Hypothesis Without Cross-Examination
+
+A hypothesis is meant to reduce the user's burden of formulation, not make them prove
+the experience. It should help the user feel, "yes, that is closer to what is
+happening," or "no, the danger is actually over here."
+
+- Do not turn a tentative formulation into a demand for evidence. Avoid following a
+  hypothesis with a stack of questions about evidence, origin, and repair.
+- After a hypothesis, ask one fit-or-correction question such as, "Does that fit, or
+  is the danger/need somewhere else?"
+- If accuracy still needs grounding, ask for the smallest lived cue or contrast that
+  would change the formulation, not a courtroom-style proof.
+- For `belief_entry`, test the sentence, prediction, or danger it names.
+- For `behavior_pattern`, test the cue, protection, short-term payoff, long-term
+  cost, or replacement need.
+- For `mode_profile` and `mode_guide_session`, test the part's job, fear, burden, or
+  impulse.
+- For `trigger_report`, test the sequence, meaning, felt stake, or consequence.
+- For `psyche_value`, `event_type`, and `emotion_definition`, test whether the wording
+  would help future recognition rather than asking the user to justify why the record
+  matters.
+
 ## Hypothesis To Record Bridge
 
 Once a hypothesis lands or is corrected, turn it into a saveable Forge shape instead

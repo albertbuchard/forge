@@ -114,6 +114,14 @@ describe("question flow quality coverage", () => {
       /Do not let API uncertainty leak out as vague wording/i
     );
     expect(entityPlaybook).toMatch(/## Dedicated surface lane translation/i);
+    expect(entityPlaybook).toMatch(/## Internal action trace, external wording/i);
+    expect(entityPlaybook).toMatch(
+      /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool/i
+    );
+    expect(entityPlaybook).toMatch(/Do not narrate that trace to the user/i);
+    expect(entityPlaybook).toMatch(
+      /saved the belief,[\s\S]*corrected the missing stay,[\s\S]*updated the weekday energy pattern,[\s\S]*read the failed\s+node/i
+    );
     expect(entityPlaybook).toMatch(
       /route\s+choice is an internal classification step, not a user-facing menu/i
     );
@@ -622,6 +630,14 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(/Name the function without blame/i);
     expect(psychePlaybook).toMatch(/Ask for correction/i);
     expect(psychePlaybook).toMatch(/Does that fit, or is the danger\/need somewhere else/i);
+    expect(psychePlaybook).toMatch(/## Hypothesis Without Cross-Examination/i);
+    expect(psychePlaybook).toMatch(/reduce the user's burden of formulation/i);
+    expect(psychePlaybook).toMatch(
+      /Avoid following a\s+hypothesis with a stack of questions about evidence, origin, and repair/i
+    );
+    expect(psychePlaybook).toMatch(
+      /smallest lived cue or contrast that\s+would change the formulation/i
+    );
     expect(psychePlaybook).toMatch(
       /If the user rejects the hypothesis, accept the correction and revise once/i
     );

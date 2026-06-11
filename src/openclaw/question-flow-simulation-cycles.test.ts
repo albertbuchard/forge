@@ -962,6 +962,44 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 1 retest: route planning stays internal while user-facing wording stays concrete", () => {
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
+
+    expect(entityPlaybook).toMatch(/## Internal action trace, external wording/);
+    expect(entityPlaybook).toMatch(
+      /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool,[\s\S]*required target identifiers/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If the trace is not clear,[\s\S]*one product-language question/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Mention route keys, HTTP paths, payloads, or\s+batch routes only for implementation debugging/i
+    );
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(/Keep that route plan internal|private action trace/i);
+      expect(source).toMatch(
+        /intent,[\s\S]*entity or dedicated domain lane,[\s\S]*exact tool or route key|exact read\/write\/run tool/i
+      );
+      expect(source).toMatch(
+        /span, place, weekday, flow, run, node, belief sentence, parent record,\s+or\s+save confirmation/i
+      );
+      expect(source).toMatch(
+        /saved the belief[\s\S]*corrected the\s+missing stay[\s\S]*updated the weekday energy pattern[\s\S]*read the failed node/i
+      );
+    }
+  });
+
   it("cycle 2: all flows keep a guided reflective stance, with stronger therapist-like pacing for Psyche", () => {
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
@@ -1019,8 +1057,16 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
     expect(psychePlaybook).toMatch(/Hypothesis Wording Shape/i);
     expect(psychePlaybook).toMatch(/Hypothesis Timing Checkpoint/i);
+    expect(psychePlaybook).toMatch(/Hypothesis Without Cross-Examination/i);
     expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
     expect(psychePlaybook).toMatch(/function without blame/i);
+    expect(psychePlaybook).toMatch(/reduce the user's burden of formulation/i);
+    expect(psychePlaybook).toMatch(
+      /one fit-or-correction question[\s\S]*Does that fit, or\s+is the danger\/need somewhere else/i
+    );
+    expect(psychePlaybook).toMatch(
+      /smallest lived cue or contrast that\s+would change the formulation/i
+    );
     expect(psychePlaybook).toMatch(
       /second or third deepening question[\s\S]*concrete episode, body cue, belief sentence, behavior, or\s+mode voice/i
     );
@@ -1162,6 +1208,9 @@ describe("question flow simulation cycles", () => {
       expect(source).toMatch(
         /behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*trigger_report[\s\S]*active formulation/i
       );
+      expect(source).toMatch(/reduce the formulation burden/i);
+      expect(source).toMatch(/one fit-or-correction question/i);
+      expect(source).toMatch(/Do not make the user prove the experience/i);
     }
   });
 
@@ -1605,18 +1654,22 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-10 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-11 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-10/);
+    expect(report).toMatch(/Latest run date: 2026-06-11/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.9/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.9/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.10/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.10/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
-    expect(latestRun).toMatch(/24\s+focused checks/i);
+    expect(latestRun).toMatch(/25\s+focused checks/i);
+    expect(latestRun).toMatch(/antiDriftRule/i);
+    expect(latestRun).toMatch(/psycheHypothesisRule/i);
     expect(latestRun).toMatch(/progressiveDisclosureRule/i);
     expect(latestRun).toMatch(/writeConfirmationRule/i);
+    expect(latestRun).toMatch(/Internal action trace/i);
+    expect(latestRun).toMatch(/Hypothesis Without Cross-Examination/i);
     expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
     expect(latestRun).toMatch(/Psyche after-save close/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
@@ -1632,10 +1685,10 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*partial answers are progress/i
+      /Cycle 1[\s\S]*private action trace/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Write\/read\/run confirmation loop/i
+      /Cycle 2[\s\S]*formulation burden/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i
