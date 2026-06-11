@@ -3400,7 +3400,7 @@ final class CompanionAppModel: ObservableObject {
         let fallbackIsTailscale = Self.isTailscaleUrl(pairing.transport?.publicBaseUrl)
             || Self.isTailscaleUrl(pairing.apiBaseUrl)
         if pairing.transport?.isIrohTransport == true {
-            return fallbackIsTailscale ? "Iroh bridge + Tailscale fallback" : "Iroh bridge"
+            return fallbackIsTailscale ? "Iroh primary + Tailscale fallback" : "Iroh primary"
         }
         return fallbackIsTailscale ? "Tailscale direct" : "HTTP"
     }

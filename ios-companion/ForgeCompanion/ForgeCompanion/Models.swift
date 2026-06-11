@@ -1202,7 +1202,7 @@ struct CompanionSyncUploadStatus {
         var parts = [
             "Phone queued \(Self.formatBytes(Int(transferStats.scheduledCurrentBytesPerSecond)))/s now",
             "\(Self.formatBytes(Int(transferStats.scheduledAverageBytesPerSecond)))/s queued avg",
-            "Forge stored \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
+            "Forge accepted \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
             "\(transferStats.uploadedChunks) chunks accepted"
         ]
         if transferStats.uploadWindow > 1 {
@@ -1247,15 +1247,18 @@ struct CompanionSyncUploadStatus {
             return isSyncing ? "Preparing HealthKit records and upload chunks" : nil
         }
         if transferStats.inFlightChunks > 0 {
-            let requestLabel = "\(transferStats.inFlightChunks) active request\(transferStats.inFlightChunks == 1 ? "" : "s")"
+            let windowLabel = transferStats.uploadWindow > 1
+                ? "\(transferStats.inFlightChunks)/\(transferStats.uploadWindow)"
+                : "\(transferStats.inFlightChunks)"
+            let requestLabel = "\(windowLabel) active request\(transferStats.inFlightChunks == 1 ? "" : "s")"
             let byteLabel = transferStats.inFlightBytes > 0
                 ? ", \(Self.formatBytes(transferStats.inFlightBytes)) in flight"
                 : ""
             if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
                secondsSinceOldestInFlight >= 3 {
-                return "Waiting \(secondsSinceOldestInFlight)s for sync transport replies: \(requestLabel)\(byteLabel)"
+                return "Waiting \(secondsSinceOldestInFlight)s for transport replies: \(requestLabel)\(byteLabel)"
             }
-            return "Waiting for sync transport replies: \(requestLabel)\(byteLabel)"
+            return "Waiting for transport replies: \(requestLabel)\(byteLabel)"
         }
         if let preparingFamily = transferStats.preparingFamily {
             let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")

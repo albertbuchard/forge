@@ -6021,7 +6021,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.transferSummary.contains("session"))
         XCTAssertTrue(status.speedSummary?.contains("Phone queued 768.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s queued avg") == true)
-        XCTAssertTrue(status.speedSummary?.contains("Forge stored 512.0 KB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("2/6 requests awaiting transport") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
@@ -6030,7 +6030,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 5s for sync transport replies: 2 active requests, 512.0 KB in flight"
+            "Waiting 5s for transport replies: 2/6 active requests, 512.0 KB in flight"
         )
         XCTAssertEqual(
             status.bridgeTimingSummary,
@@ -6107,7 +6107,7 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 1,
                 inFlightBytes: 1_572_300,
                 uploadWindow: 6,
-                transportLabel: "Iroh bridge",
+                transportLabel: "Iroh primary",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: 30,
                 lastServerProcessingMs: 18,
@@ -6119,14 +6119,14 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         XCTAssertTrue(status.speedSummary?.contains("Phone queued 1.5 MB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("Forge stored 0 B/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("Iroh bridge") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Iroh primary") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 30s") == true)
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 30s for sync transport replies: 1 active request, 1.5 MB in flight"
+            "Waiting 30s for transport replies: 1/6 active request, 1.5 MB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
     }

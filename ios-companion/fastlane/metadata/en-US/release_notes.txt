@@ -1,5 +1,5 @@
-Forge Companion 1.0.120 removes a client-side bottleneck from foreground HealthKit sync over the Iroh bridge.
+Forge Companion 1.0.121 makes HealthKit sync progress easier to understand while uploads are in flight.
 
-The embedded Iroh client runtime now has six worker threads to match the six-request foreground HealthKit upload window. That keeps concurrent workout evidence streams from being squeezed through the previous two-worker client runtime.
+The sync panel now separates phone-side queueing, transport replies, and chunks accepted by Forge. It also shows the active upload window, such as 3/6 requests, so the tail of a batch is not mistaken for Forge blocking the upload.
 
-This release keeps the 2 MB foreground Iroh chunks and the clearer sync-speed panel from 1.0.119. HealthKit cursors, upload checkpoints, pairing state, and background upload behavior are unchanged.
+Transport labels now say whether Iroh is primary and whether Tailscale is only a fallback. HealthKit cursors, upload checkpoints, pairing state, and upload behavior are unchanged.
