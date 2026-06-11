@@ -1,5 +1,7 @@
-Forge Companion 1.0.123 improves foreground HealthKit sync throughput when the phone is connected to Forge through both Tailscale/direct HTTP and Iroh.
+Forge Companion 1.0.124 improves foreground HealthKit sync throughput when the phone is connected to Forge through both Tailscale/direct HTTPS and Iroh.
 
 Foreground workout evidence uploads now use larger chunks, a wider upload window, and a deeper prepared-chunk queue so the phone can keep more packets ready while Forge replies.
 
 If the direct bulk route stalls while Iroh is available, the app now falls back much sooner instead of letting upload slots wait for tens of seconds. HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
+
+This build also fixes Tailscale bulk upload routing so the app never downgrades a secure Tailscale pairing to insecure HTTP, which iOS blocks through App Transport Security.

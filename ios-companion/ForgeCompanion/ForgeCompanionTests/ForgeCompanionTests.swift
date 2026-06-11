@@ -969,6 +969,94 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(route.usesIroh)
     }
 
+    func testHealthSyncChunkRouteSkipsInsecurePublicFallbackWhenSecurePairingUrlExists() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "http://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertFalse(route.usesIroh)
+        XCTAssertEqual(route.label, "Tailscale direct bulk + Iroh fallback")
+    }
+
+    func testHealthSyncChunkRouteKeepsIrohWhenOnlyInsecurePublicFallbackExists() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "http://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(route.apiBaseUrl, "forge-iroh://fakednodeid/api/v1")
+        XCTAssertTrue(route.usesIroh)
+        XCTAssertEqual(route.label, "Iroh primary")
+    }
+
     func testHealthSyncChunkRouteKeepsIrohWhenNoHttpFallbackExists() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",

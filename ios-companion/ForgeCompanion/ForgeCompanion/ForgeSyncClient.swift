@@ -4056,7 +4056,8 @@ struct ForgeSyncClient {
         ]
         for candidate in candidates {
             guard let normalized = normalizedHttpApiBaseUrl(candidate),
-                  isLoopbackUrl(normalized) == false else {
+                  isLoopbackUrl(normalized) == false,
+                  isSecureHttpUrl(normalized) else {
                 continue
             }
             return normalized
@@ -4098,6 +4099,14 @@ struct ForgeSyncClient {
             return false
         }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
+    private static func isSecureHttpUrl(_ rawValue: String?) -> Bool {
+        guard let rawValue,
+              let scheme = URL(string: rawValue)?.scheme?.lowercased() else {
+            return false
+        }
+        return scheme == "https"
     }
 
     private static func isTailscaleUrl(_ rawValue: String?) -> Bool {
