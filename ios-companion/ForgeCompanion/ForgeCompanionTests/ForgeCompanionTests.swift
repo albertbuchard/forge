@@ -5087,6 +5087,76 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testHealthSyncChunkUploadTransportPolicyPrefersForegroundUrlSessionWhenActive() {
+        let httpPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_http",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+        let irohTransport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "node",
+            relay: nil,
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "node",
+                token: "host-token",
+                hostName: "Mac",
+                relay: nil
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+        let irohPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "iroh",
+            transport: irohTransport
+        )
+
+        XCTAssertFalse(
+            ForgeSyncClient.shouldUseBackgroundUploadForHealthSyncChunk(
+                pairing: httpPayload,
+                appIsForegroundActive: true
+            )
+        )
+        XCTAssertTrue(
+            ForgeSyncClient.shouldUseBackgroundUploadForHealthSyncChunk(
+                pairing: httpPayload,
+                appIsForegroundActive: false
+            )
+        )
+        XCTAssertFalse(
+            ForgeSyncClient.shouldUseBackgroundUploadForHealthSyncChunk(
+                pairing: irohPayload,
+                appIsForegroundActive: true
+            )
+        )
+        XCTAssertTrue(
+            ForgeSyncClient.shouldUseBackgroundUploadForHealthSyncChunk(
+                pairing: irohPayload,
+                appIsForegroundActive: false
+            )
+        )
+    }
+
     func testIrohHealthSyncUsesBalancedChunksMatchingHttpBackgroundUpload() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_large",

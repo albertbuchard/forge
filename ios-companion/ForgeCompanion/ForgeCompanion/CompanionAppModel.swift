@@ -2519,6 +2519,9 @@ final class CompanionAppModel: ObservableObject {
                         uploadSession: session,
                         pairing: pairing,
                         startingSequence: sequence,
+                        useBackgroundUpload: self?.healthSyncChunkUploadUsesBackgroundSession(
+                            pairing: pairing
+                        ) ?? true,
                         onChunkUploaded: onChunkUploaded
                     )
                     historicalBatchesSinceStatusRefresh += 1
@@ -2727,6 +2730,11 @@ final class CompanionAppModel: ObservableObject {
                     self?.recordHealthSyncChunkUpload(event)
                 }
             }
+            let useBackgroundUpload = healthSyncChunkUploadUsesBackgroundSession(pairing: pairing)
+            companionDebugLog(
+                "CompanionAppModel",
+                "health sync chunk upload transport=\(useBackgroundUpload ? "urlsession-background" : "urlsession-foreground") appActive=\(UIApplication.shared.applicationState == .active)"
+            )
             healthSyncChunkTargetBytes = session.chunkTargetBytes
             healthSyncChunkMaxBytes = session.chunkMaxBytes
             if session.receivedChunkIds.isEmpty == false {
@@ -2782,6 +2790,7 @@ final class CompanionAppModel: ObservableObject {
                 uploadSession: session,
                 pairing: pairing,
                 startingSequence: sequence,
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
             lastHealthSyncChunkId = "\(session.syncSessionId)-\(String(format: "%06d", max(0, sequence - 1)))"
@@ -2832,6 +2841,7 @@ final class CompanionAppModel: ObservableObject {
                             uploadSession: session,
                             pairing: pairing,
                             startingSequence: sequence,
+                            useBackgroundUpload: useBackgroundUpload,
                             onChunkUploaded: onChunkUploaded
                         )
                         await MainActor.run {
@@ -3998,6 +4008,13 @@ final class CompanionAppModel: ObservableObject {
 
     private var canPresentPermissionPrompts: Bool {
         UIApplication.shared.applicationState == .active
+    }
+
+    private func healthSyncChunkUploadUsesBackgroundSession(pairing: PairingPayload) -> Bool {
+        ForgeSyncClient.shouldUseBackgroundUploadForHealthSyncChunk(
+            pairing: pairing,
+            appIsForegroundActive: UIApplication.shared.applicationState == .active
+        )
     }
 
     private func isSourceEnabled(_ source: CompanionSourceKey) -> Bool {

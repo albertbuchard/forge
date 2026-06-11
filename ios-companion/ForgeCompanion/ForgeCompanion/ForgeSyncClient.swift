@@ -427,6 +427,13 @@ struct ForgeSyncClient {
         return httpBackgroundHealthSyncChunkingVersion
     }
 
+    static func shouldUseBackgroundUploadForHealthSyncChunk(
+        pairing _: PairingPayload,
+        appIsForegroundActive: Bool
+    ) -> Bool {
+        return appIsForegroundActive == false
+    }
+
     static func shouldFallbackFromIrohToUrlSessionForTesting(
         apiBaseUrl: String,
         errorDomain: String,
@@ -1361,6 +1368,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler? = nil
     ) async throws -> Int {
         var sequence = startingSequence
@@ -1370,6 +1378,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "sleep_nights",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { SleepNightsChunkPayload(sleepNights: $0) }
         sequence = try await uploadArrayHealthSyncChunks(
@@ -1378,6 +1387,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "sleep_segments",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { SleepSegmentsChunkPayload(sleepSegments: $0) }
         sequence = try await uploadArrayHealthSyncChunks(
@@ -1386,6 +1396,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "sleep_raw_records",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { SleepRawRecordsChunkPayload(sleepRawRecords: $0) }
         sequence = try await uploadArrayHealthSyncChunks(
@@ -1394,6 +1405,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "vitals",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { VitalsChunkPayload(vitals: .init(daySummaries: $0)) }
         sequence = try await uploadMovementHealthSyncChunks(
@@ -1401,6 +1413,7 @@ struct ForgeSyncClient {
             uploadSession: uploadSession,
             pairing: pairing,
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
         sequence = try await uploadScreenTimeHealthSyncChunks(
@@ -1408,6 +1421,7 @@ struct ForgeSyncClient {
             uploadSession: uploadSession,
             pairing: pairing,
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
         return sequence
@@ -1418,6 +1432,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler? = nil
     ) async throws -> Int {
         try Task.checkCancellation()
@@ -1429,6 +1444,7 @@ struct ForgeSyncClient {
                 uploadSession: uploadSession,
                 pairing: pairing,
                 startingSequence: sequence,
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
         }
@@ -1437,6 +1453,7 @@ struct ForgeSyncClient {
             uploadSession: uploadSession,
             pairing: pairing,
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
         sequence = try await uploadChunkedWorkoutRoutes(
@@ -1444,6 +1461,7 @@ struct ForgeSyncClient {
             uploadSession: uploadSession,
             pairing: pairing,
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
         return sequence
@@ -1497,6 +1515,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool = true,
         onChunkUploaded: HealthSyncChunkUploadHandler? = nil
     ) async throws -> Int {
         guard workouts.isEmpty == false else {
@@ -1522,6 +1541,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "workout_archive",
             startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             WorkoutArchiveChunkPayload(workouts: records)
@@ -1577,6 +1597,7 @@ struct ForgeSyncClient {
         pairing: PairingPayload,
         family: String,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?,
         makePayload: ([Record]) -> Payload
     ) async throws -> Int {
@@ -1607,6 +1628,7 @@ struct ForgeSyncClient {
                 family: family,
                 recordCount: range.count,
                 payloadData: preparedRange.payloadData,
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
         }
@@ -1618,6 +1640,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         var sequence = startingSequence
@@ -1627,6 +1650,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "movement",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             MovementChunkPayload(
@@ -1644,6 +1668,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "movement",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             MovementChunkPayload(
@@ -1661,6 +1686,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "movement",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             MovementChunkPayload(
@@ -1680,6 +1706,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         var sequence = startingSequence
@@ -1689,6 +1716,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "screen_time",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             ScreenTimeChunkPayload(
@@ -1705,6 +1733,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: "screen_time",
             startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         ) { records in
             ScreenTimeChunkPayload(
@@ -1723,6 +1752,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard workouts.isEmpty == false else {
@@ -1742,6 +1772,7 @@ struct ForgeSyncClient {
                 family: "workout_summaries",
                 recordCount: records.count,
                 payload: WorkoutSummariesChunkPayload(workouts: records),
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
             lowerBound = upperBound
@@ -1754,6 +1785,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard uploadSession.acceptedFamilySet.contains("workout_time_series") else {
@@ -1780,6 +1812,7 @@ struct ForgeSyncClient {
                 family: "workout_time_series",
                 recordCount: recordCount,
                 payload: WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries),
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
             currentEntries = []
@@ -1814,6 +1847,7 @@ struct ForgeSyncClient {
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard uploadSession.acceptedFamilySet.contains("workout_routes") else {
@@ -1840,6 +1874,7 @@ struct ForgeSyncClient {
                 family: "workout_routes",
                 recordCount: recordCount,
                 payload: WorkoutRoutesChunkPayload(workoutRoutes: entries),
+                useBackgroundUpload: useBackgroundUpload,
                 onChunkUploaded: onChunkUploaded
             )
             currentEntries = []
@@ -2095,6 +2130,7 @@ struct ForgeSyncClient {
         payload: Payload,
         precomputedPayloadData: Data? = nil,
         chunkId: String? = nil,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard uploadSession.acceptedFamilySet.contains(family) else {
@@ -2113,6 +2149,7 @@ struct ForgeSyncClient {
             recordCount: recordCount,
             payloadData: payloadData,
             chunkId: chunkId,
+            useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
     }
@@ -2125,6 +2162,7 @@ struct ForgeSyncClient {
         recordCount: Int,
         payloadData: Data,
         chunkId: String? = nil,
+        useBackgroundUpload: Bool,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         try Task.checkCancellation()
@@ -2170,7 +2208,7 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession")"
+            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(useBackgroundUpload ? "urlsession-background" : "urlsession-foreground")"
         )
         let envelope: HealthSyncChunkEnvelope
         do {
@@ -2190,7 +2228,7 @@ struct ForgeSyncClient {
                 ),
                 transport: pairing.transport,
                 timeoutInterval: 120,
-                useBackgroundUpload: true
+                useBackgroundUpload: useBackgroundUpload
             )
         } catch {
             let nsError = error as NSError
