@@ -843,6 +843,7 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferLastChunkAt: Date?
     private var healthSyncTransferLastServerProcessingMs: Int?
     private var healthSyncTransferLastTransportTimingSummary: String?
+    private var healthSyncTransferLastRouteLabel: String?
     private var healthSyncTransferPreparingFamily: String?
     private var healthSyncTransferPreparingStartedAt: Date?
     private var healthSyncTransferInFlightChunksById: [String: HealthSyncInFlightChunkTelemetry] = [:]
@@ -3139,6 +3140,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
         healthSyncTransferLastTransportTimingSummary = nil
+        healthSyncTransferLastRouteLabel = nil
         healthSyncTransferPreparingFamily = nil
         healthSyncTransferPreparingStartedAt = nil
         publishHealthSyncTransferStats(now: now)
@@ -3210,6 +3212,9 @@ final class CompanionAppModel: ObservableObject {
         lastHealthSyncChunkFamily = event.family
         lastHealthSyncPayloadBytes = event.transferByteCount
         healthSyncTransferUploadWindow = max(1, event.uploadWindow)
+        if let routeLabel = event.transportRouteLabel, routeLabel.isEmpty == false {
+            healthSyncTransferLastRouteLabel = routeLabel
+        }
         switch event.phase {
         case .preparing:
             healthSyncTransferPreparingFamily = event.preparingFamily ?? event.family
@@ -3383,7 +3388,7 @@ final class CompanionAppModel: ObservableObject {
             inFlightChunks: healthSyncTransferInFlightChunks,
             inFlightBytes: inFlightBytes,
             uploadWindow: healthSyncTransferUploadWindow,
-            transportLabel: healthSyncTransportLabel(),
+            transportLabel: healthSyncTransferLastRouteLabel ?? healthSyncTransportLabel(),
             secondsSinceLastChunk: secondsSinceLastChunk,
             secondsSinceOldestInFlight: secondsSinceOldestInFlight,
             lastServerProcessingMs: healthSyncTransferLastServerProcessingMs,

@@ -1,5 +1,5 @@
-Forge Companion 1.0.121 makes HealthKit sync progress easier to understand while uploads are in flight.
+Forge Companion 1.0.122 makes HealthKit sync progress clearer when HealthKit chunks are already sent but still waiting for a network reply.
 
-The sync panel now separates phone-side queueing, transport replies, and chunks accepted by Forge. It also shows the active upload window, such as 3/6 requests, so the tail of a batch is not mistaken for Forge blocking the upload.
+The sync panel now uses the actual per-chunk route label. Bulk uploads over a Tailscale URL are shown as Tailscale direct, and Iroh is shown only when the request really uses Iroh or falls back to it.
 
-Transport labels now say whether Iroh is primary and whether Tailscale is only a fallback. HealthKit cursors, upload checkpoints, pairing state, and upload behavior are unchanged.
+The wording no longer says Forge is the blocker for every outstanding request. It separates phone queueing, network replies, Forge acceptance rate, and Forge server processing time. HealthKit cursors, upload checkpoints, pairing state, and upload behavior are unchanged.

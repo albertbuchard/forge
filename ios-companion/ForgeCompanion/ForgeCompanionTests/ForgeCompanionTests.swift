@@ -6175,7 +6175,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertTrue(status.transferSummary.contains("workout time series"))
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
-        XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting transport reply"))
+        XCTAssertTrue(status.transferSummary.contains("512.0 KB sent, waiting for network reply"))
         XCTAssertTrue(status.transferSummary.contains("session"))
         XCTAssertTrue(status.speedSummary?.contains("Phone queued 768.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s queued avg") == true)
@@ -6188,7 +6188,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 5s for transport replies: 2/6 active requests, 512.0 KB in flight"
+            "Waiting 5s for HTTP network replies: 2/6 active requests, 512.0 KB in flight"
         )
         XCTAssertEqual(
             status.bridgeTimingSummary,
@@ -6284,9 +6284,54 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 30s for transport replies: 1/6 active request, 1.5 MB in flight"
+            "Waiting 30s for Iroh network replies: 1/6 active request, 1.5 MB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
+    }
+
+    func testSyncUploadStatusNamesTailscaleRouteWhenBulkUploadsUseDirectFallback() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Uploading recent workouts 10/11",
+            payloadSummary: nil,
+            lastChunkFamily: "workout_time_series",
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_tailscale",
+            transferStats: SyncTransferStats(
+                totalBytesSent: 338_300,
+                currentBytesPerSecond: 0,
+                averageBytesPerSecond: 3_800,
+                scheduledCurrentBytesPerSecond: 229_171,
+                scheduledAverageBytesPerSecond: 3_800,
+                uploadedChunks: 3,
+                uploadedRecords: 1_875,
+                skippedChunks: 4,
+                scheduledChunks: 6,
+                scheduledBytes: 567_471,
+                inFlightChunks: 3,
+                inFlightBytes: 229_171,
+                uploadWindow: 6,
+                transportLabel: "Tailscale direct bulk + Iroh fallback",
+                secondsSinceLastChunk: nil,
+                secondsSinceOldestInFlight: 21,
+                lastServerProcessingMs: 39,
+                lastTransportTimingSummary: "Tailscale request 21.0s",
+                preparingFamily: nil,
+                secondsPreparing: nil
+            ),
+            historicalWorkoutImport: nil
+        )
+
+        XCTAssertTrue(status.speedSummary?.contains("Tailscale direct bulk + Iroh fallback") == true)
+        XCTAssertEqual(
+            status.pipelineSummary,
+            "Waiting 21s for Tailscale network replies: 3/6 active requests, 223.8 KB in flight"
+        )
+        XCTAssertEqual(status.bridgeTimingSummary, "Tailscale request 21.0s")
+        XCTAssertEqual(status.forgeProcessingSummary, "Forge processed the last chunk in 39 ms")
+        XCTAssertFalse(status.pipelineSummary?.contains("Forge replies") == true)
+        XCTAssertFalse(status.speedSummary?.contains("Iroh tunnel") == true)
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {

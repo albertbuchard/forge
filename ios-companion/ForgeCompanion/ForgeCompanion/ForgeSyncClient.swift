@@ -919,6 +919,7 @@ struct ForgeSyncClient {
         let uploadWindow: Int
         let serverProcessingMs: Int?
         let transportTimingSummary: String?
+        let transportRouteLabel: String?
         let preparingFamily: String?
 
         init(
@@ -936,6 +937,7 @@ struct ForgeSyncClient {
             uploadWindow: Int = 1,
             serverProcessingMs: Int? = nil,
             transportTimingSummary: String? = nil,
+            transportRouteLabel: String? = nil,
             preparingFamily: String? = nil
         ) {
             self.phase = phase
@@ -952,6 +954,7 @@ struct ForgeSyncClient {
             self.uploadWindow = uploadWindow
             self.serverProcessingMs = serverProcessingMs
             self.transportTimingSummary = transportTimingSummary
+            self.transportRouteLabel = transportRouteLabel
             self.preparingFamily = preparingFamily
         }
 
@@ -3021,14 +3024,20 @@ struct ForgeSyncClient {
                 receivedBytes: nil,
                 uploadWindow: uploadWindow,
                 serverProcessingMs: nil,
-                transportTimingSummary: nil
+                transportTimingSummary: nil,
+                transportRouteLabel: transportRoute.label
             )
         )
         func sendChunk(
             apiBaseUrl: String,
             transport: PairingTransport?,
-            useBackgroundUpload: Bool
-        ) async throws -> (envelope: HealthSyncChunkEnvelope, transportTimingSummary: String?) {
+            useBackgroundUpload: Bool,
+            routeLabel: String
+        ) async throws -> (
+            envelope: HealthSyncChunkEnvelope,
+            transportTimingSummary: String?,
+            routeLabel: String
+        ) {
             var timingSummary: String?
             let requestStartedAt = Date()
             let envelope: HealthSyncChunkEnvelope = try await sendRequest(
@@ -3063,7 +3072,7 @@ struct ForgeSyncClient {
                     elapsedMs: elapsedMs
                 )
             }
-            return (envelope, timingSummary)
+            return (envelope, timingSummary, routeLabel)
         }
 
         func throwUploadFailure(_ error: Error) async throws -> Never {
@@ -3087,7 +3096,8 @@ struct ForgeSyncClient {
                     receivedBytes: nil,
                     uploadWindow: uploadWindow,
                     serverProcessingMs: nil,
-                    transportTimingSummary: nil
+                    transportTimingSummary: nil,
+                    transportRouteLabel: transportRoute.label
                 )
             )
             throw Self.healthSyncChunkUploadError(
@@ -3100,12 +3110,17 @@ struct ForgeSyncClient {
             )
         }
 
-        let uploadResult: (envelope: HealthSyncChunkEnvelope, transportTimingSummary: String?)
+        let uploadResult: (
+            envelope: HealthSyncChunkEnvelope,
+            transportTimingSummary: String?,
+            routeLabel: String
+        )
         do {
             uploadResult = try await sendChunk(
                 apiBaseUrl: transportRoute.apiBaseUrl,
                 transport: transportRoute.usesIroh ? pairing.transport : nil,
-                useBackgroundUpload: effectiveUseBackgroundUpload && transportRoute.usesIroh == false
+                useBackgroundUpload: effectiveUseBackgroundUpload && transportRoute.usesIroh == false,
+                routeLabel: transportRoute.label
             )
         } catch {
             if transportRoute.usesIroh == false,
@@ -3119,7 +3134,8 @@ struct ForgeSyncClient {
                     uploadResult = try await sendChunk(
                         apiBaseUrl: pairing.apiBaseUrl,
                         transport: pairing.transport,
-                        useBackgroundUpload: false
+                        useBackgroundUpload: false,
+                        routeLabel: "Iroh fallback after direct route interruption"
                     )
                 } catch {
                     try await throwUploadFailure(error)
@@ -3130,6 +3146,7 @@ struct ForgeSyncClient {
         }
         let envelope = uploadResult.envelope
         let transportTimingSummary = uploadResult.transportTimingSummary
+        let transportRouteLabel = uploadResult.routeLabel
         companionDebugLog(
             "ForgeSyncClient",
             "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
@@ -3149,7 +3166,8 @@ struct ForgeSyncClient {
                 receivedBytes: envelope.chunk.receivedBytes,
                 uploadWindow: uploadWindow,
                 serverProcessingMs: envelope.chunk.serverProcessingMs,
-                transportTimingSummary: transportTimingSummary
+                transportTimingSummary: transportTimingSummary,
+                transportRouteLabel: transportRouteLabel
             )
         )
         return sequence + 1

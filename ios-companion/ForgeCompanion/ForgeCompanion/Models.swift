@@ -1184,7 +1184,7 @@ struct CompanionSyncUploadStatus {
         if let transferStats {
             parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) accepted")
             if transferStats.inFlightBytes > 0 {
-                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) awaiting transport reply")
+                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) sent, waiting for network reply")
             }
         } else if let lastPayloadBytes {
             parts.append(Self.formatBytes(lastPayloadBytes))
@@ -1254,11 +1254,13 @@ struct CompanionSyncUploadStatus {
             let byteLabel = transferStats.inFlightBytes > 0
                 ? ", \(Self.formatBytes(transferStats.inFlightBytes)) in flight"
                 : ""
+            let routeLabel = Self.shortTransportLabel(transferStats.transportLabel)
+            let replyLabel = routeLabel.map { "\($0) network replies" } ?? "network replies"
             if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
                secondsSinceOldestInFlight >= 3 {
-                return "Waiting \(secondsSinceOldestInFlight)s for transport replies: \(requestLabel)\(byteLabel)"
+                return "Waiting \(secondsSinceOldestInFlight)s for \(replyLabel): \(requestLabel)\(byteLabel)"
             }
-            return "Waiting for transport replies: \(requestLabel)\(byteLabel)"
+            return "Waiting for \(replyLabel): \(requestLabel)\(byteLabel)"
         }
         if let preparingFamily = transferStats.preparingFamily {
             let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
@@ -1296,6 +1298,22 @@ struct CompanionSyncUploadStatus {
             return value
         }
         return String(value.suffix(10))
+    }
+
+    private static func shortTransportLabel(_ value: String?) -> String? {
+        guard let value, value.isEmpty == false else {
+            return nil
+        }
+        if value.localizedCaseInsensitiveContains("tailscale") {
+            return "Tailscale"
+        }
+        if value.localizedCaseInsensitiveContains("iroh") {
+            return "Iroh"
+        }
+        if value.localizedCaseInsensitiveContains("http") {
+            return "HTTP"
+        }
+        return value
     }
 
     private static func formatBytes(_ value: Int) -> String {
