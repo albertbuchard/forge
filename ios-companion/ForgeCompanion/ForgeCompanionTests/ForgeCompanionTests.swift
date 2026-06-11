@@ -4629,6 +4629,10 @@ final class ForgeCompanionTests: XCTestCase {
             ),
             ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
         )
+        XCTAssertEqual(
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency,
+            ForgeSyncClient.foregroundHTTPMaximumConnectionsPerHost
+        )
     }
 
     func testBackgroundHealthUploadWritesThrowawayChunkFilesDirectly() {
@@ -5571,7 +5575,7 @@ final class ForgeCompanionTests: XCTestCase {
                 skippedChunks: 1,
                 scheduledChunks: 10,
                 inFlightChunks: 2,
-                uploadWindow: 4,
+                uploadWindow: 6,
                 secondsSinceLastChunk: 4
             ),
             historicalWorkoutImport: nil
@@ -5587,7 +5591,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.transferSummary.contains("session"))
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s avg") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/4 in flight") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/6 in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("4s since ack") == true)
     }
 
