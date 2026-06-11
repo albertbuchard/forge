@@ -1201,13 +1201,19 @@ struct CompanionSyncUploadStatus {
         }
         if let preparingFamily = transferStats.preparingFamily,
            transferStats.inFlightChunks == 0 {
-            parts.append("preparing \(preparingFamily.replacingOccurrences(of: "_", with: " "))")
+            let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
+            if let secondsPreparing = transferStats.secondsPreparing, secondsPreparing >= 3 {
+                parts.append("preparing \(familyLabel) for \(secondsPreparing)s")
+            } else {
+                parts.append("preparing \(familyLabel)")
+            }
         }
         if transferStats.skippedChunks > 0 {
             parts.append("\(transferStats.skippedChunks) resumed")
         }
         if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
-           secondsSinceLastChunk >= 3 {
+           secondsSinceLastChunk >= 3,
+           !(transferStats.preparingFamily != nil && transferStats.inFlightChunks == 0) {
             parts.append("\(secondsSinceLastChunk)s since last Forge reply")
         }
         return parts.joined(separator: " • ")

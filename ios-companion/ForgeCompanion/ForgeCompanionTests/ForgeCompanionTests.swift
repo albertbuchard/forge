@@ -5749,8 +5749,8 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertTrue(status.speedSummary?.contains("preparing workout time series") == true)
-        XCTAssertTrue(status.speedSummary?.contains("30s since last Forge reply") == true)
+        XCTAssertTrue(status.speedSummary?.contains("preparing workout time series for 12s") == true)
+        XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
             "Preparing workout time series chunks on the phone for 12s"

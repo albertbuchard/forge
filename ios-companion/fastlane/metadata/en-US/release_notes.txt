@@ -1,5 +1,5 @@
-Forge Companion 1.0.105 keeps workout evidence uploads paced and ready.
+Forge Companion 1.0.106 makes HealthKit sync progress easier to trust.
 
-Foreground workout evidence uploads now keep a bounded queue of prepared chunks ready while the current upload window is in flight, so the next heart-rate or route packet can start sooner after Forge replies.
+The sync panel now separates phone-side preparation from network upload time. When the iPhone is gathering HealthKit payloads or preparing workout evidence, Forge shows that local preparation instead of reporting a stale "since last Forge reply" timer.
 
-Background transfers stay conservative, and the scheduler is covered by regression tests so large historical imports do not build an unbounded backlog in memory.
+Recent and historical workout imports now publish preparation telemetry before each evidence batch, so long gaps are easier to diagnose as HealthKit gathering, chunk preparation, or Forge upload/processing.

@@ -2426,6 +2426,7 @@ final class CompanionAppModel: ObservableObject {
             healthSyncChunkTargetBytes = session.chunkTargetBytes
             healthSyncChunkMaxBytes = session.chunkMaxBytes
             startHealthSyncTransferTelemetry()
+            beginHealthSyncPhonePreparation("historical_workout_evidence")
 
             let initialSnapshot = Self.backendWorkoutImportSnapshot(from: session)
             var latestBackendWorkoutSnapshot = initialSnapshot
@@ -2460,9 +2461,11 @@ final class CompanionAppModel: ObservableObject {
                 alreadyUploadedWorkoutExternalUids: backendUploadedWorkoutExternalUids,
                 onProgress: { [weak self] progress in
                     await MainActor.run {
-                        self?.lastSyncMessage =
+                        guard let self else { return }
+                        self.beginHealthSyncPhonePreparation("historical_workout_evidence")
+                        self.lastSyncMessage =
                             "Preparing \(progress.uploadedWorkouts)/\(progress.totalWorkouts ?? progress.discoveredWorkouts) historical workouts"
-                        self?.updateHistoricalWorkoutImportStatus { status in
+                        self.updateHistoricalWorkoutImportStatus { status in
                             status.indexedWorkouts = max(status.indexedWorkouts, progress.uploadedWorkouts)
                             if let totalWorkouts = progress.totalWorkouts {
                                 status.totalWorkouts = totalWorkouts
@@ -2474,6 +2477,7 @@ final class CompanionAppModel: ObservableObject {
                     try Task.checkCancellation()
                     let batchStats = Self.workoutUploadStats(for: workouts)
                     await MainActor.run {
+                        self?.finishHealthSyncPhonePreparation("historical_workout_evidence")
                         if let totalWorkouts = progress.totalWorkouts {
                             self?.lastSyncMessage =
                                 "Uploading historical workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
@@ -2546,6 +2550,7 @@ final class CompanionAppModel: ObservableObject {
             )
 
             if workoutStreamResult.healthDataDeferred {
+                finishHealthSyncPhonePreparation("historical_workout_evidence")
                 lastSyncMessage = "Waiting for device unlock to import workout history"
                 backgroundScheduler.schedule(
                     activeSync: false,
@@ -2554,6 +2559,7 @@ final class CompanionAppModel: ObservableObject {
                 stopHealthSyncTransferTelemetry()
                 return
             }
+            finishHealthSyncPhonePreparation("historical_workout_evidence")
 
             session = try await syncClient.refreshHealthSyncSessionStatus(
                 uploadSession: session,
@@ -2731,6 +2737,7 @@ final class CompanionAppModel: ObservableObject {
             persistActiveHealthSyncCheckpoint(checkpoint)
             backgroundScheduler.schedule(activeSync: true, reason: "health sync started")
             startHealthSyncTransferTelemetry()
+            beginHealthSyncPhonePreparation("base_health_families")
             let onChunkUploaded: ForgeSyncClient.HealthSyncChunkUploadHandler = { [weak self] event in
                 await MainActor.run {
                     self?.recordHealthSyncChunkUpload(event)
@@ -2760,6 +2767,7 @@ final class CompanionAppModel: ObservableObject {
                 syncWindowEnd: syncWindowEnd,
                 includeWorkouts: false
             )
+            finishHealthSyncPhonePreparation("base_health_families")
             healthDataDeferred = buildResult.healthDataDeferred
             var payloadSummary = buildPayloadSummary(
                 from: buildResult.payload,
@@ -2807,6 +2815,7 @@ final class CompanionAppModel: ObservableObject {
                     "CompanionAppModel",
                     "workout chunk sync mode=recent-normal cursor=\(lastSuccessfulSyncAt?.description ?? "nil")"
                 )
+                beginHealthSyncPhonePreparation("recent_workout_evidence")
                 let workoutStreamResult = try await healthStore.streamWorkoutSessionBatches(
                     healthKitAuthorized: healthAuthorizationGranted,
                     healthSyncEnabled: healthSyncEnabled,
@@ -2815,10 +2824,26 @@ final class CompanionAppModel: ObservableObject {
                     batchSize: HealthSyncStore.recentWorkoutEvidenceBatchSize,
                     historicalBackfill: false,
                     alreadyUploadedWorkoutExternalUids: backendUploadedWorkoutExternalUids,
-                    onProgress: nil,
+                    onProgress: { [weak self] progress in
+                        await MainActor.run {
+                            guard let self else { return }
+                            self.beginHealthSyncPhonePreparation("recent_workout_evidence")
+                            if let totalWorkouts = progress.totalWorkouts {
+                                self.lastSyncMessage =
+                                    "Preparing recent workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
+                            } else if progress.isScanningComplete {
+                                self.lastSyncMessage =
+                                    "Preparing recent workouts \(progress.uploadedWorkouts)"
+                            } else {
+                                self.lastSyncMessage =
+                                    "Found \(progress.discoveredWorkouts) recent workouts; preparing evidence"
+                            }
+                        }
+                    },
                     onBatch: { [weak self] workouts, progress in
                         let batchStats = Self.workoutUploadStats(for: workouts)
                         await MainActor.run {
+                            self?.finishHealthSyncPhonePreparation("recent_workout_evidence")
                             if let totalWorkouts = progress.totalWorkouts {
                                 self?.lastSyncMessage =
                                     "Uploading recent workouts \(progress.uploadedWorkouts)/\(totalWorkouts)"
@@ -2870,6 +2895,7 @@ final class CompanionAppModel: ObservableObject {
                 if workoutStreamResult.healthDataDeferred {
                     healthDataDeferred = true
                 }
+                finishHealthSyncPhonePreparation("recent_workout_evidence")
             }
 
             if healthDataDeferred {
@@ -3109,6 +3135,26 @@ final class CompanionAppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private func beginHealthSyncPhonePreparation(_ family: String) {
+        if healthSyncTransferStartedAt == nil {
+            startHealthSyncTransferTelemetry()
+        }
+        if healthSyncTransferPreparingFamily != family {
+            healthSyncTransferPreparingFamily = family
+            healthSyncTransferPreparingStartedAt = Date()
+        }
+        publishHealthSyncTransferStats(now: Date())
+    }
+
+    private func finishHealthSyncPhonePreparation(_ family: String) {
+        guard healthSyncTransferPreparingFamily == family else {
+            return
+        }
+        healthSyncTransferPreparingFamily = nil
+        healthSyncTransferPreparingStartedAt = nil
+        publishHealthSyncTransferStats(now: Date())
     }
 
     private func stopHealthSyncTransferTelemetry() {
