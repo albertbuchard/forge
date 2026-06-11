@@ -5793,9 +5793,12 @@ final class ForgeCompanionTests: XCTestCase {
                 uploadedRecords: 512,
                 skippedChunks: 1,
                 scheduledChunks: 10,
+                scheduledBytes: 2_621_440,
                 inFlightChunks: 2,
+                inFlightBytes: 524_288,
                 uploadWindow: 6,
                 secondsSinceLastChunk: 4,
+                secondsSinceOldestInFlight: 5,
                 lastServerProcessingMs: 1_240,
                 preparingFamily: nil,
                 secondsPreparing: nil
@@ -5809,14 +5812,20 @@ final class ForgeCompanionTests: XCTestCase {
             "42 raw sleep, 18 segments, 2 nights, 7 workouts, 128 HR samples, 6 trips"
         )
         XCTAssertTrue(status.transferSummary.contains("workout time series"))
-        XCTAssertTrue(status.transferSummary.contains("2.0 MB sent"))
+        XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
+        XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting Forge"))
         XCTAssertTrue(status.transferSummary.contains("session"))
-        XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s avg") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/6 in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("4s since last Forge reply") == true)
+        XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s accepted now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s accepted avg") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/6 requests active") == true)
+        XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest request 5s") == true)
+        XCTAssertFalse(status.speedSummary?.contains("4s since last Forge reply") == true)
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
-        XCTAssertEqual(status.pipelineSummary, "Waiting for Forge to accept 2 active chunks")
+        XCTAssertEqual(
+            status.pipelineSummary,
+            "Waiting 5s for Forge replies: 2 active requests, 512.0 KB in flight"
+        )
         XCTAssertEqual(status.forgeProcessingSummary, "Forge spent 1.2s on the last chunk")
     }
 
@@ -5837,9 +5846,12 @@ final class ForgeCompanionTests: XCTestCase {
                 uploadedRecords: 10,
                 skippedChunks: 0,
                 scheduledChunks: 4,
+                scheduledBytes: 177_700,
                 inFlightChunks: 0,
+                inFlightBytes: 0,
                 uploadWindow: 6,
                 secondsSinceLastChunk: 30,
+                secondsSinceOldestInFlight: nil,
                 lastServerProcessingMs: 18,
                 preparingFamily: "workout_time_series",
                 secondsPreparing: 12
@@ -5855,6 +5867,46 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertFalse(status.pipelineSummary?.contains("Forge to accept") == true)
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
+    }
+
+    func testSyncUploadStatusDoesNotReportIdleWhenRequestsAreInFlightWithoutRecentReplies() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Uploading recent workouts 10/10",
+            payloadSummary: nil,
+            lastChunkFamily: "workout_summaries",
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_active_request",
+            transferStats: SyncTransferStats(
+                totalBytesSent: 177_700,
+                currentBytesPerSecond: 0,
+                averageBytesPerSecond: 1_100,
+                uploadedChunks: 4,
+                uploadedRecords: 10,
+                skippedChunks: 0,
+                scheduledChunks: 5,
+                scheduledBytes: 1_750_000,
+                inFlightChunks: 1,
+                inFlightBytes: 1_572_300,
+                uploadWindow: 6,
+                secondsSinceLastChunk: 30,
+                secondsSinceOldestInFlight: 30,
+                lastServerProcessingMs: 18,
+                preparingFamily: nil,
+                secondsPreparing: nil
+            ),
+            historicalWorkoutImport: nil
+        )
+
+        XCTAssertTrue(status.speedSummary?.contains("0 B/s accepted now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest request 30s") == true)
+        XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
+        XCTAssertEqual(
+            status.pipelineSummary,
+            "Waiting 30s for Forge replies: 1 active request, 1.5 MB in flight"
+        )
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {

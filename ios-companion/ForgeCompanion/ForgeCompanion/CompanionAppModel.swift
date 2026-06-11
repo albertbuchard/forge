@@ -617,6 +617,11 @@ final class CompanionAppModel: ObservableObject {
         }
     }
 
+    private struct HealthSyncInFlightChunkTelemetry {
+        let bytes: Int
+        let scheduledAt: Date
+    }
+
     private struct SimulatorPairingResponse: Decodable {
         let qrPayload: PairingPayload
     }
@@ -830,12 +835,14 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferUploadedRecords = 0
     private var healthSyncTransferSkippedChunks = 0
     private var healthSyncTransferScheduledChunks = 0
+    private var healthSyncTransferScheduledBytes = 0
     private var healthSyncTransferInFlightChunks = 0
     private var healthSyncTransferUploadWindow = 1
     private var healthSyncTransferLastChunkAt: Date?
     private var healthSyncTransferLastServerProcessingMs: Int?
     private var healthSyncTransferPreparingFamily: String?
     private var healthSyncTransferPreparingStartedAt: Date?
+    private var healthSyncTransferInFlightChunksById: [String: HealthSyncInFlightChunkTelemetry] = [:]
     private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
@@ -3120,7 +3127,9 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
         healthSyncTransferScheduledChunks = 0
+        healthSyncTransferScheduledBytes = 0
         healthSyncTransferInFlightChunks = 0
+        healthSyncTransferInFlightChunksById = [:]
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
@@ -3170,7 +3179,9 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
         healthSyncTransferScheduledChunks = 0
+        healthSyncTransferScheduledBytes = 0
         healthSyncTransferInFlightChunks = 0
+        healthSyncTransferInFlightChunksById = [:]
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
@@ -3205,9 +3216,15 @@ final class CompanionAppModel: ObservableObject {
                 healthSyncTransferPreparingStartedAt = nil
             }
             healthSyncTransferScheduledChunks += 1
-            healthSyncTransferInFlightChunks += 1
+            healthSyncTransferScheduledBytes += event.transferByteCount
+            healthSyncTransferInFlightChunksById[event.chunkId] = HealthSyncInFlightChunkTelemetry(
+                bytes: event.transferByteCount,
+                scheduledAt: Date()
+            )
+            healthSyncTransferInFlightChunks = healthSyncTransferInFlightChunksById.count
         case .accepted:
-            healthSyncTransferInFlightChunks = max(0, healthSyncTransferInFlightChunks - 1)
+            healthSyncTransferInFlightChunksById.removeValue(forKey: event.chunkId)
+            healthSyncTransferInFlightChunks = healthSyncTransferInFlightChunksById.count
             updateActiveHealthSyncCheckpointProgress(
                 chunkCount: event.receivedCount,
                 receivedBytes: event.receivedBytes
@@ -3230,7 +3247,8 @@ final class CompanionAppModel: ObservableObject {
             }
             healthSyncTransferSkippedChunks += 1
         case .failed:
-            healthSyncTransferInFlightChunks = max(0, healthSyncTransferInFlightChunks - 1)
+            healthSyncTransferInFlightChunksById.removeValue(forKey: event.chunkId)
+            healthSyncTransferInFlightChunks = healthSyncTransferInFlightChunksById.count
         }
         publishHealthSyncTransferStats(now: Date())
     }
@@ -3326,6 +3344,15 @@ final class CompanionAppModel: ObservableObject {
         let secondsPreparing = healthSyncTransferPreparingStartedAt.map {
             max(0, Int(now.timeIntervalSince($0).rounded(.down)))
         }
+        let inFlightBytes = healthSyncTransferInFlightChunksById.values.reduce(0) { total, chunk in
+            total + max(0, chunk.bytes)
+        }
+        let oldestInFlightScheduledAt = healthSyncTransferInFlightChunksById.values
+            .map(\.scheduledAt)
+            .min()
+        let secondsSinceOldestInFlight = oldestInFlightScheduledAt.map {
+            max(0, Int(now.timeIntervalSince($0).rounded(.down)))
+        }
         healthSyncTransferStats = SyncTransferStats(
             totalBytesSent: healthSyncTransferBytesSent,
             currentBytesPerSecond: healthSyncTransferCurrentBytesPerSecond,
@@ -3334,9 +3361,12 @@ final class CompanionAppModel: ObservableObject {
             uploadedRecords: healthSyncTransferUploadedRecords,
             skippedChunks: healthSyncTransferSkippedChunks,
             scheduledChunks: healthSyncTransferScheduledChunks,
+            scheduledBytes: healthSyncTransferScheduledBytes,
             inFlightChunks: healthSyncTransferInFlightChunks,
+            inFlightBytes: inFlightBytes,
             uploadWindow: healthSyncTransferUploadWindow,
             secondsSinceLastChunk: secondsSinceLastChunk,
+            secondsSinceOldestInFlight: secondsSinceOldestInFlight,
             lastServerProcessingMs: healthSyncTransferLastServerProcessingMs,
             preparingFamily: healthSyncTransferPreparingFamily,
             secondsPreparing: secondsPreparing

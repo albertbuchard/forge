@@ -1061,9 +1061,12 @@ struct SyncTransferStats: Equatable {
     let uploadedRecords: Int
     let skippedChunks: Int
     let scheduledChunks: Int
+    let scheduledBytes: Int
     let inFlightChunks: Int
+    let inFlightBytes: Int
     let uploadWindow: Int
     let secondsSinceLastChunk: Int?
+    let secondsSinceOldestInFlight: Int?
     let lastServerProcessingMs: Int?
     let preparingFamily: String?
     let secondsPreparing: Int?
@@ -1175,7 +1178,10 @@ struct CompanionSyncUploadStatus {
             parts.append(lastChunkFamily.replacingOccurrences(of: "_", with: " "))
         }
         if let transferStats {
-            parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) sent")
+            parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) accepted")
+            if transferStats.inFlightBytes > 0 {
+                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) awaiting Forge")
+            }
         } else if let lastPayloadBytes {
             parts.append(Self.formatBytes(lastPayloadBytes))
         }
@@ -1190,14 +1196,17 @@ struct CompanionSyncUploadStatus {
             return nil
         }
         var parts = [
-            "\(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
-            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s avg",
-            "\(transferStats.uploadedChunks) chunks"
+            "\(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s accepted now",
+            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s accepted avg",
+            "\(transferStats.uploadedChunks) accepted chunks"
         ]
         if transferStats.uploadWindow > 1 {
-            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) in flight")
+            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests active")
         } else if transferStats.inFlightChunks > 0 {
-            parts.append("\(transferStats.inFlightChunks) in flight")
+            parts.append("\(transferStats.inFlightChunks) request active")
+        }
+        if transferStats.inFlightBytes > 0 {
+            parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) in flight")
         }
         if let preparingFamily = transferStats.preparingFamily,
            transferStats.inFlightChunks == 0 {
@@ -1211,8 +1220,14 @@ struct CompanionSyncUploadStatus {
         if transferStats.skippedChunks > 0 {
             parts.append("\(transferStats.skippedChunks) resumed")
         }
+        if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
+           secondsSinceOldestInFlight >= 3,
+           transferStats.inFlightChunks > 0 {
+            parts.append("oldest request \(secondsSinceOldestInFlight)s")
+        }
         if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
            secondsSinceLastChunk >= 3,
+           transferStats.inFlightChunks == 0,
            !(transferStats.preparingFamily != nil && transferStats.inFlightChunks == 0) {
             parts.append("\(secondsSinceLastChunk)s since last Forge reply")
         }
@@ -1224,7 +1239,15 @@ struct CompanionSyncUploadStatus {
             return isSyncing ? "Preparing HealthKit records and upload chunks" : nil
         }
         if transferStats.inFlightChunks > 0 {
-            return "Waiting for Forge to accept \(transferStats.inFlightChunks) active chunk\(transferStats.inFlightChunks == 1 ? "" : "s")"
+            let requestLabel = "\(transferStats.inFlightChunks) active request\(transferStats.inFlightChunks == 1 ? "" : "s")"
+            let byteLabel = transferStats.inFlightBytes > 0
+                ? ", \(Self.formatBytes(transferStats.inFlightBytes)) in flight"
+                : ""
+            if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
+               secondsSinceOldestInFlight >= 3 {
+                return "Waiting \(secondsSinceOldestInFlight)s for Forge replies: \(requestLabel)\(byteLabel)"
+            }
+            return "Waiting for Forge replies: \(requestLabel)\(byteLabel)"
         }
         if let preparingFamily = transferStats.preparingFamily {
             let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
