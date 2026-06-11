@@ -1,5 +1,5 @@
-Forge Companion 1.0.104 keeps workout evidence uploads moving sooner.
+Forge Companion 1.0.105 keeps workout evidence uploads paced and ready.
 
-Dense heart-rate and route chunks now begin uploading as soon as they are prepared instead of waiting for a whole workout evidence family to finish encoding first.
+Foreground workout evidence uploads now keep a bounded queue of prepared chunks ready while the current upload window is in flight, so the next heart-rate or route packet can start sooner after Forge replies.
 
-The sync card also says when the phone is preparing HealthKit chunks, when uploads are in flight, and how long the last Forge reply took.
+Background transfers stay conservative, and the scheduler is covered by regression tests so large historical imports do not build an unbounded backlog in memory.
