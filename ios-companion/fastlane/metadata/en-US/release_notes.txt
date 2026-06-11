@@ -1,5 +1,5 @@
-Forge Companion 1.0.99 improves foreground HealthKit sync throughput.
+Forge Companion 1.0.100 improves HealthKit workout evidence sync.
 
-Sleep, vitals, movement, and screen-time chunks are now prepared together before foreground upload dispatch.
+Recent workout evidence now starts uploading after a small first batch instead of waiting for the whole recent workout window to finish mapping.
 
-This lets the app keep the foreground upload window fuller instead of waiting for each base data family to finish before scheduling the next one.
+This keeps the upload pipeline fed sooner for heart-rate, time-series, and route evidence during foreground sync.
