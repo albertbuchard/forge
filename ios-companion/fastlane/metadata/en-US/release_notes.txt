@@ -1,5 +1,5 @@
-Forge Companion 1.0.102 improves foreground HealthKit evidence throughput.
+Forge Companion 1.0.103 makes HealthKit sync progress clearer while Forge accepts workout evidence faster.
 
-Foreground HTTP sync now prepares larger HealthKit chunks so active uploads spend less time waiting on many small requests.
+The sync card now explains whether the phone is preparing chunks, waiting for Forge to accept active uploads, or waiting on scheduled work.
 
-Background and Iroh transfers keep the conservative chunk size while active app sync can move more workout time-series and route evidence per request.
+The old "ack" label is replaced with "last Forge reply", and Forge now reports how much time it spent processing the last accepted chunk.
