@@ -414,13 +414,15 @@ struct ForgeSyncClient {
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
     static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
-    static let irohHealthSyncChunkTargetBytes = 2_000_000
+    static let irohHealthSyncChunkTargetBytes = 3_000_000
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
-    static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
-    static let foregroundIrohHealthSyncChunkUploadConcurrency = 6
-    static let foregroundHealthSyncChunkUploadConcurrency = 6
-    static let foregroundHealthSyncPreparedChunkPrefetchWindows = 2
-    static let foregroundHTTPMaximumConnectionsPerHost = 6
+    static let foregroundHTTPHealthSyncChunkTargetBytes = 2_500_000
+    static let foregroundIrohHealthSyncChunkUploadConcurrency = 8
+    static let foregroundHealthSyncChunkUploadConcurrency = 8
+    static let foregroundHealthSyncPreparedChunkPrefetchWindows = 3
+    static let foregroundHTTPMaximumConnectionsPerHost = 8
+    static let foregroundDirectBulkHealthSyncChunkTimeout: TimeInterval = 12
+    static let standardHealthSyncChunkTimeout: TimeInterval = 120
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
     private static let healthSyncMinimumCompressionBytes = 256
@@ -517,6 +519,20 @@ struct ForgeSyncClient {
             apiBaseUrl: apiBaseUrl,
             transportProtocolName: transportProtocolName,
             elapsedMs: elapsedMs
+        )
+    }
+
+    static func healthSyncChunkRequestTimeoutForTesting(
+        pairing: PairingPayload,
+        route: HealthSyncChunkTransportRoute,
+        useBackgroundUpload: Bool,
+        appIsForegroundActive: Bool
+    ) -> TimeInterval {
+        healthSyncChunkRequestTimeout(
+            pairing: pairing,
+            route: route,
+            useBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
         )
     }
 
@@ -3032,7 +3048,8 @@ struct ForgeSyncClient {
             apiBaseUrl: String,
             transport: PairingTransport?,
             useBackgroundUpload: Bool,
-            routeLabel: String
+            routeLabel: String,
+            timeoutInterval: TimeInterval
         ) async throws -> (
             envelope: HealthSyncChunkEnvelope,
             transportTimingSummary: String?,
@@ -3055,7 +3072,7 @@ struct ForgeSyncClient {
                     payloadJsonBase64: wirePayload.payloadJsonBase64
                 ),
                 transport: transport,
-                timeoutInterval: 120,
+                timeoutInterval: timeoutInterval,
                 useBackgroundUpload: useBackgroundUpload,
                 responseHeaderObserver: { response in
                     timingSummary = Self.irohTransportTimingSummary(from: response)
@@ -3115,12 +3132,19 @@ struct ForgeSyncClient {
             transportTimingSummary: String?,
             routeLabel: String
         )
+        let initialRouteTimeout = Self.healthSyncChunkRequestTimeout(
+            pairing: pairing,
+            route: transportRoute,
+            useBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: UIApplication.shared.applicationState == .active
+        )
         do {
             uploadResult = try await sendChunk(
                 apiBaseUrl: transportRoute.apiBaseUrl,
                 transport: transportRoute.usesIroh ? pairing.transport : nil,
                 useBackgroundUpload: effectiveUseBackgroundUpload && transportRoute.usesIroh == false,
-                routeLabel: transportRoute.label
+                routeLabel: transportRoute.label,
+                timeoutInterval: initialRouteTimeout
             )
         } catch {
             if transportRoute.usesIroh == false,
@@ -3135,7 +3159,8 @@ struct ForgeSyncClient {
                         apiBaseUrl: pairing.apiBaseUrl,
                         transport: pairing.transport,
                         useBackgroundUpload: false,
-                        routeLabel: "Iroh fallback after direct route interruption"
+                        routeLabel: "Iroh fallback after direct route interruption",
+                        timeoutInterval: Self.standardHealthSyncChunkTimeout
                     )
                 } catch {
                     try await throwUploadFailure(error)
@@ -4003,6 +4028,25 @@ struct ForgeSyncClient {
             usesIroh: false,
             label: isTailscaleUrl(pairing.apiBaseUrl) ? "Tailscale direct" : "HTTP"
         )
+    }
+
+    private static func healthSyncChunkRequestTimeout(
+        pairing: PairingPayload,
+        route: HealthSyncChunkTransportRoute,
+        useBackgroundUpload: Bool,
+        appIsForegroundActive: Bool
+    ) -> TimeInterval {
+        let effectiveUseBackgroundUpload = effectiveUseBackgroundUploadForHealthSyncChunk(
+            requestedBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
+        )
+        if effectiveUseBackgroundUpload == false,
+           appIsForegroundActive,
+           route.usesIroh == false,
+           pairing.transport?.isIrohTransport == true {
+            return foregroundDirectBulkHealthSyncChunkTimeout
+        }
+        return standardHealthSyncChunkTimeout
     }
 
     private static func directBulkTransferApiBaseUrl(for pairing: PairingPayload) -> String? {

@@ -1013,6 +1013,180 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(route.label, "Iroh primary")
     }
 
+    func testForegroundDirectBulkRouteUsesAggressiveIrohFallbackTimeout() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+        let timeout = ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
+            pairing: payload,
+            route: route,
+            useBackgroundUpload: false,
+            appIsForegroundActive: true
+        )
+
+        XCTAssertEqual(timeout, ForgeSyncClient.foregroundDirectBulkHealthSyncChunkTimeout)
+        XCTAssertEqual(ForgeSyncClient.standardHealthSyncChunkTimeout / timeout, 10)
+    }
+
+    func testBackgroundDirectBulkRouteKeepsStandardTimeout() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
+                pairing: payload,
+                route: route,
+                useBackgroundUpload: true,
+                appIsForegroundActive: false
+            ),
+            120
+        )
+    }
+
+    func testPureHttpRouteKeepsStandardHealthSyncTimeout() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "manual-http",
+            transport: nil
+        )
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
+                pairing: payload,
+                route: route,
+                useBackgroundUpload: false,
+                appIsForegroundActive: true
+            ),
+            120
+        )
+    }
+
+    func testIrohPrimaryRouteKeepsStandardHealthSyncTimeout() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: nil,
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
+                pairing: payload,
+                route: route,
+                useBackgroundUpload: false,
+                appIsForegroundActive: true
+            ),
+            120
+        )
+    }
+
     func testHealthSyncChunkTransportTimingLabelsDirectRoutes() {
         XCTAssertEqual(
             ForgeSyncClient.requestTransportTimingSummaryForTesting(
@@ -5757,12 +5931,12 @@ final class ForgeCompanionTests: XCTestCase {
             maximum: 15_000
         )
 
-        XCTAssertEqual(irohTimeSeriesLimit, 3_125)
+        XCTAssertEqual(irohTimeSeriesLimit, 4_687)
         XCTAssertEqual(backgroundHTTPTimeSeriesLimit, 781)
-        XCTAssertEqual(httpTimeSeriesLimit, 2_343)
-        XCTAssertEqual(irohRouteLimit, 3_846)
+        XCTAssertEqual(httpTimeSeriesLimit, 3_906)
+        XCTAssertEqual(irohRouteLimit, 5_769)
         XCTAssertEqual(backgroundHTTPRouteLimit, 961)
-        XCTAssertEqual(httpRouteLimit, 2_884)
+        XCTAssertEqual(httpRouteLimit, 4_807)
         XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
         XCTAssertLessThanOrEqual(irohRouteLimit * 520, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
         XCTAssertLessThanOrEqual(
@@ -5892,6 +6066,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         let previousSerializedBudgetBytes = 500_000
+        let previousForegroundWaveBudgetBytes = 6 * 2_000_000
         let foregroundConcurrency = ForgeSyncClient.healthSyncChunkUploadConcurrency(
             pairing: irohPayload,
             useBackgroundUpload: false,
@@ -5904,10 +6079,11 @@ final class ForgeCompanionTests: XCTestCase {
         )
         let foregroundWaveBudgetBytes = foregroundConcurrency * ForgeSyncClient.irohHealthSyncChunkTargetBytes
 
-        XCTAssertEqual(foregroundConcurrency, 6)
-        XCTAssertEqual(foregroundPreparedLimit, 12)
-        XCTAssertEqual(foregroundWaveBudgetBytes, 12_000_000)
-        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 24)
+        XCTAssertEqual(foregroundConcurrency, 8)
+        XCTAssertEqual(foregroundPreparedLimit, 24)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 24_000_000)
+        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 48)
+        XCTAssertEqual(foregroundWaveBudgetBytes / previousForegroundWaveBudgetBytes, 2)
     }
 
     func testForegroundIrohHealthSyncDoublesPreviousThreeRequestWave() async throws {
@@ -5987,7 +6163,9 @@ final class ForgeCompanionTests: XCTestCase {
         )
         let recordCount = 100_000
         let previousIrohTargetBytes = 1_000_000
+        let oldCurrentIrohTargetBytes = 2_000_000
         let previousRecordLimit = previousIrohTargetBytes / 640
+        let oldCurrentRecordLimit = oldCurrentIrohTargetBytes / 640
         let newRecordLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
             uploadSession: uploadSession,
             pairing: irohPayload,
@@ -5999,19 +6177,28 @@ final class ForgeCompanionTests: XCTestCase {
             recordCount: recordCount,
             recordLimit: previousRecordLimit
         )
+        let oldCurrentChunkCount = ForgeSyncClient.workoutEvidenceChunkCountForTesting(
+            recordCount: recordCount,
+            recordLimit: oldCurrentRecordLimit
+        )
         let newChunkCount = ForgeSyncClient.workoutEvidenceChunkCountForTesting(
             recordCount: recordCount,
             recordLimit: newRecordLimit
         )
         let previousWaves = Int(ceil(Double(previousChunkCount) / 6.0))
-        let newWaves = Int(ceil(Double(newChunkCount) / 6.0))
+        let oldCurrentWaves = Int(ceil(Double(oldCurrentChunkCount) / 6.0))
+        let newWaves = Int(ceil(Double(newChunkCount) / Double(ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency)))
 
         XCTAssertEqual(previousRecordLimit, 1_562)
-        XCTAssertEqual(newRecordLimit, 3_125)
+        XCTAssertEqual(oldCurrentRecordLimit, 3_125)
+        XCTAssertEqual(newRecordLimit, 4_687)
         XCTAssertEqual(previousChunkCount, 65)
-        XCTAssertEqual(newChunkCount, 32)
+        XCTAssertEqual(oldCurrentChunkCount, 32)
+        XCTAssertEqual(newChunkCount, 22)
         XCTAssertEqual(previousWaves, 11)
-        XCTAssertEqual(newWaves, 6)
+        XCTAssertEqual(oldCurrentWaves, 6)
+        XCTAssertEqual(newWaves, 3)
+        XCTAssertLessThan(newWaves, oldCurrentWaves)
         XCTAssertLessThan(newWaves, previousWaves)
     }
 
@@ -6046,15 +6233,15 @@ final class ForgeCompanionTests: XCTestCase {
             summaryChunks: 1,
             timeSeriesChunks: 18,
             routeChunks: 5,
-            concurrency: 6,
-            prefetchLimit: 12,
+            concurrency: 8,
+            prefetchLimit: 24,
             uploadDelayNanoseconds: 120_000_000
         )
 
         XCTAssertEqual(metrics.preparedCount, 24)
         XCTAssertEqual(metrics.scheduledCount, 24)
-        XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 6)
-        XCTAssertEqual(metrics.maxPreparedQueueDepth, 12)
+        XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 8)
+        XCTAssertEqual(metrics.maxPreparedQueueDepth, 16)
     }
 
     func testPreparedChunkSchedulerWidensBeforeFirstCompletionWhenForegroundWindowAppears() async throws {
@@ -6156,7 +6343,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 2_621_440,
                 inFlightChunks: 2,
                 inFlightBytes: 524_288,
-                uploadWindow: 6,
+                uploadWindow: 8,
                 transportLabel: "HTTP",
                 secondsSinceLastChunk: 4,
                 secondsSinceOldestInFlight: 5,
@@ -6180,7 +6367,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("Phone queued 768.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s queued avg") == true)
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/6 requests awaiting transport") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/8 requests awaiting transport") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 5s") == true)
@@ -6188,7 +6375,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 5s for HTTP network replies: 2/6 active requests, 512.0 KB in flight"
+            "Waiting 5s for HTTP network replies: 2/8 active requests, 512.0 KB in flight"
         )
         XCTAssertEqual(
             status.bridgeTimingSummary,
@@ -6220,7 +6407,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 177_700,
                 inFlightChunks: 0,
                 inFlightBytes: 0,
-                uploadWindow: 6,
+                uploadWindow: 8,
                 transportLabel: "HTTP",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: nil,
@@ -6264,7 +6451,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 1_750_000,
                 inFlightChunks: 1,
                 inFlightBytes: 1_572_300,
-                uploadWindow: 6,
+                uploadWindow: 8,
                 transportLabel: "Iroh primary",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: 30,
@@ -6284,7 +6471,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 30s for Iroh network replies: 1/6 active request, 1.5 MB in flight"
+            "Waiting 30s for Iroh network replies: 1/8 active request, 1.5 MB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
     }
@@ -6311,7 +6498,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 567_471,
                 inFlightChunks: 3,
                 inFlightBytes: 229_171,
-                uploadWindow: 6,
+                uploadWindow: 8,
                 transportLabel: "Tailscale direct bulk + Iroh fallback",
                 secondsSinceLastChunk: nil,
                 secondsSinceOldestInFlight: 21,
@@ -6326,7 +6513,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("Tailscale direct bulk + Iroh fallback") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 21s for Tailscale network replies: 3/6 active requests, 223.8 KB in flight"
+            "Waiting 21s for Tailscale network replies: 3/8 active requests, 223.8 KB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Tailscale request 21.0s")
         XCTAssertEqual(status.forgeProcessingSummary, "Forge processed the last chunk in 39 ms")
