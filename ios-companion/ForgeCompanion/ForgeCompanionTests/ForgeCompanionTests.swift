@@ -5567,6 +5567,93 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testForegroundHttpHealthSyncUsesBoundedPreparedChunkPrefetch() {
+        let httpPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: "pair_http",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: []
+        )
+        let irohTransport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "node",
+            relay: nil,
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "node",
+                token: "host-token",
+                hostName: "Mac",
+                relay: nil
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+        let irohPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "iroh",
+            transport: irohTransport
+        )
+
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: httpPayload),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
+                pairing: httpPayload,
+                useBackgroundUpload: true
+            ),
+            0
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: irohPayload),
+            0
+        )
+    }
+
+    func testPreparedChunkSchedulerKeepsOneWindowReadyWithoutUnboundedPreparation() async throws {
+        let metrics = try await ForgeSyncClient.preparedChunkSchedulerMetricsForTesting(
+            totalChunks: 20,
+            concurrency: 3,
+            prefetchLimit: 3
+        )
+
+        XCTAssertEqual(metrics.preparedCount, 20)
+        XCTAssertEqual(metrics.scheduledCount, 20)
+        XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 3)
+        XCTAssertEqual(metrics.maxPreparedQueueDepth, 3)
+    }
+
+    func testPreparedChunkSchedulerCanRunWithoutExtraPrefetchForBackgroundTransfers() async throws {
+        let metrics = try await ForgeSyncClient.preparedChunkSchedulerMetricsForTesting(
+            totalChunks: 8,
+            concurrency: 1,
+            prefetchLimit: 0
+        )
+
+        XCTAssertEqual(metrics.preparedCount, 8)
+        XCTAssertEqual(metrics.scheduledCount, 8)
+        XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 1)
+        XCTAssertEqual(metrics.maxPreparedQueueDepth, 1)
+    }
+
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
         let payloadSummary = SyncPayloadSummary(
             builtAt: makeDate("2026-05-20T08:00:00.000Z"),
