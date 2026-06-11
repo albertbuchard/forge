@@ -834,7 +834,15 @@ struct ForgeSyncClient {
         let progress: HealthSyncChunkProgress?
     }
 
+    enum HealthSyncChunkUploadPhase {
+        case scheduled
+        case accepted
+        case skipped
+        case failed
+    }
+
     struct HealthSyncChunkUploadEvent {
+        let phase: HealthSyncChunkUploadPhase
         let chunkId: String
         let family: String
         let sequence: Int
@@ -845,6 +853,35 @@ struct ForgeSyncClient {
         let skipped: Bool
         let receivedCount: Int?
         let receivedBytes: Int?
+        let uploadWindow: Int
+
+        init(
+            phase: HealthSyncChunkUploadPhase = .accepted,
+            chunkId: String,
+            family: String,
+            sequence: Int,
+            recordCount: Int,
+            byteCount: Int,
+            compressedByteCount: Int?,
+            duplicate: Bool,
+            skipped: Bool,
+            receivedCount: Int?,
+            receivedBytes: Int?,
+            uploadWindow: Int = 1
+        ) {
+            self.phase = phase
+            self.chunkId = chunkId
+            self.family = family
+            self.sequence = sequence
+            self.recordCount = recordCount
+            self.byteCount = byteCount
+            self.compressedByteCount = compressedByteCount
+            self.duplicate = duplicate
+            self.skipped = skipped
+            self.receivedCount = receivedCount
+            self.receivedBytes = receivedBytes
+            self.uploadWindow = uploadWindow
+        }
 
         var transferByteCount: Int {
             compressedByteCount ?? byteCount
@@ -2319,6 +2356,7 @@ struct ForgeSyncClient {
             )
             await onChunkUploaded?(
                 HealthSyncChunkUploadEvent(
+                    phase: .skipped,
                     chunkId: effectiveChunkId,
                     family: family,
                     sequence: sequence,
@@ -2328,7 +2366,11 @@ struct ForgeSyncClient {
                     duplicate: true,
                     skipped: true,
                     receivedCount: nil,
-                    receivedBytes: nil
+                    receivedBytes: nil,
+                    uploadWindow: Self.healthSyncChunkUploadConcurrency(
+                        pairing: pairing,
+                        useBackgroundUpload: useBackgroundUpload
+                    )
                 )
             )
             return sequence + 1
@@ -2341,6 +2383,26 @@ struct ForgeSyncClient {
         companionDebugLog(
             "ForgeSyncClient",
             "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(useBackgroundUpload ? "urlsession-background" : "urlsession-foreground")"
+        )
+        let uploadWindow = Self.healthSyncChunkUploadConcurrency(
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
+        await onChunkUploaded?(
+            HealthSyncChunkUploadEvent(
+                phase: .scheduled,
+                chunkId: effectiveChunkId,
+                family: family,
+                sequence: sequence,
+                recordCount: recordCount,
+                byteCount: wirePayload.byteCount,
+                compressedByteCount: wirePayload.compressedByteCount,
+                duplicate: false,
+                skipped: false,
+                receivedCount: nil,
+                receivedBytes: nil,
+                uploadWindow: uploadWindow
+            )
         )
         let envelope: HealthSyncChunkEnvelope
         do {
@@ -2368,6 +2430,22 @@ struct ForgeSyncClient {
                 "ForgeSyncClient",
                 "uploadHealthSyncChunk failed family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) domain=\(nsError.domain) code=\(nsError.code) description=\(nsError.localizedDescription) reason=\((nsError.userInfo[NSLocalizedFailureReasonErrorKey] as? String) ?? "nil")"
             )
+            await onChunkUploaded?(
+                HealthSyncChunkUploadEvent(
+                    phase: .failed,
+                    chunkId: effectiveChunkId,
+                    family: family,
+                    sequence: sequence,
+                    recordCount: recordCount,
+                    byteCount: wirePayload.byteCount,
+                    compressedByteCount: wirePayload.compressedByteCount,
+                    duplicate: false,
+                    skipped: false,
+                    receivedCount: nil,
+                    receivedBytes: nil,
+                    uploadWindow: uploadWindow
+                )
+            )
             throw Self.healthSyncChunkUploadError(
                 wrapping: error,
                 chunkId: effectiveChunkId,
@@ -2383,6 +2461,7 @@ struct ForgeSyncClient {
         )
         await onChunkUploaded?(
             HealthSyncChunkUploadEvent(
+                phase: .accepted,
                 chunkId: effectiveChunkId,
                 family: family,
                 sequence: sequence,
@@ -2392,7 +2471,8 @@ struct ForgeSyncClient {
                 duplicate: envelope.chunk.duplicate,
                 skipped: false,
                 receivedCount: envelope.chunk.receivedCount,
-                receivedBytes: envelope.chunk.receivedBytes
+                receivedBytes: envelope.chunk.receivedBytes,
+                uploadWindow: uploadWindow
             )
         )
         return sequence + 1

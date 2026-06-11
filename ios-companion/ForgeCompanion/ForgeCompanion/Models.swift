@@ -1060,6 +1060,9 @@ struct SyncTransferStats: Equatable {
     let uploadedChunks: Int
     let uploadedRecords: Int
     let skippedChunks: Int
+    let scheduledChunks: Int
+    let inFlightChunks: Int
+    let uploadWindow: Int
     let secondsSinceLastChunk: Int?
 }
 
@@ -1188,6 +1191,11 @@ struct CompanionSyncUploadStatus {
             "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s avg",
             "\(transferStats.uploadedChunks) chunks"
         ]
+        if transferStats.uploadWindow > 1 {
+            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) in flight")
+        } else if transferStats.inFlightChunks > 0 {
+            parts.append("\(transferStats.inFlightChunks) in flight")
+        }
         if transferStats.skippedChunks > 0 {
             parts.append("\(transferStats.skippedChunks) resumed")
         }

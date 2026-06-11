@@ -829,6 +829,9 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferUploadedChunks = 0
     private var healthSyncTransferUploadedRecords = 0
     private var healthSyncTransferSkippedChunks = 0
+    private var healthSyncTransferScheduledChunks = 0
+    private var healthSyncTransferInFlightChunks = 0
+    private var healthSyncTransferUploadWindow = 1
     private var healthSyncTransferLastChunkAt: Date?
     private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
@@ -3087,6 +3090,9 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadedChunks = 0
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
+        healthSyncTransferScheduledChunks = 0
+        healthSyncTransferInFlightChunks = 0
+        healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         publishHealthSyncTransferStats(now: now)
         healthSyncTransferTickerTask = Task { [weak self] in
@@ -3111,6 +3117,9 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadedChunks = 0
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
+        healthSyncTransferScheduledChunks = 0
+        healthSyncTransferInFlightChunks = 0
+        healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferStats = nil
     }
@@ -3125,20 +3134,35 @@ final class CompanionAppModel: ObservableObject {
         lastHealthSyncChunkId = event.chunkId
         lastHealthSyncChunkFamily = event.family
         lastHealthSyncPayloadBytes = event.transferByteCount
-        updateActiveHealthSyncCheckpointProgress(
-            chunkCount: event.receivedCount,
-            receivedBytes: event.receivedBytes
-        )
-        if recordHistoricalImport {
-            recordHistoricalWorkoutImportChunk(event)
-        }
-        if event.skipped {
-            healthSyncTransferSkippedChunks += 1
-        } else {
+        healthSyncTransferUploadWindow = max(1, event.uploadWindow)
+        switch event.phase {
+        case .scheduled:
+            healthSyncTransferScheduledChunks += 1
+            healthSyncTransferInFlightChunks += 1
+        case .accepted:
+            healthSyncTransferInFlightChunks = max(0, healthSyncTransferInFlightChunks - 1)
+            updateActiveHealthSyncCheckpointProgress(
+                chunkCount: event.receivedCount,
+                receivedBytes: event.receivedBytes
+            )
+            if recordHistoricalImport {
+                recordHistoricalWorkoutImportChunk(event)
+            }
             healthSyncTransferBytesSent += event.transferByteCount
             healthSyncTransferUploadedChunks += 1
             healthSyncTransferUploadedRecords += event.recordCount
             healthSyncTransferLastChunkAt = Date()
+        case .skipped:
+            updateActiveHealthSyncCheckpointProgress(
+                chunkCount: event.receivedCount,
+                receivedBytes: event.receivedBytes
+            )
+            if recordHistoricalImport {
+                recordHistoricalWorkoutImportChunk(event)
+            }
+            healthSyncTransferSkippedChunks += 1
+        case .failed:
+            healthSyncTransferInFlightChunks = max(0, healthSyncTransferInFlightChunks - 1)
         }
         publishHealthSyncTransferStats(now: Date())
     }
@@ -3238,6 +3262,9 @@ final class CompanionAppModel: ObservableObject {
             uploadedChunks: healthSyncTransferUploadedChunks,
             uploadedRecords: healthSyncTransferUploadedRecords,
             skippedChunks: healthSyncTransferSkippedChunks,
+            scheduledChunks: healthSyncTransferScheduledChunks,
+            inFlightChunks: healthSyncTransferInFlightChunks,
+            uploadWindow: healthSyncTransferUploadWindow,
             secondsSinceLastChunk: secondsSinceLastChunk
         )
     }
