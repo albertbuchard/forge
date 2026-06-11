@@ -5654,6 +5654,25 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(metrics.maxPreparedQueueDepth, 1)
     }
 
+    func testWorkoutEvidenceChunkCountSupportsNextFamilyWarmupSequences() {
+        XCTAssertEqual(
+            ForgeSyncClient.workoutEvidenceChunkCountForTesting(recordCount: 0, recordLimit: 625),
+            0
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.workoutEvidenceChunkCountForTesting(recordCount: 625, recordLimit: 625),
+            1
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.workoutEvidenceChunkCountForTesting(recordCount: 626, recordLimit: 625),
+            2
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.workoutEvidenceChunkCountForTesting(recordCount: 2_739, recordLimit: 625),
+            5
+        )
+    }
+
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
         let payloadSummary = SyncPayloadSummary(
             builtAt: makeDate("2026-05-20T08:00:00.000Z"),

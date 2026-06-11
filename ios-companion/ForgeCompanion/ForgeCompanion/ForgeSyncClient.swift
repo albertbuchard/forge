@@ -972,6 +972,138 @@ struct ForgeSyncClient {
         let chunkId: String?
     }
 
+    private struct WorkoutTimeSeriesChunkWarmup {
+        var generator: WorkoutTimeSeriesChunkGenerator
+        let firstChunk: PreparedHealthSyncChunkUpload?
+    }
+
+    private struct WorkoutRoutesChunkWarmup {
+        var generator: WorkoutRoutesChunkGenerator
+        let firstChunk: PreparedHealthSyncChunkUpload?
+    }
+
+    private struct WorkoutTimeSeriesChunkGenerator {
+        let workouts: [CompanionSyncPayload.WorkoutSession]
+        let recordLimit: Int
+        var sequence: Int
+        var workoutIndex = 0
+        var sampleIndex = 0
+        var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
+        var currentRecordCount = 0
+
+        mutating func nextChunk() throws -> PreparedHealthSyncChunkUpload? {
+            while workoutIndex < workouts.count {
+                try Task.checkCancellation()
+                let workout = workouts[workoutIndex]
+                if sampleIndex >= workout.timeSeriesSamples.count {
+                    workoutIndex += 1
+                    sampleIndex = 0
+                    continue
+                }
+                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
+                    return chunk
+                }
+                let remainingCapacity = max(1, recordLimit - currentRecordCount)
+                let upperBound = min(workout.timeSeriesSamples.count, sampleIndex + remainingCapacity)
+                let samples = Array(workout.timeSeriesSamples[sampleIndex..<upperBound])
+                currentEntries.append(
+                    WorkoutTimeSeriesChunkPayload.Workout(
+                        externalUid: workout.externalUid,
+                        samples: samples
+                    )
+                )
+                currentRecordCount += samples.count
+                sampleIndex = upperBound
+                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
+                    return chunk
+                }
+            }
+            return try flushCurrent()
+        }
+
+        private mutating func flushCurrent() throws -> PreparedHealthSyncChunkUpload? {
+            guard currentEntries.isEmpty == false else { return nil }
+            try Task.checkCancellation()
+            let entries = currentEntries
+            let recordCount = currentRecordCount
+            let payloadData = try ForgeSyncClient.healthSyncChunkPayloadData(
+                WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries)
+            )
+            let chunk = PreparedHealthSyncChunkUpload(
+                sequence: sequence,
+                family: "workout_time_series",
+                recordCount: recordCount,
+                payloadData: payloadData,
+                chunkId: nil
+            )
+            sequence += 1
+            currentEntries = []
+            currentRecordCount = 0
+            return chunk
+        }
+    }
+
+    private struct WorkoutRoutesChunkGenerator {
+        let workouts: [CompanionSyncPayload.WorkoutSession]
+        let recordLimit: Int
+        var sequence: Int
+        var workoutIndex = 0
+        var routePointIndex = 0
+        var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
+        var currentRecordCount = 0
+
+        mutating func nextChunk() throws -> PreparedHealthSyncChunkUpload? {
+            while workoutIndex < workouts.count {
+                try Task.checkCancellation()
+                let workout = workouts[workoutIndex]
+                if routePointIndex >= workout.routePoints.count {
+                    workoutIndex += 1
+                    routePointIndex = 0
+                    continue
+                }
+                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
+                    return chunk
+                }
+                let remainingCapacity = max(1, recordLimit - currentRecordCount)
+                let upperBound = min(workout.routePoints.count, routePointIndex + remainingCapacity)
+                let routePoints = Array(workout.routePoints[routePointIndex..<upperBound])
+                currentEntries.append(
+                    WorkoutRoutesChunkPayload.Workout(
+                        externalUid: workout.externalUid,
+                        routePoints: routePoints
+                    )
+                )
+                currentRecordCount += routePoints.count
+                routePointIndex = upperBound
+                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
+                    return chunk
+                }
+            }
+            return try flushCurrent()
+        }
+
+        private mutating func flushCurrent() throws -> PreparedHealthSyncChunkUpload? {
+            guard currentEntries.isEmpty == false else { return nil }
+            try Task.checkCancellation()
+            let entries = currentEntries
+            let recordCount = currentRecordCount
+            let payloadData = try ForgeSyncClient.healthSyncChunkPayloadData(
+                WorkoutRoutesChunkPayload(workoutRoutes: entries)
+            )
+            let chunk = PreparedHealthSyncChunkUpload(
+                sequence: sequence,
+                family: "workout_routes",
+                recordCount: recordCount,
+                payloadData: payloadData,
+                chunkId: nil
+            )
+            sequence += 1
+            currentEntries = []
+            currentRecordCount = 0
+            return chunk
+        }
+    }
+
     struct HealthSyncPreparedChunkPlan: Equatable {
         let sequence: Int
         let family: String
@@ -1550,10 +1682,75 @@ struct ForgeSyncClient {
     ) async throws -> Int {
         try Task.checkCancellation()
         var sequence = startingSequence
+        var timeSeriesWarmupTask: Task<WorkoutTimeSeriesChunkWarmup, Error>?
+        var routesWarmupTask: Task<WorkoutRoutesChunkWarmup, Error>?
+        defer {
+            timeSeriesWarmupTask?.cancel()
+            routesWarmupTask?.cancel()
+        }
+
         if uploadSession.acceptedFamilySet.contains("workout_summaries") {
             let summaries = workouts.map(summaryOnlyWorkout)
-            sequence = try await uploadChunkedWorkoutSummaries(
+            let summaryChunks = try prepareChunkedWorkoutSummaries(
                 summaries,
+                uploadSession: uploadSession,
+                pairing: pairing,
+                startingSequence: sequence,
+                useBackgroundUpload: useBackgroundUpload
+            )
+            let sequenceAfterSummaries = sequence + summaryChunks.count
+            if uploadSession.acceptedFamilySet.contains("workout_time_series") {
+                let recordLimit = workoutTimeSeriesChunkRecordLimit(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    useBackgroundUpload: useBackgroundUpload
+                )
+                var generator = WorkoutTimeSeriesChunkGenerator(
+                    workouts: workouts,
+                    recordLimit: recordLimit,
+                    sequence: sequenceAfterSummaries
+                )
+                await notifyHealthSyncChunkPreparation(
+                    family: "workout_time_series",
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: sequenceAfterSummaries,
+                    useBackgroundUpload: useBackgroundUpload,
+                    onChunkUploaded: onChunkUploaded
+                )
+                timeSeriesWarmupTask = Task {
+                    WorkoutTimeSeriesChunkWarmup(
+                        generator: generator,
+                        firstChunk: try generator.nextChunk()
+                    )
+                }
+
+                let timeSeriesChunkCount = Self.workoutEvidenceChunkCount(
+                    recordCount: Self.workoutTimeSeriesRecordCount(workouts),
+                    recordLimit: recordLimit
+                )
+                if uploadSession.acceptedFamilySet.contains("workout_routes") {
+                    let routeRecordLimit = workoutRouteChunkRecordLimit(
+                        uploadSession: uploadSession,
+                        pairing: pairing,
+                        useBackgroundUpload: useBackgroundUpload
+                    )
+                    var routeGenerator = WorkoutRoutesChunkGenerator(
+                        workouts: workouts,
+                        recordLimit: routeRecordLimit,
+                        sequence: sequenceAfterSummaries + timeSeriesChunkCount
+                    )
+                    routesWarmupTask = Task {
+                        WorkoutRoutesChunkWarmup(
+                            generator: routeGenerator,
+                            firstChunk: try routeGenerator.nextChunk()
+                        )
+                    }
+                }
+            }
+
+            sequence = try await uploadPreparedHealthSyncChunks(
+                summaryChunks,
                 uploadSession: uploadSession,
                 pairing: pairing,
                 startingSequence: sequence,
@@ -1567,6 +1764,8 @@ struct ForgeSyncClient {
             pairing: pairing,
             startingSequence: sequence,
             useBackgroundUpload: useBackgroundUpload,
+            warmupTask: timeSeriesWarmupTask,
+            preparationAlreadyNotified: timeSeriesWarmupTask != nil,
             onChunkUploaded: onChunkUploaded
         )
         sequence = try await uploadChunkedWorkoutRoutes(
@@ -1575,6 +1774,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             startingSequence: sequence,
             useBackgroundUpload: useBackgroundUpload,
+            warmupTask: routesWarmupTask,
             onChunkUploaded: onChunkUploaded
         )
         return sequence
@@ -2210,16 +2410,15 @@ struct ForgeSyncClient {
         return sequence
     }
 
-    private func uploadChunkedWorkoutSummaries(
+    private func prepareChunkedWorkoutSummaries(
         _ workouts: [CompanionSyncPayload.WorkoutSession],
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
         startingSequence: Int,
-        useBackgroundUpload: Bool,
-        onChunkUploaded: HealthSyncChunkUploadHandler?
-    ) async throws -> Int {
+        useBackgroundUpload: Bool
+    ) throws -> [PreparedHealthSyncChunkUpload] {
         guard workouts.isEmpty == false else {
-            return startingSequence
+            return []
         }
         var sequence = startingSequence
         var chunks: [PreparedHealthSyncChunkUpload] = []
@@ -2248,14 +2447,7 @@ struct ForgeSyncClient {
             sequence += 1
             lowerBound = upperBound
         }
-        return try await uploadPreparedHealthSyncChunks(
-            chunks,
-            uploadSession: uploadSession,
-            pairing: pairing,
-            startingSequence: startingSequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        )
+        return chunks
     }
 
     private func uploadChunkedWorkoutTimeSeries(
@@ -2264,6 +2456,8 @@ struct ForgeSyncClient {
         pairing: PairingPayload,
         startingSequence: Int,
         useBackgroundUpload: Bool,
+        warmupTask: Task<WorkoutTimeSeriesChunkWarmup, Error>? = nil,
+        preparationAlreadyNotified: Bool = false,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard uploadSession.acceptedFamilySet.contains("workout_time_series") else {
@@ -2273,74 +2467,40 @@ struct ForgeSyncClient {
             )
             return startingSequence
         }
-        await notifyHealthSyncChunkPreparation(
-            family: "workout_time_series",
-            uploadSession: uploadSession,
-            pairing: pairing,
-            sequence: startingSequence,
-            useBackgroundUpload: useBackgroundUpload,
-            onChunkUploaded: onChunkUploaded
-        )
+        if preparationAlreadyNotified == false {
+            await notifyHealthSyncChunkPreparation(
+                family: "workout_time_series",
+                uploadSession: uploadSession,
+                pairing: pairing,
+                sequence: startingSequence,
+                useBackgroundUpload: useBackgroundUpload,
+                onChunkUploaded: onChunkUploaded
+            )
+        }
         let recordLimit = workoutTimeSeriesChunkRecordLimit(
             uploadSession: uploadSession,
             pairing: pairing,
             useBackgroundUpload: useBackgroundUpload
         )
-        var sequence = startingSequence
-        var workoutIndex = 0
-        var sampleIndex = 0
-        var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
-        var currentRecordCount = 0
-
-        func flushCurrent() throws -> PreparedHealthSyncChunkUpload? {
-            guard currentEntries.isEmpty == false else { return nil }
-            try Task.checkCancellation()
-            let entries = currentEntries
-            let recordCount = currentRecordCount
-            let payloadData = try Self.healthSyncChunkPayloadData(
-                WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries)
+        var generator: WorkoutTimeSeriesChunkGenerator
+        var warmedFirstChunk: PreparedHealthSyncChunkUpload?
+        if let warmupTask {
+            let warmup = try await warmupTask.value
+            generator = warmup.generator
+            warmedFirstChunk = warmup.firstChunk
+        } else {
+            generator = WorkoutTimeSeriesChunkGenerator(
+                workouts: workouts,
+                recordLimit: recordLimit,
+                sequence: startingSequence
             )
-            let chunk = PreparedHealthSyncChunkUpload(
-                sequence: sequence,
-                family: "workout_time_series",
-                recordCount: recordCount,
-                payloadData: payloadData,
-                chunkId: nil
-            )
-            sequence += 1
-            currentEntries = []
-            currentRecordCount = 0
-            return chunk
         }
-
         func nextChunk() throws -> PreparedHealthSyncChunkUpload? {
-            while workoutIndex < workouts.count {
-                try Task.checkCancellation()
-                let workout = workouts[workoutIndex]
-                if sampleIndex >= workout.timeSeriesSamples.count {
-                    workoutIndex += 1
-                    sampleIndex = 0
-                    continue
-                }
-                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
-                    return chunk
-                }
-                let remainingCapacity = max(1, recordLimit - currentRecordCount)
-                let upperBound = min(workout.timeSeriesSamples.count, sampleIndex + remainingCapacity)
-                let samples = Array(workout.timeSeriesSamples[sampleIndex..<upperBound])
-                currentEntries.append(
-                    WorkoutTimeSeriesChunkPayload.Workout(
-                        externalUid: workout.externalUid,
-                        samples: samples
-                    )
-                )
-                currentRecordCount += samples.count
-                sampleIndex = upperBound
-                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
-                    return chunk
-                }
+            if let chunk = warmedFirstChunk {
+                warmedFirstChunk = nil
+                return chunk
             }
-            return try flushCurrent()
+            return try generator.nextChunk()
         }
 
         let nextSequence = try await uploadGeneratedHealthSyncChunks(
@@ -2368,6 +2528,7 @@ struct ForgeSyncClient {
         pairing: PairingPayload,
         startingSequence: Int,
         useBackgroundUpload: Bool,
+        warmupTask: Task<WorkoutRoutesChunkWarmup, Error>? = nil,
         onChunkUploaded: HealthSyncChunkUploadHandler?
     ) async throws -> Int {
         guard uploadSession.acceptedFamilySet.contains("workout_routes") else {
@@ -2390,61 +2551,25 @@ struct ForgeSyncClient {
             pairing: pairing,
             useBackgroundUpload: useBackgroundUpload
         )
-        var sequence = startingSequence
-        var workoutIndex = 0
-        var routePointIndex = 0
-        var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
-        var currentRecordCount = 0
-
-        func flushCurrent() throws -> PreparedHealthSyncChunkUpload? {
-            guard currentEntries.isEmpty == false else { return nil }
-            try Task.checkCancellation()
-            let entries = currentEntries
-            let recordCount = currentRecordCount
-            let payloadData = try Self.healthSyncChunkPayloadData(
-                WorkoutRoutesChunkPayload(workoutRoutes: entries)
+        var generator: WorkoutRoutesChunkGenerator
+        var warmedFirstChunk: PreparedHealthSyncChunkUpload?
+        if let warmupTask {
+            let warmup = try await warmupTask.value
+            generator = warmup.generator
+            warmedFirstChunk = warmup.firstChunk
+        } else {
+            generator = WorkoutRoutesChunkGenerator(
+                workouts: workouts,
+                recordLimit: recordLimit,
+                sequence: startingSequence
             )
-            let chunk = PreparedHealthSyncChunkUpload(
-                sequence: sequence,
-                family: "workout_routes",
-                recordCount: recordCount,
-                payloadData: payloadData,
-                chunkId: nil
-            )
-            sequence += 1
-            currentEntries = []
-            currentRecordCount = 0
-            return chunk
         }
-
         func nextChunk() throws -> PreparedHealthSyncChunkUpload? {
-            while workoutIndex < workouts.count {
-                try Task.checkCancellation()
-                let workout = workouts[workoutIndex]
-                if routePointIndex >= workout.routePoints.count {
-                    workoutIndex += 1
-                    routePointIndex = 0
-                    continue
-                }
-                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
-                    return chunk
-                }
-                let remainingCapacity = max(1, recordLimit - currentRecordCount)
-                let upperBound = min(workout.routePoints.count, routePointIndex + remainingCapacity)
-                let routePoints = Array(workout.routePoints[routePointIndex..<upperBound])
-                currentEntries.append(
-                    WorkoutRoutesChunkPayload.Workout(
-                        externalUid: workout.externalUid,
-                        routePoints: routePoints
-                    )
-                )
-                currentRecordCount += routePoints.count
-                routePointIndex = upperBound
-                if currentRecordCount >= recordLimit, let chunk = try flushCurrent() {
-                    return chunk
-                }
+            if let chunk = warmedFirstChunk {
+                warmedFirstChunk = nil
+                return chunk
             }
-            return try flushCurrent()
+            return try generator.nextChunk()
         }
 
         let nextSequence = try await uploadGeneratedHealthSyncChunks(
@@ -2511,6 +2636,19 @@ struct ForgeSyncClient {
         )
     }
 
+    private static func workoutTimeSeriesRecordCount(
+        _ workouts: [CompanionSyncPayload.WorkoutSession]
+    ) -> Int {
+        workouts.reduce(0) { total, workout in
+            total + workout.timeSeriesSamples.count
+        }
+    }
+
+    private static func workoutEvidenceChunkCount(recordCount: Int, recordLimit: Int) -> Int {
+        guard recordCount > 0 else { return 0 }
+        return Int(ceil(Double(recordCount) / Double(max(1, recordLimit))))
+    }
+
     static func healthSyncChunkRecordLimitForTesting(
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
@@ -2527,6 +2665,10 @@ struct ForgeSyncClient {
             minimum: minimum,
             maximum: maximum
         )
+    }
+
+    static func workoutEvidenceChunkCountForTesting(recordCount: Int, recordLimit: Int) -> Int {
+        workoutEvidenceChunkCount(recordCount: recordCount, recordLimit: recordLimit)
     }
 
     static func healthSyncPreparedChunkPrefetchLimitForTesting(
