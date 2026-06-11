@@ -8442,9 +8442,14 @@ export async function buildServer(options = {}) {
     });
     app.post("/api/v1/mobile/healthkit/sync-sessions/:id/chunks", { bodyLimit: 40_000_000 }, async (request) => {
         const { id } = request.params;
+        const startedAt = performance.now();
         const rawPayloadJson = JSON.stringify((request.body ?? {}).payload ?? {});
+        const chunk = ingestMobileHealthSyncChunk(id, mobileHealthSyncChunkSchema.parse(request.body ?? {}), rawPayloadJson);
         return {
-            chunk: ingestMobileHealthSyncChunk(id, mobileHealthSyncChunkSchema.parse(request.body ?? {}), rawPayloadJson)
+            chunk: {
+                ...chunk,
+                serverProcessingMs: Math.max(0, Math.round(performance.now() - startedAt))
+            }
         };
     });
     app.post("/api/v1/mobile/healthkit/sync-sessions/:id/complete", async (request) => {

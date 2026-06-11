@@ -3347,78 +3347,6 @@ function applyWorkoutChunkImmediately(session, family, workouts) {
         }), workouts.length, createdCount, updatedCount, mergedCount, now, now, runId);
     });
 }
-function mobileSyncWorkoutRowsByExternalUid(userId, externalUids) {
-    const uniqueExternalUids = [...new Set(externalUids.filter(Boolean))];
-    const rowsByExternalUid = new Map();
-    const chunkSize = 500;
-    for (let lowerBound = 0; lowerBound < uniqueExternalUids.length; lowerBound += chunkSize) {
-        const chunk = uniqueExternalUids.slice(lowerBound, lowerBound + chunkSize);
-        if (chunk.length === 0) {
-            continue;
-        }
-        const placeholders = chunk.map(() => "?").join(", ");
-        const rows = getDatabase()
-            .prepare(`SELECT *
-         FROM health_workout_sessions
-         WHERE user_id = ?
-           AND source = 'apple_health'
-           AND external_uid IN (${placeholders})`)
-            .all(userId, ...chunk);
-        for (const row of rows) {
-            rowsByExternalUid.set(row.external_uid, row);
-        }
-    }
-    return rowsByExternalUid;
-}
-function applyWorkoutEvidenceChunkImmediately(session, payload) {
-    const timeSeries = payload.workoutTimeSeries ?? [];
-    const routes = payload.workoutRoutes ?? [];
-    if (timeSeries.length === 0 && routes.length === 0) {
-        return;
-    }
-    const pairing = mobileSyncSessionPairing(session);
-    runInTransaction(() => {
-        const rowsToRecompute = new Map();
-        const rowsByExternalUid = mobileSyncWorkoutRowsByExternalUid(pairing.user_id, [
-            ...timeSeries
-                .filter((entry) => entry.samples.length > 0)
-                .map((entry) => entry.externalUid),
-            ...routes
-                .filter((entry) => entry.routePoints.length > 0)
-                .map((entry) => entry.externalUid)
-        ]);
-        for (const entry of timeSeries) {
-            const row = rowsByExternalUid.get(entry.externalUid);
-            if (!row || entry.samples.length === 0) {
-                continue;
-            }
-            upsertWorkoutTimeSeries({
-                workoutId: row.id,
-                userId: pairing.user_id,
-                samples: entry.samples
-            });
-            rowsToRecompute.set(row.id, row);
-        }
-        for (const entry of routes) {
-            const row = rowsByExternalUid.get(entry.externalUid);
-            if (!row || entry.routePoints.length === 0) {
-                continue;
-            }
-            upsertWorkoutRoutePoints({
-                workoutId: row.id,
-                userId: pairing.user_id,
-                points: entry.routePoints
-            });
-            rowsToRecompute.set(row.id, row);
-        }
-        for (const row of rowsToRecompute.values()) {
-            recomputeAndStoreWorkoutAnalytics(row);
-        }
-        for (const dateKeyValue of new Set([...rowsToRecompute.values()].map((row) => dayKey(row.started_at)))) {
-            summarizeUserHealthDay(pairing.user_id, dateKeyValue);
-        }
-    });
-}
 function markMobileHealthSyncChunkApplied(input) {
     const now = nowIso();
     getDatabase()
@@ -3474,8 +3402,10 @@ function applyMobileHealthSyncChunkImmediately(session, family, payload) {
             return "workout_progressive_apply";
         case "workout_time_series":
         case "workout_routes":
-            applyWorkoutEvidenceChunkImmediately(session, payload);
-            return "workout_evidence_progressive_apply";
+            // Evidence chunks can be very large. Applying them here made the phone wait
+            // for route/sample upserts plus analytics recomputation before each chunk
+            // response. Store them quickly and apply once during completion instead.
+            return null;
         case "movement":
             return applyMovementChunkImmediately(session, payload)
                 ? "movement_progressive_apply"
@@ -3733,8 +3663,10 @@ function mergeMobileHealthSyncChunks(session, chunks, options = {}) {
     const workoutsByExternalUid = new Map();
     const tombstones = [];
     for (const chunk of chunks.sort((left, right) => left.sequence - right.sequence)) {
+        const keepWorkoutSummaryForDeferredEvidence = chunk.family === "workout_summaries" || chunk.family === "workout_archive";
         const skipRecords = options.skipImmediatelyApplied === true &&
-            mobileHealthSyncChunkWasImmediatelyApplied(chunk);
+            mobileHealthSyncChunkWasImmediatelyApplied(chunk) &&
+            keepWorkoutSummaryForDeferredEvidence === false;
         if (skipRecords) {
             continue;
         }
@@ -3967,7 +3899,10 @@ function listMobileSyncCompletionChunks(syncSessionId) {
         .prepare(`SELECT id, payload_json
        FROM health_mobile_sync_chunks
        WHERE sync_session_id = ?
-         AND applied_at IS NULL`)
+         AND (
+           applied_at IS NULL
+           OR family IN ('workout_summaries', 'workout_archive')
+         )`)
         .all(syncSessionId);
     if (payloadRows.length === 0) {
         return chunks;
