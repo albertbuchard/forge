@@ -415,6 +415,8 @@ struct ForgeSyncClient {
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
     static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
     static let irohHealthSyncChunkTargetBytes = 500_000
+    static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
+    static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
     static let foregroundHealthSyncChunkUploadConcurrency = 6
     static let foregroundHTTPMaximumConnectionsPerHost = 6
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
@@ -1440,7 +1442,8 @@ struct ForgeSyncClient {
             payload: payload,
             uploadSession: uploadSession,
             pairing: pairing,
-            startingSequence: startingSequence
+            startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload
         )
         return try await uploadPreparedHealthSyncChunks(
             chunks,
@@ -1620,7 +1623,8 @@ struct ForgeSyncClient {
         payload: CompanionSyncPayload,
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
-        startingSequence: Int
+        startingSequence: Int,
+        useBackgroundUpload: Bool = false
     ) throws -> [PreparedHealthSyncChunkUpload] {
         var sequence = startingSequence
         var chunks: [PreparedHealthSyncChunkUpload] = []
@@ -1636,6 +1640,7 @@ struct ForgeSyncClient {
                 pairing: pairing,
                 family: family,
                 startingSequence: sequence,
+                useBackgroundUpload: useBackgroundUpload,
                 makePayload: makePayload
             )
             chunks.append(contentsOf: prepared)
@@ -1730,6 +1735,7 @@ struct ForgeSyncClient {
         pairing: PairingPayload,
         family: String,
         startingSequence: Int,
+        useBackgroundUpload: Bool = false,
         makePayload: ([Record]) -> Payload
     ) throws -> [PreparedHealthSyncChunkUpload] {
         guard records.isEmpty == false else {
@@ -1742,7 +1748,11 @@ struct ForgeSyncClient {
             )
             return []
         }
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let targetBytes = effectiveHealthSyncChunkTarget(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
         let preparedRanges = try Self.healthSyncPreparedChunkRanges(
             recordCount: records.count,
             targetBytes: targetBytes
@@ -1776,6 +1786,7 @@ struct ForgeSyncClient {
             pairing: pairing,
             family: family,
             startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload,
             makePayload: makePayload
         )
         return try await uploadPreparedHealthSyncChunks(
@@ -1988,7 +1999,11 @@ struct ForgeSyncClient {
         }
         var sequence = startingSequence
         var chunks: [PreparedHealthSyncChunkUpload] = []
-        let recordLimit = workoutSummaryChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
+        let recordLimit = workoutSummaryChunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
         var lowerBound = 0
         while lowerBound < workouts.count {
             try Task.checkCancellation()
@@ -2035,7 +2050,11 @@ struct ForgeSyncClient {
             return startingSequence
         }
         var sequence = startingSequence
-        let recordLimit = workoutTimeSeriesChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
+        let recordLimit = workoutTimeSeriesChunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
         var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
         var currentRecordCount = 0
         var chunks: [PreparedHealthSyncChunkUpload] = []
@@ -2108,7 +2127,11 @@ struct ForgeSyncClient {
             return startingSequence
         }
         var sequence = startingSequence
-        let recordLimit = workoutRouteChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
+        let recordLimit = workoutRouteChunkRecordLimit(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
         var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
         var currentRecordCount = 0
         var chunks: [PreparedHealthSyncChunkUpload] = []
@@ -2167,11 +2190,13 @@ struct ForgeSyncClient {
 
     private func workoutSummaryChunkRecordLimit(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool
     ) -> Int {
         Self.healthSyncChunkRecordLimit(
             uploadSession: uploadSession,
             pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload,
             estimatedBytesPerRecord: 4_000,
             minimum: 20,
             maximum: 250
@@ -2180,11 +2205,13 @@ struct ForgeSyncClient {
 
     private func workoutTimeSeriesChunkRecordLimit(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool
     ) -> Int {
         Self.healthSyncChunkRecordLimit(
             uploadSession: uploadSession,
             pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload,
             estimatedBytesPerRecord: Self.workoutTimeSeriesEstimatedBytesPerRecord,
             minimum: 500,
             maximum: 12_000
@@ -2193,11 +2220,13 @@ struct ForgeSyncClient {
 
     private func workoutRouteChunkRecordLimit(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool
     ) -> Int {
         Self.healthSyncChunkRecordLimit(
             uploadSession: uploadSession,
             pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload,
             estimatedBytesPerRecord: Self.workoutRouteEstimatedBytesPerRecord,
             minimum: 500,
             maximum: 15_000
@@ -2207,6 +2236,7 @@ struct ForgeSyncClient {
     static func healthSyncChunkRecordLimitForTesting(
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
+        useBackgroundUpload: Bool = false,
         estimatedBytesPerRecord: Int,
         minimum: Int,
         maximum: Int
@@ -2214,6 +2244,7 @@ struct ForgeSyncClient {
         healthSyncChunkRecordLimit(
             uploadSession: uploadSession,
             pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload,
             estimatedBytesPerRecord: estimatedBytesPerRecord,
             minimum: minimum,
             maximum: maximum
@@ -2370,11 +2401,16 @@ struct ForgeSyncClient {
     private static func healthSyncChunkRecordLimit(
         uploadSession: HealthSyncUploadSession,
         pairing: PairingPayload,
+        useBackgroundUpload: Bool = false,
         estimatedBytesPerRecord: Int,
         minimum: Int,
         maximum: Int
     ) -> Int {
-        let targetBytes = effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        let targetBytes = effectiveHealthSyncChunkTarget(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
         let estimatedLimit = targetBytes / max(1, estimatedBytesPerRecord)
         if targetBytes < minimum * estimatedBytesPerRecord {
             return min(maximum, max(1, estimatedLimit))
@@ -2623,16 +2659,26 @@ struct ForgeSyncClient {
 
     private func effectiveHealthSyncChunkTarget(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool = false
     ) -> Int {
-        Self.effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        Self.effectiveHealthSyncChunkTarget(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
     }
 
     static func effectiveHealthSyncChunkTargetForTesting(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool = false
     ) -> Int {
-        effectiveHealthSyncChunkTarget(uploadSession: uploadSession, pairing: pairing)
+        effectiveHealthSyncChunkTarget(
+            uploadSession: uploadSession,
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
     }
 
     static func pairingHeartbeatSessionStateForTesting(from data: Data) throws -> CompanionPairingSessionState {
@@ -2641,16 +2687,21 @@ struct ForgeSyncClient {
 
     private static func effectiveHealthSyncChunkTarget(
         uploadSession: HealthSyncUploadSession,
-        pairing: PairingPayload
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool = false
     ) -> Int {
         let protocolTarget = min(uploadSession.chunkTargetBytes, max(64_000, uploadSession.chunkMaxBytes - 32_000))
         if pairing.transport?.isIrohTransport == true {
             return max(64_000, min(protocolTarget, irohHealthSyncChunkTargetBytes))
         }
+        if useBackgroundUpload {
+            return max(128_000, min(protocolTarget, backgroundHTTPHealthSyncChunkTargetBytes))
+        }
         // Tailscale/HTTP intermediaries have shown 502s on large route chunks well
-        // below the advertised server body limit. The HTTP request body carries a
-        // base64 JSON envelope, so keep raw chunks comfortably under proxy limits.
-        return max(128_000, min(protocolTarget, 500_000))
+        // below the advertised server body limit. Keep background URLSession chunks
+        // conservative, but foreground standard URLSession can use larger chunks to
+        // reduce request churn while the user keeps the app active.
+        return max(128_000, min(protocolTarget, foregroundHTTPHealthSyncChunkTargetBytes))
     }
 
     private func encodedByteCount(_ value: some Encodable) -> Int {

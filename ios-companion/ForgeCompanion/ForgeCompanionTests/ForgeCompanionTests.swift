@@ -5427,7 +5427,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testIrohHealthSyncUsesBalancedChunksMatchingHttpBackgroundUpload() {
+    func testForegroundHttpHealthSyncUsesLargerChunksThanBackgroundAndIroh() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_large",
             schemaVersion: "healthkit-sync-v2",
@@ -5494,7 +5494,15 @@ final class ForgeCompanionTests: XCTestCase {
                 uploadSession: uploadSession,
                 pairing: httpPayload
             ),
-            500_000
+            ForgeSyncClient.foregroundHTTPHealthSyncChunkTargetBytes
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.effectiveHealthSyncChunkTargetForTesting(
+                uploadSession: uploadSession,
+                pairing: httpPayload,
+                useBackgroundUpload: true
+            ),
+            ForgeSyncClient.backgroundHTTPHealthSyncChunkTargetBytes
         )
         let irohTimeSeriesLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
             uploadSession: uploadSession,
@@ -5506,6 +5514,14 @@ final class ForgeCompanionTests: XCTestCase {
         let httpTimeSeriesLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
             uploadSession: uploadSession,
             pairing: httpPayload,
+            estimatedBytesPerRecord: 640,
+            minimum: 500,
+            maximum: 12_000
+        )
+        let backgroundHTTPTimeSeriesLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: httpPayload,
+            useBackgroundUpload: true,
             estimatedBytesPerRecord: 640,
             minimum: 500,
             maximum: 12_000
@@ -5524,13 +5540,31 @@ final class ForgeCompanionTests: XCTestCase {
             minimum: 500,
             maximum: 15_000
         )
+        let backgroundHTTPRouteLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: httpPayload,
+            useBackgroundUpload: true,
+            estimatedBytesPerRecord: 520,
+            minimum: 500,
+            maximum: 15_000
+        )
 
         XCTAssertEqual(irohTimeSeriesLimit, 781)
-        XCTAssertEqual(httpTimeSeriesLimit, 781)
+        XCTAssertEqual(backgroundHTTPTimeSeriesLimit, 781)
+        XCTAssertEqual(httpTimeSeriesLimit, 2_343)
         XCTAssertEqual(irohRouteLimit, 961)
-        XCTAssertEqual(httpRouteLimit, 961)
+        XCTAssertEqual(backgroundHTTPRouteLimit, 961)
+        XCTAssertEqual(httpRouteLimit, 2_884)
         XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
         XCTAssertLessThanOrEqual(irohRouteLimit * 520, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
+        XCTAssertLessThanOrEqual(
+            httpTimeSeriesLimit * 640,
+            ForgeSyncClient.foregroundHTTPHealthSyncChunkTargetBytes
+        )
+        XCTAssertLessThanOrEqual(
+            httpRouteLimit * 520,
+            ForgeSyncClient.foregroundHTTPHealthSyncChunkTargetBytes
+        )
     }
 
     func testSyncUploadStatusExplainsCurrentCountsAndTransferChunk() {
