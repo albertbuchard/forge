@@ -414,7 +414,7 @@ struct ForgeSyncClient {
     static let legacyHTTPHealthSyncChunkingVersion = "http-v1"
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
     static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
-    static let irohHealthSyncChunkTargetBytes = 1_000_000
+    static let irohHealthSyncChunkTargetBytes = 2_000_000
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
     static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
     static let foregroundIrohHealthSyncChunkUploadConcurrency = 6

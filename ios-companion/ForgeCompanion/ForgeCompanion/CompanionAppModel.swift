@@ -579,7 +579,7 @@ final class CompanionAppModel: ObservableObject {
             } else if uploadedChunks == 0, let startedAt {
                 let elapsed = now.timeIntervalSince(startedAt)
                 if elapsed >= stalledAckInterval {
-                    return "no health sync upload acknowledgement within \(Int(elapsed.rounded(.down)))s"
+                    return "no accepted health sync chunk within \(Int(elapsed.rounded(.down)))s"
                 }
             }
             return nil
@@ -829,8 +829,10 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferStartedAt: Date?
     private var healthSyncTransferLastSnapshotAt: Date?
     private var healthSyncTransferLastSnapshotBytes = 0
+    private var healthSyncTransferLastSnapshotScheduledBytes = 0
     private var healthSyncTransferBytesSent = 0
     private var healthSyncTransferCurrentBytesPerSecond = 0.0
+    private var healthSyncTransferScheduledCurrentBytesPerSecond = 0.0
     private var healthSyncTransferUploadedChunks = 0
     private var healthSyncTransferUploadedRecords = 0
     private var healthSyncTransferSkippedChunks = 0
@@ -3122,8 +3124,10 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferStartedAt = now
         healthSyncTransferLastSnapshotAt = now
         healthSyncTransferLastSnapshotBytes = 0
+        healthSyncTransferLastSnapshotScheduledBytes = 0
         healthSyncTransferBytesSent = 0
         healthSyncTransferCurrentBytesPerSecond = 0
+        healthSyncTransferScheduledCurrentBytesPerSecond = 0
         healthSyncTransferUploadedChunks = 0
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
@@ -3175,8 +3179,10 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferStartedAt = nil
         healthSyncTransferLastSnapshotAt = nil
         healthSyncTransferLastSnapshotBytes = 0
+        healthSyncTransferLastSnapshotScheduledBytes = 0
         healthSyncTransferBytesSent = 0
         healthSyncTransferCurrentBytesPerSecond = 0
+        healthSyncTransferScheduledCurrentBytesPerSecond = 0
         healthSyncTransferUploadedChunks = 0
         healthSyncTransferUploadedRecords = 0
         healthSyncTransferSkippedChunks = 0
@@ -3329,9 +3335,15 @@ final class CompanionAppModel: ObservableObject {
         let previousAt = healthSyncTransferLastSnapshotAt ?? startedAt
         let elapsed = max(now.timeIntervalSince(previousAt), 0.001)
         let byteDelta = max(0, healthSyncTransferBytesSent - healthSyncTransferLastSnapshotBytes)
+        let scheduledByteDelta = max(
+            0,
+            healthSyncTransferScheduledBytes - healthSyncTransferLastSnapshotScheduledBytes
+        )
         healthSyncTransferCurrentBytesPerSecond = Double(byteDelta) / elapsed
+        healthSyncTransferScheduledCurrentBytesPerSecond = Double(scheduledByteDelta) / elapsed
         healthSyncTransferLastSnapshotAt = now
         healthSyncTransferLastSnapshotBytes = healthSyncTransferBytesSent
+        healthSyncTransferLastSnapshotScheduledBytes = healthSyncTransferScheduledBytes
         publishHealthSyncTransferStats(now: now)
         cancelActiveSyncIfStalled(now: now, reason: "health sync transfer watchdog")
     }
@@ -3361,6 +3373,8 @@ final class CompanionAppModel: ObservableObject {
             totalBytesSent: healthSyncTransferBytesSent,
             currentBytesPerSecond: healthSyncTransferCurrentBytesPerSecond,
             averageBytesPerSecond: Double(healthSyncTransferBytesSent) / totalElapsed,
+            scheduledCurrentBytesPerSecond: healthSyncTransferScheduledCurrentBytesPerSecond,
+            scheduledAverageBytesPerSecond: Double(healthSyncTransferScheduledBytes) / totalElapsed,
             uploadedChunks: healthSyncTransferUploadedChunks,
             uploadedRecords: healthSyncTransferUploadedRecords,
             skippedChunks: healthSyncTransferSkippedChunks,

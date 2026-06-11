@@ -1057,6 +1057,8 @@ struct SyncTransferStats: Equatable {
     let totalBytesSent: Int
     let currentBytesPerSecond: Double
     let averageBytesPerSecond: Double
+    let scheduledCurrentBytesPerSecond: Double
+    let scheduledAverageBytesPerSecond: Double
     let uploadedChunks: Int
     let uploadedRecords: Int
     let skippedChunks: Int
@@ -1198,9 +1200,10 @@ struct CompanionSyncUploadStatus {
             return nil
         }
         var parts = [
-            "Forge accepted \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
-            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s average",
-            "\(transferStats.uploadedChunks) chunks stored"
+            "Phone queued \(Self.formatBytes(Int(transferStats.scheduledCurrentBytesPerSecond)))/s now",
+            "\(Self.formatBytes(Int(transferStats.scheduledAverageBytesPerSecond)))/s queued avg",
+            "Forge stored \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
+            "\(transferStats.uploadedChunks) chunks accepted"
         ]
         if transferStats.uploadWindow > 1 {
             parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests awaiting transport")

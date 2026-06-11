@@ -4962,7 +4962,7 @@ final class ForgeCompanionTests: XCTestCase {
             now: now
         )
 
-        XCTAssertEqual(reason, "no health sync upload acknowledgement within 305s")
+        XCTAssertEqual(reason, "no accepted health sync chunk within 305s")
     }
 
     func testHealthSyncLifecyclePolicyIgnoresStoppedTelemetry() {
@@ -5477,7 +5477,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testForegroundHttpHealthSyncUsesLargerChunksThanBackgroundAndIroh() {
+    func testForegroundTransportsUseLargerChunksThanBackground() {
         let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
             syncSessionId: "hms_large",
             schemaVersion: "healthkit-sync-v2",
@@ -5599,10 +5599,10 @@ final class ForgeCompanionTests: XCTestCase {
             maximum: 15_000
         )
 
-        XCTAssertEqual(irohTimeSeriesLimit, 1_562)
+        XCTAssertEqual(irohTimeSeriesLimit, 3_125)
         XCTAssertEqual(backgroundHTTPTimeSeriesLimit, 781)
         XCTAssertEqual(httpTimeSeriesLimit, 2_343)
-        XCTAssertEqual(irohRouteLimit, 1_923)
+        XCTAssertEqual(irohRouteLimit, 3_846)
         XCTAssertEqual(backgroundHTTPRouteLimit, 961)
         XCTAssertEqual(httpRouteLimit, 2_884)
         XCTAssertLessThanOrEqual(irohTimeSeriesLimit * 640, ForgeSyncClient.irohHealthSyncChunkTargetBytes)
@@ -5748,8 +5748,8 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(foregroundConcurrency, 6)
         XCTAssertEqual(foregroundPreparedLimit, 12)
-        XCTAssertEqual(foregroundWaveBudgetBytes, 6_000_000)
-        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 12)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 12_000_000)
+        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 24)
     }
 
     func testForegroundIrohHealthSyncDoublesPreviousThreeRequestWave() async throws {
@@ -5780,6 +5780,81 @@ final class ForgeCompanionTests: XCTestCase {
             Int(ceil(Double(chunkCount) / Double(ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency))),
             3
         )
+    }
+
+    func testForegroundIrohLargerChunksReduceRoundTripWaves() {
+        let uploadSession = ForgeSyncClient.HealthSyncUploadSession(
+            syncSessionId: "hms_iroh_wave",
+            schemaVersion: "healthkit-sync-v2",
+            chunkTargetBytes: 12_000_000,
+            chunkMaxBytes: 24_000_000,
+            chunkPayloadEncoding: "payload_json_base64",
+            acceptedPayloadEncodings: ["payload_json_base64"],
+            supportsCompression: true,
+            acceptedFamilies: ["workout_time_series"],
+            receivedChunkIds: []
+        )
+        let irohTransport = PairingTransport(
+            protocolName: "iroh",
+            provider: "forge-companion-iroh",
+            status: "ready",
+            publicBaseUrl: nil,
+            localBaseUrl: "http://127.0.0.1:4317",
+            nodeId: "node",
+            relay: nil,
+            alpn: "forge-companion/1",
+            agent: "forge",
+            pairPayload: PairingTransportPairPayload(
+                v: 1,
+                nodeId: "node",
+                token: "host-token",
+                hostName: "Mac",
+                relay: nil
+            ),
+            recreateCommand: nil,
+            startedAt: nil,
+            lastError: nil,
+            notes: []
+        )
+        let irohPayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "iroh",
+            transport: irohTransport
+        )
+        let recordCount = 100_000
+        let previousIrohTargetBytes = 1_000_000
+        let previousRecordLimit = previousIrohTargetBytes / 640
+        let newRecordLimit = ForgeSyncClient.healthSyncChunkRecordLimitForTesting(
+            uploadSession: uploadSession,
+            pairing: irohPayload,
+            estimatedBytesPerRecord: 640,
+            minimum: 500,
+            maximum: 12_000
+        )
+        let previousChunkCount = ForgeSyncClient.workoutEvidenceChunkCountForTesting(
+            recordCount: recordCount,
+            recordLimit: previousRecordLimit
+        )
+        let newChunkCount = ForgeSyncClient.workoutEvidenceChunkCountForTesting(
+            recordCount: recordCount,
+            recordLimit: newRecordLimit
+        )
+        let previousWaves = Int(ceil(Double(previousChunkCount) / 6.0))
+        let newWaves = Int(ceil(Double(newChunkCount) / 6.0))
+
+        XCTAssertEqual(previousRecordLimit, 1_562)
+        XCTAssertEqual(newRecordLimit, 3_125)
+        XCTAssertEqual(previousChunkCount, 65)
+        XCTAssertEqual(newChunkCount, 32)
+        XCTAssertEqual(previousWaves, 11)
+        XCTAssertEqual(newWaves, 6)
+        XCTAssertLessThan(newWaves, previousWaves)
     }
 
     func testPreparedChunkSchedulerKeepsOneWindowReadyWithoutUnboundedPreparation() async throws {
@@ -5914,6 +5989,8 @@ final class ForgeCompanionTests: XCTestCase {
                 totalBytesSent: 2_097_152,
                 currentBytesPerSecond: 524_288,
                 averageBytesPerSecond: 262_144,
+                scheduledCurrentBytesPerSecond: 786_432,
+                scheduledAverageBytesPerSecond: 393_216,
                 uploadedChunks: 8,
                 uploadedRecords: 512,
                 skippedChunks: 1,
@@ -5942,8 +6019,9 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
         XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting transport reply"))
         XCTAssertTrue(status.transferSummary.contains("session"))
-        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s average") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Phone queued 768.0 KB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s queued avg") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge stored 512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("2/6 requests awaiting transport") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
@@ -5975,6 +6053,8 @@ final class ForgeCompanionTests: XCTestCase {
                 totalBytesSent: 177_700,
                 currentBytesPerSecond: 0,
                 averageBytesPerSecond: 1_100,
+                scheduledCurrentBytesPerSecond: 0,
+                scheduledAverageBytesPerSecond: 1_100,
                 uploadedChunks: 4,
                 uploadedRecords: 10,
                 skippedChunks: 0,
@@ -6017,6 +6097,8 @@ final class ForgeCompanionTests: XCTestCase {
                 totalBytesSent: 177_700,
                 currentBytesPerSecond: 0,
                 averageBytesPerSecond: 1_100,
+                scheduledCurrentBytesPerSecond: 1_572_300,
+                scheduledAverageBytesPerSecond: 8_000,
                 uploadedChunks: 4,
                 uploadedRecords: 10,
                 skippedChunks: 0,
@@ -6036,7 +6118,8 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Phone queued 1.5 MB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge stored 0 B/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("Iroh bridge") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 30s") == true)
