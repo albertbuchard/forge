@@ -1,5 +1,5 @@
-Forge Companion 1.0.119 reduces foreground HealthKit sync round trips over the Iroh bridge and makes sync speed easier to read.
+Forge Companion 1.0.120 removes a client-side bottleneck from foreground HealthKit sync over the Iroh bridge.
 
-Foreground Iroh workout evidence chunks now target 2 MB instead of 1 MB. In the unit model for 100,000 workout time-series records, that cuts chunks from 65 to 32 and upload waves from 11 to 6 with the six-request foreground window.
+The embedded Iroh client runtime now has six worker threads to match the six-request foreground HealthKit upload window. That keeps concurrent workout evidence streams from being squeezed through the previous two-worker client runtime.
 
-The sync panel now separates phone-side queued speed from Forge-side stored speed, so long transport waits are not mislabeled as slow Forge processing. Background uploads remain serialized and durable.
+This release keeps the 2 MB foreground Iroh chunks and the clearer sync-speed panel from 1.0.119. HealthKit cursors, upload checkpoints, pairing state, and background upload behavior are unchanged.

@@ -17,6 +17,9 @@ pub mod protocol;
 const MAX_FRAME_BYTES: usize = 50 * 1024 * 1024;
 const IROH_CLIENT_TIMING_HEADER: &str = "x-forge-iroh-client-timing-ms";
 const IROH_CLIENT_CONNECTION_REUSED_HEADER: &str = "x-forge-iroh-client-connection-reused";
+const FFI_RUNTIME_WORKER_THREADS: usize = 6;
+#[cfg(test)]
+const FOREGROUND_HEALTH_SYNC_STREAMS: usize = 6;
 
 struct FfiIrohState {
     runtime: tokio::runtime::Runtime,
@@ -54,7 +57,7 @@ fn ffi_state() -> Result<&'static FfiIrohState, String> {
 impl FfiIrohState {
     fn new() -> Result<Self, String> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
+            .worker_threads(FFI_RUNTIME_WORKER_THREADS)
             .enable_all()
             .build()
             .map_err(|error| format!("building Forge Iroh runtime: {error}"))?;
@@ -522,6 +525,14 @@ mod tests {
         assert_eq!(
             timing.to_header_value(),
             "reused=1,total=15,connection=1,openStream=2,bridgeAck=3,writeRequest=4,responseWait=5"
+        );
+    }
+
+    #[test]
+    fn ffi_runtime_keeps_up_with_foreground_health_sync_window() {
+        assert!(
+            FFI_RUNTIME_WORKER_THREADS >= FOREGROUND_HEALTH_SYNC_STREAMS,
+            "Iroh FFI runtime workers should not be narrower than foreground HealthKit streams"
         );
     }
 }
