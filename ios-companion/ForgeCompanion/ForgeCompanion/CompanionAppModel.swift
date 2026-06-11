@@ -3148,6 +3148,11 @@ final class CompanionAppModel: ObservableObject {
         case .preparing:
             healthSyncTransferPreparingFamily = event.preparingFamily ?? event.family
             healthSyncTransferPreparingStartedAt = Date()
+        case .preparationFinished:
+            if healthSyncTransferPreparingFamily == event.family {
+                healthSyncTransferPreparingFamily = nil
+                healthSyncTransferPreparingStartedAt = nil
+            }
         case .scheduled:
             if healthSyncTransferPreparingFamily == event.family {
                 healthSyncTransferPreparingFamily = nil

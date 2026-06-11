@@ -839,6 +839,7 @@ struct ForgeSyncClient {
 
     enum HealthSyncChunkUploadPhase {
         case preparing
+        case preparationFinished
         case scheduled
         case accepted
         case skipped
@@ -1475,6 +1476,37 @@ struct ForgeSyncClient {
             HealthSyncChunkUploadEvent(
                 phase: .preparing,
                 chunkId: "\(uploadSession.syncSessionId)-preparing-\(family)-\(sequence)",
+                family: family,
+                sequence: sequence,
+                recordCount: 0,
+                byteCount: 0,
+                compressedByteCount: nil,
+                duplicate: false,
+                skipped: false,
+                receivedCount: nil,
+                receivedBytes: nil,
+                uploadWindow: Self.healthSyncChunkUploadConcurrency(
+                    pairing: pairing,
+                    useBackgroundUpload: useBackgroundUpload
+                ),
+                serverProcessingMs: nil,
+                preparingFamily: family
+            )
+        )
+    }
+
+    private func notifyHealthSyncChunkPreparationFinished(
+        family: String,
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        sequence: Int,
+        useBackgroundUpload: Bool,
+        onChunkUploaded: HealthSyncChunkUploadHandler?
+    ) async {
+        await onChunkUploaded?(
+            HealthSyncChunkUploadEvent(
+                phase: .preparationFinished,
+                chunkId: "\(uploadSession.syncSessionId)-prepared-\(family)-\(sequence)",
                 family: family,
                 sequence: sequence,
                 recordCount: 0,
@@ -2209,7 +2241,7 @@ struct ForgeSyncClient {
                 producer.cancel()
             }
         }
-        return try await uploadStreamingHealthSyncChunks(
+        let nextSequence = try await uploadStreamingHealthSyncChunks(
             chunkStream,
             uploadSession: uploadSession,
             pairing: pairing,
@@ -2217,6 +2249,15 @@ struct ForgeSyncClient {
             useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
+        await notifyHealthSyncChunkPreparationFinished(
+            family: "workout_time_series",
+            uploadSession: uploadSession,
+            pairing: pairing,
+            sequence: nextSequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
+        return nextSequence
     }
 
     private func uploadChunkedWorkoutRoutes(
@@ -2305,7 +2346,7 @@ struct ForgeSyncClient {
                 producer.cancel()
             }
         }
-        return try await uploadStreamingHealthSyncChunks(
+        let nextSequence = try await uploadStreamingHealthSyncChunks(
             chunkStream,
             uploadSession: uploadSession,
             pairing: pairing,
@@ -2313,6 +2354,15 @@ struct ForgeSyncClient {
             useBackgroundUpload: useBackgroundUpload,
             onChunkUploaded: onChunkUploaded
         )
+        await notifyHealthSyncChunkPreparationFinished(
+            family: "workout_routes",
+            uploadSession: uploadSession,
+            pairing: pairing,
+            sequence: nextSequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
+        return nextSequence
     }
 
     private func workoutSummaryChunkRecordLimit(
