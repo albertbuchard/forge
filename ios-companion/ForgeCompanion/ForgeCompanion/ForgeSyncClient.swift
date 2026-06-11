@@ -834,6 +834,7 @@ struct ForgeSyncClient {
         let receivedCount: Int
         let receivedBytes: Int
         let progress: HealthSyncChunkProgress?
+        let serverProcessingMs: Int?
     }
 
     enum HealthSyncChunkUploadPhase {
@@ -856,6 +857,7 @@ struct ForgeSyncClient {
         let receivedCount: Int?
         let receivedBytes: Int?
         let uploadWindow: Int
+        let serverProcessingMs: Int?
 
         init(
             phase: HealthSyncChunkUploadPhase = .accepted,
@@ -869,7 +871,8 @@ struct ForgeSyncClient {
             skipped: Bool,
             receivedCount: Int?,
             receivedBytes: Int?,
-            uploadWindow: Int = 1
+            uploadWindow: Int = 1,
+            serverProcessingMs: Int? = nil
         ) {
             self.phase = phase
             self.chunkId = chunkId
@@ -883,6 +886,7 @@ struct ForgeSyncClient {
             self.receivedCount = receivedCount
             self.receivedBytes = receivedBytes
             self.uploadWindow = uploadWindow
+            self.serverProcessingMs = serverProcessingMs
         }
 
         var transferByteCount: Int {
@@ -2519,7 +2523,8 @@ struct ForgeSyncClient {
                     uploadWindow: Self.healthSyncChunkUploadConcurrency(
                         pairing: pairing,
                         useBackgroundUpload: useBackgroundUpload
-                    )
+                    ),
+                    serverProcessingMs: nil
                 )
             )
             return sequence + 1
@@ -2550,7 +2555,8 @@ struct ForgeSyncClient {
                 skipped: false,
                 receivedCount: nil,
                 receivedBytes: nil,
-                uploadWindow: uploadWindow
+                uploadWindow: uploadWindow,
+                serverProcessingMs: nil
             )
         )
         let envelope: HealthSyncChunkEnvelope
@@ -2592,7 +2598,8 @@ struct ForgeSyncClient {
                     skipped: false,
                     receivedCount: nil,
                     receivedBytes: nil,
-                    uploadWindow: uploadWindow
+                    uploadWindow: uploadWindow,
+                    serverProcessingMs: nil
                 )
             )
             throw Self.healthSyncChunkUploadError(
@@ -2621,7 +2628,8 @@ struct ForgeSyncClient {
                 skipped: false,
                 receivedCount: envelope.chunk.receivedCount,
                 receivedBytes: envelope.chunk.receivedBytes,
-                uploadWindow: uploadWindow
+                uploadWindow: uploadWindow,
+                serverProcessingMs: envelope.chunk.serverProcessingMs
             )
         )
         return sequence + 1

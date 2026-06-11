@@ -209,8 +209,14 @@ struct CompanionHistoricalWorkoutImportPanel: View {
                 metricRow("Uploaded", value: presentation.uploadedLabel, systemName: "arrow.up.circle")
                 metricRow("Evidence", value: presentation.evidenceLabel, systemName: "waveform.path.ecg")
                 metricRow("Routes", value: presentation.routeLabel, systemName: "map")
+                if let pipelineSummary = status.pipelineSummary {
+                    metricRow("Pipeline", value: pipelineSummary, systemName: "point.3.connected.trianglepath.dotted")
+                }
                 if let speedSummary = status.speedSummary {
                     metricRow("Speed", value: speedSummary, systemName: "speedometer")
+                }
+                if let forgeProcessingSummary = status.forgeProcessingSummary {
+                    metricRow("Forge", value: forgeProcessingSummary, systemName: "server.rack")
                 }
                 metricRow("Transfer", value: status.transferSummary, systemName: "externaldrive")
             }

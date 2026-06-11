@@ -362,8 +362,14 @@ struct CompanionSettingsSheet: View {
             }
 
             detailRow(syncInFlight ? "Uploading" : "Prepared", value: status.uploadSummary)
+            if let pipelineSummary = status.pipelineSummary {
+                detailRow("Pipeline", value: pipelineSummary)
+            }
             if let speedSummary = status.speedSummary {
                 detailRow("Speed", value: speedSummary)
+            }
+            if let forgeProcessingSummary = status.forgeProcessingSummary {
+                detailRow("Forge", value: forgeProcessingSummary)
             }
             detailRow("Transfer", value: status.transferSummary)
         }

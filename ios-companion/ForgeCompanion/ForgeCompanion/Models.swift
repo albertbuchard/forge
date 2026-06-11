@@ -1064,6 +1064,7 @@ struct SyncTransferStats: Equatable {
     let inFlightChunks: Int
     let uploadWindow: Int
     let secondsSinceLastChunk: Int?
+    let lastServerProcessingMs: Int?
 }
 
 enum CompanionSyncMode: Equatable {
@@ -1201,9 +1202,36 @@ struct CompanionSyncUploadStatus {
         }
         if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
            secondsSinceLastChunk >= 3 {
-            parts.append("\(secondsSinceLastChunk)s since ack")
+            parts.append("\(secondsSinceLastChunk)s since last Forge reply")
         }
         return parts.joined(separator: " • ")
+    }
+
+    var pipelineSummary: String? {
+        guard let transferStats else {
+            return isSyncing ? "Preparing HealthKit records and upload chunks" : nil
+        }
+        if transferStats.inFlightChunks > 0 {
+            return "Waiting for Forge to accept \(transferStats.inFlightChunks) active chunk\(transferStats.inFlightChunks == 1 ? "" : "s")"
+        }
+        if transferStats.scheduledChunks > transferStats.uploadedChunks + transferStats.skippedChunks {
+            let waiting = transferStats.scheduledChunks - transferStats.uploadedChunks - transferStats.skippedChunks
+            return "Waiting on \(waiting) scheduled chunk\(waiting == 1 ? "" : "s")"
+        }
+        if isSyncing {
+            return "Preparing the next HealthKit chunk"
+        }
+        return nil
+    }
+
+    var forgeProcessingSummary: String? {
+        guard let milliseconds = transferStats?.lastServerProcessingMs else {
+            return nil
+        }
+        if milliseconds >= 1000 {
+            return "Forge spent \(String(format: "%.1f", Double(milliseconds) / 1000))s on the last chunk"
+        }
+        return "Forge spent \(milliseconds) ms on the last chunk"
     }
 
     private static func shortSessionId(_ value: String) -> String {

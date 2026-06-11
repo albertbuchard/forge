@@ -833,6 +833,7 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferInFlightChunks = 0
     private var healthSyncTransferUploadWindow = 1
     private var healthSyncTransferLastChunkAt: Date?
+    private var healthSyncTransferLastServerProcessingMs: Int?
     private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
@@ -3094,6 +3095,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferInFlightChunks = 0
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
+        healthSyncTransferLastServerProcessingMs = nil
         publishHealthSyncTransferStats(now: now)
         healthSyncTransferTickerTask = Task { [weak self] in
             while Task.isCancelled == false {
@@ -3121,6 +3123,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferInFlightChunks = 0
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
+        healthSyncTransferLastServerProcessingMs = nil
         healthSyncTransferStats = nil
     }
 
@@ -3152,6 +3155,7 @@ final class CompanionAppModel: ObservableObject {
             healthSyncTransferUploadedChunks += 1
             healthSyncTransferUploadedRecords += event.recordCount
             healthSyncTransferLastChunkAt = Date()
+            healthSyncTransferLastServerProcessingMs = event.serverProcessingMs
         case .skipped:
             updateActiveHealthSyncCheckpointProgress(
                 chunkCount: event.receivedCount,
@@ -3265,7 +3269,8 @@ final class CompanionAppModel: ObservableObject {
             scheduledChunks: healthSyncTransferScheduledChunks,
             inFlightChunks: healthSyncTransferInFlightChunks,
             uploadWindow: healthSyncTransferUploadWindow,
-            secondsSinceLastChunk: secondsSinceLastChunk
+            secondsSinceLastChunk: secondsSinceLastChunk,
+            lastServerProcessingMs: healthSyncTransferLastServerProcessingMs
         )
     }
 

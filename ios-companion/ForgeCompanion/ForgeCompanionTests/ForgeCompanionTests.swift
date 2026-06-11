@@ -5610,7 +5610,8 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledChunks: 10,
                 inFlightChunks: 2,
                 uploadWindow: 6,
-                secondsSinceLastChunk: 4
+                secondsSinceLastChunk: 4,
+                lastServerProcessingMs: 1_240
             ),
             historicalWorkoutImport: nil
         )
@@ -5626,7 +5627,10 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s avg") == true)
         XCTAssertTrue(status.speedSummary?.contains("2/6 in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("4s since ack") == true)
+        XCTAssertTrue(status.speedSummary?.contains("4s since last Forge reply") == true)
+        XCTAssertFalse(status.speedSummary?.contains("ack") == true)
+        XCTAssertEqual(status.pipelineSummary, "Waiting for Forge to accept 2 active chunks")
+        XCTAssertEqual(status.forgeProcessingSummary, "Forge spent 1.2s on the last chunk")
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {

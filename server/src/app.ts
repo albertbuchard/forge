@@ -10659,15 +10659,20 @@ export async function buildServer(
     { bodyLimit: 40_000_000 },
     async (request) => {
       const { id } = request.params as { id: string };
+      const startedAt = performance.now();
       const rawPayloadJson = JSON.stringify(
         ((request.body ?? {}) as { payload?: unknown }).payload ?? {}
       );
+      const chunk = ingestMobileHealthSyncChunk(
+        id,
+        mobileHealthSyncChunkSchema.parse(request.body ?? {}),
+        rawPayloadJson
+      );
       return {
-        chunk: ingestMobileHealthSyncChunk(
-          id,
-          mobileHealthSyncChunkSchema.parse(request.body ?? {}),
-          rawPayloadJson
-        )
+        chunk: {
+          ...chunk,
+          serverProcessingMs: Math.max(0, Math.round(performance.now() - startedAt))
+        }
       };
     }
   );
