@@ -417,7 +417,7 @@ struct ForgeSyncClient {
     static let irohHealthSyncChunkTargetBytes = 1_000_000
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
     static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
-    static let foregroundIrohHealthSyncChunkUploadConcurrency = 3
+    static let foregroundIrohHealthSyncChunkUploadConcurrency = 6
     static let foregroundHealthSyncChunkUploadConcurrency = 6
     static let foregroundHealthSyncPreparedChunkPrefetchWindows = 2
     static let foregroundHTTPMaximumConnectionsPerHost = 6

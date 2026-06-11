@@ -5746,10 +5746,40 @@ final class ForgeCompanionTests: XCTestCase {
         )
         let foregroundWaveBudgetBytes = foregroundConcurrency * ForgeSyncClient.irohHealthSyncChunkTargetBytes
 
-        XCTAssertEqual(foregroundConcurrency, 3)
-        XCTAssertEqual(foregroundPreparedLimit, 6)
-        XCTAssertEqual(foregroundWaveBudgetBytes, 3_000_000)
-        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 6)
+        XCTAssertEqual(foregroundConcurrency, 6)
+        XCTAssertEqual(foregroundPreparedLimit, 12)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 6_000_000)
+        XCTAssertEqual(foregroundWaveBudgetBytes / previousSerializedBudgetBytes, 12)
+    }
+
+    func testForegroundIrohHealthSyncDoublesPreviousThreeRequestWave() async throws {
+        let oldForegroundIrohWindow = 3
+        let chunkCount = 18
+        let oldMetrics = try await ForgeSyncClient.preparedChunkSchedulerMetricsForTesting(
+            totalChunks: chunkCount,
+            concurrency: oldForegroundIrohWindow,
+            prefetchLimit: oldForegroundIrohWindow * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
+        )
+        let newMetrics = try await ForgeSyncClient.preparedChunkSchedulerMetricsForTesting(
+            totalChunks: chunkCount,
+            concurrency: ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency,
+            prefetchLimit: ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
+                * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
+        )
+
+        XCTAssertEqual(oldMetrics.scheduledBeforeFirstCompletion, oldForegroundIrohWindow)
+        XCTAssertEqual(
+            newMetrics.scheduledBeforeFirstCompletion,
+            ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertEqual(
+            Int(ceil(Double(chunkCount) / Double(oldForegroundIrohWindow))),
+            6
+        )
+        XCTAssertEqual(
+            Int(ceil(Double(chunkCount) / Double(ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency))),
+            3
+        )
     }
 
     func testPreparedChunkSchedulerKeepsOneWindowReadyWithoutUnboundedPreparation() async throws {
