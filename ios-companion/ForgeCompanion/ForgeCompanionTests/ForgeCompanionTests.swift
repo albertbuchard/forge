@@ -5611,7 +5611,9 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 2,
                 uploadWindow: 6,
                 secondsSinceLastChunk: 4,
-                lastServerProcessingMs: 1_240
+                lastServerProcessingMs: 1_240,
+                preparingFamily: nil,
+                secondsPreparing: nil
             ),
             historicalWorkoutImport: nil
         )
@@ -5631,6 +5633,43 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(status.pipelineSummary, "Waiting for Forge to accept 2 active chunks")
         XCTAssertEqual(status.forgeProcessingSummary, "Forge spent 1.2s on the last chunk")
+    }
+
+    func testSyncUploadStatusExplainsPhoneSideChunkPreparation() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Uploading recent workouts 10/10",
+            payloadSummary: nil,
+            lastChunkFamily: "workout_summaries",
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_prepare",
+            transferStats: SyncTransferStats(
+                totalBytesSent: 177_700,
+                currentBytesPerSecond: 0,
+                averageBytesPerSecond: 1_100,
+                uploadedChunks: 4,
+                uploadedRecords: 10,
+                skippedChunks: 0,
+                scheduledChunks: 4,
+                inFlightChunks: 0,
+                uploadWindow: 6,
+                secondsSinceLastChunk: 30,
+                lastServerProcessingMs: 18,
+                preparingFamily: "workout_time_series",
+                secondsPreparing: 12
+            ),
+            historicalWorkoutImport: nil
+        )
+
+        XCTAssertTrue(status.speedSummary?.contains("preparing workout time series") == true)
+        XCTAssertTrue(status.speedSummary?.contains("30s since last Forge reply") == true)
+        XCTAssertEqual(
+            status.pipelineSummary,
+            "Preparing workout time series chunks on the phone for 12s"
+        )
+        XCTAssertFalse(status.pipelineSummary?.contains("Forge to accept") == true)
+        XCTAssertFalse(status.speedSummary?.contains("ack") == true)
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {
