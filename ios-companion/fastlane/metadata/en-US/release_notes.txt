@@ -1,5 +1,5 @@
-Forge Companion 1.0.122 makes HealthKit sync progress clearer when HealthKit chunks are already sent but still waiting for a network reply.
+Forge Companion 1.0.123 improves foreground HealthKit sync throughput when the phone is connected to Forge through both Tailscale/direct HTTP and Iroh.
 
-The sync panel now uses the actual per-chunk route label. Bulk uploads over a Tailscale URL are shown as Tailscale direct, and Iroh is shown only when the request really uses Iroh or falls back to it.
+Foreground workout evidence uploads now use larger chunks, a wider upload window, and a deeper prepared-chunk queue so the phone can keep more packets ready while Forge replies.
 
-The wording no longer says Forge is the blocker for every outstanding request. It separates phone queueing, network replies, Forge acceptance rate, and Forge server processing time. HealthKit cursors, upload checkpoints, pairing state, and upload behavior are unchanged.
+If the direct bulk route stalls while Iroh is available, the app now falls back much sooner instead of letting upload slots wait for tens of seconds. HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
