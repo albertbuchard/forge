@@ -439,11 +439,23 @@ struct ForgeSyncClient {
         return appIsForegroundActive == false
     }
 
+    private static func effectiveUseBackgroundUploadForHealthSyncChunk(
+        requestedBackgroundUpload: Bool,
+        appIsForegroundActive: Bool
+    ) -> Bool {
+        requestedBackgroundUpload && appIsForegroundActive == false
+    }
+
     static func healthSyncChunkUploadConcurrency(
         pairing: PairingPayload,
-        useBackgroundUpload: Bool
+        useBackgroundUpload: Bool,
+        appIsForegroundActive: Bool = UIApplication.shared.applicationState == .active
     ) -> Int {
-        if useBackgroundUpload || pairing.transport?.isIrohTransport == true {
+        let effectiveUseBackgroundUpload = effectiveUseBackgroundUploadForHealthSyncChunk(
+            requestedBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
+        )
+        if effectiveUseBackgroundUpload || pairing.transport?.isIrohTransport == true {
             return 1
         }
         return foregroundHealthSyncChunkUploadConcurrency
@@ -451,14 +463,20 @@ struct ForgeSyncClient {
 
     static func healthSyncPreparedChunkPrefetchLimit(
         pairing: PairingPayload,
-        useBackgroundUpload: Bool
+        useBackgroundUpload: Bool,
+        appIsForegroundActive: Bool = UIApplication.shared.applicationState == .active
     ) -> Int {
-        guard useBackgroundUpload == false, pairing.transport?.isIrohTransport != true else {
+        let effectiveUseBackgroundUpload = effectiveUseBackgroundUploadForHealthSyncChunk(
+            requestedBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
+        )
+        guard effectiveUseBackgroundUpload == false, pairing.transport?.isIrohTransport != true else {
             return 0
         }
         return healthSyncChunkUploadConcurrency(
             pairing: pairing,
-            useBackgroundUpload: useBackgroundUpload
+            useBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
         ) * foregroundHealthSyncPreparedChunkPrefetchWindows
     }
 
@@ -2673,11 +2691,23 @@ struct ForgeSyncClient {
 
     static func healthSyncPreparedChunkPrefetchLimitForTesting(
         pairing: PairingPayload,
-        useBackgroundUpload: Bool = false
+        useBackgroundUpload: Bool = false,
+        appIsForegroundActive: Bool = true
     ) -> Int {
         healthSyncPreparedChunkPrefetchLimit(
             pairing: pairing,
-            useBackgroundUpload: useBackgroundUpload
+            useBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
+        )
+    }
+
+    static func effectiveUseBackgroundUploadForTesting(
+        requestedBackgroundUpload: Bool,
+        appIsForegroundActive: Bool
+    ) -> Bool {
+        effectiveUseBackgroundUploadForHealthSyncChunk(
+            requestedBackgroundUpload: requestedBackgroundUpload,
+            appIsForegroundActive: appIsForegroundActive
         )
     }
 
@@ -3001,9 +3031,13 @@ struct ForgeSyncClient {
             compress: uploadSession.supportsCompression,
             checksumSha256: checksumSha256
         )
+        let effectiveUseBackgroundUpload = Self.effectiveUseBackgroundUploadForHealthSyncChunk(
+            requestedBackgroundUpload: useBackgroundUpload,
+            appIsForegroundActive: UIApplication.shared.applicationState == .active
+        )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(useBackgroundUpload ? "urlsession-background" : "urlsession-foreground")"
+            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(effectiveUseBackgroundUpload ? "urlsession-background" : "urlsession-foreground") requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         let uploadWindow = Self.healthSyncChunkUploadConcurrency(
             pairing: pairing,
@@ -3044,7 +3078,7 @@ struct ForgeSyncClient {
                 ),
                 transport: pairing.transport,
                 timeoutInterval: 120,
-                useBackgroundUpload: useBackgroundUpload
+                useBackgroundUpload: effectiveUseBackgroundUpload
             )
         } catch {
             let nsError = error as NSError

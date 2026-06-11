@@ -5414,9 +5414,30 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(
             ForgeSyncClient.healthSyncChunkUploadConcurrency(
                 pairing: httpPayload,
-                useBackgroundUpload: true
+                useBackgroundUpload: true,
+                appIsForegroundActive: false
             ),
             1
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: httpPayload,
+                useBackgroundUpload: true,
+                appIsForegroundActive: true
+            ),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertFalse(
+            ForgeSyncClient.effectiveUseBackgroundUploadForTesting(
+                requestedBackgroundUpload: true,
+                appIsForegroundActive: true
+            )
+        )
+        XCTAssertTrue(
+            ForgeSyncClient.effectiveUseBackgroundUploadForTesting(
+                requestedBackgroundUpload: true,
+                appIsForegroundActive: false
+            )
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncChunkUploadConcurrency(
@@ -5618,9 +5639,18 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
                 pairing: httpPayload,
-                useBackgroundUpload: true
+                useBackgroundUpload: true,
+                appIsForegroundActive: false
             ),
             0
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
+                pairing: httpPayload,
+                useBackgroundUpload: true,
+                appIsForegroundActive: true
+            ),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: irohPayload),

@@ -1,5 +1,5 @@
-Forge Companion 1.0.107 keeps HealthKit workout uploads moving more aggressively.
+Forge Companion 1.0.108 keeps foreground HealthKit uploads moving more aggressively.
 
-Workout evidence upload now warms the next family of chunks while the current family is still uploading, reducing dead time between workout summaries, heart-rate/time-series evidence, and route evidence.
+If a HealthKit sync starts in the background and you open the app, Forge now switches active HTTP chunk uploads back to the faster foreground URLSession path instead of staying stuck on the one-at-a-time background transfer lane.
 
-The upload planner keeps chunk sequence IDs stable for resume while preparing only bounded evidence chunks, so failed or interrupted syncs can still continue from Forge's accepted chunks.
+Foregrounded HTTP syncs can use the full prepared-chunk upload window again while keeping conservative background-sized chunk boundaries for resume safety.
