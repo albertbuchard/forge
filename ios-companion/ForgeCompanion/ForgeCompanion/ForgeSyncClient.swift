@@ -415,6 +415,8 @@ struct ForgeSyncClient {
     static let httpBackgroundHealthSyncChunkingVersion = "http-background-v6-content-addressed-base"
     static let irohHealthSyncChunkingVersion = "iroh-v7-balanced-content-addressed-base"
     static let irohHealthSyncChunkTargetBytes = 500_000
+    static let foregroundHealthSyncChunkUploadConcurrency = 4
+    static let foregroundHTTPMaximumConnectionsPerHost = 6
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
     private static let healthSyncMinimumCompressionBytes = 256
@@ -432,6 +434,16 @@ struct ForgeSyncClient {
         appIsForegroundActive: Bool
     ) -> Bool {
         return appIsForegroundActive == false
+    }
+
+    static func healthSyncChunkUploadConcurrency(
+        pairing: PairingPayload,
+        useBackgroundUpload: Bool
+    ) -> Int {
+        if useBackgroundUpload || pairing.transport?.isIrohTransport == true {
+            return 1
+        }
+        return foregroundHealthSyncChunkUploadConcurrency
     }
 
     static func shouldFallbackFromIrohToUrlSessionForTesting(
@@ -456,6 +468,7 @@ struct ForgeSyncClient {
         configuration.timeoutIntervalForRequest = 12
         configuration.timeoutIntervalForResource = 20
         configuration.waitsForConnectivity = true
+        configuration.httpMaximumConnectionsPerHost = foregroundHTTPMaximumConnectionsPerHost
         return URLSession(configuration: configuration)
     }()
 
@@ -887,6 +900,14 @@ struct ForgeSyncClient {
     private struct HealthSyncPreparedChunkRange {
         let range: Range<Int>
         let payloadData: Data
+    }
+
+    private struct PreparedHealthSyncChunkUpload {
+        let sequence: Int
+        let family: String
+        let recordCount: Int
+        let payloadData: Data
+        let chunkId: String?
     }
 
     private struct HealthSyncSessionCompleteRequest: Encodable {
@@ -1619,20 +1640,98 @@ struct ForgeSyncClient {
         ) { range in
             try Self.healthSyncChunkPayloadData(makePayload(Array(records[range])))
         }
-        for preparedRange in preparedRanges {
-            let range = preparedRange.range
-            sequence = try await uploadHealthSyncChunk(
-                uploadSession: uploadSession,
-                pairing: pairing,
-                sequence: sequence,
+        let chunks = preparedRanges.enumerated().map { offset, preparedRange in
+            PreparedHealthSyncChunkUpload(
+                sequence: sequence + offset,
                 family: family,
-                recordCount: range.count,
+                recordCount: preparedRange.range.count,
                 payloadData: preparedRange.payloadData,
-                useBackgroundUpload: useBackgroundUpload,
-                onChunkUploaded: onChunkUploaded
+                chunkId: nil
             )
         }
-        return sequence
+        return try await uploadPreparedHealthSyncChunks(
+            chunks,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: sequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
+    }
+
+    private func uploadPreparedHealthSyncChunks(
+        _ chunks: [PreparedHealthSyncChunkUpload],
+        uploadSession: HealthSyncUploadSession,
+        pairing: PairingPayload,
+        startingSequence: Int,
+        useBackgroundUpload: Bool,
+        onChunkUploaded: HealthSyncChunkUploadHandler?
+    ) async throws -> Int {
+        guard chunks.isEmpty == false else {
+            return startingSequence
+        }
+        let concurrency = Self.healthSyncChunkUploadConcurrency(
+            pairing: pairing,
+            useBackgroundUpload: useBackgroundUpload
+        )
+        guard concurrency > 1, chunks.count > 1 else {
+            var sequence = startingSequence
+            for chunk in chunks {
+                sequence = try await uploadHealthSyncChunk(
+                    uploadSession: uploadSession,
+                    pairing: pairing,
+                    sequence: chunk.sequence,
+                    family: chunk.family,
+                    recordCount: chunk.recordCount,
+                    payloadData: chunk.payloadData,
+                    chunkId: chunk.chunkId,
+                    useBackgroundUpload: useBackgroundUpload,
+                    onChunkUploaded: onChunkUploaded
+                )
+            }
+            return sequence
+        }
+
+        companionDebugLog(
+            "ForgeSyncClient",
+            "uploadHealthSyncChunks concurrent start count=\(chunks.count) window=\(concurrency) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession")"
+        )
+        var iterator = chunks.makeIterator()
+        var scheduledCount = 0
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            func scheduleNext() {
+                guard let chunk = iterator.next() else {
+                    return
+                }
+                scheduledCount += 1
+                group.addTask { [self] in
+                    _ = try await uploadHealthSyncChunk(
+                        uploadSession: uploadSession,
+                        pairing: pairing,
+                        sequence: chunk.sequence,
+                        family: chunk.family,
+                        recordCount: chunk.recordCount,
+                        payloadData: chunk.payloadData,
+                        chunkId: chunk.chunkId,
+                        useBackgroundUpload: useBackgroundUpload,
+                        onChunkUploaded: onChunkUploaded
+                    )
+                }
+            }
+
+            let initialWindow = min(concurrency, chunks.count)
+            for _ in 0..<initialWindow {
+                scheduleNext()
+            }
+            while try await group.next() != nil {
+                scheduleNext()
+            }
+        }
+        companionDebugLog(
+            "ForgeSyncClient",
+            "uploadHealthSyncChunks concurrent complete count=\(chunks.count) scheduled=\(scheduledCount) nextSequence=\(startingSequence + chunks.count)"
+        )
+        return startingSequence + chunks.count
     }
 
     private func uploadMovementHealthSyncChunks(
@@ -1759,25 +1858,36 @@ struct ForgeSyncClient {
             return startingSequence
         }
         var sequence = startingSequence
+        var chunks: [PreparedHealthSyncChunkUpload] = []
         let recordLimit = workoutSummaryChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var lowerBound = 0
         while lowerBound < workouts.count {
             try Task.checkCancellation()
             let upperBound = min(workouts.count, lowerBound + recordLimit)
             let records = Array(workouts[lowerBound..<upperBound])
-            sequence = try await uploadHealthSyncChunk(
-                uploadSession: uploadSession,
-                pairing: pairing,
-                sequence: sequence,
-                family: "workout_summaries",
-                recordCount: records.count,
-                payload: WorkoutSummariesChunkPayload(workouts: records),
-                useBackgroundUpload: useBackgroundUpload,
-                onChunkUploaded: onChunkUploaded
+            let payloadData = try Self.healthSyncChunkPayloadData(
+                WorkoutSummariesChunkPayload(workouts: records)
             )
+            chunks.append(
+                PreparedHealthSyncChunkUpload(
+                    sequence: sequence,
+                    family: "workout_summaries",
+                    recordCount: records.count,
+                    payloadData: payloadData,
+                    chunkId: nil
+                )
+            )
+            sequence += 1
             lowerBound = upperBound
         }
-        return sequence
+        return try await uploadPreparedHealthSyncChunks(
+            chunks,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
     }
 
     private func uploadChunkedWorkoutTimeSeries(
@@ -1799,22 +1909,26 @@ struct ForgeSyncClient {
         let recordLimit = workoutTimeSeriesChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutTimeSeriesChunkPayload.Workout] = []
         var currentRecordCount = 0
+        var chunks: [PreparedHealthSyncChunkUpload] = []
 
-        func flushCurrent() async throws {
+        func flushCurrent() throws {
             guard currentEntries.isEmpty == false else { return }
             try Task.checkCancellation()
             let entries = currentEntries
             let recordCount = currentRecordCount
-            sequence = try await uploadHealthSyncChunk(
-                uploadSession: uploadSession,
-                pairing: pairing,
-                sequence: sequence,
-                family: "workout_time_series",
-                recordCount: recordCount,
-                payload: WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries),
-                useBackgroundUpload: useBackgroundUpload,
-                onChunkUploaded: onChunkUploaded
+            let payloadData = try Self.healthSyncChunkPayloadData(
+                WorkoutTimeSeriesChunkPayload(workoutTimeSeries: entries)
             )
+            chunks.append(
+                PreparedHealthSyncChunkUpload(
+                    sequence: sequence,
+                    family: "workout_time_series",
+                    recordCount: recordCount,
+                    payloadData: payloadData,
+                    chunkId: nil
+                )
+            )
+            sequence += 1
             currentEntries = []
             currentRecordCount = 0
         }
@@ -1824,7 +1938,7 @@ struct ForgeSyncClient {
             while lowerBound < workout.timeSeriesSamples.count {
                 try Task.checkCancellation()
                 if currentRecordCount >= recordLimit {
-                    try await flushCurrent()
+                    try flushCurrent()
                 }
                 let remainingCapacity = max(1, recordLimit - currentRecordCount)
                 let upperBound = min(workout.timeSeriesSamples.count, lowerBound + remainingCapacity)
@@ -1838,8 +1952,15 @@ struct ForgeSyncClient {
                 lowerBound = upperBound
             }
         }
-        try await flushCurrent()
-        return sequence
+        try flushCurrent()
+        return try await uploadPreparedHealthSyncChunks(
+            chunks,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
     }
 
     private func uploadChunkedWorkoutRoutes(
@@ -1861,22 +1982,26 @@ struct ForgeSyncClient {
         let recordLimit = workoutRouteChunkRecordLimit(uploadSession: uploadSession, pairing: pairing)
         var currentEntries: [WorkoutRoutesChunkPayload.Workout] = []
         var currentRecordCount = 0
+        var chunks: [PreparedHealthSyncChunkUpload] = []
 
-        func flushCurrent() async throws {
+        func flushCurrent() throws {
             guard currentEntries.isEmpty == false else { return }
             try Task.checkCancellation()
             let entries = currentEntries
             let recordCount = currentRecordCount
-            sequence = try await uploadHealthSyncChunk(
-                uploadSession: uploadSession,
-                pairing: pairing,
-                sequence: sequence,
-                family: "workout_routes",
-                recordCount: recordCount,
-                payload: WorkoutRoutesChunkPayload(workoutRoutes: entries),
-                useBackgroundUpload: useBackgroundUpload,
-                onChunkUploaded: onChunkUploaded
+            let payloadData = try Self.healthSyncChunkPayloadData(
+                WorkoutRoutesChunkPayload(workoutRoutes: entries)
             )
+            chunks.append(
+                PreparedHealthSyncChunkUpload(
+                    sequence: sequence,
+                    family: "workout_routes",
+                    recordCount: recordCount,
+                    payloadData: payloadData,
+                    chunkId: nil
+                )
+            )
+            sequence += 1
             currentEntries = []
             currentRecordCount = 0
         }
@@ -1886,7 +2011,7 @@ struct ForgeSyncClient {
             while lowerBound < workout.routePoints.count {
                 try Task.checkCancellation()
                 if currentRecordCount >= recordLimit {
-                    try await flushCurrent()
+                    try flushCurrent()
                 }
                 let remainingCapacity = max(1, recordLimit - currentRecordCount)
                 let upperBound = min(workout.routePoints.count, lowerBound + remainingCapacity)
@@ -1900,8 +2025,15 @@ struct ForgeSyncClient {
                 lowerBound = upperBound
             }
         }
-        try await flushCurrent()
-        return sequence
+        try flushCurrent()
+        return try await uploadPreparedHealthSyncChunks(
+            chunks,
+            uploadSession: uploadSession,
+            pairing: pairing,
+            startingSequence: startingSequence,
+            useBackgroundUpload: useBackgroundUpload,
+            onChunkUploaded: onChunkUploaded
+        )
     }
 
     private func workoutSummaryChunkRecordLimit(

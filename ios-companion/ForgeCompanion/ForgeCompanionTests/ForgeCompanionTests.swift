@@ -5155,6 +5155,27 @@ final class ForgeCompanionTests: XCTestCase {
                 appIsForegroundActive: false
             )
         )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: httpPayload,
+                useBackgroundUpload: false
+            ),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: httpPayload,
+                useBackgroundUpload: true
+            ),
+            1
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(
+                pairing: irohPayload,
+                useBackgroundUpload: false
+            ),
+            1
+        )
     }
 
     func testIrohHealthSyncUsesBalancedChunksMatchingHttpBackgroundUpload() {

@@ -1,5 +1,5 @@
-Forge Companion 1.0.96 improves HealthKit sync upload responsiveness.
+Forge Companion 1.0.97 improves foreground HealthKit sync throughput.
 
-Foreground HealthKit sync now uses the fast standard URLSession upload path instead of forcing every chunk through the iOS background-transfer scheduler.
+Foreground HealthKit sync can now keep several prepared HTTP chunks in flight instead of waiting for every chunk acknowledgement before starting the next upload.
 
-Background and inactive sync still keep the durable background upload path, while logs now show the selected chunk upload transport for easier diagnosis.
+Background and Iroh sync stay conservative, while the foreground HTTP path uses a larger connection window and logs the active upload window for diagnosis.
