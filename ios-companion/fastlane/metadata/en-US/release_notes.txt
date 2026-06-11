@@ -1,5 +1,5 @@
-Forge Companion 1.0.101 improves foreground HealthKit upload throughput.
+Forge Companion 1.0.102 improves foreground HealthKit evidence throughput.
 
-Foreground chunk uploads now use the full six-connection HTTP window instead of stopping at four concurrent chunks.
+Foreground HTTP sync now prepares larger HealthKit chunks so active uploads spend less time waiting on many small requests.
 
-Background and Iroh transfers remain conservative while active app sync can keep more prepared packets in flight.
+Background and Iroh transfers keep the conservative chunk size while active app sync can move more workout time-series and route evidence per request.
