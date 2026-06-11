@@ -1065,6 +1065,8 @@ struct SyncTransferStats: Equatable {
     let uploadWindow: Int
     let secondsSinceLastChunk: Int?
     let lastServerProcessingMs: Int?
+    let preparingFamily: String?
+    let secondsPreparing: Int?
 }
 
 enum CompanionSyncMode: Equatable {
@@ -1197,6 +1199,10 @@ struct CompanionSyncUploadStatus {
         } else if transferStats.inFlightChunks > 0 {
             parts.append("\(transferStats.inFlightChunks) in flight")
         }
+        if let preparingFamily = transferStats.preparingFamily,
+           transferStats.inFlightChunks == 0 {
+            parts.append("preparing \(preparingFamily.replacingOccurrences(of: "_", with: " "))")
+        }
         if transferStats.skippedChunks > 0 {
             parts.append("\(transferStats.skippedChunks) resumed")
         }
@@ -1213,6 +1219,13 @@ struct CompanionSyncUploadStatus {
         }
         if transferStats.inFlightChunks > 0 {
             return "Waiting for Forge to accept \(transferStats.inFlightChunks) active chunk\(transferStats.inFlightChunks == 1 ? "" : "s")"
+        }
+        if let preparingFamily = transferStats.preparingFamily {
+            let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
+            if let secondsPreparing = transferStats.secondsPreparing, secondsPreparing >= 3 {
+                return "Preparing \(familyLabel) chunks on the phone for \(secondsPreparing)s"
+            }
+            return "Preparing \(familyLabel) chunks on the phone"
         }
         if transferStats.scheduledChunks > transferStats.uploadedChunks + transferStats.skippedChunks {
             let waiting = transferStats.scheduledChunks - transferStats.uploadedChunks - transferStats.skippedChunks

@@ -834,6 +834,8 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferUploadWindow = 1
     private var healthSyncTransferLastChunkAt: Date?
     private var healthSyncTransferLastServerProcessingMs: Int?
+    private var healthSyncTransferPreparingFamily: String?
+    private var healthSyncTransferPreparingStartedAt: Date?
     private var backgroundRefreshTask: UIBackgroundTaskIdentifier = .invalid
     private var pendingRemoteSourceReconciliation: Set<CompanionSourceKey> = []
     private var lastAutoSyncAttemptAt: Date?
@@ -3096,6 +3098,8 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
+        healthSyncTransferPreparingFamily = nil
+        healthSyncTransferPreparingStartedAt = nil
         publishHealthSyncTransferStats(now: now)
         healthSyncTransferTickerTask = Task { [weak self] in
             while Task.isCancelled == false {
@@ -3124,6 +3128,8 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
+        healthSyncTransferPreparingFamily = nil
+        healthSyncTransferPreparingStartedAt = nil
         healthSyncTransferStats = nil
     }
 
@@ -3139,7 +3145,14 @@ final class CompanionAppModel: ObservableObject {
         lastHealthSyncPayloadBytes = event.transferByteCount
         healthSyncTransferUploadWindow = max(1, event.uploadWindow)
         switch event.phase {
+        case .preparing:
+            healthSyncTransferPreparingFamily = event.preparingFamily ?? event.family
+            healthSyncTransferPreparingStartedAt = Date()
         case .scheduled:
+            if healthSyncTransferPreparingFamily == event.family {
+                healthSyncTransferPreparingFamily = nil
+                healthSyncTransferPreparingStartedAt = nil
+            }
             healthSyncTransferScheduledChunks += 1
             healthSyncTransferInFlightChunks += 1
         case .accepted:
@@ -3259,6 +3272,9 @@ final class CompanionAppModel: ObservableObject {
         let secondsSinceLastChunk = healthSyncTransferLastChunkAt.map {
             max(0, Int(now.timeIntervalSince($0).rounded(.down)))
         }
+        let secondsPreparing = healthSyncTransferPreparingStartedAt.map {
+            max(0, Int(now.timeIntervalSince($0).rounded(.down)))
+        }
         healthSyncTransferStats = SyncTransferStats(
             totalBytesSent: healthSyncTransferBytesSent,
             currentBytesPerSecond: healthSyncTransferCurrentBytesPerSecond,
@@ -3270,7 +3286,9 @@ final class CompanionAppModel: ObservableObject {
             inFlightChunks: healthSyncTransferInFlightChunks,
             uploadWindow: healthSyncTransferUploadWindow,
             secondsSinceLastChunk: secondsSinceLastChunk,
-            lastServerProcessingMs: healthSyncTransferLastServerProcessingMs
+            lastServerProcessingMs: healthSyncTransferLastServerProcessingMs,
+            preparingFamily: healthSyncTransferPreparingFamily,
+            secondsPreparing: secondsPreparing
         )
     }
 
