@@ -3400,9 +3400,22 @@ final class CompanionAppModel: ObservableObject {
         let fallbackIsTailscale = Self.isTailscaleUrl(pairing.transport?.publicBaseUrl)
             || Self.isTailscaleUrl(pairing.apiBaseUrl)
         if pairing.transport?.isIrohTransport == true {
-            return fallbackIsTailscale ? "Iroh primary + Tailscale fallback" : "Iroh primary"
+            if fallbackIsTailscale {
+                return "Tailscale direct bulk + Iroh fallback"
+            }
+            let hasHttpFallback = Self.isHttpUrl(pairing.transport?.publicBaseUrl)
+                || Self.isHttpUrl(pairing.apiBaseUrl)
+            return hasHttpFallback ? "HTTP direct bulk + Iroh fallback" : "Iroh primary"
         }
         return fallbackIsTailscale ? "Tailscale direct" : "HTTP"
+    }
+
+    private static func isHttpUrl(_ rawValue: String?) -> Bool {
+        guard let rawValue,
+              let scheme = URL(string: rawValue)?.scheme?.lowercased() else {
+            return false
+        }
+        return scheme == "http" || scheme == "https"
     }
 
     private static func isTailscaleUrl(_ rawValue: String?) -> Bool {

@@ -498,6 +498,16 @@ struct ForgeSyncClient {
         return shouldFallbackFromIrohToUrlSession(apiBaseUrl: apiBaseUrl, error: error)
     }
 
+    static func healthSyncChunkTransportRouteForTesting(
+        pairing: PairingPayload,
+        preferDirectBulkTransfer: Bool
+    ) -> HealthSyncChunkTransportRoute {
+        healthSyncChunkTransportRoute(
+            pairing: pairing,
+            preferDirectBulkTransfer: preferDirectBulkTransfer
+        )
+    }
+
     private static let bootstrapSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieAcceptPolicy = .always
@@ -995,6 +1005,12 @@ struct ForgeSyncClient {
         let recordCount: Int
         let payloadData: Data
         let chunkId: String?
+    }
+
+    struct HealthSyncChunkTransportRoute: Equatable {
+        let apiBaseUrl: String
+        let usesIroh: Bool
+        let label: String
     }
 
     private struct WorkoutEvidenceChunkGenerator {
@@ -2966,9 +2982,13 @@ struct ForgeSyncClient {
             requestedBackgroundUpload: useBackgroundUpload,
             appIsForegroundActive: UIApplication.shared.applicationState == .active
         )
+        let transportRoute = Self.healthSyncChunkTransportRoute(
+            pairing: pairing,
+            preferDirectBulkTransfer: true
+        )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(effectiveUseBackgroundUpload ? "urlsession-background" : "urlsession-foreground") requestedBackgroundUpload=\(useBackgroundUpload)"
+            "uploadHealthSyncChunk prepared family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) checksumPrefix=\(String(wirePayload.checksumSha256.prefix(12))) transport=\(transportRoute.label) uploadTransport=\(effectiveUseBackgroundUpload && transportRoute.usesIroh == false ? "urlsession-background" : "urlsession-foreground") requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         let uploadWindow = Self.healthSyncChunkUploadConcurrency(
             pairing: pairing,
@@ -2992,12 +3012,15 @@ struct ForgeSyncClient {
                 transportTimingSummary: nil
             )
         )
-        let envelope: HealthSyncChunkEnvelope
-        var transportTimingSummary: String?
-        do {
-            envelope = try await sendRequest(
+        func sendChunk(
+            apiBaseUrl: String,
+            transport: PairingTransport?,
+            useBackgroundUpload: Bool
+        ) async throws -> (envelope: HealthSyncChunkEnvelope, transportTimingSummary: String?) {
+            var timingSummary: String?
+            let envelope: HealthSyncChunkEnvelope = try await sendRequest(
                 path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
-                apiBaseUrl: pairing.apiBaseUrl,
+                apiBaseUrl: apiBaseUrl,
                 body: HealthSyncChunkRequest(
                     chunkId: effectiveChunkId,
                     sequence: sequence,
@@ -3009,14 +3032,17 @@ struct ForgeSyncClient {
                     payloadJsonDeflateBase64: wirePayload.payloadJsonDeflateBase64,
                     payloadJsonBase64: wirePayload.payloadJsonBase64
                 ),
-                transport: pairing.transport,
+                transport: transport,
                 timeoutInterval: 120,
-                useBackgroundUpload: effectiveUseBackgroundUpload,
+                useBackgroundUpload: useBackgroundUpload,
                 responseHeaderObserver: { response in
-                    transportTimingSummary = Self.irohTransportTimingSummary(from: response)
+                    timingSummary = Self.irohTransportTimingSummary(from: response)
                 }
             )
-        } catch {
+            return (envelope, timingSummary)
+        }
+
+        func throwUploadFailure(_ error: Error) async throws -> Never {
             let nsError = error as NSError
             companionDebugLog(
                 "ForgeSyncClient",
@@ -3049,6 +3075,37 @@ struct ForgeSyncClient {
                 checksumSha256: wirePayload.checksumSha256
             )
         }
+
+        let uploadResult: (envelope: HealthSyncChunkEnvelope, transportTimingSummary: String?)
+        do {
+            uploadResult = try await sendChunk(
+                apiBaseUrl: transportRoute.apiBaseUrl,
+                transport: transportRoute.usesIroh ? pairing.transport : nil,
+                useBackgroundUpload: effectiveUseBackgroundUpload && transportRoute.usesIroh == false
+            )
+        } catch {
+            if transportRoute.usesIroh == false,
+               pairing.transport?.isIrohTransport == true,
+               Self.isRetryableUrlSessionTransferInterruption(error) {
+                companionDebugLog(
+                    "ForgeSyncClient",
+                    "uploadHealthSyncChunk direct route failed; retrying over Iroh fallback family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) route=\(transportRoute.apiBaseUrl) error=\((error as NSError).localizedDescription)"
+                )
+                do {
+                    uploadResult = try await sendChunk(
+                        apiBaseUrl: pairing.apiBaseUrl,
+                        transport: pairing.transport,
+                        useBackgroundUpload: false
+                    )
+                } catch {
+                    try await throwUploadFailure(error)
+                }
+            } else {
+                try await throwUploadFailure(error)
+            }
+        }
+        let envelope = uploadResult.envelope
+        let transportTimingSummary = uploadResult.transportTimingSummary
         companionDebugLog(
             "ForgeSyncClient",
             "uploadHealthSyncChunk accepted family=\(family) sequence=\(sequence) records=\(recordCount) bytes=\(wirePayload.byteCount) compressedBytes=\(wirePayload.compressedByteCount ?? 0) duplicate=\(envelope.chunk.duplicate) received=\(envelope.chunk.receivedCount)"
@@ -3874,6 +3931,125 @@ struct ForgeSyncClient {
 
         companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private static func healthSyncChunkTransportRoute(
+        pairing: PairingPayload,
+        preferDirectBulkTransfer: Bool
+    ) -> HealthSyncChunkTransportRoute {
+        let usesIrohPairing = pairing.transport?.isIrohTransport == true
+        if preferDirectBulkTransfer,
+           usesIrohPairing,
+           let directApiBaseUrl = directBulkTransferApiBaseUrl(for: pairing) {
+            return HealthSyncChunkTransportRoute(
+                apiBaseUrl: directApiBaseUrl,
+                usesIroh: false,
+                label: isTailscaleUrl(directApiBaseUrl)
+                    ? "Tailscale direct bulk + Iroh fallback"
+                    : "HTTP direct bulk + Iroh fallback"
+            )
+        }
+        if usesIrohPairing {
+            return HealthSyncChunkTransportRoute(
+                apiBaseUrl: pairing.apiBaseUrl,
+                usesIroh: true,
+                label: "Iroh primary"
+            )
+        }
+        return HealthSyncChunkTransportRoute(
+            apiBaseUrl: pairing.apiBaseUrl,
+            usesIroh: false,
+            label: isTailscaleUrl(pairing.apiBaseUrl) ? "Tailscale direct" : "HTTP"
+        )
+    }
+
+    private static func directBulkTransferApiBaseUrl(for pairing: PairingPayload) -> String? {
+        let candidates = [
+            pairing.transport?.publicBaseUrl,
+            pairing.apiBaseUrl
+        ]
+        for candidate in candidates {
+            guard let normalized = normalizedHttpApiBaseUrl(candidate),
+                  isLoopbackUrl(normalized) == false else {
+                continue
+            }
+            return normalized
+        }
+        return nil
+    }
+
+    private static func normalizedHttpApiBaseUrl(_ rawValue: String?) -> String? {
+        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              rawValue.isEmpty == false,
+              var components = URLComponents(string: rawValue),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              components.host?.isEmpty == false else {
+            return nil
+        }
+        let trimmedPath = components.path.replacingOccurrences(
+            of: "/+$",
+            with: "",
+            options: .regularExpression
+        )
+        if trimmedPath.isEmpty {
+            components.path = "/api/v1"
+        } else if trimmedPath.hasSuffix("/api/v1") {
+            components.path = trimmedPath
+        } else if trimmedPath.hasSuffix("/api") {
+            components.path = "\(trimmedPath)/v1"
+        } else {
+            return nil
+        }
+        components.query = nil
+        components.fragment = nil
+        return components.string
+    }
+
+    private static func isLoopbackUrl(_ rawValue: String?) -> Bool {
+        guard let rawValue,
+              let host = URL(string: rawValue)?.host?.lowercased() else {
+            return false
+        }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
+    }
+
+    private static func isTailscaleUrl(_ rawValue: String?) -> Bool {
+        guard let rawValue,
+              let host = URL(string: rawValue)?.host?.lowercased() else {
+            return false
+        }
+        return host.hasSuffix(".ts.net") || host.contains(".tailscale.")
+    }
+
+    private static func isRetryableUrlSessionTransferInterruption(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case URLError.timedOut.rawValue,
+                 URLError.cannotConnectToHost.rawValue,
+                 URLError.networkConnectionLost.rawValue,
+                 URLError.notConnectedToInternet.rawValue,
+                 URLError.internationalRoamingOff.rawValue,
+                 URLError.dataNotAllowed.rawValue:
+                return true
+            default:
+                break
+            }
+        }
+        if nsError.domain == "ForgeSyncClient",
+           nsError.code >= 400,
+           nsError.code < 600 {
+            return false
+        }
+        let message = "\(nsError.localizedDescription) \(nsError.localizedFailureReason ?? "")"
+            .lowercased()
+        return message.contains("timed out") ||
+            message.contains("timeout") ||
+            message.contains("cannot connect") ||
+            message.contains("connection lost") ||
+            message.contains("not connected") ||
+            message.contains("offline")
     }
 
     private static func irohTransportTimingSummary(from response: HTTPURLResponse) -> String? {
