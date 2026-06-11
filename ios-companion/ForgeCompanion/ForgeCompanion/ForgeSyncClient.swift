@@ -418,7 +418,7 @@ struct ForgeSyncClient {
     static let backgroundHTTPHealthSyncChunkTargetBytes = 500_000
     static let foregroundHTTPHealthSyncChunkTargetBytes = 1_500_000
     static let foregroundHealthSyncChunkUploadConcurrency = 6
-    static let foregroundHealthSyncPreparedChunkPrefetchWindows = 1
+    static let foregroundHealthSyncPreparedChunkPrefetchWindows = 2
     static let foregroundHTTPMaximumConnectionsPerHost = 6
     private static let workoutTimeSeriesEstimatedBytesPerRecord = 640
     private static let workoutRouteEstimatedBytesPerRecord = 520
@@ -2580,6 +2580,7 @@ struct ForgeSyncClient {
         timeSeriesChunks: Int,
         routeChunks: Int,
         concurrency: Int,
+        prefetchLimit: Int = 0,
         uploadDelayNanoseconds: UInt64 = 100_000_000
     ) async throws -> (
         preparedCount: Int,
@@ -2594,7 +2595,7 @@ struct ForgeSyncClient {
         var nextSequence = 0
         let metrics = try await runPreparedHealthSyncChunkScheduler(
             concurrency: concurrency,
-            prefetchLimit: 0
+            prefetchLimit: prefetchLimit
         ) {
             guard nextSequence < families.count else {
                 return nil

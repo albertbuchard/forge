@@ -5635,6 +5635,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: httpPayload),
             ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+                * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
@@ -5651,6 +5652,7 @@ final class ForgeCompanionTests: XCTestCase {
                 appIsForegroundActive: true
             ),
             ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+                * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows
         )
         XCTAssertEqual(
             ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(pairing: irohPayload),
@@ -5687,16 +5689,17 @@ final class ForgeCompanionTests: XCTestCase {
     func testCombinedWorkoutEvidenceSchedulerFillsForegroundWindowAcrossFamilies() async throws {
         let metrics = try await ForgeSyncClient.combinedWorkoutEvidenceSchedulerMetricsForTesting(
             summaryChunks: 1,
-            timeSeriesChunks: 6,
-            routeChunks: 3,
+            timeSeriesChunks: 18,
+            routeChunks: 5,
             concurrency: 6,
+            prefetchLimit: 12,
             uploadDelayNanoseconds: 120_000_000
         )
 
-        XCTAssertEqual(metrics.preparedCount, 10)
-        XCTAssertEqual(metrics.scheduledCount, 10)
+        XCTAssertEqual(metrics.preparedCount, 24)
+        XCTAssertEqual(metrics.scheduledCount, 24)
         XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 6)
-        XCTAssertEqual(metrics.maxPreparedQueueDepth, 1)
+        XCTAssertEqual(metrics.maxPreparedQueueDepth, 12)
     }
 
     func testPreparedChunkSchedulerWidensBeforeFirstCompletionWhenForegroundWindowAppears() async throws {

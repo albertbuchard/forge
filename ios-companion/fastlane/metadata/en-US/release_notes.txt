@@ -1,5 +1,5 @@
-Forge Companion 1.0.112 makes HealthKit sync progress easier to diagnose while uploads are active.
+Forge Companion 1.0.113 keeps more foreground HealthKit upload chunks prepared while network requests are already in flight.
 
-The sync panel now separates accepted throughput from active requests, shows how many bytes are still waiting for Forge replies, and names the oldest in-flight request age.
+Foreground HTTP sync now maintains two prepared upload windows, so the next HealthKit chunks are ready as soon as Forge replies instead of waiting for the app to prepare the next chunk after each response.
 
-This prevents a misleading 0 B/s display when the phone has already sent a chunk and is waiting on the network or Forge backend to respond.
+The sync panel keeps the clearer Forge reply wording from the previous build, avoiding the old “ack” label while the phone is waiting on active upload responses.
