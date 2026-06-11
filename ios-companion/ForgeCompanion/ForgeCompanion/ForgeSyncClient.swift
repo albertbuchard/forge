@@ -2184,14 +2184,33 @@ struct ForgeSyncClient {
         let scheduledBeforeFirstCompletion: Int
     }
 
+    private enum HealthSyncPreparedChunkSchedulerEvent {
+        case uploadCompleted
+        case windowPoll
+    }
+
     private static func runPreparedHealthSyncChunkScheduler(
         concurrency: Int,
         prefetchLimit: Int,
         nextChunk: () throws -> PreparedHealthSyncChunkUpload?,
         uploadChunk: @escaping @Sendable (PreparedHealthSyncChunkUpload) async throws -> Void
     ) async throws -> HealthSyncPreparedChunkSchedulerMetrics {
-        let uploadWindow = max(1, concurrency)
-        let preparedBacklogLimit = max(0, prefetchLimit)
+        try await runPreparedHealthSyncChunkScheduler(
+            currentConcurrency: { concurrency },
+            currentPrefetchLimit: { prefetchLimit },
+            windowPollIntervalNanoseconds: nil,
+            nextChunk: nextChunk,
+            uploadChunk: uploadChunk
+        )
+    }
+
+    private static func runPreparedHealthSyncChunkScheduler(
+        currentConcurrency: () -> Int,
+        currentPrefetchLimit: () -> Int,
+        windowPollIntervalNanoseconds: UInt64?,
+        nextChunk: () throws -> PreparedHealthSyncChunkUpload?,
+        uploadChunk: @escaping @Sendable (PreparedHealthSyncChunkUpload) async throws -> Void
+    ) async throws -> HealthSyncPreparedChunkSchedulerMetrics {
         var preparedQueue: [PreparedHealthSyncChunkUpload] = []
         var reachedEnd = false
         var preparedCount = 0
@@ -2200,9 +2219,18 @@ struct ForgeSyncClient {
         var maxPreparedQueueDepth = 0
         var scheduledBeforeFirstCompletion = 0
         var hasCompletedUpload = false
+        var windowPollScheduled = false
 
         func recordPreparedQueueDepth() {
             maxPreparedQueueDepth = max(maxPreparedQueueDepth, preparedQueue.count)
+        }
+
+        func currentUploadWindow() -> Int {
+            max(1, currentConcurrency())
+        }
+
+        func currentPreparedBacklogLimit() -> Int {
+            max(0, currentPrefetchLimit())
         }
 
         func prepareNextChunkIfAvailable() throws -> Bool {
@@ -2227,7 +2255,7 @@ struct ForgeSyncClient {
             }
         }
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: HealthSyncPreparedChunkSchedulerEvent.self) { group in
             func schedule(_ chunk: PreparedHealthSyncChunkUpload) {
                 scheduledCount += 1
                 if hasCompletedUpload == false {
@@ -2236,11 +2264,27 @@ struct ForgeSyncClient {
                 activeUploads += 1
                 group.addTask {
                     try await uploadChunk(chunk)
+                    return .uploadCompleted
+                }
+            }
+
+            func scheduleWindowPollIfNeeded() {
+                guard let interval = windowPollIntervalNanoseconds,
+                      interval > 0,
+                      activeUploads > 0,
+                      windowPollScheduled == false
+                else {
+                    return
+                }
+                windowPollScheduled = true
+                group.addTask {
+                    try await Task.sleep(nanoseconds: interval)
+                    return .windowPoll
                 }
             }
 
             func schedulePreparedChunksIntoOpenUploadSlots() throws {
-                while activeUploads < uploadWindow {
+                while activeUploads < currentUploadWindow() {
                     if preparedQueue.isEmpty {
                         _ = try prepareNextChunkIfAvailable()
                     }
@@ -2253,15 +2297,24 @@ struct ForgeSyncClient {
             }
 
             try schedulePreparedChunksIntoOpenUploadSlots()
-            try prepareQueuedChunksUntil(limit: preparedBacklogLimit)
+            try prepareQueuedChunksUntil(limit: currentPreparedBacklogLimit())
+            scheduleWindowPollIfNeeded()
 
             while activeUploads > 0 {
-                try await group.next()
-                hasCompletedUpload = true
-                activeUploads -= 1
+                guard let event = try await group.next() else {
+                    break
+                }
+                if event == .windowPoll {
+                    windowPollScheduled = false
+                } else {
+                    hasCompletedUpload = true
+                    activeUploads -= 1
+                }
                 try schedulePreparedChunksIntoOpenUploadSlots()
-                try prepareQueuedChunksUntil(limit: preparedBacklogLimit)
+                try prepareQueuedChunksUntil(limit: currentPreparedBacklogLimit())
+                scheduleWindowPollIfNeeded()
             }
+            group.cancelAll()
         }
 
         return HealthSyncPreparedChunkSchedulerMetrics(
@@ -2280,21 +2333,26 @@ struct ForgeSyncClient {
         onChunkUploaded: HealthSyncChunkUploadHandler?,
         nextChunk: () throws -> PreparedHealthSyncChunkUpload?
     ) async throws -> Int {
-        let concurrency = Self.healthSyncChunkUploadConcurrency(
-            pairing: pairing,
-            useBackgroundUpload: useBackgroundUpload
-        )
-        let prefetchLimit = Self.healthSyncPreparedChunkPrefetchLimit(
-            pairing: pairing,
-            useBackgroundUpload: useBackgroundUpload
-        )
+        let concurrency = {
+            Self.healthSyncChunkUploadConcurrency(
+                pairing: pairing,
+                useBackgroundUpload: useBackgroundUpload
+            )
+        }
+        let prefetchLimit = {
+            Self.healthSyncPreparedChunkPrefetchLimit(
+                pairing: pairing,
+                useBackgroundUpload: useBackgroundUpload
+            )
+        }
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadGeneratedHealthSyncChunks start window=\(concurrency) prefetch=\(prefetchLimit) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") uploadTransport=\(useBackgroundUpload ? "urlsession-background" : "urlsession-foreground")"
+            "uploadGeneratedHealthSyncChunks start window=\(concurrency()) prefetch=\(prefetchLimit()) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
-            concurrency: concurrency,
-            prefetchLimit: prefetchLimit,
+            currentConcurrency: concurrency,
+            currentPrefetchLimit: prefetchLimit,
+            windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil,
             nextChunk: nextChunk
         ) { [self] chunk in
             _ = try await uploadHealthSyncChunk(
@@ -2726,6 +2784,59 @@ struct ForgeSyncClient {
         let metrics = try await runPreparedHealthSyncChunkScheduler(
             concurrency: concurrency,
             prefetchLimit: prefetchLimit
+        ) {
+            guard nextSequence < totalChunks else {
+                return nil
+            }
+            let chunk = PreparedHealthSyncChunkUpload(
+                sequence: nextSequence,
+                family: "workout_time_series",
+                recordCount: 1,
+                payloadData: Data([UInt8(nextSequence % 255)]),
+                chunkId: nil
+            )
+            nextSequence += 1
+            return chunk
+        } uploadChunk: { _ in
+            if uploadDelayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: uploadDelayNanoseconds)
+            }
+        }
+        return (
+            preparedCount: metrics.preparedCount,
+            scheduledCount: metrics.scheduledCount,
+            maxPreparedQueueDepth: metrics.maxPreparedQueueDepth,
+            scheduledBeforeFirstCompletion: metrics.scheduledBeforeFirstCompletion
+        )
+    }
+
+    static func adaptivePreparedChunkSchedulerMetricsForTesting(
+        totalChunks: Int,
+        firstConcurrency: Int,
+        laterConcurrency: Int,
+        firstPrefetchLimit: Int,
+        laterPrefetchLimit: Int,
+        windowPollIntervalNanoseconds: UInt64,
+        uploadDelayNanoseconds: UInt64 = 100_000_000
+    ) async throws -> (
+        preparedCount: Int,
+        scheduledCount: Int,
+        maxPreparedQueueDepth: Int,
+        scheduledBeforeFirstCompletion: Int
+    ) {
+        var nextSequence = 0
+        var concurrencyReadCount = 0
+        var prefetchReadCount = 0
+        let metrics = try await runPreparedHealthSyncChunkScheduler(
+            currentConcurrency: {
+                concurrencyReadCount += 1
+                return concurrencyReadCount == 1 ? firstConcurrency : laterConcurrency
+            },
+            currentPrefetchLimit: {
+                prefetchReadCount += 1
+                return prefetchReadCount == 1 ? firstPrefetchLimit : laterPrefetchLimit
+            },
+            windowPollIntervalNanoseconds: windowPollIntervalNanoseconds
         ) {
             guard nextSequence < totalChunks else {
                 return nil
