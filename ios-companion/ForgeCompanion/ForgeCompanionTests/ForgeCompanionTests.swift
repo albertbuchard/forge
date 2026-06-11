@@ -5684,6 +5684,21 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(metrics.maxPreparedQueueDepth, 1)
     }
 
+    func testCombinedWorkoutEvidenceSchedulerFillsForegroundWindowAcrossFamilies() async throws {
+        let metrics = try await ForgeSyncClient.combinedWorkoutEvidenceSchedulerMetricsForTesting(
+            summaryChunks: 1,
+            timeSeriesChunks: 6,
+            routeChunks: 3,
+            concurrency: 6,
+            uploadDelayNanoseconds: 120_000_000
+        )
+
+        XCTAssertEqual(metrics.preparedCount, 10)
+        XCTAssertEqual(metrics.scheduledCount, 10)
+        XCTAssertEqual(metrics.scheduledBeforeFirstCompletion, 6)
+        XCTAssertEqual(metrics.maxPreparedQueueDepth, 1)
+    }
+
     func testPreparedChunkSchedulerWidensBeforeFirstCompletionWhenForegroundWindowAppears() async throws {
         let metrics = try await ForgeSyncClient.adaptivePreparedChunkSchedulerMetricsForTesting(
             totalChunks: 8,

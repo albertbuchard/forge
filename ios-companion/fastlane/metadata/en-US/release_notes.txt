@@ -1,5 +1,5 @@
-Forge Companion 1.0.110 keeps more HealthKit upload phases from getting stuck on a stale serial transfer lane.
+Forge Companion 1.0.111 keeps the recent-workout upload pipe fuller while the app is open.
 
-Prepared chunks for sleep, movement, screen time, and workout summaries now use the same adaptive foreground upload window as streamed workout evidence.
+Workout summaries, heart-rate/time-series evidence, and route evidence now share one adaptive foreground upload window instead of waiting behind each family boundary.
 
-If a sync starts in the background and you open the app, those prepared chunks can widen the upload pipe before the first slow Forge reply returns.
+This reduces stalls where the sync view showed one active workout-summary transfer while prepared evidence chunks were not yet allowed to send.
