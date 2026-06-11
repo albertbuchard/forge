@@ -896,6 +896,7 @@ struct ForgeSyncClient {
         let receivedBytes: Int?
         let uploadWindow: Int
         let serverProcessingMs: Int?
+        let transportTimingSummary: String?
         let preparingFamily: String?
 
         init(
@@ -912,6 +913,7 @@ struct ForgeSyncClient {
             receivedBytes: Int?,
             uploadWindow: Int = 1,
             serverProcessingMs: Int? = nil,
+            transportTimingSummary: String? = nil,
             preparingFamily: String? = nil
         ) {
             self.phase = phase
@@ -927,6 +929,7 @@ struct ForgeSyncClient {
             self.receivedBytes = receivedBytes
             self.uploadWindow = uploadWindow
             self.serverProcessingMs = serverProcessingMs
+            self.transportTimingSummary = transportTimingSummary
             self.preparingFamily = preparingFamily
         }
 
@@ -2948,7 +2951,8 @@ struct ForgeSyncClient {
                         pairing: pairing,
                         useBackgroundUpload: useBackgroundUpload
                     ),
-                    serverProcessingMs: nil
+                    serverProcessingMs: nil,
+                    transportTimingSummary: nil
                 )
             )
             return sequence + 1
@@ -2984,10 +2988,12 @@ struct ForgeSyncClient {
                 receivedCount: nil,
                 receivedBytes: nil,
                 uploadWindow: uploadWindow,
-                serverProcessingMs: nil
+                serverProcessingMs: nil,
+                transportTimingSummary: nil
             )
         )
         let envelope: HealthSyncChunkEnvelope
+        var transportTimingSummary: String?
         do {
             envelope = try await sendRequest(
                 path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
@@ -3005,7 +3011,10 @@ struct ForgeSyncClient {
                 ),
                 transport: pairing.transport,
                 timeoutInterval: 120,
-                useBackgroundUpload: effectiveUseBackgroundUpload
+                useBackgroundUpload: effectiveUseBackgroundUpload,
+                responseHeaderObserver: { response in
+                    transportTimingSummary = Self.irohTransportTimingSummary(from: response)
+                }
             )
         } catch {
             let nsError = error as NSError
@@ -3027,7 +3036,8 @@ struct ForgeSyncClient {
                     receivedCount: nil,
                     receivedBytes: nil,
                     uploadWindow: uploadWindow,
-                    serverProcessingMs: nil
+                    serverProcessingMs: nil,
+                    transportTimingSummary: nil
                 )
             )
             throw Self.healthSyncChunkUploadError(
@@ -3057,7 +3067,8 @@ struct ForgeSyncClient {
                 receivedCount: envelope.chunk.receivedCount,
                 receivedBytes: envelope.chunk.receivedBytes,
                 uploadWindow: uploadWindow,
-                serverProcessingMs: envelope.chunk.serverProcessingMs
+                serverProcessingMs: envelope.chunk.serverProcessingMs,
+                transportTimingSummary: transportTimingSummary
             )
         )
         return sequence + 1
@@ -3730,7 +3741,8 @@ struct ForgeSyncClient {
         session: URLSession? = nil,
         transport: PairingTransport? = nil,
         timeoutInterval: TimeInterval = 20,
-        useBackgroundUpload: Bool = false
+        useBackgroundUpload: Bool = false,
+        responseHeaderObserver: ((HTTPURLResponse) -> Void)? = nil
     ) async throws -> Response {
         guard let url = URL(string: "\(apiBaseUrl)\(path)") else {
             companionDebugLog(
@@ -3815,6 +3827,7 @@ struct ForgeSyncClient {
             "ForgeSyncClient",
             "sendRequest response method=\(method) url=\(url.absoluteString) status=\(httpResponse.statusCode) bytes=\(data.count)"
         )
+        responseHeaderObserver?(httpResponse)
         guard (200..<300).contains(httpResponse.statusCode) else {
             let decodedError = try? JSONDecoder().decode(ErrorEnvelope.self, from: data)
             let serverMessage = decodedError.flatMap { $0.message ?? $0.error }
@@ -3861,6 +3874,67 @@ struct ForgeSyncClient {
 
         companionDebugLog("ForgeSyncClient", "sendRequest decode success url=\(url.absoluteString)")
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    private static func irohTransportTimingSummary(from response: HTTPURLResponse) -> String? {
+        let clientTiming = timingHeaderParts(
+            responseHeaderValue(response, named: "x-forge-iroh-client-timing-ms")
+        )
+        let hostTiming = timingHeaderParts(
+            responseHeaderValue(response, named: "x-forge-iroh-host-timing-ms")
+        )
+        guard clientTiming.isEmpty == false || hostTiming.isEmpty == false else {
+            return nil
+        }
+
+        var parts: [String] = []
+        if let total = clientTiming["total"] {
+            parts.append("Iroh client \(total) ms")
+        }
+        if let responseWait = clientTiming["responseWait"] {
+            parts.append("response wait \(responseWait) ms")
+        }
+        if let bridgeAck = clientTiming["bridgeAck"] {
+            parts.append("bridge ready \(bridgeAck) ms")
+        }
+        if let connection = clientTiming["connection"],
+           responseHeaderValue(response, named: "x-forge-iroh-client-connection-reused") != "1" {
+            parts.append("connect \(connection) ms")
+        }
+        if let hostTotal = hostTiming["total"] {
+            parts.append("host proxy \(hostTotal) ms")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " • ")
+    }
+
+    private static func responseHeaderValue(
+        _ response: HTTPURLResponse,
+        named targetName: String
+    ) -> String? {
+        let lowerTarget = targetName.lowercased()
+        for (name, value) in response.allHeaderFields {
+            guard String(describing: name).lowercased() == lowerTarget else {
+                continue
+            }
+            return String(describing: value)
+        }
+        return nil
+    }
+
+    private static func timingHeaderParts(_ raw: String?) -> [String: Int] {
+        guard let raw, raw.isEmpty == false else {
+            return [:]
+        }
+        var parts: [String: Int] = [:]
+        for field in raw.split(separator: ",") {
+            let pair = field.split(separator: "=", maxSplits: 1)
+            guard pair.count == 2,
+                  let value = Int(pair[1].trimmingCharacters(in: .whitespaces)) else {
+                continue
+            }
+            parts[String(pair[0].trimmingCharacters(in: .whitespaces))] = value
+        }
+        return parts
     }
 
     private func urlSessionResponse(

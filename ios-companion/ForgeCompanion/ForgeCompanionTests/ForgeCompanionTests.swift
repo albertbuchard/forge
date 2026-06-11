@@ -5896,6 +5896,7 @@ final class ForgeCompanionTests: XCTestCase {
                 secondsSinceLastChunk: 4,
                 secondsSinceOldestInFlight: 5,
                 lastServerProcessingMs: 1_240,
+                lastTransportTimingSummary: "Iroh client 84 ms • response wait 70 ms • bridge ready 2 ms • host proxy 12 ms",
                 preparingFamily: nil,
                 secondsPreparing: nil
             ),
@@ -5909,21 +5910,26 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertTrue(status.transferSummary.contains("workout time series"))
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
-        XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting Forge"))
+        XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting transport reply"))
         XCTAssertTrue(status.transferSummary.contains("session"))
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s average") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/6 requests waiting on Forge") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/6 requests awaiting transport") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 5s") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 5s") == true)
         XCTAssertFalse(status.speedSummary?.contains("4s since last Forge reply") == true)
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 5s for Forge replies: 2 active requests, 512.0 KB in flight"
+            "Waiting 5s for sync transport replies: 2 active requests, 512.0 KB in flight"
         )
-        XCTAssertEqual(status.forgeProcessingSummary, "Forge spent 1.2s on the last chunk")
+        XCTAssertEqual(
+            status.bridgeTimingSummary,
+            "Iroh client 84 ms • response wait 70 ms • bridge ready 2 ms • host proxy 12 ms"
+        )
+        XCTAssertFalse(status.bridgeTimingSummary?.contains("ack") == true)
+        XCTAssertEqual(status.forgeProcessingSummary, "Forge processed the last chunk in 1.2s")
     }
 
     func testSyncUploadStatusExplainsPhoneSideChunkPreparation() {
@@ -5951,6 +5957,7 @@ final class ForgeCompanionTests: XCTestCase {
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: nil,
                 lastServerProcessingMs: 18,
+                lastTransportTimingSummary: nil,
                 preparingFamily: "workout_time_series",
                 secondsPreparing: 12
             ),
@@ -5988,10 +5995,11 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 1,
                 inFlightBytes: 1_572_300,
                 uploadWindow: 6,
-                transportLabel: "Iroh tunnel",
+                transportLabel: "Iroh bridge",
                 secondsSinceLastChunk: 30,
                 secondsSinceOldestInFlight: 30,
                 lastServerProcessingMs: 18,
+                lastTransportTimingSummary: "Iroh client 213 ms • response wait 201 ms",
                 preparingFamily: nil,
                 secondsPreparing: nil
             ),
@@ -5999,14 +6007,15 @@ final class ForgeCompanionTests: XCTestCase {
         )
 
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("Iroh tunnel") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Iroh bridge") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 30s") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 30s") == true)
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 30s for Forge replies: 1 active request, 1.5 MB in flight"
+            "Waiting 30s for sync transport replies: 1 active request, 1.5 MB in flight"
         )
+        XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {

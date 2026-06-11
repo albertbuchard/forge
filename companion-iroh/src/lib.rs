@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use iroh::endpoint::Connection;
 use iroh::{Endpoint, SecretKey};
@@ -15,6 +15,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub mod protocol;
 
 const MAX_FRAME_BYTES: usize = 50 * 1024 * 1024;
+const IROH_CLIENT_TIMING_HEADER: &str = "x-forge-iroh-client-timing-ms";
+const IROH_CLIENT_CONNECTION_REUSED_HEADER: &str = "x-forge-iroh-client-connection-reused";
 
 struct FfiIrohState {
     runtime: tokio::runtime::Runtime,
@@ -87,7 +89,7 @@ impl FfiIrohState {
     async fn cached_connection(
         &self,
         payload: &PairPayload,
-    ) -> Result<(ConnectionCacheKey, Arc<Connection>), String> {
+    ) -> Result<(ConnectionCacheKey, Arc<Connection>, bool), String> {
         let key = ConnectionCacheKey::from_payload(payload);
         if let Some(connection) = self
             .connections
@@ -96,17 +98,17 @@ impl FfiIrohState {
             .get(&key)
             .cloned()
         {
-            return Ok((key, connection));
+            return Ok((key, connection, true));
         }
 
         let endpoint = self.cached_endpoint().await?;
         let connection = Arc::new(connect_iroh(endpoint, payload).await?);
         let mut guard = self.connections.lock().map_err(lock_error)?;
         if let Some(existing) = guard.get(&key).cloned() {
-            return Ok((key, existing));
+            return Ok((key, existing, true));
         }
         guard.insert(key.clone(), connection.clone());
-        Ok((key, connection))
+        Ok((key, connection, false))
     }
 
     fn evict_connection(&self, key: &ConnectionCacheKey, connection: &Arc<Connection>) {
@@ -228,9 +230,26 @@ async fn send_http_request_over_iroh(
     validate_pair_payload(&request.pair_payload)?;
     validate_proxy_path(&request.path)?;
 
-    let (cache_key, conn) = state.cached_connection(&request.pair_payload).await?;
+    let total_started_at = Instant::now();
+    let connection_started_at = Instant::now();
+    let (cache_key, conn, connection_reused) =
+        state.cached_connection(&request.pair_payload).await?;
+    let connection_ms = elapsed_ms(connection_started_at);
     match send_request_over_connection(&conn, request).await {
-        Ok(response) => Ok(response),
+        Ok((mut response, mut timing)) => {
+            timing.connection_ms = connection_ms;
+            timing.connection_reused = connection_reused;
+            timing.total_ms = elapsed_ms(total_started_at);
+            response.headers.push(HeaderPair {
+                name: IROH_CLIENT_TIMING_HEADER.to_string(),
+                value: timing.to_header_value(),
+            });
+            response.headers.push(HeaderPair {
+                name: IROH_CLIENT_CONNECTION_REUSED_HEADER.to_string(),
+                value: if connection_reused { "1" } else { "0" }.to_string(),
+            });
+            Ok(response)
+        }
         Err(error) => {
             state.evict_connection(&cache_key, &conn);
             Err(error)
@@ -263,11 +282,16 @@ async fn connect_iroh(
 async fn send_request_over_connection(
     conn: &Connection,
     request: FfiHttpRequest,
-) -> Result<ForgeHttpResponse, String> {
+) -> Result<(ForgeHttpResponse, IrohClientTiming), String> {
+    let mut timing = IrohClientTiming::default();
+    let open_started_at = Instant::now();
     let (mut send, mut recv) = conn
         .open_bi()
         .await
         .map_err(|error| format!("opening Iroh stream: {error}"))?;
+    timing.open_stream_ms = elapsed_ms(open_started_at);
+
+    let bridge_started_at = Instant::now();
     write_json_frame(
         &mut send,
         &BridgeRequest::Connect {
@@ -279,6 +303,9 @@ async fn send_request_over_connection(
     .await?;
     let ack: BridgeResponse = read_json_frame(&mut recv).await?;
     validate_bridge_response(&ack)?;
+    timing.bridge_ack_ms = elapsed_ms(bridge_started_at);
+
+    let write_started_at = Instant::now();
     write_json_frame(
         &mut send,
         &ForgeHttpRequest {
@@ -290,13 +317,47 @@ async fn send_request_over_connection(
         },
     )
     .await?;
+    timing.write_request_ms = elapsed_ms(write_started_at);
+
+    let response_started_at = Instant::now();
     let response = tokio::time::timeout(
         Duration::from_secs(60),
         read_json_frame::<ForgeHttpResponse, _>(&mut recv),
     )
     .await
     .map_err(|_| "timed out waiting for Forge Iroh response".to_string())??;
-    Ok(response)
+    timing.response_wait_ms = elapsed_ms(response_started_at);
+    Ok((response, timing))
+}
+
+#[derive(Debug, Default)]
+struct IrohClientTiming {
+    connection_reused: bool,
+    connection_ms: u128,
+    open_stream_ms: u128,
+    bridge_ack_ms: u128,
+    write_request_ms: u128,
+    response_wait_ms: u128,
+    total_ms: u128,
+}
+
+impl IrohClientTiming {
+    fn to_header_value(&self) -> String {
+        format!(
+            "reused={},total={},connection={},openStream={},bridgeAck={},writeRequest={},responseWait={}",
+            if self.connection_reused { 1 } else { 0 },
+            self.total_ms,
+            self.connection_ms,
+            self.open_stream_ms,
+            self.bridge_ack_ms,
+            self.write_request_ms,
+            self.response_wait_ms
+        )
+    }
+}
+
+fn elapsed_ms(started_at: Instant) -> u128 {
+    started_at.elapsed().as_millis()
 }
 
 fn validate_pair_payload(payload: &PairPayload) -> Result<(), String> {
@@ -443,6 +504,24 @@ mod tests {
         assert_ne!(
             ConnectionCacheKey::from_payload(&payload),
             ConnectionCacheKey::from_payload(&different_token)
+        );
+    }
+
+    #[test]
+    fn iroh_client_timing_header_names_response_wait() {
+        let timing = IrohClientTiming {
+            connection_reused: true,
+            connection_ms: 1,
+            open_stream_ms: 2,
+            bridge_ack_ms: 3,
+            write_request_ms: 4,
+            response_wait_ms: 5,
+            total_ms: 15,
+        };
+
+        assert_eq!(
+            timing.to_header_value(),
+            "reused=1,total=15,connection=1,openStream=2,bridgeAck=3,writeRequest=4,responseWait=5"
         );
     }
 }

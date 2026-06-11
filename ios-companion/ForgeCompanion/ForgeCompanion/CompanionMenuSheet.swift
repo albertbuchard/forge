@@ -368,6 +368,9 @@ struct CompanionSettingsSheet: View {
             if let speedSummary = status.speedSummary {
                 detailRow("Speed", value: speedSummary)
             }
+            if let bridgeTimingSummary = status.bridgeTimingSummary {
+                detailRow("Bridge", value: bridgeTimingSummary)
+            }
             if let forgeProcessingSummary = status.forgeProcessingSummary {
                 detailRow("Forge", value: forgeProcessingSummary)
             }

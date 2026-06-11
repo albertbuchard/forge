@@ -1,5 +1,5 @@
-Forge Companion 1.0.116 keeps the Iroh bridge warm during foreground HealthKit sync.
+Forge Companion 1.0.117 makes HealthKit sync diagnostics more precise while keeping the faster Iroh bridge path from 1.0.116.
 
-Foreground Iroh uploads now reuse the bridge runtime, endpoint, and connection, so concurrent chunks open lightweight streams instead of rebuilding the transport for every request.
+The sync panel now separates phone-side transport wait, Iroh bridge timing, and Forge backend processing time, so long waits no longer appear as vague "ACK" or generic Forge blocking.
 
-Background transfers stay conservative, and stale Iroh connections are dropped automatically after stream failures so the next retry reconnects cleanly.
+When a pairing uses Iroh with a Tailscale HTTPS fallback, the app now says that explicitly instead of calling the active upload path an "Iroh tunnel."

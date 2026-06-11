@@ -1069,6 +1069,7 @@ struct SyncTransferStats: Equatable {
     let secondsSinceLastChunk: Int?
     let secondsSinceOldestInFlight: Int?
     let lastServerProcessingMs: Int?
+    let lastTransportTimingSummary: String?
     let preparingFamily: String?
     let secondsPreparing: Int?
 }
@@ -1181,7 +1182,7 @@ struct CompanionSyncUploadStatus {
         if let transferStats {
             parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) accepted")
             if transferStats.inFlightBytes > 0 {
-                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) awaiting Forge")
+                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) awaiting transport reply")
             }
         } else if let lastPayloadBytes {
             parts.append(Self.formatBytes(lastPayloadBytes))
@@ -1202,9 +1203,9 @@ struct CompanionSyncUploadStatus {
             "\(transferStats.uploadedChunks) chunks stored"
         ]
         if transferStats.uploadWindow > 1 {
-            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests waiting on Forge")
+            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests awaiting transport")
         } else if transferStats.inFlightChunks > 0 {
-            parts.append("\(transferStats.inFlightChunks) request waiting on Forge")
+            parts.append("\(transferStats.inFlightChunks) request awaiting transport")
         }
         if let transportLabel = transferStats.transportLabel {
             parts.append(transportLabel)
@@ -1227,13 +1228,13 @@ struct CompanionSyncUploadStatus {
         if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
            secondsSinceOldestInFlight >= 3,
            transferStats.inFlightChunks > 0 {
-            parts.append("oldest Forge wait \(secondsSinceOldestInFlight)s")
+            parts.append("oldest transport wait \(secondsSinceOldestInFlight)s")
         }
         if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
            secondsSinceLastChunk >= 3,
            transferStats.inFlightChunks == 0,
            !(transferStats.preparingFamily != nil && transferStats.inFlightChunks == 0) {
-            parts.append("\(secondsSinceLastChunk)s since last Forge reply")
+            parts.append("\(secondsSinceLastChunk)s since last accepted chunk")
         }
         return parts.joined(separator: " • ")
     }
@@ -1249,9 +1250,9 @@ struct CompanionSyncUploadStatus {
                 : ""
             if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
                secondsSinceOldestInFlight >= 3 {
-                return "Waiting \(secondsSinceOldestInFlight)s for Forge replies: \(requestLabel)\(byteLabel)"
+                return "Waiting \(secondsSinceOldestInFlight)s for sync transport replies: \(requestLabel)\(byteLabel)"
             }
-            return "Waiting for Forge replies: \(requestLabel)\(byteLabel)"
+            return "Waiting for sync transport replies: \(requestLabel)\(byteLabel)"
         }
         if let preparingFamily = transferStats.preparingFamily {
             let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
@@ -1275,9 +1276,13 @@ struct CompanionSyncUploadStatus {
             return nil
         }
         if milliseconds >= 1000 {
-            return "Forge spent \(String(format: "%.1f", Double(milliseconds) / 1000))s on the last chunk"
+            return "Forge processed the last chunk in \(String(format: "%.1f", Double(milliseconds) / 1000))s"
         }
-        return "Forge spent \(milliseconds) ms on the last chunk"
+        return "Forge processed the last chunk in \(milliseconds) ms"
+    }
+
+    var bridgeTimingSummary: String? {
+        transferStats?.lastTransportTimingSummary
     }
 
     private static func shortSessionId(_ value: String) -> String {

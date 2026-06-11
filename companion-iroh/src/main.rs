@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow};
 use base64::Engine;
@@ -16,6 +16,7 @@ use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 const MAX_FRAME_BYTES: usize = 50 * 1024 * 1024;
+const IROH_HOST_TIMING_HEADER: &str = "x-forge-iroh-host-timing-ms";
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Forge Companion transport over Iroh QUIC")]
@@ -276,9 +277,12 @@ async fn proxy_http_request(
             .context("decoding request body")?;
         builder = builder.body(bytes);
     }
+    let request_started_at = Instant::now();
     let response = builder.send().await.context("forwarding HTTP request")?;
+    let upstream_response_ms = request_started_at.elapsed().as_millis();
     let status = response.status().as_u16();
-    let headers = response
+    let body_started_at = Instant::now();
+    let mut headers: Vec<HeaderPair> = response
         .headers()
         .iter()
         .filter_map(|(name, value)| {
@@ -292,6 +296,15 @@ async fn proxy_http_request(
         .bytes()
         .await
         .context("reading HTTP response body")?;
+    let body_read_ms = body_started_at.elapsed().as_millis();
+    let total_ms = request_started_at.elapsed().as_millis();
+    headers.push(HeaderPair {
+        name: IROH_HOST_TIMING_HEADER.to_string(),
+        value: format!(
+            "total={},upstreamResponse={},bodyRead={}",
+            total_ms, upstream_response_ms, body_read_ms
+        ),
+    });
     Ok(ForgeHttpResponse {
         v: PROTOCOL_VERSION,
         status,

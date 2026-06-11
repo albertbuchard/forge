@@ -840,6 +840,7 @@ final class CompanionAppModel: ObservableObject {
     private var healthSyncTransferUploadWindow = 1
     private var healthSyncTransferLastChunkAt: Date?
     private var healthSyncTransferLastServerProcessingMs: Int?
+    private var healthSyncTransferLastTransportTimingSummary: String?
     private var healthSyncTransferPreparingFamily: String?
     private var healthSyncTransferPreparingStartedAt: Date?
     private var healthSyncTransferInFlightChunksById: [String: HealthSyncInFlightChunkTelemetry] = [:]
@@ -3133,6 +3134,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
+        healthSyncTransferLastTransportTimingSummary = nil
         healthSyncTransferPreparingFamily = nil
         healthSyncTransferPreparingStartedAt = nil
         publishHealthSyncTransferStats(now: now)
@@ -3185,6 +3187,7 @@ final class CompanionAppModel: ObservableObject {
         healthSyncTransferUploadWindow = 1
         healthSyncTransferLastChunkAt = nil
         healthSyncTransferLastServerProcessingMs = nil
+        healthSyncTransferLastTransportTimingSummary = nil
         healthSyncTransferPreparingFamily = nil
         healthSyncTransferPreparingStartedAt = nil
         healthSyncTransferStats = nil
@@ -3237,6 +3240,7 @@ final class CompanionAppModel: ObservableObject {
             healthSyncTransferUploadedRecords += event.recordCount
             healthSyncTransferLastChunkAt = Date()
             healthSyncTransferLastServerProcessingMs = event.serverProcessingMs
+            healthSyncTransferLastTransportTimingSummary = event.transportTimingSummary
         case .skipped:
             updateActiveHealthSyncCheckpointProgress(
                 chunkCount: event.receivedCount,
@@ -3365,13 +3369,34 @@ final class CompanionAppModel: ObservableObject {
             inFlightChunks: healthSyncTransferInFlightChunks,
             inFlightBytes: inFlightBytes,
             uploadWindow: healthSyncTransferUploadWindow,
-            transportLabel: pairing?.transport?.isIrohTransport == true ? "Iroh tunnel" : "HTTP",
+            transportLabel: healthSyncTransportLabel(),
             secondsSinceLastChunk: secondsSinceLastChunk,
             secondsSinceOldestInFlight: secondsSinceOldestInFlight,
             lastServerProcessingMs: healthSyncTransferLastServerProcessingMs,
+            lastTransportTimingSummary: healthSyncTransferLastTransportTimingSummary,
             preparingFamily: healthSyncTransferPreparingFamily,
             secondsPreparing: secondsPreparing
         )
+    }
+
+    private func healthSyncTransportLabel() -> String {
+        guard let pairing else {
+            return "HTTP"
+        }
+        let fallbackIsTailscale = Self.isTailscaleUrl(pairing.transport?.publicBaseUrl)
+            || Self.isTailscaleUrl(pairing.apiBaseUrl)
+        if pairing.transport?.isIrohTransport == true {
+            return fallbackIsTailscale ? "Iroh bridge + Tailscale fallback" : "Iroh bridge"
+        }
+        return fallbackIsTailscale ? "Tailscale direct" : "HTTP"
+    }
+
+    private static func isTailscaleUrl(_ rawValue: String?) -> Bool {
+        guard let rawValue,
+              let host = URL(string: rawValue)?.host?.lowercased() else {
+            return false
+        }
+        return host.hasSuffix(".ts.net") || host.contains(".tailscale.")
     }
 
     private func applyHealthSyncChunkErrorDiagnostics(_ error: Error) {
