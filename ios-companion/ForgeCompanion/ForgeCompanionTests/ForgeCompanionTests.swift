@@ -4856,6 +4856,27 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(ranges.dropFirst().dropLast().allSatisfy { $0.count == 32 })
     }
 
+    func testHistoricalWorkoutPrefetchPipelineKeepsBatchesReadyBehindUploads() {
+        let batchCount = HealthSyncStore.workoutBatchRanges(
+            totalCount: 1_077,
+            firstBatchSize: 8,
+            regularBatchSize: 32
+        ).count
+
+        let snapshots = HealthSyncStore.workoutPipelinePrefetchSnapshotsForTesting(
+            totalBatches: batchCount,
+            prefetchLimit: 10
+        )
+
+        XCTAssertEqual(batchCount, 35)
+        XCTAssertEqual(snapshots.first?.scheduledBatches, 10)
+        XCTAssertEqual(snapshots.first?.pendingBatches, 10)
+        XCTAssertEqual(snapshots[1].pendingBatches, 10)
+        XCTAssertEqual(snapshots[20].pendingBatches, 10)
+        XCTAssertEqual(snapshots.last?.deliveredBatches, batchCount)
+        XCTAssertEqual(snapshots.last?.pendingBatches, 0)
+    }
+
     func testRecentWorkoutBatchRangesStartUploadingBeforeWholeWindowIsMapped() {
         let ranges = HealthSyncStore.workoutBatchRanges(
             totalCount: 21,
@@ -5818,11 +5839,11 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
         XCTAssertTrue(status.transferSummary.contains("512.0 KB awaiting Forge"))
         XCTAssertTrue(status.transferSummary.contains("session"))
-        XCTAssertTrue(status.speedSummary?.contains("512.0 KB/s accepted now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s accepted avg") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/6 requests active") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("256.0 KB/s average") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/6 requests waiting on Forge") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("oldest request 5s") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 5s") == true)
         XCTAssertFalse(status.speedSummary?.contains("4s since last Forge reply") == true)
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
@@ -5902,9 +5923,9 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertTrue(status.speedSummary?.contains("0 B/s accepted now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
-        XCTAssertTrue(status.speedSummary?.contains("oldest request 30s") == true)
+        XCTAssertTrue(status.speedSummary?.contains("oldest Forge wait 30s") == true)
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,

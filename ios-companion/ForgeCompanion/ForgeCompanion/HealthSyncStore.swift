@@ -1009,6 +1009,46 @@ actor HealthSyncStore {
         return ranges
     }
 
+    struct WorkoutPipelinePrefetchSnapshot: Equatable {
+        let deliveredBatches: Int
+        let scheduledBatches: Int
+        let pendingBatches: Int
+    }
+
+    nonisolated static func workoutPipelinePrefetchSnapshotsForTesting(
+        totalBatches: Int,
+        prefetchLimit: Int
+    ) -> [WorkoutPipelinePrefetchSnapshot] {
+        guard totalBatches > 0 else {
+            return []
+        }
+        let safePrefetchLimit = max(1, min(prefetchLimit, totalBatches))
+        var deliveredBatches = 0
+        var scheduledBatches = safePrefetchLimit
+        var snapshots = [
+            WorkoutPipelinePrefetchSnapshot(
+                deliveredBatches: deliveredBatches,
+                scheduledBatches: scheduledBatches,
+                pendingBatches: scheduledBatches - deliveredBatches
+            )
+        ]
+
+        while deliveredBatches < totalBatches {
+            deliveredBatches += 1
+            if scheduledBatches < totalBatches {
+                scheduledBatches += 1
+            }
+            snapshots.append(
+                WorkoutPipelinePrefetchSnapshot(
+                    deliveredBatches: deliveredBatches,
+                    scheduledBatches: scheduledBatches,
+                    pendingBatches: scheduledBatches - deliveredBatches
+                )
+            )
+        }
+        return snapshots
+    }
+
     nonisolated static func workoutMetricQueryBatchRangesForTesting(
         totalCount: Int,
         concurrencyLimit: Int
@@ -1120,40 +1160,90 @@ actor HealthSyncStore {
                 )
             )
 
-            var lowerBound = 0
-            while lowerBound < windowWorkouts.count {
-                try Task.checkCancellation()
-                let currentBatchSize = isFirstPendingBatch
-                    ? boundedFirstBatchSize ?? boundedBatchSize
-                    : boundedBatchSize
-                let upperBound = min(windowWorkouts.count, lowerBound + currentBatchSize)
-                let batchWorkouts = Array(windowWorkouts[lowerBound..<upperBound])
-                let sessions = try await mapWorkoutSessionsBounded(
-                    batchWorkouts,
-                    exportedAt: window.end,
-                    concurrencyLimit: workoutMappingConcurrencyLimit
-                )
-                    .sorted { $0.startedAt > $1.startedAt }
-                uploadedWorkouts += sessions.count
-                batchIndex += 1
-                isFirstPendingBatch = false
-                let isFinalBatch = windowIndex == windows.count - 1 && upperBound == windowWorkouts.count
-                try await onBatch(
-                    sessions,
-                    WorkoutBatchProgress(
-                        batchIndex: batchIndex,
-                        totalBatches: 0,
-                        uploadedWorkouts: skippedWorkouts + uploadedWorkouts,
-                        totalWorkouts: isFinalBatch ? discoveredWorkouts : nil,
-                        discoveredWorkouts: discoveredWorkouts,
-                        isScanningComplete: isFinalBatch
+            let firstBatchSizeForWindow = isFirstPendingBatch
+                ? boundedFirstBatchSize ?? boundedBatchSize
+                : boundedBatchSize
+            let batchRanges = Self.workoutBatchRanges(
+                totalCount: windowWorkouts.count,
+                firstBatchSize: firstBatchSizeForWindow,
+                regularBatchSize: boundedBatchSize
+            )
+            let totalWindowBatches = batchRanges.count
+            let windowPrefetchLimit = max(1, min(historicalWorkoutBatchPrefetchLimit, totalWindowBatches))
+            var nextBatchToSchedule = 0
+            var nextBatchToDeliver = 0
+            var mappedBatches: [Int: MappedWorkoutBatch] = [:]
+            companionDebugLog(
+                "HealthSyncStore",
+                "streamWorkoutSessionBatchesByWindow pipeline window=\(windowIndex + 1)/\(windows.count) batches=\(totalWindowBatches) firstBatchSize=\(firstBatchSizeForWindow) regularBatchSize=\(boundedBatchSize) prefetchLimit=\(windowPrefetchLimit)"
+            )
+
+            try await withThrowingTaskGroup(of: MappedWorkoutBatch.self) { group in
+                func scheduleNextBatch() {
+                    guard nextBatchToSchedule < totalWindowBatches else {
+                        return
+                    }
+                    let windowBatchIndex = nextBatchToSchedule
+                    let batchRange = batchRanges[windowBatchIndex]
+                    let batchWorkouts = Array(windowWorkouts[batchRange])
+                    nextBatchToSchedule += 1
+                    companionDebugLog(
+                        "HealthSyncStore",
+                        "streamWorkoutSessionBatchesByWindow schedule window=\(windowIndex + 1)/\(windows.count) batch=\(windowBatchIndex + 1)/\(totalWindowBatches) workouts=\(batchWorkouts.count) pendingPrefetch=\(nextBatchToSchedule - nextBatchToDeliver)"
                     )
-                )
-                companionDebugLog(
-                    "HealthSyncStore",
-                    "streamWorkoutSessionBatchesByWindow uploaded batch=\(batchIndex) mapped=\(sessions.count) uploaded=\(uploadedWorkouts) skipped=\(skippedWorkouts) discovered=\(discoveredWorkouts)"
-                )
-                lowerBound = upperBound
+                    group.addTask {
+                        try Task.checkCancellation()
+                        let sessions = try await self.mapWorkoutSessionsBounded(
+                            batchWorkouts,
+                            exportedAt: window.end,
+                            concurrencyLimit: self.workoutMappingConcurrencyLimit
+                        )
+                            .sorted { $0.startedAt > $1.startedAt }
+                        return MappedWorkoutBatch(batchIndex: windowBatchIndex, sessions: sessions)
+                    }
+                }
+
+                for _ in 0..<windowPrefetchLimit {
+                    scheduleNextBatch()
+                }
+
+                while nextBatchToDeliver < totalWindowBatches {
+                    try Task.checkCancellation()
+                    if let mappedBatch = mappedBatches.removeValue(forKey: nextBatchToDeliver) {
+                        uploadedWorkouts += mappedBatch.sessions.count
+                        batchIndex += 1
+                        isFirstPendingBatch = false
+                        let isFinalBatch = windowIndex == windows.count - 1
+                            && nextBatchToDeliver == totalWindowBatches - 1
+                        try await onBatch(
+                            mappedBatch.sessions,
+                            WorkoutBatchProgress(
+                                batchIndex: batchIndex,
+                                totalBatches: 0,
+                                uploadedWorkouts: skippedWorkouts + uploadedWorkouts,
+                                totalWorkouts: isFinalBatch ? discoveredWorkouts : nil,
+                                discoveredWorkouts: discoveredWorkouts,
+                                isScanningComplete: isFinalBatch
+                            )
+                        )
+                        companionDebugLog(
+                            "HealthSyncStore",
+                            "streamWorkoutSessionBatchesByWindow uploaded batch=\(batchIndex) mapped=\(mappedBatch.sessions.count) uploaded=\(uploadedWorkouts) skipped=\(skippedWorkouts) discovered=\(discoveredWorkouts) prefetchLimit=\(windowPrefetchLimit)"
+                        )
+                        nextBatchToDeliver += 1
+                        scheduleNextBatch()
+                        continue
+                    }
+
+                    guard let mappedBatch = try await group.next() else {
+                        break
+                    }
+                    mappedBatches[mappedBatch.batchIndex] = mappedBatch
+                    companionDebugLog(
+                        "HealthSyncStore",
+                        "streamWorkoutSessionBatchesByWindow mapped window=\(windowIndex + 1)/\(windows.count) batch=\(mappedBatch.batchIndex + 1)/\(totalWindowBatches) records=\(mappedBatch.sessions.count)"
+                    )
+                }
             }
         }
 

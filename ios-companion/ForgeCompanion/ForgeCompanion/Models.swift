@@ -1196,14 +1196,14 @@ struct CompanionSyncUploadStatus {
             return nil
         }
         var parts = [
-            "\(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s accepted now",
-            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s accepted avg",
-            "\(transferStats.uploadedChunks) accepted chunks"
+            "Forge accepted \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
+            "\(Self.formatBytes(Int(transferStats.averageBytesPerSecond)))/s average",
+            "\(transferStats.uploadedChunks) chunks stored"
         ]
         if transferStats.uploadWindow > 1 {
-            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests active")
+            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests waiting on Forge")
         } else if transferStats.inFlightChunks > 0 {
-            parts.append("\(transferStats.inFlightChunks) request active")
+            parts.append("\(transferStats.inFlightChunks) request waiting on Forge")
         }
         if transferStats.inFlightBytes > 0 {
             parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) in flight")
@@ -1223,7 +1223,7 @@ struct CompanionSyncUploadStatus {
         if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
            secondsSinceOldestInFlight >= 3,
            transferStats.inFlightChunks > 0 {
-            parts.append("oldest request \(secondsSinceOldestInFlight)s")
+            parts.append("oldest Forge wait \(secondsSinceOldestInFlight)s")
         }
         if let secondsSinceLastChunk = transferStats.secondsSinceLastChunk,
            secondsSinceLastChunk >= 3,

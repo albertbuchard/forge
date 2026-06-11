@@ -1,5 +1,5 @@
-Forge Companion 1.0.113 keeps more foreground HealthKit upload chunks prepared while network requests are already in flight.
+Forge Companion 1.0.114 keeps historical workout evidence preparation ahead of uploads instead of mapping one batch only after the previous upload finishes.
 
-Foreground HTTP sync now maintains two prepared upload windows, so the next HealthKit chunks are ready as soon as Forge replies instead of waiting for the app to prepare the next chunk after each response.
+Historical workout imports now prefetch mapped workout batches inside each HealthKit scan window, helping the phone keep the upload pipeline fed while Forge is processing active requests.
 
-The sync panel keeps the clearer Forge reply wording from the previous build, avoiding the old “ack” label while the phone is waiting on active upload responses.
+The sync panel now separates accepted throughput, requests waiting on Forge, and phone-side preparation so long waits are easier to diagnose without the old “ack” wording.
