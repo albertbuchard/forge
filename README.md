@@ -10,6 +10,8 @@
 
 Forge is a local-first workspace for planning, execution, memory, health context, and agent collaboration.
 
+Read the full published documentation on the [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
+
 ![Forge overview dashboard](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
 
 It gives you one place to:
