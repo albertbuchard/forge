@@ -1,5 +1,5 @@
-Forge Companion 1.0.97 improves foreground HealthKit sync throughput.
+Forge Companion 1.0.98 improves foreground HealthKit sync diagnostics.
 
-Foreground HealthKit sync can now keep several prepared HTTP chunks in flight instead of waiting for every chunk acknowledgement before starting the next upload.
+The sync view now distinguishes completed chunk acknowledgements from chunks that are already scheduled and in flight.
 
-Background and Iroh sync stay conservative, while the foreground HTTP path uses a larger connection window and logs the active upload window for diagnosis.
+This makes foreground HealthKit upload stalls easier to diagnose on device: when an acknowledgement is delayed, the app can show whether the upload pipe is still active or empty.
