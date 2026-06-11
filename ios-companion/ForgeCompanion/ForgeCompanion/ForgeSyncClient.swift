@@ -2113,68 +2113,41 @@ struct ForgeSyncClient {
         guard chunks.isEmpty == false else {
             return startingSequence
         }
-        let concurrency = Self.healthSyncChunkUploadConcurrency(
-            pairing: pairing,
-            useBackgroundUpload: useBackgroundUpload
-        )
-        guard concurrency > 1, chunks.count > 1 else {
-            var sequence = startingSequence
-            for chunk in chunks {
-                sequence = try await uploadHealthSyncChunk(
-                    uploadSession: uploadSession,
-                    pairing: pairing,
-                    sequence: chunk.sequence,
-                    family: chunk.family,
-                    recordCount: chunk.recordCount,
-                    payloadData: chunk.payloadData,
-                    chunkId: chunk.chunkId,
-                    useBackgroundUpload: useBackgroundUpload,
-                    onChunkUploaded: onChunkUploaded
-                )
-            }
-            return sequence
+        let concurrency = {
+            Self.healthSyncChunkUploadConcurrency(
+                pairing: pairing,
+                useBackgroundUpload: useBackgroundUpload
+            )
         }
-
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunks concurrent start count=\(chunks.count) window=\(concurrency) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession")"
+            "uploadPreparedHealthSyncChunks start count=\(chunks.count) window=\(concurrency()) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         var iterator = chunks.makeIterator()
-        var scheduledCount = 0
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            func scheduleNext() {
-                guard let chunk = iterator.next() else {
-                    return
-                }
-                scheduledCount += 1
-                group.addTask { [self] in
-                    _ = try await uploadHealthSyncChunk(
-                        uploadSession: uploadSession,
-                        pairing: pairing,
-                        sequence: chunk.sequence,
-                        family: chunk.family,
-                        recordCount: chunk.recordCount,
-                        payloadData: chunk.payloadData,
-                        chunkId: chunk.chunkId,
-                        useBackgroundUpload: useBackgroundUpload,
-                        onChunkUploaded: onChunkUploaded
-                    )
-                }
-            }
-
-            let initialWindow = min(concurrency, chunks.count)
-            for _ in 0..<initialWindow {
-                scheduleNext()
-            }
-            while try await group.next() != nil {
-                scheduleNext()
-            }
+        let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
+            currentConcurrency: concurrency,
+            currentPrefetchLimit: { 0 },
+            windowPollIntervalNanoseconds: useBackgroundUpload ? 1_000_000_000 : nil
+        ) {
+            iterator.next()
+        } uploadChunk: { [self] chunk in
+            _ = try await uploadHealthSyncChunk(
+                uploadSession: uploadSession,
+                pairing: pairing,
+                sequence: chunk.sequence,
+                family: chunk.family,
+                recordCount: chunk.recordCount,
+                payloadData: chunk.payloadData,
+                chunkId: chunk.chunkId,
+                useBackgroundUpload: useBackgroundUpload,
+                onChunkUploaded: onChunkUploaded
+            )
         }
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadHealthSyncChunks concurrent complete count=\(chunks.count) scheduled=\(scheduledCount) nextSequence=\(startingSequence + chunks.count)"
+            "uploadPreparedHealthSyncChunks complete count=\(chunks.count) scheduled=\(metrics.scheduledCount) scheduledBeforeFirstCompletion=\(metrics.scheduledBeforeFirstCompletion) nextSequence=\(startingSequence + metrics.scheduledCount)"
         )
-        return startingSequence + chunks.count
+        return startingSequence + metrics.scheduledCount
     }
 
     private struct HealthSyncPreparedChunkSchedulerMetrics: Equatable {
