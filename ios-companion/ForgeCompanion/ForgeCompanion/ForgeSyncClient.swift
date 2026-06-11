@@ -508,6 +508,18 @@ struct ForgeSyncClient {
         )
     }
 
+    static func requestTransportTimingSummaryForTesting(
+        apiBaseUrl: String,
+        transportProtocolName: String?,
+        elapsedMs: Int
+    ) -> String {
+        requestTransportTimingSummary(
+            apiBaseUrl: apiBaseUrl,
+            transportProtocolName: transportProtocolName,
+            elapsedMs: elapsedMs
+        )
+    }
+
     private static let bootstrapSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieAcceptPolicy = .always
@@ -3018,6 +3030,7 @@ struct ForgeSyncClient {
             useBackgroundUpload: Bool
         ) async throws -> (envelope: HealthSyncChunkEnvelope, transportTimingSummary: String?) {
             var timingSummary: String?
+            let requestStartedAt = Date()
             let envelope: HealthSyncChunkEnvelope = try await sendRequest(
                 path: "/mobile/healthkit/sync-sessions/\(uploadSession.syncSessionId)/chunks",
                 apiBaseUrl: apiBaseUrl,
@@ -3039,6 +3052,17 @@ struct ForgeSyncClient {
                     timingSummary = Self.irohTransportTimingSummary(from: response)
                 }
             )
+            let elapsedMs = max(
+                0,
+                Int((Date().timeIntervalSince(requestStartedAt) * 1000).rounded())
+            )
+            if timingSummary == nil {
+                timingSummary = Self.requestTransportTimingSummary(
+                    apiBaseUrl: apiBaseUrl,
+                    transportProtocolName: transport?.protocolName,
+                    elapsedMs: elapsedMs
+                )
+            }
             return (envelope, timingSummary)
         }
 
@@ -4050,6 +4074,25 @@ struct ForgeSyncClient {
             message.contains("connection lost") ||
             message.contains("not connected") ||
             message.contains("offline")
+    }
+
+    private static func requestTransportTimingSummary(
+        apiBaseUrl: String,
+        transportProtocolName: String?,
+        elapsedMs: Int
+    ) -> String {
+        let routeLabel: String
+        if transportProtocolName == "iroh" {
+            routeLabel = "Iroh request"
+        } else if isTailscaleUrl(apiBaseUrl) {
+            routeLabel = "Tailscale request"
+        } else {
+            routeLabel = "HTTP request"
+        }
+        if elapsedMs >= 1000 {
+            return "\(routeLabel) \(String(format: "%.1f", Double(elapsedMs) / 1000))s"
+        }
+        return "\(routeLabel) \(elapsedMs) ms"
     }
 
     private static func irohTransportTimingSummary(from response: HTTPURLResponse) -> String? {

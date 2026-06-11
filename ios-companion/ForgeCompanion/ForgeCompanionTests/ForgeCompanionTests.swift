@@ -1013,6 +1013,33 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(route.label, "Iroh primary")
     }
 
+    func testHealthSyncChunkTransportTimingLabelsDirectRoutes() {
+        XCTAssertEqual(
+            ForgeSyncClient.requestTransportTimingSummaryForTesting(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                transportProtocolName: nil,
+                elapsedMs: 842
+            ),
+            "Tailscale request 842 ms"
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.requestTransportTimingSummaryForTesting(
+                apiBaseUrl: "https://forge.example.com/api/v1",
+                transportProtocolName: nil,
+                elapsedMs: 1_245
+            ),
+            "HTTP request 1.2s"
+        )
+        XCTAssertEqual(
+            ForgeSyncClient.requestTransportTimingSummaryForTesting(
+                apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+                transportProtocolName: "iroh",
+                elapsedMs: 21_400
+            ),
+            "Iroh request 21.4s"
+        )
+    }
+
     func testIrohTransportTimeoutUsesUrlSessionFallbackOnlyForHttpPairingUrls() {
         XCTAssertTrue(
             ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
