@@ -505,6 +505,15 @@ struct ForgeWatchAckBatchEnvelope: Codable, Hashable {
     let acks: [ForgeWatchAckEnvelope]
 }
 
+enum ForgeWatchActionQueueReconciliation {
+    nonisolated static func remainingEnvelopes(
+        afterAcknowledging acknowledgedIds: Set<String>,
+        in latestQueue: [ForgeWatchOutboundEnvelope]
+    ) -> [ForgeWatchOutboundEnvelope] {
+        latestQueue.filter { acknowledgedIds.contains($0.id) == false }
+    }
+}
+
 enum ForgeWatchPhoneFallbackBatchPolicy {
     nonisolated static func reachablePhoneExchangeCount(forActionCount actionCount: Int) -> Int {
         actionCount > 0 ? 1 : 0

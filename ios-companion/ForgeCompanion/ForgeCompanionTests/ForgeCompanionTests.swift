@@ -1519,6 +1519,19 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("queued"))
     }
 
+    func testWatchQueueReconciliationPreservesActionsCreatedDuringDirectUpload() {
+        let acknowledgedBeforeUpload = makeWatchEnvelope(id: "action_before_upload")
+        let createdDuringUpload = makeWatchEnvelope(id: "action_created_during_upload")
+        let latestQueue = [acknowledgedBeforeUpload, createdDuringUpload]
+
+        let remaining = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+            afterAcknowledging: [acknowledgedBeforeUpload.id],
+            in: latestQueue
+        )
+
+        XCTAssertEqual(remaining.map(\.id), [createdDuringUpload.id])
+    }
+
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)
@@ -1539,6 +1552,29 @@ final class ForgeCompanionTests: XCTestCase {
             userInfo: [NSLocalizedDescriptionKey: "Forge rejected the action."]
         )
         XCTAssertFalse(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(serverRejection))
+    }
+
+    private func makeWatchEnvelope(id: String) -> ForgeWatchOutboundEnvelope {
+        ForgeWatchOutboundEnvelope(
+            id: id,
+            createdAt: "2026-06-12T08:00:00Z",
+            device: ForgeWatchDeviceDescriptor(
+                name: "Test Watch",
+                platform: "watchOS",
+                appVersion: "test",
+                sourceDevice: "watch"
+            ),
+            kind: .captureEvent,
+            habitCheckIn: nil,
+            captureEvent: ForgeWatchCaptureEventAction(
+                eventType: "mark_moment",
+                recordedAt: "2026-06-12T08:00:00Z",
+                promptId: nil,
+                linkedContext: .empty,
+                payload: ["source": "test"]
+            ),
+            command: nil
+        )
     }
 
     func testReachablePhoneFallbackBatchesWatchActionsIntoOneExchange() throws {

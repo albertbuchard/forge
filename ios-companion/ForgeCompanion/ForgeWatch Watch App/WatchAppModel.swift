@@ -73,13 +73,25 @@ final class WatchAppModel: NSObject, ObservableObject {
             forceUserRetry: forceDirect
         )
         if directConnection(respectingCooldown: respectCooldown) != nil {
-            directFlushTask?.cancel()
-            directFlushTask = Task { @MainActor [weak self] in
-                await self?.flushPendingActionsDirectThenPhone(forceDirect: forceDirect)
-            }
+            startDirectFlushIfNeeded(forceDirect: forceDirect)
             return
         }
         flushPendingActionsThroughPhone(queue)
+    }
+
+    private func startDirectFlushIfNeeded(forceDirect: Bool) {
+        guard directFlushTask == nil else {
+            lastStatusMessage = "Direct send already running"
+            return
+        }
+        directFlushTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.flushPendingActionsDirectThenPhone(forceDirect: forceDirect)
+            self.directFlushTask = nil
+            if self.loadQueue().isEmpty == false, self.directConnection() != nil {
+                self.flushPendingActions(forceDirect: forceDirect)
+            }
+        }
     }
 
     private func flushPendingActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
@@ -749,7 +761,13 @@ final class WatchAppModel: NSObject, ObservableObject {
             clearDirectRouteCooldown()
             saveBootstrap(envelope.watch.withConnection(connection))
             let acknowledgedIds = Set(envelope.receipt.receipts.map(\.actionId))
-            saveQueue(queue.filter { acknowledgedIds.contains($0.id) == false })
+            let latestQueue = loadQueue()
+            saveQueue(
+                ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+                    afterAcknowledging: acknowledgedIds,
+                    in: latestQueue
+                )
+            )
             let remaining = loadQueue()
             lastStatusMessage = remaining.isEmpty
                 ? "Synced: \(result.metric.summary)"
