@@ -1,9 +1,9 @@
-Forge Companion 1.0.132 fixes the remaining mixed Tailscale/Iroh sync status label.
+Forge Companion 1.0.133 improves watch sync clarity and keeps transport labels tied to the active route.
 
-If the active pairing route is Tailscale, sync status now reports Tailscale. If the active route is Iroh, it reports Iroh, even when stale pairing metadata still contains an older Tailscale URL.
+The watch sync page now shows whether it has a direct Forge route, how many local actions are still pending, and whether it is sending directly through Tailscale or falling back to the iPhone relay.
 
-This keeps the UI aligned with the actual upload route and removes another source of confusing hybrid transport wording during HealthKit uploads.
+Watch action status now says "Sending to Forge through Tailscale" when a secure Tailscale URL is available, instead of vague queued or relay wording.
 
-The update also keeps the existing stale "Synced ..." message suppression during active transfers, so the panel should continue showing the current upload stage instead of an old completed stage.
+The Tailscale/Iroh route rules are unchanged: secure Tailscale URLs use direct networking, while loopback, plain HTTP, and logical Iroh URLs are rejected for direct watch calls and use the relay path instead.
 
-HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
+HealthKit cursors, upload checkpoints, pairing state, watch queues, and stored user data are unchanged.

@@ -21,6 +21,7 @@ struct ContentView: View {
                     navigation: navigation,
                     bootstrap: appModel.bootstrap,
                     directMetric: appModel.lastDirectSyncMetric,
+                    pendingActionCount: appModel.pendingActionCount,
                     onHabitTap: { selectedHabit = $0 },
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
@@ -135,6 +136,7 @@ private struct WatchSurfacePager: View {
     @ObservedObject var navigation: WatchNavigationModel
     let bootstrap: ForgeWatchBootstrap
     let directMetric: ForgeWatchDirectSyncMetric?
+    let pendingActionCount: Int
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
@@ -211,7 +213,9 @@ private struct WatchSurfacePager: View {
             case .sync:
                 SyncSurface(
                     sync: bootstrap.sync,
+                    connection: bootstrap.connection,
                     directMetric: directMetric,
+                    pendingActionCount: pendingActionCount,
                     onRefresh: onRefresh,
                     onRetry: onRetry
                 )
@@ -1149,7 +1153,9 @@ private struct InboxSurface: View {
 
 private struct SyncSurface: View {
     let sync: ForgeWatchSyncSnapshot?
+    let connection: ForgeWatchConnection?
     let directMetric: ForgeWatchDirectSyncMetric?
+    let pendingActionCount: Int
     let onRefresh: () -> Void
     let onRetry: () -> Void
 
@@ -1162,7 +1168,13 @@ private struct SyncSurface: View {
                 HStack {
                     DenseMetric(title: "Captures", value: "\(sync?.storedCaptureCount ?? 0)", tint: WatchTheme.accent)
                     DenseMetric(title: "Receipts", value: "\(sync?.actionReceiptCount ?? 0)", tint: WatchTheme.success)
+                    DenseMetric(title: "Pending", value: "\(pendingActionCount)", tint: pendingActionCount == 0 ? WatchTheme.success : WatchTheme.accent)
                 }
+                Text(connectionSummary)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(connection?.directNetworkingEnabled == true ? WatchTheme.success : WatchTheme.textMuted)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
                 Text(sync?.generatedAt ?? "Waiting for Forge")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
@@ -1195,6 +1207,16 @@ private struct SyncSurface: View {
                 }
             }
         }
+    }
+
+    private var connectionSummary: String {
+        guard let connection else {
+            return "No direct Forge route yet; watch will ask the iPhone relay."
+        }
+        if connection.directNetworkingEnabled {
+            return "Direct \(connection.transportLabel) to Forge"
+        }
+        return "Direct route disabled; watch will ask the iPhone relay."
     }
 }
 

@@ -12,6 +12,10 @@ import XCTest
 final class ForgeWatch_Watch_AppTests: XCTestCase {
 
     func testQueueHabitCheckInOptimisticallyUpdatesCurrentSegment() throws {
+        ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        defer {
+            ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        }
         let model = WatchAppModel(preview: true)
         let habit = try XCTUnwrap(model.bootstrap.habits.first)
         let originalStreak = habit.streakCount
@@ -23,6 +27,20 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertFalse(updated.dueToday)
         XCTAssertGreaterThanOrEqual(updated.streakCount, originalStreak)
         XCTAssertEqual(updated.last7History.filter(\.current).first?.state, .aligned)
+    }
+
+    func testQueueHabitCheckInShowsDirectTailscalePendingAction() throws {
+        ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        defer {
+            ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        }
+        let model = WatchAppModel(preview: true)
+        let habit = try XCTUnwrap(model.bootstrap.habits.first)
+
+        model.queueHabitCheckIn(for: habit, status: "done")
+
+        XCTAssertEqual(model.pendingActionCount, 1)
+        XCTAssertEqual(model.lastStatusMessage, "Sending to Forge through Tailscale")
     }
 
     func testHabitRingAlwaysUsesSevenSegments() throws {

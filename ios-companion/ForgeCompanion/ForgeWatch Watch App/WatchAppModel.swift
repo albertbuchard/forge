@@ -66,6 +66,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     @Published var selectedSurface: WatchSurface = .now
     @Published var lastStatusMessage = "Waiting for Forge"
     @Published var lastDirectSyncMetric: ForgeWatchDirectSyncMetric?
+    @Published private(set) var pendingActionCount = 0
 
     private let defaults = ForgeWatchStorage.sharedDefaults()
     private let encoder = JSONEncoder()
@@ -86,6 +87,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         super.init()
         if preview == false {
             bootstrap = loadBootstrap()
+            pendingActionCount = loadQueue().count
             activateSession()
         }
     }
@@ -147,8 +149,8 @@ final class WatchAppModel: NSObject, ObservableObject {
             }
         }
         lastStatusMessage = WCSession.default.isReachable
-            ? "Sending through iPhone"
-            : "Saved until iPhone can relay"
+            ? "Sending through iPhone relay"
+            : "Waiting for iPhone relay"
     }
 
     func requestForgeRefresh(reason: String = "manual", force: Bool = false) {
@@ -179,7 +181,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             reason: reason
         )
         guard let data = try? encoder.encode(request) else { return }
-        lastStatusMessage = "Asking iPhone relay to sync"
+        lastStatusMessage = "Requesting iPhone relay refresh"
         if WCSession.default.isReachable {
             WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
                 Task { @MainActor in
@@ -535,8 +537,8 @@ final class WatchAppModel: NSObject, ObservableObject {
         queue.append(envelope)
         saveQueue(queue)
         lastStatusMessage = directConnection() != nil
-            ? "Syncing with Forge"
-            : "Saved until Forge is reachable"
+            ? "Sending to Forge through \(directConnection()?.transportLabel ?? "direct")"
+            : "Waiting for iPhone relay"
         flushPendingActions()
     }
 
@@ -875,6 +877,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     private func saveQueue(_ queue: [ForgeWatchOutboundEnvelope]) {
+        pendingActionCount = queue.count
         if let data = try? encoder.encode(queue) {
             defaults.set(data, forKey: ForgeWatchStorage.outgoingQueueKey)
         }
@@ -920,7 +923,11 @@ extension WatchAppModel: WCSessionDelegate {
             if let error {
                 self.lastStatusMessage = "iPhone link failed: \(error.localizedDescription)"
             } else {
-                self.lastStatusMessage = activationState == .activated ? "Relay available" : "Waiting for Forge"
+                if activationState == .activated, let connection = self.directConnection() {
+                    self.lastStatusMessage = "Direct \(connection.transportLabel) ready"
+                } else {
+                    self.lastStatusMessage = activationState == .activated ? "iPhone relay ready" : "Waiting for Forge"
+                }
                 self.flushPendingActions()
                 self.refreshFromForge(reason: "activation", fallbackToPhone: true)
             }
