@@ -76,6 +76,8 @@ final class WatchAppModel: NSObject, ObservableObject {
     private let directRequestTimeout: TimeInterval = 12
     private var lastRefreshRequestAt: Date?
     private var directFlushTask: Task<Void, Never>?
+    private var directRouteCoolingDownUntil: Date?
+    private var directRouteLastFailureDescription: String?
 
     init(preview: Bool = false) {
         self.previewMode = preview
@@ -148,6 +150,10 @@ final class WatchAppModel: NSObject, ObservableObject {
                 }
             }
         }
+        if let cooldownMessage = directCooldownRelayMessage() {
+            lastStatusMessage = cooldownMessage
+            return
+        }
         lastStatusMessage = WCSession.default.isReachable
             ? "Sending through iPhone relay"
             : "Waiting for iPhone relay"
@@ -166,6 +172,9 @@ final class WatchAppModel: NSObject, ObservableObject {
         if directConnection() != nil {
             refreshFromForge(reason: reason, fallbackToPhone: true)
             return
+        }
+        if let cooldownMessage = directCooldownRelayMessage() {
+            lastStatusMessage = "\(cooldownMessage) refresh"
         }
         requestPhoneRelayRefresh(reason: reason)
     }
@@ -536,9 +545,11 @@ final class WatchAppModel: NSObject, ObservableObject {
         var queue = loadQueue()
         queue.append(envelope)
         saveQueue(queue)
-        lastStatusMessage = directConnection() != nil
-            ? "Sending to Forge through \(directConnection()?.transportLabel ?? "direct")"
-            : "Waiting for iPhone relay"
+        if let connection = directConnection() {
+            lastStatusMessage = "Sending to Forge through \(connection.transportLabel)"
+        } else {
+            lastStatusMessage = directCooldownRelayMessage() ?? "Waiting for iPhone relay"
+        }
         flushPendingActions()
     }
 
@@ -575,23 +586,21 @@ final class WatchAppModel: NSObject, ObservableObject {
         let metric: ForgeWatchDirectSyncMetric
     }
 
-    private func directConnection() -> ForgeWatchConnection? {
+    private func directConnection(respectingCooldown: Bool = true) -> ForgeWatchConnection? {
         guard let connection = bootstrap.connection, Self.canUseDirectNetworking(connection) else {
+            return nil
+        }
+        if respectingCooldown, isDirectRouteCoolingDown(now: Date()) {
             return nil
         }
         return connection
     }
 
     static func canUseDirectNetworking(_ connection: ForgeWatchConnection) -> Bool {
-        guard
-            connection.directNetworkingEnabled,
-            let url = URL(string: connection.apiBaseUrl),
-            url.scheme?.lowercased() == "https",
-            let host = url.host?.lowercased()
-        else {
-            return false
-        }
-        return host != "127.0.0.1" && host != "localhost" && host != "::1"
+        ForgeWatchDirectRoutePolicy.canUseDirectNetworking(
+            apiBaseUrl: connection.apiBaseUrl,
+            directNetworkingEnabled: connection.directNetworkingEnabled
+        )
     }
 
     private func directURL(path: String, connection: ForgeWatchConnection) throws -> URL {
@@ -707,11 +716,13 @@ final class WatchAppModel: NSObject, ObservableObject {
                 itemCount: 0
             )
             let envelope = result.response
+            clearDirectRouteCooldown()
             saveBootstrap(envelope.watch.withConnection(connection))
             lastStatusMessage = "Synced: \(result.metric.summary)"
             flushPendingActions()
         } catch {
             lastStatusMessage = "Direct sync failed: \(error.localizedDescription)"
+            markDirectRouteFailureIfNeeded(error)
             if fallbackToPhone {
                 requestPhoneRelayRefresh(reason: reason)
             }
@@ -741,6 +752,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                 itemCount: commands.count
             )
             let envelope = result.response
+            clearDirectRouteCooldown()
             saveBootstrap(envelope.watch.withConnection(connection))
             let acknowledgedIds = Set(envelope.receipt.receipts.map(\.actionId))
             saveQueue(queue.filter { acknowledgedIds.contains($0.id) == false })
@@ -757,9 +769,50 @@ final class WatchAppModel: NSObject, ObservableObject {
             if let metric = lastDirectSyncMetric {
                 lastDirectSyncMetric = metric.withFallbackUsed(true)
             }
+            markDirectRouteFailureIfNeeded(error)
             lastStatusMessage = "Direct sync unavailable; using iPhone relay"
             flushPendingActionsThroughPhone(queue)
         }
+    }
+
+    private func isDirectRouteCoolingDown(now: Date) -> Bool {
+        guard let directRouteCoolingDownUntil else {
+            return false
+        }
+        if now < directRouteCoolingDownUntil {
+            return true
+        }
+        self.directRouteCoolingDownUntil = nil
+        directRouteLastFailureDescription = nil
+        return false
+    }
+
+    private func directCooldownRelayMessage() -> String? {
+        guard
+            let connection = directConnection(respectingCooldown: false),
+            isDirectRouteCoolingDown(now: Date())
+        else {
+            return nil
+        }
+        return "\(connection.transportLabel) not reachable on watch; using iPhone relay"
+    }
+
+    private func markDirectRouteFailureIfNeeded(_ error: Error) {
+        guard Self.isRecoverableDirectNetworkError(error) else {
+            return
+        }
+        directRouteCoolingDownUntil = Date()
+            .addingTimeInterval(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds)
+        directRouteLastFailureDescription = error.localizedDescription
+    }
+
+    private func clearDirectRouteCooldown() {
+        directRouteCoolingDownUntil = nil
+        directRouteLastFailureDescription = nil
+    }
+
+    static func isRecoverableDirectNetworkError(_ error: Error) -> Bool {
+        ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(error)
     }
 
     private static func commands(

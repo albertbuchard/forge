@@ -19,6 +19,50 @@ enum ForgeWatchStorage {
     }
 }
 
+enum ForgeWatchDirectRoutePolicy {
+    nonisolated static let failureRelayCooldownSeconds: TimeInterval = 45
+
+    nonisolated static func canUseDirectNetworking(
+        apiBaseUrl: String,
+        directNetworkingEnabled: Bool
+    ) -> Bool {
+        guard
+            directNetworkingEnabled,
+            let url = URL(string: apiBaseUrl),
+            url.scheme?.lowercased() == "https",
+            let host = url.host?.lowercased()
+        else {
+            return false
+        }
+        return host != "127.0.0.1" && host != "localhost" && host != "::1"
+    }
+
+    nonisolated static func isRecoverableNetworkError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else {
+            return false
+        }
+        switch nsError.code {
+        case URLError.timedOut.rawValue,
+            URLError.cannotFindHost.rawValue,
+            URLError.cannotConnectToHost.rawValue,
+            URLError.networkConnectionLost.rawValue,
+            URLError.notConnectedToInternet.rawValue,
+            URLError.dnsLookupFailed.rawValue,
+            URLError.internationalRoamingOff.rawValue,
+            URLError.dataNotAllowed.rawValue,
+            URLError.secureConnectionFailed.rawValue,
+            URLError.serverCertificateHasBadDate.rawValue,
+            URLError.serverCertificateUntrusted.rawValue,
+            URLError.serverCertificateHasUnknownRoot.rawValue,
+            URLError.serverCertificateNotYetValid.rawValue:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 enum WatchSurface: String, CaseIterable, Codable {
     case now
     case work

@@ -1168,7 +1168,7 @@ private struct SyncSurface: View {
                 HStack {
                     DenseMetric(title: "Captures", value: "\(sync?.storedCaptureCount ?? 0)", tint: WatchTheme.accent)
                     DenseMetric(title: "Receipts", value: "\(sync?.actionReceiptCount ?? 0)", tint: WatchTheme.success)
-                    DenseMetric(title: "Pending", value: "\(pendingActionCount)", tint: pendingActionCount == 0 ? WatchTheme.success : WatchTheme.accent)
+                    DenseMetric(title: actionCountTitle, value: "\(pendingActionCount)", tint: pendingActionCount == 0 ? WatchTheme.success : WatchTheme.accent)
                 }
                 Text(connectionSummary)
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -1217,6 +1217,13 @@ private struct SyncSurface: View {
             return "Direct \(connection.transportLabel) to Forge"
         }
         return "Direct route disabled; watch will ask the iPhone relay."
+    }
+
+    private var actionCountTitle: String {
+        if pendingActionCount == 0 {
+            return "Clear"
+        }
+        return connection?.directNetworkingEnabled == true ? "Sending" : "To send"
     }
 }
 

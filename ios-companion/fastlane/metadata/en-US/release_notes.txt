@@ -1,9 +1,9 @@
-Forge Companion 1.0.134 fixes stale Tailscale/manual transport state and makes follow-up workout evidence uploads clearer.
+Forge Companion 1.0.135 improves watch sync routing for secure Tailscale pairings.
 
-Existing pairings that point at a secure Tailscale `*.ts.net` Forge URL are now normalized back to Tailscale mode even if an older payload still said manual HTTP.
+The watch now only attempts direct API calls for secure, non-local URLs such as Tailscale HTTPS endpoints. Iroh URLs stay on the Iroh path; Tailscale URLs stay labeled as Tailscale.
 
-The sync panel no longer shows a completed "Synced..." headline while a historical workout import or missing heart-rate/route evidence repair is active.
+If the watch cannot reach the direct route, it stops repeatedly waiting on the same network timeout and temporarily uses the iPhone relay instead.
 
-Historical workout evidence now has its own pipeline status so the app shows that Forge is preparing or importing workout evidence instead of looking stuck on the previous sync result.
+The watch sync card now says Clear, Sending, or To send instead of Pending, so staged actions are easier to understand.
 
 HealthKit cursors, upload checkpoints, pairing tokens, watch action queues, and stored user data are unchanged.

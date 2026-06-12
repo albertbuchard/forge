@@ -1404,6 +1404,47 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertNil(WatchSessionManager.directWatchConnectionForTesting(for: insecureFallbackPayload))
     }
 
+    func testWatchDirectRoutePolicyOnlyAllowsSecureNonLoopbackDirectUrls() {
+        XCTAssertTrue(
+            ForgeWatchDirectRoutePolicy.canUseDirectNetworking(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                directNetworkingEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            ForgeWatchDirectRoutePolicy.canUseDirectNetworking(
+                apiBaseUrl: "http://macbook-pro.example.ts.net/api/v1",
+                directNetworkingEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            ForgeWatchDirectRoutePolicy.canUseDirectNetworking(
+                apiBaseUrl: "https://127.0.0.1:4317/api/v1",
+                directNetworkingEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            ForgeWatchDirectRoutePolicy.canUseDirectNetworking(
+                apiBaseUrl: "forge-iroh://node/api/v1",
+                directNetworkingEnabled: true
+            )
+        )
+    }
+
+    func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
+        XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds, 45)
+        XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.timedOut)))
+        XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.cannotConnectToHost)))
+        XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.notConnectedToInternet)))
+
+        let serverRejection = NSError(
+            domain: "ForgeWatchDirect",
+            code: 409,
+            userInfo: [NSLocalizedDescriptionKey: "Forge rejected the action."]
+        )
+        XCTAssertFalse(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(serverRejection))
+    }
+
     func testForegroundDirectBulkRouteUsesAggressiveDirectTimeout() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
