@@ -28,6 +28,10 @@ enum ForgeWatchDirectRoutePolicy {
         forceUserRetry == false
     }
 
+    nonisolated static func directRouteTestingStatus(transportLabel: String) -> String {
+        "Testing \(transportLabel) direct route"
+    }
+
     nonisolated static func canUseDirectNetworking(
         apiBaseUrl: String,
         directNetworkingEnabled: Bool

@@ -1431,6 +1431,16 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testWatchDirectRouteTestingStatusDoesNotClaimReadyBeforeVerification() {
+        let status = ForgeWatchDirectRoutePolicy.directRouteTestingStatus(
+            transportLabel: "Tailscale"
+        )
+
+        XCTAssertEqual(status, "Testing Tailscale direct route")
+        XCTAssertFalse(status.localizedCaseInsensitiveContains("ready"))
+        XCTAssertFalse(status.localizedCaseInsensitiveContains("Iroh"))
+    }
+
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)

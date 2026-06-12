@@ -1,11 +1,7 @@
-Forge Companion 1.0.147 makes watch direct-sync status evidence-based instead of configuration-based.
+Forge Companion 1.0.148 tightens the watch direct-sync status so it cannot claim a route is ready before it is actually verified.
 
-The Sync surface now says when a Tailscale/HTTPS route is only configured, when the watch has verified direct Forge reachability, and when direct watch delivery failed.
+When the watch activates with a configured Tailscale HTTPS route, it now says it is testing that direct route until a real request proves Forge is reachable.
 
-If the paired iPhone backup sends an action after direct watch delivery fails, the watch now says that explicitly instead of implying that Tailscale direct sync succeeded.
-
-Direct watch failures now show the concrete error on the watch so Tailscale reachability problems are visible instead of looking like a stuck sync.
+The watch no longer treats paired-session activation as proof that Tailscale direct sync works.
 
 The iPhone HealthKit sync path, Tailscale/Iroh transport selection rules, pairing tokens, upload checkpoints, watch action persistence, and stored user data are unchanged.
-
-Existing route tests still verify that a Tailscale HTTPS pairing does not use Iroh metadata, and that Iroh is used only for active forge-iroh pairings.

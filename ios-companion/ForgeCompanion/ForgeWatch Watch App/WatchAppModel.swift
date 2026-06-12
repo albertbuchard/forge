@@ -637,6 +637,12 @@ final class WatchAppModel: NSObject, ObservableObject {
         )
     }
 
+    static func directRouteTestingStatus(for connection: ForgeWatchConnection) -> String {
+        ForgeWatchDirectRoutePolicy.directRouteTestingStatus(
+            transportLabel: connection.transportLabel
+        )
+    }
+
     private func directURL(path: String, connection: ForgeWatchConnection) throws -> URL {
         guard let url = URL(string: "\(connection.apiBaseUrl)\(path)") else {
             throw URLError(.badURL)
@@ -1062,7 +1068,7 @@ extension WatchAppModel: WCSessionDelegate {
                 self.lastStatusMessage = "iPhone link failed: \(error.localizedDescription)"
             } else {
                 if activationState == .activated, let connection = self.directConnection() {
-                    self.lastStatusMessage = "Direct \(connection.transportLabel) ready"
+                    self.lastStatusMessage = Self.directRouteTestingStatus(for: connection)
                 } else {
                     self.lastStatusMessage = activationState == .activated ? "Paired iPhone backup ready" : "Waiting for Forge"
                 }
