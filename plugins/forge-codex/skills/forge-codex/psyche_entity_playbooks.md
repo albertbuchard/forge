@@ -256,6 +256,28 @@ example makes the hypothesis plausible, then let the user correct the danger,
 protection, payoff, cost, or wording. If the correction is usable, revise once and move
 toward the record shape instead of asking for another broad story.
 
+## Hypothesis Without Cross-Examination
+
+A hypothesis is meant to reduce the user's burden of formulation, not make them prove
+the experience. It should help the user feel, "yes, that is closer to what is
+happening," or "no, the danger is actually over here."
+
+- Do not turn a tentative formulation into a demand for evidence. Avoid following a
+  hypothesis with a stack of questions about evidence, origin, and repair.
+- After a hypothesis, ask one fit-or-correction question such as, "Does that fit, or
+  is the danger/need somewhere else?"
+- If accuracy still needs grounding, ask for the smallest lived cue or contrast that
+  would change the formulation, not a courtroom-style proof.
+- For `belief_entry`, test the sentence, prediction, or danger it names.
+- For `behavior_pattern`, test the cue, protection, short-term payoff, long-term
+  cost, or replacement need.
+- For `mode_profile` and `mode_guide_session`, test the part's job, fear, burden, or
+  impulse.
+- For `trigger_report`, test the sequence, meaning, felt stake, or consequence.
+- For `psyche_value`, `event_type`, and `emotion_definition`, test whether the wording
+  would help future recognition rather than asking the user to justify why the record
+  matters.
+
 ## Hypothesis To Record Bridge
 
 Once a hypothesis lands or is corrected, turn it into a saveable Forge shape instead
@@ -275,6 +297,28 @@ of leaving it as warm reflective prose.
   that.
 - Save through shared batch entity routes only after the user accepts the working
   wording or explicitly asks to save.
+
+## Psyche progressive disclosure
+
+Use this when the user has already supplied meaningful Psyche material. The next move
+should preserve momentum instead of making them retell the whole story.
+
+- Treat an offered belief sentence, value phrase, part voice, urge sentence, trigger
+  episode, event kind, emotion signature, or functional loop as real data, not as a
+  prompt to restart intake.
+- Say what is already usable in plain language, then ask only for the missing detail
+  that changes the record: accuracy, the cue or situation, payoff or cost, protective
+  job, linked episode, whether it is a new version or an update, or save consent.
+- If the user's wording is serviceable, keep it and refine at most one phrase. Do not
+  replace it with a prettier formulation before the user feels recognized.
+- If the user asks to update a Psyche record and already gives the new wording, ask
+  what part of the old formulation it replaces or whether it should stand as a new
+  version. Do not reopen origin, evidence, or repair unless the new meaning is still
+  unclear.
+- If the working material is already accurate enough, ask one accuracy or consent
+  question instead of reopening origin, evidence, or repair.
+- If the remaining unknown is optional therapeutic metadata, save a provisional
+  version after one accuracy check and preserve nuance in a linked note when needed.
 
 ## Psyche save-readiness checkpoint
 
@@ -306,6 +350,23 @@ save the record instead of reopening the whole story.
   when the link is already clear or will materially improve retrieval.
 - After the minimum is present, ask one accuracy question at most: "Is this true
   enough to save as a first version?" If yes, save through shared batch CRUD.
+
+## Psyche after-save close
+
+Use this after a Psyche record is created or updated. The user should feel the
+formulation was held accurately, not that a new worksheet has started.
+
+- Confirm the accepted wording, primary container, and whether it was saved as a
+  first version, update, link, archive, or distinct version.
+- Do not reopen origin, evidence, repair, or adjacent entity mapping after the save.
+  Only offer a flashcard, note, value link, task, or habit when that next object is
+  already visible and would materially help retrieval or action.
+- If nuance was preserved in a linked note or left provisional, say that briefly and
+  keep the door open for later correction without asking another broad exploration
+  question.
+- For belief, pattern, mode, trigger report, value, event type, emotion definition,
+  or flashcard saves, the clean close is one accurate sentence plus any concrete next option
+  that genuinely follows from the user's request.
 
 ## Psyche Hypothesis Map
 
