@@ -3437,28 +3437,17 @@ final class CompanionAppModel: ObservableObject {
     }
 
     private func healthSyncTransportLabel() -> String {
+        Self.healthSyncTransportLabel(for: pairing)
+    }
+
+    static func healthSyncTransportLabel(for pairing: PairingPayload?) -> String {
         guard let pairing else {
             return "HTTP"
         }
-        let fallbackIsTailscale = Self.isTailscaleUrl(pairing.transport?.publicBaseUrl)
-            || Self.isTailscaleUrl(pairing.apiBaseUrl)
         if pairing.usesIrohTransportForActiveApiUrl {
-            if fallbackIsTailscale {
-                return "Tailscale direct"
-            }
-            let hasHttpFallback = Self.isHttpUrl(pairing.transport?.publicBaseUrl)
-                || Self.isHttpUrl(pairing.apiBaseUrl)
-            return hasHttpFallback ? "HTTP direct" : "Iroh primary"
+            return "Iroh primary"
         }
-        return fallbackIsTailscale ? "Tailscale direct" : "HTTP"
-    }
-
-    private static func isHttpUrl(_ rawValue: String?) -> Bool {
-        guard let rawValue,
-              let scheme = URL(string: rawValue)?.scheme?.lowercased() else {
-            return false
-        }
-        return scheme == "http" || scheme == "https"
+        return Self.isTailscaleUrl(pairing.apiBaseUrl) ? "Tailscale direct" : "HTTP"
     }
 
     private static func isTailscaleUrl(_ rawValue: String?) -> Bool {

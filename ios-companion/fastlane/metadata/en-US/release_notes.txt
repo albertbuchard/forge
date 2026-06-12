@@ -1,9 +1,9 @@
-Forge Companion 1.0.131 separates Tailscale and Iroh routing for companion sync.
+Forge Companion 1.0.132 fixes the remaining mixed Tailscale/Iroh sync status label.
 
-When a pairing includes a secure Tailscale URL, the companion now normalizes the active route to Tailscale before chunk uploads and watch bootstrap sharing. Iroh stays active only for Iroh-only pairings.
+If the active pairing route is Tailscale, sync status now reports Tailscale. If the active route is Iroh, it reports Iroh, even when stale pairing metadata still contains an older Tailscale URL.
 
-This removes the hybrid path where an Iroh pairing could silently send HealthKit chunks through a Tailscale fallback and show confusing mixed transport labels.
+This keeps the UI aligned with the actual upload route and removes another source of confusing hybrid transport wording during HealthKit uploads.
 
-The watch app also receives its direct API connection from the normalized active pairing URL, so stale Iroh metadata cannot override an active Tailscale route.
+The update also keeps the existing stale "Synced ..." message suppression during active transfers, so the panel should continue showing the current upload stage instead of an old completed stage.
 
 HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
