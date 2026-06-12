@@ -6,7 +6,7 @@
     <title>Forge Integration Guide</title>
     <meta
       name="description"
-      content="Learn how Forge connects to OpenClaw, Hermes, Codex, and the iPhone companion while keeping one coherent local-first system."
+      content="Learn how Forge connects to OpenClaw, Hermes, Codex, Claude Code, and the iPhone companion while keeping one coherent local-first system."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -70,6 +70,7 @@
               <li><a href="#openclaw">OpenClaw</a></li>
               <li><a href="#hermes">Hermes</a></li>
               <li><a href="#codex">Codex</a></li>
+              <li><a href="#claude">Claude Code</a></li>
               <li><a href="#ios">iPhone companion</a></li>
               <li><a href="#companion-transport">Companion transport</a></li>
             </ul>
@@ -88,9 +89,10 @@
               <h3>One front door</h3>
               <p>
                 Use one command whether you want only the browser UI or the full
-                OpenClaw, Hermes, Codex, and iPhone companion setup. Forge
-                installs the local runtime first, then discovers host adapters
-                in the background and asks only for the choices that matter.
+                OpenClaw, Hermes, Codex, Claude Code, and iPhone companion
+                setup. Forge installs the local runtime first, then discovers
+                host adapters in the background and asks only for the choices
+                that matter.
               </p>
               <pre><code>npx forge-memory</code></pre>
               <p>
@@ -141,10 +143,10 @@ userIds:  explicit on cross-owner reads</code></pre>
             <article class="card">
               <h3>Why this matters</h3>
               <p>
-                If OpenClaw, Hermes, Codex, and the browser are meant to see the
-                same goals, tasks, notes, strategies, and users, they must point
-                at the same Forge instance rather than drifting onto separate
-                default stores.
+                If OpenClaw, Hermes, Codex, Claude Code, and the browser are
+                meant to see the same goals, tasks, notes, strategies, and
+                users, they must point at the same Forge instance rather than
+                drifting onto separate default stores.
               </p>
             </article>
           </div>
@@ -160,7 +162,7 @@ userIds:  explicit on cross-owner reads</code></pre>
             <article class="card">
               <h3>The short version</h3>
               <p>
-                OpenClaw, Hermes, and Codex each connect as a stable
+                OpenClaw, Hermes, Codex, and Claude Code each connect as a stable
                 <strong>agent identity</strong>. That identity is based on the
                 provider, machine or data root, and persona. It is not based on
                 a cron id, process id, timestamp, WhatsApp thread, or temporary
@@ -199,7 +201,7 @@ userIds:  explicit on cross-owner reads</code></pre>
             <div
               class="identity-flow"
               role="img"
-              aria-label="OpenClaw, Hermes, and Codex register stable agent identity keys. Forge stores one canonical agent identity per provider and machine, records sessions under it, links users to it, and shows one grouped card in Settings."
+              aria-label="OpenClaw, Hermes, Codex, and Claude Code register stable agent identity keys. Forge stores one canonical agent identity per provider and machine, records sessions under it, links users to it, and shows one grouped card in Settings."
             >
               <div class="flow-group source">
                 <div class="flow-node openclaw">
@@ -213,6 +215,10 @@ userIds:  explicit on cross-owner reads</code></pre>
                 <div class="flow-node codex">
                   <strong>Codex</strong>
                   <span>provider: codex</span>
+                </div>
+                <div class="flow-node claude">
+                  <strong>Claude Code</strong>
+                  <span>provider: claude</span>
                 </div>
               </div>
 
@@ -233,7 +239,7 @@ userIds:  explicit on cross-owner reads</code></pre>
               <div class="flow-node forge-core">
                 <strong>Forge canonical agent</strong>
                 <span>agent_identities.identity_key</span>
-                <small>one OpenClaw, one Hermes, one Codex per install</small>
+                <small>one OpenClaw, one Hermes, one Codex, one Claude Code per install</small>
               </div>
 
               <div class="flow-branch">
@@ -298,8 +304,8 @@ userIds:  explicit on cross-owner reads</code></pre>
               <p>
                 The Settings &gt; Agents page should show canonical agent
                 presence, not a pile of old sessions. A healthy local setup
-                shows one OpenClaw card, one Hermes card, and one Codex card,
-                each with its own nested session history.
+                shows one OpenClaw card, one Hermes card, one Codex card, and
+                one Claude Code card, each with its own nested session history.
               </p>
               <p>
                 Token counts belong to the canonical identity. Old auth probes,
@@ -372,7 +378,7 @@ userIds:  explicit on cross-owner reads</code></pre>
               <p>
                 Let <code>npx forge-memory</code> detect OpenClaw and configure
                 the adapter against the same local runtime and data folder as
-                the browser, Hermes, Codex, and iPhone companion.
+                the browser, Hermes, Codex, Claude Code, and iPhone companion.
               </p>
               <pre><code>npx forge-memory</code></pre>
             </article>
@@ -451,6 +457,8 @@ openclaw forge health</code></pre>
               <p>
                 Use the same origin, port, and data root as the browser and
                 OpenClaw if Hermes is meant to share the same Forge system.
+                Codex and Claude Code should use those same values when all
+                agent hosts are meant to collaborate over one local memory.
               </p>
             </article>
           </div>
@@ -467,7 +475,8 @@ openclaw forge health</code></pre>
               <p>
                 Let <code>npx forge-memory</code> write the local MCP entry for
                 Codex. The adapter then points at the same Forge runtime used by
-                the browser, OpenClaw, Hermes, and iPhone companion.
+                the browser, OpenClaw, Hermes, Claude Code, and iPhone
+                companion.
               </p>
               <pre><code>npx forge-memory</code></pre>
             </article>
@@ -525,6 +534,61 @@ codex mcp list</code></pre>
             metadata lives in <code>plugins/forge-codex/.mcp.json</code> and
             <code>plugins/forge-codex/.codex-plugin/plugin.json</code>.
           </p>
+        </section>
+
+        <section class="section" id="claude">
+          <div class="section-heading">
+            <p class="eyebrow">Claude Code</p>
+            <h2>Use Forge from Claude Code through the shared MCP server.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> detect Claude Code and write
+                the Forge MCP entry into Claude's user config. Claude Code then
+                uses the same local Forge runtime and data root as the browser,
+                OpenClaw, Hermes, Codex, Claude Code, and iPhone companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>What gets configured</h3>
+              <p>
+                Forge writes one user-scope Claude MCP server named
+                <code>forge</code>. The command is the shared Forge Memory MCP
+                bridge rather than a second Claude-specific runtime.
+              </p>
+              <pre><code>npx forge-memory mcp</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced manual MCP install</h3>
+              <p>
+                Use this when debugging Claude Code itself or recovering a
+                host-specific config. The guided installer should be the normal
+                path because it preserves shared data-root settings.
+              </p>
+              <pre><code>claude mcp add --scope user \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=claude \
+  --env FORGE_AGENT_PROVIDER=claude \
+  --env FORGE_TIMEOUT_MS=15000 \
+  forge -- npx forge-memory mcp
+claude mcp list
+claude mcp get forge</code></pre>
+            </article>
+            <article class="card">
+              <h3>Config safety</h3>
+              <p>
+                Forge updates only <code>mcpServers.forge</code> in Claude's
+                config. It preserves unrelated Claude settings, project-level
+                MCP servers, and non-Forge server entries. Uninstall keeps the
+                Claude config by default and removes the Forge MCP entry only
+                when the user explicitly asks to remove adapters.
+              </p>
+            </article>
+          </div>
         </section>
 
         <section class="section" id="ios">
@@ -649,6 +713,12 @@ codex mcp list</code></pre>
               <a
                 href="https://github.com/albertbuchard/forge/blob/main/plugins/forge-codex/README.md"
                 >Codex MCP guide</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/claude-code-adapter.md"
+                >Claude Code MCP guide</a
               >
             </li>
             <li>

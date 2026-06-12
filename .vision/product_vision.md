@@ -5,10 +5,10 @@ health, movement, and agent collaboration in one runtime. It is meant to feel li
 serious operational tool, not a generic productivity dashboard with disconnected features.
 
 Forge is built as a production-grade monorepo using React 19, TypeScript 5, Vite 6,
-Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI contracts, OpenClaw/Hermes/Codex
-adapter surfaces, a repo-owned Rust Iroh companion transport, and a Swift iPhone
-companion that syncs HealthKit and other phone-native signals into the same canonical
-Forge data model.
+Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI contracts,
+OpenClaw/Hermes/Codex/Claude Code adapter surfaces, a repo-owned Rust Iroh
+companion transport, and a Swift iPhone companion that syncs HealthKit and other
+phone-native signals into the same canonical Forge data model.
 
 Forge-owned public code is licensed Apache-2.0 so the open-source project stays
 permissive and patent-explicit while preserving a clean path for future closed-source

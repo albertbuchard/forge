@@ -9,9 +9,9 @@ npx forge-memory
 ```
 
 The guided installer always installs the Forge UI/runtime, then shows OpenClaw,
-Hermes, and Codex as host adapter choices. Direct OpenClaw plugin commands below
-are advanced adapter-only commands for debugging, source-linking, or older host
-workflows.
+Hermes, Codex, and Claude Code as host adapter choices. Direct OpenClaw plugin
+commands below are advanced adapter-only commands for debugging, source-linking,
+or older host workflows.
 
 Useful lifecycle commands:
 

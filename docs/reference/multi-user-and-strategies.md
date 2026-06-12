@@ -96,7 +96,7 @@ Examples of good shared setups:
 
 - one local runtime at `http://127.0.0.1:4317`
 - one shared `dataRoot`, such as `/absolute/path/to/forge-data`
-- OpenClaw, Hermes, Codex, and the browser all talking to that same runtime
+- OpenClaw, Hermes, Codex, Claude Code, and the browser all talking to that same runtime
 
 Examples of when to use separate data roots:
 
@@ -169,6 +169,22 @@ Important points:
 - choose a distinct `actorLabel` only when Hermes or a child agent should act
   as its own bot identity
 - use `FORGE_API_TOKEN` when Hermes is writing to a remote protected runtime
+
+## Claude Code Setup For Shared Multi-user Forge
+
+Recommended setup:
+
+```bash
+npx forge-memory configure --adapters claude
+claude mcp list
+claude mcp get forge
+```
+
+Claude Code should use the same `origin`, `port`, and `dataRoot` as OpenClaw,
+Hermes, Codex, and the browser when all surfaces are meant to share one Forge
+system. Forge Memory writes only Claude's `mcpServers.forge` entry and uses the
+shared `npx forge-memory mcp` server, so Claude does not create a separate
+runtime or database.
 
 ## Browser And Standalone UI
 

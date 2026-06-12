@@ -726,6 +726,10 @@ li {
   border-color: rgba(22, 163, 74, 0.26);
 }
 
+.flow-node.claude {
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
 .flow-node.identity-key {
   border-color: rgba(37, 99, 235, 0.26);
   background: rgba(231, 239, 255, 0.78);
