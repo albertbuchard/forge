@@ -5,9 +5,10 @@ Native SwiftUI companion app for Forge.
 ## Scope
 
 This Apple companion is the sensor, sync, and micro-command bridge for Forge. The
-iPhone app remains the networked client that pairs with Forge, owns credentials, and
-handles retries. The watch app is a paired wrist-first command surface, not a second
-Forge client.
+iPhone app pairs with Forge, owns credentials, and handles HealthKit and movement
+sync. The watch app is a wrist-first command surface that can call Forge directly
+over a secure Tailscale or HTTPS route and uses the paired iPhone as a backup when
+the watch cannot reach Forge itself.
 
 The current shipped surfaces focus on:
 
@@ -18,7 +19,7 @@ The current shipped surfaces focus on:
 - Manual sync + background refresh hooks
 - Full-screen embedded Forge web app after pairing
 - Floating native control center for sync, HealthKit, and companion settings
-- WatchConnectivity bootstrap + idempotent queued action bridge
+- WatchConnectivity bootstrap + direct-first watch action delivery with paired-iPhone backup
 - watchOS crown-selected command surfaces for Now, Work, Habits, Goals, Today, Health, Movement, Psyche, Inbox, and Sync
 - watchOS habits with 7-segment streak rings and Done/Missed or Resisted/Performed decisions
 - watchOS task-run controls for starting, heartbeating, completing, releasing, and moving work
@@ -26,13 +27,14 @@ The current shipped surfaces focus on:
 - watchOS WidgetKit / App Intents launch points for Habits, Check In, Mark Moment, and Emotion
 
 The companion architecture intentionally keeps the watch compact but no longer
-one-dimensional. The phone does the networking, prompt generation, sync retries, and
-projection into canonical Forge APIs. The watch presents dense command cards and queues
-commands locally; Forge is still the canonical source of truth.
+one-dimensional. The phone builds the compact watch snapshot and handles heavy sensor
+sync. The watch presents dense command cards, stores outgoing actions durably, tries
+the direct secure Forge route first, and falls back to the paired iPhone only when
+that direct route is unavailable. Forge is still the canonical source of truth.
 
 The architecture still leaves room for richer Apple Watch biometrics and passive
-context surfaces, but each mutation must continue to flow through the iPhone relay and
-Forge's backend receipt model.
+context surfaces, but each mutation must continue to receive a Forge backend receipt
+before the watch treats it as complete.
 
 ## Project generation
 
@@ -74,9 +76,11 @@ Forge web settings generate a QR payload with:
 - `transportMode`
 - `transport`
 
-The default `transportMode` is `iroh`. In that mode the QR keeps the request API/UI
-URLs as the direct fallback path and includes a transport payload with the desktop Iroh
-node id, the pairing token, an optional relay hint, and ALPN `forge-companion/1`.
+The active `transportMode` must match the selected connection strategy. When the user
+pairs through Tailscale or another secure direct HTTPS URL, the API/UI URLs are the
+primary route and Iroh metadata must not be used for that session. When Iroh is
+selected, the QR includes the desktop Iroh node id, the pairing token, an optional
+relay hint, and ALPN `forge-companion/1`.
 
 The companion scans the QR payload, stores it in the keychain-backed app model,
 requests the relevant permissions, then sends sync payloads to Forge. For Iroh
@@ -92,15 +96,18 @@ Tailscale, or debugging behavior:
 npx forge-memory pair-ios --manual-http
 ```
 
-Watch actions are never sent directly from the watch to Forge. The watch sends queued
-messages to the iPhone through WatchConnectivity, the iPhone submits idempotent
-commands through `/mobile/watch/actions:batch`, and Forge records command receipts
-before sending a refreshed compact snapshot back to the watch and widget surfaces.
+Watch actions use a direct-first contract. If the watch has a secure non-loopback
+`https://` route, such as a Tailscale MagicDNS URL, it submits idempotent commands to
+`/mobile/watch/actions:batch` itself. If that route is unavailable, it sends the same
+durable action envelopes to the paired iPhone through WatchConnectivity as a backup.
+Forge records command receipts before sending a refreshed compact snapshot back to
+the watch and widget surfaces.
 
 Runtime discovery can still surface Bonjour candidates for known local or manual
-routes, but Iroh QR pairing is the default. When Forge advertises `_forge._tcp`, it
-can include Iroh metadata such as the node id, pair payload, and `forge-companion/1`
-ALPN alongside phone-reachable HTTPS/Tailscale API and UI hints.
+routes. When Forge advertises `_forge._tcp`, it can include phone-reachable
+HTTPS/Tailscale API and UI hints alongside Iroh metadata such as the node id, pair
+payload, and `forge-companion/1` ALPN. The app must keep those strategies separated:
+Tailscale pairings use Tailscale; Iroh pairings use Iroh.
 
 The deeper transport reference lives in `docs/reference/companion-iroh.md`.
 

@@ -21,6 +21,7 @@ enum ForgeWatchStorage {
 
 enum ForgeWatchDirectRoutePolicy {
     nonisolated static let failureFallbackCooldownSeconds: TimeInterval = 3
+    nonisolated static let directRetryAfterFailureDelaySeconds: TimeInterval = 3.25
     nonisolated static let directRequestTimeoutSeconds: TimeInterval = 3
 
     nonisolated static func shouldRespectFailureCooldown(forceUserRetry: Bool) -> Bool {

@@ -1,11 +1,11 @@
-Forge Companion 1.0.145 makes foreground Tailscale and direct HTTPS HealthKit uploads more aggressive and clearer.
+Forge Companion 1.0.146 keeps watch sync transport behavior aligned with the selected pairing route.
 
-Foreground direct uploads now keep up to 12 chunk requests in flight instead of 8, with the direct URLSession connection cap raised to match. Iroh foreground uploads remain capped separately at 8, and background uploads remain serial for iOS background reliability.
+Watch actions now describe and retry direct secure Forge delivery more clearly. A Tailscale or HTTPS watch route is treated as the primary path, and the paired iPhone is shown only as a backup when the watch cannot reach Forge directly.
 
-The prepared direct upload queue now holds 36 chunks instead of 24, so the phone can keep more HealthKit evidence ready while Tailscale is accepting previous chunks.
+Recoverable direct watch failures now schedule a short direct retry after the cooldown instead of leaving the user staring at stale backup wording.
 
-The sync panel now describes active work as requests in flight and network responses, not vague replies or ack-style wording. It also keeps Tailscale direct labels separate from Iroh labels.
+Watch sync and empty-state copy no longer uses queue, relay, or phone-fallback jargon for normal Tailscale sessions.
+
+The iPhone HealthKit, movement, pairing tokens, upload checkpoints, watch action persistence, and stored user data are unchanged.
 
 Existing route tests still verify that a Tailscale HTTPS pairing does not use Iroh metadata, and that Iroh is used only for active forge-iroh pairings.
-
-HealthKit cursors, upload checkpoints, pairing tokens, watch action persistence, and stored user data are unchanged.

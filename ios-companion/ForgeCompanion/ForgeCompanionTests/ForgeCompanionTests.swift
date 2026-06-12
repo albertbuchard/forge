@@ -1433,6 +1433,7 @@ final class ForgeCompanionTests: XCTestCase {
 
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
+        XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds, 3)
         XCTAssertTrue(
             ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(forceUserRetry: false)

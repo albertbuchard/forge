@@ -451,7 +451,7 @@ private struct WorkSurface: View {
         } else {
             EmptySurfaceCard(
                 title: "No work snapshot",
-                message: "Refresh Forge directly when reachable; phone fallback only protects offline actions.",
+                message: "Refresh Forge directly when reachable; paired iPhone backup protects offline actions.",
                 actionTitle: "Refresh work",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -596,7 +596,7 @@ private struct HabitSurface: View {
         if habits.isEmpty {
             EmptySurfaceCard(
                 title: "No habits loaded",
-                message: "Refresh Forge directly to load active habits; phone fallback only runs if the watch cannot reach Forge.",
+                message: "Refresh Forge directly to load active habits; paired iPhone backup runs only if the watch cannot reach Forge.",
                 actionTitle: "Refresh habits",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -923,7 +923,7 @@ private struct PsycheSurface: View {
             if questions.isEmpty {
                 EmptySurfaceCard(
                     title: "Psyche not loaded",
-                    message: "Mark a moment now; Forge definitions load after the next direct refresh or phone fallback.",
+                    message: "Mark a moment now; Forge definitions load after the next direct refresh or paired iPhone backup.",
                     actionTitle: "Mark moment",
                     systemImage: "bookmark.fill",
                     action: {
@@ -1216,7 +1216,7 @@ private struct SyncSurface: View {
         if connection.directNetworkingEnabled {
             return "Direct \(connection.transportLabel) HTTPS to Forge"
         }
-        return "Direct route disabled; phone fallback remains available."
+        return "Direct route disabled; paired iPhone backup remains available."
     }
 
     private var actionCountTitle: String {

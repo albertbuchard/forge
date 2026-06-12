@@ -68,6 +68,33 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("relay"))
     }
 
+    func testDeferredBackupAckWithoutMessageDoesNotExposeQueueOrPhoneFallbackJargon() throws {
+        ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        defer {
+            ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        }
+        let model = WatchAppModel(preview: true)
+        let habit = try XCTUnwrap(model.bootstrap.habits.first)
+
+        model.queueHabitCheckIn(for: habit, status: "done")
+        model.applyAckForTesting(
+            ForgeWatchAckEnvelope(
+                actionId: "fallback-deferred",
+                processedAt: ISO8601DateFormatter().string(from: Date()),
+                status: "deferred",
+                error: nil,
+                bootstrap: nil
+            )
+        )
+
+        XCTAssertEqual(model.pendingActionCount, 1)
+        XCTAssertTrue(model.lastStatusMessage.contains("Still sending"))
+        XCTAssertTrue(model.lastStatusMessage.contains("paired iPhone backup"))
+        XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("queued"))
+        XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("phone fallback"))
+        XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("relay"))
+    }
+
     func testHabitRingAlwaysUsesSevenSegments() throws {
         let model = WatchAppModel(preview: true)
         let habit = try XCTUnwrap(model.bootstrap.habits.first)
@@ -117,6 +144,26 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertFalse(WatchAppModel.canUseDirectNetworking(loopback))
         XCTAssertFalse(WatchAppModel.canUseDirectNetworking(insecureHttp))
         XCTAssertFalse(WatchAppModel.canUseDirectNetworking(iroh))
+    }
+
+    func testDirectMetricUsesBackupWordingWithoutIrohOrQueueJargon() {
+        let metric = ForgeWatchDirectSyncMetric(
+            operation: "actions",
+            transportLabel: "Tailscale",
+            requestBytes: 1536,
+            responseBytes: 512,
+            durationMs: 240,
+            itemCount: 3,
+            succeeded: false,
+            fallbackUsed: true,
+            errorDescription: "timed out"
+        )
+
+        XCTAssertTrue(metric.summary.contains("Tailscale"))
+        XCTAssertTrue(metric.summary.contains("paired iPhone backup"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("phone fallback"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("Iroh"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("queued"))
     }
 
 }

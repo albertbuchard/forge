@@ -26,7 +26,7 @@ struct ForgeWatchDirectSyncMetric: Hashable {
             parts.append("\(itemCount) item\(itemCount == 1 ? "" : "s")")
         }
         if fallbackUsed {
-            parts.append("iPhone fallback")
+            parts.append("paired iPhone backup")
         }
         if succeeded == false {
             parts.append("failed")
@@ -76,6 +76,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     private let directRequestTimeout = ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds
     private var lastRefreshRequestAt: Date?
     private var directFlushTask: Task<Void, Never>?
+    private var directRetryTask: Task<Void, Never>?
     private var directRouteCoolingDownUntil: Date?
     private var directRouteLastFailureDescription: String?
 
@@ -151,7 +152,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                     }
                 } errorHandler: { [weak self] error in
                     Task { @MainActor in
-                        self?.lastStatusMessage = "Phone fallback failed: \(error.localizedDescription)"
+                        self?.lastStatusMessage = "Paired iPhone backup failed: \(error.localizedDescription)"
                         self?.transferActionsThroughPhone(queue)
                     }
                 }
@@ -164,8 +165,8 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         lastStatusMessage = WCSession.default.isReachable
-            ? "Phone fallback sending to Forge"
-            : "Waiting for phone fallback"
+            ? "Paired iPhone backup sending to Forge"
+            : "Waiting for paired iPhone backup"
     }
 
     private func transferActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
@@ -212,11 +213,11 @@ final class WatchAppModel: NSObject, ObservableObject {
             reason: reason
         )
         guard let data = try? encoder.encode(request) else { return }
-        lastStatusMessage = "Phone fallback refreshing Forge"
+        lastStatusMessage = "Paired iPhone backup refreshing Forge"
         if WCSession.default.isReachable {
             WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
                 Task { @MainActor in
-                    self?.lastStatusMessage = "Phone fallback failed: \(error.localizedDescription)"
+                    self?.lastStatusMessage = "Paired iPhone backup failed: \(error.localizedDescription)"
                 }
             }
         } else {
@@ -581,7 +582,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         if let connection = directConnection() {
             lastStatusMessage = "Sending to Forge through \(connection.transportLabel)"
         } else {
-            lastStatusMessage = directCooldownFallbackMessage() ?? "Waiting for phone fallback"
+            lastStatusMessage = directCooldownFallbackMessage() ?? "Waiting for paired iPhone backup"
         }
         flushPendingActions()
     }
@@ -813,8 +814,9 @@ final class WatchAppModel: NSObject, ObservableObject {
                 lastDirectSyncMetric = metric.withFallbackUsed(true)
             }
             markDirectRouteFailureIfNeeded(error)
+            scheduleDirectRetryAfterCooldown()
             let label = connection.transportLabel
-            lastStatusMessage = "Direct \(label) unavailable; phone fallback is sending"
+            lastStatusMessage = "Direct \(label) unavailable; paired iPhone backup is sending"
             flushPendingActionsThroughPhone(queue)
         }
     }
@@ -838,7 +840,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         else {
             return nil
         }
-        return "\(connection.transportLabel) not reachable on watch; phone fallback is sending"
+        return "\(connection.transportLabel) not reachable on watch; paired iPhone backup is sending"
     }
 
     private func markDirectRouteFailureIfNeeded(_ error: Error) {
@@ -853,6 +855,30 @@ final class WatchAppModel: NSObject, ObservableObject {
     private func clearDirectRouteCooldown() {
         directRouteCoolingDownUntil = nil
         directRouteLastFailureDescription = nil
+        directRetryTask?.cancel()
+        directRetryTask = nil
+    }
+
+    private func scheduleDirectRetryAfterCooldown() {
+        guard directConnection(respectingCooldown: false) != nil else {
+            return
+        }
+        guard loadQueue().isEmpty == false else {
+            return
+        }
+        directRetryTask?.cancel()
+        let delay = ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds
+        directRetryTask = Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(max(0, delay) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard let self, Task.isCancelled == false else {
+                return
+            }
+            guard self.loadQueue().isEmpty == false else {
+                return
+            }
+            self.flushPendingActions(forceDirect: true)
+        }
     }
 
     static func isRecoverableDirectNetworkError(_ error: Error) -> Bool {
@@ -998,7 +1024,7 @@ final class WatchAppModel: NSObject, ObservableObject {
 
     private func applyAck(_ ack: ForgeWatchAckEnvelope) {
         if ack.status == "deferred" {
-            let message = ack.error?["message"] ?? "phone fallback deferred"
+            let message = ack.error?["message"] ?? "paired iPhone backup deferred"
             lastStatusMessage = "Still sending: \(message)"
             return
         }
@@ -1038,7 +1064,7 @@ extension WatchAppModel: WCSessionDelegate {
                 if activationState == .activated, let connection = self.directConnection() {
                     self.lastStatusMessage = "Direct \(connection.transportLabel) ready"
                 } else {
-                    self.lastStatusMessage = activationState == .activated ? "Phone fallback ready" : "Waiting for Forge"
+                    self.lastStatusMessage = activationState == .activated ? "Paired iPhone backup ready" : "Waiting for Forge"
                 }
                 self.flushPendingActions()
                 self.refreshFromForge(reason: "activation", fallbackToPhone: true)
