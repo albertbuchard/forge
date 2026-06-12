@@ -652,7 +652,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(payload.transportMode, "iroh")
         XCTAssertEqual(payload.transport?.protocolName, "iroh")
         XCTAssertFalse(payload.usesIrohTransportForActiveApiUrl)
-        XCTAssertEqual(normalized.transportMode, "manual-http")
+        XCTAssertEqual(normalized.transportMode, "tailscale")
         XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
         XCTAssertNil(normalized.transport)
@@ -759,7 +759,7 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
-        XCTAssertEqual(normalized.transportMode, "manual-http")
+        XCTAssertEqual(normalized.transportMode, "tailscale")
         XCTAssertNil(normalized.transport)
     }
 
@@ -930,6 +930,13 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(route.label, "Tailscale direct")
+    }
+
+    func testDiscoveryRanksTailscaleAheadOfIroh() {
+        XCTAssertLessThan(
+            ForgeServerDiscovery.sourceRankForTesting(.tailscale),
+            ForgeServerDiscovery.sourceRankForTesting(.iroh)
+        )
     }
 
     func testHealthSyncChunkRoutePrefersTailscaleDirectForIrohBulkUploads() {
@@ -6622,8 +6629,8 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
         XCTAssertTrue(status.transferSummary.contains("512.0 KB sent, waiting for network reply"))
         XCTAssertTrue(status.transferSummary.contains("session"))
-        XCTAssertTrue(status.speedSummary?.contains("Phone queued 768.0 KB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s queued avg") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Phone sent 768.0 KB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s sent avg") == true)
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("2/8 requests awaiting transport") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
@@ -6721,7 +6728,7 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertTrue(status.speedSummary?.contains("Phone queued 1.5 MB/s now") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Phone sent 1.5 MB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 0 B/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("Iroh primary") == true)
         XCTAssertTrue(status.speedSummary?.contains("1.5 MB in flight") == true)
@@ -6783,7 +6790,7 @@ final class ForgeCompanionTests: XCTestCase {
         let status = CompanionSyncUploadStatus(
             isSyncing: true,
             syncMode: .normal,
-            message: "Synced 2 nights, 1 workouts, 0 body metrics, and 114 trips via manual",
+            message: "Synced 2 nights, 1 workouts, 0 body metrics, and 114 trips",
             payloadSummary: nil,
             lastChunkFamily: "workout_routes",
             lastPayloadBytes: nil,

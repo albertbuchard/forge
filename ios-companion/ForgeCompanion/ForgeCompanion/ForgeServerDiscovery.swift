@@ -204,15 +204,19 @@ final class ForgeServerDiscovery {
         switch source {
         case .simulator:
             return 0
-        case .iroh:
-            return 1
         case .tailscale:
+            return 1
+        case .iroh:
             return 2
         case .bonjour:
             return 3
         case .lan:
             return 4
         }
+    }
+
+    static func sourceRankForTesting(_ source: ForgeDiscoverySource) -> Int {
+        sourceRank(source)
     }
 
     private static func normalizedHostKey(_ raw: String) -> String {
@@ -388,20 +392,20 @@ final class ForgeServerDiscovery {
     }
 
     private static func probeBonjourSeed(_ seed: BonjourSeed) async -> [DiscoveredForgeServer] {
-        if let irohServer = await probeIrohAdvertisement(seed) {
-            companionDebugLog(
-                "ForgeServerDiscovery",
-                "probeBonjourSeed using iroh-preferred service=\(seed.name)"
-            )
-            return [irohServer]
-        }
-
         if let tailscaleServer = await probeTailscaleAdvertisement(seed) {
             companionDebugLog(
                 "ForgeServerDiscovery",
                 "probeBonjourSeed using tailscale-preferred service=\(seed.name)"
             )
             return [tailscaleServer]
+        }
+
+        if let irohServer = await probeIrohAdvertisement(seed) {
+            companionDebugLog(
+                "ForgeServerDiscovery",
+                "probeBonjourSeed using iroh-fallback service=\(seed.name)"
+            )
+            return [irohServer]
         }
 
         if let localServer = await probeForgeHost(host: seed.host, name: seed.name, source: .bonjour) {

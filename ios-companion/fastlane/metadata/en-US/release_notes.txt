@@ -1,9 +1,9 @@
-Forge Companion 1.0.128 improves the watchOS companion refresh path for Tailscale and direct Forge connections.
+Forge Companion 1.0.129 tightens Tailscale and Iroh route handling in the iOS and watch companions.
 
-The watch now tries a secure direct Forge refresh first when the paired endpoint is a reachable HTTPS URL such as Tailscale. The iPhone relay is kept only as a fallback when the watch cannot reach Forge directly.
+Tailscale pairings now stay labeled and prioritized as Tailscale even if old Iroh metadata is still present in stored pairing data. Discovery now prefers Tailscale before Iroh when both are advertised.
 
-Watch copy now describes the real path: direct Forge when available, iPhone relay only when needed. Stale “iPhone bridge” and “waiting for iPhone” messages were removed from the watch surfaces.
+Sync status now reports phone-side bytes as sent, Forge-side bytes as accepted, and names Tailscale network replies instead of generic Forge replies. Completed sync messages no longer show trigger labels such as manual as if they were transports.
 
-Regression coverage was added so Tailscale HTTPS is accepted as a direct watch route, while loopback, plain HTTP, and logical Iroh URLs are rejected for watch URLSession direct networking.
+Regression coverage was added for stale Iroh metadata on Tailscale URLs, Tailscale-first discovery ranking, and the updated sync progress wording.
 
 HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.

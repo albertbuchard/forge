@@ -1234,8 +1234,8 @@ struct CompanionSyncUploadStatus {
             return nil
         }
         var parts = [
-            "Phone queued \(Self.formatBytes(Int(transferStats.scheduledCurrentBytesPerSecond)))/s now",
-            "\(Self.formatBytes(Int(transferStats.scheduledAverageBytesPerSecond)))/s queued avg",
+            "Phone sent \(Self.formatBytes(Int(transferStats.scheduledCurrentBytesPerSecond)))/s now",
+            "\(Self.formatBytes(Int(transferStats.scheduledAverageBytesPerSecond)))/s sent avg",
             "Forge accepted \(Self.formatBytes(Int(transferStats.currentBytesPerSecond)))/s now",
             "\(transferStats.uploadedChunks) chunks accepted"
         ]

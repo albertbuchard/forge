@@ -89,6 +89,16 @@ enum CompanionPairingURLResolver {
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
 
+    static func isTailscaleUrl(_ rawValue: String?) -> Bool {
+        guard
+            let rawValue,
+            let host = URL(string: rawValue)?.host?.lowercased()
+        else {
+            return false
+        }
+        return host.hasSuffix(".ts.net") || host.contains(".tailscale.")
+    }
+
     private static func irohApiBaseUrl(for payload: PairingPayload) -> String? {
         guard
             payload.transport?.isIrohTransport == true,
@@ -216,6 +226,12 @@ enum CompanionPairingURLResolver {
             && URL(string: normalizedUiBaseUrl)?.scheme?.lowercased() == "forge-iroh"
             ? deriveUiBaseUrl(from: normalizedApiBaseUrl)
             : normalizedUiBaseUrl
+        let normalizedTransportMode: String?
+        if inactiveIrohTransport {
+            normalizedTransportMode = isTailscaleUrl(normalizedApiBaseUrl) ? "tailscale" : "manual-http"
+        } else {
+            normalizedTransportMode = payload.transportMode
+        }
         return PairingPayload(
             kind: payload.kind,
             apiBaseUrl: normalizedApiBaseUrl,
@@ -224,7 +240,7 @@ enum CompanionPairingURLResolver {
             pairingToken: payload.pairingToken,
             expiresAt: payload.expiresAt,
             capabilities: payload.capabilities,
-            transportMode: inactiveIrohTransport ? "manual-http" : payload.transportMode,
+            transportMode: normalizedTransportMode,
             transport: inactiveIrohTransport ? nil : payload.transport
         )
     }
@@ -2283,7 +2299,7 @@ final class CompanionAppModel: ObservableObject {
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepNights ?? receipt.imported.sleepSessions) nights, \(receipt.imported.workouts) workouts, \(receipt.imported.vitalsMetricEntries ?? 0) body metrics, and \(receipt.imported.movementTrips ?? 0) trips via \(trigger)"
+                    "Synced \(receipt.imported.sleepNights ?? receipt.imported.sleepSessions) nights, \(receipt.imported.workouts) workouts, \(receipt.imported.vitalsMetricEntries ?? 0) body metrics, and \(receipt.imported.movementTrips ?? 0) trips"
             }
             latestError = nil
             await refreshHealthAccessStatus()
