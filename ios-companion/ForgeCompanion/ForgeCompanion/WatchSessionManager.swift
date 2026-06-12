@@ -203,32 +203,30 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     private static func directWatchConnection(for pairing: PairingPayload) -> ForgeWatchConnection? {
-        guard let apiBaseUrl = directApiBaseUrl(for: pairing) else {
+        let normalizedPairing = CompanionPairingURLResolver.normalizedPayload(pairing)
+        guard let apiBaseUrl = directApiBaseUrl(for: normalizedPairing) else {
             return nil
         }
         return ForgeWatchConnection(
             apiBaseUrl: apiBaseUrl,
             uiBaseUrl: CompanionPairingURLResolver.deriveUiBaseUrl(from: apiBaseUrl),
-            sessionId: pairing.sessionId,
-            pairingToken: pairing.pairingToken,
+            sessionId: normalizedPairing.sessionId,
+            pairingToken: normalizedPairing.pairingToken,
             transportLabel: transportLabel(for: apiBaseUrl),
             directNetworkingEnabled: true
         )
     }
 
     private static func directApiBaseUrl(for pairing: PairingPayload) -> String? {
-        for candidate in [pairing.apiBaseUrl, pairing.transport?.publicBaseUrl] {
-            let normalized = CompanionPairingURLResolver.normalizeApiBaseUrl(candidate ?? "")
-            guard
-                let url = URL(string: normalized),
-                url.scheme?.lowercased() == "https",
-                CompanionPairingURLResolver.isLoopbackUrl(normalized) == false
-            else {
-                continue
-            }
-            return normalized
+        let normalized = CompanionPairingURLResolver.normalizeApiBaseUrl(pairing.apiBaseUrl)
+        guard
+            let url = URL(string: normalized),
+            url.scheme?.lowercased() == "https",
+            CompanionPairingURLResolver.isLoopbackUrl(normalized) == false
+        else {
+            return nil
         }
-        return nil
+        return normalized
     }
 
     private static func transportLabel(for apiBaseUrl: String) -> String {

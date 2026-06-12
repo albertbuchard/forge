@@ -131,6 +131,17 @@ enum CompanionPairingURLResolver {
         return normalizeApiBaseUrl(publicBaseUrl)
     }
 
+    private static func secureTailscalePublicApiBaseUrl(for payload: PairingPayload) -> String? {
+        guard
+            let publicApiBaseUrl = nonLoopbackPublicApiBaseUrl(for: payload),
+            isTailscaleUrl(publicApiBaseUrl),
+            URL(string: publicApiBaseUrl)?.scheme?.lowercased() == "https"
+        else {
+            return nil
+        }
+        return publicApiBaseUrl
+    }
+
     static func rememberableHost(for payload: PairingPayload) -> String? {
         let candidates = [
             payload.transport?.publicBaseUrl,
@@ -205,9 +216,13 @@ enum CompanionPairingURLResolver {
         let rawApiBaseUrl = preferredApiBaseUrl ?? payload.apiBaseUrl
         let normalizedRawApiBaseUrl = normalizeApiBaseUrl(rawApiBaseUrl)
         let publicApiBaseUrl = nonLoopbackPublicApiBaseUrl(for: payload)
+        let tailscalePublicApiBaseUrl = secureTailscalePublicApiBaseUrl(for: payload)
         let irohApiBaseUrl = irohApiBaseUrl(for: payload)
         let normalizedApiBaseUrl: String
-        if isLoopbackUrl(normalizedRawApiBaseUrl), let irohApiBaseUrl {
+        if URL(string: normalizedRawApiBaseUrl)?.scheme?.lowercased() == "forge-iroh",
+           let tailscalePublicApiBaseUrl {
+            normalizedApiBaseUrl = tailscalePublicApiBaseUrl
+        } else if isLoopbackUrl(normalizedRawApiBaseUrl), let irohApiBaseUrl {
             normalizedApiBaseUrl = publicApiBaseUrl ?? irohApiBaseUrl
         } else {
             normalizedApiBaseUrl = normalizedRawApiBaseUrl

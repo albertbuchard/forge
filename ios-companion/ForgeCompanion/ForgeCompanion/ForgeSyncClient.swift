@@ -4003,17 +4003,7 @@ struct ForgeSyncClient {
         preferDirectBulkTransfer: Bool
     ) -> HealthSyncChunkTransportRoute {
         let usesIrohPairing = pairing.usesIrohTransportForActiveApiUrl
-        if preferDirectBulkTransfer,
-           usesIrohPairing,
-           let directApiBaseUrl = directBulkTransferApiBaseUrl(for: pairing) {
-            return HealthSyncChunkTransportRoute(
-                apiBaseUrl: directApiBaseUrl,
-                usesIroh: false,
-                label: isTailscaleUrl(directApiBaseUrl)
-                    ? "Tailscale direct"
-                    : "HTTP direct"
-            )
-        }
+        _ = preferDirectBulkTransfer
         if usesIrohPairing {
             return HealthSyncChunkTransportRoute(
                 apiBaseUrl: pairing.apiBaseUrl,
@@ -4046,64 +4036,12 @@ struct ForgeSyncClient {
         return standardHealthSyncChunkTimeout
     }
 
-    private static func directBulkTransferApiBaseUrl(for pairing: PairingPayload) -> String? {
-        let candidates = [
-            pairing.transport?.publicBaseUrl,
-            pairing.apiBaseUrl
-        ]
-        for candidate in candidates {
-            guard let normalized = normalizedHttpApiBaseUrl(candidate),
-                  isLoopbackUrl(normalized) == false,
-                  isSecureHttpUrl(normalized) else {
-                continue
-            }
-            return normalized
-        }
-        return nil
-    }
-
-    private static func normalizedHttpApiBaseUrl(_ rawValue: String?) -> String? {
-        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
-              rawValue.isEmpty == false,
-              var components = URLComponents(string: rawValue),
-              let scheme = components.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              components.host?.isEmpty == false else {
-            return nil
-        }
-        let trimmedPath = components.path.replacingOccurrences(
-            of: "/+$",
-            with: "",
-            options: .regularExpression
-        )
-        if trimmedPath.isEmpty {
-            components.path = "/api/v1"
-        } else if trimmedPath.hasSuffix("/api/v1") {
-            components.path = trimmedPath
-        } else if trimmedPath.hasSuffix("/api") {
-            components.path = "\(trimmedPath)/v1"
-        } else {
-            return nil
-        }
-        components.query = nil
-        components.fragment = nil
-        return components.string
-    }
-
     private static func isLoopbackUrl(_ rawValue: String?) -> Bool {
         guard let rawValue,
               let host = URL(string: rawValue)?.host?.lowercased() else {
             return false
         }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
-    }
-
-    private static func isSecureHttpUrl(_ rawValue: String?) -> Bool {
-        guard let rawValue,
-              let scheme = URL(string: rawValue)?.scheme?.lowercased() else {
-            return false
-        }
-        return scheme == "https"
     }
 
     private static func isTailscaleUrl(_ rawValue: String?) -> Bool {

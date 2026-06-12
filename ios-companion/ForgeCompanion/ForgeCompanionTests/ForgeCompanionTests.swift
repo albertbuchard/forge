@@ -939,7 +939,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testHealthSyncChunkRoutePrefersTailscaleDirectForIrohBulkUploads() {
+    func testIrohPairingWithTailscalePublicFallbackNormalizesBeforeChunkRouting() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
@@ -973,11 +973,24 @@ final class ForgeCompanionTests: XCTestCase {
             )
         )
 
-        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+        let rawRoute = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
             pairing: payload,
             preferDirectBulkTransfer: true
         )
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: normalized,
+            preferDirectBulkTransfer: true
+        )
 
+        XCTAssertEqual(rawRoute.apiBaseUrl, "forge-iroh://fakednodeid/api/v1")
+        XCTAssertTrue(rawRoute.usesIroh)
+        XCTAssertEqual(rawRoute.label, "Iroh primary")
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+        XCTAssertEqual(normalized.transportMode, "tailscale")
+        XCTAssertNil(normalized.transport)
+        XCTAssertFalse(normalized.usesIrohTransportForActiveApiUrl)
         XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(route.label, "Tailscale direct")
@@ -1023,11 +1036,15 @@ final class ForgeCompanionTests: XCTestCase {
             )
         )
 
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
         let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
-            pairing: payload,
+            pairing: normalized,
             preferDirectBulkTransfer: true
         )
 
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(normalized.transportMode, "tailscale")
+        XCTAssertNil(normalized.transport)
         XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
     }
@@ -1201,7 +1218,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(connection?.directNetworkingEnabled == true)
     }
 
-    func testWatchDirectConnectionUsesSecurePublicFallbackForIrohPairing() {
+    func testWatchDirectConnectionNormalizesTailscaleFallbackForIrohPairing() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
@@ -1233,6 +1250,37 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(connection?.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(connection?.transportLabel, "Tailscale")
+    }
+
+    func testWatchDirectConnectionDoesNotMixGenericPublicFallbackForIrohPairing() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_watch_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://forge.example.com/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: nil,
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        XCTAssertNil(WatchSessionManager.directWatchConnectionForTesting(for: payload))
     }
 
     func testWatchDirectConnectionRejectsLoopbackAndPlainHttpUrls() {
@@ -1311,17 +1359,20 @@ final class ForgeCompanionTests: XCTestCase {
                 notes: []
             )
         )
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
         let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
-            pairing: payload,
+            pairing: normalized,
             preferDirectBulkTransfer: true
         )
         let timeout = ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
-            pairing: payload,
+            pairing: normalized,
             route: route,
             useBackgroundUpload: false,
             appIsForegroundActive: true
         )
 
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(timeout, ForgeSyncClient.foregroundDirectBulkHealthSyncChunkTimeout)
         XCTAssertEqual(ForgeSyncClient.standardHealthSyncChunkTimeout / timeout, 10)
     }
@@ -1359,14 +1410,17 @@ final class ForgeCompanionTests: XCTestCase {
                 notes: []
             )
         )
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
         let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
-            pairing: payload,
+            pairing: normalized,
             preferDirectBulkTransfer: true
         )
 
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(
             ForgeSyncClient.healthSyncChunkRequestTimeoutForTesting(
-                pairing: payload,
+                pairing: normalized,
                 route: route,
                 useBackgroundUpload: true,
                 appIsForegroundActive: false
