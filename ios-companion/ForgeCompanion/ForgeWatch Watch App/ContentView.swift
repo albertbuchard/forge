@@ -20,6 +20,7 @@ struct ContentView: View {
                     surface: navigation.selectedSurface,
                     navigation: navigation,
                     bootstrap: appModel.bootstrap,
+                    directMetric: appModel.lastDirectSyncMetric,
                     onHabitTap: { selectedHabit = $0 },
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
@@ -133,6 +134,7 @@ private struct WatchSurfacePager: View {
     let surface: WatchSurface
     @ObservedObject var navigation: WatchNavigationModel
     let bootstrap: ForgeWatchBootstrap
+    let directMetric: ForgeWatchDirectSyncMetric?
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
@@ -207,7 +209,12 @@ private struct WatchSurfacePager: View {
                     onCapture: onCapture
                 )
             case .sync:
-                SyncSurface(sync: bootstrap.sync, onRefresh: onRefresh, onRetry: onRetry)
+                SyncSurface(
+                    sync: bootstrap.sync,
+                    directMetric: directMetric,
+                    onRefresh: onRefresh,
+                    onRetry: onRetry
+                )
             }
         }
         .animation(.snappy(duration: 0.24), value: surface)
@@ -1142,6 +1149,7 @@ private struct InboxSurface: View {
 
 private struct SyncSurface: View {
     let sync: ForgeWatchSyncSnapshot?
+    let directMetric: ForgeWatchDirectSyncMetric?
     let onRefresh: () -> Void
     let onRetry: () -> Void
 
@@ -1159,6 +1167,13 @@ private struct SyncSurface: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
                     .lineLimit(2)
+                if let directMetric {
+                    Text(directMetric.summary)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(directMetric.succeeded ? WatchTheme.success : WatchTheme.accent)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.82)
+                }
                 HStack(spacing: 6) {
                     Button {
                         onRefresh()

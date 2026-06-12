@@ -50,8 +50,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
         do {
             let bootstrap = try await syncClient.fetchWatchBootstrap(payload: pairing)
-            saveBootstrap(bootstrap)
-            publishBootstrap(bootstrap)
+            let enrichedBootstrap = bootstrap.withConnection(Self.directWatchConnection(for: pairing))
+            saveBootstrap(enrichedBootstrap)
+            publishBootstrap(enrichedBootstrap)
             lastStatusMessage = "Watch bootstrap refreshed via \(reason)"
             await processPendingQueue()
         } catch {
@@ -165,7 +166,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     envelopes: remaining,
                     pairing: pairing
                 )
-                let bootstrap = result.watch
+                let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
                 self.saveBootstrap(bootstrap)
                 self.publishBootstrap(bootstrap)
                 let acknowledgedIds = Set(result.receipt.receipts.map(\.actionId))
@@ -195,6 +196,49 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     private func watchTransportAvailable(for session: WCSession) -> Bool {
         session.isPaired && session.isWatchAppInstalled
+    }
+
+    static func directWatchConnectionForTesting(for pairing: PairingPayload) -> ForgeWatchConnection? {
+        directWatchConnection(for: pairing)
+    }
+
+    private static func directWatchConnection(for pairing: PairingPayload) -> ForgeWatchConnection? {
+        guard let apiBaseUrl = directApiBaseUrl(for: pairing) else {
+            return nil
+        }
+        return ForgeWatchConnection(
+            apiBaseUrl: apiBaseUrl,
+            uiBaseUrl: CompanionPairingURLResolver.deriveUiBaseUrl(from: apiBaseUrl),
+            sessionId: pairing.sessionId,
+            pairingToken: pairing.pairingToken,
+            transportLabel: transportLabel(for: apiBaseUrl),
+            directNetworkingEnabled: true
+        )
+    }
+
+    private static func directApiBaseUrl(for pairing: PairingPayload) -> String? {
+        for candidate in [pairing.apiBaseUrl, pairing.transport?.publicBaseUrl] {
+            let normalized = CompanionPairingURLResolver.normalizeApiBaseUrl(candidate ?? "")
+            guard
+                let url = URL(string: normalized),
+                url.scheme?.lowercased() == "https",
+                CompanionPairingURLResolver.isLoopbackUrl(normalized) == false
+            else {
+                continue
+            }
+            return normalized
+        }
+        return nil
+    }
+
+    private static func transportLabel(for apiBaseUrl: String) -> String {
+        guard let host = URL(string: apiBaseUrl)?.host?.lowercased() else {
+            return "HTTPS"
+        }
+        if host.hasSuffix(".ts.net") || host.contains(".tailscale.") {
+            return "Tailscale"
+        }
+        return "HTTPS"
     }
 
 }

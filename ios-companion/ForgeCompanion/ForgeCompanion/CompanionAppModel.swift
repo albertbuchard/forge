@@ -3406,11 +3406,11 @@ final class CompanionAppModel: ObservableObject {
             || Self.isTailscaleUrl(pairing.apiBaseUrl)
         if pairing.transport?.isIrohTransport == true {
             if fallbackIsTailscale {
-                return "Tailscale direct bulk + Iroh fallback"
+                return "Tailscale direct"
             }
             let hasHttpFallback = Self.isHttpUrl(pairing.transport?.publicBaseUrl)
                 || Self.isHttpUrl(pairing.apiBaseUrl)
-            return hasHttpFallback ? "HTTP direct bulk + Iroh fallback" : "Iroh primary"
+            return hasHttpFallback ? "HTTP direct" : "Iroh primary"
         }
         return fallbackIsTailscale ? "Tailscale direct" : "HTTP"
     }
@@ -3882,7 +3882,7 @@ final class CompanionAppModel: ObservableObject {
                 id: "watch",
                 title: "Watch",
                 value: watchSyncLabel,
-                detail: "The watch uses the phone bridge and does not sync directly to Forge.",
+                detail: "The watch syncs directly to Forge when the secure companion URL is reachable, and keeps the iPhone relay only as an offline fallback.",
                 isMissing: false
             )
         ]

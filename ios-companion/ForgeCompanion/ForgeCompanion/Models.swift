@@ -1155,10 +1155,32 @@ struct CompanionSyncUploadStatus {
         guard isSyncing else {
             return "Ready for the next sync"
         }
+        if let activeTransferHeadline {
+            return activeTransferHeadline
+        }
         guard let message, message.isEmpty == false else {
             return "Preparing sync"
         }
         return message
+    }
+
+    private var activeTransferHeadline: String? {
+        guard let transferStats else {
+            return nil
+        }
+        if transferStats.inFlightChunks > 0 {
+            if let lastChunkFamily, lastChunkFamily.isEmpty == false {
+                return "Uploading \(Self.familyLabel(lastChunkFamily))"
+            }
+            return "Uploading to Forge"
+        }
+        if let preparingFamily = transferStats.preparingFamily {
+            return "Preparing \(Self.familyLabel(preparingFamily))"
+        }
+        if transferStats.scheduledChunks > transferStats.uploadedChunks + transferStats.skippedChunks {
+            return "Uploading to Forge"
+        }
+        return nil
     }
 
     var uploadSummary: String {
@@ -1314,6 +1336,10 @@ struct CompanionSyncUploadStatus {
             return "HTTP"
         }
         return value
+    }
+
+    private static func familyLabel(_ value: String) -> String {
+        value.replacingOccurrences(of: "_", with: " ")
     }
 
     private static func formatBytes(_ value: Int) -> String {

@@ -923,7 +923,13 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
-        XCTAssertEqual(route.label, "Tailscale direct bulk + Iroh fallback")
+        XCTAssertEqual(route.label, "Tailscale direct")
+        XCTAssertNil(
+            ForgeSyncClient.effectiveIrohTransportProtocolForTesting(
+                apiBaseUrl: route.apiBaseUrl,
+                transport: payload.transport
+            )
+        )
     }
 
     func testHealthSyncChunkRouteNormalizesRootTailscalePublicUrlToApi() {
@@ -1010,7 +1016,7 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertFalse(route.usesIroh)
-        XCTAssertEqual(route.label, "Tailscale direct bulk + Iroh fallback")
+        XCTAssertEqual(route.label, "Tailscale direct")
     }
 
     func testHealthSyncChunkRouteKeepsIrohWhenOnlyInsecurePublicFallbackExists() {
@@ -1101,7 +1107,121 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(route.label, "Iroh primary")
     }
 
-    func testForegroundDirectBulkRouteUsesAggressiveIrohFallbackTimeout() {
+    func testWatchDirectConnectionUsesTailscalePairingUrlEvenWhenIrohMetadataExists() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_watch_tailscale",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "http://127.0.0.1:4317/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: nil,
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        let connection = WatchSessionManager.directWatchConnectionForTesting(for: payload)
+
+        XCTAssertEqual(connection?.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(connection?.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+        XCTAssertEqual(connection?.transportLabel, "Tailscale")
+        XCTAssertEqual(connection?.sessionId, "pair_watch_tailscale")
+        XCTAssertTrue(connection?.directNetworkingEnabled == true)
+    }
+
+    func testWatchDirectConnectionUsesSecurePublicFallbackForIrohPairing() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_watch_iroh",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: nil,
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        let connection = WatchSessionManager.directWatchConnectionForTesting(for: payload)
+
+        XCTAssertEqual(connection?.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(connection?.transportLabel, "Tailscale")
+    }
+
+    func testWatchDirectConnectionRejectsLoopbackAndPlainHttpUrls() {
+        let loopbackPayload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "http://127.0.0.1:4317/api/v1",
+            uiBaseUrl: "http://127.0.0.1:4317/forge/",
+            sessionId: "pair_watch_loopback",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "manual-http",
+            transport: nil
+        )
+        let insecureFallbackPayload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_watch_http",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "http://forge.local:4317/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: nil,
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        XCTAssertNil(WatchSessionManager.directWatchConnectionForTesting(for: loopbackPayload))
+        XCTAssertNil(WatchSessionManager.directWatchConnectionForTesting(for: insecureFallbackPayload))
+    }
+
+    func testForegroundDirectBulkRouteUsesAggressiveDirectTimeout() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
@@ -1302,8 +1422,8 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testIrohTransportTimeoutUsesUrlSessionFallbackOnlyForHttpPairingUrls() {
-        XCTAssertTrue(
+    func testIrohTransportTimeoutDoesNotFallbackForTailscaleDirectUrls() {
+        XCTAssertFalse(
             ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
                 apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
                 errorDomain: "ForgeIrohTransport",
@@ -1311,7 +1431,7 @@ final class ForgeCompanionTests: XCTestCase {
                 errorDescription: "Forge Iroh request timed out."
             )
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             ForgeSyncClient.shouldFallbackFromIrohToUrlSessionForTesting(
                 apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
                 errorDomain: "ForgeIrohTransport",
@@ -6443,7 +6563,7 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertEqual(status.headline, "Uploading workouts 5/7")
+        XCTAssertEqual(status.headline, "Uploading workout time series")
         XCTAssertEqual(
             status.uploadSummary,
             "42 raw sleep, 18 segments, 2 nights, 7 workouts, 128 HR samples, 6 trips"
@@ -6564,7 +6684,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
     }
 
-    func testSyncUploadStatusNamesTailscaleRouteWhenBulkUploadsUseDirectFallback() {
+    func testSyncUploadStatusNamesTailscaleRouteWhenBulkUploadsUseDirectTransfer() {
         let status = CompanionSyncUploadStatus(
             isSyncing: true,
             syncMode: .normal,
@@ -6587,7 +6707,7 @@ final class ForgeCompanionTests: XCTestCase {
                 inFlightChunks: 3,
                 inFlightBytes: 229_171,
                 uploadWindow: 8,
-                transportLabel: "Tailscale direct bulk + Iroh fallback",
+                transportLabel: "Tailscale direct",
                 secondsSinceLastChunk: nil,
                 secondsSinceOldestInFlight: 21,
                 lastServerProcessingMs: 39,
@@ -6598,7 +6718,7 @@ final class ForgeCompanionTests: XCTestCase {
             historicalWorkoutImport: nil
         )
 
-        XCTAssertTrue(status.speedSummary?.contains("Tailscale direct bulk + Iroh fallback") == true)
+        XCTAssertTrue(status.speedSummary?.contains("Tailscale direct") == true)
         XCTAssertEqual(
             status.pipelineSummary,
             "Waiting 21s for Tailscale network replies: 3/8 active requests, 223.8 KB in flight"
@@ -6607,6 +6727,44 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(status.forgeProcessingSummary, "Forge processed the last chunk in 39 ms")
         XCTAssertFalse(status.pipelineSummary?.contains("Forge replies") == true)
         XCTAssertFalse(status.speedSummary?.contains("Iroh tunnel") == true)
+    }
+
+    func testSyncUploadStatusHeadlineUsesActiveTransferOverStaleSyncedMessage() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Synced 2 nights, 1 workouts, 0 body metrics, and 114 trips via manual",
+            payloadSummary: nil,
+            lastChunkFamily: "workout_routes",
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_stale_message",
+            transferStats: SyncTransferStats(
+                totalBytesSent: 126_700,
+                currentBytesPerSecond: 0,
+                averageBytesPerSecond: 3_800,
+                scheduledCurrentBytesPerSecond: 126_700,
+                scheduledAverageBytesPerSecond: 3_800,
+                uploadedChunks: 1,
+                uploadedRecords: 1,
+                skippedChunks: 0,
+                scheduledChunks: 2,
+                scheduledBytes: 253_400,
+                inFlightChunks: 1,
+                inFlightBytes: 126_700,
+                uploadWindow: 6,
+                transportLabel: "Tailscale direct",
+                secondsSinceLastChunk: nil,
+                secondsSinceOldestInFlight: 8,
+                lastServerProcessingMs: nil,
+                lastTransportTimingSummary: "Tailscale request 8.0s",
+                preparingFamily: nil,
+                secondsPreparing: nil
+            ),
+            historicalWorkoutImport: nil
+        )
+
+        XCTAssertEqual(status.headline, "Uploading workout routes")
+        XCTAssertFalse(status.headline.contains("Synced"))
     }
 
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {

@@ -522,6 +522,13 @@ struct ForgeSyncClient {
         )
     }
 
+    static func effectiveIrohTransportProtocolForTesting(
+        apiBaseUrl: String,
+        transport: PairingTransport?
+    ) -> String? {
+        effectiveIrohTransport(apiBaseUrl: apiBaseUrl, transport: transport)?.protocolName
+    }
+
     static func healthSyncChunkRequestTimeoutForTesting(
         pairing: PairingPayload,
         route: HealthSyncChunkTransportRoute,
@@ -3147,27 +3154,7 @@ struct ForgeSyncClient {
                 timeoutInterval: initialRouteTimeout
             )
         } catch {
-            if transportRoute.usesIroh == false,
-               pairing.transport?.isIrohTransport == true,
-               Self.isRetryableUrlSessionTransferInterruption(error) {
-                companionDebugLog(
-                    "ForgeSyncClient",
-                    "uploadHealthSyncChunk direct route failed; retrying over Iroh fallback family=\(family) sequence=\(sequence) chunkId=\(effectiveChunkId) route=\(transportRoute.apiBaseUrl) error=\((error as NSError).localizedDescription)"
-                )
-                do {
-                    uploadResult = try await sendChunk(
-                        apiBaseUrl: pairing.apiBaseUrl,
-                        transport: pairing.transport,
-                        useBackgroundUpload: false,
-                        routeLabel: "Iroh fallback after direct route interruption",
-                        timeoutInterval: Self.standardHealthSyncChunkTimeout
-                    )
-                } catch {
-                    try await throwUploadFailure(error)
-                }
-            } else {
-                try await throwUploadFailure(error)
-            }
+            try await throwUploadFailure(error)
         }
         let envelope = uploadResult.envelope
         let transportTimingSummary = uploadResult.transportTimingSummary
@@ -3887,20 +3874,24 @@ struct ForgeSyncClient {
             requestBody = nil
         }
 
+        let effectiveTransport = Self.effectiveIrohTransport(
+            apiBaseUrl: apiBaseUrl,
+            transport: transport
+        )
         companionDebugLog(
             "ForgeSyncClient",
-            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(useBackgroundUpload && transport?.isIrohTransport != true ? "urlsession-background" : transport?.protocolName ?? "urlsession")"
+            "sendRequest start method=\(method) url=\(url.absoluteString) bodyBytes=\(requestBody?.count ?? 0) transport=\(useBackgroundUpload && effectiveTransport?.isIrohTransport != true ? "urlsession-background" : effectiveTransport?.protocolName ?? "urlsession")"
         )
         var data: Data
         var httpResponse: HTTPURLResponse
-        if let transport, transport.isIrohTransport {
+        if let effectiveTransport {
             do {
                 let irohResult = try await ForgeIrohTransportClient.send(
                     method: method,
                     path: apiRequestPath(apiBaseUrl: apiBaseUrl, endpointPath: path),
                     headers: requestHeaders,
                     body: requestBody,
-                    transport: transport,
+                    transport: effectiveTransport,
                     timeoutInterval: timeoutInterval
                 )
                 data = irohResult.data
@@ -4012,8 +4003,8 @@ struct ForgeSyncClient {
                 apiBaseUrl: directApiBaseUrl,
                 usesIroh: false,
                 label: isTailscaleUrl(directApiBaseUrl)
-                    ? "Tailscale direct bulk + Iroh fallback"
-                    : "HTTP direct bulk + Iroh fallback"
+                    ? "Tailscale direct"
+                    : "HTTP direct"
             )
         }
         if usesIrohPairing {
@@ -4115,6 +4106,21 @@ struct ForgeSyncClient {
             return false
         }
         return host.hasSuffix(".ts.net") || host.contains(".tailscale.")
+    }
+
+    private static func effectiveIrohTransport(
+        apiBaseUrl: String,
+        transport: PairingTransport?
+    ) -> PairingTransport? {
+        guard
+            let transport,
+            transport.isIrohTransport,
+            let scheme = URL(string: apiBaseUrl)?.scheme?.lowercased(),
+            scheme == "forge-iroh"
+        else {
+            return nil
+        }
+        return transport
     }
 
     private static func isRetryableUrlSessionTransferInterruption(_ error: Error) -> Bool {
@@ -4263,29 +4269,14 @@ struct ForgeSyncClient {
         guard
             let url = URL(string: apiBaseUrl),
             let scheme = url.scheme?.lowercased(),
-            scheme == "http" || scheme == "https"
+            scheme == "forge-iroh"
         else {
             return false
         }
-        let nsError = error as NSError
-        guard nsError.domain == "ForgeIrohTransport" else {
-            return false
-        }
-        if nsError.code == URLError.timedOut.rawValue ||
-            nsError.code == URLError.cannotConnectToHost.rawValue ||
-            nsError.code == URLError.networkConnectionLost.rawValue {
-            return true
-        }
-        if nsError.code >= 400 && nsError.code < 600 {
-            return false
-        }
-        let message = "\(nsError.localizedDescription) \(nsError.localizedFailureReason ?? "")"
-            .lowercased()
-        return message.contains("timed out") ||
-            message.contains("timeout") ||
-            message.contains("connect") ||
-            message.contains("no response") ||
-            message.contains("unreachable")
+        // A logical forge-iroh URL has no equivalent URLSession endpoint. HTTPS and
+        // Tailscale URLs are routed through URLSession directly before this point.
+        _ = error
+        return false
     }
 
     private func apiRequestPath(apiBaseUrl: String, endpointPath: String) -> String {

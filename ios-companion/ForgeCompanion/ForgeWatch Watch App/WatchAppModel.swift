@@ -4,18 +4,77 @@ import SwiftUI
 import WatchConnectivity
 import WatchKit
 
+struct ForgeWatchDirectSyncMetric: Hashable {
+    let operation: String
+    let transportLabel: String
+    let requestBytes: Int
+    let responseBytes: Int
+    let durationMs: Int
+    let itemCount: Int
+    let succeeded: Bool
+    let fallbackUsed: Bool
+    let errorDescription: String?
+
+    var summary: String {
+        var parts = [
+            "\(transportLabel)",
+            "\(operation) \(durationMs) ms",
+            "\(Self.formatBytes(requestBytes)) up",
+            "\(Self.formatBytes(responseBytes)) down"
+        ]
+        if itemCount > 0 {
+            parts.append("\(itemCount) item\(itemCount == 1 ? "" : "s")")
+        }
+        if fallbackUsed {
+            parts.append("iPhone fallback")
+        }
+        if succeeded == false {
+            parts.append("failed")
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    func withFallbackUsed(_ value: Bool) -> ForgeWatchDirectSyncMetric {
+        ForgeWatchDirectSyncMetric(
+            operation: operation,
+            transportLabel: transportLabel,
+            requestBytes: requestBytes,
+            responseBytes: responseBytes,
+            durationMs: durationMs,
+            itemCount: itemCount,
+            succeeded: succeeded,
+            fallbackUsed: value,
+            errorDescription: errorDescription
+        )
+    }
+
+    private static func formatBytes(_ value: Int) -> String {
+        guard value >= 1024 else {
+            return "\(value) B"
+        }
+        let kilobytes = Double(value) / 1024
+        guard kilobytes >= 1024 else {
+            return String(format: "%.1f KB", kilobytes)
+        }
+        return String(format: "%.1f MB", kilobytes / 1024)
+    }
+}
+
 @MainActor
 final class WatchAppModel: NSObject, ObservableObject {
     @Published var bootstrap: ForgeWatchBootstrap
     @Published var selectedSurface: WatchSurface = .now
     @Published var lastStatusMessage = "Waiting for iPhone"
+    @Published var lastDirectSyncMetric: ForgeWatchDirectSyncMetric?
 
     private let defaults = ForgeWatchStorage.sharedDefaults()
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let previewMode: Bool
     private let refreshRequestCooldown: TimeInterval = 8
+    private let directRequestTimeout: TimeInterval = 12
     private var lastRefreshRequestAt: Date?
+    private var directFlushTask: Task<Void, Never>?
 
     init(preview: Bool = false) {
         self.previewMode = preview
@@ -37,7 +96,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         session.delegate = self
         session.activate()
         flushPendingActions()
-        requestPhoneRefresh(reason: "watch_launch")
+        refreshFromForge(reason: "watch_launch", fallbackToPhone: true)
     }
 
     func consumePendingLaunchDestination() {
@@ -61,6 +120,17 @@ final class WatchAppModel: NSObject, ObservableObject {
         guard previewMode == false else { return }
         let queue = loadQueue()
         guard queue.isEmpty == false else { return }
+        if directConnection() != nil {
+            directFlushTask?.cancel()
+            directFlushTask = Task { @MainActor [weak self] in
+                await self?.flushPendingActionsDirectThenPhone()
+            }
+            return
+        }
+        flushPendingActionsThroughPhone(queue)
+    }
+
+    private func flushPendingActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
         if WCSession.default.isReachable {
             for item in queue {
                 if let data = try? encoder.encode(item) {
@@ -76,6 +146,9 @@ final class WatchAppModel: NSObject, ObservableObject {
                 }
             }
         }
+        lastStatusMessage = WCSession.default.isReachable
+            ? "Sending through iPhone"
+            : "Saved until iPhone can relay"
     }
 
     func requestPhoneRefresh(reason: String = "manual", force: Bool = false) {
@@ -103,6 +176,19 @@ final class WatchAppModel: NSObject, ObservableObject {
             WCSession.default.transferUserInfo([
                 ForgeWatchStorage.syncRequestMessageKey: data
             ])
+        }
+    }
+
+    func refreshFromForge(reason: String = "manual", fallbackToPhone: Bool = true) {
+        guard previewMode == false else { return }
+        guard directConnection() != nil else {
+            if fallbackToPhone {
+                requestPhoneRefresh(reason: reason, force: true)
+            }
+            return
+        }
+        Task { @MainActor [weak self] in
+            await self?.refreshFromForgeDirect(reason: reason, fallbackToPhone: fallbackToPhone)
         }
     }
 
@@ -197,6 +283,14 @@ final class WatchAppModel: NSObject, ObservableObject {
         return ForgeWatchBootstrap(
             schemaVersion: 2,
             generatedAt: now,
+            connection: ForgeWatchConnection(
+                apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+                sessionId: "pair_preview",
+                pairingToken: "preview-token",
+                transportLabel: "Tailscale",
+                directNetworkingEnabled: true
+            ),
             surfaces: [
                 .init(id: "now", title: "Now", icon: "sparkle"),
                 .init(id: "work", title: "Work", icon: "kanban"),
@@ -426,8 +520,282 @@ final class WatchAppModel: NSObject, ObservableObject {
         var queue = loadQueue()
         queue.append(envelope)
         saveQueue(queue)
-        lastStatusMessage = "Queued \(queue.count) action\(queue.count == 1 ? "" : "s")"
+        lastStatusMessage = directConnection() != nil
+            ? "Syncing with Forge"
+            : "Saved until Forge is reachable"
         flushPendingActions()
+    }
+
+    private struct WatchBootstrapRequest: Encodable {
+        let sessionId: String
+        let pairingToken: String
+    }
+
+    private struct WatchBootstrapEnvelope: Decodable {
+        let watch: ForgeWatchBootstrap
+    }
+
+    private struct WatchCommandBatchRequest: Encodable {
+        struct Command: Encodable {
+            let id: String
+            let kind: String
+            let createdAt: String
+            let payload: [String: String]
+        }
+
+        let sessionId: String
+        let pairingToken: String
+        let device: ForgeWatchDeviceDescriptor
+        let commands: [Command]
+    }
+
+    private struct WatchCommandBatchEnvelope: Decodable {
+        let receipt: ForgeWatchCommandBatchReceipt
+        let watch: ForgeWatchBootstrap
+    }
+
+    private struct DirectPostResult<Response> {
+        let response: Response
+        let metric: ForgeWatchDirectSyncMetric
+    }
+
+    private func directConnection() -> ForgeWatchConnection? {
+        guard
+            let connection = bootstrap.connection,
+            connection.directNetworkingEnabled,
+            let url = URL(string: connection.apiBaseUrl),
+            url.scheme?.lowercased() == "https",
+            let host = url.host?.lowercased(),
+            host != "127.0.0.1",
+            host != "localhost",
+            host != "::1"
+        else {
+            return nil
+        }
+        return connection
+    }
+
+    private func directURL(path: String, connection: ForgeWatchConnection) throws -> URL {
+        guard let url = URL(string: "\(connection.apiBaseUrl)\(path)") else {
+            throw URLError(.badURL)
+        }
+        return url
+    }
+
+    private func postDirect<Request: Encodable, Response: Decodable>(
+        path: String,
+        body: Request,
+        connection: ForgeWatchConnection,
+        operation: String,
+        itemCount: Int
+    ) async throws -> DirectPostResult<Response> {
+        let url = try directURL(path: path, connection: connection)
+        let bodyData = try encoder.encode(body)
+        let startedAt = Date()
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = directRequestTimeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = bodyData
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+            lastDirectSyncMetric = ForgeWatchDirectSyncMetric(
+                operation: operation,
+                transportLabel: connection.transportLabel,
+                requestBytes: bodyData.count,
+                responseBytes: 0,
+                durationMs: durationMs,
+                itemCount: itemCount,
+                succeeded: false,
+                fallbackUsed: false,
+                errorDescription: error.localizedDescription
+            )
+            throw error
+        }
+        let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+        guard let httpResponse = response as? HTTPURLResponse else {
+            lastDirectSyncMetric = ForgeWatchDirectSyncMetric(
+                operation: operation,
+                transportLabel: connection.transportLabel,
+                requestBytes: bodyData.count,
+                responseBytes: data.count,
+                durationMs: durationMs,
+                itemCount: itemCount,
+                succeeded: false,
+                fallbackUsed: false,
+                errorDescription: URLError(.badServerResponse).localizedDescription
+            )
+            throw URLError(.badServerResponse)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            lastDirectSyncMetric = ForgeWatchDirectSyncMetric(
+                operation: operation,
+                transportLabel: connection.transportLabel,
+                requestBytes: bodyData.count,
+                responseBytes: data.count,
+                durationMs: durationMs,
+                itemCount: itemCount,
+                succeeded: false,
+                fallbackUsed: false,
+                errorDescription: "Forge returned HTTP \(httpResponse.statusCode)."
+            )
+            throw NSError(
+                domain: "ForgeWatchDirect",
+                code: httpResponse.statusCode,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Forge returned HTTP \(httpResponse.statusCode)."
+                ]
+            )
+        }
+        let metric = ForgeWatchDirectSyncMetric(
+            operation: operation,
+            transportLabel: connection.transportLabel,
+            requestBytes: bodyData.count,
+            responseBytes: data.count,
+            durationMs: durationMs,
+            itemCount: itemCount,
+            succeeded: true,
+            fallbackUsed: false,
+            errorDescription: nil
+        )
+        lastDirectSyncMetric = metric
+        return DirectPostResult(response: try decoder.decode(Response.self, from: data), metric: metric)
+    }
+
+    private func refreshFromForgeDirect(reason: String, fallbackToPhone: Bool) async {
+        guard let connection = directConnection() else {
+            if fallbackToPhone {
+                requestPhoneRefresh(reason: reason, force: true)
+            }
+            return
+        }
+        do {
+            lastStatusMessage = "Refreshing through \(connection.transportLabel)"
+            let result: DirectPostResult<WatchBootstrapEnvelope> = try await postDirect(
+                path: "/mobile/watch/bootstrap",
+                body: WatchBootstrapRequest(
+                    sessionId: connection.sessionId,
+                    pairingToken: connection.pairingToken
+                ),
+                connection: connection,
+                operation: "bootstrap",
+                itemCount: 0
+            )
+            let envelope = result.response
+            saveBootstrap(envelope.watch.withConnection(connection))
+            lastStatusMessage = "Synced: \(result.metric.summary)"
+            flushPendingActions()
+        } catch {
+            lastStatusMessage = "Direct sync failed: \(error.localizedDescription)"
+            if fallbackToPhone {
+                requestPhoneRefresh(reason: reason, force: true)
+            }
+        }
+    }
+
+    private func flushPendingActionsDirectThenPhone() async {
+        guard let connection = directConnection() else {
+            flushPendingActionsThroughPhone(loadQueue())
+            return
+        }
+        let queue = loadQueue()
+        guard queue.isEmpty == false else { return }
+        do {
+            lastStatusMessage = "Syncing with Forge through \(connection.transportLabel)"
+            let commands = Self.commands(from: queue)
+            let result: DirectPostResult<WatchCommandBatchEnvelope> = try await postDirect(
+                path: "/mobile/watch/actions:batch",
+                body: WatchCommandBatchRequest(
+                    sessionId: connection.sessionId,
+                    pairingToken: connection.pairingToken,
+                    device: queue.first?.device ?? currentDeviceDescriptor(),
+                    commands: commands
+                ),
+                connection: connection,
+                operation: "actions",
+                itemCount: commands.count
+            )
+            let envelope = result.response
+            saveBootstrap(envelope.watch.withConnection(connection))
+            let acknowledgedIds = Set(envelope.receipt.receipts.map(\.actionId))
+            saveQueue(queue.filter { acknowledgedIds.contains($0.id) == false })
+            let remaining = loadQueue()
+            lastStatusMessage = remaining.isEmpty
+                ? "Synced: \(result.metric.summary)"
+                : "Still sending \(remaining.count) • \(result.metric.summary)"
+            if envelope.receipt.failedCount > 0 {
+                WKInterfaceDevice.current().play(.failure)
+            } else {
+                WKInterfaceDevice.current().play(.success)
+            }
+        } catch {
+            if let metric = lastDirectSyncMetric {
+                lastDirectSyncMetric = metric.withFallbackUsed(true)
+            }
+            lastStatusMessage = "Direct sync unavailable; using iPhone relay"
+            flushPendingActionsThroughPhone(queue)
+        }
+    }
+
+    private static func commands(
+        from envelopes: [ForgeWatchOutboundEnvelope]
+    ) -> [WatchCommandBatchRequest.Command] {
+        envelopes.compactMap { envelope in
+            if let habit = envelope.habitCheckIn {
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: [
+                        "habitId": habit.habitId,
+                        "dateKey": habit.dateKey,
+                        "status": habit.status,
+                        "note": habit.note
+                    ]
+                )
+            }
+            if let capture = envelope.captureEvent {
+                var payload = capture.payload
+                payload["eventType"] = capture.eventType
+                payload["recordedAt"] = capture.recordedAt
+                if let promptId = capture.promptId {
+                    payload["promptId"] = promptId
+                }
+                if let placeId = capture.linkedContext.placeId {
+                    payload["placeId"] = placeId
+                }
+                if let stayId = capture.linkedContext.stayId {
+                    payload["stayId"] = stayId
+                }
+                if let tripId = capture.linkedContext.tripId {
+                    payload["tripId"] = tripId
+                }
+                if let workoutId = capture.linkedContext.workoutId {
+                    payload["workoutId"] = workoutId
+                }
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: payload
+                )
+            }
+            if let command = envelope.command {
+                return WatchCommandBatchRequest.Command(
+                    id: envelope.id,
+                    kind: envelope.kind.rawValue,
+                    createdAt: envelope.createdAt,
+                    payload: command.payload
+                )
+            }
+            return nil
+        }
     }
 
     private func currentDeviceDescriptor() -> ForgeWatchDeviceDescriptor {
@@ -472,8 +840,9 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     private func saveBootstrap(_ bootstrap: ForgeWatchBootstrap) {
-        self.bootstrap = bootstrap
-        if let data = try? encoder.encode(bootstrap) {
+        let merged = bootstrap.withConnection(bootstrap.connection ?? self.bootstrap.connection)
+        self.bootstrap = merged
+        if let data = try? encoder.encode(merged) {
             defaults.set(data, forKey: ForgeWatchStorage.bootstrapKey)
         }
     }
@@ -507,7 +876,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     private func removeQueuedAction(id: String) {
         let queue = loadQueue().filter { $0.id != id }
         saveQueue(queue)
-        lastStatusMessage = queue.isEmpty ? "Synced to iPhone" : "Still sending \(queue.count)"
+        lastStatusMessage = queue.isEmpty ? "Synced with Forge" : "Still sending \(queue.count)"
     }
 
     private func applyAck(_ ack: ForgeWatchAckEnvelope) {
@@ -536,7 +905,7 @@ extension WatchAppModel: WCSessionDelegate {
             } else {
                 self.lastStatusMessage = activationState == .activated ? "Connected to iPhone" : "Waiting for iPhone"
                 self.flushPendingActions()
-                self.requestPhoneRefresh(reason: "activation")
+                self.refreshFromForge(reason: "activation", fallbackToPhone: true)
             }
         }
     }
@@ -546,7 +915,7 @@ extension WatchAppModel: WCSessionDelegate {
         Task { @MainActor in
             if isReachable {
                 self.flushPendingActions()
-                self.requestPhoneRefresh(reason: "reachable")
+                self.refreshFromForge(reason: "reachable", fallbackToPhone: true)
             }
         }
     }

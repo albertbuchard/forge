@@ -254,9 +254,19 @@ struct ForgeWatchSyncSnapshot: Codable, Hashable {
     let actionReceiptCount: Int
 }
 
+struct ForgeWatchConnection: Codable, Hashable {
+    let apiBaseUrl: String
+    let uiBaseUrl: String
+    let sessionId: String
+    let pairingToken: String
+    let transportLabel: String
+    let directNetworkingEnabled: Bool
+}
+
 struct ForgeWatchBootstrap: Codable, Hashable {
     let schemaVersion: Int?
     let generatedAt: String
+    let connection: ForgeWatchConnection?
     let surfaces: [ForgeWatchSurfaceSummary]?
     let now: ForgeWatchNowSnapshot?
     let work: ForgeWatchWorkSnapshot?
@@ -275,6 +285,7 @@ struct ForgeWatchBootstrap: Codable, Hashable {
     static let empty = ForgeWatchBootstrap(
         schemaVersion: 2,
         generatedAt: ISO8601DateFormatter().string(from: Date()),
+        connection: nil,
         surfaces: nil,
         now: nil,
         work: nil,
@@ -297,6 +308,28 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         ),
         pendingPrompts: []
     )
+
+    func withConnection(_ connection: ForgeWatchConnection?) -> ForgeWatchBootstrap {
+        ForgeWatchBootstrap(
+            schemaVersion: schemaVersion,
+            generatedAt: generatedAt,
+            connection: connection ?? self.connection,
+            surfaces: surfaces,
+            now: now,
+            work: work,
+            goals: goals,
+            projects: projects,
+            today: today,
+            health: health,
+            movement: movement,
+            psyche: psyche,
+            inbox: inbox,
+            sync: sync,
+            habits: habits,
+            checkInOptions: checkInOptions,
+            pendingPrompts: pendingPrompts
+        )
+    }
 }
 
 struct ForgeWatchDeviceDescriptor: Codable, Hashable {
