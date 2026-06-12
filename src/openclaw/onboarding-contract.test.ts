@@ -560,7 +560,9 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         boxCatalog: "/api/v1/workbench/catalog/boxes",
         listFlows: "/api/v1/workbench/flows",
+        flowDetail: "/api/v1/workbench/flows/:id",
         flowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
+        runHistory: "/api/v1/workbench/flows/:id/runs",
         runs: "/api/v1/workbench/flows/:id/runs",
         publishedOutput: "/api/v1/workbench/flows/:id/output",
         latestNodeOutput: "/api/v1/workbench/flows/:id/nodes/:nodeId/output"
@@ -582,6 +584,7 @@ describe("forge onboarding contract", () => {
     expect(routeModel.specializedDomainSurfaces.workbench.methodRoutes).toEqual(
       expect.objectContaining({
         listFlows: "GET /api/v1/workbench/flows",
+        flowDetail: "GET /api/v1/workbench/flows/:id",
         updateFlow: "PATCH /api/v1/workbench/flows/:id",
         deleteFlow: "DELETE /api/v1/workbench/flows/:id",
         runFlow: "POST /api/v1/workbench/flows/:id/run",
@@ -598,6 +601,7 @@ describe("forge onboarding contract", () => {
     expect(routeModel.specializedDomainSurfaces.workbench.routeKeys).toEqual(
       expect.arrayContaining([
         "listFlows",
+        "flowDetail",
         "flowById",
         "flowBySlug",
         "boxCatalog",
@@ -607,6 +611,7 @@ describe("forge onboarding contract", () => {
         "runFlow",
         "runByPayload",
         "chatFlow",
+        "runHistory",
         "runs",
         "runDetail",
         "runNodes",
@@ -906,6 +911,9 @@ describe("forge onboarding contract", () => {
         workbenchFlowCatalog: expect.stringMatching(
           /routeKey[\s\S]*listFlows/
         ),
+        workbenchFlowDetail: expect.stringMatching(
+          /routeKey[\s\S]*flowDetail[\s\S]*pathParams[\s\S]*id/
+        ),
         workbenchBoxCatalog: expect.stringMatching(
           /routeKey[\s\S]*boxCatalog/
         ),
@@ -917,6 +925,9 @@ describe("forge onboarding contract", () => {
         ),
         workbenchDeleteFlow: expect.stringMatching(
           /routeKey[\s\S]*deleteFlow[\s\S]*pathParams/
+        ),
+        workbenchRunHistory: expect.stringMatching(
+          /routeKey[\s\S]*runHistory[\s\S]*pathParams[\s\S]*id/
         ),
         workbenchRunDetail: expect.stringMatching(
           /routeKey[\s\S]*runDetail[\s\S]*pathParams[\s\S]*runId/

@@ -173,6 +173,7 @@ const lifeForceRouteSpecs = {
 const workbenchRouteSpecs = {
     boxCatalog: { method: "GET", path: "/api/v1/workbench/catalog/boxes" },
     listFlows: { method: "GET", path: "/api/v1/workbench/flows" },
+    flowDetail: { method: "GET", path: "/api/v1/workbench/flows/:id" },
     flowById: { method: "GET", path: "/api/v1/workbench/flows/:id" },
     flowBySlug: {
         method: "GET",
@@ -212,6 +213,7 @@ const workbenchRouteSpecs = {
         method: "GET",
         path: "/api/v1/workbench/flows/:id/output"
     },
+    runHistory: { method: "GET", path: "/api/v1/workbench/flows/:id/runs" },
     runs: { method: "GET", path: "/api/v1/workbench/flows/:id/runs" },
     runDetail: {
         method: "GET",

@@ -135,6 +135,7 @@ LIFE_FORCE_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
 WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "boxCatalog": {"method": "GET", "path": "/api/v1/workbench/catalog/boxes"},
     "listFlows": {"method": "GET", "path": "/api/v1/workbench/flows"},
+    "flowDetail": {"method": "GET", "path": "/api/v1/workbench/flows/:id"},
     "flowById": {"method": "GET", "path": "/api/v1/workbench/flows/:id"},
     "flowBySlug": {"method": "GET", "path": "/api/v1/workbench/flows/by-slug/:slug"},
     "createFlow": {"method": "POST", "path": "/api/v1/workbench/flows", "write": True},
@@ -144,6 +145,7 @@ WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "runByPayload": {"method": "POST", "path": "/api/v1/workbench/run", "write": True},
     "chatFlow": {"method": "POST", "path": "/api/v1/workbench/flows/:id/chat", "write": True},
     "publishedOutput": {"method": "GET", "path": "/api/v1/workbench/flows/:id/output"},
+    "runHistory": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs"},
     "runs": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs"},
     "runDetail": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs/:runId"},
     "runNodes": {"method": "GET", "path": "/api/v1/workbench/flows/:id/runs/:runId/nodes"},

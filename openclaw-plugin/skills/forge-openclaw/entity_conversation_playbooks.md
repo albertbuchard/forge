@@ -2221,6 +2221,8 @@ Lane-to-route map:
 
 - discover or inspect flows:
   `/api/v1/workbench/flows`, `/api/v1/workbench/flows/:id`, or `/api/v1/workbench/flows/by-slug/:slug`
+  Use route key `flowDetail` for saved-flow detail by id; `flowById` remains valid
+  for older agents.
 - create, update, or delete a flow:
   `POST /api/v1/workbench/flows`, then `PATCH /api/v1/workbench/flows/:id` or
   `DELETE /api/v1/workbench/flows/:id` for an existing saved flow
@@ -2232,6 +2234,8 @@ Lane-to-route map:
   `POST /api/v1/workbench/flows/:id/chat`
 - inspect published output or run history:
   `/api/v1/workbench/flows/:id/output` or `/api/v1/workbench/flows/:id/runs`
+  Use route key `runHistory` for the run-history read; `runs` remains valid for
+  older agents.
 - inspect one run or node result:
   `/api/v1/workbench/flows/:id/runs/:runId`,
   `/api/v1/workbench/flows/:id/runs/:runId/nodes`,

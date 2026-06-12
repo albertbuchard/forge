@@ -460,9 +460,11 @@ describe("question flow simulation cycles", () => {
     },
     Workbench: {
       listFlows: "List saved flows before choosing one.",
+      flowDetail: "Read one saved flow detail by id.",
       flowById: "Read one saved flow by id.",
       flowBySlug: "Read one saved flow by slug.",
       publishedOutput: "Read the public result.",
+      runHistory: "Inspect run history.",
       runs: "Inspect run history.",
       runDetail: "Debug one run summary.",
       runNodes: "Inspect node results for one run.",
@@ -1592,6 +1594,9 @@ describe("question flow simulation cycles", () => {
       /workbenchFlowCatalog[\s\S]*"routeKey":"listFlows"/
     );
     expect(onboardingSource).toMatch(
+      /workbenchFlowDetail[\s\S]*"routeKey":"flowDetail"[\s\S]*"id":"flow_research_digest"/
+    );
+    expect(onboardingSource).toMatch(
       /Route-selection questions are internal[\s\S]*saved flow, its input contract, one run, one node, or the public result/i
     );
     expect(onboardingSource).toMatch(
@@ -1608,6 +1613,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(onboardingSource).toMatch(
       /workbenchDeleteFlow[\s\S]*"routeKey":"deleteFlow"[\s\S]*"pathParams"/
+    );
+    expect(onboardingSource).toMatch(
+      /workbenchRunHistory[\s\S]*"routeKey":"runHistory"[\s\S]*"limit":10/
     );
     expect(onboardingSource).toMatch(
       /workbenchRunDetail[\s\S]*"routeKey":"runDetail"[\s\S]*"runId"/
@@ -1654,16 +1662,16 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-11 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-12 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-11/);
+    expect(report).toMatch(/Latest run date: 2026-06-12/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.10/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.10/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.11/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.11/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
-    expect(latestRun).toMatch(/25\s+focused checks/i);
+    expect(latestRun).toMatch(/49\s+focused checks/i);
     expect(latestRun).toMatch(/antiDriftRule/i);
     expect(latestRun).toMatch(/psycheHypothesisRule/i);
     expect(latestRun).toMatch(/progressiveDisclosureRule/i);
@@ -1672,6 +1680,7 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Hypothesis Without Cross-Examination/i);
     expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
     expect(latestRun).toMatch(/Psyche after-save close/i);
+    expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
       /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
@@ -1685,10 +1694,10 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*private action trace/i
+      /Cycle 1[\s\S]*Workbench[\s\S]*route-key aliases/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*formulation burden/i
+      /Cycle 2[\s\S]*flowDetail[\s\S]*runHistory[\s\S]*examples/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i

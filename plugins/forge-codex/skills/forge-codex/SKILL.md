@@ -105,6 +105,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}`
 - Workbench flow catalog:
   `{"routeKey":"listFlows","query":{"includeArchived":false}}`
+- Workbench flow detail:
+  `{"routeKey":"flowDetail","pathParams":{"id":"flow_research_digest"}}`
 - Workbench box catalog:
   `{"routeKey":"boxCatalog"}`
 - Workbench flow creation:
@@ -113,6 +115,8 @@ Concrete route-key examples for internal use:
   `{"routeKey":"updateFlow","pathParams":{"id":"flow_research_digest"},"body":{"description":"Keep the same input contract but add a stronger evidence-check node."}}`
 - Workbench flow deletion:
   `{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}`
+- Workbench run history:
+  `{"routeKey":"runHistory","pathParams":{"id":"flow_research_digest"},"query":{"limit":10}}`
 - Workbench run detail:
   `{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}`
 - Workbench run nodes:

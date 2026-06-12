@@ -290,6 +290,7 @@ describe("openclaw tool contracts", () => {
       expect.arrayContaining([
         "boxCatalog",
         "listFlows",
+        "flowDetail",
         "flowById",
         "flowBySlug",
         "createFlow",
@@ -299,6 +300,7 @@ describe("openclaw tool contracts", () => {
         "runByPayload",
         "chatFlow",
         "publishedOutput",
+        "runHistory",
         "runs",
         "runDetail",
         "runNodes",

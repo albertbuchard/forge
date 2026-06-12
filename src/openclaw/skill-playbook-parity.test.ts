@@ -191,10 +191,12 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Life Force weekday template edit[\s\S]*"routeKey":"weekdayTemplate"/i);
       expect(skill).toMatch(/Life Force fatigue signal[\s\S]*"routeKey":"fatigueSignal"/i);
       expect(skill).toMatch(/Workbench flow catalog[\s\S]*"routeKey":"listFlows"/i);
+      expect(skill).toMatch(/Workbench flow detail[\s\S]*"routeKey":"flowDetail"/i);
       expect(skill).toMatch(/Workbench box catalog[\s\S]*"routeKey":"boxCatalog"/i);
       expect(skill).toMatch(/Workbench flow creation[\s\S]*"routeKey":"createFlow"/i);
       expect(skill).toMatch(/Workbench flow edit[\s\S]*"routeKey":"updateFlow"/i);
       expect(skill).toMatch(/Workbench flow deletion[\s\S]*"routeKey":"deleteFlow"/i);
+      expect(skill).toMatch(/Workbench run history[\s\S]*"routeKey":"runHistory"/i);
       expect(skill).toMatch(/Workbench run detail[\s\S]*"routeKey":"runDetail"/i);
       expect(skill).toMatch(/Workbench run nodes[\s\S]*"routeKey":"runNodes"/i);
       expect(skill).toMatch(/Workbench node result[\s\S]*"routeKey":"nodeResult"/i);
@@ -682,6 +684,8 @@ describe("forge skill playbook parity", () => {
     expect(appSource).toMatch(/selection:\s*"POST \/api\/v1\/movement\/selection"/);
     expect(appSource).toMatch(/overview:\s*"GET \/api\/v1\/life-force"/);
     expect(appSource).toMatch(/runFlow:\s*"POST \/api\/v1\/workbench\/flows\/:id\/run"/);
+    expect(appSource).toMatch(/flowDetail:\s*"GET \/api\/v1\/workbench\/flows\/:id"/);
+    expect(appSource).toMatch(/runHistory:\s*"GET \/api\/v1\/workbench\/flows\/:id\/runs"/);
     expect(appSource).toMatch(/movementAllTime:/);
     expect(appSource).toMatch(/movementAutomaticBoxInvalidate:/);
     expect(appSource).toMatch(/movementTripPointUpdate:/);
