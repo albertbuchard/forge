@@ -63,8 +63,9 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         )
 
         XCTAssertEqual(model.pendingActionCount, 1)
-        XCTAssertTrue(model.lastStatusMessage.contains("Still to send"))
+        XCTAssertTrue(model.lastStatusMessage.contains("Still sending"))
         XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("queued"))
+        XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("relay"))
     }
 
     func testHabitRingAlwaysUsesSevenSegments() throws {

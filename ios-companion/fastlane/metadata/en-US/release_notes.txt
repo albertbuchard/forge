@@ -1,10 +1,10 @@
-Forge Companion 1.0.139 makes manual watch sync retries use the direct secure route immediately.
+Forge Companion 1.0.140 makes watch sync transport wording match the actual route.
 
-When the watch has a secure HTTPS/Tailscale companion URL and the user taps Refresh or Retry, the watch now retries the direct route immediately instead of waiting behind the previous transient-failure cooldown.
+Tailscale watch connections now present themselves as direct HTTPS/Tailscale routes in the watch Sync surface, instead of using relay-style wording that made a Tailscale pairing look mixed with another transport.
 
-Automatic direct-route retry cooldown is reduced from 45 seconds to 20 seconds, so temporary network misses recover sooner without repeatedly hammering Forge.
+When watchOS cannot reach Forge directly, the UI now calls that path a phone fallback. It no longer says queued action or iPhone relay in the normal watch sync flow.
 
-The iPhone relay remains a durable fallback for offline or unreachable watches, and previously queued actions are preserved until Forge accepts them.
+The durable fallback still preserves offline actions until Forge accepts them, but direct Tailscale remains the preferred path whenever watchOS can reach the secure companion URL.
 
 The Tailscale/Iroh separation remains in place: secure Tailscale URLs stay on the Tailscale path, and Iroh is only used for active forge-iroh pairings.
 

@@ -151,7 +151,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                     }
                 } errorHandler: { [weak self] error in
                     Task { @MainActor in
-                        self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
+                        self?.lastStatusMessage = "Phone fallback failed: \(error.localizedDescription)"
                         self?.transferActionsThroughPhone(queue)
                     }
                 }
@@ -164,8 +164,8 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         lastStatusMessage = WCSession.default.isReachable
-            ? "Sending through iPhone relay"
-            : "Waiting for iPhone relay"
+            ? "Phone fallback sending to Forge"
+            : "Waiting for phone fallback"
     }
 
     private func transferActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
@@ -212,11 +212,11 @@ final class WatchAppModel: NSObject, ObservableObject {
             reason: reason
         )
         guard let data = try? encoder.encode(request) else { return }
-        lastStatusMessage = "Requesting iPhone relay refresh"
+        lastStatusMessage = "Phone fallback refreshing Forge"
         if WCSession.default.isReachable {
             WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
                 Task { @MainActor in
-                    self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
+                    self?.lastStatusMessage = "Phone fallback failed: \(error.localizedDescription)"
                 }
             }
         } else {
@@ -581,7 +581,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         if let connection = directConnection() {
             lastStatusMessage = "Sending to Forge through \(connection.transportLabel)"
         } else {
-            lastStatusMessage = directCooldownRelayMessage() ?? "Waiting for iPhone relay"
+            lastStatusMessage = directCooldownRelayMessage() ?? "Waiting for phone fallback"
         }
         flushPendingActions()
     }
@@ -813,7 +813,8 @@ final class WatchAppModel: NSObject, ObservableObject {
                 lastDirectSyncMetric = metric.withFallbackUsed(true)
             }
             markDirectRouteFailureIfNeeded(error)
-            lastStatusMessage = "Direct sync unavailable; using iPhone relay"
+            let label = connection.transportLabel
+            lastStatusMessage = "Direct \(label) unavailable; phone fallback is sending"
             flushPendingActionsThroughPhone(queue)
         }
     }
@@ -837,7 +838,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         else {
             return nil
         }
-        return "\(connection.transportLabel) not reachable on watch; using iPhone relay"
+        return "\(connection.transportLabel) not reachable on watch; phone fallback is sending"
     }
 
     private func markDirectRouteFailureIfNeeded(_ error: Error) {
@@ -997,8 +998,8 @@ final class WatchAppModel: NSObject, ObservableObject {
 
     private func applyAck(_ ack: ForgeWatchAckEnvelope) {
         if ack.status == "deferred" {
-            let message = ack.error?["message"] ?? "iPhone relay deferred"
-            lastStatusMessage = "Still to send: \(message)"
+            let message = ack.error?["message"] ?? "phone fallback deferred"
+            lastStatusMessage = "Still sending: \(message)"
             return
         }
         removeQueuedAction(id: ack.actionId)
@@ -1037,7 +1038,7 @@ extension WatchAppModel: WCSessionDelegate {
                 if activationState == .activated, let connection = self.directConnection() {
                     self.lastStatusMessage = "Direct \(connection.transportLabel) ready"
                 } else {
-                    self.lastStatusMessage = activationState == .activated ? "iPhone relay ready" : "Waiting for Forge"
+                    self.lastStatusMessage = activationState == .activated ? "Phone fallback ready" : "Waiting for Forge"
                 }
                 self.flushPendingActions()
                 self.refreshFromForge(reason: "activation", fallbackToPhone: true)

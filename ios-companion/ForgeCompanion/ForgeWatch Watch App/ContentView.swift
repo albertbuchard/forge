@@ -451,7 +451,7 @@ private struct WorkSurface: View {
         } else {
             EmptySurfaceCard(
                 title: "No work snapshot",
-                message: "Refresh Forge directly when reachable; the iPhone relay is only a fallback.",
+                message: "Refresh Forge directly when reachable; phone fallback only protects offline actions.",
                 actionTitle: "Refresh work",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -1211,12 +1211,12 @@ private struct SyncSurface: View {
 
     private var connectionSummary: String {
         guard let connection else {
-            return "No direct Forge route yet; watch will ask the iPhone relay."
+            return "No secure watch route yet; open the iPhone app to share one."
         }
         if connection.directNetworkingEnabled {
-            return "Direct \(connection.transportLabel) to Forge"
+            return "Direct \(connection.transportLabel) HTTPS to Forge"
         }
-        return "Direct route disabled; watch will ask the iPhone relay."
+        return "Direct route disabled; phone fallback remains available."
     }
 
     private var actionCountTitle: String {
