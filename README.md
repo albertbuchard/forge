@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./openclaw-plugin/docs/assets/brand-icons/forge-lockup-transparent-1280.png" alt="Forge" width="620" />
+  <img src="https://raw.githubusercontent.com/albertbuchard/forge/main/openclaw-plugin/docs/assets/brand-icons/forge-logo-imagegen2-transparent-1280.png" alt="Forge" width="720" />
 </p>
 
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=06121c)](https://react.dev/)
