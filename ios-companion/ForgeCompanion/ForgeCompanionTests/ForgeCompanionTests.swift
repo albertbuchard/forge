@@ -6824,6 +6824,27 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.headline.contains("Synced"))
     }
 
+    func testSyncUploadStatusDoesNotShowCompletedMessageBeforeNextChunkTelemetry() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .normal,
+            message: "Synced 22 workouts",
+            payloadSummary: nil,
+            lastChunkFamily: nil,
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_next_stage",
+            transferStats: nil,
+            historicalWorkoutImport: nil
+        )
+
+        XCTAssertEqual(status.headline, "Preparing the next upload")
+        XCTAssertEqual(
+            status.pipelineSummary,
+            "Starting the next sync stage; no upload request is in flight yet"
+        )
+        XCTAssertFalse(status.headline.contains("Synced"))
+    }
+
     func testHistoricalWorkoutImportPanelRemainsVisibleForRepairMessages() {
         let progress = HistoricalWorkoutImportStatus(
             indexedWorkouts: 1077,

@@ -1173,6 +1173,9 @@ struct CompanionSyncUploadStatus {
         guard let message, message.isEmpty == false else {
             return "Preparing sync"
         }
+        if Self.isCompletedSyncMessage(message) {
+            return "Preparing the next upload"
+        }
         return message
     }
 
@@ -1278,6 +1281,9 @@ struct CompanionSyncUploadStatus {
 
     var pipelineSummary: String? {
         guard let transferStats else {
+            if isSyncing, let message, Self.isCompletedSyncMessage(message) {
+                return "Starting the next sync stage; no upload request is in flight yet"
+            }
             return isSyncing ? "Preparing HealthKit records and upload chunks" : nil
         }
         if transferStats.inFlightChunks > 0 {
@@ -1332,6 +1338,13 @@ struct CompanionSyncUploadStatus {
             return value
         }
         return String(value.suffix(10))
+    }
+
+    private static func isCompletedSyncMessage(_ message: String) -> Bool {
+        let normalized = message
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalized.hasPrefix("synced ")
     }
 
     private static func shortTransportLabel(_ value: String?) -> String? {
