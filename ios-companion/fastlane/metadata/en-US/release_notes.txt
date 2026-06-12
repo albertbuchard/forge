@@ -1,9 +1,9 @@
-Forge Companion 1.0.129 tightens Tailscale and Iroh route handling in the iOS and watch companions.
+Forge Companion 1.0.130 tightens live sync status during staged HealthKit uploads.
 
-Tailscale pairings now stay labeled and prioritized as Tailscale even if old Iroh metadata is still present in stored pairing data. Discovery now prefers Tailscale before Iroh when both are advertised.
+The sync card no longer keeps showing an old completed message such as “Synced 22 workouts” while a new upload stage is still preparing. It now says that the next upload is being prepared until real chunk telemetry is available.
 
-Sync status now reports phone-side bytes as sent, Forge-side bytes as accepted, and names Tailscale network replies instead of generic Forge replies. Completed sync messages no longer show trigger labels such as manual as if they were transports.
+This builds on the previous Tailscale/Iroh fixes: Tailscale pairings remain labeled as Tailscale, Iroh is only used for Iroh pairings, and the progress text separates phone-side sending from Forge-side acceptance.
 
-Regression coverage was added for stale Iroh metadata on Tailscale URLs, Tailscale-first discovery ranking, and the updated sync progress wording.
+Regression coverage was added for stale completed sync messages during active uploads.
 
 HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
