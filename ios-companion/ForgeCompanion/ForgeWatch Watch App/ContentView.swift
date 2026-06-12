@@ -596,7 +596,7 @@ private struct HabitSurface: View {
         if habits.isEmpty {
             EmptySurfaceCard(
                 title: "No habits loaded",
-                message: "Refresh Forge directly to load active habits; relay only if the watch cannot reach Forge.",
+                message: "Refresh Forge directly to load active habits; phone fallback only runs if the watch cannot reach Forge.",
                 actionTitle: "Refresh habits",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -923,7 +923,7 @@ private struct PsycheSurface: View {
             if questions.isEmpty {
                 EmptySurfaceCard(
                     title: "Psyche not loaded",
-                    message: "Mark a moment now; Forge definitions load after the next direct or relay refresh.",
+                    message: "Mark a moment now; Forge definitions load after the next direct refresh or phone fallback.",
                     actionTitle: "Mark moment",
                     systemImage: "bookmark.fill",
                     action: {
