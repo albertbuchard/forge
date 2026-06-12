@@ -4,62 +4,6 @@ import SwiftUI
 import WatchConnectivity
 import WatchKit
 
-struct ForgeWatchDirectSyncMetric: Hashable {
-    let operation: String
-    let transportLabel: String
-    let requestBytes: Int
-    let responseBytes: Int
-    let durationMs: Int
-    let itemCount: Int
-    let succeeded: Bool
-    let fallbackUsed: Bool
-    let errorDescription: String?
-
-    var summary: String {
-        var parts = [
-            "\(transportLabel)",
-            "\(operation) \(durationMs) ms",
-            "\(Self.formatBytes(requestBytes)) up",
-            "\(Self.formatBytes(responseBytes)) down"
-        ]
-        if itemCount > 0 {
-            parts.append("\(itemCount) item\(itemCount == 1 ? "" : "s")")
-        }
-        if fallbackUsed {
-            parts.append("paired iPhone backup")
-        }
-        if succeeded == false {
-            parts.append("failed")
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    func withFallbackUsed(_ value: Bool) -> ForgeWatchDirectSyncMetric {
-        ForgeWatchDirectSyncMetric(
-            operation: operation,
-            transportLabel: transportLabel,
-            requestBytes: requestBytes,
-            responseBytes: responseBytes,
-            durationMs: durationMs,
-            itemCount: itemCount,
-            succeeded: succeeded,
-            fallbackUsed: value,
-            errorDescription: errorDescription
-        )
-    }
-
-    private static func formatBytes(_ value: Int) -> String {
-        guard value >= 1024 else {
-            return "\(value) B"
-        }
-        let kilobytes = Double(value) / 1024
-        guard kilobytes >= 1024 else {
-            return String(format: "%.1f KB", kilobytes)
-        }
-        return String(format: "%.1f MB", kilobytes / 1024)
-    }
-}
-
 @MainActor
 final class WatchAppModel: NSObject, ObservableObject {
     @Published var bootstrap: ForgeWatchBootstrap

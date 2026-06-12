@@ -542,6 +542,60 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(refreshed.capabilities, ["healthkit.sleep", "healthkit.fitness", "watch-ready"])
     }
 
+    func testPairingPayloadRefreshNormalizesStaleIrohMetadataForTailscaleUrl() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "forge-iroh://fakednodeid/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2026-04-07T10:05:00Z",
+            capabilities: ["healthkit.sleep"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+        let session = makePairingSessionState(
+            id: "pair_test",
+            expiresAt: payload.expiresAt,
+            capabilities: payload.capabilities
+        )
+
+        let refreshed = CompanionPairingURLResolver.payload(payload, refreshedBy: session)
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: refreshed,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(refreshed.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(refreshed.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+        XCTAssertEqual(refreshed.transportMode, "tailscale")
+        XCTAssertNil(refreshed.transport)
+        XCTAssertFalse(refreshed.usesIrohTransportForActiveApiUrl)
+        XCTAssertFalse(route.usesIroh)
+        XCTAssertEqual(route.label, "Tailscale direct")
+    }
+
     func testPairingHeartbeatDecoderAcceptsEnvelopeAndLegacyRawSession() throws {
         let rawSession = """
         {
@@ -957,6 +1011,10 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(normalized.usesIrohTransportForActiveApiUrl)
         XCTAssertFalse(route.usesIroh)
         XCTAssertEqual(route.label, "Tailscale direct")
+        XCTAssertEqual(
+            CompanionAppModel.healthSyncTransportLabel(for: normalized),
+            "Tailscale direct"
+        )
     }
 
     func testDiscoveryRanksTailscaleAheadOfIroh() {
@@ -1439,6 +1497,26 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(status, "Testing Tailscale direct route")
         XCTAssertFalse(status.localizedCaseInsensitiveContains("ready"))
         XCTAssertFalse(status.localizedCaseInsensitiveContains("Iroh"))
+    }
+
+    func testWatchDirectMetricUsesTailscaleBackupWordingWithoutIrohOrQueueJargon() {
+        let metric = ForgeWatchDirectSyncMetric(
+            operation: "actions",
+            transportLabel: "Tailscale",
+            requestBytes: 1536,
+            responseBytes: 512,
+            durationMs: 240,
+            itemCount: 3,
+            succeeded: false,
+            fallbackUsed: true,
+            errorDescription: "timed out"
+        )
+
+        XCTAssertTrue(metric.summary.contains("Tailscale"))
+        XCTAssertTrue(metric.summary.contains("paired iPhone backup"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("phone fallback"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("Iroh"))
+        XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("queued"))
     }
 
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {

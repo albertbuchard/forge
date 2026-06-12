@@ -269,7 +269,7 @@ enum CompanionPairingURLResolver {
         guard session.id == payload.sessionId else {
             return payload
         }
-        return PairingPayload(
+        return normalizedPayload(PairingPayload(
             kind: payload.kind,
             apiBaseUrl: payload.apiBaseUrl,
             uiBaseUrl: payload.uiBaseUrl,
@@ -279,7 +279,7 @@ enum CompanionPairingURLResolver {
             capabilities: session.capabilities.isEmpty ? payload.capabilities : session.capabilities,
             transportMode: payload.transportMode,
             transport: payload.transport
-        )
+        ))
     }
 }
 
@@ -4338,9 +4338,10 @@ final class CompanionAppModel: ObservableObject {
                 currentPairing,
                 refreshedBy: session
             )
-            if refreshedPairing.expiresAt != currentPairing.expiresAt
-                || refreshedPairing.capabilities != currentPairing.capabilities
-            {
+            if Self.shouldPersistRefreshedPairing(
+                refreshedPairing,
+                replacing: currentPairing
+            ) {
                 pairing = refreshedPairing
                 persistPairing()
                 companionDebugLog(
@@ -4350,6 +4351,18 @@ final class CompanionAppModel: ObservableObject {
             }
         }
         applyRemoteSourceStates(session.sourceStates)
+    }
+
+    private static func shouldPersistRefreshedPairing(
+        _ refreshedPairing: PairingPayload,
+        replacing currentPairing: PairingPayload
+    ) -> Bool {
+        refreshedPairing.apiBaseUrl != currentPairing.apiBaseUrl ||
+            refreshedPairing.uiBaseUrl != currentPairing.uiBaseUrl ||
+            refreshedPairing.expiresAt != currentPairing.expiresAt ||
+            refreshedPairing.capabilities != currentPairing.capabilities ||
+            refreshedPairing.transportMode != currentPairing.transportMode ||
+            refreshedPairing.transport != currentPairing.transport
     }
 
     private func sourceNeedsInteractiveReconciliation(_ source: CompanionSourceKey) -> Bool {
