@@ -166,10 +166,6 @@ pre code {
   display: grid;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(39, 56, 86, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 10px 22px rgba(45, 62, 94, 0.12);
 }
 
 .brand-mark img {

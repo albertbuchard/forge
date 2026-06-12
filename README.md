@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-master.png" alt="" width="44" /> Forge
+  <img src="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-transparent.png" alt="" width="84" /> Forge
 </h1>
 
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=06121c)](https://react.dev/)
