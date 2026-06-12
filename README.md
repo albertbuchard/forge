@@ -1,6 +1,6 @@
-<h1 align="center">
-  <img src="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-transparent.png" alt="" width="84" /> Forge
-</h1>
+<p align="center">
+  <img src="./openclaw-plugin/docs/assets/brand-icons/forge-lockup-transparent-1280.png" alt="Forge" width="620" />
+</p>
 
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=06121c)](https://react.dev/)
 [![TypeScript 5.8](https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
