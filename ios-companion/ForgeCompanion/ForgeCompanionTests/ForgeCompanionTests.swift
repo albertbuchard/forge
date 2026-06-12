@@ -1532,6 +1532,23 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(remaining.map(\.id), [createdDuringUpload.id])
     }
 
+    func testWatchQueueReconciliationPreservesUnacknowledgedAndNewRelayActions() {
+        let acknowledgedBeforeRelay = makeWatchEnvelope(id: "action_acknowledged_before_relay")
+        let unacknowledgedBeforeRelay = makeWatchEnvelope(id: "action_unacknowledged_before_relay")
+        let createdDuringRelay = makeWatchEnvelope(id: "action_created_during_relay")
+        let latestQueue = [acknowledgedBeforeRelay, unacknowledgedBeforeRelay, createdDuringRelay]
+
+        let remaining = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+            afterAcknowledging: [acknowledgedBeforeRelay.id],
+            in: latestQueue
+        )
+
+        XCTAssertEqual(
+            remaining.map(\.id),
+            [unacknowledgedBeforeRelay.id, createdDuringRelay.id]
+        )
+    }
+
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)

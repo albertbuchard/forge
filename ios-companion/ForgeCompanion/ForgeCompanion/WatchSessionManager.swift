@@ -220,23 +220,36 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     func processPendingQueue() async {
-        processingTask?.cancel()
-        processingTask = Task { [weak self] in
-            guard let self else { return }
-            guard let pairing = self.pairingProvider?() else { return }
-            guard self.watchTransportAvailable(for: WCSession.default) else {
-                self.lastStatusMessage = "Watch app not installed"
-                return
-            }
+        if let processingTask {
+            await processingTask.value
+            return
+        }
 
-            let remaining = self.loadQueue()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.drainPendingQueue()
+            self.processingTask = nil
+        }
+        processingTask = task
+        await task.value
+    }
+
+    private func drainPendingQueue() async {
+        guard let pairing = pairingProvider?() else { return }
+        guard watchTransportAvailable(for: WCSession.default) else {
+            lastStatusMessage = "Watch app not installed"
+            return
+        }
+
+        while Task.isCancelled == false {
+            let remaining = loadQueue()
             guard remaining.isEmpty == false else {
-                self.lastStatusMessage = "Watch bridge caught up"
+                lastStatusMessage = "Watch bridge caught up"
                 return
             }
 
             do {
-                let result = try await self.syncClient.submitWatchCommandBatch(
+                let result = try await syncClient.submitWatchCommandBatch(
                     device: remaining.first?.device ?? ForgeWatchDeviceDescriptor(
                         name: "Apple Watch",
                         platform: "watchos",
@@ -247,11 +260,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     pairing: pairing
                 )
                 let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
-                self.saveBootstrap(bootstrap)
-                self.publishBootstrap(bootstrap)
+                saveBootstrap(bootstrap)
+                publishBootstrap(bootstrap)
                 let acknowledgedIds = Set(result.receipt.receipts.map(\.actionId))
                 for receipt in result.receipt.receipts {
-                    self.sendAck(
+                    sendAck(
                         ForgeWatchAckEnvelope(
                             actionId: receipt.actionId,
                             processedAt: receipt.processedAt,
@@ -261,17 +274,25 @@ final class WatchSessionManager: NSObject, ObservableObject {
                         )
                     )
                 }
-                let stillPending = remaining.filter { acknowledgedIds.contains($0.id) == false }
-                self.saveQueue(stillPending)
-                self.lastStatusMessage = stillPending.isEmpty
-                    ? "Watch bridge caught up"
-                    : "Watch bridge kept \(stillPending.count) unacknowledged action\(stillPending.count == 1 ? "" : "s")"
+                let latestQueue = loadQueue()
+                let stillPending = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+                    afterAcknowledging: acknowledgedIds,
+                    in: latestQueue
+                )
+                saveQueue(stillPending)
+                if stillPending.isEmpty {
+                    lastStatusMessage = "Watch bridge caught up"
+                    return
+                }
+                lastStatusMessage = "Watch bridge sending \(stillPending.count) remaining action\(stillPending.count == 1 ? "" : "s")"
+                if acknowledgedIds.isEmpty, stillPending.count == remaining.count {
+                    return
+                }
             } catch {
-                self.lastStatusMessage = "Watch sync deferred: \(error.localizedDescription)"
+                lastStatusMessage = "Watch sync deferred: \(error.localizedDescription)"
+                return
             }
         }
-
-        await processingTask?.value
     }
 
     private func watchTransportAvailable(for session: WCSession) -> Bool {

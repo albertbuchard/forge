@@ -1,7 +1,7 @@
-Forge Companion 1.0.150 makes watchOS direct sync safer when Forge is reached through Tailscale.
+Forge Companion 1.0.151 makes watchOS direct and paired-iPhone sync safer when Forge is reached through Tailscale.
 
-Watch actions no longer cancel and restart an active direct upload every time a new action is saved. The watch now keeps one direct send in flight, removes only the action IDs Forge acknowledged from the latest stored action list, and immediately continues with any remaining actions.
+Watch actions no longer cancel and restart an active direct upload every time a new action is saved. The paired-iPhone relay now follows the same single-flight pattern: it keeps the active Forge request alive, removes only the action IDs Forge acknowledged from the latest stored action list, and immediately continues with any remaining actions.
 
-This avoids stale action counters, protects actions created while another direct request is in flight, and keeps Tailscale direct sync separate from the paired iPhone backup path.
+This avoids stale action counters, protects actions created while another direct or relay request is in flight, and keeps Tailscale direct sync separate from the paired iPhone backup path.
 
 Pairing tokens, upload checkpoints, HealthKit data, watch action persistence, and stored user data are unchanged.
