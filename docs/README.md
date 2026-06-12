@@ -7,7 +7,9 @@ This directory separates current references from preserved planning history.
 - [Companion Iroh transport](./reference/companion-iroh.md): iOS pairing, Iroh, manual HTTP, and phone-safe URLs.
 - [OpenClaw plugin](./reference/openclaw-plugin.md): advanced OpenClaw adapter setup and runtime behavior.
 - [Hermes plugin](./reference/hermes-plugin.md): advanced Hermes adapter setup and release notes.
+- [Claude Code adapter](./reference/claude-code-adapter.md): advanced Claude MCP setup and recovery.
 - [Codex MCP](../plugins/forge-codex/README.md): Codex adapter setup and MCP bridge behavior.
+- [Claude Code MCP](./reference/claude-code-adapter.md): Claude Code adapter setup and MCP bridge behavior.
 - [Calendar provider setup](./reference/calendar-provider-setup.md): Google Calendar and OAuth configuration.
 - [Multi-user and strategies](./reference/multi-user-and-strategies.md): shared runtime, identity, and strategy model notes.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.

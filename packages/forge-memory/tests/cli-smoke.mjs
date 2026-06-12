@@ -691,6 +691,96 @@ if (
     `Expected unrelated Codex MCP server config to survive Forge MCP patching:\n${codexConfig}`
   );
 }
+const claudeConfigPath = path.join(tempHome, ".claude.json");
+fs.writeFileSync(
+  claudeConfigPath,
+  `${JSON.stringify(
+    {
+      theme: "dark",
+      mcpServers: {
+        other: {
+          type: "stdio",
+          command: "node",
+          args: ["other-mcp.js"],
+          env: { KEEP: "1" }
+        }
+      },
+      projects: {
+        "/tmp/forge-smoke": {
+          mcpServers: {
+            localOnly: {
+              type: "stdio",
+              command: "node",
+              args: ["local-project-mcp.js"]
+            }
+          }
+        }
+      }
+    },
+    null,
+    2
+  )}\n`
+);
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--skip-pair-ios",
+  "--adapters",
+  "claude",
+  "--json"
+]);
+run([
+  "configure",
+  "--yes",
+  "--no-start",
+  "--skip-pair-ios",
+  "--adapters",
+  "claude",
+  "--json"
+]);
+const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf8"));
+const claudeForge = claudeConfig.mcpServers?.forge;
+if (
+  !claudeForge ||
+  claudeForge.type !== "stdio" ||
+  claudeForge.command !== "npx" ||
+  claudeForge.args?.join(" ") !== "forge-memory mcp"
+) {
+  throw new Error(
+    `Expected Claude Forge MCP server to use npx forge-memory mcp:\n${JSON.stringify(
+      claudeConfig,
+      null,
+      2
+    )}`
+  );
+}
+if (
+  claudeForge.env?.FORGE_ACTOR_LABEL !== "claude" ||
+  claudeForge.env?.FORGE_AGENT_PROVIDER !== "claude" ||
+  claudeForge.env?.FORGE_DATA_ROOT !== dataRoot
+) {
+  throw new Error(
+    `Expected Claude Forge MCP env to preserve provider and data root:\n${JSON.stringify(
+      claudeForge,
+      null,
+      2
+    )}`
+  );
+}
+if (
+  claudeConfig.theme !== "dark" ||
+  claudeConfig.mcpServers?.other?.env?.KEEP !== "1" ||
+  !claudeConfig.projects?.["/tmp/forge-smoke"]?.mcpServers?.localOnly
+) {
+  throw new Error(
+    `Expected unrelated Claude settings to survive Forge MCP patching:\n${JSON.stringify(
+      claudeConfig,
+      null,
+      2
+    )}`
+  );
+}
 await withFakeForgeServer(
   async (request, body) => {
     if (request.url === "/api/v1/health") {
@@ -1424,7 +1514,7 @@ try {
     mode: "packaged",
     port: liveRuntime.port,
     dataRoot,
-    adapters: ["openclaw", "hermes", "codex"]
+    adapters: ["openclaw", "hermes", "codex", "claude"]
   });
   fs.rmSync(path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"), {
     force: true
@@ -1490,6 +1580,31 @@ try {
   if (!codexAfterUninstall.includes("[mcp_servers.other]")) {
     throw new Error(
       `Expected uninstall --remove-adapters to preserve unrelated Codex MCP config:\n${codexAfterUninstall}`
+    );
+  }
+  const claudeAfterUninstall = JSON.parse(
+    fs.readFileSync(claudeConfigPath, "utf8")
+  );
+  if (claudeAfterUninstall.mcpServers?.forge) {
+    throw new Error(
+      `Expected uninstall --remove-adapters to remove only Forge's Claude MCP entry:\n${JSON.stringify(
+        claudeAfterUninstall,
+        null,
+        2
+      )}`
+    );
+  }
+  if (
+    claudeAfterUninstall.theme !== "dark" ||
+    claudeAfterUninstall.mcpServers?.other?.env?.KEEP !== "1" ||
+    !claudeAfterUninstall.projects?.["/tmp/forge-smoke"]?.mcpServers?.localOnly
+  ) {
+    throw new Error(
+      `Expected uninstall --remove-adapters to preserve unrelated Claude config:\n${JSON.stringify(
+        claudeAfterUninstall,
+        null,
+        2
+      )}`
     );
   }
 } finally {

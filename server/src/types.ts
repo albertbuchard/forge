@@ -299,7 +299,8 @@ export const defaultAgentScopePolicy = {
 export const agentRuntimeProviderSchema = z.enum([
   "openclaw",
   "hermes",
-  "codex"
+  "codex",
+  "claude"
 ]);
 export const agentRuntimeConnectionModeSchema = z.enum([
   "operator_session",

@@ -415,7 +415,8 @@ function runtimeProviderFromAgentType(agentType) {
     const normalized = normalizeAgentIdentityPart(agentType);
     if (normalized === "openclaw" ||
         normalized === "hermes" ||
-        normalized === "codex") {
+        normalized === "codex" ||
+        normalized === "claude") {
         return normalized;
     }
     return null;

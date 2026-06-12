@@ -620,7 +620,8 @@ function runtimeProviderFromAgentType(
   if (
     normalized === "openclaw" ||
     normalized === "hermes" ||
-    normalized === "codex"
+    normalized === "codex" ||
+    normalized === "claude"
   ) {
     return normalized;
   }

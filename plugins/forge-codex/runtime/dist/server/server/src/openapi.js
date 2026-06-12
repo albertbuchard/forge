@@ -2380,7 +2380,7 @@ export function buildOpenApiDocument() {
             identityKey: nullable({ type: "string" }),
             provider: nullable({
                 type: "string",
-                enum: ["openclaw", "hermes", "codex"]
+                enum: ["openclaw", "hermes", "codex", "claude"]
             }),
             machineKey: nullable({ type: "string" }),
             personaKey: nullable({ type: "string" }),
@@ -2488,7 +2488,10 @@ export function buildOpenApiDocument() {
             agentId: nullable({ type: "string" }),
             agentLabel: { type: "string" },
             agentType: { type: "string" },
-            provider: { type: "string", enum: ["openclaw", "hermes", "codex"] },
+            provider: {
+                type: "string",
+                enum: ["openclaw", "hermes", "codex", "claude"]
+            },
             sessionKey: { type: "string" },
             sessionLabel: { type: "string" },
             actorLabel: { type: "string" },

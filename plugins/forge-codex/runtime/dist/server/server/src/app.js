@@ -5134,9 +5134,11 @@ function buildAgentOnboardingPayload(request) {
                     summary: "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
                     routeKeys: [
                         "listFlows",
+                        "flowDetail",
                         "flowById",
                         "flowBySlug",
                         "publishedOutput",
+                        "runHistory",
                         "runs",
                         "runDetail",
                         "runNodes",
@@ -5160,9 +5162,11 @@ function buildAgentOnboardingPayload(request) {
                     ],
                     methodRoutes: {
                         listFlows: "GET /api/v1/workbench/flows",
+                        flowDetail: "GET /api/v1/workbench/flows/:id",
                         flowById: "GET /api/v1/workbench/flows/:id",
                         flowBySlug: "GET /api/v1/workbench/flows/by-slug/:slug",
                         publishedOutput: "GET /api/v1/workbench/flows/:id/output",
+                        runHistory: "GET /api/v1/workbench/flows/:id/runs",
                         runs: "GET /api/v1/workbench/flows/:id/runs",
                         runDetail: "GET /api/v1/workbench/flows/:id/runs/:runId",
                         runNodes: "GET /api/v1/workbench/flows/:id/runs/:runId/nodes",
@@ -5178,9 +5182,11 @@ function buildAgentOnboardingPayload(request) {
                     },
                     readRoutes: {
                         listFlows: "/api/v1/workbench/flows",
+                        flowDetail: "/api/v1/workbench/flows/:id",
                         flowById: "/api/v1/workbench/flows/:id",
                         flowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
                         publishedOutput: "/api/v1/workbench/flows/:id/output",
+                        runHistory: "/api/v1/workbench/flows/:id/runs",
                         runs: "/api/v1/workbench/flows/:id/runs",
                         runDetail: "/api/v1/workbench/flows/:id/runs/:runId",
                         runNodes: "/api/v1/workbench/flows/:id/runs/:runId/nodes",
@@ -5199,6 +5205,7 @@ function buildAgentOnboardingPayload(request) {
                     notes: [
                         "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
                         "Route-selection questions are internal. User-facing questions should ask whether the user needs the saved flow, its input contract, one run, one node, or the public result instead of reciting Workbench route keys.",
+                        "`flowDetail` is the plain saved-flow detail route-key alias for `flowById`, and `runHistory` is the plain run-history route-key alias for `runs`. Keep the older keys valid for existing agents, but prefer the clearer aliases in new examples and guidance.",
                         "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
                         "If the user is still figuring out inputs or editable structure, read flow detail or box catalog before asking them to reconstruct structured inputs from memory.",
                         "For flow creation, clarify what the flow should reliably produce, which input contract it should accept, and which first node or box anchors the flow before asking for structured input details.",
@@ -5305,6 +5312,25 @@ function buildAgentOnboardingPayload(request) {
                     "Use a distinct actor label such as Albert (codex) so Codex-originated work stays readable in Forge history.",
                     "The Forge MCP bridge now self-registers as a live agent session and heartbeats while the MCP server process stays alive."
                 ]
+            },
+            claude: {
+                label: "Claude Code",
+                installSteps: [
+                    "Install Claude Code, then run npx forge-memory configure and select Claude Code.",
+                    "Keep Claude pointed at the same Forge origin, port, and shared data root used by the rest of the local runtime.",
+                    "Restart the Claude Code session after MCP configuration changes so the Forge MCP server starts cleanly."
+                ],
+                verifyCommands: [
+                    "claude mcp list",
+                    "claude mcp get forge",
+                    "claude",
+                    `curl -s ${origin}/api/v1/health`
+                ],
+                configNotes: [
+                    "Forge Memory writes one user-scope Claude MCP server named forge in ~/.claude.json.",
+                    "The Claude MCP server command is npx forge-memory mcp, so Claude shares the same Forge runtime and data root as OpenClaw, Hermes, and Codex.",
+                    "Use a distinct actor label such as Albert (claude) so Claude-originated work stays readable in Forge history."
+                ]
             }
         },
         verificationPaths: {
@@ -5340,8 +5366,10 @@ function buildAgentOnboardingPayload(request) {
             movementTripPointDelete: "/api/v1/movement/trips/:id/points/:pointId",
             workbenchBoxCatalog: "/api/v1/workbench/catalog/boxes",
             workbenchFlows: "/api/v1/workbench/flows",
+            workbenchFlowDetail: "/api/v1/workbench/flows/:id",
             workbenchFlowBySlug: "/api/v1/workbench/flows/by-slug/:slug",
             workbenchPublishedOutput: "/api/v1/workbench/flows/:id/output",
+            workbenchRunHistory: "/api/v1/workbench/flows/:id/runs",
             workbenchRuns: "/api/v1/workbench/flows/:id/runs",
             workbenchRunDetail: "/api/v1/workbench/flows/:id/runs/:runId",
             workbenchNodeResult: "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
@@ -5510,10 +5538,12 @@ function buildAgentOnboardingPayload(request) {
                 lifeForceWeekdayTemplate: '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}',
                 lifeForceFatigueSignal: '{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}',
                 workbenchFlowCatalog: '{"routeKey":"listFlows","query":{"includeArchived":false}}',
+                workbenchFlowDetail: '{"routeKey":"flowDetail","pathParams":{"id":"flow_research_digest"}}',
                 workbenchBoxCatalog: '{"routeKey":"boxCatalog"}',
                 workbenchCreateFlow: '{"routeKey":"createFlow","body":{"title":"Research digest","slug":"research-digest","description":"Turn a topic into a cited digest with a stable published summary.","nodes":[],"edges":[]}}',
                 workbenchUpdateFlow: '{"routeKey":"updateFlow","pathParams":{"id":"flow_research_digest"},"body":{"description":"Keep the same input contract but add a stronger evidence-check node."}}',
                 workbenchDeleteFlow: '{"routeKey":"deleteFlow","pathParams":{"id":"flow_research_digest"}}',
+                workbenchRunHistory: '{"routeKey":"runHistory","pathParams":{"id":"flow_research_digest"},"query":{"limit":10}}',
                 workbenchRunDetail: '{"routeKey":"runDetail","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
                 workbenchRunNodes: '{"routeKey":"runNodes","pathParams":{"id":"flow_research_digest","runId":"run_123"}}',
                 workbenchNodeResult: '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}',

@@ -22779,6 +22779,105 @@ test("singleton codex runtime sessions supersede older bridges and ignore stale 
   }
 });
 
+test("claude runtime sessions register with a canonical identity and reconnect plan", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-agent-runtime-claude-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const registerResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/agents/sessions",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        provider: "claude",
+        agentLabel: "Local Claude",
+        agentType: "claude",
+        actorLabel: "Albert",
+        sessionKey: "claude-test-session",
+        sessionLabel: "Forge Claude MCP server",
+        connectionMode: "mcp",
+        baseUrl: "http://127.0.0.1:4317",
+        webUrl: "http://127.0.0.1:4317/forge/",
+        externalSessionId: "claude-instance-a",
+        metadata: {
+          pid: 24680,
+          singleton: true
+        }
+      }
+    });
+    assert.equal(registerResponse.statusCode, 200);
+    const registerBody = registerResponse.json() as {
+      session: {
+        id: string;
+        provider: string;
+        agentLabel: string;
+      };
+    };
+    assert.equal(registerBody.session.provider, "claude");
+    assert.equal(registerBody.session.agentLabel, "Forge Claude Code");
+
+    const reconnectResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/agents/sessions/${registerBody.session.id}/reconnect`,
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        note: "Reconnect Claude MCP."
+      }
+    });
+    assert.equal(reconnectResponse.statusCode, 200);
+    const reconnectBody = reconnectResponse.json() as {
+      session: { reconnectPlan: { commands: string[]; notes: string[] } };
+    };
+    assert.ok(
+      reconnectBody.session.reconnectPlan.commands.includes(
+        "claude mcp get forge"
+      )
+    );
+    assert.ok(
+      reconnectBody.session.reconnectPlan.notes.some((note) =>
+        note.includes("npx forge-memory mcp")
+      )
+    );
+
+    const agentsResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/agents",
+      headers: {
+        cookie: operatorCookie
+      }
+    });
+    assert.equal(agentsResponse.statusCode, 200);
+    const agentsBody = agentsResponse.json() as {
+      agents: Array<{
+        label: string;
+        provider: string | null;
+        linkedUsers: Array<{ userId: string; role: string }>;
+      }>;
+    };
+    const claudeAgent = agentsBody.agents.find(
+      (agent) => agent.provider === "claude"
+    );
+    assert.equal(claudeAgent?.label, "Forge Claude Code");
+    assert.ok(
+      claudeAgent?.linkedUsers.some(
+        (link) =>
+          link.userId === "user_agent_claude" && link.role === "primary"
+      )
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("agent runtime identities stay stable across volatile session keys and labels", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-agent-runtime-identity-")

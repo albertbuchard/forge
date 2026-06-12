@@ -6,7 +6,7 @@ Single-command Forge install:
 npx forge-memory
 ```
 
-This is the preferred setup path for Forge. The command launches a guided CLI that installs the local Forge UI/runtime first, then discovers OpenClaw, Hermes, and Codex and offers to configure the detected adapters against the same Forge data folder.
+This is the preferred setup path for Forge. The command launches a guided CLI that installs the local Forge UI/runtime first, then discovers OpenClaw, Hermes, Codex, and Claude Code and offers to configure the detected adapters against the same Forge data folder.
 
 Development install from a Forge checkout:
 
@@ -32,8 +32,8 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
-Codex uses `npx forge-memory mcp` after configuration. That MCP entrypoint loads
-the same curated Forge tool registry as the OpenClaw/Codex adapters, including
+Codex and Claude Code use `npx forge-memory mcp` after configuration. That MCP entrypoint loads
+the same curated Forge tool registry as the other Forge adapters, including
 the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance
 tools). It also exposes `forge_memory_mcp_diagnostics` so adapter startup issues
 show up as a tool result instead of a closed MCP transport.
@@ -88,7 +88,7 @@ accept that backup. Existing Forge-related skill folders under Codex, OpenClaw, 
 Hermes are hashed and backed up before adapter updates when Forge cannot prove they are
 unchanged.
 
-Agent prompt for Codex, Hermes, or OpenClaw:
+Agent prompt for Codex, Claude Code, Hermes, or OpenClaw:
 
 ```text
 Run `npx forge-memory update --yes`, verify `npx forge-memory doctor`, and report the
@@ -102,7 +102,7 @@ Typical first run:
 
 1. Run `npx forge-memory`.
 2. Keep or change the real Forge data folder.
-3. Select OpenClaw, Hermes, and Codex adapters with Space.
+3. Select OpenClaw, Hermes, Codex, and Claude Code adapters with Space.
 4. Pair the iOS companion when prompted, or skip and run `npx forge-memory pair-ios` later.
 
-Manual OpenClaw, Hermes, and Codex commands still exist in the Forge repository for advanced recovery, source-linking, and adapter debugging. The normal user path should start here.
+Manual OpenClaw, Hermes, Codex, and Claude Code commands still exist in the Forge repository for advanced recovery, source-linking, and adapter debugging. The normal user path should start here.

@@ -21,10 +21,10 @@ It gives you one place to:
 - turn goals into strategies, projects, issues, tasks, and subtasks
 - run a mixed Kanban board and a compact hierarchy view
 - keep notes, wiki pages, preferences, Psyche records, sleep, workouts, and movement context beside the work they explain
-- let OpenClaw, Hermes, Codex, the browser app, and the iPhone companion use the same local Forge runtime
+- let OpenClaw, Hermes, Codex, Claude Code, the browser app, and the iPhone companion use the same local Forge runtime
 - keep the database local by default, with optional explicit data folders and backups in `Settings -> Data`
 
-Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, a Rust Iroh companion transport, and a Swift iPhone companion that links the same Rust transport core natively.
+Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, Claude Code MCP, a Rust Iroh companion transport, and a Swift iPhone companion that links the same Rust transport core natively.
 
 ## Start Here
 
@@ -36,9 +36,9 @@ The preferred install for everyone is one guided command:
 npx forge-memory
 ```
 
-`forge-memory` is the front door for Forge. It installs the local Forge UI/runtime, discovers OpenClaw, Hermes, and Codex in the background, shows detected host adapters in a checkbox menu, selects every detected adapter by default, leaves missing adapters visible as disabled `not found` rows, lets Space toggle adapter choices, and can pair the iOS companion at the end.
+`forge-memory` is the front door for Forge. It installs the local Forge UI/runtime, discovers OpenClaw, Hermes, Codex, and Claude Code in the background, shows detected host adapters in a checkbox menu, selects every detected adapter by default, leaves missing adapters visible as disabled `not found` rows, lets Space toggle adapter choices, and can pair the iOS companion at the end.
 
-Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, or all of them sharing one local Forge memory system.
+Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude Code, or all of them sharing one local Forge memory system.
 
 Development installs use the same flow, but link adapters to this source checkout and default to the real shared Forge data folder:
 
@@ -105,7 +105,7 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-Manual OpenClaw, Hermes, and Codex setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), and [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md).
+Manual OpenClaw, Hermes, Codex, and Claude Code setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md), and [`docs/reference/claude-code-adapter.md`](./docs/reference/claude-code-adapter.md).
 
 ## License
 
@@ -203,7 +203,7 @@ the current user-facing docs.
 
 By default, local plugin installs store Forge data under `~/.forge`. You can choose another folder by setting `dataRoot` in the plugin config or by using `Settings -> Data` in the web app.
 
-If OpenClaw, Hermes, Codex, and the browser should share one Forge system, point them at the same origin, port, and data root. Before moving or merging data folders, back up every candidate `forge.sqlite` and verify which database the live runtime has opened.
+If OpenClaw, Hermes, Codex, Claude Code, and the browser should share one Forge system, point them at the same origin, port, and data root. Before moving or merging data folders, back up every candidate `forge.sqlite` and verify which database the live runtime has opened.
 
 ## Screenshots
 
@@ -231,4 +231,4 @@ npm run test
 npm run test:server
 ```
 
-Contributor and runtime details live in the [Development guide](https://albertbuchard.github.io/forge/development.html) and [Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The publishable OpenClaw package lives in [`openclaw-plugin/`](./openclaw-plugin), the Hermes adapter in [`plugins/forge-hermes/`](./plugins/forge-hermes), and the Codex adapter in [`plugins/forge-codex/`](./plugins/forge-codex).
+Contributor and runtime details live in the [Development guide](https://albertbuchard.github.io/forge/development.html) and [Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The publishable OpenClaw package lives in [`openclaw-plugin/`](./openclaw-plugin), the Hermes adapter in [`plugins/forge-hermes/`](./plugins/forge-hermes), and the Codex and Claude Code MCP adapters use Forge Memory's shared MCP entrypoint.

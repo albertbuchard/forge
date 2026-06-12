@@ -30,7 +30,7 @@ const DEFAULT_ORIGIN = "http://127.0.0.1";
 const DEFAULT_PORT = 4317;
 const DEFAULT_WEB_PORT = 3027;
 const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
-const ADAPTERS = ["openclaw", "hermes", "codex"];
+const ADAPTERS = ["openclaw", "hermes", "codex", "claude"];
 const DEFAULT_UPDATE_BACKUP_CONFIRM_THRESHOLD_BYTES = 100 * 1024 * 1024;
 const BACKUP_SKIP_TOP_LEVEL = new Set(["exports", "logs", "run", "runtime"]);
 
@@ -220,6 +220,14 @@ function forgeApiUrl(config, pathname) {
 async function readJson(filePath, fallback = null) {
   try {
     return JSON.parse(await fsp.readFile(filePath, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function readJsonSync(filePath, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
     return fallback;
   }
@@ -833,10 +841,41 @@ function detectCodex() {
   };
 }
 
+function claudeConfigPath() {
+  const customConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return customConfigDir
+    ? path.join(path.resolve(customConfigDir), ".claude.json")
+    : path.join(homeDir(), ".claude.json");
+}
+
+function detectClaude() {
+  const config = claudeConfigPath();
+  const payload = readJsonSync(config, null);
+  const configured = isForgeMemoryMcpServer(payload?.mcpServers?.forge);
+  const installed = commandExists("claude") || configured || fs.existsSync(config);
+  const version = commandExists("claude")
+    ? runCapture("claude", ["--version"])
+    : null;
+  return {
+    id: "claude",
+    label: "Claude Code",
+    installed,
+    disabled: !installed,
+    configured,
+    status: installed
+      ? [version || "detected", configured ? "Forge MCP configured" : null]
+          .filter(Boolean)
+          .join("; ")
+      : "not found",
+    configPath: config,
+    hint: "Install Claude Code first, then rerun npx forge-memory configure."
+  };
+}
+
 function discover() {
   return {
     generatedAt: new Date().toISOString(),
-    adapters: [detectOpenClaw(), detectHermes(), detectCodex()]
+    adapters: [detectOpenClaw(), detectHermes(), detectCodex(), detectClaude()]
   };
 }
 
@@ -1291,6 +1330,7 @@ async function patchCodexConfig(config, options) {
     `FORGE_ORIGIN = "${config.origin}"`,
     `FORGE_PORT = "${config.port}"`,
     'FORGE_ACTOR_LABEL = "codex"',
+    'FORGE_AGENT_PROVIDER = "codex"',
     'FORGE_TIMEOUT_MS = "15000"',
     `FORGE_DATA_ROOT = "${config.dataRoot.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`,
     ""
@@ -1309,6 +1349,50 @@ async function patchCodexConfig(config, options) {
   return { filePath };
 }
 
+function forgeMcpEnv(config, actorLabel) {
+  return {
+    FORGE_ORIGIN: config.origin,
+    FORGE_PORT: String(config.port),
+    FORGE_ACTOR_LABEL: actorLabel,
+    FORGE_AGENT_PROVIDER: actorLabel,
+    FORGE_TIMEOUT_MS: "15000",
+    FORGE_DATA_ROOT: config.dataRoot
+  };
+}
+
+function forgeMemoryMcpServerConfig(config, actorLabel) {
+  return {
+    type: "stdio",
+    command: "npx",
+    args: ["forge-memory", "mcp"],
+    env: forgeMcpEnv(config, actorLabel)
+  };
+}
+
+function isForgeMemoryMcpServer(entry) {
+  return (
+    entry &&
+    typeof entry === "object" &&
+    entry.command === "npx" &&
+    Array.isArray(entry.args) &&
+    entry.args.length >= 2 &&
+    entry.args[0] === "forge-memory" &&
+    entry.args[1] === "mcp"
+  );
+}
+
+async function patchClaudeConfig(config, options) {
+  const filePath = claudeConfigPath();
+  const payload = (await readJson(filePath, {})) ?? {};
+  const currentServers =
+    payload.mcpServers && typeof payload.mcpServers === "object"
+      ? { ...payload.mcpServers }
+      : {};
+  currentServers.forge = forgeMemoryMcpServerConfig(config, "claude");
+  const next = { ...payload, mcpServers: currentServers };
+  return writeJson(filePath, next, options);
+}
+
 function stripCodexForgeMcpConfig(source) {
   const orphanForgeLines = new Set([
     'command = "npx"',
@@ -1316,6 +1400,7 @@ function stripCodexForgeMcpConfig(source) {
     "FORGE_ORIGIN",
     "FORGE_PORT",
     "FORGE_ACTOR_LABEL",
+    "FORGE_AGENT_PROVIDER",
     "FORGE_TIMEOUT_MS",
     "FORGE_DATA_ROOT"
   ]);
@@ -1476,6 +1561,11 @@ async function installCodexAdapter(config, options) {
   return { adapter: "codex", ok: true };
 }
 
+async function installClaudeAdapter(config, options) {
+  await patchClaudeConfig(config, options);
+  return { adapter: "claude", ok: true };
+}
+
 async function configureAdapters(config, options) {
   const results = [];
   for (const adapter of config.adapters) {
@@ -1485,6 +1575,8 @@ async function configureAdapters(config, options) {
       results.push(await installHermesAdapter(config, options));
     if (adapter === "codex")
       results.push(await installCodexAdapter(config, options));
+    if (adapter === "claude")
+      results.push(await installClaudeAdapter(config, options));
   }
   return results;
 }
@@ -2369,6 +2461,27 @@ async function removeCodexAdapterConfig() {
   return { filePath, changed: true };
 }
 
+async function removeClaudeAdapterConfig() {
+  const filePath = claudeConfigPath();
+  const payload = await readJson(filePath, null);
+  if (!payload || typeof payload !== "object") {
+    return { filePath, changed: false };
+  }
+  const servers =
+    payload.mcpServers && typeof payload.mcpServers === "object"
+      ? { ...payload.mcpServers }
+      : null;
+  if (!servers?.forge || !isForgeMemoryMcpServer(servers.forge)) {
+    return { filePath, changed: false };
+  }
+  delete servers.forge;
+  const next = { ...payload };
+  if (Object.keys(servers).length > 0) next.mcpServers = servers;
+  else delete next.mcpServers;
+  await writeJson(filePath, next, { backup: true });
+  return { filePath, changed: true };
+}
+
 async function uninstallForgeMemory(parsed) {
   const config = await readConfig();
   const confirmed = parsed.flags.yes
@@ -2398,14 +2511,15 @@ async function uninstallForgeMemory(parsed) {
     parsed.flags.removeAdapters ||
     (!parsed.flags.yes &&
       (await promptYesNo(
-        "Remove Forge adapter entries from OpenClaw, Hermes, and Codex?",
+        "Remove Forge adapter entries from OpenClaw, Hermes, Codex, and Claude Code?",
         false
       )));
   if (removeAdapters) {
     adapterResults = [
       await removeOpenClawAdapterConfig(),
       await removeHermesAdapterConfig(),
-      await removeCodexAdapterConfig()
+      await removeCodexAdapterConfig(),
+      await removeClaudeAdapterConfig()
     ];
   }
 
@@ -3866,13 +3980,179 @@ async function loadForgeToolRuntime(config) {
     { registerTool: (tool) => tools.push(tool) },
     forgeConfig
   );
-  return { pluginRoot, Value, tools };
+  return { pluginRoot, Value, tools, forgeConfig };
 }
 
 function validationErrorMessage(Value, schema, value) {
   const firstError = Value.Errors(schema, value).First();
   if (!firstError) return "Invalid arguments";
   return `${firstError.path || "input"}: ${firstError.message}`;
+}
+
+function resolveMcpAgentProvider() {
+  const rawProvider = process.env.FORGE_AGENT_PROVIDER?.trim().toLowerCase();
+  if (ADAPTERS.includes(rawProvider)) return rawProvider;
+  const actor = process.env.FORGE_ACTOR_LABEL?.trim().toLowerCase();
+  if (ADAPTERS.includes(actor)) return actor;
+  if (actor?.includes("claude")) return "claude";
+  if (actor?.includes("hermes")) return "hermes";
+  if (actor?.includes("openclaw")) return "openclaw";
+  return "codex";
+}
+
+function resolveMcpRuntimeLabel(provider) {
+  if (provider === "openclaw") return "Forge OpenClaw";
+  if (provider === "hermes") return "Forge Hermes";
+  if (provider === "claude") return "Forge Claude Code";
+  return "Forge Codex";
+}
+
+function resolveMcpSessionLabel(provider) {
+  if (provider === "claude") return "Forge Claude Code MCP server";
+  return `${resolveMcpRuntimeLabel(provider)} MCP server`;
+}
+
+function createMcpMachineKey(config) {
+  const fingerprint = createHash("sha1")
+    .update(
+      JSON.stringify({
+        baseUrl: config.baseUrl,
+        dataRoot: config.dataRoot || ""
+      })
+    )
+    .digest("hex")
+    .slice(0, 12);
+  return `machine_${fingerprint}`;
+}
+
+function createMcpSessionKey(provider, config) {
+  const fingerprint = createHash("sha1")
+    .update(
+      JSON.stringify({
+        provider,
+        baseUrl: config.baseUrl,
+        dataRoot: config.dataRoot || "",
+        cwd: process.cwd()
+      })
+    )
+    .digest("hex")
+    .slice(0, 12);
+  return `${provider}-${fingerprint}`;
+}
+
+async function postMcpRuntimeSessionEvent(config, pathname, body) {
+  const url = new URL(pathname, config.baseUrl);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-forge-source": "agent",
+      ...(config.apiToken
+        ? { authorization: `Bearer ${config.apiToken}` }
+        : {})
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(config.timeoutMs || 15_000)
+  });
+  if (!response.ok) {
+    throw new Error(`Forge session endpoint returned ${response.status}`);
+  }
+  return response.json().catch(() => ({}));
+}
+
+async function registerMcpRuntimeSession(forgeConfig) {
+  const provider = resolveMcpAgentProvider();
+  const machineKey = createMcpMachineKey(forgeConfig);
+  const instanceId = `${provider}-${process.pid}-${Date.now().toString(36)}`;
+  const state = {
+    id: null,
+    provider,
+    sessionKey: createMcpSessionKey(provider, forgeConfig),
+    instanceId,
+    connected: false,
+    heartbeat: null,
+    config: forgeConfig
+  };
+  try {
+    const payload = await postMcpRuntimeSessionEvent(
+      forgeConfig,
+      "/api/v1/agents/sessions",
+      {
+        provider,
+        agentLabel: resolveMcpRuntimeLabel(provider),
+        agentType: provider,
+        agentIdentityKey: `runtime:${provider}:${machineKey}:default`,
+        machineKey,
+        personaKey: "default",
+        actorLabel: forgeConfig.actorLabel || provider,
+        sessionKey: state.sessionKey,
+        sessionLabel: resolveMcpSessionLabel(provider),
+        connectionMode: "mcp",
+        baseUrl: forgeConfig.baseUrl,
+        webUrl: forgeConfig.webAppUrl,
+        dataRoot: forgeConfig.dataRoot || null,
+        externalSessionId: instanceId,
+        staleAfterSeconds: 90,
+        metadata: {
+          singleton: true,
+          instanceId,
+          pid: process.pid,
+          packageName: "forge-memory",
+          packageVersion: VERSION,
+          cwd: process.cwd()
+        }
+      }
+    );
+    state.id =
+      payload &&
+      typeof payload === "object" &&
+      payload.session &&
+      typeof payload.session.id === "string"
+        ? payload.session.id
+        : null;
+    state.connected = Boolean(state.id);
+  } catch {
+    state.connected = false;
+  }
+  return state;
+}
+
+async function heartbeatMcpRuntimeSession(state, summary, metadata = {}) {
+  if (!state.connected) return;
+  try {
+    await postMcpRuntimeSessionEvent(
+      state.config,
+      "/api/v1/agents/sessions/heartbeat",
+      {
+        provider: state.provider,
+        sessionKey: state.sessionKey,
+        externalSessionId: state.instanceId,
+        summary,
+        metadata
+      }
+    );
+  } catch {
+    state.connected = false;
+  }
+}
+
+async function disconnectMcpRuntimeSession(state, note, lastError = null) {
+  if (!state.connected || !state.id) return;
+  try {
+    await postMcpRuntimeSessionEvent(
+      state.config,
+      `/api/v1/agents/sessions/${state.id}/disconnect`,
+      {
+        note,
+        externalSessionId: state.instanceId,
+        lastError
+      }
+    );
+  } catch {
+    // MCP hosts often terminate stdio abruptly; disconnect cleanup is best-effort.
+  } finally {
+    state.connected = false;
+  }
 }
 
 async function runMcp() {
@@ -3887,6 +4167,28 @@ async function runMcp() {
   }
   const forgeTools = toolRuntime?.tools ?? [];
   const forgeToolByName = new Map(forgeTools.map((tool) => [tool.name, tool]));
+  const runtimeSession = toolRuntime
+    ? await registerMcpRuntimeSession(toolRuntime.forgeConfig).catch(() => null)
+    : null;
+  if (runtimeSession?.connected) {
+    runtimeSession.heartbeat = setInterval(() => {
+      void heartbeatMcpRuntimeSession(
+        runtimeSession,
+        `${resolveMcpRuntimeLabel(runtimeSession.provider)} MCP heartbeat.`,
+        { pid: process.pid }
+      );
+    }, 45_000);
+    runtimeSession.heartbeat.unref?.();
+  }
+  const cleanupRuntimeSession = (note, lastError = null) => {
+    if (!runtimeSession) return;
+    if (runtimeSession?.heartbeat) {
+      clearInterval(runtimeSession.heartbeat);
+      runtimeSession.heartbeat = null;
+    }
+    void disconnectMcpRuntimeSession(runtimeSession, note, lastError);
+  };
+  process.once("beforeExit", () => cleanupRuntimeSession("MCP server exited."));
   const server = new Server(
     { name: "forge-memory", version: VERSION },
     { capabilities: { tools: {} } }
@@ -4029,7 +4331,7 @@ Options:
   --yes, -y              Accept defaults/non-interactive mode
   --dev                 Use source-backed Forge runtime and adapter links
   --data-root <path>    Forge data root
-  --adapters <list>     Comma list: openclaw,hermes,codex or none
+  --adapters <list>     Comma list: openclaw,hermes,codex,claude or none
   --skip-adapters       Skip adapter configuration/update
   --skip-pair-ios       Do not prompt or create iOS pairing
   --manual-http         Force direct HTTP/TCP for iOS pairing

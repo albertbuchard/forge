@@ -49,6 +49,21 @@ function toReconnectPlan(row) {
             automationSupported: false
         });
     }
+    if (row.provider === "claude") {
+        return agentRuntimeReconnectPlanSchema.parse({
+            summary: "Restart or resume Claude Code so the Forge MCP server starts again and reconnects to the shared Forge runtime.",
+            commands: [
+                "claude mcp list",
+                "claude mcp get forge",
+                `curl -s ${forgeBaseUrl}/api/v1/health`
+            ],
+            notes: [
+                "Forge Memory configures Claude through a user-scope MCP server named forge that runs npx forge-memory mcp.",
+                "If Forge is local, keep Claude pointed at the same Forge origin, port, and shared data root."
+            ],
+            automationSupported: false
+        });
+    }
     return agentRuntimeReconnectPlanSchema.parse({
         summary: "Restart or resume the Codex session so the Forge MCP bridge launches again and re-registers with Forge.",
         commands: [
@@ -229,6 +244,9 @@ function canonicalRuntimeAgentLabel(provider) {
     if (provider === "hermes") {
         return "Forge Hermes";
     }
+    if (provider === "claude") {
+        return "Forge Claude Code";
+    }
     return "Forge Codex";
 }
 function canonicalRuntimeDescription(provider) {
@@ -251,6 +269,15 @@ function canonicalAgentUserSpec(provider) {
             displayName: "Hermes",
             description: "Hermes runtime actor linked to Forge agent identity and Kanban ownership.",
             accentColor: "#a78bfa"
+        };
+    }
+    if (provider === "claude") {
+        return {
+            id: "user_agent_claude",
+            handle: "claude",
+            displayName: "Claude Code",
+            description: "Claude Code runtime actor linked to Forge agent identity and Kanban ownership.",
+            accentColor: "#f97316"
         };
     }
     return {

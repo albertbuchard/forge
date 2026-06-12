@@ -16,7 +16,7 @@ Forge should make the full planning ladder explicit:
 
 Forge should treat projects as PRD-backed initiatives, issues as vertical slices across the stack, tasks as one focused AI session each, and subtasks as lightweight granular child steps. The product should support humans and bots as first-class collaborators with one owner plus one-or-many assignees, and the web app should let users explore the hierarchy through both a mixed Kanban board and a compact hierarchy view.
 
-Forge should also distinguish stable agent identity from user ownership. OpenClaw, Hermes, and Codex are durable agent runtimes that may reconnect many times, create bot users, or spawn subagents, but repeated runtime sessions must not become repeated top-level agents. A stable agent ID can link to one or several human or bot users, and each linked bot user can own its own Kanban work.
+Forge should also distinguish stable agent identity from user ownership. OpenClaw, Hermes, Codex, and Claude Code are durable agent runtimes that may reconnect many times, create bot users, or spawn subagents, but repeated runtime sessions must not become repeated top-level agents. A stable agent ID can link to one or several human or bot users, and each linked bot user can own its own Kanban work.
 
 Forge should stay modern and production-grade:
 
@@ -27,14 +27,14 @@ Forge should stay modern and production-grade:
 - Fastify 5
 - SQLite
 - generated OpenAPI
-- OpenClaw, Hermes, and Codex adapter surfaces
+- OpenClaw, Hermes, Codex, and Claude Code adapter surfaces
 - Swift iPhone companion
 - SwiftUI watchOS companion command surface
 - optional GitHub Release-hosted gamification art packs installed into the local Forge data root
 
 Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
 
-Forge should make `npx forge-memory` the preferred public install path for UI-only use and for OpenClaw, Hermes, and Codex. The installer should feel like a polished Forge surface, always install the Forge UI/runtime as the base layer, run automated discovery in the background, ask a guided question flow, show an OpenClaw-quality checkbox menu for host adapters only with every detected runtime selected by default, missing runtimes as disabled rows, Space to toggle rows, and a Skip option, route selected runtimes to one shared data folder, expose configure/status/doctor/runtime commands, make `configure` rerun the full flow with the current state as defaults, support source-backed development installs through `npx forge-memory --dev` that default to the real shared Forge data folder, and offer iOS companion pairing with yes selected by default before falling back to advanced manual adapter docs.
+Forge should make `npx forge-memory` the preferred public install path for UI-only use and for OpenClaw, Hermes, Codex, and Claude Code. The installer should feel like a polished Forge surface, always install the Forge UI/runtime as the base layer, run automated discovery in the background, ask a guided question flow, show an OpenClaw-quality checkbox menu for host adapters only with every detected runtime selected by default, missing runtimes as disabled rows, Space to toggle rows, and a Skip option, route selected runtimes to one shared data folder, expose configure/status/doctor/runtime commands, make `configure` rerun the full flow with the current state as defaults, support source-backed development installs through `npx forge-memory --dev` that default to the real shared Forge data folder, and offer iOS companion pairing with yes selected by default before falling back to advanced manual adapter docs.
 
 ## 2. What It Shouldn't Be
 
@@ -55,7 +55,7 @@ Forge already has strong foundations:
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`
 - local-first SQLite persistence, including SQLite-backed wiki and evidence memory
-- OpenClaw, Hermes, and Codex integrations
+- OpenClaw, Hermes, Codex, and Claude Code integrations
 - guided modal flows for many important entity edits
 
 Forge also already has existing project and strategy models, user ownership, task execution surfaces, and a strong documentation surface.
@@ -92,7 +92,7 @@ Finally, Forge still needs the workflow and documentation layer to match the run
 - `goal_alignment.md` in this exact four-part format
 - skill flows for PRD authoring, PRD -> issues, issues -> tasks, and task closeout
 - public docs that explicitly describe the full hierarchy and the direct-to-`main` workflow
-- public installation docs that lead with `npx forge-memory` while preserving OpenClaw, Hermes, Codex, and data-root details as advanced reference material
+- public installation docs that lead with `npx forge-memory` while preserving OpenClaw, Hermes, Codex, Claude Code, and data-root details as advanced reference material
 
 Forge also needs the progression layer to behave like a real achievement system, not a decorative XP readout:
 

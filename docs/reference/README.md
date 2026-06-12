@@ -5,6 +5,7 @@ These files are durable Forge references for setup, architecture, and current op
 - [Companion Iroh transport](./companion-iroh.md)
 - [OpenClaw plugin](./openclaw-plugin.md)
 - [Hermes plugin](./hermes-plugin.md)
+- [Claude Code adapter](./claude-code-adapter.md)
 - [Calendar provider setup](./calendar-provider-setup.md)
 - [Multi-user and strategies](./multi-user-and-strategies.md)
 - [Preferences system](./preferences-system.md)
