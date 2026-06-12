@@ -1172,7 +1172,7 @@ private struct SyncSurface: View {
                 }
                 Text(connectionSummary)
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(connection?.directNetworkingEnabled == true ? WatchTheme.success : WatchTheme.textMuted)
+                    .foregroundStyle(connectionSummaryTint)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                 Text(sync?.generatedAt ?? "Waiting for Forge")
@@ -1185,6 +1185,13 @@ private struct SyncSurface: View {
                         .foregroundStyle(directMetric.succeeded ? WatchTheme.success : WatchTheme.accent)
                         .lineLimit(3)
                         .minimumScaleFactor(0.82)
+                    if directMetric.succeeded == false, let error = directMetric.errorDescription {
+                        Text(error)
+                            .font(.system(size: 9, weight: .medium, design: .rounded))
+                            .foregroundStyle(WatchTheme.accent)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.78)
+                    }
                 }
                 HStack(spacing: 6) {
                     Button {
@@ -1213,10 +1220,29 @@ private struct SyncSurface: View {
         guard let connection else {
             return "No secure watch route yet; open the iPhone app to share one."
         }
-        if connection.directNetworkingEnabled {
-            return "Direct \(connection.transportLabel) HTTPS to Forge"
+        guard connection.directNetworkingEnabled else {
+            return "Direct route disabled; paired iPhone backup remains available."
         }
-        return "Direct route disabled; paired iPhone backup remains available."
+        guard let directMetric else {
+            return "Configured direct \(connection.transportLabel) HTTPS; waiting for the watch to test it."
+        }
+        if directMetric.succeeded {
+            return "Verified direct \(directMetric.transportLabel) HTTPS to Forge."
+        }
+        if directMetric.fallbackUsed {
+            return "\(directMetric.transportLabel) direct failed on watch; paired iPhone backup sent it."
+        }
+        return "\(directMetric.transportLabel) direct failed on watch; retry direct when reachable."
+    }
+
+    private var connectionSummaryTint: Color {
+        guard connection?.directNetworkingEnabled == true else {
+            return WatchTheme.textMuted
+        }
+        guard let directMetric else {
+            return WatchTheme.textMuted
+        }
+        return directMetric.succeeded ? WatchTheme.success : WatchTheme.accent
     }
 
     private var actionCountTitle: String {
