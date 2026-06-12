@@ -43,6 +43,30 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertEqual(model.lastStatusMessage, "Sending to Forge through Tailscale")
     }
 
+    func testDeferredPhoneRelayAckKeepsActionToSend() throws {
+        ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        defer {
+            ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        }
+        let model = WatchAppModel(preview: true)
+        let habit = try XCTUnwrap(model.bootstrap.habits.first)
+
+        model.queueHabitCheckIn(for: habit, status: "done")
+        model.applyAckForTesting(
+            ForgeWatchAckEnvelope(
+                actionId: "relay-deferred",
+                processedAt: ISO8601DateFormatter().string(from: Date()),
+                status: "deferred",
+                error: ["message": "Tailscale not reachable from iPhone"],
+                bootstrap: nil
+            )
+        )
+
+        XCTAssertEqual(model.pendingActionCount, 1)
+        XCTAssertTrue(model.lastStatusMessage.contains("Still to send"))
+        XCTAssertFalse(model.lastStatusMessage.localizedCaseInsensitiveContains("queued"))
+    }
+
     func testHabitRingAlwaysUsesSevenSegments() throws {
         let model = WatchAppModel(preview: true)
         let habit = try XCTUnwrap(model.bootstrap.habits.first)

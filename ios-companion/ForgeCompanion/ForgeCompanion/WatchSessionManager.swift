@@ -131,6 +131,51 @@ final class WatchSessionManager: NSObject, ObservableObject {
         }
     }
 
+    private func deferredAck(
+        for envelope: ForgeWatchOutboundEnvelope,
+        message: String
+    ) -> ForgeWatchAckEnvelope {
+        ForgeWatchAckEnvelope(
+            actionId: envelope.id,
+            processedAt: ISO8601DateFormatter().string(from: Date()),
+            status: "deferred",
+            error: ["message": message],
+            bootstrap: nil
+        )
+    }
+
+    private func processEnvelopeForReply(_ envelope: ForgeWatchOutboundEnvelope) async -> ForgeWatchAckEnvelope {
+        guard let pairing = pairingProvider?() else {
+            appendToQueue(envelope)
+            return deferredAck(for: envelope, message: "Forge pairing is not ready")
+        }
+        do {
+            let result = try await syncClient.submitWatchCommandBatch(
+                device: envelope.device,
+                envelopes: [envelope],
+                pairing: pairing
+            )
+            let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
+            saveBootstrap(bootstrap)
+            publishBootstrap(bootstrap)
+            guard let receipt = result.receipt.receipts.first(where: { $0.actionId == envelope.id }) else {
+                appendToQueue(envelope)
+                return deferredAck(for: envelope, message: "Forge did not acknowledge the watch action")
+            }
+            lastStatusMessage = "Watch action processed"
+            return ForgeWatchAckEnvelope(
+                actionId: receipt.actionId,
+                processedAt: receipt.processedAt,
+                status: receipt.status,
+                error: nil,
+                bootstrap: bootstrap
+            )
+        } catch {
+            appendToQueue(envelope)
+            return deferredAck(for: envelope, message: error.localizedDescription)
+        }
+    }
+
     private func handleControlRequestData(_ data: Data) async -> Bool {
         guard let request = try? decoder.decode(ForgeWatchControlRequest.self, from: data) else {
             return false
@@ -311,6 +356,25 @@ extension WatchSessionManager: WCSessionDelegate {
             }
                 self.appendToQueue(envelope)
                 await self.processPendingQueue()
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessageData messageData: Data,
+        replyHandler: @escaping (Data) -> Void
+    ) {
+        Task { @MainActor in
+            if await self.handleControlRequestData(messageData) {
+                return
+            }
+            guard let envelope = try? self.decoder.decode(ForgeWatchOutboundEnvelope.self, from: messageData) else {
+                return
+            }
+            let ack = await self.processEnvelopeForReply(envelope)
+            if let data = try? self.encoder.encode(ack) {
+                replyHandler(data)
+            }
         }
     }
 }

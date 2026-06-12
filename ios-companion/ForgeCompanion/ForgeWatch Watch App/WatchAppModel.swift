@@ -138,7 +138,22 @@ final class WatchAppModel: NSObject, ObservableObject {
         if WCSession.default.isReachable {
             for item in queue {
                 if let data = try? encoder.encode(item) {
-                    WCSession.default.sendMessageData(data, replyHandler: nil, errorHandler: nil)
+                    WCSession.default.sendMessageData(data) { [weak self] replyData in
+                        Task { @MainActor in
+                            guard
+                                let self,
+                                let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: replyData)
+                            else { return }
+                            self.applyAck(ack)
+                        }
+                    } errorHandler: { [weak self] error in
+                        Task { @MainActor in
+                            self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
+                        }
+                        WCSession.default.transferUserInfo([
+                            ForgeWatchStorage.actionMessageKey: data
+                        ])
+                    }
                 }
             }
         } else {
@@ -953,6 +968,11 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     private func applyAck(_ ack: ForgeWatchAckEnvelope) {
+        if ack.status == "deferred" {
+            let message = ack.error?["message"] ?? "iPhone relay deferred"
+            lastStatusMessage = "Still to send: \(message)"
+            return
+        }
         removeQueuedAction(id: ack.actionId)
         if let bootstrap = ack.bootstrap {
             saveBootstrap(bootstrap)
@@ -963,6 +983,10 @@ final class WatchAppModel: NSObject, ObservableObject {
         } else {
             WKInterfaceDevice.current().play(.success)
         }
+    }
+
+    func applyAckForTesting(_ ack: ForgeWatchAckEnvelope) {
+        applyAck(ack)
     }
 }
 
