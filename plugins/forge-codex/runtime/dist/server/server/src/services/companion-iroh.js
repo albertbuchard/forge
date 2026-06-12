@@ -23,6 +23,16 @@ export async function buildCompanionPairingTransport(input) {
             "Manual HTTP/TCP pairing was explicitly requested."
         ]);
     }
+    if (selectedFallback) {
+        const fallbackMode = fallbackModeFor(selectedFallback.apiBaseUrl, input.fallbackMode);
+        return manualHttpTransport(selectedFallback.apiBaseUrl, selectedFallback.uiBaseUrl, [
+            fallbackMode === "tailscale"
+                ? "Tailscale HTTPS pairing was selected as the primary companion transport."
+                : "A phone-reachable direct companion URL was selected as the primary transport.",
+            "Forge did not include Iroh transport metadata because direct pairing is active.",
+            "Run pairing again without a phone-facing public URL if you want an Iroh pairing instead."
+        ]);
+    }
     if (!shouldAutoStartIrohHost()) {
         return manualHttpTransport(requestApiBaseUrl, requestUiBaseUrl, [
             "Forge Iroh companion transport is unavailable in this runtime, so Forge fell back to direct HTTP."
@@ -34,18 +44,14 @@ export async function buildCompanionPairingTransport(input) {
             pairPayload: snapshot.pairPayload,
             alpn: snapshot.alpn ?? COMPANION_IROH_ALPN,
             localBaseUrl: snapshot.localBaseUrl,
-            fallbackApiBaseUrl: selectedFallback?.apiBaseUrl ?? null,
-            fallbackUiBaseUrl: selectedFallback?.uiBaseUrl ?? null,
-            fallbackMode: selectedFallback
-                ? fallbackModeFor(selectedFallback.apiBaseUrl, input.fallbackMode)
-                : "none",
+            fallbackApiBaseUrl: null,
+            fallbackUiBaseUrl: null,
+            fallbackMode: "none",
             recreateCommand: snapshot.recreateCommand ?? undefined,
             startedAt: snapshot.startedAt ?? undefined,
             notes: [
                 "Default pairing uses Forge's Rust Iroh transport over QUIC first.",
-                selectedFallback
-                    ? "The QR includes the selected direct URL only as an explicit fallback/direct path."
-                    : "No direct HTTP fallback was selected for this QR.",
+                "No direct HTTP fallback was selected for this QR.",
                 "The QR payload carries the Iroh node id, host token, optional relay, and ALPN forge-companion/1.",
                 "Manual HTTP/TCP pairing remains available with --manual-http for advanced local setups."
             ]
