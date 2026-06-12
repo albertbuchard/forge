@@ -1,9 +1,9 @@
-Forge Companion 1.0.130 tightens live sync status during staged HealthKit uploads.
+Forge Companion 1.0.131 separates Tailscale and Iroh routing for companion sync.
 
-The sync card no longer keeps showing an old completed message such as “Synced 22 workouts” while a new upload stage is still preparing. It now says that the next upload is being prepared until real chunk telemetry is available.
+When a pairing includes a secure Tailscale URL, the companion now normalizes the active route to Tailscale before chunk uploads and watch bootstrap sharing. Iroh stays active only for Iroh-only pairings.
 
-This builds on the previous Tailscale/Iroh fixes: Tailscale pairings remain labeled as Tailscale, Iroh is only used for Iroh pairings, and the progress text separates phone-side sending from Forge-side acceptance.
+This removes the hybrid path where an Iroh pairing could silently send HealthKit chunks through a Tailscale fallback and show confusing mixed transport labels.
 
-Regression coverage was added for stale completed sync messages during active uploads.
+The watch app also receives its direct API connection from the normalized active pairing URL, so stale Iroh metadata cannot override an active Tailscale route.
 
 HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
