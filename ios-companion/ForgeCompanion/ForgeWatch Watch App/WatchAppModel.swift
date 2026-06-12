@@ -73,7 +73,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     private let decoder = JSONDecoder()
     private let previewMode: Bool
     private let refreshRequestCooldown: TimeInterval = 8
-    private let directRequestTimeout: TimeInterval = 12
+    private let directRequestTimeout = ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds
     private var lastRefreshRequestAt: Date?
     private var directFlushTask: Task<Void, Never>?
     private var directRouteCoolingDownUntil: Date?

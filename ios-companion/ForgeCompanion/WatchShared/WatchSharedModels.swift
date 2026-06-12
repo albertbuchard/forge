@@ -21,6 +21,7 @@ enum ForgeWatchStorage {
 
 enum ForgeWatchDirectRoutePolicy {
     nonisolated static let failureRelayCooldownSeconds: TimeInterval = 45
+    nonisolated static let directRequestTimeoutSeconds: TimeInterval = 6
 
     nonisolated static func canUseDirectNetworking(
         apiBaseUrl: String,

@@ -2319,8 +2319,9 @@ final class CompanionAppModel: ObservableObject {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
+                let transportLabel = healthSyncTransportLabel()
                 lastSyncMessage =
-                    "Synced \(receipt.imported.sleepNights ?? receipt.imported.sleepSessions) nights, \(receipt.imported.workouts) workouts, \(receipt.imported.vitalsMetricEntries ?? 0) body metrics, and \(receipt.imported.movementTrips ?? 0) trips"
+                    "Synced \(receipt.imported.sleepNights ?? receipt.imported.sleepSessions) nights, \(receipt.imported.workouts) workouts, \(receipt.imported.vitalsMetricEntries ?? 0) body metrics, and \(receipt.imported.movementTrips ?? 0) trips over \(transportLabel)"
             }
             latestError = nil
             await refreshHealthAccessStatus()
