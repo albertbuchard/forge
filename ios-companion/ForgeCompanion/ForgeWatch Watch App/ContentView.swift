@@ -25,7 +25,7 @@ struct ContentView: View {
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
                     onCapture: appModel.queueCaptureEvent,
-                    onRefresh: { appModel.requestPhoneRefresh(reason: "surface_refresh", force: true) },
+                    onRefresh: { appModel.requestForgeRefresh(reason: "surface_refresh", force: true) },
                     onRetry: appModel.flushPendingActions
                 )
                 .id(navigation.selectedSurface)
@@ -49,7 +49,7 @@ struct ContentView: View {
             appModel.consumePendingLaunchDestination()
             navigation.selectSurface(appModel.selectedSurface)
             crownFocused = true
-            appModel.requestPhoneRefresh(reason: "watch_open")
+            appModel.requestForgeRefresh(reason: "watch_open")
         }
         .onChange(of: navigation.crownValue) { _, value in
             withAnimation(.snappy(duration: 0.22)) {
@@ -447,7 +447,7 @@ private struct WorkSurface: View {
         } else {
             EmptySurfaceCard(
                 title: "No work snapshot",
-                message: "Ask the iPhone bridge to refresh Forge work and task runs.",
+                message: "Refresh Forge directly when reachable; the iPhone relay is only a fallback.",
                 actionTitle: "Refresh work",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -592,7 +592,7 @@ private struct HabitSurface: View {
         if habits.isEmpty {
             EmptySurfaceCard(
                 title: "No habits loaded",
-                message: "Ask the iPhone bridge to fetch active habits from Forge.",
+                message: "Refresh Forge directly to load active habits; relay only if the watch cannot reach Forge.",
                 actionTitle: "Refresh habits",
                 systemImage: "arrow.clockwise",
                 action: onRefresh
@@ -642,7 +642,7 @@ private struct GoalSurface: View {
         if count == 0 {
             EmptySurfaceCard(
                 title: "No goals loaded",
-                message: "Mark a direction note now; richer goals arrive after the next iPhone refresh.",
+                message: "Mark a direction note now; richer goals load after the next Forge refresh.",
                 actionTitle: "Capture note",
                 systemImage: "square.and.pencil",
                 action: {
@@ -919,7 +919,7 @@ private struct PsycheSurface: View {
             if questions.isEmpty {
                 EmptySurfaceCard(
                     title: "Psyche not loaded",
-                    message: "Ask the iPhone bridge to fetch the Psyche definitions from Forge.",
+                    message: "Mark a moment now; Forge definitions load after the next direct or relay refresh.",
                     actionTitle: "Mark moment",
                     systemImage: "bookmark.fill",
                     action: {
@@ -1163,7 +1163,7 @@ private struct SyncSurface: View {
                     DenseMetric(title: "Captures", value: "\(sync?.storedCaptureCount ?? 0)", tint: WatchTheme.accent)
                     DenseMetric(title: "Receipts", value: "\(sync?.actionReceiptCount ?? 0)", tint: WatchTheme.success)
                 }
-                Text(sync?.generatedAt ?? "Waiting for iPhone")
+                Text(sync?.generatedAt ?? "Waiting for Forge")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
                     .lineLimit(2)

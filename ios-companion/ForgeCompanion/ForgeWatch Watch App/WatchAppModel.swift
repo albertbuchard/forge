@@ -64,7 +64,7 @@ struct ForgeWatchDirectSyncMetric: Hashable {
 final class WatchAppModel: NSObject, ObservableObject {
     @Published var bootstrap: ForgeWatchBootstrap
     @Published var selectedSurface: WatchSurface = .now
-    @Published var lastStatusMessage = "Waiting for iPhone"
+    @Published var lastStatusMessage = "Waiting for Forge"
     @Published var lastDirectSyncMetric: ForgeWatchDirectSyncMetric?
 
     private let defaults = ForgeWatchStorage.sharedDefaults()
@@ -151,25 +151,39 @@ final class WatchAppModel: NSObject, ObservableObject {
             : "Saved until iPhone can relay"
     }
 
-    func requestPhoneRefresh(reason: String = "manual", force: Bool = false) {
-        guard previewMode == false, WCSession.isSupported() else { return }
+    func requestForgeRefresh(reason: String = "manual", force: Bool = false) {
+        guard previewMode == false else { return }
         let now = Date()
         if force == false, let lastRefreshRequestAt, now.timeIntervalSince(lastRefreshRequestAt) < refreshRequestCooldown {
-            lastStatusMessage = "Refresh already queued"
+            lastStatusMessage = directConnection() == nil
+                ? "Refresh already pending"
+                : "Direct refresh already running"
             return
         }
         lastRefreshRequestAt = now
+        if directConnection() != nil {
+            refreshFromForge(reason: reason, fallbackToPhone: true)
+            return
+        }
+        requestPhoneRelayRefresh(reason: reason)
+    }
+
+    private func requestPhoneRelayRefresh(reason: String) {
+        guard WCSession.isSupported() else {
+            lastStatusMessage = "Forge direct unavailable"
+            return
+        }
         let request = ForgeWatchControlRequest(
             id: UUID().uuidString,
             createdAt: ISO8601DateFormatter().string(from: Date()),
             reason: reason
         )
         guard let data = try? encoder.encode(request) else { return }
-        lastStatusMessage = "Asking iPhone to sync"
+        lastStatusMessage = "Asking iPhone relay to sync"
         if WCSession.default.isReachable {
             WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
                 Task { @MainActor in
-                    self?.lastStatusMessage = "Phone sync request failed: \(error.localizedDescription)"
+                    self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
                 }
             }
         } else {
@@ -183,7 +197,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         guard previewMode == false else { return }
         guard directConnection() != nil else {
             if fallbackToPhone {
-                requestPhoneRefresh(reason: reason, force: true)
+                requestPhoneRelayRefresh(reason: reason)
             }
             return
         }
@@ -560,19 +574,22 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     private func directConnection() -> ForgeWatchConnection? {
-        guard
-            let connection = bootstrap.connection,
-            connection.directNetworkingEnabled,
-            let url = URL(string: connection.apiBaseUrl),
-            url.scheme?.lowercased() == "https",
-            let host = url.host?.lowercased(),
-            host != "127.0.0.1",
-            host != "localhost",
-            host != "::1"
-        else {
+        guard let connection = bootstrap.connection, Self.canUseDirectNetworking(connection) else {
             return nil
         }
         return connection
+    }
+
+    static func canUseDirectNetworking(_ connection: ForgeWatchConnection) -> Bool {
+        guard
+            connection.directNetworkingEnabled,
+            let url = URL(string: connection.apiBaseUrl),
+            url.scheme?.lowercased() == "https",
+            let host = url.host?.lowercased()
+        else {
+            return false
+        }
+        return host != "127.0.0.1" && host != "localhost" && host != "::1"
     }
 
     private func directURL(path: String, connection: ForgeWatchConnection) throws -> URL {
@@ -671,7 +688,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     private func refreshFromForgeDirect(reason: String, fallbackToPhone: Bool) async {
         guard let connection = directConnection() else {
             if fallbackToPhone {
-                requestPhoneRefresh(reason: reason, force: true)
+                requestPhoneRelayRefresh(reason: reason)
             }
             return
         }
@@ -694,7 +711,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         } catch {
             lastStatusMessage = "Direct sync failed: \(error.localizedDescription)"
             if fallbackToPhone {
-                requestPhoneRefresh(reason: reason, force: true)
+                requestPhoneRelayRefresh(reason: reason)
             }
         }
     }
@@ -903,7 +920,7 @@ extension WatchAppModel: WCSessionDelegate {
             if let error {
                 self.lastStatusMessage = "iPhone link failed: \(error.localizedDescription)"
             } else {
-                self.lastStatusMessage = activationState == .activated ? "Connected to iPhone" : "Waiting for iPhone"
+                self.lastStatusMessage = activationState == .activated ? "Relay available" : "Waiting for Forge"
                 self.flushPendingActions()
                 self.refreshFromForge(reason: "activation", fallbackToPhone: true)
             }

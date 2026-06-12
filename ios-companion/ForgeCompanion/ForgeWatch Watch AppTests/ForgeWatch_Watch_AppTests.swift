@@ -32,4 +32,48 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertEqual(habit.last7History.filter(\.current).count, 1)
     }
 
+    func testTailscaleHttpsConnectionCanUseWatchDirectNetworking() {
+        let connection = ForgeWatchConnection(
+            apiBaseUrl: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            transportLabel: "Tailscale",
+            directNetworkingEnabled: true
+        )
+
+        XCTAssertTrue(WatchAppModel.canUseDirectNetworking(connection))
+    }
+
+    func testWatchDirectNetworkingRejectsLoopbackHttpAndLogicalIroh() {
+        let loopback = ForgeWatchConnection(
+            apiBaseUrl: "https://127.0.0.1:4317/api/v1",
+            uiBaseUrl: "https://127.0.0.1:4317/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            transportLabel: "Loopback",
+            directNetworkingEnabled: true
+        )
+        let insecureHttp = ForgeWatchConnection(
+            apiBaseUrl: "http://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/api/v1",
+            uiBaseUrl: "http://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            transportLabel: "HTTP",
+            directNetworkingEnabled: true
+        )
+        let iroh = ForgeWatchConnection(
+            apiBaseUrl: "forge-iroh://node/api/v1",
+            uiBaseUrl: "forge-iroh://node/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            transportLabel: "Iroh",
+            directNetworkingEnabled: true
+        )
+
+        XCTAssertFalse(WatchAppModel.canUseDirectNetworking(loopback))
+        XCTAssertFalse(WatchAppModel.canUseDirectNetworking(insecureHttp))
+        XCTAssertFalse(WatchAppModel.canUseDirectNetworking(iroh))
+    }
+
 }
