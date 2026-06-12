@@ -1,11 +1,9 @@
-Forge Companion 1.0.126 fixes transport selection for Tailscale pairings and improves Watch sync behavior.
+Forge Companion 1.0.127 finishes the Tailscale/Iroh transport separation and tightens direct sync behavior.
 
-When the companion is paired through a secure Tailscale URL, HealthKit sync now stays on Tailscale direct transport instead of mixing in Iroh metadata or downgrading bulk uploads to insecure HTTP. Iroh is only used for actual forge-iroh pairings.
+New Tailscale pairings now produce a direct Tailscale payload without Iroh metadata. Existing mixed pairings are normalized on the phone so a Tailscale HTTPS URL is treated as Tailscale direct for sync, chunking, progress labels, and WebView routing.
 
-The sync card now prefers the active transfer state over stale "synced" text, so long-running uploads show what is being prepared or uploaded instead of sitting on an old workout count.
+Foreground Tailscale uploads now use the shorter direct-transfer timeout instead of waiting on the old long fallback path, so stalled requests fail and resume sooner while background uploads keep their system-friendly timeout.
 
-The Watch app now receives scoped companion connection metadata and tries direct HTTPS/Tailscale API calls for refreshes and command batches. It keeps the iPhone relay as a fallback when watchOS cannot reach Forge directly.
+The pairing screen copy now matches the actual policy: Tailscale/LAN direct when reachable, Iroh only for Iroh pairings.
 
 HealthKit cursors, upload checkpoints, pairing state, and stored user data are unchanged.
-
-This build also hardens TestFlight upload reconciliation when App Store Connect accepts the archive but returns a transient post-upload polling error.
