@@ -120,14 +120,17 @@ final class WatchAppModel: NSObject, ObservableObject {
         }
     }
 
-    func flushPendingActions() {
+    func flushPendingActions(forceDirect: Bool = false) {
         guard previewMode == false else { return }
         let queue = loadQueue()
         guard queue.isEmpty == false else { return }
-        if directConnection() != nil {
+        let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
+            forceUserRetry: forceDirect
+        )
+        if directConnection(respectingCooldown: respectCooldown) != nil {
             directFlushTask?.cancel()
             directFlushTask = Task { @MainActor [weak self] in
-                await self?.flushPendingActionsDirectThenPhone()
+                await self?.flushPendingActionsDirectThenPhone(forceDirect: forceDirect)
             }
             return
         }
@@ -185,8 +188,11 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         lastRefreshRequestAt = now
-        if directConnection() != nil {
-            refreshFromForge(reason: reason, fallbackToPhone: true)
+        let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
+            forceUserRetry: force
+        )
+        if directConnection(respectingCooldown: respectCooldown) != nil {
+            refreshFromForge(reason: reason, fallbackToPhone: true, forceDirect: force)
             return
         }
         if let cooldownMessage = directCooldownRelayMessage() {
@@ -220,16 +226,27 @@ final class WatchAppModel: NSObject, ObservableObject {
         }
     }
 
-    func refreshFromForge(reason: String = "manual", fallbackToPhone: Bool = true) {
+    func refreshFromForge(
+        reason: String = "manual",
+        fallbackToPhone: Bool = true,
+        forceDirect: Bool = false
+    ) {
         guard previewMode == false else { return }
-        guard directConnection() != nil else {
+        let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
+            forceUserRetry: forceDirect
+        )
+        guard directConnection(respectingCooldown: respectCooldown) != nil else {
             if fallbackToPhone {
                 requestPhoneRelayRefresh(reason: reason)
             }
             return
         }
         Task { @MainActor [weak self] in
-            await self?.refreshFromForgeDirect(reason: reason, fallbackToPhone: fallbackToPhone)
+            await self?.refreshFromForgeDirect(
+                reason: reason,
+                fallbackToPhone: fallbackToPhone,
+                forceDirect: forceDirect
+            )
         }
     }
 
@@ -712,8 +729,15 @@ final class WatchAppModel: NSObject, ObservableObject {
         return DirectPostResult(response: try decoder.decode(Response.self, from: data), metric: metric)
     }
 
-    private func refreshFromForgeDirect(reason: String, fallbackToPhone: Bool) async {
-        guard let connection = directConnection() else {
+    private func refreshFromForgeDirect(
+        reason: String,
+        fallbackToPhone: Bool,
+        forceDirect: Bool
+    ) async {
+        let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
+            forceUserRetry: forceDirect
+        )
+        guard let connection = directConnection(respectingCooldown: respectCooldown) else {
             if fallbackToPhone {
                 requestPhoneRelayRefresh(reason: reason)
             }
@@ -745,8 +769,11 @@ final class WatchAppModel: NSObject, ObservableObject {
         }
     }
 
-    private func flushPendingActionsDirectThenPhone() async {
-        guard let connection = directConnection() else {
+    private func flushPendingActionsDirectThenPhone(forceDirect: Bool = false) async {
+        let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
+            forceUserRetry: forceDirect
+        )
+        guard let connection = directConnection(respectingCooldown: respectCooldown) else {
             flushPendingActionsThroughPhone(loadQueue())
             return
         }

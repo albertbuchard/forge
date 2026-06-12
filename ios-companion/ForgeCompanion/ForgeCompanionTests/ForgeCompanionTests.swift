@@ -1432,8 +1432,14 @@ final class ForgeCompanionTests: XCTestCase {
     }
 
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
-        XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds, 45)
+        XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds, 20)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds, 6)
+        XCTAssertTrue(
+            ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(forceUserRetry: false)
+        )
+        XCTAssertFalse(
+            ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(forceUserRetry: true)
+        )
         XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.timedOut)))
         XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.cannotConnectToHost)))
         XCTAssertTrue(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(URLError(.notConnectedToInternet)))

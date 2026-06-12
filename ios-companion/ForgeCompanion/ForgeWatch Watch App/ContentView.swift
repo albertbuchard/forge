@@ -27,7 +27,7 @@ struct ContentView: View {
                     onCommand: appModel.queueCommand,
                     onCapture: appModel.queueCaptureEvent,
                     onRefresh: { appModel.requestForgeRefresh(reason: "surface_refresh", force: true) },
-                    onRetry: appModel.flushPendingActions
+                    onRetry: { appModel.flushPendingActions(forceDirect: true) }
                 )
                 .id(navigation.selectedSurface)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))

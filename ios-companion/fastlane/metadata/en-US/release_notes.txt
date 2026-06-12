@@ -1,10 +1,10 @@
-Forge Companion 1.0.138 batches reachable watch actions through the iPhone relay.
+Forge Companion 1.0.139 makes manual watch sync retries use the direct secure route immediately.
 
-When the watch cannot reach Forge directly but the iPhone is reachable, multiple pending watch actions now travel in one WatchConnectivity request and one Forge command batch instead of one request per action.
+When the watch has a secure HTTPS/Tailscale companion URL and the user taps Refresh or Retry, the watch now retries the direct route immediately instead of waiting behind the previous transient-failure cooldown.
 
-This reduces phone-relay chatter for bursts of habit, task, and capture actions while keeping the same durable retry path when the iPhone is offline or cannot submit to Forge.
+Automatic direct-route retry cooldown is reduced from 45 seconds to 20 seconds, so temporary network misses recover sooner without repeatedly hammering Forge.
 
-The relay protocol also remains compatible with older single-action watch acknowledgements during rollout.
+The iPhone relay remains a durable fallback for offline or unreachable watches, and previously queued actions are preserved until Forge accepts them.
 
 The Tailscale/Iroh separation remains in place: secure Tailscale URLs stay on the Tailscale path, and Iroh is only used for active forge-iroh pairings.
 
