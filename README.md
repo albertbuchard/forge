@@ -12,6 +12,23 @@ Forge is a local-first workspace for planning, execution, memory, health context
 
 Read the full published documentation on the [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
 
+<p align="center">
+  <a href="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-master.png">
+    <img src="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-master.png" alt="Forge large light high-definition icon" width="118" />
+  </a>
+  <a href="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-dark-master.png">
+    <img src="./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-dark-master.png" alt="Forge large dark high-definition icon" width="118" />
+  </a>
+  <a href="./openclaw-plugin/docs/assets/brand-icons/forge-ios-icon-1024.png">
+    <img src="./openclaw-plugin/docs/assets/brand-icons/forge-ios-icon-1024.png" alt="Forge Companion iOS high-definition icon" width="118" />
+  </a>
+  <a href="./openclaw-plugin/docs/assets/brand-icons/forge-watch-icon-1024.png">
+    <img src="./openclaw-plugin/docs/assets/brand-icons/forge-watch-icon-1024.png" alt="Forge Watch high-definition icon" width="118" />
+  </a>
+</p>
+
+High-definition brand icons are published with the docs: [large light](./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-light-master.png), [large dark](./openclaw-plugin/docs/assets/brand-icons/forge-icon-large-dark-master.png), [iOS companion](./openclaw-plugin/docs/assets/brand-icons/forge-ios-icon-1024.png), and [watchOS companion](./openclaw-plugin/docs/assets/brand-icons/forge-watch-icon-1024.png).
+
 ![Forge overview dashboard](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
 
 It gives you one place to:

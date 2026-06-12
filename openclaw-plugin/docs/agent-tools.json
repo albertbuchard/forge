@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T12:39:18.564Z",
+  "generatedAt": "2026-06-12T06:11:51.314Z",
   "source": {
     "manifest": "openclaw.plugin.json",
     "onboardingCatalog": "server/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -607,7 +607,7 @@
       "name": "forge_get_wiki_health",
       "groupId": "wiki",
       "groupTitle": "Wiki And Evidence Memory",
-      "label": "Forge Wiki Health",
+      "label": "KarpaWiki Health",
       "summary": "Read wiki maintenance signals such as unresolved links, orphan pages, missing summaries, raw-source counts, and the generated index path.",
       "whenToUse": "Use for memory quality checks, cleanup passes, or before asking an LLM to lint the wiki.",
       "inputShape": "{ spaceId?: string }",
@@ -641,7 +641,7 @@
       "name": "forge_get_wiki_settings",
       "groupId": "wiki",
       "groupTitle": "Wiki And Evidence Memory",
-      "label": "Forge Wiki Settings",
+      "label": "KarpaWiki Settings",
       "summary": "Read the current wiki spaces plus enabled LLM and embedding profiles.",
       "whenToUse": "Use before semantic wiki search, ingest, or wiki writes so the agent knows which spaces and profiles exist.",
       "inputShape": "{}",

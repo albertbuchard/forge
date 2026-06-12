@@ -410,6 +410,61 @@ li {
   padding: 20px;
 }
 
+.brand-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.brand-icon-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  text-decoration: none;
+}
+
+.brand-icon-frame {
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(39, 56, 86, 0.1);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 238, 247, 0.72)),
+    #f8fbff;
+}
+
+.brand-icon-frame.dark {
+  border-color: rgba(229, 238, 251, 0.14);
+  background:
+    linear-gradient(135deg, rgba(10, 18, 34, 0.96), rgba(31, 44, 72, 0.9)),
+    #101828;
+}
+
+.brand-icon-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.brand-icon-card strong {
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.brand-icon-card span:last-child {
+  color: var(--text-soft);
+  font-size: 0.86rem;
+}
+
 .card p:last-child,
 .callout p:last-child,
 .guide-list p:last-child {
@@ -1220,6 +1275,7 @@ li {
   .split-list,
   .api-stat-grid,
   .tool-grid,
+  .brand-icon-grid,
   .ios-shot-grid,
   .identity-flow,
   .ownership-diagram {
