@@ -136,34 +136,25 @@ final class WatchAppModel: NSObject, ObservableObject {
 
     private func flushPendingActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
         if WCSession.default.isReachable {
-            for item in queue {
-                if let data = try? encoder.encode(item) {
-                    WCSession.default.sendMessageData(data) { [weak self] replyData in
-                        Task { @MainActor in
-                            guard
-                                let self,
-                                let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: replyData)
-                            else { return }
+            if let data = try? encoder.encode(ForgeWatchOutboundBatchEnvelope(envelopes: queue)) {
+                WCSession.default.sendMessageData(data) { [weak self] replyData in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if let ackBatch = try? self.decoder.decode(ForgeWatchAckBatchEnvelope.self, from: replyData) {
+                            self.applyAckBatch(ackBatch)
+                        } else if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: replyData) {
                             self.applyAck(ack)
                         }
-                    } errorHandler: { [weak self] error in
-                        Task { @MainActor in
-                            self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
-                        }
-                        WCSession.default.transferUserInfo([
-                            ForgeWatchStorage.actionMessageKey: data
-                        ])
+                    }
+                } errorHandler: { [weak self] error in
+                    Task { @MainActor in
+                        self?.lastStatusMessage = "iPhone relay failed: \(error.localizedDescription)"
+                        self?.transferActionsThroughPhone(queue)
                     }
                 }
             }
         } else {
-            for item in queue {
-                if let data = try? encoder.encode(item) {
-                    WCSession.default.transferUserInfo([
-                        ForgeWatchStorage.actionMessageKey: data
-                    ])
-                }
-            }
+            transferActionsThroughPhone(queue)
         }
         if let cooldownMessage = directCooldownRelayMessage() {
             lastStatusMessage = cooldownMessage
@@ -172,6 +163,16 @@ final class WatchAppModel: NSObject, ObservableObject {
         lastStatusMessage = WCSession.default.isReachable
             ? "Sending through iPhone relay"
             : "Waiting for iPhone relay"
+    }
+
+    private func transferActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
+        for item in queue {
+            if let data = try? encoder.encode(item) {
+                WCSession.default.transferUserInfo([
+                    ForgeWatchStorage.actionMessageKey: data
+                ])
+            }
+        }
     }
 
     func requestForgeRefresh(reason: String = "manual", force: Bool = false) {
@@ -982,6 +983,12 @@ final class WatchAppModel: NSObject, ObservableObject {
             WKInterfaceDevice.current().play(.failure)
         } else {
             WKInterfaceDevice.current().play(.success)
+        }
+    }
+
+    private func applyAckBatch(_ batch: ForgeWatchAckBatchEnvelope) {
+        for ack in batch.acks {
+            applyAck(ack)
         }
     }
 

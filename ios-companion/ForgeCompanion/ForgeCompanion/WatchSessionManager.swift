@@ -145,34 +145,69 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     private func processEnvelopeForReply(_ envelope: ForgeWatchOutboundEnvelope) async -> ForgeWatchAckEnvelope {
+        let batch = await processBatchForReply([envelope])
+        guard let ack = batch.acks.first else {
+            return deferredAck(for: envelope, message: "Forge did not acknowledge the watch action")
+        }
+        return ack
+    }
+
+    private func processBatchForReply(_ envelopes: [ForgeWatchOutboundEnvelope]) async -> ForgeWatchAckBatchEnvelope {
+        guard envelopes.isEmpty == false else {
+            return ForgeWatchAckBatchEnvelope(acks: [])
+        }
         guard let pairing = pairingProvider?() else {
-            appendToQueue(envelope)
-            return deferredAck(for: envelope, message: "Forge pairing is not ready")
+            for envelope in envelopes {
+                appendToQueue(envelope)
+            }
+            return ForgeWatchAckBatchEnvelope(
+                acks: envelopes.map {
+                    deferredAck(for: $0, message: "Forge pairing is not ready")
+                }
+            )
         }
         do {
             let result = try await syncClient.submitWatchCommandBatch(
-                device: envelope.device,
-                envelopes: [envelope],
+                device: envelopes.first?.device ?? ForgeWatchDeviceDescriptor(
+                    name: "Apple Watch",
+                    platform: "watchos",
+                    appVersion: "",
+                    sourceDevice: "Apple Watch"
+                ),
+                envelopes: envelopes,
                 pairing: pairing
             )
             let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
             saveBootstrap(bootstrap)
             publishBootstrap(bootstrap)
-            guard let receipt = result.receipt.receipts.first(where: { $0.actionId == envelope.id }) else {
-                appendToQueue(envelope)
-                return deferredAck(for: envelope, message: "Forge did not acknowledge the watch action")
+            var receiptsByActionId: [String: ForgeWatchCommandReceipt] = [:]
+            for receipt in result.receipt.receipts {
+                receiptsByActionId[receipt.actionId] = receipt
             }
-            lastStatusMessage = "Watch action processed"
-            return ForgeWatchAckEnvelope(
-                actionId: receipt.actionId,
-                processedAt: receipt.processedAt,
-                status: receipt.status,
-                error: nil,
-                bootstrap: bootstrap
-            )
+            let acks = envelopes.map { envelope in
+                guard let receipt = receiptsByActionId[envelope.id] else {
+                    appendToQueue(envelope)
+                    return deferredAck(for: envelope, message: "Forge did not acknowledge the watch action")
+                }
+                return ForgeWatchAckEnvelope(
+                    actionId: receipt.actionId,
+                    processedAt: receipt.processedAt,
+                    status: receipt.status,
+                    error: nil,
+                    bootstrap: bootstrap
+                )
+            }
+            lastStatusMessage = "Watch actions processed"
+            return ForgeWatchAckBatchEnvelope(acks: acks)
         } catch {
-            appendToQueue(envelope)
-            return deferredAck(for: envelope, message: error.localizedDescription)
+            for envelope in envelopes {
+                appendToQueue(envelope)
+            }
+            return ForgeWatchAckBatchEnvelope(
+                acks: envelopes.map {
+                    deferredAck(for: $0, message: error.localizedDescription)
+                }
+            )
         }
     }
 
@@ -350,6 +385,13 @@ extension WatchSessionManager: WCSessionDelegate {
             if await self.handleControlRequestData(messageData) {
                 return
             }
+            if let batch = try? self.decoder.decode(ForgeWatchOutboundBatchEnvelope.self, from: messageData) {
+                for envelope in batch.envelopes {
+                    self.appendToQueue(envelope)
+                }
+                await self.processPendingQueue()
+                return
+            }
             guard let envelope = try? self.decoder.decode(ForgeWatchOutboundEnvelope.self, from: messageData) else {
                 self.lastStatusMessage = "Ignored invalid watch payload"
                 return
@@ -366,9 +408,22 @@ extension WatchSessionManager: WCSessionDelegate {
     ) {
         Task { @MainActor in
             if await self.handleControlRequestData(messageData) {
+                if let data = try? self.encoder.encode(ForgeWatchAckBatchEnvelope(acks: [])) {
+                    replyHandler(data)
+                }
+                return
+            }
+            if let batch = try? self.decoder.decode(ForgeWatchOutboundBatchEnvelope.self, from: messageData) {
+                let ackBatch = await self.processBatchForReply(batch.envelopes)
+                if let data = try? self.encoder.encode(ackBatch) {
+                    replyHandler(data)
+                }
                 return
             }
             guard let envelope = try? self.decoder.decode(ForgeWatchOutboundEnvelope.self, from: messageData) else {
+                if let data = try? self.encoder.encode(ForgeWatchAckBatchEnvelope(acks: [])) {
+                    replyHandler(data)
+                }
                 return
             }
             let ack = await self.processEnvelopeForReply(envelope)

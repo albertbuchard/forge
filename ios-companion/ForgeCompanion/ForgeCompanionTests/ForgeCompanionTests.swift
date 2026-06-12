@@ -1446,6 +1446,76 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(serverRejection))
     }
 
+    func testReachablePhoneRelayBatchesWatchActionsIntoOneExchange() throws {
+        let actionCount = 5
+        let previousExchangeCount = actionCount
+
+        XCTAssertEqual(
+            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
+            1
+        )
+        XCTAssertLessThan(
+            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
+            previousExchangeCount
+        )
+        XCTAssertEqual(
+            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: 0),
+            0
+        )
+    }
+
+    func testWatchRelayBatchEnvelopesRoundTrip() throws {
+        let device = ForgeWatchDeviceDescriptor(
+            name: "Apple Watch",
+            platform: "watchos",
+            appVersion: "1.0",
+            sourceDevice: "Apple Watch"
+        )
+        let action = ForgeWatchOutboundEnvelope(
+            id: "watch_action_1",
+            createdAt: "2026-06-12T12:00:00Z",
+            device: device,
+            kind: .habitCheckIn,
+            habitCheckIn: ForgeWatchHabitCheckInAction(
+                habitId: "habit_1",
+                dateKey: "2026-06-12",
+                status: "done",
+                note: ""
+            ),
+            captureEvent: nil,
+            command: nil
+        )
+        let encodedBatch = try JSONEncoder().encode(
+            ForgeWatchOutboundBatchEnvelope(envelopes: [action])
+        )
+        let decodedBatch = try JSONDecoder().decode(
+            ForgeWatchOutboundBatchEnvelope.self,
+            from: encodedBatch
+        )
+        XCTAssertEqual(decodedBatch.envelopes.map(\.id), ["watch_action_1"])
+
+        let ack = ForgeWatchAckEnvelope(
+            actionId: action.id,
+            processedAt: "2026-06-12T12:00:01Z",
+            status: "processed",
+            error: nil,
+            bootstrap: nil
+        )
+        let encodedSingleAck = try JSONEncoder().encode(ack)
+        let decodedSingleAck = try JSONDecoder().decode(
+            ForgeWatchAckEnvelope.self,
+            from: encodedSingleAck
+        )
+        XCTAssertEqual(decodedSingleAck.actionId, "watch_action_1")
+
+        let encodedAckBatch = try JSONEncoder().encode(ForgeWatchAckBatchEnvelope(acks: [ack]))
+        let decodedAckBatch = try JSONDecoder().decode(
+            ForgeWatchAckBatchEnvelope.self,
+            from: encodedAckBatch
+        )
+        XCTAssertEqual(decodedAckBatch.acks.map(\.actionId), ["watch_action_1"])
+    }
+
     func testForegroundDirectBulkRouteUsesAggressiveDirectTimeout() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",

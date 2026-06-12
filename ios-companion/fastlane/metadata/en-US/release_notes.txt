@@ -1,8 +1,10 @@
-Forge Companion 1.0.137 makes reachable watch actions sync through the iPhone relay faster.
+Forge Companion 1.0.138 batches reachable watch actions through the iPhone relay.
 
-When the watch cannot reach Forge directly but the iPhone is reachable, action acknowledgements now return in the same WatchConnectivity request instead of waiting for a separate acknowledgement message.
+When the watch cannot reach Forge directly but the iPhone is reachable, multiple pending watch actions now travel in one WatchConnectivity request and one Forge command batch instead of one request per action.
 
-If the iPhone cannot submit the action to Forge, the watch keeps the action marked as still to send and the phone stores it for later retry. The UI no longer calls that state queued.
+This reduces phone-relay chatter for bursts of habit, task, and capture actions while keeping the same durable retry path when the iPhone is offline or cannot submit to Forge.
+
+The relay protocol also remains compatible with older single-action watch acknowledgements during rollout.
 
 The Tailscale/Iroh separation remains in place: secure Tailscale URLs stay on the Tailscale path, and Iroh is only used for active forge-iroh pairings.
 

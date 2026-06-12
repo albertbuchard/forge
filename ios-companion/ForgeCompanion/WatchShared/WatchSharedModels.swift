@@ -424,12 +424,26 @@ struct ForgeWatchOutboundEnvelope: Codable, Identifiable, Hashable {
     let command: ForgeWatchCommandAction?
 }
 
+struct ForgeWatchOutboundBatchEnvelope: Codable, Hashable {
+    let envelopes: [ForgeWatchOutboundEnvelope]
+}
+
 struct ForgeWatchAckEnvelope: Codable, Hashable {
     let actionId: String
     let processedAt: String
     let status: String?
     let error: [String: String]?
     let bootstrap: ForgeWatchBootstrap?
+}
+
+struct ForgeWatchAckBatchEnvelope: Codable, Hashable {
+    let acks: [ForgeWatchAckEnvelope]
+}
+
+enum ForgeWatchRelayBatchPolicy {
+    nonisolated static func reachablePhoneExchangeCount(forActionCount actionCount: Int) -> Int {
+        actionCount > 0 ? 1 : 0
+    }
 }
 
 struct ForgeWatchCommandReceipt: Codable, Hashable {
