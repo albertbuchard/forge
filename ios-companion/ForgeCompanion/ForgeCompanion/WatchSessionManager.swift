@@ -184,6 +184,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
             for receipt in result.receipt.receipts {
                 receiptsByActionId[receipt.actionId] = receipt
             }
+            let acknowledgedIds = Set(result.receipt.receipts.map(\.actionId))
+            if acknowledgedIds.isEmpty == false {
+                let latestQueue = loadQueue()
+                let stillPending = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+                    afterAcknowledging: acknowledgedIds,
+                    in: latestQueue
+                )
+                if stillPending.count != latestQueue.count {
+                    saveQueue(stillPending)
+                }
+            }
             let acks = envelopes.map { envelope in
                 guard let receipt = receiptsByActionId[envelope.id] else {
                     appendToQueue(envelope)

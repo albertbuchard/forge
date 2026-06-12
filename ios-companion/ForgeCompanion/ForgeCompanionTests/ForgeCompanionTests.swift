@@ -1549,6 +1549,19 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testWatchQueueReconciliationRemovesLiveAckFromDurableRelayQueue() {
+        let liveAckedDuplicate = makeWatchEnvelope(id: "action_sent_live_and_stored")
+        let durableOnlyPending = makeWatchEnvelope(id: "action_only_in_durable_queue")
+        let latestQueue = [liveAckedDuplicate, durableOnlyPending]
+
+        let remaining = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+            afterAcknowledging: [liveAckedDuplicate.id],
+            in: latestQueue
+        )
+
+        XCTAssertEqual(remaining.map(\.id), [durableOnlyPending.id])
+    }
+
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)

@@ -1221,10 +1221,13 @@ private struct SyncSurface: View {
             return "No secure watch route yet; open the iPhone app to share one."
         }
         guard connection.directNetworkingEnabled else {
-            return "Direct route disabled; paired iPhone backup remains available."
+            return "No direct HTTPS route; paired iPhone backup can still send."
         }
         guard let directMetric else {
-            return "Configured direct \(connection.transportLabel) HTTPS; waiting for the watch to test it."
+            if pendingActionCount > 0 {
+                return "Trying direct \(connection.transportLabel) HTTPS now; paired iPhone backup only if direct fails."
+            }
+            return "Ready to test direct \(connection.transportLabel) HTTPS to Forge."
         }
         if directMetric.succeeded {
             return "Verified direct \(directMetric.transportLabel) HTTPS to Forge."
@@ -1249,7 +1252,7 @@ private struct SyncSurface: View {
         if pendingActionCount == 0 {
             return "Clear"
         }
-        return connection?.directNetworkingEnabled == true ? "Sending" : "To send"
+        return connection?.directNetworkingEnabled == true ? "Sending" : "Backup"
     }
 }
 
