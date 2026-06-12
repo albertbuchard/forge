@@ -345,16 +345,6 @@ rescue StandardError => error
     raise
   end
 
-  if app_store_upload_is_duplicate_build_number?(error: error, build_number: build_number) &&
-     ENV["FORGE_IOS_ACCEPT_DUPLICATE_TESTFLIGHT_UPLOAD"].to_s != "1"
-    UI.user_error!(
-      "App Store Connect already has build #{marketing_version} (#{build_number}). " \
-      "Bump CFBundleVersion and upload a fresh build; set " \
-      "FORGE_IOS_ACCEPT_DUPLICATE_TESTFLIGHT_UPLOAD=1 only when intentionally " \
-      "reconciling a previously accepted identical IPA."
-    )
-  end
-
   UI.important("App Store Connect upload returned an ambiguous/duplicate response. Checking whether build #{marketing_version} (#{build_number}) was accepted.")
   build = wait_for_app_store_connect_build(
     config: config,
@@ -372,6 +362,8 @@ def app_store_upload_may_have_been_accepted?(error:, build_number:)
   return true if message.include?("UPDATE buildUploadFiles CHECKSUM") && message.include?("status code 500")
   return true if message.include?("UPLOAD SUCCEEDED with no errors") && message.include?("GET UPLOAD STATE") && message.include?("status code 500")
   return true if message.include?("No errors uploading archive") && message.include?("GET UPLOAD STATE") && message.include?("status code 500")
+  return true if message.include?("No errors uploading archive") && message.include?("RETRIEVE UPLOAD OPERATIONS") && message.include?("status code 500")
+  return true if message.include?("UPLOAD SUCCEEDED with no errors") && message.include?("RETRIEVE UPLOAD OPERATIONS") && message.include?("status code 500")
   return true if app_store_upload_is_duplicate_build_number?(error: error, build_number: build_number)
 
   false
@@ -524,11 +516,43 @@ def increment_release_versions!(config)
   )
   increment_build_number(xcodeproj: xcode_project_path)
   build_number = current_build_number
+  latest_remote_build_number = latest_app_store_connect_build_number(config: config)
+  desired_build_number = [build_number.to_i, latest_remote_build_number + 1].max
+  if desired_build_number > build_number.to_i
+    UI.important(
+      "Local next build #{build_number} is not higher than App Store Connect latest #{latest_remote_build_number}; using #{desired_build_number}."
+    )
+    increment_build_number(
+      build_number: desired_build_number.to_s,
+      xcodeproj: xcode_project_path
+    )
+    build_number = current_build_number
+  end
   synchronize_release_target_versions!(
     marketing_version: marketing_version,
     build_number: build_number
   )
   build_number
+end
+
+def latest_app_store_connect_build_number(config:)
+  app = verify_app_store_connect_app!(config: config)
+  return 0 unless app
+
+  builds = Spaceship::ConnectAPI::Build.all(
+    app_id: app.id,
+    platform: "IOS",
+    processing_states: "PROCESSING,FAILED,INVALID,VALID",
+    limit: 200
+  )
+  builds
+    .map { |build| build.version.to_s }
+    .map { |version| Integer(version, exception: false) }
+    .compact
+    .max || 0
+rescue StandardError => error
+  UI.important("Could not read latest App Store Connect build number; using local build sequence. #{error.message}")
+  0
 end
 
 def release_target_names

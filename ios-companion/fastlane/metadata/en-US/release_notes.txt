@@ -1,4 +1,4 @@
-Forge Companion 1.0.141 makes watch sync transport wording match the actual route.
+Forge Companion 1.0.142 makes watch sync transport wording match the actual route and hardens TestFlight release retries.
 
 Tailscale watch connections now present themselves as direct HTTPS/Tailscale routes in the watch Sync surface, instead of using relay-style wording that made a Tailscale pairing look mixed with another transport.
 
@@ -7,5 +7,7 @@ When watchOS cannot reach Forge directly, the UI now calls that path a phone fal
 The durable fallback still preserves offline actions until Forge accepts them, but direct Tailscale remains the preferred path whenever watchOS can reach the secure companion URL.
 
 The Tailscale/Iroh separation remains in place: secure Tailscale URLs stay on the Tailscale path, and Iroh is only used for active forge-iroh pairings.
+
+Release automation now reconciles Apple transporter accepted-upload 500s and picks a build number above the latest App Store Connect build.
 
 HealthKit cursors, upload checkpoints, pairing tokens, watch action queues, and stored user data are unchanged.
