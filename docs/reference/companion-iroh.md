@@ -1,7 +1,9 @@
-# Forge Companion Iroh Transport
+# Forge Companion Transport
 
-Forge Companion pairs to the desktop with Forge's own Iroh/QUIC transport by
-default. The base user path stays deliberately small:
+Forge Companion pairs to the desktop through one active transport at a time. Tailscale
+HTTPS is preferred when it is installed, authenticated, and Forge is reachable through
+the Mac's MagicDNS URL. Iroh is the fallback when Tailscale is unavailable, declined, or
+not reachable. The base user path stays deliberately small:
 
 ```bash
 npx forge-memory
@@ -13,28 +15,27 @@ or, after Forge is already installed:
 npx forge-memory pair-ios
 ```
 
-Those commands start the local Forge runtime, create an Iroh-first pairing payload,
-and show a compact QR code for the iPhone app. The payload also keeps the request
-API/UI URL as a direct fallback. If the native Iroh bridge times out and that URL is
-phone-reachable HTTPS/Tailscale, the app retries the same Forge request through
-URLSession instead of leaving the pairing stuck on a bridge timeout. The CLI also
-saves the compact payload under `~/.forge/pairing/` so it can be pasted into the
-iPhone app when a terminal QR is too large or the camera cannot scan it.
+Those commands start the local Forge runtime and show a compact QR code for the iPhone
+app. When Tailscale is healthy, the QR uses the Tailscale API/UI URL as the primary
+direct transport and does not include Iroh node metadata. When Tailscale is unavailable,
+the QR uses Forge's Iroh/QUIC transport. The CLI also saves the compact payload under
+`~/.forge/pairing/` so it can be pasted into the iPhone app when a terminal QR is too
+large or the camera cannot scan it.
 
 Manual HTTP/TCP remains available for explicit LAN, Tailscale, or debugging setups. A
 physical iPhone needs a phone-reachable URL:
 
 ```bash
-npx forge-memory pair-ios --manual-http --public-url https://your-mac.tailnet.ts.net/forge/
+npx forge-memory pair-ios --public-url https://your-mac.tailnet.ts.net/forge/
 ```
 
-Without `--public-url`, manual HTTP can resolve to `127.0.0.1`. That is useful for the
-iOS Simulator but not for a real phone.
+Loopback URLs such as `127.0.0.1` are useful for the iOS Simulator but are rejected for
+physical-phone pairing.
 
-## What The Default Transport Is
+## What The Iroh Fallback Is
 
-The default path is not an HTTPS tunnel and it is not the Alleycat protocol. Forge
-uses its own Rust crate, `companion-iroh`, with its own protocol label:
+When Iroh is selected, the path is not an HTTPS tunnel and it is not the Alleycat
+protocol. Forge uses its own Rust crate, `companion-iroh`, with its own protocol label:
 
 ```text
 forge-companion/1
@@ -68,7 +69,7 @@ The QR code gives the iPhone:
 - the pairing token
 - the Forge protocol label, `forge-companion/1`
 - the optional relay hint
-- the request API and UI URLs, which may be HTTPS/Tailscale fallback URLs
+- the active API and UI URLs
 - the Iroh transport payload used for the first request attempt
 
 Iroh then resolves and dials that endpoint identity. It can try direct QUIC when the
@@ -182,9 +183,10 @@ binaries. That keeps the package small and avoids shipping one binary per target
 platform.
 
 `npx forge-memory install`, `npx forge-memory configure`, and
-`npx forge-memory pair-ios` prepare the default Iroh transport before creating a QR.
-The installer checks for an existing host binary, checks for Cargo, offers to install
-the minimal Rust toolchain when it can do so on the current platform, and then runs:
+`npx forge-memory pair-ios` prepare the Iroh transport only when Tailscale/direct
+pairing is not selected. The installer checks for an existing host binary, checks for
+Cargo, offers to install the minimal Rust toolchain when it can do so on the current
+platform, and then runs:
 
 ```bash
 cargo build --release --manifest-path <companion-iroh-src/Cargo.toml> --bin forge-companion-iroh

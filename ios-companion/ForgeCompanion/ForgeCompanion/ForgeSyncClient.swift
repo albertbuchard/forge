@@ -429,7 +429,7 @@ struct ForgeSyncClient {
     private static let lowercaseHexDigits = Array("0123456789abcdef".utf8)
 
     static func healthSyncChunkingVersion(for pairing: PairingPayload) -> String {
-        if pairing.transport?.isIrohTransport == true {
+        if pairing.usesIrohTransportForActiveApiUrl {
             return irohHealthSyncChunkingVersion
         }
         return httpBackgroundHealthSyncChunkingVersion
@@ -461,10 +461,14 @@ struct ForgeSyncClient {
         if effectiveUseBackgroundUpload {
             return 1
         }
-        if pairing.transport?.isIrohTransport == true {
+        if pairing.usesIrohTransportForActiveApiUrl {
             return appIsForegroundActive ? foregroundIrohHealthSyncChunkUploadConcurrency : 1
         }
         return foregroundHealthSyncChunkUploadConcurrency
+    }
+
+    private static func activeHealthSyncTransportName(for pairing: PairingPayload) -> String {
+        pairing.usesIrohTransportForActiveApiUrl ? pairing.transport?.protocolName ?? "iroh" : "urlsession"
     }
 
     static func healthSyncPreparedChunkPrefetchLimit(
@@ -1774,7 +1778,7 @@ struct ForgeSyncClient {
         )
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadWorkoutHealthSyncChunks start combined summaries=\(summaryChunks.count) estimatedTimeSeriesChunks=\(timeSeriesChunkCount) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") requestedBackgroundUpload=\(useBackgroundUpload)"
+            "uploadWorkoutHealthSyncChunks start combined summaries=\(summaryChunks.count) estimatedTimeSeriesChunks=\(timeSeriesChunkCount) firstSequence=\(startingSequence) transport=\(Self.activeHealthSyncTransportName(for: pairing)) requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         let nextSequence = try await uploadGeneratedHealthSyncChunks(
             uploadSession: uploadSession,
@@ -2115,7 +2119,7 @@ struct ForgeSyncClient {
         }
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadPreparedHealthSyncChunks start count=\(chunks.count) window=\(concurrency()) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") requestedBackgroundUpload=\(useBackgroundUpload)"
+            "uploadPreparedHealthSyncChunks start count=\(chunks.count) window=\(concurrency()) firstSequence=\(startingSequence) transport=\(Self.activeHealthSyncTransportName(for: pairing)) requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         var iterator = chunks.makeIterator()
         let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
@@ -2314,7 +2318,7 @@ struct ForgeSyncClient {
         }
         companionDebugLog(
             "ForgeSyncClient",
-            "uploadGeneratedHealthSyncChunks start window=\(concurrency()) prefetch=\(prefetchLimit()) firstSequence=\(startingSequence) transport=\(pairing.transport?.protocolName ?? "urlsession") requestedBackgroundUpload=\(useBackgroundUpload)"
+            "uploadGeneratedHealthSyncChunks start window=\(concurrency()) prefetch=\(prefetchLimit()) firstSequence=\(startingSequence) transport=\(Self.activeHealthSyncTransportName(for: pairing)) requestedBackgroundUpload=\(useBackgroundUpload)"
         )
         let metrics = try await Self.runPreparedHealthSyncChunkScheduler(
             currentConcurrency: concurrency,
@@ -3252,7 +3256,7 @@ struct ForgeSyncClient {
         useBackgroundUpload: Bool = false
     ) -> Int {
         let protocolTarget = min(uploadSession.chunkTargetBytes, max(64_000, uploadSession.chunkMaxBytes - 32_000))
-        if pairing.transport?.isIrohTransport == true {
+        if pairing.usesIrohTransportForActiveApiUrl {
             return max(64_000, min(protocolTarget, irohHealthSyncChunkTargetBytes))
         }
         if useBackgroundUpload {
@@ -3998,7 +4002,7 @@ struct ForgeSyncClient {
         pairing: PairingPayload,
         preferDirectBulkTransfer: Bool
     ) -> HealthSyncChunkTransportRoute {
-        let usesIrohPairing = pairing.transport?.isIrohTransport == true
+        let usesIrohPairing = pairing.usesIrohTransportForActiveApiUrl
         if preferDirectBulkTransfer,
            usesIrohPairing,
            let directApiBaseUrl = directBulkTransferApiBaseUrl(for: pairing) {
@@ -4036,8 +4040,7 @@ struct ForgeSyncClient {
         )
         if effectiveUseBackgroundUpload == false,
            appIsForegroundActive,
-           route.usesIroh == false,
-           pairing.transport?.isIrohTransport == true {
+           route.usesIroh == false {
             return foregroundDirectBulkHealthSyncChunkTimeout
         }
         return standardHealthSyncChunkTimeout

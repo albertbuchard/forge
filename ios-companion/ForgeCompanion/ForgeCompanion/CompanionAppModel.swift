@@ -209,16 +209,23 @@ enum CompanionPairingURLResolver {
         } else {
             resolvedUiBaseUrl = rawUiBaseUrl
         }
+        let inactiveIrohTransport = payload.transport?.isIrohTransport == true
+            && URL(string: normalizedApiBaseUrl)?.scheme?.lowercased() != "forge-iroh"
+        let normalizedUiBaseUrl = resolvedUiBaseUrl.map(normalizeUiBaseUrl) ?? deriveUiBaseUrl(from: normalizedApiBaseUrl)
+        let finalUiBaseUrl = inactiveIrohTransport
+            && URL(string: normalizedUiBaseUrl)?.scheme?.lowercased() == "forge-iroh"
+            ? deriveUiBaseUrl(from: normalizedApiBaseUrl)
+            : normalizedUiBaseUrl
         return PairingPayload(
             kind: payload.kind,
             apiBaseUrl: normalizedApiBaseUrl,
-            uiBaseUrl: resolvedUiBaseUrl.map(normalizeUiBaseUrl) ?? deriveUiBaseUrl(from: normalizedApiBaseUrl),
+            uiBaseUrl: finalUiBaseUrl,
             sessionId: payload.sessionId,
             pairingToken: payload.pairingToken,
             expiresAt: payload.expiresAt,
             capabilities: payload.capabilities,
-            transportMode: payload.transportMode,
-            transport: payload.transport
+            transportMode: inactiveIrohTransport ? "manual-http" : payload.transportMode,
+            transport: inactiveIrohTransport ? nil : payload.transport
         )
     }
 
@@ -3404,7 +3411,7 @@ final class CompanionAppModel: ObservableObject {
         }
         let fallbackIsTailscale = Self.isTailscaleUrl(pairing.transport?.publicBaseUrl)
             || Self.isTailscaleUrl(pairing.apiBaseUrl)
-        if pairing.transport?.isIrohTransport == true {
+        if pairing.usesIrohTransportForActiveApiUrl {
             if fallbackIsTailscale {
                 return "Tailscale direct"
             }

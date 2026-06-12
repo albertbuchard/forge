@@ -390,6 +390,18 @@ struct PairingPayload: Codable {
     }
 }
 
+extension PairingPayload {
+    var usesIrohTransportForActiveApiUrl: Bool {
+        guard
+            transport?.isIrohTransport == true,
+            let scheme = URL(string: apiBaseUrl)?.scheme?.lowercased()
+        else {
+            return false
+        }
+        return scheme == "forge-iroh"
+    }
+}
+
 private struct PairingPayloadEnvelope: Decodable {
     let qrPayload: PairingPayload
 }

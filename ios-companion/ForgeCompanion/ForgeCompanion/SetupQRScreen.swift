@@ -48,11 +48,11 @@ struct SetupQRScreen: View {
                             .frame(width: 28, height: 28)
 
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("No Tailscale app required for the default route.")
+                            Text("Tailscale is preferred when it is available.")
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textPrimary)
 
-                            Text("Forge uses its own Iroh/QUIC companion transport; manual HTTP is only for explicit LAN or Tailscale fallback setups.")
+                            Text("Forge uses the QR transport exactly as paired: Tailscale/LAN direct when reachable, or Iroh only for Iroh pairings.")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(CompanionStyle.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)

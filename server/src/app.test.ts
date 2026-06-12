@@ -249,7 +249,7 @@ while true; do sleep 1; done
   }
 });
 
-test("companion Iroh pairing preserves a Tailscale request URL for phone fallback", async () => {
+test("companion pairing uses Tailscale request URL as the primary direct transport", async () => {
   const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-companion-iroh-fallback-")
@@ -291,13 +291,13 @@ while true; do sleep 1; done
         transport: {
           protocol: string;
           provider: string;
-          publicBaseUrl: string;
           localBaseUrl: string;
-          pairPayload: { node_id: string };
+          nodeId?: string;
+          pairPayload?: { node_id: string };
         };
       };
     };
-    assert.equal(payload.qrPayload.transportMode, "iroh");
+    assert.equal(payload.qrPayload.transportMode, "manual-http");
     assert.equal(
       payload.qrPayload.apiBaseUrl,
       "https://macbook-pro.example.ts.net/api/v1"
@@ -306,20 +306,14 @@ while true; do sleep 1; done
       payload.qrPayload.uiBaseUrl,
       "https://macbook-pro.example.ts.net/forge/"
     );
-    assert.equal(payload.qrPayload.transport.protocol, "iroh");
-    assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
-    assert.equal(
-      payload.qrPayload.transport.publicBaseUrl,
-      "https://macbook-pro.example.ts.net/api/v1"
-    );
+    assert.equal(payload.qrPayload.transport.protocol, "http");
+    assert.equal(payload.qrPayload.transport.provider, "manual-http");
     assert.equal(
       payload.qrPayload.transport.localBaseUrl,
-      "http://127.0.0.1:4317"
+      "https://macbook-pro.example.ts.net"
     );
-    assert.equal(
-      payload.qrPayload.transport.pairPayload.node_id,
-      "fakednodeid"
-    );
+    assert.equal(payload.qrPayload.transport.nodeId, undefined);
+    assert.equal(payload.qrPayload.transport.pairPayload, undefined);
   } finally {
     await app.close();
     closeDatabase();
@@ -332,7 +326,7 @@ while true; do sleep 1; done
   }
 });
 
-test("companion Iroh pairing uses a non-loopback request URL as phone fallback", async () => {
+test("companion pairing uses a non-loopback request URL as the primary direct transport", async () => {
   const originalIrohBin = process.env.FORGE_COMPANION_IROH_BIN;
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-companion-iroh-detected-fallback-")
@@ -372,14 +366,13 @@ while true; do sleep 1; done
         transport: {
           protocol: string;
           provider: string;
-          publicBaseUrl: string;
-          fallbackMode: string;
           localBaseUrl: string;
-          pairPayload: { node_id: string };
+          fallbackMode?: string;
+          pairPayload?: { node_id: string };
         };
       };
     };
-    assert.equal(payload.qrPayload.transportMode, "iroh");
+    assert.equal(payload.qrPayload.transportMode, "manual-http");
     assert.equal(
       payload.qrPayload.apiBaseUrl,
       "https://macbook-pro.example.ts.net/api/v1"
@@ -388,21 +381,14 @@ while true; do sleep 1; done
       payload.qrPayload.uiBaseUrl,
       "https://macbook-pro.example.ts.net/forge/"
     );
-    assert.equal(payload.qrPayload.transport.protocol, "iroh");
-    assert.equal(payload.qrPayload.transport.provider, "forge-companion-iroh");
-    assert.equal(
-      payload.qrPayload.transport.publicBaseUrl,
-      "https://macbook-pro.example.ts.net/api/v1"
-    );
-    assert.equal(payload.qrPayload.transport.fallbackMode, "tailscale");
+    assert.equal(payload.qrPayload.transport.protocol, "http");
+    assert.equal(payload.qrPayload.transport.provider, "manual-http");
+    assert.equal(payload.qrPayload.transport.fallbackMode, undefined);
     assert.equal(
       payload.qrPayload.transport.localBaseUrl,
-      "http://127.0.0.1:4317"
+      "https://macbook-pro.example.ts.net"
     );
-    assert.equal(
-      payload.qrPayload.transport.pairPayload.node_id,
-      "fakednodeid"
-    );
+    assert.equal(payload.qrPayload.transport.pairPayload, undefined);
   } finally {
     await app.close();
     closeDatabase();

@@ -608,7 +608,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(current.sourceStates.movement.authorizationStatus, "approved")
     }
 
-    func testPairingPayloadDecodesAndPreservesIrohTransport() throws {
+    func testPairingPayloadNormalizesStaleIrohMetadataOffTailscaleUrls() throws {
         let json = """
         {
           "kind": "forge-companion-pairing",
@@ -649,16 +649,14 @@ final class ForgeCompanionTests: XCTestCase {
 
         let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
 
-        XCTAssertEqual(normalized.transportMode, "iroh")
+        XCTAssertEqual(payload.transportMode, "iroh")
+        XCTAssertEqual(payload.transport?.protocolName, "iroh")
+        XCTAssertFalse(payload.usesIrohTransportForActiveApiUrl)
+        XCTAssertEqual(normalized.transportMode, "manual-http")
         XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
-        XCTAssertEqual(normalized.transport?.protocolName, "iroh")
-        XCTAssertEqual(normalized.transport?.provider, "forge-companion-iroh")
-        XCTAssertEqual(normalized.transport?.publicBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
-        XCTAssertEqual(normalized.transport?.nodeId, "fakednodeid")
-        XCTAssertEqual(normalized.transport?.alpn, "forge-companion/1")
-        XCTAssertEqual(normalized.transport?.pairPayload?.token, "hosttoken")
-        XCTAssertEqual(normalized.transport?.notes.first, "Iroh transport is active.")
+        XCTAssertNil(normalized.transport)
+        XCTAssertFalse(normalized.usesIrohTransportForActiveApiUrl)
     }
 
     func testLegacyIrohOnlyPairingPayloadStillDecodes() throws {
@@ -761,6 +759,8 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
         XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+        XCTAssertEqual(normalized.transportMode, "manual-http")
+        XCTAssertNil(normalized.transport)
     }
 
     func testIrohOnlyPairingDoesNotRememberNodeIdAsHost() throws {
@@ -880,6 +880,56 @@ final class ForgeCompanionTests: XCTestCase {
             CompanionPairingURLResolver.rememberableHost(for: payload),
             "macbook-pro.example.ts.net"
         )
+    }
+
+    func testTailscaleApiUrlWithStaleIrohMetadataUsesDirectHttpPolicy() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "iroh",
+            transport: PairingTransport(
+                protocolName: "iroh",
+                provider: "forge-companion-iroh",
+                status: "ready",
+                publicBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+                localBaseUrl: "http://127.0.0.1:4317",
+                nodeId: "fakednodeid",
+                relay: "https://relay.example.com",
+                alpn: "forge-companion/1",
+                agent: "forge",
+                pairPayload: PairingTransportPairPayload(
+                    v: 1,
+                    nodeId: "fakednodeid",
+                    token: "hosttoken",
+                    hostName: "test-host",
+                    relay: "https://relay.example.com"
+                ),
+                recreateCommand: nil,
+                startedAt: nil,
+                lastError: nil,
+                notes: []
+            )
+        )
+
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: payload,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertFalse(payload.usesIrohTransportForActiveApiUrl)
+        XCTAssertEqual(ForgeSyncClient.healthSyncChunkingVersion(for: payload), ForgeSyncClient.httpBackgroundHealthSyncChunkingVersion)
+        XCTAssertEqual(
+            ForgeSyncClient.healthSyncChunkUploadConcurrency(pairing: payload, useBackgroundUpload: false),
+            ForgeSyncClient.foregroundHealthSyncChunkUploadConcurrency
+        )
+        XCTAssertEqual(route.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertFalse(route.usesIroh)
+        XCTAssertEqual(route.label, "Tailscale direct")
     }
 
     func testHealthSyncChunkRoutePrefersTailscaleDirectForIrohBulkUploads() {
@@ -1318,7 +1368,7 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testPureHttpRouteKeepsStandardHealthSyncTimeout() {
+    func testForegroundDirectHttpRouteUsesShortHealthSyncTimeout() {
         let payload = PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
@@ -1342,7 +1392,7 @@ final class ForgeCompanionTests: XCTestCase {
                 useBackgroundUpload: false,
                 appIsForegroundActive: true
             ),
-            120
+            ForgeSyncClient.foregroundDirectBulkHealthSyncChunkTimeout
         )
     }
 
