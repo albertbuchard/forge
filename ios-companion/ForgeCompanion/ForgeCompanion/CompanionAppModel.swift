@@ -3916,7 +3916,7 @@ final class CompanionAppModel: ObservableObject {
                 id: "watch",
                 title: "Watch",
                 value: watchSyncLabel,
-                detail: "The watch syncs directly to Forge when the secure companion URL is reachable, and keeps the iPhone relay only as an offline fallback.",
+                detail: "The watch syncs directly to Forge when the secure companion URL is reachable, and uses the iPhone only as an offline fallback.",
                 isMissing: false
             )
         ]
