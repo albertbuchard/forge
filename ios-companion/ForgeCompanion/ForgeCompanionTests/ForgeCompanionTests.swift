@@ -6601,6 +6601,50 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(foregroundWaveBudgetBytes / previousForegroundWaveBudgetBytes, 2)
     }
 
+    func testForegroundDirectHealthSyncWidensTailscalePipeBeyondIrohWindow() {
+        let tailscalePayload = PairingPayload(
+            kind: "pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_tailscale",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: [],
+            transportMode: "tailscale",
+            transport: nil
+        )
+
+        let oldDirectWindow = 8
+        let foregroundConcurrency = ForgeSyncClient.healthSyncChunkUploadConcurrency(
+            pairing: tailscalePayload,
+            useBackgroundUpload: false,
+            appIsForegroundActive: true
+        )
+        let foregroundPreparedLimit = ForgeSyncClient.healthSyncPreparedChunkPrefetchLimitForTesting(
+            pairing: tailscalePayload,
+            useBackgroundUpload: false,
+            appIsForegroundActive: true
+        )
+        let foregroundWaveBudgetBytes = foregroundConcurrency * ForgeSyncClient.foregroundHTTPHealthSyncChunkTargetBytes
+
+        XCTAssertEqual(foregroundConcurrency, 12)
+        XCTAssertEqual(ForgeSyncClient.foregroundHTTPMaximumConnectionsPerHost, 12)
+        XCTAssertEqual(foregroundPreparedLimit, 36)
+        XCTAssertEqual(foregroundWaveBudgetBytes, 30_000_000)
+        XCTAssertEqual(
+            foregroundConcurrency - oldDirectWindow,
+            4
+        )
+        XCTAssertEqual(
+            foregroundPreparedLimit - oldDirectWindow * ForgeSyncClient.foregroundHealthSyncPreparedChunkPrefetchWindows,
+            12
+        )
+        XCTAssertGreaterThan(
+            foregroundConcurrency,
+            ForgeSyncClient.foregroundIrohHealthSyncChunkUploadConcurrency
+        )
+    }
+
     func testForegroundIrohHealthSyncDoublesPreviousThreeRequestWave() async throws {
         let oldForegroundIrohWindow = 3
         let chunkCount = 18
@@ -6877,12 +6921,12 @@ final class ForgeCompanionTests: XCTestCase {
         )
         XCTAssertTrue(status.transferSummary.contains("workout time series"))
         XCTAssertTrue(status.transferSummary.contains("2.0 MB accepted"))
-        XCTAssertTrue(status.transferSummary.contains("512.0 KB sent, waiting for network reply"))
+        XCTAssertTrue(status.transferSummary.contains("512.0 KB in flight awaiting network response"))
         XCTAssertTrue(status.transferSummary.contains("session"))
         XCTAssertTrue(status.speedSummary?.contains("Phone sent 768.0 KB/s now") == true)
         XCTAssertTrue(status.speedSummary?.contains("384.0 KB/s sent avg") == true)
         XCTAssertTrue(status.speedSummary?.contains("Forge accepted 512.0 KB/s now") == true)
-        XCTAssertTrue(status.speedSummary?.contains("2/8 requests awaiting transport") == true)
+        XCTAssertTrue(status.speedSummary?.contains("2/8 requests in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("HTTP") == true)
         XCTAssertTrue(status.speedSummary?.contains("512.0 KB in flight") == true)
         XCTAssertTrue(status.speedSummary?.contains("oldest transport wait 5s") == true)
@@ -6890,7 +6934,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("ack") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 5s for HTTP network replies: 2/8 active requests, 512.0 KB in flight"
+            "Awaiting HTTP network responses for 5s: 2/8 active requests, 512.0 KB in flight"
         )
         XCTAssertEqual(
             status.bridgeTimingSummary,
@@ -6986,7 +7030,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(status.speedSummary?.contains("30s since last Forge reply") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 30s for Iroh network replies: 1/8 active request, 1.5 MB in flight"
+            "Awaiting Iroh network responses for 30s: 1/8 active request, 1.5 MB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Iroh client 213 ms • response wait 201 ms")
     }
@@ -7013,7 +7057,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 567_471,
                 inFlightChunks: 3,
                 inFlightBytes: 229_171,
-                uploadWindow: 8,
+                uploadWindow: 12,
                 transportLabel: "Tailscale direct",
                 secondsSinceLastChunk: nil,
                 secondsSinceOldestInFlight: 21,
@@ -7028,7 +7072,7 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(status.speedSummary?.contains("Tailscale direct") == true)
         XCTAssertEqual(
             status.pipelineSummary,
-            "Waiting 21s for Tailscale network replies: 3/8 active requests, 223.8 KB in flight"
+            "Awaiting Tailscale network responses for 21s: 3/12 active requests, 223.8 KB in flight"
         )
         XCTAssertEqual(status.bridgeTimingSummary, "Tailscale request 21.0s")
         XCTAssertEqual(status.forgeProcessingSummary, "Forge processed the last chunk in 39 ms")
@@ -7058,7 +7102,7 @@ final class ForgeCompanionTests: XCTestCase {
                 scheduledBytes: 253_400,
                 inFlightChunks: 1,
                 inFlightBytes: 126_700,
-                uploadWindow: 6,
+                uploadWindow: 12,
                 transportLabel: "Tailscale direct",
                 secondsSinceLastChunk: nil,
                 secondsSinceOldestInFlight: 8,

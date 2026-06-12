@@ -1221,7 +1221,7 @@ struct CompanionSyncUploadStatus {
         if let transferStats {
             parts.append("\(Self.formatBytes(transferStats.totalBytesSent)) accepted")
             if transferStats.inFlightBytes > 0 {
-                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) sent, waiting for network reply")
+                parts.append("\(Self.formatBytes(transferStats.inFlightBytes)) in flight awaiting network response")
             }
         } else if let lastPayloadBytes {
             parts.append(Self.formatBytes(lastPayloadBytes))
@@ -1243,9 +1243,9 @@ struct CompanionSyncUploadStatus {
             "\(transferStats.uploadedChunks) chunks accepted"
         ]
         if transferStats.uploadWindow > 1 {
-            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests awaiting transport")
+            parts.append("\(transferStats.inFlightChunks)/\(transferStats.uploadWindow) requests in flight")
         } else if transferStats.inFlightChunks > 0 {
-            parts.append("\(transferStats.inFlightChunks) request awaiting transport")
+            parts.append("\(transferStats.inFlightChunks) request in flight")
         }
         if let transportLabel = transferStats.transportLabel {
             parts.append(transportLabel)
@@ -1298,12 +1298,12 @@ struct CompanionSyncUploadStatus {
                 ? ", \(Self.formatBytes(transferStats.inFlightBytes)) in flight"
                 : ""
             let routeLabel = Self.shortTransportLabel(transferStats.transportLabel)
-            let replyLabel = routeLabel.map { "\($0) network replies" } ?? "network replies"
+            let replyLabel = routeLabel.map { "\($0) network responses" } ?? "network responses"
             if let secondsSinceOldestInFlight = transferStats.secondsSinceOldestInFlight,
                secondsSinceOldestInFlight >= 3 {
-                return "Waiting \(secondsSinceOldestInFlight)s for \(replyLabel): \(requestLabel)\(byteLabel)"
+                return "Awaiting \(replyLabel) for \(secondsSinceOldestInFlight)s: \(requestLabel)\(byteLabel)"
             }
-            return "Waiting for \(replyLabel): \(requestLabel)\(byteLabel)"
+            return "Awaiting \(replyLabel): \(requestLabel)\(byteLabel)"
         }
         if let preparingFamily = transferStats.preparingFamily {
             let familyLabel = preparingFamily.replacingOccurrences(of: "_", with: " ")
