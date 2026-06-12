@@ -370,6 +370,8 @@ end
 def app_store_upload_may_have_been_accepted?(error:, build_number:)
   message = error.message.to_s
   return true if message.include?("UPDATE buildUploadFiles CHECKSUM") && message.include?("status code 500")
+  return true if message.include?("UPLOAD SUCCEEDED with no errors") && message.include?("GET UPLOAD STATE") && message.include?("status code 500")
+  return true if message.include?("No errors uploading archive") && message.include?("GET UPLOAD STATE") && message.include?("status code 500")
   return true if app_store_upload_is_duplicate_build_number?(error: error, build_number: build_number)
 
   false
