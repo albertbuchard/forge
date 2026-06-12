@@ -932,6 +932,33 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(route.label, "Tailscale direct")
     }
 
+    func testTailscaleApiUrlWithManualModeNormalizesToTailscaleMode() {
+        let payload = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://macbook-pro.example.ts.net/api/v1",
+            uiBaseUrl: "https://macbook-pro.example.ts.net/forge/",
+            sessionId: "pair_test",
+            pairingToken: "token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["healthkit.fitness"],
+            transportMode: "manual-http",
+            transport: nil
+        )
+
+        let normalized = CompanionPairingURLResolver.normalizedPayload(payload)
+        let route = ForgeSyncClient.healthSyncChunkTransportRouteForTesting(
+            pairing: normalized,
+            preferDirectBulkTransfer: true
+        )
+
+        XCTAssertEqual(normalized.transportMode, "tailscale")
+        XCTAssertEqual(normalized.apiBaseUrl, "https://macbook-pro.example.ts.net/api/v1")
+        XCTAssertEqual(normalized.uiBaseUrl, "https://macbook-pro.example.ts.net/forge/")
+        XCTAssertFalse(normalized.usesIrohTransportForActiveApiUrl)
+        XCTAssertFalse(route.usesIroh)
+        XCTAssertEqual(route.label, "Tailscale direct")
+    }
+
     func testDiscoveryRanksTailscaleAheadOfIroh() {
         XCTAssertLessThan(
             ForgeServerDiscovery.sourceRankForTesting(.tailscale),
@@ -6947,6 +6974,36 @@ final class ForgeCompanionTests: XCTestCase {
             status.pipelineSummary,
             "Starting the next sync stage; no upload request is in flight yet"
         )
+        XCTAssertFalse(status.headline.contains("Synced"))
+    }
+
+    func testSyncUploadStatusUsesHistoricalHeadlineOverCompletedMessage() {
+        let status = CompanionSyncUploadStatus(
+            isSyncing: true,
+            syncMode: .historicalWorkoutImport,
+            message: "Synced 22 workouts",
+            payloadSummary: nil,
+            lastChunkFamily: nil,
+            lastPayloadBytes: nil,
+            activeSessionId: "hms_history",
+            transferStats: nil,
+            historicalWorkoutImport: HistoricalWorkoutImportStatus(
+                indexedWorkouts: 22,
+                totalWorkouts: 1051,
+                uploadedWorkoutSummaries: 22,
+                uploadedTimeSeriesSamples: 10_000,
+                uploadedRoutePoints: 5_000,
+                targetHeartRateSamples: 12_000,
+                targetTimeSeriesSamples: 20_000,
+                targetRoutePoints: 8_000,
+                uploadedChunks: 12,
+                resumedChunks: 0
+            )
+        )
+
+        XCTAssertEqual(status.headline, "Historical workout import")
+        XCTAssertEqual(status.pipelineSummary, "Preparing historical workout evidence")
+        XCTAssertTrue(status.shouldShowHistoricalWorkoutImportPanel)
         XCTAssertFalse(status.headline.contains("Synced"))
     }
 

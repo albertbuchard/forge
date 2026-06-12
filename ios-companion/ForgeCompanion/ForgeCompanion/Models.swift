@@ -1281,6 +1281,9 @@ struct CompanionSyncUploadStatus {
 
     var pipelineSummary: String? {
         guard let transferStats else {
+            if isHistoricalWorkoutImport {
+                return "Preparing historical workout evidence"
+            }
             if isSyncing, let message, Self.isCompletedSyncMessage(message) {
                 return "Starting the next sync stage; no upload request is in flight yet"
             }

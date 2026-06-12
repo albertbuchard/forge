@@ -242,8 +242,10 @@ enum CompanionPairingURLResolver {
             ? deriveUiBaseUrl(from: normalizedApiBaseUrl)
             : normalizedUiBaseUrl
         let normalizedTransportMode: String?
-        if inactiveIrohTransport {
-            normalizedTransportMode = isTailscaleUrl(normalizedApiBaseUrl) ? "tailscale" : "manual-http"
+        if isTailscaleUrl(normalizedApiBaseUrl) {
+            normalizedTransportMode = "tailscale"
+        } else if inactiveIrohTransport {
+            normalizedTransportMode = "manual-http"
         } else {
             normalizedTransportMode = payload.transportMode
         }
@@ -2309,7 +2311,11 @@ final class CompanionAppModel: ObservableObject {
                 trigger: "after \(trigger)",
                 forceEvidenceReplay: syncResult.requiresWorkoutEvidenceReplay
             )
-            if syncResult.healthDataDeferred {
+            if hasHistoricalWorkoutImportActive {
+                lastSyncMessage = syncResult.requiresWorkoutEvidenceReplay
+                    ? "Sync accepted; repairing missing workout heart-rate and route evidence"
+                    : "Sync accepted; importing workout history"
+            } else if syncResult.healthDataDeferred {
                 lastSyncMessage =
                     "Synced movement while HealthKit stayed locked. Health data will resume after unlock."
             } else {
