@@ -159,7 +159,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         } else {
             transferActionsThroughPhone(queue)
         }
-        if let cooldownMessage = directCooldownRelayMessage() {
+        if let cooldownMessage = directCooldownFallbackMessage() {
             lastStatusMessage = cooldownMessage
             return
         }
@@ -195,13 +195,13 @@ final class WatchAppModel: NSObject, ObservableObject {
             refreshFromForge(reason: reason, fallbackToPhone: true, forceDirect: force)
             return
         }
-        if let cooldownMessage = directCooldownRelayMessage() {
+        if let cooldownMessage = directCooldownFallbackMessage() {
             lastStatusMessage = "\(cooldownMessage) refresh"
         }
-        requestPhoneRelayRefresh(reason: reason)
+        requestPhoneFallbackRefresh(reason: reason)
     }
 
-    private func requestPhoneRelayRefresh(reason: String) {
+    private func requestPhoneFallbackRefresh(reason: String) {
         guard WCSession.isSupported() else {
             lastStatusMessage = "Forge direct unavailable"
             return
@@ -237,7 +237,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         )
         guard directConnection(respectingCooldown: respectCooldown) != nil else {
             if fallbackToPhone {
-                requestPhoneRelayRefresh(reason: reason)
+                requestPhoneFallbackRefresh(reason: reason)
             }
             return
         }
@@ -581,7 +581,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         if let connection = directConnection() {
             lastStatusMessage = "Sending to Forge through \(connection.transportLabel)"
         } else {
-            lastStatusMessage = directCooldownRelayMessage() ?? "Waiting for phone fallback"
+            lastStatusMessage = directCooldownFallbackMessage() ?? "Waiting for phone fallback"
         }
         flushPendingActions()
     }
@@ -739,7 +739,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         )
         guard let connection = directConnection(respectingCooldown: respectCooldown) else {
             if fallbackToPhone {
-                requestPhoneRelayRefresh(reason: reason)
+                requestPhoneFallbackRefresh(reason: reason)
             }
             return
         }
@@ -764,7 +764,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             lastStatusMessage = "Direct sync failed: \(error.localizedDescription)"
             markDirectRouteFailureIfNeeded(error)
             if fallbackToPhone {
-                requestPhoneRelayRefresh(reason: reason)
+                requestPhoneFallbackRefresh(reason: reason)
             }
         }
     }
@@ -831,7 +831,7 @@ final class WatchAppModel: NSObject, ObservableObject {
         return false
     }
 
-    private func directCooldownRelayMessage() -> String? {
+    private func directCooldownFallbackMessage() -> String? {
         guard
             let connection = directConnection(respectingCooldown: false),
             isDirectRouteCoolingDown(now: Date())
@@ -846,7 +846,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         directRouteCoolingDownUntil = Date()
-            .addingTimeInterval(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds)
+            .addingTimeInterval(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds)
         directRouteLastFailureDescription = error.localizedDescription
     }
 

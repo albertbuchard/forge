@@ -1432,8 +1432,8 @@ final class ForgeCompanionTests: XCTestCase {
     }
 
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
-        XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureRelayCooldownSeconds, 20)
-        XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds, 6)
+        XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
+        XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRequestTimeoutSeconds, 3)
         XCTAssertTrue(
             ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(forceUserRetry: false)
         )
@@ -1452,20 +1452,20 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertFalse(ForgeWatchDirectRoutePolicy.isRecoverableNetworkError(serverRejection))
     }
 
-    func testReachablePhoneRelayBatchesWatchActionsIntoOneExchange() throws {
+    func testReachablePhoneFallbackBatchesWatchActionsIntoOneExchange() throws {
         let actionCount = 5
         let previousExchangeCount = actionCount
 
         XCTAssertEqual(
-            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
+            ForgeWatchPhoneFallbackBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
             1
         )
         XCTAssertLessThan(
-            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
+            ForgeWatchPhoneFallbackBatchPolicy.reachablePhoneExchangeCount(forActionCount: actionCount),
             previousExchangeCount
         )
         XCTAssertEqual(
-            ForgeWatchRelayBatchPolicy.reachablePhoneExchangeCount(forActionCount: 0),
+            ForgeWatchPhoneFallbackBatchPolicy.reachablePhoneExchangeCount(forActionCount: 0),
             0
         )
     }

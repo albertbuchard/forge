@@ -20,8 +20,8 @@ enum ForgeWatchStorage {
 }
 
 enum ForgeWatchDirectRoutePolicy {
-    nonisolated static let failureRelayCooldownSeconds: TimeInterval = 20
-    nonisolated static let directRequestTimeoutSeconds: TimeInterval = 6
+    nonisolated static let failureFallbackCooldownSeconds: TimeInterval = 3
+    nonisolated static let directRequestTimeoutSeconds: TimeInterval = 3
 
     nonisolated static func shouldRespectFailureCooldown(forceUserRetry: Bool) -> Bool {
         forceUserRetry == false
@@ -444,7 +444,7 @@ struct ForgeWatchAckBatchEnvelope: Codable, Hashable {
     let acks: [ForgeWatchAckEnvelope]
 }
 
-enum ForgeWatchRelayBatchPolicy {
+enum ForgeWatchPhoneFallbackBatchPolicy {
     nonisolated static func reachablePhoneExchangeCount(forActionCount actionCount: Int) -> Int {
         actionCount > 0 ? 1 : 0
     }

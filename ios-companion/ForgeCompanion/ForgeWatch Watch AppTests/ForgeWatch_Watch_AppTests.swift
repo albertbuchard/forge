@@ -43,7 +43,7 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertEqual(model.lastStatusMessage, "Sending to Forge through Tailscale")
     }
 
-    func testDeferredPhoneRelayAckKeepsActionToSend() throws {
+    func testDeferredPhoneFallbackAckKeepsActionToSend() throws {
         ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
         defer {
             ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)

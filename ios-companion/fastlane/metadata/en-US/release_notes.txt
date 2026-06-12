@@ -1,13 +1,11 @@
-Forge Companion 1.0.143 finishes the watch sync transport wording cleanup and keeps the release retry hardening from 1.0.142.
+Forge Companion 1.0.144 makes watch direct sync retry Tailscale much sooner after transient watch-network failures.
 
-Tailscale watch connections now present themselves as direct HTTPS/Tailscale routes in the watch Sync surface, instead of using relay-style wording that made a Tailscale pairing look mixed with another transport.
+The watch still uses direct HTTPS/Tailscale whenever the secure companion URL is reachable. Iroh remains limited to active forge-iroh pairings.
 
-When watchOS cannot reach Forge directly, the UI now calls that path a phone fallback. It no longer says queued action, relay, or iPhone relay in the normal watch sync flow or in the iPhone coverage details.
+Direct watch requests now time out after 3 seconds instead of 6 seconds before falling back to the phone, so a bad watch network path blocks the user for less time.
 
-The durable fallback still preserves offline actions until Forge accepts them, but direct Tailscale remains the preferred path whenever watchOS can reach the secure companion URL.
+After a recoverable direct-route failure, the watch retries direct Forge access after 3 seconds instead of waiting 20 seconds, so it returns to Tailscale faster when the route comes back.
 
-The Tailscale/Iroh separation remains in place: secure Tailscale URLs stay on the Tailscale path, and Iroh is only used for active forge-iroh pairings.
+Watch fallback code and tests now use phone fallback wording instead of relay wording. User-visible sync copy continues to avoid queued action, Iroh tunnel, and iPhone relay wording for Tailscale sessions.
 
-Release automation now reconciles Apple transporter accepted-upload 500s and picks a build number above the latest App Store Connect build.
-
-HealthKit cursors, upload checkpoints, pairing tokens, watch action queues, and stored user data are unchanged.
+HealthKit cursors, upload checkpoints, pairing tokens, watch action persistence, and stored user data are unchanged.
