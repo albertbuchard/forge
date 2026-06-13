@@ -521,7 +521,7 @@ export class OpenAiResponsesProvider {
                         ? "Connection test."
                         : "Reply with the single word ok.",
                     ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
-                    max_output_tokens: 24,
+                    ...(isCodexProfile(profile) ? {} : { max_output_tokens: 24 }),
                     reasoning: buildReasoningConfiguration(profile),
                     text: buildTextConfiguration({ profile })
                 })
@@ -628,7 +628,7 @@ export class OpenAiResponsesProvider {
                 ...(isCodexProfile(profile) ? { stream: true, store: false } : {}),
                 reasoning: buildReasoningConfiguration(profile),
                 text: buildTextConfiguration({ profile }),
-                max_output_tokens: 1200
+                ...(isCodexProfile(profile) ? {} : { max_output_tokens: 1200 })
             })
         });
         if (!response.ok) {

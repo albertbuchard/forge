@@ -692,6 +692,12 @@ if (
   );
 }
 const claudeConfigPath = path.join(tempHome, ".claude.json");
+const claudeRulesPath = path.join(tempHome, ".claude", "rules", "forge-memory.md");
+fs.mkdirSync(path.dirname(claudeRulesPath), { recursive: true });
+fs.writeFileSync(
+  claudeRulesPath,
+  "# Personal Claude Forge notes\n\nKeep this operator-specific note.\n"
+);
 fs.writeFileSync(
   claudeConfigPath,
   `${JSON.stringify(
@@ -780,6 +786,32 @@ if (
       2
     )}`
   );
+}
+const claudeRules = fs.readFileSync(claudeRulesPath, "utf8");
+if (!claudeRules.includes("Keep this operator-specific note.")) {
+  throw new Error(
+    `Expected existing Claude rule content to survive Forge rules patching:\n${claudeRules}`
+  );
+}
+const forgeRulesBlockCount = (
+  claudeRules.match(/forge-memory:rules:start/g) ?? []
+).length;
+if (forgeRulesBlockCount !== 1) {
+  throw new Error(
+    `Expected exactly one Forge-managed Claude rules block after repeated configure, got ${forgeRulesBlockCount}:\n${claudeRules}`
+  );
+}
+for (const expected of [
+  "Prefer Forge MCP tools over ad hoc files",
+  "Start wiki work by checking the active wiki settings",
+  "Create or update deliberate wiki pages",
+  "Redact true secrets"
+]) {
+  if (!claudeRules.includes(expected)) {
+    throw new Error(
+      `Expected Claude Forge rules to include ${expected}:\n${claudeRules}`
+    );
+  }
 }
 await withFakeForgeServer(
   async (request, body) => {
@@ -1605,6 +1637,19 @@ try {
         null,
         2
       )}`
+    );
+  }
+  const claudeRulesAfterUninstall = fs.readFileSync(claudeRulesPath, "utf8");
+  if (claudeRulesAfterUninstall.includes("forge-memory:rules:start")) {
+    throw new Error(
+      `Expected uninstall --remove-adapters to remove Forge's Claude rules block:\n${claudeRulesAfterUninstall}`
+    );
+  }
+  if (
+    !claudeRulesAfterUninstall.includes("Keep this operator-specific note.")
+  ) {
+    throw new Error(
+      `Expected uninstall --remove-adapters to preserve unrelated Claude rule content:\n${claudeRulesAfterUninstall}`
     );
   }
 } finally {

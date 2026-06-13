@@ -257,6 +257,18 @@ async function writeJson(
   return { filePath, backupPath, dryRun: false };
 }
 
+async function writeText(
+  filePath,
+  content,
+  { dryRun = false, backup = true } = {}
+) {
+  if (dryRun) return { filePath, backupPath: null, dryRun: true };
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
+  const backupPath = backup ? await backupIfExists(filePath) : null;
+  await fsp.writeFile(filePath, content, "utf8");
+  return { filePath, backupPath, dryRun: false };
+}
+
 async function readConfig() {
   const config = await readJson(configPath(), {});
   return {
@@ -848,6 +860,17 @@ function claudeConfigPath() {
     : path.join(homeDir(), ".claude.json");
 }
 
+function claudeUserDirectory() {
+  const customConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return customConfigDir
+    ? path.resolve(customConfigDir)
+    : path.join(homeDir(), ".claude");
+}
+
+function claudeForgeRulesPath() {
+  return path.join(claudeUserDirectory(), "rules", "forge-memory.md");
+}
+
 function detectClaude() {
   const config = claudeConfigPath();
   const payload = readJsonSync(config, null);
@@ -1381,6 +1404,56 @@ function isForgeMemoryMcpServer(entry) {
   );
 }
 
+const CLAUDE_FORGE_RULES_START = "<!-- forge-memory:rules:start -->";
+const CLAUDE_FORGE_RULES_END = "<!-- forge-memory:rules:end -->";
+
+const CLAUDE_FORGE_RULES_BODY = `# Forge Memory
+
+Forge is the durable local memory, wiki, health, planning, and execution runtime connected through the \`forge\` MCP server.
+
+## How To Use Forge
+
+- Prefer Forge MCP tools over ad hoc files or one-off import scripts when the user asks to read, write, ingest, curate, merge, or audit Forge knowledge.
+- Start wiki work by checking the active wiki settings and spaces, then use the normal Forge wiki ingest and page APIs. Do not invent a separate wiki storage path.
+- Ingest source files as evidence-backed wiki material. Preserve useful facts, relationships, dates, decisions, events, people, organizations, projects, concepts, preferences, and stated uncertainty.
+- Redact true secrets such as passwords, tokens, private keys, recovery codes, and payment credentials. Do not strip ordinary personal context merely because it is sensitive or relational.
+- Create or update deliberate wiki pages for important people, organizations, events, concepts, projects, and media. Canonical pages should be curated, readable, structured articles, not raw logs or repetitive dumps.
+- When duplicate pages exist, merge the information into one canonical page without losing facts. Link out to separate pages when a concept deserves its own page.
+- Keep evidence traceable. If facts come from an uploaded conversation, note provenance enough for later audit without pasting huge raw transcripts into canonical pages.
+- Before saying ingest/merge/cleanup is done, audit what changed: created pages, updated pages, skipped material, merge candidates, and remaining uncertainty.
+- Respect the configured Forge data root. Never delete user data or move a Forge database unless the user explicitly asks and backups are created first.
+`;
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function forgeManagedBlock(body) {
+  return `${CLAUDE_FORGE_RULES_START}\n${body.trim()}\n${CLAUDE_FORGE_RULES_END}`;
+}
+
+function upsertForgeManagedBlock(source, body) {
+  const block = forgeManagedBlock(body);
+  const pattern = new RegExp(
+    `${escapeRegExp(CLAUDE_FORGE_RULES_START)}[\\s\\S]*?${escapeRegExp(
+      CLAUDE_FORGE_RULES_END
+    )}`
+  );
+  const trimmed = source.trimEnd();
+  if (pattern.test(source)) return trimmed.replace(pattern, block).trimEnd();
+  return [trimmed, block].filter(Boolean).join("\n\n").trimEnd();
+}
+
+function removeForgeManagedBlock(source) {
+  const pattern = new RegExp(
+    `${escapeRegExp(CLAUDE_FORGE_RULES_START)}[\\s\\S]*?${escapeRegExp(
+      CLAUDE_FORGE_RULES_END
+    )}`,
+    "g"
+  );
+  return source.replace(pattern, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 async function patchClaudeConfig(config, options) {
   const filePath = claudeConfigPath();
   const payload = (await readJson(filePath, {})) ?? {};
@@ -1391,6 +1464,20 @@ async function patchClaudeConfig(config, options) {
   currentServers.forge = forgeMemoryMcpServerConfig(config, "claude");
   const next = { ...payload, mcpServers: currentServers };
   return writeJson(filePath, next, options);
+}
+
+async function patchClaudeForgeRules(options = {}) {
+  const filePath = claudeForgeRulesPath();
+  const source = fs.existsSync(filePath)
+    ? await fsp.readFile(filePath, "utf8")
+    : "";
+  const next = `${upsertForgeManagedBlock(
+    source,
+    CLAUDE_FORGE_RULES_BODY
+  )}\n`;
+  if (next === source) return { filePath, changed: false };
+  await writeText(filePath, next, options);
+  return { filePath, changed: true };
 }
 
 function stripCodexForgeMcpConfig(source) {
@@ -1563,6 +1650,7 @@ async function installCodexAdapter(config, options) {
 
 async function installClaudeAdapter(config, options) {
   await patchClaudeConfig(config, options);
+  await patchClaudeForgeRules(options);
   return { adapter: "claude", ok: true };
 }
 
@@ -2464,22 +2552,35 @@ async function removeCodexAdapterConfig() {
 async function removeClaudeAdapterConfig() {
   const filePath = claudeConfigPath();
   const payload = await readJson(filePath, null);
-  if (!payload || typeof payload !== "object") {
-    return { filePath, changed: false };
+  let changed = false;
+  if (payload && typeof payload === "object") {
+    const servers =
+      payload.mcpServers && typeof payload.mcpServers === "object"
+        ? { ...payload.mcpServers }
+        : null;
+    if (servers?.forge && isForgeMemoryMcpServer(servers.forge)) {
+      delete servers.forge;
+      const next = { ...payload };
+      if (Object.keys(servers).length > 0) next.mcpServers = servers;
+      else delete next.mcpServers;
+      await writeJson(filePath, next, { backup: true });
+      changed = true;
+    }
   }
-  const servers =
-    payload.mcpServers && typeof payload.mcpServers === "object"
-      ? { ...payload.mcpServers }
-      : null;
-  if (!servers?.forge || !isForgeMemoryMcpServer(servers.forge)) {
-    return { filePath, changed: false };
+
+  const rulesPath = claudeForgeRulesPath();
+  if (fs.existsSync(rulesPath)) {
+    const source = await fsp.readFile(rulesPath, "utf8");
+    const next = removeForgeManagedBlock(source);
+    if (next !== source.trim()) {
+      await backupIfExists(rulesPath);
+      if (next) await fsp.writeFile(rulesPath, `${next}\n`, "utf8");
+      else await fsp.rm(rulesPath, { force: true });
+      changed = true;
+    }
   }
-  delete servers.forge;
-  const next = { ...payload };
-  if (Object.keys(servers).length > 0) next.mcpServers = servers;
-  else delete next.mcpServers;
-  await writeJson(filePath, next, { backup: true });
-  return { filePath, changed: true };
+
+  return { filePath, rulesPath, changed };
 }
 
 async function uninstallForgeMemory(parsed) {

@@ -297,6 +297,9 @@ of leaving it as warm reflective prose.
   that.
 - Save through shared batch entity routes only after the user accepts the working
   wording or explicitly asks to save.
+- Do not leave the user with interpretation alone. Once the hypothesis lands or is
+  corrected, name the primary Forge record it becomes and ask one accuracy or consent
+  question that moves toward that save.
 
 ## Psyche progressive disclosure
 
@@ -317,6 +320,10 @@ should preserve momentum instead of making them retell the whole story.
   unclear.
 - If the working material is already accurate enough, ask one accuracy or consent
   question instead of reopening origin, evidence, or repair.
+- If the user accepts or corrects a hypothesis, immediately turn the corrected
+  interpretation into the nearest saveable shape: belief sentence, functional loop,
+  part voice, trigger chain, value phrase, event kind, emotion signature, or
+  flashcard message.
 - If the remaining unknown is optional therapeutic metadata, save a provisional
   version after one accuracy check and preserve nuance in a linked note when needed.
 

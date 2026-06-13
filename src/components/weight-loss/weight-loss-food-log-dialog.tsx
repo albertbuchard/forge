@@ -1,5 +1,14 @@
-import { useMemo, useState } from "react";
-import { Info, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  Info,
+  LoaderCircle,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2
+} from "lucide-react";
 import {
   FlowField,
   QuestionFlowDialog,
@@ -46,6 +55,22 @@ export type WeightLossFoodDraft = {
   timeZone?: string;
   source?: NutritionFoodLogInput["source"];
   selectedItems: WeightLossSelectedFood[];
+};
+
+export type WeightLossFoodParseSummary = {
+  itemCount: number;
+  completeNutritionItemCount: number;
+  catalogResolvedItemCount: number;
+  chatGptEstimatedItemCount: number;
+  chatGptValidatedItemCount: number;
+  elapsedMs: number;
+  llmCallCount: number;
+};
+
+export type WeightLossFoodParseFeedback = {
+  status: "idle" | "parsing" | "success" | "error";
+  summary?: WeightLossFoodParseSummary;
+  message?: string;
 };
 
 export function buildInitialFoodDraft(): WeightLossFoodDraft {
@@ -317,6 +342,100 @@ export function buildInitialCustomFoodDraft(): WeightLossFoodDraft {
   };
 }
 
+const chatGptStages = [
+  "Reading the meal text",
+  "Searching nutrition catalogs",
+  "Checking calories and macros",
+  "Preparing the review draft"
+] as const;
+
+function formatElapsedSeconds(elapsedMs: number | undefined) {
+  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs)) {
+    return null;
+  }
+  return `${Math.max(0.1, elapsedMs / 1000).toFixed(1)}s`;
+}
+
+function ChatGptParseStatusCard({
+  feedback,
+  pending,
+  stageIndex
+}: {
+  feedback: WeightLossFoodParseFeedback | null | undefined;
+  pending: boolean;
+  stageIndex: number;
+}) {
+  if (!pending && feedback?.status !== "success") {
+    return null;
+  }
+
+  if (pending) {
+    const activeStage = chatGptStages[stageIndex] ?? chatGptStages[0];
+    return (
+      <div className="overflow-hidden rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink-strong)]">
+          <LoaderCircle className="size-4 animate-spin text-[var(--primary)]" />
+          {activeStage}
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1.5">
+          {chatGptStages.map((stage, index) => (
+            <div
+              key={stage}
+              className={`h-1.5 rounded-full transition-colors duration-300 ${
+                index <= stageIndex
+                  ? "bg-[linear-gradient(90deg,var(--primary),var(--secondary))]"
+                  : "bg-[var(--ui-surface-3)]"
+              }`}
+            />
+          ))}
+        </div>
+        <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+          Forge is parsing the text, matching foods, and refusing incomplete
+          nutrition before it adds anything to the draft.
+        </div>
+      </div>
+    );
+  }
+
+  const summary = feedback?.summary;
+  if (!summary) {
+    return null;
+  }
+  const elapsed = formatElapsedSeconds(summary.elapsedMs);
+  return (
+    <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--success)_26%,var(--ui-border-subtle)_74%)] bg-[color-mix(in_srgb,var(--success)_10%,var(--ui-surface-1)_90%)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink-strong)]">
+          <CheckCircle2 className="size-4 text-[var(--success)]" />
+          {summary.itemCount} food{summary.itemCount === 1 ? "" : "s"} added
+          to the draft
+        </div>
+        <Badge tone="signal">
+          {summary.completeNutritionItemCount}/{summary.itemCount} complete
+        </Badge>
+      </div>
+      <div className="mt-2 grid gap-2 text-xs leading-5 text-[var(--ui-ink-soft)] sm:grid-cols-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-3.5 text-[var(--secondary)]" />
+          {summary.catalogResolvedItemCount} catalog match
+          {summary.catalogResolvedItemCount === 1 ? "" : "es"} ·{" "}
+          {summary.chatGptValidatedItemCount} model validation
+          {summary.chatGptValidatedItemCount === 1 ? "" : "s"}
+        </div>
+        <div>
+          {summary.llmCallCount} model call
+          {summary.llmCallCount === 1 ? "" : "s"}
+          {elapsed ? ` · ${elapsed}` : ""}
+        </div>
+      </div>
+      <div className="mt-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+        You can add more food here, or continue to review exact quantities and
+        nutrients before saving.
+      </div>
+    </div>
+  );
+}
+
 export function WeightLossFoodLogDialog({
   open,
   onOpenChange,
@@ -326,6 +445,7 @@ export function WeightLossFoodLogDialog({
   searchPending,
   chatGptPending = false,
   chatGptError = null,
+  chatGptFeedback = null,
   logPending,
   onSearch,
   onParseWithChatGpt,
@@ -342,6 +462,7 @@ export function WeightLossFoodLogDialog({
   searchPending: boolean;
   chatGptPending?: boolean;
   chatGptError?: string | null;
+  chatGptFeedback?: WeightLossFoodParseFeedback | null;
   logPending: boolean;
   onSearch: (query: string) => void;
   onParseWithChatGpt?: (text: string) => Promise<void>;
@@ -352,6 +473,7 @@ export function WeightLossFoodLogDialog({
 }) {
   const [query, setQuery] = useState("");
   const [chatGptText, setChatGptText] = useState("");
+  const [chatGptStageIndex, setChatGptStageIndex] = useState(0);
   const [detailFood, setDetailFood] =
     useState<NutritionFoodSearchResult | null>(null);
   const totals = useMemo(
@@ -414,8 +536,21 @@ export function WeightLossFoodLogDialog({
   };
   const submitMeal = async () => {
     if (value.selectedItems.length === 0) return;
+    if (getFoodDraftNutritionError(value)) return;
     await onSubmit();
   };
+  useEffect(() => {
+    if (!chatGptPending) {
+      setChatGptStageIndex(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setChatGptStageIndex((current) => (current + 1) % chatGptStages.length);
+    }, 1250);
+    return () => window.clearInterval(timer);
+  }, [chatGptPending]);
+
+  const nutritionError = getFoodDraftNutritionError(value);
   const chatGptPanel = (
     <SurfacePanel className="grid gap-3">
       <FlowField
@@ -433,6 +568,11 @@ export function WeightLossFoodLogDialog({
           {chatGptError}
         </div>
       ) : null}
+      <ChatGptParseStatusCard
+        feedback={chatGptFeedback}
+        pending={chatGptPending}
+        stageIndex={chatGptStageIndex}
+      />
       <Button
         type="button"
         variant={intent === "chatgpt" ? "primary" : "secondary"}
@@ -658,6 +798,11 @@ export function WeightLossFoodLogDialog({
               value={`${formatNumber(totals.fatGrams)}g`}
             />
           </div>
+          {nutritionError ? (
+            <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+              {nutritionError}
+            </div>
+          ) : null}
         </div>
       )
     },
@@ -733,8 +878,17 @@ export function WeightLossFoodLogDialog({
       pending={logPending}
       pendingLabel="Saving meal"
       resolveError={(stepId) =>
-        stepId !== "search" && value.selectedItems.length === 0
-          ? "Select at least one food before saving."
+        stepId !== "search"
+          ? value.selectedItems.length === 0
+            ? "Select at least one food before saving."
+            : nutritionError
+          : null
+      }
+      resolveContinueNudge={(stepId) =>
+        stepId === "search" &&
+        chatGptFeedback?.status === "success" &&
+        value.selectedItems.length > 0
+          ? "Meal draft is ready. Continue to review quantities."
           : null
       }
       draftPersistenceKey={`weight-loss-food-log.${mode}.${intent}`}
@@ -1062,6 +1216,37 @@ function scaleFood(item: WeightLossSelectedFood) {
     caffeineMg: scaledNumber(item.food.caffeineMg),
     alcoholGrams: scaledNumber(item.food.alcoholGrams)
   };
+}
+
+function hasRequiredNutritionValue(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function missingRequiredScaledNutrition(item: WeightLossSelectedFood) {
+  const scaled = scaleFood(item);
+  const missing: string[] = [];
+  if (!hasRequiredNutritionValue(scaled.calories)) missing.push("calories");
+  if (!hasRequiredNutritionValue(scaled.proteinGrams)) missing.push("protein");
+  if (!hasRequiredNutritionValue(scaled.carbohydrateGrams)) {
+    missing.push("carbs");
+  }
+  if (!hasRequiredNutritionValue(scaled.fatGrams)) missing.push("fat");
+  return missing;
+}
+
+function getFoodDraftNutritionError(draft: WeightLossFoodDraft) {
+  const incomplete = draft.selectedItems
+    .map((item) => ({
+      name: item.food.name,
+      missing: missingRequiredScaledNutrition(item)
+    }))
+    .filter((item) => item.missing.length > 0);
+  if (incomplete.length === 0) {
+    return null;
+  }
+  return `Add complete nutrition before saving: ${incomplete
+    .map((item) => `${item.name} is missing ${item.missing.join(", ")}`)
+    .join("; ")}.`;
 }
 
 function sumSelectedFoods(items: WeightLossSelectedFood[]) {

@@ -46,6 +46,7 @@ import {
   type WeightLossCheckinDraft,
   type WeightLossFoodDraft,
   type WeightLossFoodLogIntent,
+  type WeightLossFoodParseFeedback,
   type WeightLossPlanDraft
 } from "@/components/weight-loss/weight-loss-dialogs";
 import {
@@ -500,6 +501,8 @@ export function WeightLossPage() {
   const [editingFoodLogId, setEditingFoodLogId] = useState<string | null>(null);
   const [foodDialogIntent, setFoodDialogIntent] =
     useState<WeightLossFoodLogIntent>("search");
+  const [foodParseFeedback, setFoodParseFeedback] =
+    useState<WeightLossFoodParseFeedback | null>(null);
   const [foodInitialStepId, setFoodInitialStepId] = useState<
     string | undefined
   >(undefined);
@@ -594,11 +597,24 @@ export function WeightLossPage() {
         userIds: selectedUserIds,
         commitCandidate: false
       }),
-    onSuccess: ({ candidate }) => {
+    onMutate: () => {
+      setFoodParseFeedback({ status: "parsing" });
+    },
+    onSuccess: ({ candidate, parseSummary }) => {
       setFoodDraft({
         ...buildFoodDraftFromInput(candidate, "chatgpt"),
         dayKey: currentDateKey,
         timeZone: runtimeTimeZone
+      });
+      setFoodParseFeedback({
+        status: "success",
+        summary: parseSummary
+      });
+    },
+    onError: (error) => {
+      setFoodParseFeedback({
+        status: "error",
+        message: error instanceof Error ? error.message : "Food parsing failed."
       });
     }
   });
@@ -614,6 +630,7 @@ export function WeightLossPage() {
       ),
     onSuccess: () => {
       setFoodDraft(buildInitialFoodDraft());
+      setFoodParseFeedback(null);
       setFoodOpen(false);
       void refresh();
     }
@@ -638,6 +655,7 @@ export function WeightLossPage() {
     onSuccess: () => {
       setFoodDraft(buildInitialFoodDraft());
       setEditingFoodLogId(null);
+      setFoodParseFeedback(null);
       setFoodOpen(false);
       void refresh();
     }
@@ -886,6 +904,7 @@ export function WeightLossPage() {
 
   const openNewFoodLog = (intent: WeightLossFoodLogIntent = "search") => {
     setEditingFoodLogId(null);
+    setFoodParseFeedback(null);
     setFoodDialogIntent(intent);
     setFoodInitialStepId(intent === "custom" ? "amounts" : "search");
     const nextDraft =
@@ -902,6 +921,7 @@ export function WeightLossPage() {
 
   const openEditFoodLog = (meal: NutritionFoodLog) => {
     setEditingFoodLogId(meal.id);
+    setFoodParseFeedback(null);
     setFoodDialogIntent("search");
     setFoodInitialStepId("amounts");
     setFoodDraft({
@@ -1145,7 +1165,12 @@ export function WeightLossPage() {
       />
       <WeightLossFoodLogDialog
         open={foodOpen}
-        onOpenChange={setFoodOpen}
+        onOpenChange={(nextOpen) => {
+          setFoodOpen(nextOpen);
+          if (!nextOpen) {
+            setFoodParseFeedback(null);
+          }
+        }}
         value={foodDraft}
         onChange={setFoodDraft}
         foodResults={foodSearchMutation.data ?? []}
@@ -1156,6 +1181,7 @@ export function WeightLossPage() {
             ? chatGptFoodParseMutation.error.message
             : null
         }
+        chatGptFeedback={foodParseFeedback}
         logPending={
           createFoodLogMutation.isPending || patchFoodLogMutation.isPending
         }

@@ -191,6 +191,9 @@ describe("question flow quality coverage", () => {
       /After the read, answer the practical question[\s\S]*before asking for\s+any write detail/i
     );
     expect(entityPlaybook).toMatch(
+      /If the read produces several possible actions[\s\S]*do not hand the user a broad menu/i
+    );
+    expect(entityPlaybook).toMatch(
       /If the answer does not create a concrete next action, close cleanly/i
     );
     expect(entityPlaybook).toMatch(
@@ -284,6 +287,9 @@ describe("question flow quality coverage", () => {
       /read[\s\S]*relevant timeline back instead of leaving the correction ungrounded/i
     );
     expect(entityPlaybook).toMatch(
+      /After a Movement read, translate the returned data into one next action[\s\S]*manual overlay[\s\S]*place boundary correction[\s\S]*settings change[\s\S]*linked note/i
+    );
+    expect(entityPlaybook).toMatch(
       /if the truth of one uncertain span is still unclear,[\s\S]*read the timeline or saved-box[\s\S]*detail before you mutate it/i
     );
     expect(entityPlaybook).toMatch(
@@ -296,6 +302,9 @@ describe("question flow quality coverage", () => {
       /planning decision[\s\S]*workload[\s\S]*recovery[\s\S]*timebox/i
     );
     expect(entityPlaybook).toMatch(
+      /After a Life Force overview, translate the read into one planning implication[\s\S]*lighter workload[\s\S]*added recovery[\s\S]*protected timebox/i
+    );
+    expect(entityPlaybook).toMatch(
       /only needs an explanation or planning read[\s\S]*overview first/i
     );
     expect(entityPlaybook).toMatch(
@@ -305,6 +314,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
     expect(entityPlaybook).toMatch(/latest node output/i);
     expect(entityPlaybook).toMatch(/published output/i);
+    expect(entityPlaybook).toMatch(
+      /After a Workbench read, translate the returned artifact into one next action[\s\S]*rerun with clearer input[\s\S]*inspect a specific node[\s\S]*publish or\s+preserve the output/i
+    );
     expect(entityPlaybook).toMatch(
       /flow catalog questions[\s\S]*GET \/api\/v1\/workbench\/flows[\s\S]*available box\s+inputs[\s\S]*GET \/api\/v1\/workbench\/catalog\/boxes/i
     );
@@ -430,6 +442,12 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(
       /Name what the hypothesis is becoming:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*mode[\s\S]*trigger report/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not leave the user with interpretation alone[\s\S]*name the primary Forge record[\s\S]*accuracy or consent\s+question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /nearest saveable shape:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*part voice[\s\S]*trigger chain[\s\S]*emotion signature/i
     );
     expect(psychePlaybook).toMatch(
       /wiki_page[\s\S]*durable explanation of a schema theme/i

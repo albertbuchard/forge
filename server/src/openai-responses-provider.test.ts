@@ -326,6 +326,7 @@ test("OpenAI Codex connection tests use the ChatGPT Codex backend and headers", 
   assert.equal(request.body.input, "Connection test.");
   assert.equal(request.body.stream, true);
   assert.equal(request.body.store, false);
+  assert.equal(request.body.max_output_tokens, undefined);
 });
 
 test("OpenAI Codex wiki ingest sends instructions as a top-level field", async () => {
@@ -564,4 +565,5 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
   assert.equal(body.stream, true);
   assert.equal(body.store, false);
   assert.equal(body.instructions, "Answer briefly.");
+  assert.equal(body.max_output_tokens, undefined);
 });

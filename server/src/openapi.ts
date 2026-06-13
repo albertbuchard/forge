@@ -6401,9 +6401,10 @@ export function buildOpenApiDocument() {
                   additionalProperties: false,
                   properties: {
                     text: { type: "string" },
-                    imageDescription: { type: "string" },
-                    loggedAt: { type: "string", format: "date-time" },
-                    mealLabel: { type: "string" }
+                    mealTime: { type: "string", format: "date-time" },
+                    imageRefs: arrayOf({ type: "string" }),
+                    connectionId: { type: "string" },
+                    commitCandidate: { type: "boolean" }
                   }
                 }
               }
@@ -6416,6 +6417,7 @@ export function buildOpenApiDocument() {
                 required: [
                   "candidate",
                   "log",
+                  "parseSummary",
                   "clarificationQuestions",
                   "uncertaintyReasons"
                 ],
@@ -6426,6 +6428,27 @@ export function buildOpenApiDocument() {
                   log: nullable({
                     $ref: "#/components/schemas/NutritionFoodLog"
                   }),
+                  parseSummary: {
+                    type: "object",
+                    required: [
+                      "itemCount",
+                      "completeNutritionItemCount",
+                      "catalogResolvedItemCount",
+                      "chatGptEstimatedItemCount",
+                      "chatGptValidatedItemCount",
+                      "elapsedMs",
+                      "llmCallCount"
+                    ],
+                    properties: {
+                      itemCount: { type: "number" },
+                      completeNutritionItemCount: { type: "number" },
+                      catalogResolvedItemCount: { type: "number" },
+                      chatGptEstimatedItemCount: { type: "number" },
+                      chatGptValidatedItemCount: { type: "number" },
+                      elapsedMs: { type: "number" },
+                      llmCallCount: { type: "number" }
+                    }
+                  },
                   clarificationQuestions: arrayOf({ type: "string" }),
                   uncertaintyReasons: arrayOf({ type: "string" })
                 }

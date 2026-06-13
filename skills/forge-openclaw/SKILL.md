@@ -193,6 +193,15 @@ Wiki rule:
 - Use the wiki tools when the user wants SQLite-backed reference pages, backlink-aware recall, ingest from a URL or local file, or wiki maintenance work such as unresolved-link cleanup.
 - `forge_ingest_wiki_source` now queues the ingest as background work; use the Forge UI handoff when the user wants to review or keep only selected wiki/entity candidates after the ingest finishes.
 - Keep evidence notes and wiki pages conceptually distinct: evidence notes are linked operating records, while wiki pages are curated long-form memory.
+- Ingestion policy for OpenClaw, Hermes, Codex, and Claude Code adapters:
+  - Before ingesting, call `forge_get_wiki_settings` so the agent knows the available spaces, LLM profiles, and embedding profiles. Prefer the shared wiki space for durable shared knowledge unless the current settings or user request clearly require another space.
+  - Use `forge_ingest_wiki_source` for raw text, local files, and URLs. Do not build an ad hoc importer or write raw source pages manually unless the Forge ingest tool is broken; if it is broken, fix the ingest path and tests before proceeding.
+  - Preserve source/evidence artifacts for audit, but do not make the wiki a transcript dump, movement log, release log, or repetitive check-in archive. Evidence supports knowledge; canonical wiki pages should be curated, readable, structured articles.
+  - Detect and propose durable pages for important people, organizations, projects, places, events, concepts, recurring relationship patterns, decisions, preferences, commitments, and timelines. A detected person or important concept should become or update a real wiki page, not disappear into one source note.
+  - Merge duplicates deliberately into one canonical page per real concept/person/project. Do not merely rename a page, hide a duplicate, or keep competing partial pages. Combine the durable information, preserve aliases and backlinks, and link the original evidence/source pages from the canonical page.
+  - Keep normal personal context when it is useful knowledge. Redact or omit actual secrets and security/payment credentials such as passwords, API keys, tokens, private auth links, card numbers, and similar material; do not over-redact ordinary names, relationships, work context, events, or preferences just because they are personal.
+  - After ingest or merge work, run `forge_sync_wiki_vault`, then use `forge_get_wiki_health`, search/list checks, and spot reads to verify created and updated pages, duplicate candidates, unresolved links, missing summaries, evidence links, and whether source material is reachable from canonical pages.
+  - Report what was created, updated, merged, left unresolved, and how evidence is preserved. If the user asked for reviewable candidates, hand off to the Forge UI ingest review instead of pretending the adapter can approve candidates inline.
 
 Wiki navigation and search rule:
 
@@ -263,6 +272,10 @@ Entity conversation rule:
 - Do not ask for optional tags, priority, status, dates, color, links, or assignees
   when accepted wording and meaningful body are enough unless that metadata changes
   accountability, retrieval, or execution.
+- After a read returns data and several next actions are plausible, choose the one
+  most directly supported by what was learned and ask only for the missing detail
+  that would permit that action. Do not hand the user a broad menu after the read has
+  already narrowed the work.
 - Let each question have one job. Know what you are trying to clarify before you ask it.
 - Before you ask, decide the exact missing thing you need and how that answer will help you name, place, or save the record.
 - Prefer a progression of:
@@ -335,6 +348,9 @@ Psyche interview rule:
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A good hypothesis says what the reaction may be protecting, predicting, relieving, or costing, then asks whether that lands or needs correction.
 - For Psyche hypotheses, reduce the formulation burden. After one concrete example, offer one tentative function, danger, protection, payoff, or cost hypothesis and ask one fit-or-correction question. Do not make the user prove the experience, list evidence, or design repair before the wording feels held.
 - Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For `behavior_pattern`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the next helpful move is usually one active formulation plus one correction question, not another passive reflection.
+- Do not leave the user with interpretation alone. Once the hypothesis lands or is
+  corrected, name the primary Forge record it becomes and ask one accuracy or consent
+  question that moves toward saving the corrected formulation.
 - Use the hypothesis timing checkpoint before asking a second or third deepening question: offer a hypothesis when one concrete episode, body cue, belief sentence, behavior, or mode voice is visible and the hypothesis would change the record shape, wording, links, or next action. Do not hypothesize yet when no concrete moment is visible, the user only wants a direct mechanical save, the user is flooded or unsafe, or the only available interpretation would be diagnosis-like, an origin story, or a certainty claim.
 - If several Psyche containers are plausible, do not ask the user to choose from a taxonomy menu first. Reflect the lived difference, offer one careful hypothesis when a concrete example is visible, then distinguish the options in plain language: one episode as a `trigger_report`, a recurring loop as a `behavior_pattern`, one repeated move as `behavior`, one sentence as `belief_entry`, a part-state as `mode_profile` or `mode_guide_session`, or reusable future-labeling as `event_type` or `emotion_definition`.
 - For Psyche updates, start with what feels newly true, newly visible, or newly inaccurate, then ask what should stay true before changing the formulation.
@@ -660,6 +676,12 @@ through `forge_create_entities` or `forge_update_entities`.
 - If you are unsure which specialized route family applies, check `forge_get_agent_onboarding` and use its `entityRouteModel.specializedDomainSurfaces` section before guessing.
 - If the truth of the current Movement, Life Force, or Workbench state is still unclear, prefer the dedicated read before the mutation so the correction stays truthful.
 - After a concrete Movement, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant specialized view back when the user is trying to understand the result rather than only store it: timeline or place/settings detail for Movement, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench.
+- After any dedicated Movement, Life Force, or Workbench read, translate the result
+  into one next action: no change, Movement overlay/place/settings/link, Life Force
+  workload/recovery/timebox/meeting/task-choice change, or Workbench
+  rerun/node-inspection/flow-edit/publish/preserve/stop. Ask only for the missing
+  span, place, weekday, flow, run, node, output, correction, preservation choice, or
+  confirmation that would change that action.
 
 Use live work tools for `task_run`:
 `forge_log_work`, `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, `forge_release_task_run`

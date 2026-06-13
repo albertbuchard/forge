@@ -679,6 +679,9 @@ describe("question flow simulation cycles", () => {
     expect(movement.notes?.join(" ")).toMatch(
       /POST \/api\/v1\/movement\/places[\s\S]*PATCH \/api\/v1\/movement\/places\/:id[\s\S]*generic entity writes/i
     );
+    expect(movement.notes?.join(" ")).toMatch(
+      /After a Movement read[\s\S]*one next action[\s\S]*manual overlay[\s\S]*place boundary correction[\s\S]*settings change[\s\S]*linked note/i
+    );
     for (const surface of [lifeForce, lifeForceAlias]) {
       expect(surface.routeSelectionQuestions?.join(" ")).toMatch(
         /planning decision[\s\S]*workload[\s\S]*recovery[\s\S]*timeboxes/i
@@ -686,12 +689,18 @@ describe("question flow simulation cycles", () => {
       expect(surface.notes?.join(" ")).toMatch(
         /only needs an explanation or planning read[\s\S]*overview first/i
       );
+      expect(surface.notes?.join(" ")).toMatch(
+        /After a Life Force overview[\s\S]*one planning implication[\s\S]*lighter workload[\s\S]*added recovery[\s\S]*protected timebox/i
+      );
     }
     expect(workbench.routeSelectionQuestions?.join(" ")).toMatch(
       /saved flow[\s\S]*one-off input run[\s\S]*reusable/i
     );
     expect(workbench.notes?.join(" ")).toMatch(
       /one-off execution[\s\S]*do not create a saved flow unless the user wants reuse[\s\S]*POST \/api\/v1\/workbench\/run/i
+    );
+    expect(workbench.notes?.join(" ")).toMatch(
+      /After a Workbench read[\s\S]*one next action[\s\S]*rerun with clearer input[\s\S]*inspect a specific node[\s\S]*publish or preserve the output/i
     );
   });
 
@@ -1213,6 +1222,9 @@ describe("question flow simulation cycles", () => {
       expect(source).toMatch(/reduce the formulation burden/i);
       expect(source).toMatch(/one fit-or-correction question/i);
       expect(source).toMatch(/Do not make the user prove the experience/i);
+      expect(source).toMatch(
+        /Do not leave the user with interpretation alone[\s\S]*primary Forge record[\s\S]*accuracy or consent\s+question/i
+      );
     }
   });
 
@@ -1259,6 +1271,12 @@ describe("question flow simulation cycles", () => {
     ]) {
       expect(source).toMatch(
         /correction, mutation, or\s+result-producing run[\s\S]*timeline or\s+place\/settings detail[\s\S]*Life Force overview[\s\S]*flow detail,\s+run\s+detail, node result, latest node output, published\s+output, or run history/i
+      );
+      expect(source).toMatch(
+        /After any dedicated(?: Movement, Life Force, or Workbench)? read[\s\S]*translate the result[\s\S]*into one next action[\s\S]*Movement overlay\/place\/settings\/link[\s\S]*Workbench/i
+      );
+      expect(source).toMatch(
+        /several (?:next )?actions[\s\S]*(?:choose|narrow)[\s\S]*most directly\s+supported[\s\S]*(?:broad menu|instead of handing)/i
       );
     }
   });
@@ -1662,13 +1680,13 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-12 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-13 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-12/);
+    expect(report).toMatch(/Latest run date: 2026-06-13/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.11/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.11/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.13/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.13/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
     expect(latestRun).toMatch(/49\s+focused checks/i);
@@ -1678,9 +1696,14 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/writeConfirmationRule/i);
     expect(latestRun).toMatch(/Internal action trace/i);
     expect(latestRun).toMatch(/Hypothesis Without Cross-Examination/i);
+    expect(latestRun).toMatch(/Hypothesis To Record Bridge/i);
     expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
     expect(latestRun).toMatch(/Psyche after-save close/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
+    expect(latestRun).toMatch(/After a Movement read/i);
+    expect(latestRun).toMatch(/After a Life Force overview/i);
+    expect(latestRun).toMatch(/After a Workbench read/i);
+    expect(latestRun).toMatch(/Do not leave the user with interpretation alone/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
       /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
@@ -1694,10 +1717,10 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*Workbench[\s\S]*route-key aliases/i
+      /Cycle 1[\s\S]*post-read[\s\S]*Psyche/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*flowDetail[\s\S]*runHistory[\s\S]*examples/i
+      /Cycle 2[\s\S]*per-surface onboarding notes/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i

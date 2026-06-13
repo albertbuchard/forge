@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
+import { parseNutritionFoodLogWithChatGpt } from "./health-weight-loss.js";
+import type { LlmManager } from "./managers/platform/llm-manager.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -393,6 +395,281 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     );
     assert.equal(overviewBody.weightLoss.bodyCheckins.length, 1);
     assert.equal(overviewBody.weightLoss.weightTrend.latestWeightKg, 82.4);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("ChatGPT food parser uses one model call when catalog nutrition completes every item", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-chatgpt-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES ('secret_codex_food', 'present', 'Codex OAuth test secret', ?, ?)`
+      )
+      .run(now, now);
+    getDatabase()
+      .prepare(
+        `INSERT INTO ai_model_connections (
+           id, label, provider, auth_mode, base_url, model, account_label,
+           secret_id, enabled, metadata_json, created_at, updated_at
+         )
+         VALUES (
+           'conn_codex_food', 'Codex food parser', 'openai-codex', 'oauth',
+           'https://chatgpt.com/backend-api', 'gpt-5.4-mini', 'test',
+           'secret_codex_food', 1, '{}', ?, ?
+         )`
+      )
+      .run(now, now);
+    getDatabase()
+      .prepare(
+        `INSERT INTO nutrition_food_catalog (
+           id, source, source_id, barcode, name, brand, serving_label,
+           serving_grams, calories, protein_grams, carbohydrate_grams,
+           fat_grams, fiber_grams, sugar_grams, sodium_mg, potassium_mg,
+           caffeine_mg, alcohol_grams, nova_group, nutri_score, tags_json,
+           nutrients_json, confidence, created_at, updated_at
+         )
+         VALUES (
+           'food_kagi_chief_bar', 'open_food_facts', 'kagi-chief-13g',
+           NULL, 'Kagi Chief 13g Protein Bar', 'Kagi', '1 bar', 45,
+           180, 13, 19, 7, 2, 8, 120, NULL, NULL, NULL, NULL, NULL,
+           '["protein_bar"]', '{}', 0.86, ?, ?
+         )`
+      )
+      .run(now, now);
+    getDatabase()
+      .prepare(
+        `INSERT INTO nutrition_food_catalog (
+           id, source, source_id, barcode, name, brand, serving_label,
+           serving_grams, calories, protein_grams, carbohydrate_grams,
+           fat_grams, fiber_grams, sugar_grams, sodium_mg, potassium_mg,
+           caffeine_mg, alcohol_grams, nova_group, nutri_score, tags_json,
+           nutrients_json, confidence, created_at, updated_at
+         )
+         VALUES (
+           'food_almonds_raw', 'usda_fdc', 'almonds-raw',
+           NULL, 'Almonds', '', '100 g', 100,
+           579, 21.2, 21.6, 49.9, 12.5, 4.4, 1, NULL, NULL, NULL, NULL, NULL,
+           '["nuts"]', '{}', 0.84, ?, ?
+         )`
+      )
+      .run(now, now);
+
+    const llmCalls: string[] = [];
+    const fakeLlm = {
+      async runTextPrompt() {
+        llmCalls.push("parse");
+        return {
+          outputText: JSON.stringify({
+            mealLabel: "Breakfast",
+            loggedAt: null,
+            items: [
+              {
+                name: "Kagi Chief 13g Protein Bar",
+                searchQuery: "Kagi Chief 13g Protein Bar",
+                brand: "Kagi",
+                quantity: 1,
+                unit: "serving",
+                grams: null,
+                calories: null,
+                proteinGrams: null,
+                carbohydrateGrams: null,
+                fatGrams: null,
+                fiberGrams: null,
+                sugarGrams: null,
+                sodiumMg: null,
+                tags: ["high_protein"],
+                confidence: 0.6
+              },
+              {
+                name: "almonds",
+                searchQuery: "almonds",
+                brand: "",
+                quantity: 20,
+                unit: "piece",
+                grams: null,
+                calories: null,
+                proteinGrams: null,
+                carbohydrateGrams: null,
+                fatGrams: null,
+                fiberGrams: null,
+                sugarGrams: null,
+                sodiumMg: null,
+                tags: ["nuts"],
+                confidence: 0.6
+              }
+            ],
+            uncertaintyReasons: ["User gave a rough free-text description."],
+            clarificationQuestions: [],
+            tags: ["breakfast"]
+          })
+        };
+      }
+    } as unknown as LlmManager;
+
+    const parsed = await parseNutritionFoodLogWithChatGpt(
+      {
+        text: "I had one kaggi chief 13g protein bar and 20 almonds this morning",
+        commitCandidate: false
+      },
+      fakeLlm
+    );
+
+    assert.equal(parsed.log, null);
+    assert.equal(llmCalls.length, 1);
+    assert.deepEqual(parsed.parseSummary, {
+      itemCount: 2,
+      completeNutritionItemCount: 2,
+      catalogResolvedItemCount: 2,
+      chatGptEstimatedItemCount: 0,
+      chatGptValidatedItemCount: 0,
+      elapsedMs: parsed.parseSummary.elapsedMs,
+      llmCallCount: 1
+    });
+    assert.equal(typeof parsed.parseSummary.elapsedMs, "number");
+    assert.equal(parsed.candidate.items.length, 2);
+    const item = parsed.candidate.items[0]!;
+    assert.equal(item.foodId, "food_kagi_chief_bar");
+    assert.equal(item.name, "Kagi Chief 13g Protein Bar");
+    assert.equal(item.calories, 180);
+    assert.equal(item.proteinGrams, 13);
+    assert.equal(item.carbohydrateGrams, 19);
+    assert.equal(item.fatGrams, 7);
+    const almonds = parsed.candidate.items[1]!;
+    assert.equal(almonds.foodId, "food_almonds_raw");
+    assert.equal(almonds.name, "Almonds");
+    assert.equal(almonds.grams, 24);
+    assert.equal(almonds.calories, 138.96);
+    assert.equal(almonds.proteinGrams, 5.09);
+    assert.equal(almonds.carbohydrateGrams, 5.18);
+    assert.equal(almonds.fatGrams, 11.98);
+    assert.match(parsed.candidate.notes, /Resolved "Kagi Chief 13g Protein Bar"/);
+    assert.match(parsed.candidate.notes, /Resolved "almonds" to Almonds/);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("ChatGPT food parser uses one extra validation call for unresolved nutrition", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-weight-loss-chatgpt-fallback-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const now = new Date().toISOString();
+    getDatabase()
+      .prepare(
+        `INSERT INTO stored_secrets (id, cipher_text, description, created_at, updated_at)
+         VALUES ('secret_codex_food', 'present', 'Codex OAuth test secret', ?, ?)`
+      )
+      .run(now, now);
+    getDatabase()
+      .prepare(
+        `INSERT INTO ai_model_connections (
+           id, label, provider, auth_mode, base_url, model, account_label,
+           secret_id, enabled, metadata_json, created_at, updated_at
+         )
+         VALUES (
+           'conn_codex_food', 'Codex food parser', 'openai-codex', 'oauth',
+           'https://chatgpt.com/backend-api', 'gpt-5.4-mini', 'test',
+           'secret_codex_food', 1, '{}', ?, ?
+         )`
+      )
+      .run(now, now);
+
+    const llmPrompts: string[] = [];
+    const fakeLlm = {
+      async runTextPrompt(_profile: unknown, request: { prompt: string }) {
+        llmPrompts.push(request.prompt);
+        if (llmPrompts.length === 1) {
+          return {
+            outputText: JSON.stringify({
+              mealLabel: "Snack",
+              loggedAt: null,
+              items: [
+                {
+                  name: "homemade seed cracker",
+                  searchQuery: "homemade seed cracker",
+                  brand: "",
+                  quantity: 1,
+                  unit: "piece",
+                  grams: null,
+                  calories: null,
+                  proteinGrams: null,
+                  carbohydrateGrams: null,
+                  fatGrams: null,
+                  fiberGrams: null,
+                  sugarGrams: null,
+                  sodiumMg: null,
+                  tags: ["homemade"],
+                  confidence: 0.35
+                }
+              ],
+              uncertaintyReasons: ["Homemade item needs estimated nutrition."],
+              clarificationQuestions: [],
+              tags: ["snack"]
+            })
+          };
+        }
+        return {
+          outputText: JSON.stringify({
+            items: [
+              {
+                index: 0,
+                grams: 18,
+                calories: 82,
+                proteinGrams: 2.7,
+                carbohydrateGrams: 6.8,
+                fatGrams: 5.1,
+                fiberGrams: 1.8,
+                sugarGrams: 0.6,
+                sodiumMg: 95,
+                confidence: 0.48,
+                reason:
+                  "Conservative estimate for one small homemade seed cracker."
+              }
+            ],
+            validationNotes: ["Validated unresolved homemade item."]
+          })
+        };
+      }
+    } as unknown as LlmManager;
+
+    const parsed = await parseNutritionFoodLogWithChatGpt(
+      {
+        text: "I ate one homemade seed cracker",
+        commitCandidate: false
+      },
+      fakeLlm
+    );
+
+    assert.equal(parsed.log, null);
+    assert.equal(llmPrompts.length, 2);
+    assert.equal(parsed.parseSummary.llmCallCount, 2);
+    assert.equal(parsed.parseSummary.itemCount, 1);
+    assert.equal(parsed.parseSummary.completeNutritionItemCount, 1);
+    assert.equal(parsed.parseSummary.chatGptEstimatedItemCount, 1);
+    assert.equal(parsed.parseSummary.chatGptValidatedItemCount, 1);
+    const item = parsed.candidate.items[0]!;
+    assert.equal(item.name, "homemade seed cracker");
+    assert.equal(item.grams, 18);
+    assert.equal(item.calories, 82);
+    assert.equal(item.proteinGrams, 2.7);
+    assert.equal(item.carbohydrateGrams, 6.8);
+    assert.equal(item.fatGrams, 5.1);
+    assert.match(parsed.candidate.notes, /Validated unresolved homemade item/);
   } finally {
     await app.close();
     closeDatabase();

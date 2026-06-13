@@ -15,6 +15,7 @@ export {
   buildInitialCustomFoodDraft,
   buildInitialFoodDraft,
   WeightLossFoodLogDialog,
+  type WeightLossFoodParseFeedback,
   type WeightLossFoodDraft,
   type WeightLossFoodLogIntent,
   type WeightLossSelectedFood

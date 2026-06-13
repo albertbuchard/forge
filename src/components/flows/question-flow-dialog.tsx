@@ -344,6 +344,7 @@ export function QuestionFlowDialog<TValue>({
   pendingLabel,
   error,
   resolveError,
+  resolveContinueNudge,
   initialStepId,
   contentClassName,
   draftPersistenceKey
@@ -362,6 +363,10 @@ export function QuestionFlowDialog<TValue>({
   pendingLabel?: string;
   error?: string | null;
   resolveError?: (stepId: string) => string | null | undefined;
+  resolveContinueNudge?: (
+    stepId: string,
+    value: TValue
+  ) => string | null | undefined;
   initialStepId?: string;
   contentClassName?: string;
   draftPersistenceKey?: string;
@@ -369,7 +374,7 @@ export function QuestionFlowDialog<TValue>({
   const { t } = useI18n();
   const isMobile = useIsMobileFlow();
   const [stepIndex, setStepIndex] = useState(0);
-  const previousOpenRef = useRef(open);
+  const previousOpenRef = useRef(false);
   const previousInitialStepIdRef = useRef(initialStepId);
   const previousDraftOpenRef = useRef(open);
   const restoredDraftKeyRef = useRef<string | null>(null);
@@ -408,6 +413,10 @@ export function QuestionFlowDialog<TValue>({
   const progress = totalSteps === 0 ? 0 : ((stepIndex + 1) / totalSteps) * 100;
   const resolvedError = step ? resolveError?.(step.id) : undefined;
   const visibleError = resolvedError === undefined ? error : resolvedError;
+  const continueNudge =
+    step && stepIndex < totalSteps - 1
+      ? resolveContinueNudge?.(step.id, value)
+      : null;
 
   const persistDraft = useCallback(() => {
     if (!draftPersistenceKey) {
@@ -601,7 +610,7 @@ export function QuestionFlowDialog<TValue>({
             <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
               <div className="hidden min-w-0 shrink text-[12px] text-[var(--ui-ink-faint)] sm:block">
                 <span className="truncate">
-                  Step {stepIndex + 1}/{totalSteps}
+                  {continueNudge || `Step ${stepIndex + 1}/${totalSteps}`}
                 </span>
               </div>
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
@@ -629,12 +638,34 @@ export function QuestionFlowDialog<TValue>({
                 {stepIndex < totalSteps - 1 ? (
                   <Button
                     type="button"
-                    className="min-w-0 px-3 text-[12px]"
+                    className={cn(
+                      "min-w-0 px-3 text-[12px]",
+                      continueNudge
+                        ? "shadow-[0_0_0_5px_color-mix(in_srgb,var(--primary)_14%,transparent)]"
+                        : ""
+                    )}
                     onClick={() =>
                       changeStep(Math.min(totalSteps - 1, stepIndex + 1))
                     }
                   >
-                    Continue
+                    <motion.span
+                      animate={
+                        continueNudge
+                          ? { scale: [1, 1.04, 1], x: [0, 1.5, 0] }
+                          : { scale: 1, x: 0 }
+                      }
+                      transition={
+                        continueNudge
+                          ? {
+                              duration: 1.1,
+                              repeat: Infinity,
+                              ease: "easeInOut"
+                            }
+                          : { duration: 0.2 }
+                      }
+                    >
+                      Continue
+                    </motion.span>
                     <ArrowRight className="size-4" />
                   </Button>
                 ) : (

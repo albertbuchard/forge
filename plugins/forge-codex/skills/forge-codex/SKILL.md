@@ -259,6 +259,10 @@ Surface rule:
   Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After
   the read, answer the practical question before asking for any save, correction,
   link, run, enrichment, or publish detail.
+- If several actions are possible after the read, choose the one most directly
+  supported by what was learned and ask only for the missing detail that would permit
+  that action. Do not hand the user a broad menu after the read has already narrowed
+  the work.
 - After create, update, delete, restore, run, read, or repair actions, confirm the
   user-facing record, action, and result in the user's language instead of reopening
   intake. For batch creates and updates, confirm the working title or accepted wording,
@@ -305,6 +309,9 @@ Surface rule:
   `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the
   next helpful move is usually one active formulation plus one correction question,
   not another passive reflection.
+- Do not leave the user with interpretation alone. Once the hypothesis lands or is
+  corrected, name the primary Forge record it becomes and ask one accuracy or consent
+  question that moves toward saving the corrected formulation.
 - Use the hypothesis timing checkpoint before asking a second or third deepening
   question: offer a hypothesis when one concrete episode, body cue, belief sentence,
   behavior, or mode voice is visible and the hypothesis would change the record shape,
@@ -461,6 +468,30 @@ Surface rule:
   add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection,
   or values-based support around it.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
+  Before ingesting source material, call `forge_get_wiki_settings` so Codex knows the
+  available spaces, LLM profiles, and embedding profiles. Prefer the shared wiki
+  space for durable shared knowledge unless settings or the user clearly require
+  another space. Use `forge_ingest_wiki_source` for raw text, local files, and URLs;
+  do not build an ad hoc importer or manually write raw source pages unless the
+  Forge ingest tool is broken, and fix that tool path plus tests first if it is.
+  Preserve source/evidence artifacts for audit, but keep canonical wiki pages as
+  curated, readable, structured articles rather than transcript dumps, movement
+  logs, release logs, or repetitive check-in archives. Detect important people,
+  organizations, projects, places, events, concepts, recurring relationship
+  patterns, decisions, preferences, commitments, and timelines; important detected
+  entities should become or update real wiki pages instead of staying buried in one
+  source note. Merge duplicates into one canonical page per real concept/person/
+  project by combining durable information, preserving aliases/backlinks, and
+  linking original evidence/source pages. Redact actual secrets and security/payment
+  credentials such as passwords, API keys, tokens, private auth links, and card
+  numbers, but do not over-redact useful ordinary personal context such as names,
+  relationships, work context, events, or preferences. After ingest or merge work,
+  run `forge_sync_wiki_vault`, then use `forge_get_wiki_health`, search/list checks,
+  and spot reads to verify created/updated pages, duplicate candidates, unresolved
+  links, missing summaries, evidence links, and evidence reachability from canonical
+  pages. Report created pages, updated pages, merges, unresolved candidates, and how
+  evidence is preserved. If the user wants reviewable candidates, hand off to the
+  Forge UI ingest review instead of pretending Codex can approve candidates inline.
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Preferred API path for Movement, Life Force, and Workbench: use the dedicated
@@ -482,6 +513,12 @@ Surface rule:
   place/settings detail for Movement, the Life Force overview for energy-planning
   impact, and flow detail, run detail, node result, latest node output, published
   output, or run history for Workbench.
+- After any dedicated Movement, Life Force, or Workbench read, translate the result
+  into one next action: no change, Movement overlay/place/settings/link, Life Force
+  workload/recovery/timebox/meeting/task-choice change, or Workbench
+  rerun/node-inspection/flow-edit/publish/preserve/stop. Ask only for the missing
+  span, place, weekday, flow, run, node, output, correction, preservation choice, or
+  confirmation that would change that action.
 - In the live onboarding catalog, those domains should read as
   `specialized_domain_surface`, not as read-only leftovers. If the classification and
   route family disagree, trust the specialized route family and fix the contract

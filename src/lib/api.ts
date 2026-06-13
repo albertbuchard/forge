@@ -3548,6 +3548,15 @@ export function parseNutritionFoodLogWithChatGpt(input: {
   return request<{
     candidate: NutritionFoodLogInput;
     log: NutritionFoodLog | null;
+    parseSummary: {
+      itemCount: number;
+      completeNutritionItemCount: number;
+      catalogResolvedItemCount: number;
+      chatGptEstimatedItemCount: number;
+      chatGptValidatedItemCount: number;
+      elapsedMs: number;
+      llmCallCount: number;
+    };
     clarificationQuestions: string[];
     uncertaintyReasons: string[];
   }>(`/api/v1/health/weight-loss/parse${suffix}`, {

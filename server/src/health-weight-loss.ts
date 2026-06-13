@@ -249,6 +249,18 @@ const scoreSchema = z
   .optional();
 
 const tagsSchema = z.array(z.string().trim().min(1)).default([]);
+const parsedStringDefaultSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value : ""),
+  z.string().trim()
+);
+const parsedOptionalDatetimeSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() ? value : undefined),
+  z.string().datetime().optional()
+);
+const parsedOptionalNumberSchema = z.preprocess(
+  (value) => (value === null || value === "" ? undefined : value),
+  z.coerce.number().finite().optional()
+);
 const linksSchema = z
   .array(
     z.object({
@@ -3296,33 +3308,366 @@ function getNutritionCodexProfile(
 
 const parsedMealItemSchema = z.object({
   name: z.string().trim().min(1),
+  searchQuery: parsedStringDefaultSchema.default(""),
+  brand: parsedStringDefaultSchema.default(""),
   quantity: z.coerce.number().positive().default(1),
   unit: z.string().trim().min(1).default("serving"),
-  grams: optionalNumberSchema,
-  calories: optionalNumberSchema,
-  proteinGrams: optionalNumberSchema,
-  carbohydrateGrams: optionalNumberSchema,
-  fatGrams: optionalNumberSchema,
-  fiberGrams: optionalNumberSchema,
-  sugarGrams: optionalNumberSchema,
-  sodiumMg: optionalNumberSchema,
+  grams: parsedOptionalNumberSchema,
+  calories: parsedOptionalNumberSchema,
+  proteinGrams: parsedOptionalNumberSchema,
+  carbohydrateGrams: parsedOptionalNumberSchema,
+  fatGrams: parsedOptionalNumberSchema,
+  fiberGrams: parsedOptionalNumberSchema,
+  sugarGrams: parsedOptionalNumberSchema,
+  sodiumMg: parsedOptionalNumberSchema,
   tags: tagsSchema,
   confidence: z.coerce.number().min(0).max(1).default(0.45)
 });
 
+type ParsedMealItem = z.infer<typeof parsedMealItemSchema>;
+
 const parsedMealSchema = z.object({
   mealLabel: z.string().trim().default(""),
-  loggedAt: z.string().datetime().optional(),
+  loggedAt: parsedOptionalDatetimeSchema,
   items: z.array(parsedMealItemSchema).min(1),
   uncertaintyReasons: z.array(z.string()).default([]),
   clarificationQuestions: z.array(z.string()).default([]),
   tags: tagsSchema
 });
 
+const parsedMealNutritionCompletionSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        index: z.coerce.number().int().min(0),
+        grams: parsedOptionalNumberSchema,
+        calories: parsedOptionalNumberSchema,
+        proteinGrams: parsedOptionalNumberSchema,
+        carbohydrateGrams: parsedOptionalNumberSchema,
+        fatGrams: parsedOptionalNumberSchema,
+        fiberGrams: parsedOptionalNumberSchema,
+        sugarGrams: parsedOptionalNumberSchema,
+        sodiumMg: parsedOptionalNumberSchema,
+        confidence: z.coerce.number().min(0).max(1).default(0.45),
+        reason: parsedStringDefaultSchema.default("")
+      })
+    )
+    .default([]),
+  validationNotes: z.array(z.string()).default([])
+});
+
+function searchableFoodText(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function foodSearchTokens(value: string) {
+  return searchableFoodText(value)
+    .split(" ")
+    .filter((token) => token.length >= 3);
+}
+
+function foodHasRequiredMacros(food: ReturnType<typeof mapFood>) {
+  return (
+    hasNutritionValue(food.calories) &&
+    hasNutritionValue(food.proteinGrams) &&
+    hasNutritionValue(food.carbohydrateGrams) &&
+    hasNutritionValue(food.fatGrams)
+  );
+}
+
+function scoreNutritionFoodMatch(
+  item: ParsedMealItem,
+  food: ReturnType<typeof mapFood>
+) {
+  const queryText = searchableFoodText(
+    [item.searchQuery, item.brand, item.name].filter(Boolean).join(" ")
+  );
+  const foodText = searchableFoodText([food.brand, food.name].join(" "));
+  const queryTokens = foodSearchTokens(queryText);
+  if (queryTokens.length === 0 || !foodText) {
+    return 0;
+  }
+  const matchedTokens = queryTokens.filter((token) => foodText.includes(token));
+  const coverage = matchedTokens.length / queryTokens.length;
+  const exactBoost =
+    queryText && foodText.includes(queryText)
+      ? 0.35
+      : searchableFoodText(item.name) &&
+          foodText.includes(searchableFoodText(item.name))
+        ? 0.2
+        : 0;
+  const nutritionBoost = foodHasRequiredMacros(food) ? 0.2 : -0.2;
+  return coverage + exactBoost + nutritionBoost;
+}
+
+const countedFoodGramEstimates = [
+  { tokens: ["almond"], gramsPerUnit: 1.2 },
+  { tokens: ["cashew"], gramsPerUnit: 1.6 },
+  { tokens: ["pistachio"], gramsPerUnit: 0.6 },
+  { tokens: ["walnut"], gramsPerUnit: 4 },
+  { tokens: ["hazelnut"], gramsPerUnit: 1.3 },
+  { tokens: ["egg"], gramsPerUnit: 50 },
+  { tokens: ["slice", "bread"], gramsPerUnit: 35 }
+] as const;
+
+function estimateCountedFoodGrams(item: ParsedMealItem) {
+  if (hasNutritionValue(item.grams) && item.grams > 0) {
+    return item.grams;
+  }
+  if (!hasNutritionValue(item.quantity) || item.quantity <= 0) {
+    return item.grams;
+  }
+
+  const unit = normalizeCustomFoodToken(item.unit);
+  const countLikeUnits = new Set([
+    "",
+    "piece",
+    "pieces",
+    "unit",
+    "units",
+    "count",
+    "counts",
+    "custom",
+    "almond",
+    "almonds",
+    "nut",
+    "nuts"
+  ]);
+  if (!countLikeUnits.has(unit)) {
+    return item.grams;
+  }
+
+  const text = searchableFoodText(
+    [item.name, item.searchQuery, item.brand].filter(Boolean).join(" ")
+  );
+  const estimate = countedFoodGramEstimates.find(({ tokens }) =>
+    tokens.every((token) => text.includes(token))
+  );
+  return estimate ? round(item.quantity * estimate.gramsPerUnit, 1) : item.grams;
+}
+
+async function resolveParsedMealItemNutrition(
+  item: ParsedMealItem
+): Promise<MealItemInput & { resolutionNote: string | null }> {
+  const searchQueries = Array.from(
+    new Set(
+      [
+        item.searchQuery,
+        [item.brand, item.name].filter(Boolean).join(" "),
+        item.name
+      ]
+        .map((query) => query.trim())
+        .filter(Boolean)
+    )
+  );
+  const seen = new Set<string>();
+  let match: {
+    food: ReturnType<typeof mapFood>;
+    score: number;
+  } | null = null;
+  for (const query of searchQueries) {
+    const foods = await searchNutritionFoods({ query, limit: 1 })
+      .then((result) => result.foods)
+      .catch(() => []);
+    const candidates = foods
+      .filter((food) => {
+        if (seen.has(food.id)) {
+          return false;
+        }
+        seen.add(food.id);
+        return foodHasRequiredMacros(food);
+      })
+      .map((food) => ({
+        food,
+        score: scoreNutritionFoodMatch(item, food)
+      }))
+      .sort((left, right) => right.score - left.score);
+    match = candidates.find((candidate) => candidate.score >= 0.45) ?? null;
+    if (match) {
+      break;
+    }
+  }
+  const baseItem = {
+    name: item.name,
+    brand: item.brand || null,
+    quantity: item.quantity,
+    unit: item.unit,
+    grams: estimateCountedFoodGrams(item),
+    calories: item.calories,
+    proteinGrams: item.proteinGrams,
+    carbohydrateGrams: item.carbohydrateGrams,
+    fatGrams: item.fatGrams,
+    fiberGrams: item.fiberGrams,
+    sugarGrams: item.sugarGrams,
+    sodiumMg: item.sodiumMg,
+    tags: item.tags,
+    confidence: item.confidence,
+    nutrients: {}
+  };
+
+  if (match) {
+    const resolved = resolveMealItemForInsert(
+      {
+        ...baseItem,
+        foodId: match.food.id,
+        name: match.food.name,
+        brand: match.food.brand || item.brand || null,
+        tags: Array.from(
+          new Set([
+            ...item.tags,
+            "catalog_resolved",
+            match.food.source.replaceAll("-", "_")
+          ])
+        ),
+        confidence: Math.max(item.confidence, match.food.confidence ?? 0.65),
+        nutrients: {
+          catalogResolution: {
+            source: match.food.source,
+            sourceId: match.food.sourceId,
+            searchQueries,
+            score: round(match.score, 2)
+          }
+        }
+      },
+      { cacheConfirmedCustomFood: false }
+    );
+    return {
+      ...resolved,
+      resolutionNote: `Resolved "${item.name}" to ${match.food.name}${
+        match.food.brand ? ` (${match.food.brand})` : ""
+      }.`
+    };
+  }
+
+  return {
+    ...baseItem,
+    tags: Array.from(new Set([...item.tags, "chatgpt_estimate"])),
+    nutrients: {
+      estimateResolution: {
+        searchQueries,
+        searchedSources: ["local_cache", "open_food_facts", "usda_fdc"],
+        matched: false
+      }
+    },
+    resolutionNote:
+      searchQueries.length > 0
+        ? `No catalog match with complete macros for "${item.name}"; using ChatGPT estimate for review.`
+        : null
+  };
+}
+
+async function completeMissingParsedMealNutritionWithChatGpt(
+  rawText: string,
+  items: Array<MealItemInput & { resolutionNote: string | null }>,
+  llm: LlmManager,
+  profile: NonNullable<ReturnType<typeof getNutritionCodexProfile>>
+) {
+  const incompleteItems = items
+    .map((item, index) => ({ item, index, missing: missingRequiredNutritionFields(item) }))
+    .filter(({ missing }) => missing.length > 0);
+  if (incompleteItems.length === 0) {
+    return { items, validationNotes: [], llmCallCount: 0 };
+  }
+
+  const result = await llm.runTextPrompt(profile, {
+    systemPrompt:
+      "You are Forge's nutrition fact checker. Return strict JSON only. Use conservative, plausible nutrition values and explain uncertainty briefly.",
+    prompt: `Some parsed food-log items still lack required nutrition after Forge searched its local, Open Food Facts, and USDA-backed catalogs.
+
+Original user text:
+${rawText}
+
+Items needing complete nutrition:
+${JSON.stringify(
+  incompleteItems.map(({ item, index, missing }) => ({
+    index,
+    name: item.name,
+    brand: item.brand,
+    quantity: item.quantity,
+    unit: item.unit,
+    grams: item.grams,
+    missing
+  }))
+)}
+
+Return strict JSON only:
+{
+  "items": [
+    {
+      "index": 0,
+      "grams": 100,
+      "calories": 0,
+      "proteinGrams": 0,
+      "carbohydrateGrams": 0,
+      "fatGrams": 0,
+      "fiberGrams": null,
+      "sugarGrams": null,
+      "sodiumMg": null,
+      "confidence": 0.0,
+      "reason": "short source/estimate explanation"
+    }
+  ],
+  "validationNotes": []
+}
+
+Every returned item must include calories, proteinGrams, carbohydrateGrams, and fatGrams. Estimate grams for counted portions when needed.`
+  });
+
+  const completion = parsedMealNutritionCompletionSchema.parse(
+    JSON.parse(extractJsonObject(result.outputText))
+  );
+  const completedByIndex = new Map(
+    completion.items.map((item) => [item.index, item] as const)
+  );
+  return {
+    items: items.map((item, index) => {
+      const completed = completedByIndex.get(index);
+      if (!completed) {
+        return item;
+      }
+      const reason = completed.reason || "ChatGPT supplied conservative nutrition values.";
+      return {
+        ...item,
+        grams: item.grams ?? completed.grams,
+        calories: item.calories ?? completed.calories,
+        proteinGrams: item.proteinGrams ?? completed.proteinGrams,
+        carbohydrateGrams:
+          item.carbohydrateGrams ?? completed.carbohydrateGrams,
+        fatGrams: item.fatGrams ?? completed.fatGrams,
+        fiberGrams: item.fiberGrams ?? completed.fiberGrams,
+        sugarGrams: item.sugarGrams ?? completed.sugarGrams,
+        sodiumMg: item.sodiumMg ?? completed.sodiumMg,
+        confidence: Math.max(item.confidence, completed.confidence),
+        tags: Array.from(new Set([...item.tags, "chatgpt_validated"])),
+        nutrients: {
+          ...item.nutrients,
+          chatGptNutritionValidation: {
+            reason,
+            confidence: completed.confidence
+          }
+        },
+        resolutionNote: item.resolutionNote
+          ? `${item.resolutionNote} ${reason}`
+          : reason
+      };
+    }),
+    validationNotes: completion.validationNotes,
+    llmCallCount: 1
+  };
+}
+
 export async function parseNutritionFoodLogWithChatGpt(
   input: unknown,
   llm: LlmManager
 ) {
+  const parseStartedAt = Date.now();
   const parsed = nutritionParseRequestSchema.parse(input);
   const profile = getNutritionCodexProfile(parsed.connectionId);
   if (!profile) {
@@ -3354,7 +3699,9 @@ Return this JSON shape:
   "loggedAt": "ISO time if known",
   "items": [
     {
-      "name": "food name",
+      "name": "normalized food name",
+      "searchQuery": "best search query for Forge nutrition catalogs, including corrected brand/product wording when obvious",
+      "brand": "brand or product line if known",
       "quantity": 1,
       "unit": "serving|g|ml|piece|cup|tbsp|custom",
       "grams": null,
@@ -3374,7 +3721,7 @@ Return this JSON shape:
   "tags": []
 }
 
-Use null for unknown nutrients. Prefer conservative estimates and mark uncertainty.`;
+Decompose mixed meals into separate food items. Correct obvious food-brand typos in searchQuery but keep the name human-readable. When a quantity is known from the text, preserve it. For counted foods such as nuts, eggs, fruit, slices, pieces, and bars, estimate grams when possible because Forge scales catalog nutrition by grams. For packaged foods, include brand/product hints in searchQuery. Fill calories, proteinGrams, carbohydrateGrams, and fatGrams with conservative estimates when catalog lookup may fail; use null only when there is genuinely no defensible estimate. Before returning JSON, validate every item against the original text and make sure each item has either a useful searchQuery for public nutrition catalogs or complete calories/proteinGrams/carbohydrateGrams/fatGrams. Mark uncertainty.`;
   const result = await llm.runTextPrompt(profile, {
     systemPrompt:
       "You are Forge's nutrition parser. Return strict JSON only. Never claim precision when food quantity is unclear.",
@@ -3383,25 +3730,76 @@ Use null for unknown nutrients. Prefer conservative estimates and mark uncertain
   const parsedResult = parsedMealSchema.parse(
     JSON.parse(extractJsonObject(result.outputText))
   );
+  const initiallyResolvedItems = await Promise.all(
+    parsedResult.items.map((item) => resolveParsedMealItemNutrition(item))
+  );
+  const {
+    items: resolvedItems,
+    validationNotes,
+    llmCallCount: nutritionCompletionLlmCallCount
+  } =
+    await completeMissingParsedMealNutritionWithChatGpt(
+      parsed.text,
+      initiallyResolvedItems,
+      llm,
+      profile
+    );
+  const stillIncompleteItems = resolvedItems
+    .map((item) => ({
+      name: item.name,
+      missing: missingRequiredNutritionFields(item)
+    }))
+    .filter((item) => item.missing.length > 0);
+  if (stillIncompleteItems.length > 0) {
+    throw new Error(
+      `ChatGPT could not verify complete nutrition for: ${stillIncompleteItems
+        .map((item) => `${item.name} (${item.missing.join(", ")})`)
+        .join("; ")}. Search the catalog or create a custom food with calories, protein, carbs, and fat before logging.`
+    );
+  }
+  const resolutionNotes = resolvedItems
+    .map((item) => item.resolutionNote)
+    .filter((note): note is string => Boolean(note));
+  const parseSummary = {
+    itemCount: resolvedItems.length,
+    completeNutritionItemCount: resolvedItems.filter(
+      (item) => missingRequiredNutritionFields(item).length === 0
+    ).length,
+    catalogResolvedItemCount: resolvedItems.filter((item) =>
+      item.tags.includes("catalog_resolved")
+    ).length,
+    chatGptEstimatedItemCount: resolvedItems.filter((item) =>
+      item.tags.includes("chatgpt_estimate")
+    ).length,
+    chatGptValidatedItemCount: resolvedItems.filter((item) =>
+      item.tags.includes("chatgpt_validated")
+    ).length,
+    elapsedMs: Date.now() - parseStartedAt,
+    llmCallCount: 1 + nutritionCompletionLlmCallCount
+  };
   const candidate = {
     userId,
     loggedAt: parsedResult.loggedAt ?? parsed.mealTime ?? nowIso(),
     mealLabel: parsedResult.mealLabel || "ChatGPT parsed meal",
     source: parsed.imageRefs.length > 0 ? "photo" : "chatgpt",
     confirmationState: "candidate",
-    notes: parsedResult.uncertaintyReasons.join("; "),
+    notes: [
+      ...resolutionNotes,
+      ...validationNotes,
+      ...parsedResult.uncertaintyReasons
+    ].join("; "),
     imageRefs: parsed.imageRefs,
     parserProvenance: {
       provider: "openai-codex",
       model: profile.model,
       uncertaintyReasons: parsedResult.uncertaintyReasons,
       clarificationQuestions: parsedResult.clarificationQuestions,
+      parseSummary,
       rawText: parsed.text
     },
     links: [],
-    items: parsedResult.items.map((item) => ({
+    items: resolvedItems.map(({ resolutionNote: _resolutionNote, ...item }) => ({
       ...item,
-      nutrients: {},
       tags: Array.from(new Set([...item.tags, ...parsedResult.tags]))
     }))
   };
@@ -3409,6 +3807,7 @@ Use null for unknown nutrients. Prefer conservative estimates and mark uncertain
   return {
     candidate,
     log,
+    parseSummary,
     clarificationQuestions: parsedResult.clarificationQuestions,
     uncertaintyReasons: parsedResult.uncertaintyReasons
   };

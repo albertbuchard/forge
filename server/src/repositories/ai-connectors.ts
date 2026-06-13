@@ -1083,7 +1083,7 @@ async function runOpenAiConversationPrompt(input: {
         typeof input.profile.metadata.verbosity === "string"
           ? { verbosity: input.profile.metadata.verbosity }
           : undefined,
-      max_output_tokens: 1200
+      ...(isCodexProfile(input.profile) ? {} : { max_output_tokens: 1200 })
     })
   });
   if (!response.ok) {
