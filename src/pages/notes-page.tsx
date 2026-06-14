@@ -1216,7 +1216,7 @@ export function NotesPage() {
                     <>
                       <button
                         type="button"
-                        className="mt-4 w-full text-left"
+                        className="mt-4 min-w-0 max-w-full overflow-hidden text-left"
                         onClick={() => {
                           if (href) {
                             navigate(

@@ -47,7 +47,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
             <a
               key={`${keyPrefix}-forge-${index}`}
               href={href}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--warning)]/20 bg-[var(--ui-warning-soft)] px-2 py-0.5 text-[0.9em] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)] transition hover:bg-[var(--ui-surface-3)]"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-[var(--warning)]/20 bg-[var(--ui-warning-soft)] px-2 py-0.5 text-[0.9em] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)] transition hover:bg-[var(--ui-surface-3)]"
             >
               <span className="shrink-0 text-[0.72em] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
                 Forge
@@ -59,7 +59,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
           ) : (
             <span
               key={`${keyPrefix}-forge-${index}`}
-              className="inline-flex max-w-full items-center gap-1 rounded-full bg-[var(--ui-surface-2)] px-2 py-0.5 text-[0.9em] text-[var(--ui-ink-soft)]"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-[var(--ui-surface-2)] px-2 py-0.5 text-[0.9em] text-[var(--ui-ink-soft)]"
             >
               <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {label}
@@ -76,7 +76,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
             key={`${keyPrefix}-wiki-${index}`}
             href={href}
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.9em] transition",
+              "inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[0.9em] transition",
               isEmbed
                 ? "border border-[var(--info)]/20 bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_78%,var(--ui-ink-strong)_22%)] hover:bg-[var(--ui-surface-3)]"
                 : "bg-[var(--ui-surface-2)] text-[var(--secondary)] hover:bg-[var(--ui-surface-3)]"
@@ -221,7 +221,7 @@ function renderBlocks(markdown: string) {
       blocks.push(
         <blockquote
           key={`quote-${index}`}
-          className="border-l-2 border-[var(--secondary)]/50 pl-4 text-sm leading-7 text-[var(--ui-ink-soft)]"
+          className="min-w-0 border-l-2 border-[var(--secondary)]/50 pl-4 text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
         >
           {renderInline(quoteLines.join(" "), `quote-${index}`)}
         </blockquote>
@@ -247,12 +247,12 @@ function renderBlocks(markdown: string) {
         <ListTag
           key={`list-${index}`}
           className={cn(
-            "space-y-1 pl-5 text-sm leading-7 text-[var(--ui-ink-soft)]",
+            "min-w-0 space-y-1 pl-5 text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]",
             ordered ? "list-decimal" : "list-disc"
           )}
         >
           {items.map((item, itemIndex) => (
-            <li key={`item-${index}-${itemIndex}`}>
+            <li key={`item-${index}-${itemIndex}`} className="min-w-0">
               {renderInline(item, `list-${index}-${itemIndex}`)}
             </li>
           ))}
@@ -281,7 +281,7 @@ function renderBlocks(markdown: string) {
     blocks.push(
       <p
         key={`paragraph-${index}`}
-        className="text-sm leading-7 text-[var(--ui-ink-soft)]"
+        className="min-w-0 text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
       >
         {renderInline(paragraphLines.join(" "), `paragraph-${index}`)}
       </p>
@@ -299,6 +299,8 @@ export function NoteMarkdown({
   className?: string;
 }) {
   return (
-    <div className={cn("grid gap-3", className)}>{renderBlocks(markdown)}</div>
+    <div className={cn("grid min-w-0 max-w-full gap-3", className)}>
+      {renderBlocks(markdown)}
+    </div>
   );
 }

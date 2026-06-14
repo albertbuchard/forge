@@ -27,20 +27,20 @@ function TargetTable({
         {rows.map((target) => (
           <div
             key={target.id}
-            className="grid min-w-0 gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
+            className="grid min-w-0 max-w-full gap-2 overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
           >
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0 break-words text-sm font-semibold text-[var(--ui-ink)]">
+            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div className="min-w-0 text-wrap text-sm font-semibold text-[var(--ui-ink)] [overflow-wrap:anywhere]">
                 {target.label}
               </div>
-              <div className="shrink-0 text-right text-sm font-semibold text-[var(--ui-ink)]">
+              <div className="min-w-0 text-left text-sm font-semibold text-[var(--ui-ink)] sm:text-right">
                 {target.target}
                 <div className="text-xs font-normal text-[var(--ui-ink-faint)]">
                   {target.unit}
                 </div>
               </div>
             </div>
-            <p className="min-w-0 break-words text-xs leading-5 text-[var(--ui-ink-muted)]">
+            <p className="min-w-0 text-wrap text-xs leading-5 text-[var(--ui-ink-muted)] [overflow-wrap:anywhere]">
               {target.note}
             </p>
             {!compact ? (
@@ -51,9 +51,15 @@ function TargetTable({
           </div>
         ))}
       </div>
-      <div className="hidden overflow-hidden rounded-[20px] border border-[var(--ui-border-subtle)] md:block">
+      <div className="hidden min-w-0 max-w-full overflow-hidden rounded-[20px] border border-[var(--ui-border-subtle)] md:block">
         <div className="max-h-[460px] overflow-auto">
-          <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[560px] table-fixed border-collapse text-left text-sm lg:min-w-0">
+            <colgroup>
+              <col className="w-[24%]" />
+              <col className="w-[18%]" />
+              <col className={compact ? "w-[58%]" : "w-[40%]"} />
+              {!compact ? <col className="w-[18%]" /> : null}
+            </colgroup>
             <thead className="sticky top-0 bg-[var(--ui-surface-2)] text-xs uppercase text-[var(--ui-ink-faint)]">
               <tr>
                 <th className="px-4 py-3 font-semibold">Target</th>
@@ -67,21 +73,23 @@ function TargetTable({
             <tbody className="divide-y divide-[var(--ui-border-subtle)]">
               {rows.map((target) => (
                 <tr key={target.id} className="bg-[var(--ui-surface-1)]">
-                  <td className="px-4 py-3 font-medium text-[var(--ui-ink)]">
+                  <td className="min-w-0 px-4 py-3 font-medium text-[var(--ui-ink)] [overflow-wrap:anywhere]">
                     {target.label}
                   </td>
-                  <td className="px-4 py-3 text-[var(--ui-ink)]">
+                  <td className="min-w-0 px-4 py-3 text-[var(--ui-ink)] [overflow-wrap:anywhere]">
                     <span className="font-semibold">{target.target}</span>{" "}
                     <span className="text-[var(--ui-ink-faint)]">
                       {target.unit}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[var(--ui-ink-muted)]">
+                  <td className="min-w-0 px-4 py-3 text-[var(--ui-ink-muted)] [overflow-wrap:anywhere]">
                     {target.note}
                   </td>
                   {!compact ? (
-                    <td className="px-4 py-3">
-                      <Badge tone="meta">{target.source}</Badge>
+                    <td className="min-w-0 px-4 py-3">
+                      <Badge tone="meta" wrap>
+                        {target.source}
+                      </Badge>
                     </td>
                   ) : null}
                 </tr>
@@ -104,10 +112,14 @@ function TargetSection({
   children: ReactNode;
 }) {
   return (
-    <SurfacePanel>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[var(--ui-ink)]">{title}</h3>
-        <p className="mt-1 text-sm text-[var(--ui-ink-muted)]">{description}</p>
+    <SurfacePanel className="min-w-0 max-w-full overflow-hidden">
+      <div className="mb-4 min-w-0">
+        <h3 className="text-wrap text-sm font-semibold text-[var(--ui-ink)] [overflow-wrap:anywhere]">
+          {title}
+        </h3>
+        <p className="mt-1 text-wrap text-sm text-[var(--ui-ink-muted)] [overflow-wrap:anywhere]">
+          {description}
+        </p>
       </div>
       {children}
     </SurfacePanel>
@@ -158,12 +170,14 @@ export function WeightLossNutritionTargetsPanel({
 
   return (
     <section className="grid gap-4">
-      <Card className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
-              <Wheat className="size-4 text-[var(--ui-accent)]" />
-              Macro And Micronutrient Targets
+      <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
+              <Wheat className="size-4 shrink-0 text-[var(--ui-accent)]" />
+              <span className="min-w-0 text-wrap [overflow-wrap:anywhere]">
+                Macro And Micronutrient Targets
+              </span>
               <WeightLossFormulaTooltip
                 values={{
                   sex: targets.profile.sex,
@@ -195,24 +209,24 @@ export function WeightLossNutritionTargetsPanel({
                 }}
               />
             </div>
-            <p className="mt-1 max-w-3xl text-sm text-[var(--ui-ink-muted)]">
+            <p className="mt-1 max-w-3xl text-wrap text-sm text-[var(--ui-ink-muted)] [overflow-wrap:anywhere]">
               Daily targets use Forge plan values first, then adult DRI/Dietary
               Guidelines defaults for nutrients the food log can score as
               catalog detail improves.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2 lg:justify-end">
             <Badge tone="signal">
               {targets.profile.calorieTarget.toFixed(0)} kcal
             </Badge>
-            <Badge tone="meta">
+            <Badge tone="meta" wrap>
               {targets.profile.sex}, {targets.profile.ageYears.toFixed(0)}y
             </Badge>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.58fr)]">
-          <div className="grid gap-4">
+        <div className="mt-5 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.58fr)]">
+          <div className="grid min-w-0 gap-4">
             <TargetSection
               title="All macro targets"
               description="Calories, protein, carbs, fat, fiber, sugar ceiling, saturated fat ceiling, essential fats, and water."
@@ -228,12 +242,12 @@ export function WeightLossNutritionTargetsPanel({
             </TargetSection>
           </div>
 
-          <div className="grid content-start gap-4">
+          <div className="grid min-w-0 content-start gap-4">
             <TargetSection
               title="Expected sport losses"
               description="Planning range from active burn. Calibrate with pre/post workout weight when possible."
             >
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                 <SurfaceStat
                   label="Active burn"
                   value={
@@ -252,9 +266,9 @@ export function WeightLossNutritionTargetsPanel({
                   value={`${targets.sportSummary.sodiumLossMg} mg`}
                 />
               </div>
-              <div className="mt-4 flex items-start gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-4 flex min-w-0 items-start gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm text-[var(--ui-ink-muted)]">
                 <Dumbbell className="mt-0.5 size-4 shrink-0 text-[var(--ui-accent)]" />
-                <span>
+                <span className="min-w-0 text-wrap [overflow-wrap:anywhere]">
                   Sport burn is shown as gross energy equivalent, not a promise
                   of scale loss. The calorie plan may already include active
                   burn, and replacement depends on appetite, heat, sodium loss,
@@ -278,22 +292,24 @@ export function WeightLossNutritionTargetsPanel({
                 {targets.sportLosses.map((target) => (
                   <div
                     key={target.id}
-                    className="flex items-start justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
+                    className="grid min-w-0 gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
+                      <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--ui-ink)]">
                         {target.id === "sweat_fluid" ? (
-                          <Droplets className="size-4 text-[var(--ui-accent)]" />
+                          <Droplets className="size-4 shrink-0 text-[var(--ui-accent)]" />
                         ) : (
-                          <Pill className="size-4 text-[var(--ui-accent)]" />
+                          <Pill className="size-4 shrink-0 text-[var(--ui-accent)]" />
                         )}
-                        {target.label}
+                        <span className="min-w-0 text-wrap [overflow-wrap:anywhere]">
+                          {target.label}
+                        </span>
                       </div>
-                      <p className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                      <p className="mt-1 text-wrap text-xs text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
                         {target.note}
                       </p>
                     </div>
-                    <div className="shrink-0 text-right text-sm font-semibold text-[var(--ui-ink)]">
+                    <div className="min-w-0 text-left text-sm font-semibold text-[var(--ui-ink)] sm:text-right">
                       {target.target}
                       <div className="text-xs font-normal text-[var(--ui-ink-faint)]">
                         {target.unit}

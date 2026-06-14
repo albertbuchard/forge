@@ -54,9 +54,9 @@ const SETTINGS_EYEBROW_CLASS =
 const SETTINGS_BODY_CLASS = "text-sm leading-6 text-[var(--ui-ink-soft)]";
 const SETTINGS_STRONG_CLASS = "font-medium text-[var(--ui-ink-strong)]";
 const SETTINGS_PANEL_CLASS =
-  "rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
+  "min-w-0 max-w-full overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
 const SETTINGS_MUTED_PANEL_CLASS =
-  "rounded-[24px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)]";
+  "min-w-0 max-w-full overflow-hidden rounded-[24px] border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-surface-1)]";
 const SETTINGS_META_BADGE_CLASS =
   "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
 const SETTINGS_SUCCESS_BADGE_CLASS =
@@ -593,15 +593,15 @@ export function SettingsCalendarPage() {
               return (
                 <div
                   key={provider.provider}
-                  className={`flex min-h-[248px] flex-col rounded-[26px] border p-5 shadow-[inset_0_1px_0_var(--ui-border-subtle)] ${
+                  className={`flex min-h-[248px] min-w-0 max-w-full flex-col overflow-hidden rounded-[26px] border p-5 shadow-[inset_0_1px_0_var(--ui-border-subtle)] ${
                     hasConnections
                       ? "border-[var(--ui-success-soft)] bg-[var(--ui-success-soft)]"
                       : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]"
                   }`}
                 >
-                  <div className="flex items-start gap-4">
+                  <div className="flex min-w-0 items-start gap-4">
                     <div
-                      className={`rounded-[18px] p-3 ${
+                      className={`shrink-0 rounded-[18px] p-3 ${
                         hasConnections
                           ? SETTINGS_SUCCESS_BADGE_CLASS
                           : "bg-[var(--primary)]/14 text-[var(--primary)]"
@@ -610,8 +610,8 @@ export function SettingsCalendarPage() {
                       <ProviderIcon className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium text-[var(--ui-ink-strong)]">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="min-w-0 text-wrap font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                           {provider.label}
                         </div>
                         {hasConnections ? (
@@ -625,11 +625,11 @@ export function SettingsCalendarPage() {
                           </>
                         ) : null}
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                      <p className="mt-2 min-w-0 text-sm leading-6 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                         {providerConnectionSummary(provider.provider)}
                       </p>
                       {hasConnections ? (
-                        <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)]">
+                        <div className="mt-3 min-w-0 text-sm text-[color-mix(in_srgb,var(--success)_68%,var(--ui-ink-strong)_32%)] [overflow-wrap:anywhere]">
                           Forge already has{" "}
                           {providerConnectionCountLabel(connectionCount)} for
                           this provider. Open the guided flow again to add
@@ -639,7 +639,7 @@ export function SettingsCalendarPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="mt-5 flex min-w-0 flex-wrap gap-2">
                     <Badge
                       tone="signal"
                       className="bg-[var(--ui-accent-soft)] text-[var(--primary)]"
@@ -700,7 +700,7 @@ export function SettingsCalendarPage() {
                   useCalendarColors: !current.useCalendarColors
                 }))
               }
-              className={`rounded-full px-4 py-2 text-sm transition ${
+              className={`min-w-0 rounded-full px-4 py-2 text-sm transition ${
                 displayPreferences.useCalendarColors
                   ? "border border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]"
                   : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"
@@ -719,7 +719,7 @@ export function SettingsCalendarPage() {
                 return (
                   <div
                     key={calendar.id}
-                    className="grid gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 md:grid-cols-[minmax(0,1fr)_auto]"
+                    className="grid min-w-0 gap-3 overflow-hidden rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 md:grid-cols-[minmax(0,1fr)_auto]"
                   >
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-3">
@@ -734,14 +734,14 @@ export function SettingsCalendarPage() {
                           <div className="truncate font-medium text-[var(--ui-ink-strong)]">
                             {calendarLabel}
                           </div>
-                          <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                          <div className="mt-1 min-w-0 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                             {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
                             {calendar.timezone}
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
                       <input
                         aria-label={`Choose display color for ${calendarLabel}`}
                         type="color"
@@ -810,14 +810,14 @@ export function SettingsCalendarPage() {
                 return (
                   <div
                     key={connection.id}
-                    className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
+                    className="min-w-0 max-w-full overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-[var(--ui-ink-strong)]">
+                      <div className="min-w-0 flex-1">
+                        <div className="min-w-0 text-wrap font-medium text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
                           {connection.label}
                         </div>
-                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                        <div className="mt-1 min-w-0 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                           {calendarProviderLabel(connection.provider)} ·{" "}
                           {connection.accountLabel || "No account label yet"}
                         </div>
@@ -828,12 +828,12 @@ export function SettingsCalendarPage() {
                           </div>
                         ) : null}
                         {connection.lastSyncError ? (
-                          <div className="mt-2 text-sm text-rose-200">
+                          <div className="mt-2 min-w-0 text-sm text-rose-200 [overflow-wrap:anywhere]">
                             {connection.lastSyncError}
                           </div>
                         ) : null}
                         {usesSharedWriteTargetElsewhere ? (
-                          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+                          <div className="mt-2 min-w-0 text-sm text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]">
                             Forge writes through{" "}
                             <span className="font-medium text-[var(--ui-ink-strong)]">
                               {sharedForgeWriteTargetConnection.label}
@@ -845,7 +845,7 @@ export function SettingsCalendarPage() {
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                         <Badge className={SETTINGS_META_BADGE_CLASS}>
                           {connection.status}
                         </Badge>
@@ -903,13 +903,13 @@ export function SettingsCalendarPage() {
                       {calendars.map((calendar) => (
                         <div
                           key={calendar.id}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
+                          className="flex min-w-0 flex-wrap items-center justify-between gap-3 overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                         >
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-medium text-[var(--ui-ink-strong)]">
                               {readCalendarDisplayName(calendar)}
                             </div>
-                            <div className="mt-1 text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                            <div className="mt-1 min-w-0 text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
                               {calendar.canWrite ? "Writable" : "Read only"} ·{" "}
                               {calendar.timezone}
                             </div>

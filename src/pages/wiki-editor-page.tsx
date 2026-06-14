@@ -267,7 +267,7 @@ function ToolbarIconButton({
       >
         <Icon className="size-4" />
       </button>
-      <div className="pointer-events-none absolute left-1/2 top-[calc(100%+0.55rem)] z-20 -translate-x-1/2 whitespace-nowrap rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--ui-ink-medium)] opacity-0 shadow-[var(--ui-shadow-floating)] transition group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute left-1/2 top-[calc(100%+0.55rem)] z-20 max-w-[min(14rem,calc(100vw-2rem))] -translate-x-1/2 whitespace-normal rounded-[12px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-popover)] px-2.5 py-1.5 text-center text-[11px] font-medium text-[var(--ui-ink-medium)] opacity-0 shadow-[var(--ui-shadow-floating)] transition [overflow-wrap:anywhere] group-hover:opacity-100 group-focus-within:opacity-100">
         {label}
       </div>
     </div>
