@@ -94,6 +94,22 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /record\s+shape, route choice, useful wording, timing, or links/i
     );
+    expect(entityPlaybook).toMatch(/## Depth calibration/i);
+    expect(entityPlaybook).toMatch(
+      /Quick capture:[\s\S]*usable wording[\s\S]*one structural, accuracy, or consent detail/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Guided formulation:[\s\S]*understand, name, map, decide, or work[\s\S]*Psyche hypotheses/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Review-first:[\s\S]*Read the relevant stored entity, overview, or specialized surface/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Action-first:[\s\S]*task run[\s\S]*Movement correction[\s\S]*Life Force signal\/template[\s\S]*Workbench\s+run\/output/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not downgrade psychologically meaningful material into quick capture/i
+    );
     expect(entityPlaybook).toMatch(
       /Replace "that sounds\s+important"[\s\S]*surface,[\s\S]*CRUD,[\s\S]*payload/i
     );
@@ -114,6 +130,16 @@ describe("question flow quality coverage", () => {
       /Do not let API uncertainty leak out as vague wording/i
     );
     expect(entityPlaybook).toMatch(/## Dedicated surface lane translation/i);
+    expect(entityPlaybook).toMatch(/## Dedicated surface route fallback/i);
+    expect(entityPlaybook).toMatch(
+      /route-key tool is unavailable, stale, or lacks the needed route key[\s\S]*exact `methodRoutes` entry/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not fall back to generic batch CRUD for Movement, Life Force, or Workbench/i
+    );
+    expect(entityPlaybook).toMatch(
+      /tool schema, live onboarding, and OpenAPI disagree[\s\S]*contract bug/i
+    );
     expect(entityPlaybook).toMatch(/## Internal action trace, external wording/i);
     expect(entityPlaybook).toMatch(
       /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool/i
@@ -156,6 +182,16 @@ describe("question flow quality coverage", () => {
       /skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
     );
     expect(psychePlaybook).toMatch(/## Psyche progressive disclosure/i);
+    expect(psychePlaybook).toMatch(/## Psyche depth calibration/i);
+    expect(psychePlaybook).toMatch(
+      /Direct save:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*ask one accuracy or consent question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Guided formulation:[\s\S]*pattern, mode, belief,[\s\S]*schema theme[\s\S]*testable hypothesis/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not use quick capture to minimize functional analysis, triggers, behavior\s+patterns, modes, beliefs, or schemas/i
+    );
     expect(psychePlaybook).toMatch(
       /offered belief sentence, value phrase, part voice, urge sentence, trigger\s+episode, event kind, emotion signature, or functional loop/i
     );

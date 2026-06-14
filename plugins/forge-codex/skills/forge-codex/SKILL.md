@@ -69,6 +69,11 @@ any route-key or endpoint detail.
   that schema and live onboarding disagree, trust the live onboarding for the current
   call and treat the disagreement as a Forge contract bug to fix, not as a reason to
   guess a nearby route.
+- If a specialized route-key tool is unavailable, stale, or missing the needed route
+  key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
+  live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
+  Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
+  and path.
 
 Concrete route-key examples for internal use:
 
@@ -212,6 +217,13 @@ Surface rule:
   `work_adjustment`, `preference_judgment`, `preference_signal`, and specialized
   `movement`, `life_force`, or `workbench` work so Codex starts from the user's real
   job before choosing the route family.
+- Calibrate depth before deepening: choose quick capture, guided formulation,
+  review-first, or action-first. For quick capture, use the user's supplied wording,
+  ask only the one structural, accuracy, or consent detail that changes the write, and
+  do not force full exploration. For guided formulation, use active listening and
+  Psyche hypotheses when the user is trying to understand or name charged material.
+  For review-first, read before write-shaped questions. For action-first, act or ask
+  only for the missing target, span, weekday, flow, run, node, correction, or consent.
 - When one message combines several jobs, sequence them instead of turning them into a
   broad menu: read before a correction when the current truth is uncertain, formulate
   the primary Psyche record before deriving a flashcard or note, and ask only for the
@@ -332,6 +344,9 @@ Surface rule:
   trigger episode, value phrase, event kind, emotion signature, or flashcard message,
   treat it as real data and ask one accuracy or consent question instead of reopening
   origin, evidence, or repair.
+- For direct Psyche saves, do not reopen origin, evidence, or repair when the user
+  already supplied usable wording and asked to save it. Reflect the wording, ask one
+  accuracy or consent question, and save when accepted.
 - If the formulation already lands and no new answer would change the wording or the
   write, stop asking and save.
 - After a Psyche formulation lands, use the Psyche save-readiness checkpoint from the

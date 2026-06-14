@@ -136,7 +136,20 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/place IDs inside `routeKey`[\s\S]*invent a raw route\s+string/i);
       expect(skill).toMatch(/pathParams[\s\S]*placeholder names exactly/i);
       expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
+      expect(skill).toMatch(
+        /specialized route-key tool is unavailable, stale, or missing the needed route\s+key/i
+      );
+      expect(skill).toMatch(
+        /do not fall back to generic batch CRUD[\s\S]*exact `methodRoutes` entry/i
+      );
       expect(skill).toMatch(/reflection-sensitive records/i);
+      expect(skill).toMatch(/Calibrate depth before deepening/i);
+      expect(skill).toMatch(
+        /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first/i
+      );
+      expect(skill).toMatch(
+        /one structural, accuracy, or consent detail[\s\S]*do\s+not force full exploration/i
+      );
       expect(skill).toMatch(/understand, decide, notice, remember, or\s+change later/i);
       expect(skill).toMatch(/minimum save-readiness\s+checkpoint/i);
       expect(skill).toMatch(/accepted wording[\s\S]*meaningful body[\s\S]*route lane/i);

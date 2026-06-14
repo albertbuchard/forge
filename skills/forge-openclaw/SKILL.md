@@ -109,6 +109,11 @@ any route-key or endpoint detail.
   that schema and live onboarding disagree, trust the live onboarding for the current
   call and treat the disagreement as a Forge contract bug to fix, not as a reason to
   guess a nearby route.
+- If a specialized route-key tool is unavailable, stale, or missing the needed route
+  key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
+  live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
+  Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
+  and path.
 
 Concrete route-key examples for internal use:
 
@@ -258,6 +263,13 @@ Write to Forge only with clear user consent. If the user is just thinking aloud,
 Entity conversation rule:
 
 - For all entity creation or update flows, first use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) to decide the next best question.
+- Calibrate depth before deepening: choose quick capture, guided formulation,
+  review-first, or action-first. For quick capture, use the user's supplied wording,
+  ask only the one structural, accuracy, or consent detail that changes the write, and
+  do not force full exploration. For guided formulation, use active listening and
+  Psyche hypotheses when the user is trying to understand or name charged material.
+  For review-first, read before write-shaped questions. For action-first, act or ask
+  only for the missing target, span, weekday, flow, run, node, correction, or consent.
 - Ask only for what is missing or unclear. Do not walk through every schema field.
 - Before asking another question, run the playbook's minimum save-readiness
   checkpoint: if accepted wording, meaningful body, route lane, target object or
@@ -374,6 +386,9 @@ Psyche interview rule:
   trigger episode, value phrase, event kind, emotion signature, or flashcard message,
   treat it as real data and ask one accuracy or consent question instead of reopening
   origin, evidence, or repair.
+- For direct Psyche saves, do not reopen origin, evidence, or repair when the user
+  already supplied usable wording and asked to save it. Reflect the wording, ask one
+  accuracy or consent question, and save when accepted.
 - When the conversation reveals an adjacent entity such as a linked belief, mode, value, pattern, or note, name that gently and ask whether the user wants to map it too.
 - If nuance matters, preserve it in a linked Markdown `note` instead of forcing every detail into normalized fields.
 - If the user shows imminent risk of self-harm, suicide, violence, inability to stay safe, or severe disorientation, stop normal intake and prioritize urgent human support or emergency help instead.

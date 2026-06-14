@@ -127,6 +127,11 @@ any route-key or endpoint detail.
   that schema and live onboarding disagree, trust the live onboarding for the current
   call and treat the disagreement as a Forge contract bug to fix, not as a reason to
   guess a nearby route.
+- If a specialized route-key tool is unavailable, stale, or missing the needed route
+  key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
+  live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
+  Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
+  and path.
 
 Concrete route-key examples for internal use:
 
@@ -246,6 +251,13 @@ After a Psyche formulation lands, use the Psyche save-readiness checkpoint from 
 playbook. If the belief sentence, functional loop, behavior move, part-state, trigger
 episode, value, event type, emotion definition, or flashcard cue/message is true
 enough to save, ask at most one accuracy question and then use shared batch CRUD.
+Calibrate depth before deepening: choose quick capture, guided formulation,
+review-first, or action-first. For quick capture, use the user's supplied wording, ask
+only the one structural, accuracy, or consent detail that changes the write, and do
+not force full exploration. For guided formulation, use active listening and Psyche
+hypotheses when the user is trying to understand or name charged material. For
+review-first, read before write-shaped questions. For action-first, act or ask only
+for the missing target, span, weekday, flow, run, node, correction, or consent.
 When the operation is not already explicit, identify the job first:
 add, update, review, compare, navigate, link, or run. Skip that meta question when
 the action is already obvious from the user's wording.
@@ -269,6 +281,9 @@ For direct Psyche saves or updates, if the user already offers a usable belief s
 trigger episode, value phrase, event kind, emotion signature, or flashcard message,
 treat it as real data and ask one accuracy or consent question instead of reopening
 origin, evidence, or repair.
+Do not reopen origin, evidence, or repair when the user already supplied usable Psyche
+wording and asked to save it. Reflect the wording, ask one accuracy or consent
+question, and save when accepted.
 When the user wants to review, compare, inspect, or navigate an existing Forge
 record, ask what they are trying to understand first and look up the existing record
 before you reopen create or update intake.

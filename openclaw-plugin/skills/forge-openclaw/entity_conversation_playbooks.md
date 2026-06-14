@@ -110,6 +110,29 @@ Forge correctly, and gather only the structure that still matters.
 - When the record is already clear enough to save, save it instead of performing a
   ceremonial extra question.
 
+## Depth calibration
+
+Use this before choosing how much to ask. The goal is to match the user's actual job,
+not to make every entity feel equally deep.
+
+- Quick capture: the user already gave usable wording and says "save this", "remember
+  this", "log this", or otherwise makes storage the job. Reflect the working shape
+  once, ask only the one structural, accuracy, or consent detail that changes the
+  write, and do not force a full exploration.
+- Guided formulation: the user wants to understand, name, map, decide, or work
+  through unclear or charged material. Use active listening, one lane at a time, and
+  Psyche hypotheses when appropriate before saving.
+- Review-first: the user wants to inspect, compare, navigate, or understand something
+  already in Forge. Read the relevant stored entity, overview, or specialized surface
+  before asking write-shaped questions.
+- Action-first: the target task run, work adjustment, preference judgment or signal,
+  questionnaire run, Movement correction, Life Force signal/template, or Workbench
+  run/output is already clear. Act, or ask only for the missing target, span, weekday,
+  flow, run, node, correction, or consent.
+- Do not downgrade psychologically meaningful material into quick capture when the
+  user is asking to understand it. Do not expand a simple storage request into therapy
+  or project planning when a concise save is enough.
+
 ## Plain-language rule
 
 Keep API and architecture nouns inside your own reasoning. Do not ask the user about
@@ -159,6 +182,26 @@ choice is an internal classification step, not a user-facing menu.
   node, skip the route menu entirely and ask only for the missing product detail.
 - Once the lane is selected, use the exact route key internally and do not invent a
   friendlier path.
+
+## Dedicated surface route fallback
+
+Use this when the adapter tool surface is missing, stale, or narrower than live Forge
+onboarding.
+
+- First prefer the route-key tools when they exist:
+  `forge_call_movement_route`, `forge_call_life_force_route`, or
+  `forge_call_workbench_route`.
+- If a route-key tool is unavailable, stale, or lacks the needed route key, read live
+  onboarding and use the exact `methodRoutes` entry for the selected lane. Cross-check
+  OpenAPI only to confirm the same method and path.
+- Do not fall back to generic batch CRUD for Movement, Life Force, or Workbench just
+  because a route-key tool is missing. They remain specialized domain surfaces.
+- Do not invent a nearby raw path, put IDs into the route key, or ask the user to pick
+  an endpoint. Ask only for the missing product identifier or span that fills the
+  published path.
+- If tool schema, live onboarding, and OpenAPI disagree, trust live onboarding for the
+  immediate call when it names the exact route, then treat the disagreement as a Forge
+  contract bug to fix.
 
 ## Dedicated surface verification loop
 

@@ -836,8 +836,11 @@ describe("forge onboarding contract", () => {
 
     expect(onboarding.interactionGuidance).toEqual(
       expect.objectContaining({
+        depthCalibrationRule: expect.stringMatching(
+          /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first[\s\S]*simple storage request/i
+        ),
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
@@ -1509,6 +1512,7 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         additionalProperties: false,
           required: expect.arrayContaining([
+            "depthCalibrationRule",
             "specializedSurfaceRule",
             "reviewShortcutRule",
             "readModelWriteRule",
@@ -1520,6 +1524,7 @@ describe("forge onboarding contract", () => {
             "antiDriftRule"
           ]),
           properties: expect.objectContaining({
+            depthCalibrationRule: { type: "string" },
             specializedSurfaceRule: { type: "string" },
             reviewShortcutRule: { type: "string" },
             readModelWriteRule: { type: "string" },

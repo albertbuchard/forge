@@ -1680,17 +1680,18 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-13 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-14 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-13/);
+    expect(report).toMatch(/Latest run date: 2026-06-14/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.13/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.13/i);
+    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.14/i);
+    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
     expect(latestRun).toMatch(/49\s+focused checks/i);
     expect(latestRun).toMatch(/antiDriftRule/i);
+    expect(latestRun).toMatch(/depthCalibrationRule/i);
     expect(latestRun).toMatch(/psycheHypothesisRule/i);
     expect(latestRun).toMatch(/progressiveDisclosureRule/i);
     expect(latestRun).toMatch(/writeConfirmationRule/i);
@@ -1699,6 +1700,11 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Hypothesis To Record Bridge/i);
     expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
     expect(latestRun).toMatch(/Psyche after-save close/i);
+    expect(latestRun).toMatch(/Depth calibration/i);
+    expect(latestRun).toMatch(/Psyche depth calibration/i);
+    expect(latestRun).toMatch(/Dedicated surface route fallback/i);
+    expect(latestRun).toMatch(/methodRoutes/i);
+    expect(latestRun).toMatch(/do not fall back to generic batch CRUD/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
     expect(latestRun).toMatch(/After a Movement read/i);
     expect(latestRun).toMatch(/After a Life Force overview/i);
@@ -1717,10 +1723,10 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*post-read[\s\S]*Psyche/i
+      /Cycle 1[\s\S]*Depth calibration[\s\S]*Psyche/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*per-surface onboarding notes/i
+      /Cycle 2[\s\S]*Dedicated surface route fallback[\s\S]*methodRoutes/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i
