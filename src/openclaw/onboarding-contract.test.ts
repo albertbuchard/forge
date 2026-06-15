@@ -1177,10 +1177,10 @@ describe("forge onboarding contract", () => {
       /downstream sync, published output, backlinks, run history, or completed runs/i
     );
     expect(onboarding.interactionGuidance.antiDriftRule).toMatch(
-      /Avoid vague reflective filler[\s\S]*surface, CRUD, payload[\s\S]*product nouns/i
+      /Avoid vague reflective filler[\s\S]*surface, CRUD, payload[\s\S]*route key, batch route[\s\S]*product nouns/i
     );
     expect(onboarding.interactionGuidance.antiDriftRule).toMatch(
-      /belief[\s\S]*pattern[\s\S]*timeline[\s\S]*weekday template[\s\S]*published output/i
+      /belief[\s\S]*pattern[\s\S]*timeline[\s\S]*weekday template[\s\S]*published output[\s\S]*cannot yet name the product noun[\s\S]*grounding question/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /book, article, paper, source, concept, person, conversation, project reference/i

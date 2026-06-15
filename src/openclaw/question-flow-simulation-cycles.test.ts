@@ -1680,11 +1680,12 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-14 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-15 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-14/);
+    expect(report).toMatch(/Latest run date: 2026-06-15/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
+    expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-codex\/scripts\/run-mcp\.sh/i);
     expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
@@ -1703,6 +1704,7 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Depth calibration/i);
     expect(latestRun).toMatch(/Psyche depth calibration/i);
     expect(latestRun).toMatch(/Dedicated surface route fallback/i);
+    expect(latestRun).toMatch(/route key[\s\S]*batch route[\s\S]*grounding question/i);
     expect(latestRun).toMatch(/methodRoutes/i);
     expect(latestRun).toMatch(/do not fall back to generic batch CRUD/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
@@ -1723,7 +1725,7 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*Depth calibration[\s\S]*Psyche/i
+      /Cycle 1[\s\S]*anti-drift/i
     );
     expect(latestRun).toMatch(
       /Cycle 2[\s\S]*Dedicated surface route fallback[\s\S]*methodRoutes/i

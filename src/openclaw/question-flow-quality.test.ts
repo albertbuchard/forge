@@ -164,6 +164,12 @@ describe("question flow quality coverage", () => {
       /Avoid generic reflections such as "that sounds important"/i
     );
     expect(entityPlaybook).toMatch(
+      /route key,[\s\S]*batch route,[\s\S]*endpoint[\s\S]*missing\s+stay/i
+    );
+    expect(entityPlaybook).toMatch(
+      /If you cannot\s+name the product noun yet,[\s\S]*ask one grounding question/i
+    );
+    expect(entityPlaybook).toMatch(
       /For updates,[\s\S]*smallest thing[\s\S]*newly visible/i
     );
     expect(entityPlaybook).toMatch(
