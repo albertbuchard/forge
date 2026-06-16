@@ -839,6 +839,9 @@ describe("forge onboarding contract", () => {
         depthCalibrationRule: expect.stringMatching(
           /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first[\s\S]*simple storage request/i
         ),
+        operationLaneRule: expect.stringMatching(
+          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Movement, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, or preserve[\s\S]*Psyche entities[\s\S]*formulation lane/i
+        ),
         specializedSurfaceRule: expect.stringMatching(
           /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
@@ -1513,6 +1516,7 @@ describe("forge onboarding contract", () => {
         additionalProperties: false,
           required: expect.arrayContaining([
             "depthCalibrationRule",
+            "operationLaneRule",
             "specializedSurfaceRule",
             "reviewShortcutRule",
             "readModelWriteRule",
@@ -1525,6 +1529,7 @@ describe("forge onboarding contract", () => {
           ]),
           properties: expect.objectContaining({
             depthCalibrationRule: { type: "string" },
+            operationLaneRule: { type: "string" },
             specializedSurfaceRule: { type: "string" },
             reviewShortcutRule: { type: "string" },
             readModelWriteRule: { type: "string" },

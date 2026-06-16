@@ -304,6 +304,14 @@ Entity conversation rule:
 - When the operation is not already explicit, identify the job first:
   add, update, review, compare, navigate, link, or run. Skip that meta question
   when the action is already obvious from the user's wording.
+- Keep the operation lane explicit across every entity family. Normal stored entities
+  can be added, updated, reviewed/navigated, linked, or placed; action workflows use
+  verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or
+  observe; specialized CRUD uses lifecycle verbs; read models need a practical read
+  question and scope; Movement, Life Force, and Workbench use review, correct,
+  repair, run, inspect, publish, or preserve lanes through their dedicated route keys;
+  and Psyche entities need formulation before storage when the user wants
+  understanding rather than direct save.
 - For emotionally meaningful non-Psyche records such as goals, habits, and notes, reflect the meaning before you ask for structure.
 - When the user is vague, ask for one small concrete example, stake, or desired outcome before you ask them to name the record.
 - When the user is clear, say what the record seems to be becoming and ask only for the last missing detail.

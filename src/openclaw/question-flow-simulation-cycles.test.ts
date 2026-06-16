@@ -265,6 +265,58 @@ describe("question flow simulation cycles", () => {
       "Define the lived signature of dread versus ordinary anxiety."
   };
 
+  const simulatedOperationLanes: Record<
+    (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
+    readonly string[]
+  > = {
+    Goal: ["add", "update", "review", "link"],
+    Project: ["add", "update", "review", "place"],
+    Strategy: ["add", "update", "review", "link"],
+    Task: ["add", "update", "review", "place"],
+    Habit: ["add", "update", "review", "check-in"],
+    Tag: ["add", "update", "review", "link"],
+    Note: ["add", "update", "review", "link"],
+    "Wiki Page": ["create", "read", "update", "browse"],
+    Insight: ["add", "review", "link", "preserve"],
+    "Calendar Event": ["add", "update", "review", "delete"],
+    "Work Block Template": ["add", "update", "review", "delete"],
+    "Task Timebox": ["add", "update", "review", "schedule"],
+    "Task Run": ["start", "continue", "complete", "release"],
+    "Work Adjustment": ["add", "correct", "review", "audit"],
+    "Operator Overview": ["review", "navigate", "interpret", "follow-up"],
+    "Operator Context": ["review", "navigate", "interpret", "follow-up"],
+    "Self Observation": ["observe", "review", "link", "route"],
+    "Sleep Session": ["add", "update", "review", "enrich"],
+    "Workout Session": ["add", "update", "review", "enrich"],
+    "Sleep Overview": ["review", "navigate", "interpret", "follow-up"],
+    "Sports Overview": ["review", "navigate", "interpret", "follow-up"],
+    "Training Load": ["review", "navigate", "interpret", "follow-up"],
+    "Weight Loss": ["review", "log", "experiment", "follow-up"],
+    "Calendar Overview": ["review", "navigate", "interpret", "follow-up"],
+    "Calendar Connection": ["create", "read", "update", "sync"],
+    "Preference Judgment": ["compare", "judge", "review", "record"],
+    "Preference Signal": ["mark", "update", "review", "record"],
+    Movement: ["review", "correct", "repair", "link"],
+    "Life Force": ["overview", "profile", "weekday-template", "fatigue-signal"],
+    Workbench: ["inspect", "run", "edit", "publish"],
+    "Preference Catalog": ["add", "update", "review", "browse"],
+    "Preference Catalog Item": ["add", "update", "review", "compare"],
+    "Preference Context": ["add", "update", "review", "merge"],
+    "Preference Item": ["add", "update", "review", "signal"],
+    "Questionnaire Instrument": ["create", "draft", "review", "publish"],
+    "Questionnaire Run": ["start", "continue", "review", "complete"],
+    Value: ["formulate", "direct-save", "update", "link"],
+    "Behavior Pattern": ["formulate", "direct-save", "update", "review"],
+    Behavior: ["formulate", "direct-save", "update", "link"],
+    Belief: ["formulate", "direct-save", "update", "review"],
+    "Mode Profile": ["formulate", "direct-save", "update", "link"],
+    "Mode Guide Session": ["guide", "formulate", "update", "link"],
+    Flashcard: ["retrieve", "create", "update", "link"],
+    "Trigger Report": ["capture", "formulate", "update", "link"],
+    "Event Type": ["formulate", "direct-save", "update", "review"],
+    "Emotion Definition": ["formulate", "direct-save", "update", "review"]
+  };
+
   const fullFlowCoverageByCycle: Record<
     "cycle1" | "cycle2" | "cycle3",
     readonly (typeof allFlowSections)[number][]
@@ -273,6 +325,12 @@ describe("question flow simulation cycles", () => {
     cycle2: allFlowSections,
     cycle3: allFlowSections
   };
+
+  const operationLaneCoverageByCycle = {
+    cycle1: simulatedOperationLanes,
+    cycle2: simulatedOperationLanes,
+    cycle3: simulatedOperationLanes
+  } as const;
 
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
@@ -496,6 +554,19 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Mixed-intent sequencing/i);
     expect(entityPlaybook).toMatch(/Search-before-write and existing-record disambiguation/i);
     expect(entityPlaybook).toMatch(/Destructive and replacement actions/i);
+    expect(entityPlaybook).toMatch(/## Operation coverage checkpoint/i);
+    expect(entityPlaybook).toMatch(
+      /Normal stored entities need four possible lanes[\s\S]*add a new\s+record[\s\S]*update an existing record[\s\S]*review or navigate existing records[\s\S]*link or\s+place/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Action workflows need action verbs[\s\S]*start, continue, complete,[\s\S]*adjust, judge, signal, publish, sync, or observe/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement, Life Force, and Workbench need their dedicated operation lanes[\s\S]*review,\s+correct,\s+repair,\s+run,\s+inspect,\s+publish, or preserve/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Psyche entities need a formulation lane before the storage lane/i
+    );
     expect(entityPlaybook).toMatch(
       /route\s+choice is an internal classification step, not a user-facing menu/i
     );
@@ -570,6 +641,9 @@ describe("question flow simulation cycles", () => {
     expect(Object.keys(simulatedUserScenarios).sort()).toEqual(
       [...allFlowSections].sort()
     );
+    expect(Object.keys(simulatedOperationLanes).sort()).toEqual(
+      [...allFlowSections].sort()
+    );
     expect(Object.keys(expectedApiPosture).sort()).toEqual(
       Object.keys(simulatedUserScenarios).sort()
     );
@@ -580,6 +654,20 @@ describe("question flow simulation cycles", () => {
         [...coveredFlows].sort(),
         `${cycleName} should explicitly retest every flow`
       ).toEqual([...allFlowSections].sort());
+    }
+    for (const [cycleName, laneMap] of Object.entries(
+      operationLaneCoverageByCycle
+    )) {
+      expect(
+        Object.keys(laneMap).sort(),
+        `${cycleName} should include operation-lane simulations for every flow`
+      ).toEqual([...allFlowSections].sort());
+      for (const [section, lanes] of Object.entries(laneMap)) {
+        expect(
+          lanes.length,
+          `${cycleName} ${section} should cover multiple operation lanes`
+        ).toBeGreaterThanOrEqual(4);
+      }
     }
 
     for (const section of nonPsycheSections) {
@@ -1680,19 +1768,20 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-15 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-16 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-15/);
+    expect(report).toMatch(/Latest run date: 2026-06-16/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-codex\/scripts\/run-mcp\.sh/i);
+    expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-hermes/i);
     expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
-    expect(latestRun).toMatch(/43 entity catalog\s+entries/i);
+    expect(latestRun).toMatch(/43 entity\s+catalog entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
     expect(latestRun).toMatch(/49\s+focused checks/i);
     expect(latestRun).toMatch(/antiDriftRule/i);
     expect(latestRun).toMatch(/depthCalibrationRule/i);
+    expect(latestRun).toMatch(/operationLaneRule/i);
     expect(latestRun).toMatch(/psycheHypothesisRule/i);
     expect(latestRun).toMatch(/progressiveDisclosureRule/i);
     expect(latestRun).toMatch(/writeConfirmationRule/i);
@@ -1705,12 +1794,23 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Psyche depth calibration/i);
     expect(latestRun).toMatch(/Dedicated surface route fallback/i);
     expect(latestRun).toMatch(/route key[\s\S]*batch route[\s\S]*grounding question/i);
+    expect(latestRun).toMatch(/Operation coverage checkpoint/i);
+    expect(latestRun).toMatch(
+      /normal stored entities[\s\S]*add[\s\S]*update[\s\S]*review[\s\S]*link/i
+    );
+    expect(latestRun).toMatch(
+      /start, continue, complete[\s\S]*adjust, judge, signal, publish, sync, or observe/i
+    );
+    expect(latestRun).toMatch(
+      /review, correct, repair, run, inspect, publish, or preserve/i
+    );
+    expect(latestRun).toMatch(/formulation lane before storage/i);
     expect(latestRun).toMatch(/methodRoutes/i);
     expect(latestRun).toMatch(/do not fall back to generic batch CRUD/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
     expect(latestRun).toMatch(/After a Movement read/i);
     expect(latestRun).toMatch(/After a Life Force overview/i);
-    expect(latestRun).toMatch(/After a Workbench read/i);
+    expect(latestRun).toMatch(/After a\s+Workbench read/i);
     expect(latestRun).toMatch(/Do not leave the user with interpretation alone/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
@@ -1725,10 +1825,10 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*anti-drift/i
+      /Cycle 1[\s\S]*operation-lane/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*Dedicated surface route fallback[\s\S]*methodRoutes/i
+      /Cycle 2[\s\S]*OpenAPI[\s\S]*methodRoutes/i
     );
     expect(latestRun).toMatch(
       /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i

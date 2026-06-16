@@ -27,6 +27,16 @@ access or ownership defaults. Strategies may also be locked with `isLocked`; onc
 strategy is locked, Hermes should treat the graph, targets, and descriptive plan
 fields as a contract until the user explicitly unlocks it.
 
+Keep the operation lane explicit across every entity family. Normal stored entities
+can be added, updated, reviewed or navigated, linked, or placed. Action workflows use
+verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or
+observe. Specialized CRUD uses lifecycle verbs such as create, read, update, sync,
+reconnect, delete, or browse. Read models need a practical read question and scope.
+Movement, Life Force, and Workbench use review, correct, repair, run, inspect,
+publish, or preserve lanes through their dedicated route keys. Psyche entities need
+formulation before storage when the user wants understanding rather than a direct
+save.
+
 ## Project Management Hierarchy Rule
 
 Forge project management is explicit:

@@ -526,6 +526,33 @@ Use this before you choose an API path or ask for more structure.
 - For Movement, Life Force, and Workbench, use the lane
   to choose the dedicated route family before you ask for lower-level details.
 
+## Operation coverage checkpoint
+
+Use this as a live handling and simulation check so every entity family is exercised
+as real work, not only as a create form.
+
+- Normal stored entities need four possible lanes in the agent's head: add a new
+  record, update an existing record, review or navigate existing records, and link or
+  place the record in Forge. Ask the lane only when the user's verb does not already
+  choose it.
+- Action workflows need action verbs instead of CRUD verbs: start, continue, complete,
+  adjust, judge, signal, publish, sync, or observe. Once the action verb is clear,
+  ask only for the missing target, answer, comparison, minutes, or consent.
+- Specialized CRUD surfaces need lifecycle verbs: create, read, update, sync,
+  reconnect, delete, or browse. For wiki pages, ask about the durable page or evidence
+  source; for calendar connections, ask about the provider workflow and lifecycle
+  action.
+- Read-model surfaces need a practical read question plus scope. Do not ask
+  write-shaped questions until the read creates a concrete follow-up.
+- Movement, Life Force, and Workbench need their dedicated operation lanes: review,
+  correct, repair, run, inspect, publish, or preserve. After the lane is clear, use
+  the exact dedicated route key internally and ask only for the span, place, weekday,
+  flow, run, node, output, correction, or preservation choice that is still missing.
+- Psyche entities need a formulation lane before the storage lane when the user wants
+  understanding. Direct saves can move to one accuracy or consent question; guided
+  formulation should stay with one lived example, one hypothesis when useful, and one
+  corrected saveable shape.
+
 ## Route posture checkpoint
 
 Use this quick split before the conversation gets too detailed.

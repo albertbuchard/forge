@@ -116,6 +116,17 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/Workbench is a specialized domain surface, not batch CRUD/i);
     for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
       expect(skill).toMatch(/## Entity Route Posture/i);
+      expect(skill).toMatch(/Keep the operation lane explicit across every entity family/i);
+      expect(skill).toMatch(
+        /Normal stored entities[\s\S]*added, updated, reviewed(?: or |\/)navigated,[\s\S]*linked,[\s\S]*placed/i
+      );
+      expect(skill).toMatch(
+        /start, continue, complete, adjust, judge, signal, publish, sync,\s+or\s+observe/i
+      );
+      expect(skill).toMatch(
+        /Movement, Life Force, and Workbench[\s\S]*review, correct,\s+repair, run, inspect,\s+publish,\s+or\s+preserve/i
+      );
+      expect(skill).toMatch(/formulation before storage/i);
       expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
       expect(skill).toMatch(/readModelOnlySurfaces/i);
       expect(skill).toMatch(/sleepOverview[\s\S]*sportsOverview[\s\S]*trainingLoad[\s\S]*sleep_overview[\s\S]*sports_overview[\s\S]*training_load/i);

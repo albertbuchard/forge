@@ -4350,6 +4350,8 @@ export interface AgentOnboardingPayload {
     saveSuggestionPlacement: string;
     saveSuggestionTone: string;
     maxQuestionsPerTurn: number;
+    depthCalibrationRule: string;
+    operationLaneRule: string;
     psycheExplorationRule: string;
     progressiveDisclosureRule: string;
     writeConfirmationRule: string;
@@ -4363,9 +4365,9 @@ export interface AgentOnboardingPayload {
     destructiveActionRule: string;
     followUpQuestionRule: string;
     antiDriftRule: string;
-      duplicateCheckRoute: string;
-      uiSuggestionRule: string;
-      browserFallbackRule: string;
+    duplicateCheckRoute: string;
+    uiSuggestionRule: string;
+    browserFallbackRule: string;
     writeConsentRule: string;
   };
   mutationGuidance: {
