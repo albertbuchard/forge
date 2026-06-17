@@ -144,9 +144,13 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/live onboarding `routeKeys` list,[\s\S]*`methodRoutes` map[\s\S]*route-key tool schemas[\s\S]*exact route-key to method\/path/i);
       expect(skill).toMatch(/routeKeys[\s\S]*allowed names[\s\S]*methodRoutes[\s\S]*route-key-to-`METHOD \/api\/v1\/\.\.\.` source of truth/i);
       expect(skill).toMatch(/POST aggregate reads[\s\S]*Movement `selection`[\s\S]*DELETE\s+repair paths/i);
-      expect(skill).toMatch(/place IDs inside `routeKey`[\s\S]*invent a raw route\s+string/i);
+      expect(skill).toMatch(
+        /Do not place IDs inside[\s\S]*`routeKey`, `query`, or `body`[\s\S]*invent a raw route\s+string/i
+      );
       expect(skill).toMatch(/pathParams[\s\S]*placeholder names exactly/i);
-      expect(skill).toMatch(/live onboarding disagree[\s\S]*contract bug/i);
+      expect(skill).toMatch(/:slug[\s\S]*:pointId/i);
+      expect(skill).toMatch(/routeKey`, `query`, or `body`|routeKey, query, or body/i);
+      expect(skill).toMatch(/schema and live\s+onboarding disagree[\s\S]*contract bug/i);
       expect(skill).toMatch(
         /specialized route-key tool is unavailable, stale, or missing the needed route\s+key/i
       );
@@ -165,6 +169,12 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/minimum save-readiness\s+checkpoint/i);
       expect(skill).toMatch(/accepted wording[\s\S]*meaningful body[\s\S]*route lane/i);
       expect(skill).toMatch(/write, read, run, or update[\s\S]*instead of collecting optional\s+fields/i);
+      expect(skill).toMatch(
+        /read's decision value[\s\S]*rules\s+in[\s\S]*rules\s+out[\s\S]*answer-changing\s+uncertainty/i
+      );
+      expect(skill).toMatch(
+        /save, update, review,\s+link, schedule, correct, run, publish, preserve,\s+enrich, open the UI, or stop/i
+      );
       expect(skill).toMatch(/Psyche save-readiness checkpoint/i);
       expect(skill).toMatch(/belief sentence[\s\S]*functional loop[\s\S]*flashcard cue\/message/i);
       expect(skill).toMatch(/hypothesis timing checkpoint/i);
@@ -194,6 +204,9 @@ describe("forge skill playbook parity", () => {
       );
       expect(skill).toMatch(/preserve\s+therapeutic history/i);
       expect(skill).toMatch(/Concrete route-key examples for internal use/i);
+      expect(skill).toMatch(
+        /If no card fits[\s\S]*cue or urge sentence[\s\S]*short message[\s\S]*visual\s+style[\s\S]*colors[\s\S]*tags[\s\S]*optional links/i
+      );
       expect(skill).toMatch(/Movement all-time read[\s\S]*"routeKey":"allTime"/i);
       expect(skill).toMatch(/Movement timeline read[\s\S]*"routeKey":"timeline"/i);
       expect(skill).toMatch(/Movement selection aggregate[\s\S]*"routeKey":"selection"[\s\S]*"body"[\s\S]*"placeIds"/i);

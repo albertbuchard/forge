@@ -199,6 +199,12 @@ onboarding.
 - Do not invent a nearby raw path, put IDs into the route key, or ask the user to pick
   an endpoint. Ask only for the missing product identifier or span that fills the
   published path.
+- Before calling a specialized route, check the selected `methodRoutes` entry for
+  placeholders such as `:id`, `:weekday`, `:slug`, `:runId`, `:nodeId`, or
+  `:pointId`. Every placeholder must be filled through `pathParams` with the same
+  name before the call; never hide one inside `query`, `body`, or `routeKey`.
+- If a required placeholder is missing, ask for the product noun that fills it: the
+  saved place, movement box, trip, weekday, flow, slug, run, node, or trip point.
 - If tool schema, live onboarding, and OpenAPI disagree, trust live onboarding for the
   immediate call when it names the exact route, then treat the disagreement as a Forge
   contract bug to fix.
@@ -269,6 +275,9 @@ worked.
   answers the user's practical question and ask only for the missing detail that would
   permit that action. Do not hand the user a broad menu after you just learned enough
   to narrow the next move.
+- Make the read's decision value explicit before any follow-up: what the read rules
+  in, what it rules out, and what one uncertainty remains. If there is no
+  answer-changing uncertainty, do not ask another question.
 - For Movement, Life Force, Workbench, calendar, health, and operator overviews,
   keep the follow-up anchored to the read result: the span that is missing, the
   weekday curve that needs correction, the failed run or node, the overloaded day, or
@@ -827,8 +836,10 @@ Use this quick internal check before every follow-up question.
    operational detail?
 3. Does it affect the API posture: batch CRUD, specialized CRUD, action workflow, or
    specialized domain route?
-4. What is the smallest question that would answer that unknown?
-5. If the user already gave enough to act, stop asking and move to a short summary or
+4. What concrete action would a possible answer enable: save, update, review, link,
+   schedule, correct, run, publish, preserve, or stop?
+5. What is the smallest question that would answer that unknown?
+6. If the user already gave enough to act, stop asking and move to a short summary or
    the write.
 
 Useful calibration heuristics:
@@ -845,6 +856,15 @@ Useful calibration heuristics:
   skip it.
 - If the next question would not change the API path, write shape, wording, timing, or
   useful links, skip it.
+- If you cannot say what the user's answer would change, do not ask the question.
+  Summarize what is already clear, take the read/write/run action, or close cleanly.
+- For review-first work, the follow-up must point to one action enabled by the read:
+  no change, save, update, correct, link, schedule, run, publish, preserve, enrich, or
+  open the UI. Do not ask a generic "what do you want to do with this?" after the read
+  already narrowed the practical next move.
+- For Movement, Life Force, and Workbench, the same rule applies through the product
+  object: missing span, place boundary, weekday curve, profile assumption, flow, run,
+  node, output, or preservation choice.
 
 ## Abstract And Reusable Record Moves
 
@@ -2082,6 +2102,10 @@ Direct action rules:
 - Treat day, month, all-time, timeline, trip detail, and selection as internal read
   lanes. With the user, ask for the useful time window, place, selected span, stay, or
   trip instead of listing route choices.
+- For route keys with placeholders, identify the product object before calling:
+  `boxDetail`, `tripDetail`, `placeUpdate`, `userBoxUpdate`, `userBoxDelete`,
+  `automaticBoxInvalidate`, `stayUpdate`, `stayDelete`, `tripUpdate`, `tripDelete`,
+  `tripPointUpdate`, and `tripPointDelete` all need exact saved IDs in `pathParams`.
 - Treat settings as a separate movement lane for passive capture, publish mode, and
   retention behavior. Ask what operating behavior should change instead of routing it
   through a place, stay, or trip edit.
@@ -2230,6 +2254,8 @@ Direct action rules:
   `GET /api/v1/life-force`. Do not invent `/api/v1/life-force/overview`.
 - If the user is describing a durable baseline such as work capacity, recovery style,
   or action-point assumptions, patch the profile instead of logging a fatigue signal.
+- For the weekday-template route, fill `pathParams.weekday` from the real weekday name
+  or number before sending the update; do not bury the weekday only in the body.
 - If the user is describing a repeatable weekday rhythm, update that weekday template
   instead of treating it as a one-off right-now feeling.
 - If the user is describing how one weekday should usually feel, update that weekday
@@ -2334,6 +2360,11 @@ Direct action rules:
 
 - If the user needs the stable public contract of a flow, prefer the flow detail or
   published-output routes before a run-history read.
+- For Workbench route keys with placeholders, identify the saved flow, slug, run, and
+  node explicitly before calling. `flowDetail`, `flowById`, `flowBySlug`,
+  `publishedOutput`, `runHistory`, `runs`, `runDetail`, `runNodes`, `nodeResult`,
+  `latestNodeOutput`, `updateFlow`, `deleteFlow`, `runFlow`, and `chatFlow` all
+  depend on exact `pathParams`.
 - Treat saved-flow catalog, box catalog, run history, run detail, node result, latest
   node output, and published output as internal read lanes. With the user, ask whether
   they need the saved flow, its input contract, one run, one node, or the public

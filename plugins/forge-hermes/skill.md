@@ -131,12 +131,13 @@ any route-key or endpoint detail.
   route-key-to-`METHOD /api/v1/...` source of truth when checking specialized
   methods, especially POST aggregate reads such as Movement `selection` and DELETE
   repair paths. When a route key's exact path contains placeholders such as `:id`,
-  `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
-  placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
-  string, or ask the user to choose an endpoint when the lane already selects one. If
-  that schema and live onboarding disagree, trust the live onboarding for the current
-  call and treat the disagreement as a Forge contract bug to fix, not as a reason to
-  guess a nearby route.
+  `:weekday`, `:slug`, `:runId`, `:nodeId`, or `:pointId`, pass those values in
+  `pathParams` using the placeholder names exactly. Do not place IDs inside
+  `routeKey`, `query`, or `body`, invent a raw route string, or ask the user to
+  choose an endpoint when the lane already selects one. If that schema and live
+  onboarding disagree, trust the live onboarding for the current call and treat the
+  disagreement as a Forge contract bug to fix, not as a reason to guess a nearby
+  route.
 - If a specialized route-key tool is unavailable, stale, or missing the needed route
   key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
   live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
@@ -232,6 +233,12 @@ Before asking another follow-up, run the playbook's minimum save-readiness check
 if accepted wording, meaningful body, route lane, target object or time scope, and any
 ownership or placement that changes later use are already clear, summarize once and
 write, read, run, or update instead of collecting optional fields.
+Make the read's decision value explicit before any follow-up: what the read rules in,
+what it rules out, and what one uncertainty remains. If no answer-changing
+uncertainty remains, close cleanly instead of asking another question.
+Before asking, decide what the user's answer would change: save, update, review,
+link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If you
+cannot name that change, summarize and act instead of asking.
 Treat partial answers as progress. Before another follow-up, identify what is
 already usable: operation, entity or surface, target record or time span, working
 wording, owner or placement, route lane, and consent. Ask only for the first missing
@@ -498,7 +505,7 @@ For wiki-specific recall:
 - Notes are searchable and editable records, not comment strings. If the user cares about durable context, preserve it as a note.
 - The wiki is the durable long-form memory surface. Use it for canonical reference pages, ingest, backlink-aware recall, books, articles, sources, concepts, and personal manuals rather than overloading normal notes.
 - Self-observation is only for lightweight observed episode notes. When the user describes a psychological chain, map situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence; use `trigger_report` for one meaningful episode, `behavior_pattern` for recurring-loop functional analysis, `behavior` for one repeated move, `belief_entry` for a core sentence, `mode_guide_session` or `mode_profile` for a part-state, `flashcard` for a rehearsable reminder during an urge or trigger, and `wiki_page` for durable memory. If a schema theme is visible, preserve it through the matching belief, pattern, mode, trigger report, flashcard, or wiki explanation instead of hiding it in self-observation.
-- If the user says they feel an urge or asks for help not doing something, search existing `flashcard` records first with `forge_search_entities` and `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection, or values-based support around it.
+- If the user says they feel an urge or asks for help not doing something, search existing `flashcard` records first with `forge_search_entities` and `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection, or values-based support around it. If no card fits and the user wants one, create only after the cue or urge sentence and short message are clear; postpone visual style, colors, tags, and optional links until the intervention sentence works.
 - The UI route is `/sports`, but the backend overview route is `/api/v1/health/fitness`. Treat both as the same sports surface. The dedicated cardiovascular training-load surface is `/training-load` in the UI and `/api/v1/health/training-load` in the API; it includes zone-time buckets, Combat/Base/Endurance smart modes, and next-workout guidance.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only to enrich those records with reflective context, tags, and links. Normal stored-record CRUD for those entities belongs on the shared batch routes.
 - Ephemeral notes are appropriate for scratch memory, temporary handoffs, or “what just happened” captures that should disappear automatically later.

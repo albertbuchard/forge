@@ -324,6 +324,25 @@ of leaving it as warm reflective prose.
   corrected, name the primary Forge record it becomes and ask one accuracy or consent
   question that moves toward that save.
 
+## Flashcard support sequence
+
+Use this when the user reports an urge, trigger, belief activation, mode activation,
+or asks for a card they can use in the hard moment.
+
+- Search existing `flashcard` records first using the user's exact urge sentence,
+  trigger situation, tags, and nearby Psyche wording.
+- If a matching card exists, show the card's message first before adding your own
+  support. The card is the intervention; the therapist-like wrapper should be brief.
+- If no card fits and the user wants one, formulate the cue or urge sentence and the
+  smallest usable message before asking about visual style, colors, tags, or optional
+  links.
+- When creating a new card from a belief, mode, trigger report, value, behavior, or
+  behavior pattern, preserve the accepted primary formulation first, then derive the
+  card from it. Do not turn card creation into a second broad Psyche interview.
+- Ready-to-save minimum: cue or urge sentence, one message the user can recognize
+  while activated, and at least one retrieval cue such as a tag, trigger situation, or
+  linked Psyche record.
+
 ## Psyche progressive disclosure
 
 Use this when the user has already supplied meaningful Psyche material. The next move
@@ -1119,6 +1138,9 @@ Arc:
    the message and retrieval cues are clear.
 6. If the user is in an urge right now, search existing flashcards first, show the
    matching message first, then support it with brief psychotherapy-informed guidance.
+7. If no matching card exists, create only after the cue or urge sentence and the
+   short message are clear; postpone visual styling until the intervention wording
+   works.
 
 Helpful follow-up lanes:
 

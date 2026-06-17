@@ -1764,13 +1764,93 @@ describe("question flow simulation cycles", () => {
     );
   });
 
+  it("cycle 3 retest: follow-ups, flashcard support, and specialized path params stay explicit", () => {
+    const questionLoop = getSectionSlice(entityPlaybook, "Question Calibration Loop");
+    const postRead = getSectionSlice(entityPlaybook, "Post-read synthesis");
+    const routeFallback = getSectionSlice(
+      entityPlaybook,
+      "Dedicated surface route fallback"
+    );
+    const flashcardSupport = getSectionSlice(
+      psychePlaybook,
+      "Flashcard support sequence"
+    );
+    const onboardingSource = readRepoFile("server/src/app.ts");
+    const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/forge-hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/forge-codex/skills/forge-codex/SKILL.md"
+    );
+
+    expect(questionLoop).toMatch(
+      /What concrete action would a possible answer enable:[\s\S]*save,[\s\S]*update,[\s\S]*review,[\s\S]*link,[\s\S]*schedule,[\s\S]*correct,[\s\S]*run,[\s\S]*publish,[\s\S]*preserve,[\s\S]*stop/i
+    );
+    expect(questionLoop).toMatch(
+      /If the user already gave enough to act,[\s\S]*stop asking/i
+    );
+    expect(postRead).toMatch(
+      /read's decision value[\s\S]*rules\s+in[\s\S]*rules\s+out[\s\S]*answer-changing uncertainty/i
+    );
+    expect(routeFallback).toMatch(
+      /methodRoutes[\s\S]*:id[\s\S]*:weekday[\s\S]*:slug[\s\S]*:runId[\s\S]*:nodeId[\s\S]*:pointId/i
+    );
+    expect(routeFallback).toMatch(
+      /Every placeholder must be filled through `pathParams`[\s\S]*never hide one inside `query`, `body`, or `routeKey`/i
+    );
+    expect(routeFallback).toMatch(
+      /saved place, movement box, trip, weekday, flow, slug, run, node, or trip point/i
+    );
+    expect(flashcardSupport).toMatch(
+      /Search existing `flashcard` records first[\s\S]*exact urge sentence[\s\S]*trigger situation[\s\S]*nearby Psyche wording/i
+    );
+    expect(flashcardSupport).toMatch(
+      /matching card exists[\s\S]*show the card's message first[\s\S]*card is the intervention/i
+    );
+    expect(flashcardSupport).toMatch(
+      /If no card fits[\s\S]*cue or urge sentence[\s\S]*smallest usable message[\s\S]*visual style, colors, tags, or optional\s+links/i
+    );
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(/answer would\s+change|answer's? would\s+change/i);
+      expect(source).toMatch(
+        /save, update, review,\s+link, schedule, correct, run, publish, preserve,\s+enrich, open the UI, or stop/i
+      );
+      expect(source).toContain("read's decision value");
+      expect(source).toMatch(/rules\s+in/i);
+      expect(source).toMatch(/rules\s+out/i);
+      expect(source).toMatch(/answer-changing\s+uncertainty/i);
+      expect(source).toContain("methodRoutes");
+      expect(source).toContain("pathParams");
+      expect(source).toContain("weekday");
+      expect(source).toContain("slug");
+      expect(source).toContain("runId");
+      expect(source).toContain("nodeId");
+      expect(source).toContain("pointId");
+      expect(source).toMatch(
+        /routeKey`, `query`, or `body`|routeKey, query, or body|query`, `body`, or `routeKey`|query, body, or routeKey/i
+      );
+      expect(source).toMatch(/if no card fits/i);
+      expect(source).toContain("cue or urge sentence");
+      expect(source).toContain("short message");
+      expect(source).toMatch(/visual\s+style/i);
+      expect(source).toContain("colors");
+      expect(source).toContain("tags");
+      expect(source).toContain("optional links");
+    }
+  });
+
   it("cycle 3 report retest: durable automation report covers this full run", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-16 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-17 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-16/);
+    expect(report).toMatch(/Latest run date: 2026-06-17/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-hermes/i);
@@ -1778,7 +1858,7 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/43 entity\s+catalog entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
-    expect(latestRun).toMatch(/49\s+focused checks/i);
+    expect(latestRun).toMatch(/50\s+focused checks/i);
     expect(latestRun).toMatch(/antiDriftRule/i);
     expect(latestRun).toMatch(/depthCalibrationRule/i);
     expect(latestRun).toMatch(/operationLaneRule/i);
@@ -1793,8 +1873,11 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Depth calibration/i);
     expect(latestRun).toMatch(/Psyche depth calibration/i);
     expect(latestRun).toMatch(/Dedicated surface route fallback/i);
+    expect(latestRun).toMatch(/Question Calibration Loop/i);
+    expect(latestRun).toMatch(/Post-read synthesis/i);
+    expect(latestRun).toMatch(/Flashcard support sequence/i);
     expect(latestRun).toMatch(/route key[\s\S]*batch route[\s\S]*grounding question/i);
-    expect(latestRun).toMatch(/Operation coverage checkpoint/i);
+    expect(latestRun).toMatch(/Operation coverage\s+checkpoint/i);
     expect(latestRun).toMatch(
       /normal stored entities[\s\S]*add[\s\S]*update[\s\S]*review[\s\S]*link/i
     );
@@ -1806,7 +1889,11 @@ describe("question flow simulation cycles", () => {
     );
     expect(latestRun).toMatch(/formulation lane before storage/i);
     expect(latestRun).toMatch(/methodRoutes/i);
-    expect(latestRun).toMatch(/do not fall back to generic batch CRUD/i);
+    expect(latestRun).toMatch(/pathParams/i);
+    expect(latestRun).toMatch(/:pointId/i);
+    expect(latestRun).toMatch(/answer-changing\s+uncertainty/i);
+    expect(latestRun).toMatch(/cue or urge sentence[\s\S]*short message/i);
+    expect(latestRun).toMatch(/do not\s+fall back to generic batch CRUD/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
     expect(latestRun).toMatch(/After a Movement read/i);
     expect(latestRun).toMatch(/After a Life Force overview/i);
@@ -1825,15 +1912,15 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
     expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*operation-lane/i
+      /Cycle 1[\s\S]*answer-changing follow-up/i
     );
     expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*OpenAPI[\s\S]*methodRoutes/i
+      /Cycle 2[\s\S]*flashcard support/i
     );
     expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*durable\s+automation freshness[\s\S]*current onboarding\s+contract/i
+      /Cycle 3[\s\S]*pathParams[\s\S]*methodRoutes/i
     );
-    expect(latestRun).toMatch(/batch-first normal entity routing/i);
+    expect(latestRun).toMatch(/batch-first\s+normal entity routing/i);
     expect(latestRun).toMatch(/specialized route-key examples/i);
     expect(latestRun).toMatch(/focused retest passed/i);
     expect(latestRun).toMatch(/What happened after retesting/i);

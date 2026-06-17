@@ -73,12 +73,13 @@ any route-key or endpoint detail.
   route-key-to-`METHOD /api/v1/...` source of truth when checking specialized
   methods, especially POST aggregate reads such as Movement `selection` and DELETE
   repair paths. When a route key's exact path contains placeholders such as `:id`,
-  `:weekday`, `:runId`, or `:nodeId`, pass those values in `pathParams` using the
-  placeholder names exactly. Do not place IDs inside `routeKey`, invent a raw route
-  string, or ask the user to choose an endpoint when the lane already selects one. If
-  that schema and live onboarding disagree, trust the live onboarding for the current
-  call and treat the disagreement as a Forge contract bug to fix, not as a reason to
-  guess a nearby route.
+  `:weekday`, `:slug`, `:runId`, `:nodeId`, or `:pointId`, pass those values in
+  `pathParams` using the placeholder names exactly. Do not place IDs inside
+  `routeKey`, `query`, or `body`, invent a raw route string, or ask the user to
+  choose an endpoint when the lane already selects one. If that schema and live
+  onboarding disagree, trust the live onboarding for the current call and treat the
+  disagreement as a Forge contract bug to fix, not as a reason to guess a nearby
+  route.
 - If a specialized route-key tool is unavailable, stale, or missing the needed route
   key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
   live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
@@ -220,6 +221,12 @@ Surface rule:
   scope, and any ownership or placement that changes later use are already clear,
   summarize once and write, read, run, or update instead of collecting optional
   fields.
+- Make the read's decision value explicit before any follow-up: what the read rules
+  in, what it rules out, and what one uncertainty remains. If no answer-changing
+  uncertainty remains, close cleanly instead of asking another question.
+- Before asking, decide what the user's answer would change: save, update, review,
+  link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If
+  you cannot name that change, summarize and act instead of asking.
 - Use a natural progression of:
   concrete example or intent -> working name -> purpose or meaning -> placement in
   Forge -> operational details -> linked context.
@@ -491,7 +498,9 @@ Surface rule:
   existing `flashcard` records first with `forge_search_entities` and
   `entityTypes: ["flashcard"]`. If a card matches, show the card message first, then
   add brief grounding, urge-surfing, cognitive defusion, schema/mode-aware reflection,
-  or values-based support around it.
+  or values-based support around it. If no card fits and the user wants one, create
+  only after the cue or urge sentence and short message are clear; postpone visual
+  style, colors, tags, and optional links until the intervention sentence works.
 - Preferred mutation path for wiki content: use the wiki tools instead of batch CRUD.
   Before ingesting source material, call `forge_get_wiki_settings` so Codex knows the
   available spaces, LLM profiles, and embedding profiles. Prefer the shared wiki
