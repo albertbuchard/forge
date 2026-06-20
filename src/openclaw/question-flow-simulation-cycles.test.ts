@@ -1848,14 +1848,16 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-19 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-20 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-19/);
+    expect(report).toMatch(/Latest run date: 2026-06-20/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-hermes/i);
     expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.14/i);
     expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
+    expect(latestRun).toMatch(/\/api\/v1\/agents\/onboarding/i);
+    expect(latestRun).toMatch(/\/api\/v1\/agent\/onboarding[\s\S]*stale/i);
     expect(latestRun).toMatch(/43 entity\s+catalog entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
     expect(latestRun).toMatch(/41\s+focused checks/i);
