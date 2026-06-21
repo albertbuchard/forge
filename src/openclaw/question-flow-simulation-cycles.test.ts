@@ -1766,14 +1766,23 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 3 retest: follow-ups, flashcard support, and specialized path params stay explicit", () => {
     const questionLoop = getSectionSlice(entityPlaybook, "Question Calibration Loop");
+    const noQuestionGate = getSectionSlice(entityPlaybook, "No-question gate");
     const postRead = getSectionSlice(entityPlaybook, "Post-read synthesis");
     const routeFallback = getSectionSlice(
       entityPlaybook,
       "Dedicated surface route fallback"
     );
+    const routeHandshake = getSectionSlice(
+      entityPlaybook,
+      "Specialized route-contract handshake"
+    );
     const flashcardSupport = getSectionSlice(
       psychePlaybook,
       "Flashcard support sequence"
+    );
+    const hypothesisExamples = getSectionSlice(
+      psychePlaybook,
+      "Psyche hypothesis examples"
     );
     const onboardingSource = readRepoFile("server/src/app.ts");
     const openClawSkill = readRepoFile("skills/forge-openclaw/SKILL.md");
@@ -1788,8 +1797,32 @@ describe("question flow simulation cycles", () => {
     expect(questionLoop).toMatch(
       /If the user already gave enough to act,[\s\S]*stop asking/i
     );
+    expect(noQuestionGate).toMatch(
+      /A polished extra question is still a bad\s+question when it cannot change the next action/i
+    );
+    expect(noQuestionGate).toMatch(
+      /record type[\s\S]*accepted wording[\s\S]*hierarchy placement[\s\S]*owner\/accountability[\s\S]*timing[\s\S]*route lane[\s\S]*target object[\s\S]*correction[\s\S]*link[\s\S]*verification read[\s\S]*run\/publish\/preserve[\s\S]*consent/i
+    );
+    expect(noQuestionGate).toMatch(
+      /optional tags, colors, priority, assignees, dates, aliases, visual\s+style, or related links/i
+    );
+    expect(noQuestionGate).toMatch(
+      /would only make the conversation feel warmer, more complete, or\s+more like a form/i
+    );
     expect(postRead).toMatch(
       /read's decision value[\s\S]*rules\s+in[\s\S]*rules\s+out[\s\S]*answer-changing uncertainty/i
+    );
+    expect(routeHandshake).toMatch(
+      /Select the product lane first[\s\S]*movement span or repair[\s\S]*energy\s+assumption or signal[\s\S]*saved flow\/run\/node\/output/i
+    );
+    expect(routeHandshake).toMatch(
+      /verify the matching `routeKey` against live onboarding `routeKeys` and\s+`methodRoutes`/i
+    );
+    expect(routeHandshake).toMatch(
+      /fill every placeholder through\s+`pathParams`[\s\S]*missing product noun/i
+    );
+    expect(routeHandshake).toMatch(
+      /report a\s+contract bug instead of silently using generic batch CRUD or a nearby route/i
     );
     expect(routeFallback).toMatch(
       /methodRoutes[\s\S]*:id[\s\S]*:weekday[\s\S]*:slug[\s\S]*:runId[\s\S]*:nodeId[\s\S]*:pointId/i
@@ -1809,6 +1842,27 @@ describe("question flow simulation cycles", () => {
     expect(flashcardSupport).toMatch(
       /If no card fits[\s\S]*cue or urge sentence[\s\S]*smallest usable message[\s\S]*visual style, colors, tags, or optional\s+links/i
     );
+    expect(hypothesisExamples).toMatch(
+      /These are examples of active formulation, not scripts to recite/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`behavior_pattern`:[\s\S]*over-editing[\s\S]*protects[\s\S]*cost/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`belief_entry`:[\s\S]*If this is seen[\s\S]*not legitimate/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`mode_profile`:[\s\S]*tightening standards[\s\S]*protection from shame/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`trigger_report`:[\s\S]*silence started meaning danger/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`event_type`:[\s\S]*feedback becomes danger/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`emotion_definition`:[\s\S]*body brake[\s\S]*ordinary\s+anxiety/i
+    );
 
     for (const source of [
       onboardingSource,
@@ -1816,6 +1870,24 @@ describe("question flow simulation cycles", () => {
       hermesSkill,
       codexSkill
     ]) {
+      expect(source).toMatch(/no-question gate/i);
+      expect(source).toMatch(
+        /record type[\s\S]*accepted wording[\s\S]*hierarchy placement[\s\S]*owner\/accountability[\s\S]*timing[\s\S]*route lane[\s\S]*target object[\s\S]*correction[\s\S]*link[\s\S]*verification read/i
+      );
+      expect(source).toMatch(
+        /warmth, completeness, optional\s+metadata, or form polish/i
+      );
+      expect(source).toMatch(/route-contract\s+handshake/i);
+      expect(source).toMatch(
+        /routeKey[\s\S]*routeKeys[\s\S]*methodRoutes[\s\S]*pathParams[\s\S]*missing\s+product\s+noun/i
+      );
+      expect(source).toMatch(
+        /contract is missing a lane[\s\S]*contract bug[\s\S]*generic batch\s+CRUD/i
+      );
+      expect(source).toMatch(/Psyche hypothesis examples/i);
+      expect(source).toMatch(
+        /another broad question would make the user do\s+all the interpretation alone/i
+      );
       expect(source).toMatch(/answer would\s+change|answer's? would\s+change/i);
       expect(source).toMatch(
         /save, update, review,\s+link, schedule, correct, run, publish, preserve,\s+enrich, open the UI, or stop/i
@@ -1848,9 +1920,9 @@ describe("question flow simulation cycles", () => {
     const report = readRepoFile(
       "docs/internal/audits/question-flow-improvement-cycles.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-20 Automation Pass");
+    const latestRun = getSectionSlice(report, "2026-06-21 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-20/);
+    expect(report).toMatch(/Latest run date: 2026-06-21/);
     expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
     expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-hermes/i);
@@ -1860,7 +1932,7 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/\/api\/v1\/agent\/onboarding[\s\S]*stale/i);
     expect(latestRun).toMatch(/43 entity\s+catalog entries/i);
     expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
-    expect(latestRun).toMatch(/41\s+focused checks/i);
+    expect(latestRun).toMatch(/26\s+focused Vitest tests/i);
     expect(latestRun).toMatch(
       /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/entities\/update[\s\S]*\/api\/v1\/entities\/delete[\s\S]*\/api\/v1\/entities\/restore[\s\S]*\/api\/v1\/entities\/search/i
     );
@@ -1881,6 +1953,8 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/Depth calibration/i);
     expect(latestRun).toMatch(/Psyche depth calibration/i);
     expect(latestRun).toMatch(/Dedicated surface route fallback/i);
+    expect(latestRun).toMatch(/Specialized route-contract handshake/i);
+    expect(latestRun).toMatch(/No-question gate/i);
     expect(latestRun).toMatch(/Question Calibration Loop/i);
     expect(latestRun).toMatch(/Post-read synthesis/i);
     expect(latestRun).toMatch(/Flashcard support sequence/i);
@@ -1890,7 +1964,7 @@ describe("question flow simulation cycles", () => {
       /normal stored entities[\s\S]*add[\s\S]*update[\s\S]*review[\s\S]*link/i
     );
     expect(latestRun).toMatch(
-      /start, continue, complete[\s\S]*adjust, judge, signal, publish, sync, or observe/i
+      /start,\s+continue,\s+complete[\s\S]*adjust,\s+judge,\s+signal,\s+publish,\s+sync,\s+or\s+observe/i
     );
     expect(latestRun).toMatch(
       /review, correct, repair, run, inspect, publish, or preserve/i
@@ -1900,13 +1974,19 @@ describe("question flow simulation cycles", () => {
     expect(latestRun).toMatch(/pathParams/i);
     expect(latestRun).toMatch(/:pointId/i);
     expect(latestRun).toMatch(/answer-changing\s+uncertainty/i);
-    expect(latestRun).toMatch(/cue or urge sentence[\s\S]*short message/i);
+    expect(latestRun).toMatch(/cue\s+or\s+urge\s+sentence[\s\S]*short\s+message/i);
     expect(latestRun).toMatch(/do not\s+fall back to generic batch CRUD/i);
     expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
     expect(latestRun).toMatch(/After a Movement read/i);
     expect(latestRun).toMatch(/After a Life Force overview/i);
     expect(latestRun).toMatch(/After a\s+Workbench read/i);
     expect(latestRun).toMatch(/Do not leave the user with interpretation alone/i);
+    expect(latestRun).toMatch(/Psyche hypothesis examples/i);
+    expect(latestRun).toMatch(/active formulation/i);
+    expect(latestRun).toMatch(/polished extra\s+question/i);
+    expect(latestRun).toMatch(/route-contract\s+handshake/i);
+    expect(latestRun).toMatch(/missing\s+product\s+noun/i);
+    expect(latestRun).toMatch(/contract bug/i);
     expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
     expect(latestRun).toMatch(
       /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i

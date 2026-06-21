@@ -560,6 +560,7 @@ test("OpenAI Codex text prompts read event-stream responses", async () => {
     stream?: unknown;
     store?: unknown;
     instructions?: unknown;
+    max_output_tokens?: unknown;
   } | null;
   assert.ok(body);
   assert.equal(body.stream, true);

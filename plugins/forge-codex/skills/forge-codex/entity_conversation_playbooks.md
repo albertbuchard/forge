@@ -209,6 +209,24 @@ onboarding.
   immediate call when it names the exact route, then treat the disagreement as a Forge
   contract bug to fix.
 
+## Specialized route-contract handshake
+
+Use this before every Movement, Life Force, or Workbench call so the route path is
+truthful without turning the user's turn into implementation talk.
+
+- Select the product lane first in plain language: movement span or repair, energy
+  assumption or signal, saved flow/run/node/output, or published artifact.
+- Then verify the matching `routeKey` against live onboarding `routeKeys` and
+  `methodRoutes`. The route key and method/path must come from that contract, not from
+  memory or a guessed URL.
+- If `methodRoutes` contains placeholders, fill every placeholder through
+  `pathParams` with the exact placeholder name before the call. Ask the user only for
+  the missing product noun that fills the placeholder.
+- Cross-check OpenAPI when you are debugging or when a route-key tool looks stale; do
+  not make the user choose between endpoint names.
+- If the contract is missing a lane the product clearly supports, stop and report a
+  contract bug instead of silently using generic batch CRUD or a nearby route.
+
 ## Dedicated surface verification loop
 
 Use this after a Movement, Life Force, or Workbench mutation or result-producing run.
@@ -865,6 +883,29 @@ Useful calibration heuristics:
 - For Movement, Life Force, and Workbench, the same rule applies through the product
   object: missing span, place boundary, weekday curve, profile assumption, flow, run,
   node, output, or preservation choice.
+
+## No-question gate
+
+Use this before every follow-up, especially after partial answers, reads, writes,
+repairs, and Psyche-adjacent material. A polished extra question is still a bad
+question when it cannot change the next action.
+
+- Ask only if the answer can change one of these: record type, accepted wording,
+  hierarchy placement, owner/accountability, timing, route lane, target object,
+  correction, link, verification read, run/publish/preserve action, or consent.
+- Do not ask for optional tags, colors, priority, assignees, dates, aliases, visual
+  style, or related links when the user already gave enough to save, read, run,
+  correct, or close.
+- If the next question would only make the conversation feel warmer, more complete, or
+  more like a form, skip it. Summarize what is clear and act, or close cleanly.
+- For review-first work, answer the practical question first. Ask another question
+  only when the read exposes an answer-changing uncertainty or a concrete action the
+  user has not yet authorized.
+- For specialized domains, do not ask a reflective "why" after the route lane and
+  target are already known; ask only for the span, place, weekday, flow, run, node,
+  output, correction, or preservation choice that permits the action.
+- For Psyche-adjacent work, do not keep exploring once the user has accepted a
+  formulation. Ask one accuracy or consent question, then save or stop.
 
 ## Abstract And Reusable Record Moves
 

@@ -143,6 +143,13 @@ any route-key or endpoint detail.
   live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
   Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
   and path.
+- Before every Movement, Life Force, or Workbench call, run a route-contract
+  handshake internally: select the product lane in plain language, verify the matching
+  `routeKey` against live onboarding `routeKeys` and `methodRoutes`, fill any
+  placeholders through `pathParams`, and ask the user only for the missing product
+  noun that fills the placeholder. If the contract is missing a lane the product
+  clearly supports, report a contract bug instead of silently using generic batch
+  CRUD or a nearby route.
 
 Concrete route-key examples for internal use:
 
@@ -233,6 +240,11 @@ Before asking another follow-up, run the playbook's minimum save-readiness check
 if accepted wording, meaningful body, route lane, target object or time scope, and any
 ownership or placement that changes later use are already clear, summarize once and
 write, read, run, or update instead of collecting optional fields.
+Run the no-question gate before every follow-up: ask only if the answer can change
+record type, accepted wording, hierarchy placement, owner/accountability, timing,
+route lane, target object, correction, link, verification read, run/publish/preserve
+action, or consent. If the question would only add warmth, completeness, optional
+metadata, or form polish, skip it, summarize what is clear, and act or close.
 Make the read's decision value explicit before any follow-up: what the read rules in,
 what it rules out, and what one uncertainty remains. If no answer-changing
 uncertainty remains, close cleanly instead of asking another question.
@@ -519,6 +531,10 @@ For wiki-specific recall:
 - Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. Once at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand the function, protection, cost, belief, mode, or schema theme.
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A good hypothesis says what the reaction may be protecting, predicting, relieving, or costing, then asks whether that lands or needs correction.
 - For Psyche hypotheses, reduce the formulation burden. After one concrete example, offer one tentative function, danger, protection, payoff, or cost hypothesis and ask one fit-or-correction question. Do not make the user prove the experience, list evidence, or design repair before the wording feels held.
+- Use the Psyche hypothesis examples when one concrete episode, belief sentence,
+  behavior, or mode voice is visible and another broad question would make the user do
+  all the interpretation alone. Offer one testable formulation, ask one correction
+  question, and then bridge to the saveable record if it lands.
 - Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For `behavior_pattern`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the next helpful move is usually one active formulation plus one correction question, not another passive reflection.
 - Do not leave the user with interpretation alone. Once the hypothesis lands or is
   corrected, name the primary Forge record it becomes and ask one accuracy or consent
