@@ -5,28 +5,24 @@ on:
   push:
     paths:
       - ".github/workflows/openclaw-plugin.yml"
-      - "companion-iroh/**"
-      - "openclaw-plugin/**"
-      - "openclaw.plugin.json"
-      - "skills/forge-openclaw/**"
+      - "packages/companion-iroh/**"
+      - "plugins/openclaw/**"
       - "scripts/ci/setup-safe-chain-ci.sh"
-      - "src/openclaw/**"
-      - "server/src/app.ts"
-      - "server/src/app.test.ts"
-      - "server/src/openapi.ts"
+      - "apps/web/src/openclaw/**"
+      - "apps/api/src/app.ts"
+      - "apps/api/src/app.test.ts"
+      - "apps/api/src/openapi.ts"
       - "package.json"
   pull_request:
     paths:
       - ".github/workflows/openclaw-plugin.yml"
-      - "companion-iroh/**"
-      - "openclaw-plugin/**"
-      - "openclaw.plugin.json"
-      - "skills/forge-openclaw/**"
+      - "packages/companion-iroh/**"
+      - "plugins/openclaw/**"
       - "scripts/ci/setup-safe-chain-ci.sh"
-      - "src/openclaw/**"
-      - "server/src/app.ts"
-      - "server/src/app.test.ts"
-      - "server/src/openapi.ts"
+      - "apps/web/src/openclaw/**"
+      - "apps/api/src/app.ts"
+      - "apps/api/src/app.test.ts"
+      - "apps/api/src/openapi.ts"
       - "package.json"
 
 jobs:
@@ -43,5 +39,5 @@ jobs:
       - name: Set up Safe Chain
         run: ./scripts/ci/setup-safe-chain-ci.sh
       - run: npm ci
-      - run: npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts
+      - run: npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts
       - run: npm run build:openclaw-plugin

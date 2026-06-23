@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/albertbuchard/forge/main/openclaw-plugin/docs/assets/brand-icons/forge-logo-imagegen2-transparent-1280.png" alt="Forge" width="720" />
+  <img src="https://raw.githubusercontent.com/albertbuchard/forge/main/plugins/openclaw/docs/assets/brand-icons/forge-logo-imagegen2-transparent-1280.png" alt="Forge" width="720" />
 </p>
 
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=06121c)](https://react.dev/)
@@ -14,7 +14,7 @@ Forge is a local-first workspace for planning, execution, memory, health context
 
 Read the full published documentation on the [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
 
-![Forge overview dashboard](./openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+![Forge overview dashboard](./plugins/openclaw/docs/assets/forge-overview-dashboard.png)
 
 It gives you one place to:
 
@@ -105,7 +105,7 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-Manual OpenClaw, Hermes, Codex, and Claude Code setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), [`plugins/forge-codex/README.md`](./plugins/forge-codex/README.md), and [`docs/reference/claude-code-adapter.md`](./docs/reference/claude-code-adapter.md).
+Manual OpenClaw, Hermes, Codex, and Claude Code setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), [`plugins/codex/README.md`](./plugins/codex/README.md), and [`docs/reference/claude-code-adapter.md`](./docs/reference/claude-code-adapter.md).
 
 ## License
 
@@ -137,7 +137,7 @@ This is an advanced adapter-only path. Prefer `npx forge-memory --dev` unless yo
 From the Forge repo root:
 
 ```bash
-openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
+openclaw plugins install --link --dangerously-force-unsafe-install ./plugins/openclaw
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
 openclaw plugins inspect forge-openclaw-plugin --runtime
@@ -163,7 +163,7 @@ Use this from the Forge repo instead when you want Hermes to follow local source
 ```bash
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/hermes
 ```
 
 ### Advanced: Codex MCP Commands
@@ -178,7 +178,7 @@ codex mcp add forge \
   --env FORGE_PORT=4317 \
   --env FORGE_ACTOR_LABEL=codex \
   --env FORGE_TIMEOUT_MS=15000 \
-  -- /bin/zsh /absolute/path/to/forge/plugins/forge-codex/scripts/run-mcp.sh
+  -- /bin/zsh /absolute/path/to/forge/plugins/codex/scripts/run-mcp.sh
 codex mcp list
 ```
 
@@ -213,10 +213,10 @@ If OpenClaw, Hermes, Codex, Claude Code, and the browser should share one Forge 
 
 | Surface              | Screenshot                                                                      |
 | -------------------- | ------------------------------------------------------------------------------- |
-| Projects             | ![Forge projects board](./openclaw-plugin/docs/assets/forge-projects-board.png) |
-| Execution board      | ![Forge Kanban board](./openclaw-plugin/docs/assets/forge-kanban-board.png)     |
-| Knowledge and memory | ![Forge wiki memory](./openclaw-plugin/docs/assets/forge-wiki-memory.png)       |
-| Sleep and health     | ![Forge sleep overview](./openclaw-plugin/docs/assets/forge-sleep-overview.png) |
+| Projects             | ![Forge projects board](./plugins/openclaw/docs/assets/forge-projects-board.png) |
+| Execution board      | ![Forge Kanban board](./plugins/openclaw/docs/assets/forge-kanban-board.png)     |
+| Knowledge and memory | ![Forge wiki memory](./plugins/openclaw/docs/assets/forge-wiki-memory.png)       |
+| Sleep and health     | ![Forge sleep overview](./plugins/openclaw/docs/assets/forge-sleep-overview.png) |
 
 ## Documentation
 
@@ -235,4 +235,4 @@ npm run test
 npm run test:server
 ```
 
-Contributor and runtime details live in the [Development guide](https://albertbuchard.github.io/forge/development.html) and [Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The publishable OpenClaw package lives in [`openclaw-plugin/`](./openclaw-plugin), the Hermes adapter in [`plugins/forge-hermes/`](./plugins/forge-hermes), and the Codex and Claude Code MCP adapters use Forge Memory's shared MCP entrypoint.
+Contributor and runtime details live in the [Development guide](https://albertbuchard.github.io/forge/development.html) and [Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The publishable OpenClaw package lives in [`plugins/openclaw/`](./plugins/openclaw), the Hermes adapter in [`plugins/hermes/`](./plugins/hermes), and the Codex and Claude Code MCP adapters use Forge Memory's shared MCP entrypoint.

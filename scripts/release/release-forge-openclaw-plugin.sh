@@ -4,17 +4,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FORGE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-PLUGIN_DIR="${FORGE_DIR}/openclaw-plugin"
-ROOT_MANIFEST="${FORGE_DIR}/openclaw.plugin.json"
+PLUGIN_DIR="${FORGE_DIR}/plugins/openclaw"
+ROOT_MANIFEST="${FORGE_DIR}/plugins/openclaw/openclaw.plugin.json"
 FORGE_PACKAGE_JSON="${FORGE_DIR}/package.json"
 PLUGIN_MANIFEST="${PLUGIN_DIR}/openclaw.plugin.json"
 PLUGIN_PACKAGE_JSON="${PLUGIN_DIR}/package.json"
 PLUGIN_PACKAGE_LOCK_JSON="${PLUGIN_DIR}/package-lock.json"
-CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-codex/.codex-plugin/plugin.json"
-CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-codex/runtime/package.json"
-HERMES_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/forge-hermes/plugin.yaml"
-HERMES_PLUGIN_PACKAGE_VERSION="${FORGE_DIR}/plugins/forge-hermes/forge_hermes/version.py"
-HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/forge-hermes/forge_hermes/runtime/package.json"
+CODEX_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/codex/.codex-plugin/plugin.json"
+CODEX_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/codex/runtime/package.json"
+HERMES_PLUGIN_MANIFEST="${FORGE_DIR}/plugins/hermes/plugin.yaml"
+HERMES_PLUGIN_PACKAGE_VERSION="${FORGE_DIR}/plugins/hermes/forge_hermes/version.py"
+HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${FORGE_DIR}/plugins/hermes/forge_hermes/runtime/package.json"
 FORGE_MEMORY_PACKAGE_JSON="${FORGE_DIR}/packages/forge-memory/package.json"
 FORGE_MEMORY_PACKAGE_LOCK_JSON="${FORGE_DIR}/packages/forge-memory/package-lock.json"
 SAFE_OPENCLAW_HOST_RANGE="2026.6.9"
@@ -36,12 +36,12 @@ ORIGINAL_FORGE_MEMORY_PACKAGE_VERSION=""
 ORIGINAL_FORGE_MEMORY_PACKAGE_LOCK_VERSION=""
 RELEASE_TARGET_VERSION=""
 VERIFY_TESTS=(
-  "npm --prefix openclaw-plugin audit --omit=dev --omit=peer"
+  "npm --prefix plugins/openclaw audit --omit=dev --omit=peer"
   "npm --prefix packages/forge-memory ci"
   "npm run test:forge-memory"
-  "npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
+  "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
   "npm run build"
-  "node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
+  "node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts"
   "npm run build:openclaw-plugin"
   "npm run smoke:packed-openclaw-runtime"
 )
@@ -78,8 +78,8 @@ cleanup_release_workspace() {
   rm -rf \
     "${FORGE_DIR}/dist" \
     "${PLUGIN_DIR}/dist" \
-    "${FORGE_DIR}/plugins/forge-codex/runtime/dist" \
-    "${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
+    "${FORGE_DIR}/plugins/codex/runtime/dist" \
+    "${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
 
   git -C "${FORGE_DIR}" restore --source=HEAD --staged --worktree -- \
     "${ROOT_MANIFEST}" \
@@ -92,9 +92,9 @@ cleanup_release_workspace() {
     "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" \
-    "openclaw-plugin/server/migrations" \
-    "plugins/forge-codex/runtime/dist" \
-    "plugins/forge-codex/runtime/server/migrations" >/dev/null 2>&1 || true
+    "plugins/openclaw/apps/api/migrations" \
+    "plugins/codex/runtime/dist" \
+    "plugins/codex/runtime/apps/api/migrations" >/dev/null 2>&1 || true
 }
 
 rollback_release_state() {
@@ -442,8 +442,8 @@ create_release_commit() {
   local version="$1"
   git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
   git -C "${FORGE_DIR}" add -A \
-    "${FORGE_DIR}/plugins/forge-codex/runtime/dist" \
-    "${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
+    "${FORGE_DIR}/plugins/codex/runtime/dist" \
+    "${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
   git -C "${FORGE_DIR}" commit -m "release(openclaw): v${version}"
   RELEASE_COMMIT_CREATED=1
   git -C "${FORGE_DIR}" tag "v${version}"

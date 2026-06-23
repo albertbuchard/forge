@@ -1,5 +1,5 @@
-import { resolveForgePluginConfig } from "../../src/openclaw/plugin-entry-shared.ts";
-import { runDoctor } from "../../src/openclaw/routes.ts";
+import { resolveForgePluginConfig } from "../../apps/web/src/openclaw/plugin-entry-shared.ts";
+import { runDoctor } from "../../apps/web/src/openclaw/routes.ts";
 
 type RawCliConfig = Partial<{
   origin: string;

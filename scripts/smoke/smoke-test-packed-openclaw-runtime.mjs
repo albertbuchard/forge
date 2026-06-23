@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
-const pluginRoot = path.join(repoRoot, "openclaw-plugin");
+const pluginRoot = path.join(repoRoot, "plugins/openclaw");
 const tempRoot = mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"));
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");

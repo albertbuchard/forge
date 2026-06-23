@@ -192,21 +192,21 @@ jobs:
           else
             echo "Using bundled FORGE_IOS_RELEASE_ENV(_BASE64) payload for Forge iOS release auth."
           fi
-          ./ios-companion/scripts/write-release-env.sh ios-companion/.release.env --require-asc-auth
+          ./apps/ios-companion/scripts/write-release-env.sh apps/ios-companion/.release.env --require-asc-auth
 
       - name: Verify release config version matches tag
         env:
           RELEASE_VERSION: ${{ steps.release_meta.outputs.release_version }}
         run: |
           CONFIG_VERSION="$(
-            sed -n 's/^[[:space:]]*marketing: "\(.*\)"/\1/p' ios-companion/release/release.yml | head -n 1
+            sed -n 's/^[[:space:]]*marketing: "\(.*\)"/\1/p' apps/ios-companion/release/release.yml | head -n 1
           )"
           [[ -n "${CONFIG_VERSION}" ]] || {
-            echo "Could not read release.version.marketing from ios-companion/release/release.yml." >&2
+            echo "Could not read release.version.marketing from apps/ios-companion/release/release.yml." >&2
             exit 1
           }
           [[ "${CONFIG_VERSION}" == "${RELEASE_VERSION}" ]] || {
-            echo "Tag version ${RELEASE_VERSION} does not match ios-companion/release/release.yml marketing version ${CONFIG_VERSION}." >&2
+            echo "Tag version ${RELEASE_VERSION} does not match apps/ios-companion/release/release.yml marketing version ${CONFIG_VERSION}." >&2
             exit 1
           }
 
@@ -222,7 +222,7 @@ jobs:
         run: |
           set +e
           publish_log_path="${RUNNER_TEMP}/forge-ios-publish.log"
-          ./ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}" 2>&1 | tee "${publish_log_path}"
+          ./apps/ios-companion/scripts/publish-forge-companion.sh "${RELEASE_MODE}" 2>&1 | tee "${publish_log_path}"
           release_exit_code=${PIPESTATUS[0]}
           set -e
 
@@ -287,7 +287,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forge-ios-release-artifacts
-          path: ios-companion/.artifacts/releases/**
+          path: apps/ios-companion/.artifacts/releases/**
           if-no-files-found: ignore
 
       - name: Upload gym logs
@@ -303,5 +303,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forge-ios-screenshots
-          path: ios-companion/fastlane/screenshots/en-US/iphone-65/*.png
+          path: apps/ios-companion/fastlane/screenshots/en-US/iphone-65/*.png
           if-no-files-found: error

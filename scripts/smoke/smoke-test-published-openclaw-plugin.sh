@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FORGE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PLUGIN_ID="forge-openclaw-plugin"
-LOCAL_PLUGIN_PATH="/Users/omarclaw/Documents/aurel-monorepo/projects/forge/openclaw-plugin"
-LOCAL_PLUGIN_VERSION="$(node --input-type=module - "${FORGE_ROOT}/openclaw-plugin/package.json" <<'NODE'
+LOCAL_PLUGIN_PATH="/Users/omarclaw/Documents/aurel-monorepo/projects/forge/plugins/openclaw"
+LOCAL_PLUGIN_VERSION="$(node --input-type=module - "${FORGE_ROOT}/plugins/openclaw/package.json" <<'NODE'
 import fs from "node:fs";
 const pkg = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 process.stdout.write(pkg.version);

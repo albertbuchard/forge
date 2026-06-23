@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Integration Guide</title>
+    <meta
+      name="description"
+      content="Learn how Forge connects to OpenClaw, Hermes, Codex, Claude Code, and the iPhone companion while keeping one coherent local-first system."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Project Guide</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./features.html">Features</a>
+          <a href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a class="active" href="./integrations.html">Integrations</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Integrations</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Integrations</p>
+            <h1>
+              Forge connects your browser, agents, and phone to the same life
+              system.
+            </h1>
+            <p class="lede">
+              Forge is designed so your browser, agent hosts, and companion app
+              all work from the same underlying system. The important idea is
+              continuity: one origin, one data root, one evolving picture of
+              your tasks, notes, health, and movement.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#install">Single-command install</a></li>
+              <li><a href="#shared-runtime">Shared runtime</a></li>
+              <li><a href="#agent-identity">Agent identity and users</a></li>
+              <li><a href="#openclaw">OpenClaw</a></li>
+              <li><a href="#hermes">Hermes</a></li>
+              <li><a href="#codex">Codex</a></li>
+              <li><a href="#claude">Claude Code</a></li>
+              <li><a href="#ios">iPhone companion</a></li>
+              <li><a href="#companion-transport">Companion transport</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="install">
+          <div class="section-heading">
+            <p class="eyebrow">Install</p>
+            <h2>
+              Every Forge integration starts from the same guided command.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>One front door</h3>
+              <p>
+                Use one command whether you want only the browser UI or the full
+                OpenClaw, Hermes, Codex, Claude Code, and iPhone companion
+                setup. Forge installs the local runtime first, then discovers
+                host adapters in the background and asks only for the choices
+                that matter.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+              <p>
+                The deeper transport, relay, and protocol details live below the
+                quickstart so the base install stays small.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Configuration stays reusable</h3>
+              <p>
+                The installer keeps the real Forge data folder explicit. You can
+                reopen the same flow later with current settings already
+                selected, safely update the runtime and adapters, export the
+                data folder, stop the runtime, or uninstall the runtime manager
+                without deleting your data by default.
+              </p>
+              <pre><code>npx forge-memory configure
+npx forge-memory update
+npx forge-memory export
+npx forge-memory stop
+npx forge-memory uninstall</code></pre>
+              <p>
+                Update always creates a pre-update backup first. If Forge sees a
+                Forge-related skill folder that may have manual edits, it asks
+                before continuing and saves a skill-folder backup too.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="shared-runtime">
+          <div class="section-heading">
+            <p class="eyebrow">Shared System</p>
+            <h2>
+              Forge works best when every surface points at the same underlying
+              instance.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended shape</h3>
+              <pre><code>origin:   http://127.0.0.1
+port:     4317
+dataRoot: /absolute/path/to/forge-data
+userId:   explicit on writes
+userIds:  explicit on cross-owner reads</code></pre>
+            </article>
+            <article class="card">
+              <h3>Why this matters</h3>
+              <p>
+                If OpenClaw, Hermes, Codex, Claude Code, and the browser are
+                meant to see the same goals, tasks, notes, strategies, and
+                users, they must point at the same Forge instance rather than
+                drifting onto separate default stores.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="agent-identity">
+          <div class="section-heading">
+            <p class="eyebrow">Agent Identity</p>
+            <h2>Agents, sessions, and users are different things in Forge.</h2>
+          </div>
+
+          <div class="card-grid two">
+            <article class="card">
+              <h3>The short version</h3>
+              <p>
+                OpenClaw, Hermes, Codex, and Claude Code each connect as a stable
+                <strong>agent identity</strong>. That identity is based on the
+                provider, machine or data root, and persona. It is not based on
+                a cron id, process id, timestamp, WhatsApp thread, or temporary
+                session key.
+              </p>
+              <p>
+                Every reconnect creates or updates a
+                <strong>runtime session</strong> under that agent identity.
+                Sessions keep heartbeat, reconnect, and event history, but they
+                do not become new agents.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why users still matter</h3>
+              <p>
+                A Forge <strong>user</strong> is the owner or actor for work:
+                Kanban lanes, task ownership, notes, scoped reads, and
+                provenance. One agent identity can be linked to one or several
+                users. That lets the same OpenClaw runtime act for an operator,
+                spawn a bot user, or work inside a constrained Kanban without
+                pretending it is a different installed agent.
+              </p>
+              <p>
+                Subagents normally become bot users with their own user id and
+                Kanban scope. They link back to the parent agent identity unless
+                they are truly a separate runtime installation.
+              </p>
+            </article>
+          </div>
+
+          <div class="identity-diagram-card">
+            <div class="diagram-heading">
+              <p class="eyebrow">Connection Flow</p>
+              <h3>One stable agent, many sessions, linked users.</h3>
+            </div>
+            <div
+              class="identity-flow"
+              role="img"
+              aria-label="OpenClaw, Hermes, Codex, and Claude Code register stable agent identity keys. Forge stores one canonical agent identity per provider and machine, records sessions under it, links users to it, and shows one grouped card in Settings."
+            >
+              <div class="flow-group source">
+                <div class="flow-node openclaw">
+                  <strong>OpenClaw</strong>
+                  <span>provider: openclaw</span>
+                </div>
+                <div class="flow-node hermes">
+                  <strong>Hermes</strong>
+                  <span>provider: hermes</span>
+                </div>
+                <div class="flow-node codex">
+                  <strong>Codex</strong>
+                  <span>provider: codex</span>
+                </div>
+                <div class="flow-node claude">
+                  <strong>Claude Code</strong>
+                  <span>provider: claude</span>
+                </div>
+              </div>
+
+              <div class="flow-arrow" aria-hidden="true">
+                <span></span>
+              </div>
+
+              <div class="flow-node identity-key">
+                <strong>Stable identity key</strong>
+                <span>provider + machine/dataRoot + persona</span>
+                <small>never pid, timestamp, cron uuid, or chat thread</small>
+              </div>
+
+              <div class="flow-arrow" aria-hidden="true">
+                <span></span>
+              </div>
+
+              <div class="flow-node forge-core">
+                <strong>Forge canonical agent</strong>
+                <span>agent_identities.identity_key</span>
+                <small>one OpenClaw, one Hermes, one Codex, one Claude Code per install</small>
+              </div>
+
+              <div class="flow-branch">
+                <div class="flow-node sessions">
+                  <strong>Runtime sessions</strong>
+                  <span>heartbeats, reconnects, event history</span>
+                </div>
+                <div class="flow-node users">
+                  <strong>Linked users</strong>
+                  <span>Mira, openclaw, hermes, codex, bot users</span>
+                </div>
+                <div class="flow-node settings-card">
+                  <strong>Settings card</strong>
+                  <span>one card with nested current/history rows</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What Forge stores</h3>
+              <table class="doc-table compact">
+                <thead>
+                  <tr>
+                    <th>Concept</th>
+                    <th>Purpose</th>
+                    <th>Stable?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>agent_identities</code></td>
+                    <td>The installed/runtime agent Forge recognizes.</td>
+                    <td>Yes</td>
+                  </tr>
+                  <tr>
+                    <td><code>agent_runtime_sessions</code></td>
+                    <td>Live and historical activity for that agent.</td>
+                    <td>No</td>
+                  </tr>
+                  <tr>
+                    <td><code>users</code></td>
+                    <td>
+                      Human or bot ownership, Kanban scope, and provenance.
+                    </td>
+                    <td>Yes</td>
+                  </tr>
+                  <tr>
+                    <td><code>agent_identity_users</code></td>
+                    <td>
+                      The link between a stable agent and the users it may act
+                      for.
+                    </td>
+                    <td>Yes</td>
+                  </tr>
+                </tbody>
+              </table>
+            </article>
+            <article class="card">
+              <h3>What you should see in Settings</h3>
+              <p>
+                The Settings &gt; Agents page should show canonical agent
+                presence, not a pile of old sessions. A healthy local setup
+                shows one OpenClaw card, one Hermes card, one Codex card, and
+                one Claude Code card, each with its own nested session history.
+              </p>
+              <p>
+                Token counts belong to the canonical identity. Old auth probes,
+                cron runs, gateway restarts, and Codex process ids remain useful
+                as session history, but they should not appear as separate
+                connected agents.
+              </p>
+            </article>
+          </div>
+
+          <div class="identity-diagram-card">
+            <div class="diagram-heading">
+              <p class="eyebrow">Ownership Model</p>
+              <h3>
+                Agent identity answers "which runtime?", user answers "whose
+                work?".
+              </h3>
+            </div>
+            <div
+              class="ownership-diagram"
+              role="img"
+              aria-label="A canonical OpenClaw agent identity links to several Forge users. Each user owns a Kanban and work records. Subagents are bot users linked to the same parent agent unless they are separate runtime installs."
+            >
+              <div class="owner-agent">
+                <strong>Forge OpenClaw</strong>
+                <span>agent identity</span>
+                <code>runtime:openclaw:machine:default</code>
+              </div>
+              <div class="owner-lines" aria-hidden="true"></div>
+              <div class="owner-users">
+                <div class="owner-user">
+                  <strong>Mira</strong>
+                  <span>human user</span>
+                  <small>personal tasks, notes, goals</small>
+                </div>
+                <div class="owner-user">
+                  <strong>openclaw</strong>
+                  <span>bot user</span>
+                  <small>agent-owned Kanban</small>
+                </div>
+                <div class="owner-user">
+                  <strong>research-bot</strong>
+                  <span>spawned subagent user</span>
+                  <small>scoped project board</small>
+                </div>
+              </div>
+              <div class="owner-kanbans">
+                <div>Mira Kanban</div>
+                <div>OpenClaw Kanban</div>
+                <div>Research Bot Kanban</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="note">
+            Rule of thumb: create another user when the work needs its own
+            owner, permissions, or Kanban. Create another agent identity only
+            when there is another durable runtime installation.
+          </div>
+        </section>
+
+        <section class="section" id="openclaw">
+          <div class="section-heading">
+            <p class="eyebrow">OpenClaw</p>
+            <h2>Bring Forge into OpenClaw as an operational workspace.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> detect OpenClaw and configure
+                the adapter against the same local runtime and data folder as
+                the browser, Hermes, Codex, Claude Code, and iPhone companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card" id="advanced-adapters">
+              <h3>Advanced manual install</h3>
+              <p>
+                Use this only for adapter debugging, manual recovery, or when
+                testing OpenClaw installer behavior directly.
+              </p>
+              <pre><code>openclaw plugins install --dangerously-force-unsafe-install forge-openclaw-plugin
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+openclaw forge health
+openclaw forge ui</code></pre>
+              <p>
+                Tested on OpenClaw <code>2026.6.9</code>: plain install is
+                blocked by the scanner, and the explicit approval flag succeeds
+                without manual config editing.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Development install</h3>
+              <p>
+                Prefer dev mode for normal source-backed work. It keeps the same
+                guided setup while linking adapters to the local checkout.
+              </p>
+              <pre><code>npx forge-memory --dev</code></pre>
+              <p>
+                Link the repo-local plugin manually only when you are debugging
+                OpenClaw plugin installation itself.
+              </p>
+              <pre><code>openclaw plugins install --link --dangerously-force-unsafe-install ./plugins/openclaw
+openclaw plugins enable forge-openclaw-plugin
+openclaw gateway restart
+openclaw plugins inspect forge-openclaw-plugin --runtime
+openclaw forge health</code></pre>
+            </article>
+            <article class="card">
+              <h3>What you get</h3>
+              <p>
+                The plugin exposes a curated Forge operating surface rather than
+                every internal route. It is optimized around operator overview,
+                entity mutation, live work, notes, wiki, health, and UI handoff.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="hermes">
+          <div class="section-heading">
+            <p class="eyebrow">Hermes</p>
+            <h2>Run Forge inside a Hermes-driven workflow.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended install</h3>
+              <p>
+                Let the Forge installer configure Hermes so it points at the
+                same local runtime and data folder as every other surface.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced manual install</h3>
+              <p>
+                Use this when debugging Hermes package discovery or recovering a
+                host-specific install.
+              </p>
+              <pre><code>~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin</code></pre>
+            </article>
+            <article class="card">
+              <h3>Config location</h3>
+              <pre><code>~/.hermes/forge/config.json</code></pre>
+              <p>
+                Use the same origin, port, and data root as the browser and
+                OpenClaw if Hermes is meant to share the same Forge system.
+                Codex and Claude Code should use those same values when all
+                agent hosts are meant to collaborate over one local memory.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="codex">
+          <div class="section-heading">
+            <p class="eyebrow">Codex</p>
+            <h2>Use Forge from Codex through MCP.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> write the local MCP entry for
+                Codex. The adapter then points at the same Forge runtime used by
+                the browser, OpenClaw, Hermes, Claude Code, and iPhone
+                companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced local MCP install</h3>
+              <p>
+                Codex uses MCP, and the MCP configuration is shared across the
+                Codex CLI and IDE extension. Use the repo-local launcher when
+                you are developing or debugging the adapter directly.
+              </p>
+              <pre><code>codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/codex/scripts/run-mcp.sh
+codex mcp list</code></pre>
+            </article>
+            <article class="card">
+              <h3>What it is for</h3>
+              <p>
+                The Codex adapter lives in <code>plugins/codex/</code> and
+                is built for shared-runtime work against the same local Forge
+                system used by the browser, OpenClaw, and Hermes.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Runtime payload</h3>
+              <p>
+                The OpenClaw build path also copies the built runtime into the
+                Codex runtime payload so agent surfaces stay aligned with the
+                same app/API behavior.
+              </p>
+            </article>
+            <article class="card">
+              <h3>How to make it widely available</h3>
+              <p>
+                For broad public distribution, the better path is a hosted
+                remote MCP server over HTTPS with auth, so users can install
+                Forge with one command instead of cloning the repo first.
+              </p>
+              <pre><code>codex mcp add forge --url https://your-forge-mcp.example.com/mcp
+codex mcp list</code></pre>
+              <p>
+                That is the cleanest public install story for Codex today. The
+                repo-local launcher is ideal for contributors and local-first
+                use, but a remote MCP endpoint is what makes Forge easy to adopt
+                at scale.
+              </p>
+            </article>
+          </div>
+          <p style="margin-top: 18px">
+            The local launcher script is
+            <code>plugins/codex/scripts/run-mcp.sh</code>, and the adapter
+            metadata lives in <code>plugins/codex/.mcp.json</code> and
+            <code>plugins/codex/.codex-plugin/plugin.json</code>.
+          </p>
+        </section>
+
+        <section class="section" id="claude">
+          <div class="section-heading">
+            <p class="eyebrow">Claude Code</p>
+            <h2>Use Forge from Claude Code through the shared MCP server.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Recommended install</h3>
+              <p>
+                Let <code>npx forge-memory</code> detect Claude Code and write
+                the Forge MCP entry into Claude's user config. Claude Code then
+                uses the same local Forge runtime and data root as the browser,
+                OpenClaw, Hermes, Codex, Claude Code, and iPhone companion.
+              </p>
+              <pre><code>npx forge-memory</code></pre>
+            </article>
+            <article class="card">
+              <h3>What gets configured</h3>
+              <p>
+                Forge writes one user-scope Claude MCP server named
+                <code>forge</code>. The command is the shared Forge Memory MCP
+                bridge rather than a second Claude-specific runtime.
+              </p>
+              <pre><code>npx forge-memory mcp</code></pre>
+            </article>
+            <article class="card">
+              <h3>Advanced manual MCP install</h3>
+              <p>
+                Use this when debugging Claude Code itself or recovering a
+                host-specific config. The guided installer should be the normal
+                path because it preserves shared data-root settings.
+              </p>
+              <pre><code>claude mcp add --scope user \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_ACTOR_LABEL=claude \
+  --env FORGE_AGENT_PROVIDER=claude \
+  --env FORGE_TIMEOUT_MS=15000 \
+  forge -- npx forge-memory mcp
+claude mcp list
+claude mcp get forge</code></pre>
+            </article>
+            <article class="card">
+              <h3>Config safety</h3>
+              <p>
+                Forge updates only <code>mcpServers.forge</code> in Claude's
+                config. It preserves unrelated Claude settings, project-level
+                MCP servers, and non-Forge server entries. Uninstall keeps the
+                Claude config by default and removes the Forge MCP entry only
+                when the user explicitly asks to remove adapters.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="ios">
+          <div class="section-heading">
+            <p class="eyebrow">iPhone Companion</p>
+            <h2>
+              The iPhone companion brings movement and HealthKit into Forge.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What the companion does</h3>
+              <p>
+                The iOS companion pairs to a local Forge runtime, requests Apple
+                permissions, imports HealthKit sleep and workout data, and
+                writes structured Forge records rather than opaque snapshots.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Relevant routes</h3>
+              <pre><code>/api/v1/health/pairing-sessions
+/api/v1/mobile/pairing/verify
+/api/v1/mobile/healthkit/sync
+/api/v1/health/sleep
+/api/v1/health/fitness</code></pre>
+            </article>
+            <article class="card">
+              <h3>Default transport</h3>
+              <p>
+                Pairing uses Forge's own Rust Iroh transport by default. The QR
+                contains a desktop node id, pairing token, optional relay hint,
+                and ALPN <code>forge-companion/1</code>. Manual HTTP/TCP stays
+                available as an explicit advanced mode.
+              </p>
+            </article>
+          </div>
+          <figure class="shot">
+            <img
+              src="./assets/forge-apps/ios-companion-sync.png"
+              alt="Forge iPhone companion sync flow"
+            />
+            <figcaption>
+              The iPhone companion adds native data capture while still feeding
+              the same Forge system you use on the web.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="section" id="companion-transport">
+          <div class="section-heading">
+            <p class="eyebrow">Companion Transport</p>
+            <h2>
+              Forge Companion dials a Forge endpoint identity over Iroh and
+              QUIC.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>What the QR means</h3>
+              <p>
+                The Iroh QR is a connection recipe, not only a URL. It tells the
+                iPhone which desktop node id to dial, which protocol to
+                negotiate, which relay hint to use if present, and which token
+                must appear in the first stream frame.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why this is not Tailscale</h3>
+              <p>
+                Tailscale gives the whole device a VPN address. Forge embeds
+                Iroh at the app layer, so the companion app can connect without
+                requiring the user to install a VPN. Iroh still uses relay and
+                discovery infrastructure as the public meeting point.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Why this is not Alleycat</h3>
+              <p>
+                Alleycat and KittyLitter were studied for the Iroh pairing
+                pattern, but Forge does not use Alleycat source or the
+                <code>alleycat/1</code> protocol. Forge's protocol is
+                <code>forge-companion/1</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Detailed view</h3>
+              <p>
+                The companion transport guide explains the relay model, pairing
+                payload, first-frame token auth, request envelopes, fallback
+                mode, code ownership, and verification commands.
+              </p>
+              <div class="link-row">
+                <a class="button" href="./companion-transport.html"
+                  >Open transport guide</a
+                >
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Deeper Guides</p>
+            <h2>
+              If you want implementation detail, these longer guides go further.
+            </h2>
+          </div>
+          <ul class="guide-list">
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/plugins/openclaw.md"
+                >OpenClaw plugin guide</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/hermes-plugin.md"
+                >Hermes plugin guide</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/plugins/codex/README.md"
+                >Codex MCP guide</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/claude-code-adapter.md"
+                >Claude Code MCP guide</a
+              >
+            </li>
+            <li>
+              <a href="./companion-transport.html">Companion transport guide</a>
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/multi-user-and-strategies.md"
+                >Multi-user and strategies guide</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/albertbuchard/forge/blob/main/docs/reference/calendar-provider-setup.md"
+                >Calendar provider setup</a
+              >
+            </li>
+          </ul>
+        </section>
+
+        <footer class="footer">
+          Use the API reference when you want exact request and response shapes
+          behind these integrations.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="./lightbox.js"></script>
+  </body>
+</html>

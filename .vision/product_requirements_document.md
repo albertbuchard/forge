@@ -27,6 +27,15 @@ Forge is built as a production-grade monorepo application with:
 - transport-explicit mobile pairing: a secure HTTPS/Tailscale URL is preferred when the phone is connected through Tailscale; Iroh is used only for pairings whose active API/UI URLs are `forge-iroh://` logical endpoints; manual HTTP/LAN routing remains an explicit advanced option and must not silently downgrade a physical device to insecure non-loopback HTTP
 - Apache-2.0 licensing for Forge-owned public code so open-source releases remain permissive, patent-explicit, and compatible with future closed-source commercial Forge forks
 
+The repository architecture is now clean-break source-first. React/Vite source
+and web public assets live in `apps/web`; Fastify source, OpenAPI, and SQLite
+migrations live in `apps/api`; the Tauri shell lives in `apps/desktop-tauri`;
+the native iPhone/watchOS companion lives in `apps/ios-companion`; OpenClaw,
+Codex, and Hermes host adapters live under `plugins/`; npm/Rust packages live
+under `packages/`; Playwright and shared fixtures live under `tests/`; and
+operational tooling is grouped under `scripts/`. Generated Codex runtime output
+and private planning artifacts are not public source.
+
 Forge's preferred public onboarding path is a Node-based guided installer exposed as `npx forge-memory`. That installer should be the single front door for UI-only installs and OpenClaw, Hermes, Codex, and Claude Code adapter installs. It should always install the Forge UI/runtime as the base layer, run automated host/data discovery in the background, ask a polished guided question flow, show host adapters in an interactive checkbox menu with detected runtimes selected by default, missing runtimes shown as disabled "not found" rows, Space to toggle rows, and a Skip option, configure selected adapters against one shared data root, expose runtime commands such as `configure`, `status`, `ui`, `doctor`, `restart`, and `pair-ios`, make `configure` rerun the full flow with current config as defaults, default the iOS pairing prompt to yes, support source-backed development installs through `npx forge-memory --dev`, default dev mode to the real shared Forge data folder, and leave direct adapter installs as advanced/reference paths rather than the main user journey.
 
 The gamified progression layer is part of the same production stack. It uses the existing Fastify reward ledger and SQLite persistence, React 19 UI surfaces, Framer Motion celebrations, source-controlled TypeScript trophy/unlock catalog data, small repo-owned mascot previews under `public/gamification-previews/`, and optional per-style raster sprite archives hosted as GitHub Release downloadable content. Heavy generated trophy, unlock, mascot, atlas, and source sprite files must not be part of the monorepo history or the default npm/PyPI plugin packages.

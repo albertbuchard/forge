@@ -119,11 +119,11 @@ Users can also manage storage from the Forge web app in `Settings -> Data`. The 
 
 Overview dashboard:
 
-![Forge overview dashboard](../openclaw-plugin/docs/assets/forge-overview-dashboard.png)
+![Forge overview dashboard](../plugins/openclaw/docs/assets/forge-overview-dashboard.png)
 
 Psyche graph:
 
-![Forge Psyche graph](../openclaw-plugin/docs/assets/forge-psyche-graph.png)
+![Forge Psyche graph](../plugins/openclaw/docs/assets/forge-psyche-graph.png)
 
 The intended workflow is:
 
@@ -323,9 +323,9 @@ Important examples:
 
 There are three files involved on purpose:
 
-- [`openclaw.plugin.json`](../openclaw.plugin.json): source-of-truth plugin manifest in the main Forge repo. It declares OpenClaw startup activation, command aliases, and the `contracts.tools` ownership list required before Forge can register agent tools.
-- [`openclaw-plugin/openclaw.plugin.json`](../openclaw-plugin/openclaw.plugin.json): packaged copy that ships in the npm artifact. Keep its activation, command aliases, and tool contracts aligned with the root manifest.
-- [`openclaw-plugin/package.json`](../openclaw-plugin/package.json): npm package metadata and `openclaw.extensions` entry wiring
+- [`plugins/openclaw/openclaw.plugin.json`](../plugins/openclaw/openclaw.plugin.json): source-of-truth plugin manifest in the main Forge repo. It declares OpenClaw startup activation, command aliases, and the `contracts.tools` ownership list required before Forge can register agent tools.
+- [`plugins/openclaw/openclaw.plugin.json`](../plugins/openclaw/openclaw.plugin.json): packaged copy that ships in the npm artifact. Keep its activation, command aliases, and tool contracts aligned with the root manifest.
+- [`plugins/openclaw/package.json`](../plugins/openclaw/package.json): npm package metadata and `openclaw.extensions` entry wiring
 
 ## Advanced Install
 
@@ -356,14 +356,14 @@ openclaw forge health
 From the Forge repo root:
 
 ```bash
-openclaw plugins install --link --dangerously-force-unsafe-install ./openclaw-plugin
+openclaw plugins install --link --dangerously-force-unsafe-install ./plugins/openclaw
 openclaw plugins enable forge-openclaw-plugin
 openclaw gateway restart
 openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
-Use `--link` when OpenClaw should use the checked-out source folder. If you are running from the monorepo root, use `./projects/forge/openclaw-plugin` instead.
+Use `--link` when OpenClaw should use the checked-out source folder. If you are running from the monorepo root, use `./projects/forge/plugins/openclaw` instead.
 
 ### Manual fallback for older OpenClaw builds
 

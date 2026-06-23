@@ -10,6 +10,14 @@ OpenClaw/Hermes/Codex/Claude Code adapter surfaces, a repo-owned Rust Iroh
 companion transport, and a Swift iPhone companion that syncs HealthKit and other
 phone-native signals into the same canonical Forge data model.
 
+The source tree makes those runtime boundaries explicit: the browser app is in
+`apps/web`, the API and migrations are in `apps/api`, desktop and mobile shells
+are under `apps/`, host adapters are under `plugins/`, public/shared packages
+are under `packages/`, tests are under `tests/`, and public docs stay under
+`docs/`. Internal goals, handoffs, audit reports, automation memory, and
+conversation-derived planning notes are private operating material, not public
+Forge source.
+
 Forge-owned public code is licensed Apache-2.0 so the open-source project stays
 permissive and patent-explicit while preserving a clean path for future closed-source
 commercial Forge forks.

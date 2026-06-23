@@ -10,8 +10,8 @@ import {
   configureLegacyWikiAutoImport,
   getDatabase,
   initializeDatabase
-} from "../../server/src/db.ts";
-import { getWikiSettingsPayload } from "../../server/src/repositories/wiki-memory.ts";
+} from "../../apps/api/src/db.ts";
+import { getWikiSettingsPayload } from "../../apps/api/src/repositories/wiki-memory.ts";
 import { migrateWikiMarkdownToSqlite } from "./migrate-wiki-markdown-to-sqlite.ts";
 
 async function withTempForgeDataRoot(

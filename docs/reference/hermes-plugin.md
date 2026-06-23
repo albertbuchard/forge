@@ -100,7 +100,7 @@ If you are developing Forge from this repo and want Hermes to follow source edit
 ~/.hermes/hermes-agent/venv/bin/python -m ensurepip --upgrade
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade pip
 ~/.hermes/hermes-agent/venv/bin/python -m pip uninstall -y forge-hermes-plugin
-~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/forge-hermes
+~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/hermes
 ```
 
 The generated config file is also the durable user-editable settings surface for the

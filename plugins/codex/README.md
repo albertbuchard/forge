@@ -1,0 +1,127 @@
+# Forge Codex Plugin
+
+Repo-local Codex plugin for Forge.
+
+This plugin exposes the Forge MCP tool surface through the same curated contract as the Forge OpenClaw adapter.
+
+It also carries a generated Forge runtime package under [`runtime/`](./runtime),
+so local Codex use does not depend on a globally installed Forge process.
+The current Codex integration model is MCP-first: Codex connects to a local MCP
+server and shares that MCP setup across the CLI and IDE extension. This adapter
+therefore ships the Codex plugin metadata in
+[`./.codex-plugin/plugin.json`](./.codex-plugin/plugin.json), the MCP server
+definition in [`./.mcp.json`](./.mcp.json), and a local stdio bridge in
+[`./scripts/forge-codex-mcp.mjs`](./scripts/forge-codex-mcp.mjs).
+
+The MCP bridge now also registers itself into Forge's live agent-session
+registry when the server process starts. Forge can therefore show active Codex
+bridges next to OpenClaw and Hermes, track recent MCP activity, detect stale
+sessions, and surface reconnect guidance in the onboarding and token-management
+contract without requiring a Settings click.
+
+- start from the operator overview
+- search before creating duplicates
+- use batch entity tools for normal multi-entity work
+- post structured insights
+- hand off to the Forge UI when Kanban, review, or Psyche exploration is easier visually
+
+The current PM contract it should understand is:
+
+- `Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask`
+- one mixed board for `project | issue | task | subtask`
+- one compact hierarchy view with shared filters and level visibility
+- shared `executionMode` + `acceptanceCriteria` support on issues and tasks
+- hierarchy-aware linking and creation flows
+- `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`
+- direct work on `main` by default
+
+The MCP server is launched by [`./scripts/run-mcp.sh`](./scripts/run-mcp.sh),
+which starts the MCP bridge and reuses the Forge OpenClaw tool registrations
+from the generated runtime bundle. If the bundle is missing in a clean checkout,
+the wrapper builds it before starting the MCP server. When this script is run
+from the Forge checkout it defaults to source-backed development mode:
+
+- `FORGE_OPENCLAW_DEV=1`
+- `FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/`
+- `FORGE_BASE_PATH=/forge/`
+- `FORGE_PORT=4317`
+- shared monorepo data root when `../../data/forge` exists
+
+In that mode the `4317` runtime must serve `/forge/` through the Vite dev app,
+so `http://127.0.0.1:4317/forge/weight-loss` should contain
+`/forge/@vite/client` and `/forge/src/main.tsx`, not a packaged
+`/forge/assets/index-*.js` bundle.
+
+The MCP bridge now reports the live plugin version from the Codex plugin
+manifest instead of a stale hard-coded server version, so Codex and Forge stay
+aligned across local installs and releases.
+
+## Install
+
+For normal installs, start with the single-command Forge installer:
+
+```bash
+npx forge-memory
+```
+
+It installs the Forge UI/runtime, discovers Codex in the background, and writes
+the Forge MCP entry against the same real data folder used by the browser,
+OpenClaw, Hermes, and the iPhone companion. Use `npx forge-memory configure` to
+reopen the full flow, `npx forge-memory export` to back up data,
+`npx forge-memory stop` to shut down the local runtime, and
+`npx forge-memory uninstall` to remove the runtime manager while keeping data by
+default.
+
+From a Forge checkout, register the MCP bridge with Codex manually only when you
+are developing or debugging the adapter directly:
+
+```bash
+codex mcp add forge \
+  --env FORGE_ORIGIN=http://127.0.0.1 \
+  --env FORGE_PORT=4317 \
+  --env FORGE_OPENCLAW_DEV=1 \
+  --env FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/ \
+  --env FORGE_ACTOR_LABEL=codex \
+  --env FORGE_TIMEOUT_MS=15000 \
+  -- /bin/zsh /absolute/path/to/forge/plugins/codex/scripts/run-mcp.sh
+codex mcp list
+```
+
+Replace `/absolute/path/to/forge` with the path to this Forge repo. The MCP bridge will use the configured Forge runtime, and it can start the bundled local runtime if nothing is already listening on the configured local port.
+
+Environment variables:
+
+- `FORGE_ORIGIN`
+- `FORGE_PORT`
+- `FORGE_API_TOKEN`
+- `FORGE_ACTOR_LABEL`
+- `FORGE_TIMEOUT_MS`
+- `FORGE_DATA_ROOT`
+- `FORGE_OPENCLAW_DEV`
+- `FORGE_DEV_WEB_ORIGIN`
+- `FORGE_BASE_PATH`
+- `FORGE_MCP_TEXT_CONTENT_LIMIT_BYTES`
+- `FORGE_MCP_STRUCTURED_CONTENT_LIMIT_BYTES`
+
+Defaults match the local Forge runtime:
+
+- origin: `http://127.0.0.1`
+- port: `4317`
+- actor: `codex`
+- data root: shared Forge runtime root, resolved from local runtime preferences
+  when present
+
+If nothing is already listening on the configured local Forge port, the plugin auto-starts the bundled runtime.
+
+The MCP bridge caps oversized text and structured payloads before writing to
+stdio. This prevents large wiki/search responses from closing the client
+transport; when a cap is hit the result includes a truncated preview and
+guidance to narrow the request.
+
+## Notes
+
+- The Codex MCP server name stays short and explicit as `forge`, which matches
+  current Codex MCP guidance and makes tool selection clearer inside Codex.
+- This adapter is repo-local on purpose. It is meant to run against the checked
+  out Forge tree and bundled runtime artifacts, not a separate published npm
+  package.

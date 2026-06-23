@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Engineering Reference</title>
+    <meta
+      name="description"
+      content="Forge architecture, stack, runtime surfaces, repository layout, and data model."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Project Guide</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./features.html">Features</a>
+          <a class="active" href="./engineering.html">Engineering</a>
+          <a href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./tools.html">Agent Tools</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Engineering</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">How Forge Is Built</p>
+            <h1>
+              Forge is one local-first system shared by the web app, API,
+              agents, and companion.
+            </h1>
+            <p class="lede">
+              This page explains the architecture behind Forge so readers can
+              understand how the product stays coherent across interfaces,
+              stores structured data locally first, and keeps its docs aligned
+              with the running system.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Page Sections</p>
+            <ul class="guide-list">
+              <li><a href="#runtime-surfaces">Runtime surfaces</a></li>
+              <li><a href="#stack">Stack</a></li>
+              <li><a href="#companion-transport">Companion transport</a></li>
+              <li><a href="#data-model">Storage and data model</a></li>
+              <li><a href="#route-families">Route families</a></li>
+              <li><a href="#repository-layout">Repository layout</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="runtime-surfaces">
+          <div class="section-heading">
+            <p class="eyebrow">Runtime Surfaces</p>
+            <h2>
+              These are the product surfaces users and tools actually interact
+              with.
+            </h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Web application</h3>
+              <p>
+                The user-facing app is mounted under <code>/forge/</code>. The
+                UI includes execution, calendar, notes, wiki, health,
+                preferences, and Psyche surfaces.
+              </p>
+            </article>
+            <article class="card">
+              <h3>HTTP API</h3>
+              <p>
+                The versioned API is mounted under <code>/api/v1/</code>. The
+                generated OpenAPI 3.1 document is served from
+                <code>/api/v1/openapi.json</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Agent adapters</h3>
+              <p>
+                OpenClaw, Hermes, Codex, and Claude Code do not mirror the
+                entire internal API. They expose curated operator, mutation,
+                and UI-handoff surfaces on top of the same Forge model.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="stack">
+          <div class="section-heading">
+            <p class="eyebrow">Stack</p>
+            <h2>This is the stack currently powering the product.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Concern</th>
+                <th>Technology</th>
+                <th>Why it matters here</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>UI</td>
+                <td>React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4</td>
+                <td>
+                  SPA served from the same repo, with local and mounted runtime
+                  paths.
+                </td>
+              </tr>
+              <tr>
+                <td>Backend</td>
+                <td>Fastify 5, TypeScript, custom OpenAPI generator</td>
+                <td>
+                  One server process exposes runtime API, auth bootstrap, and
+                  OpenAPI JSON.
+                </td>
+              </tr>
+              <tr>
+                <td>Persistence</td>
+                <td>
+                  SQLite, structured JSON columns, SQLite-backed wiki storage
+                </td>
+                <td>
+                  Execution and reflection records stay local-first and
+                  auditable.
+                </td>
+              </tr>
+              <tr>
+                <td>Desktop / native</td>
+                <td>Tauri 2, Swift iOS companion, Rust Iroh bridge</td>
+                <td>
+                  Desktop shell, HealthKit import, and default Iroh/QUIC
+                  companion pairing are separate runtime surfaces.
+                </td>
+              </tr>
+              <tr>
+                <td>Mobile transport</td>
+                <td>
+                  Iroh, QUIC, ALPN <code>forge-companion/1</code>,
+                  length-prefixed JSON frames
+                </td>
+                <td>
+                  Forge Companion dials the desktop by Iroh node id and falls
+                  back to manual HTTP only when explicitly requested.
+                </td>
+              </tr>
+              <tr>
+                <td>Documentation</td>
+                <td>GitHub Pages static docs + generated OpenAPI reference</td>
+                <td>
+                  The public guide and API explorer stay published side by side.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="companion-transport">
+          <div class="section-heading">
+            <p class="eyebrow">Companion Transport</p>
+            <h2>
+              The iPhone path is Forge-owned Iroh and QUIC, not a generic HTTPS
+              tunnel.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Desktop host</h3>
+              <p>
+                Fastify starts <code>forge-companion-iroh host</code> from a
+                prebuilt package binary, a configured
+                <code>FORGE_COMPANION_IROH_BIN</code>, or the Rust source
+                fallback. The host keeps its state under the Forge data root,
+                reports a ready JSON payload, and proxies accepted requests into
+                <code>http://127.0.0.1:4317</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>iOS bridge</h3>
+              <p>
+                The Swift app links the same Rust crate as a static library,
+                parses the Iroh QR, registers the
+                <code>forge-iroh://</code> scheme for the embedded web view, and
+                sends mobile API calls over authenticated QUIC streams.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Protocol boundary</h3>
+              <p>
+                Forge uses ALPN <code>forge-companion/1</code>. The first frame
+                validates the QR token, and later frames carry Forge HTTP
+                request and response envelopes. The app does not use
+                <code>alleycat/1</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Longer reference</h3>
+              <p>
+                The dedicated transport page contains the relay model, pairing
+                payload, request envelope shape, fallback path, licensing notes,
+                and verification commands.
+              </p>
+              <div class="link-row">
+                <a class="button" href="./companion-transport.html"
+                  >Read transport details</a
+                >
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="data-model">
+          <div class="section-heading">
+            <p class="eyebrow">Storage And Data Model</p>
+            <h2>
+              Forge combines structured operational data with long-form
+              knowledge.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Structured runtime records</h3>
+              <p>
+                Goals, strategies, projects, work items, task runs, habits,
+                calendar records, preferences, Psyche entities, questionnaires,
+                sleep, workouts, and notes are stored in SQLite with typed
+                repository boundaries.
+              </p>
+            </article>
+            <article class="card">
+              <h3>SQLite-backed wiki memory</h3>
+              <p>
+                Wiki pages keep Markdown content in SQLite notes rows. Forge
+                stores page metadata, ingest jobs, links, and search index state
+                in the database.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Multi-user ownership</h3>
+              <p>
+                Most entity families support explicit
+                <code>userId</code> ownership for human and bot actors. Forge's
+                project-management surfaces also support one owner plus
+                one-or-many assignees. Read flows may widen scope with repeated
+                <code>userIds</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Hierarchy-aware execution</h3>
+              <p>
+                Forge keeps <code>goal</code>, <code>strategy</code>, and
+                <code>project</code> as first-class records, then models
+                <code>issue</code>, <code>task</code>, and
+                <code>subtask</code> through one lean work-item layer with AI
+                instructions, execution mode, acceptance criteria, blocker
+                links, completion reports, and canonical git refs.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Shared PM surfaces</h3>
+              <p>
+                The web app exposes one mixed board for projects, issues, tasks,
+                and subtasks plus one compact hierarchy tree with shared
+                filters, level visibility, ownership filters, and guided modal
+                linking flows.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Local-first by default</h3>
+              <p>
+                The repo runtime, OpenClaw plugin, and Hermes plugin can all
+                point at one shared local data root. That is the expected shape
+                for a shared Forge system.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="route-families">
+          <div class="section-heading">
+            <p class="eyebrow">Route Families</p>
+            <h2>
+              The API is grouped by product area so the system stays legible.
+            </h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Family</th>
+                <th>Root</th>
+                <th>Coverage</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Execution</td>
+                <td>
+                  <code>/api/v1/goals</code>, <code>/projects</code>,
+                  <code>/tasks</code>, <code>/work-items</code>
+                </td>
+                <td>
+                  Goals, strategies, projects, issues, tasks, subtasks, task
+                  runs, adjustments, activity, metrics, and reviews.
+                </td>
+              </tr>
+              <tr>
+                <td>Calendar</td>
+                <td><code>/api/v1/calendar/*</code></td>
+                <td>
+                  Connections, mirrored events, work blocks, timeboxes, and
+                  native events.
+                </td>
+              </tr>
+              <tr>
+                <td>Knowledge</td>
+                <td><code>/api/v1/wiki/*</code>, <code>/api/v1/notes</code></td>
+                <td>
+                  Wiki pages, ingest, search, embeddings, and Markdown evidence
+                  records.
+                </td>
+              </tr>
+              <tr>
+                <td>Preferences</td>
+                <td><code>/api/v1/preferences/*</code></td>
+                <td>
+                  Contexts, concept lists, items, judgments, signals, and score
+                  updates.
+                </td>
+              </tr>
+              <tr>
+                <td>Psyche</td>
+                <td><code>/api/v1/psyche/*</code></td>
+                <td>
+                  Values, patterns, behaviors, beliefs, modes, reports,
+                  questionnaires, and self-observation.
+                </td>
+              </tr>
+              <tr>
+                <td>Health</td>
+                <td><code>/api/v1/health/*</code></td>
+                <td>
+                  Sleep, sports, workouts, and iPhone companion sync/update
+                  flows.
+                </td>
+              </tr>
+              <tr>
+                <td>Platform</td>
+                <td>
+                  <code>/api/v1/settings</code>, <code>/entities/*</code>,
+                  <code>/agents/*</code>
+                </td>
+                <td>
+                  Settings, batch entity mutation, approvals, agents, users, and
+                  onboarding.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="repository-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Repository Layout</p>
+            <h2>These folders carry the main product responsibilities.</h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>src/</code></td>
+                <td>
+                  React app routes, components, view logic, API client, and UI
+                  state.
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/api/src/</code></td>
+                <td>
+                  Fastify app, repositories, managers, OpenAPI builder, and
+                  tests.
+                </td>
+              </tr>
+              <tr>
+                <td><code>docs/</code></td>
+                <td>Longer technical guides and operating notes.</td>
+              </tr>
+              <tr>
+                <td><code>plugins/openclaw/</code></td>
+                <td>
+                  Published OpenClaw package and GitHub Pages output boundary.
+                </td>
+              </tr>
+              <tr>
+                <td><code>plugins/hermes/</code></td>
+                <td>Hermes plugin package.</td>
+              </tr>
+              <tr>
+                <td><code>plugins/codex/</code></td>
+                <td>
+                  Codex adapter and runtime payload used for in-repo agent work.
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/ios-companion/</code></td>
+                <td>
+                  Swift iPhone companion for pairing and HealthKit import.
+                </td>
+              </tr>
+              <tr>
+                <td><code>packages/companion-iroh/</code></td>
+                <td>
+                  Forge-owned Rust Iroh transport host and iOS static library
+                  for ALPN <code>forge-companion/1</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>apps/desktop-tauri/</code></td>
+                <td>Tauri desktop shell integration.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section">
+          <div class="note">
+            The API reference at <a href="./api/">`/api/`</a> is generated from
+            the same OpenAPI source that the running Forge server exposes at
+            <code>/api/v1/openapi.json</code>, so the public docs stay aligned
+            with the real product contract.
+          </div>
+        </section>
+
+        <footer class="footer">
+          Use this page when you want to understand why Forge feels unified
+          across web, API, agents, and native companion surfaces.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="./lightbox.js"></script>
+  </body>
+</html>

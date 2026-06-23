@@ -9,7 +9,7 @@ const colorScheme =
   process.env.FORGE_SCREENSHOT_COLOR_SCHEME === "dark" ? "dark" : "light";
 const outputDir = path.resolve(
   projectRoot,
-  process.env.FORGE_SCREENSHOT_OUTPUT_DIR ?? "openclaw-plugin/docs/assets"
+  process.env.FORGE_SCREENSHOT_OUTPUT_DIR ?? "plugins/openclaw/docs/assets"
 );
 
 const captures = [
@@ -108,7 +108,7 @@ const captures = [
     scrollTo: { x: 0, y: 180 }
   },
   {
-    name: "forge-ios-companion-sync.png",
+    name: "forge-apps/ios-companion-sync.png",
     route: "settings/mobile",
     waitForText: "Companion",
     scrollTo: { x: 0, y: 120 }

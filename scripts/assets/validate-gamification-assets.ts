@@ -6,7 +6,7 @@ import {
   GAMIFICATION_ASSET_MANIFEST,
   GAMIFICATION_CATALOG,
   GAMIFICATION_MASCOT_KEYS
-} from "../../src/lib/gamification-catalog.js";
+} from "../../apps/web/src/lib/gamification-catalog.js";
 
 const projectRoot = path.resolve(import.meta.dirname, "../..");
 const publicRoot = path.join(projectRoot, "public");

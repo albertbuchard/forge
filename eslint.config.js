@@ -8,16 +8,16 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
-      "server",
-      "src-tauri/target",
-      "openclaw-plugin/docs/**",
+      "apps/api",
+      "apps/desktop-tauri/target",
+      "plugins/openclaw/docs/**",
       "plugins/**/runtime/dist/**"
     ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["apps/web/src/**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: "latest",
       globals: globals.browser

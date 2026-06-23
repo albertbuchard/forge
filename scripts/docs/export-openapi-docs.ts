@@ -1,21 +1,21 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AGENT_ONBOARDING_TOOL_INPUT_CATALOG } from "../../server/src/app.ts";
-import { buildOpenApiDocument } from "../../server/src/openapi.ts";
-import type { ForgePluginConfig } from "../../src/openclaw/api-client.ts";
-import { registerForgePluginTools } from "../../src/openclaw/tools.ts";
-import type { ForgeRegisteredTool } from "../../src/openclaw/plugin-sdk-types.ts";
+import { AGENT_ONBOARDING_TOOL_INPUT_CATALOG } from "../../apps/api/src/app.ts";
+import { buildOpenApiDocument } from "../../apps/api/src/openapi.ts";
+import type { ForgePluginConfig } from "../../apps/web/src/openclaw/api-client.ts";
+import { registerForgePluginTools } from "../../apps/web/src/openclaw/tools.ts";
+import type { ForgeRegisteredTool } from "../../apps/web/src/openclaw/plugin-sdk-types.ts";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../..");
-const docsRoot = path.join(repoRoot, "openclaw-plugin", "docs");
+const docsRoot = path.join(repoRoot, "plugins/openclaw", "docs");
 const apiDocsRoot = path.join(docsRoot, "api");
 const document = buildOpenApiDocument();
 const payload = `${JSON.stringify(document, null, 2)}\n`;
 
 const pluginManifest = JSON.parse(
-  readFileSync(path.join(repoRoot, "openclaw.plugin.json"), "utf8")
+  readFileSync(path.join(repoRoot, "plugins/openclaw/openclaw.plugin.json"), "utf8")
 ) as { contracts?: { tools?: string[] } };
 
 type ToolCatalogEntry = (typeof AGENT_ONBOARDING_TOOL_INPUT_CATALOG)[number];
@@ -127,8 +127,8 @@ const documentedToolNames = new Set(
 const agentToolsPayload = {
   generatedAt: new Date().toISOString(),
   source: {
-    manifest: "openclaw.plugin.json",
-    onboardingCatalog: "server/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
+    manifest: "plugins/openclaw/openclaw.plugin.json",
+    onboardingCatalog: "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
   },
   groups: [
     ...toolGroups.map(({ id, title }) => ({ id, title })),

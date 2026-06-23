@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../apps/web/src",
+    "outDir": "./dist",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"],
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "../../apps/web/src/openclaw/index.ts",
+    "../../apps/web/src/openclaw/api-client.ts",
+    "../../apps/web/src/openclaw/local-runtime.ts",
+    "../../apps/web/src/openclaw/plugin-entry-shared.ts",
+    "../../apps/web/src/openclaw/plugin-sdk-types.ts",
+    "../../apps/web/src/openclaw/routes.ts",
+    "../../apps/web/src/openclaw/tools.ts",
+    "../../apps/web/src/openclaw/parity.ts"
+  ]
+}

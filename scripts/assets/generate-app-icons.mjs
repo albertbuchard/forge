@@ -20,10 +20,10 @@ const master = {
   letterhead: path.join(mastersDir, "forge-letterhead-watermark.png"),
 };
 
-const tauriIconDir = path.join(forgeRoot, "src-tauri", "icons");
+const tauriIconDir = path.join(forgeRoot, "apps/desktop-tauri", "icons");
 const iosIconDir = path.join(
   forgeRoot,
-  "ios-companion",
+  "apps/ios-companion",
   "ForgeCompanion",
   "ForgeCompanion",
   "Assets.xcassets",
@@ -31,7 +31,7 @@ const iosIconDir = path.join(
 );
 const watchIconDir = path.join(
   forgeRoot,
-  "ios-companion",
+  "apps/ios-companion",
   "ForgeCompanion",
   "ForgeWatch Watch App",
   "Assets.xcassets",
@@ -39,7 +39,7 @@ const watchIconDir = path.join(
 );
 const watchSharedIconDir = path.join(
   forgeRoot,
-  "ios-companion",
+  "apps/ios-companion",
   "ForgeCompanion",
   "ForgeWatch",
   "Assets.xcassets",

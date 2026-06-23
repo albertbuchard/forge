@@ -4,8 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const toolRoot = path.join(projectRoot, "tools", "atlas-cropper");
-const gamificationRoot = path.join(projectRoot, "public", "gamification");
+const toolRoot = path.join(projectRoot, "scripts", "assets", "atlas-cropper");
+const gamificationRoot = path.join(projectRoot, "apps", "web", "public", "gamification");
 const cropRegionRoot = path.join(toolRoot, "crop-regions");
 const port = Number(process.env.PORT ?? 4325);
 const host = process.env.HOST ?? "127.0.0.1";

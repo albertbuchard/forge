@@ -206,21 +206,21 @@ explicitly passes a phone-reachable `--public-url`.
 
 ## Where The Code Lives
 
-- `companion-iroh/`: Forge-owned Rust host binary and iOS static library.
-- `server/src/services/companion-iroh.ts`: starts the host, parses readiness, and
+- `packages/companion-iroh/`: Forge-owned Rust host binary and iOS static library.
+- `apps/api/src/services/companion-iroh.ts`: starts the host, parses readiness, and
   builds the QR transport payload.
-- `server/src/discovery-advertiser.ts`: advertises Bonjour/Tailscale discovery
+- `apps/api/src/discovery-advertiser.ts`: advertises Bonjour/Tailscale discovery
   hints; Iroh discovery uses phone-reachable HTTPS/Tailscale URLs when available
   instead of synthetic `forge-iroh://` API bases.
-- `server/src/app.ts`: exposes mobile pairing routes and companion Iroh status.
-- `src/pages/settings-mobile-page.tsx`: web settings UI for Iroh QR generation and
+- `apps/api/src/app.ts`: exposes mobile pairing routes and companion Iroh status.
+- `apps/web/src/pages/settings-mobile-page.tsx`: web settings UI for Iroh QR generation and
   manual HTTP fallback.
-- `ios-companion/ForgeCompanion/ForgeCompanion/ForgeSyncClient.swift`: sends mobile
+- `apps/ios-companion/ForgeCompanion/ForgeCompanion/ForgeSyncClient.swift`: sends mobile
   API calls over Iroh when the pairing payload is Iroh and retries through URLSession
   when the Iroh bridge times out and the pairing has an HTTP(S) fallback URL.
-- `ios-companion/ForgeCompanion/ForgeCompanion/ForgeWebView.swift`: registers the
+- `apps/ios-companion/ForgeCompanion/ForgeCompanion/ForgeWebView.swift`: registers the
   `forge-iroh://` scheme for the embedded Forge web app.
-- `ios-companion/RustBridge/build-for-xcode.sh`: builds the Rust static library for
+- `apps/ios-companion/RustBridge/build-for-xcode.sh`: builds the Rust static library for
   iOS simulator and device targets.
 
 ## License And Upstream Boundary
@@ -239,9 +239,9 @@ multiplexer.
 Use these checks when changing the transport:
 
 ```bash
-cargo fmt --manifest-path companion-iroh/Cargo.toml --check
-cargo test --manifest-path companion-iroh/Cargo.toml
-cargo build --release --manifest-path companion-iroh/Cargo.toml --bin forge-companion-iroh
+cargo fmt --manifest-path packages/companion-iroh/Cargo.toml --check
+cargo test --manifest-path packages/companion-iroh/Cargo.toml
+cargo build --release --manifest-path packages/companion-iroh/Cargo.toml --bin forge-companion-iroh
 npx tsc --noEmit
 npm run check:server
 npm run test:forge-memory
@@ -250,12 +250,12 @@ npm run test:forge-memory
 For iOS bridge changes, also build and test the generated Xcode project:
 
 ```bash
-xcodebuild -project ios-companion/ForgeCompanion.xcodeproj \
+xcodebuild -project apps/ios-companion/ForgeCompanion.xcodeproj \
   -scheme ForgeCompanion \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   CODE_SIGNING_ALLOWED=NO build
 
-xcodebuild -project ios-companion/ForgeCompanion.xcodeproj \
+xcodebuild -project apps/ios-companion/ForgeCompanion.xcodeproj \
   -scheme ForgeCompanion \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:ForgeCompanionTests \

@@ -337,7 +337,7 @@ function candidateIrohRoots(config) {
   const roots = [];
   if (config.mode === "dev" && config.repo) {
     roots.push(config.repo);
-    roots.push(path.join(config.repo, "openclaw-plugin", "dist"));
+    roots.push(path.join(config.repo, "plugins/openclaw", "dist"));
   }
   const pluginRoot = resolveOpenClawPluginRoot();
   if (pluginRoot) {
@@ -1577,7 +1577,7 @@ async function installOpenClawAdapter(config, options) {
   }
   const installTarget =
     config.mode === "dev" && config.repo
-      ? path.join(config.repo, "openclaw-plugin")
+      ? path.join(config.repo, "plugins/openclaw")
       : FORGE_PLUGIN_ID;
   const installArgs =
     config.mode === "dev"
@@ -4043,7 +4043,7 @@ function maybeStructuredContent(details, limits) {
 
 function resolveMcpRuntimeRoot(config) {
   if (config.mode === "dev" && config.repo) {
-    const devRoot = path.join(config.repo, "openclaw-plugin");
+    const devRoot = path.join(config.repo, "plugins/openclaw");
     if (fs.existsSync(path.join(devRoot, "dist", "openclaw", "tools.js"))) {
       return devRoot;
     }

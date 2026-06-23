@@ -8,15 +8,16 @@ const {
   GAMIFICATION_ASSET_MANIFEST,
   GAMIFICATION_CATALOG,
   GAMIFICATION_MASCOT_KEYS
-} = await import("../../src/lib/gamification-catalog.ts");
+} = await import("../../apps/web/src/lib/gamification-catalog.ts");
 
 const projectRoot = path.resolve(import.meta.dirname, "../..");
-const publicRoot = path.join(projectRoot, "public", "gamification");
+const publicRoot = path.join(projectRoot, "apps", "web", "public", "gamification");
 const sourceRoot = path.join(publicRoot, "source");
 const spriteRoot = path.join(publicRoot, "sprites");
 const manualCropRoot = path.join(
   projectRoot,
-  "tools",
+  "scripts",
+  "assets",
   "atlas-cropper",
   "crop-regions"
 );

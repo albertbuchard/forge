@@ -1,9 +1,9 @@
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { closeDatabase, configureDatabase, getDatabase, initializeDatabase } from "../../server/src/db.js";
-import { seedDemoDataIntoRuntime } from "../../server/src/demo-data.js";
-import { createSleepSession, createWorkoutSession } from "../../server/src/health.js";
+import { closeDatabase, configureDatabase, getDatabase, initializeDatabase } from "../../apps/api/src/db.js";
+import { seedDemoDataIntoRuntime } from "../../apps/api/src/demo-data.js";
+import { createSleepSession, createWorkoutSession } from "../../apps/api/src/health.js";
 import {
   createNutritionAppearanceCheckin,
   createNutritionBodyCheckin,
@@ -13,10 +13,10 @@ import {
   createNutritionSubjectiveCheckin,
   updateNutritionDailyActiveCalories,
   updateNutritionTarget
-} from "../../server/src/health-weight-loss.js";
-import { createMovementUserBox } from "../../server/src/movement.js";
-import { updateSettings } from "../../server/src/repositories/settings.js";
-import { createEntities } from "../../server/src/services/entity-crud.js";
+} from "../../apps/api/src/health-weight-loss.js";
+import { createMovementUserBox } from "../../apps/api/src/movement.js";
+import { updateSettings } from "../../apps/api/src/repositories/settings.js";
+import { createEntities } from "../../apps/api/src/services/entity-crud.js";
 
 const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
 const monorepoDataRoot = path.resolve(projectRoot, "..", "..", "data", "forge");

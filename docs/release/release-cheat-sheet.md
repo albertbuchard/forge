@@ -23,7 +23,7 @@ Forge currently has four release tracks:
 The GitHub Actions workflows live in:
 
 - `.github/workflows/release-forge-memory.yml`
-- `.github/workflows/release-openclaw-plugin.yml`
+- `.github/workflows/release-plugins/openclaw.yml`
 - `.github/workflows/release-hermes-plugin.yml`
 - `.github/workflows/release-ios-companion.yml`
 
@@ -102,7 +102,7 @@ One-time registry setup:
 
 1. Open npm package settings for `forge-openclaw-plugin`
 2. Configure Trusted Publishing for this GitHub repository
-3. Point it at the `release-openclaw-plugin.yml` workflow
+3. Point it at the `release-plugins/openclaw.yml` workflow
 4. Keep the workflow on GitHub-hosted runners
 
 Notes:
@@ -130,7 +130,7 @@ One-time registry setup:
 
 ### Forge Companion iOS release
 
-- release config file: `ios-companion/release/release.yml`
+- release config file: `apps/ios-companion/release/release.yml`
 - workflow trigger tags:
   - `ios-testflight-v<marketing-version>`
   - `ios-app-store-v<marketing-version>`
@@ -166,7 +166,7 @@ Choose one of these secret styles in the Forge GitHub repo.
 
 Single-secret setup:
 
-- `FORGE_IOS_RELEASE_ENV` with the raw multiline contents of `ios-companion/.release.env`, or
+- `FORGE_IOS_RELEASE_ENV` with the raw multiline contents of `apps/ios-companion/.release.env`, or
 - `FORGE_IOS_RELEASE_ENV_BASE64` with a base64-encoded `.release.env` payload
 
 Split-secret setup:
@@ -194,7 +194,7 @@ Optional in either setup:
 Formatting note:
 
 - `FORGE_IOS_RELEASE_ENV(_BASE64)` should include the same values you would put in
-  `ios-companion/.release.env`
+  `apps/ios-companion/.release.env`
 - `FORGE_ASC_KEY_CONTENT_BASE64` should be the base64 body of the `.p8` App Store
   Connect key
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64` should be the base64 body of the exported `.p12`
@@ -286,8 +286,8 @@ call the iOS release script internally, but the release action is the tag.
 
 Before tagging:
 
-1. update `ios-companion/release/release.yml`
-2. update `ios-companion/fastlane/metadata/en-US/release_notes.txt`
+1. update `apps/ios-companion/release/release.yml`
+2. update `apps/ios-companion/fastlane/metadata/en-US/release_notes.txt`
 3. replace any metadata placeholders if still present
 4. commit and push to `main`
 
@@ -320,8 +320,8 @@ git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge push origin ios-t
 
 Before tagging:
 
-1. update `ios-companion/release/release.yml`
-2. update `ios-companion/fastlane/metadata/en-US/release_notes.txt`
+1. update `apps/ios-companion/release/release.yml`
+2. update `apps/ios-companion/fastlane/metadata/en-US/release_notes.txt`
 3. verify screenshots or let CI regenerate them
 4. commit and push to `main`
 
@@ -334,7 +334,7 @@ git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge push origin ios-a
 
 Important iOS rule:
 
-- the marketing version in `ios-companion/release/release.yml` must exactly match the
+- the marketing version in `apps/ios-companion/release/release.yml` must exactly match the
   version embedded in the iOS release tag
 - release completion requires App Store Connect to accept and process a new build
   number for the intended IPA. Do not count an already-existing TestFlight build as
@@ -396,11 +396,11 @@ When an iOS release tag lands on a `main` commit, the workflow:
 - verifies the tag commit is on `origin/main`
 - derives release mode from the tag name
 - installs dependencies
-- writes `ios-companion/.release.env` from GitHub secrets
+- writes `apps/ios-companion/.release.env` from GitHub secrets
 - optionally installs signing certs and provisioning profiles
 - verifies the marketing version matches the tag
 - captures App Store screenshots
-- runs `./ios-companion/scripts/publish-forge-companion.sh testflight` or `app-store`
+- runs `./apps/ios-companion/scripts/publish-forge-companion.sh testflight` or `app-store`
 - uploads release artifacts and screenshots back to GitHub Actions
 
 ## Exact Tag Reference
@@ -428,8 +428,8 @@ python3 -m pip index versions forge-hermes-plugin
 
 ### iOS release
 
-1. Update `ios-companion/release/release.yml`
-2. Update `ios-companion/fastlane/metadata/en-US/release_notes.txt`
+1. Update `apps/ios-companion/release/release.yml`
+2. Update `apps/ios-companion/fastlane/metadata/en-US/release_notes.txt`
 3. Push the changes on `main`
 4. Push the correct iOS tag
 5. Watch the GitHub Actions workflow
@@ -438,7 +438,7 @@ python3 -m pip index versions forge-hermes-plugin
    `build_number`, and a non-empty `app_store_build_icon_asset_token`
 
 Normal iOS release commands must be limited to git operations and GitHub Actions
-inspection. Local `./ios-companion/scripts/publish-forge-companion.sh testflight`
+inspection. Local `./apps/ios-companion/scripts/publish-forge-companion.sh testflight`
 is a fallback only, not the standard release process.
 
 ## Recent Verified Releases
@@ -508,12 +508,12 @@ Important:
 
 ### iOS local fallback
 
-- keep `ios-companion/.release.env` filled once
+- keep `apps/ios-companion/.release.env` filled once
 - then run:
 
 ```bash
-./ios-companion/scripts/publish-forge-companion.sh testflight
-./ios-companion/scripts/publish-forge-companion.sh app-store
+./apps/ios-companion/scripts/publish-forge-companion.sh testflight
+./apps/ios-companion/scripts/publish-forge-companion.sh app-store
 ```
 
 That script already supports non-interactive App Store Connect API key auth, so it

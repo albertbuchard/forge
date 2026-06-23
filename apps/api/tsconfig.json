@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../dist/server",
+    "rootDir": "../..",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx",
+    "baseUrl": "../..",
+    "paths": {
+      "@/*": ["apps/web/src/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "../web/src/lib/workbench/**/*.ts",
+    "../web/src/lib/workbench/**/*.tsx",
+    "../web/src/components/workbench-boxes/**/*.ts",
+    "../web/src/components/workbench-boxes/**/*.tsx",
+    "../web/src/components/customization/utility-widgets.tsx"
+  ]
+}

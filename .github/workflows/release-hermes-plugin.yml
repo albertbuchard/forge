@@ -60,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forge-hermes-python-dist
-          path: plugins/forge-hermes/python-dist/*
+          path: plugins/hermes/python-dist/*
           if-no-files-found: error
 
   publish:

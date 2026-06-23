@@ -37,7 +37,7 @@ latest_tag="$(
     | awk '{print $2}'
 )"
 
-release_file="ios-companion/release/release.yml"
+release_file="apps/ios-companion/release/release.yml"
 [[ -f "$release_file" ]] || fail "missing $release_file"
 
 working_version="$(awk -F'"' '/marketing:/ { print $2; exit }' "$release_file")"

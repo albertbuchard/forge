@@ -8,10 +8,10 @@ on:
       - "README.md"
       - "package.json"
       - "package-lock.json"
-      - "server/src/**"
+      - "apps/api/src/**"
       - "scripts/docs/export-openapi-docs.ts"
       - "scripts/ci/setup-safe-chain-ci.sh"
-      - "openclaw-plugin/docs/**"
+      - "plugins/openclaw/docs/**"
       - ".github/workflows/github-pages.yml"
   workflow_dispatch:
 
@@ -44,6 +44,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./openclaw-plugin/docs
+          path: ./plugins/openclaw/docs
       - id: deployment
         uses: actions/deploy-pages@v4

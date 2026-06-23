@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forge Development Guide</title>
+    <meta
+      name="description"
+      content="Forge local development, verification, docs generation, and release-oriented commands."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient a"></div>
+      <div class="ambient b"></div>
+
+      <header class="topbar">
+        <a class="brand" href="./index.html">
+          <span class="brand-mark">F</span>
+          <span class="brand-copy">
+            <strong>Forge</strong>
+            <span>Project Guide</span>
+          </span>
+        </a>
+        <nav class="topnav">
+          <a href="./index.html">Home</a>
+          <a href="./features.html">Features</a>
+          <a href="./engineering.html">Engineering</a>
+          <a class="active" href="./development.html">Development</a>
+          <a href="./integrations.html">Integrations</a>
+          <a href="./tools.html">Agent Tools</a>
+          <a href="./api/">API</a>
+          <a href="https://github.com/albertbuchard/forge">GitHub</a>
+        </nav>
+      </header>
+
+      <main class="page">
+        <div class="breadcrumbs">
+          <a href="./index.html">Docs</a>
+          <span>/</span>
+          <span>Development</span>
+        </div>
+
+        <section class="hero split">
+          <div class="hero-card">
+            <p class="eyebrow">Run Forge Yourself</p>
+            <h1>
+              Start Forge locally and verify the real product paths, not just
+              the code.
+            </h1>
+            <p class="lede">
+              If you want to try Forge, contribute to it, or operate it locally,
+              this page shows the main commands and the checks that matter. The
+              key rule is simple: make sure the app and API actually load where
+              users expect them.
+            </p>
+          </div>
+          <aside class="hero-card">
+            <p class="eyebrow">Jump To</p>
+            <ul class="guide-list">
+              <li><a href="#dev-installer">Forge Memory dev mode</a></li>
+              <li><a href="#dependency-safety">Dependency safety</a></li>
+              <li><a href="#local-development">Local development</a></li>
+              <li><a href="#workflow-model">Workflow model</a></li>
+              <li><a href="#verification">Verification</a></li>
+              <li><a href="#docs-pipeline">Docs pipeline</a></li>
+              <li><a href="#release-adjacent">Release-adjacent commands</a></li>
+            </ul>
+          </aside>
+        </section>
+
+        <section class="section" id="dev-installer">
+          <div class="section-heading">
+            <p class="eyebrow">Preferred Dev Setup</p>
+            <h2>Use the same installer for source-backed Forge work.</h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Guided dev install</h3>
+              <p>
+                Dev mode keeps the same guided flow as the public install, but
+                links host adapters to this checkout and defaults to the real
+                shared Forge data folder.
+              </p>
+              <pre><code>npx forge-memory --dev</code></pre>
+            </article>
+            <article class="card">
+              <h3>Dev runtime commands</h3>
+              <p>
+                Use these commands to check the source-backed runtime, open the
+                UI, export data before risky work, or stop the local processes.
+              </p>
+              <pre><code>npx forge-memory status
+npx forge-memory doctor
+npx forge-memory ui
+npx forge-memory export
+npx forge-memory stop</code></pre>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="dependency-safety">
+          <div class="section-heading">
+            <p class="eyebrow">Dependency Safety</p>
+            <h2>
+              Use installed dependencies for checks and keep new installs
+              deliberate.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Local verification posture</h3>
+              <p>
+                Most contributor checks can run against the already installed
+                Node, Rust, Ruby, Python, and Xcode toolchains. Avoid running
+                package-manager installs just to inspect or verify an unrelated
+                documentation change.
+              </p>
+            </article>
+            <article class="card">
+              <h3>CI release guard</h3>
+              <p>
+                Forge release workflows run
+                <code>scripts/ci/setup-safe-chain-ci.sh</code> before npm, PyPI,
+                and docs package steps where Safe Chain can protect the install
+                surface. Cargo, Bundler, Xcode, and binary toolchains still need
+                normal lockfile and release-review discipline.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="local-development">
+          <div class="section-heading">
+            <p class="eyebrow">Local Development</p>
+            <h2>
+              These commands get the app running in a realistic local setup.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Install and run</h3>
+              <pre><code>npm install
+npm run dev</code></pre>
+              <p>
+                The normal repo dev command starts the Fastify backend and the
+                Vite UI together.
+              </p>
+            </article>
+            <article class="card">
+              <h3>OpenClaw data-root variant</h3>
+              <pre><code>npm run dev:server:openclaw-data
+FORGE_BASE_PATH=/forge/ npm run dev:web -- --host 127.0.0.1 --port 3027</code></pre>
+              <p>
+                Use this path when you need the repo runtime aligned with the
+                tracked shared Forge data root.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Plugin entrypoint in dev mode</h3>
+              <pre><code>FORGE_OPENCLAW_DEV=1 node ./plugins/openclaw/apps/api/index.js
+npm run dev:plugins/openclaw-runtime</code></pre>
+              <p>
+                The OpenClaw plugin entrypoint stays on the built runtime by
+                default. Set <code>FORGE_OPENCLAW_DEV=1</code> only during local
+                development to have that same entrypoint launch the
+                source-backed autoreloading backend on port <code>4317</code>.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="workflow-model">
+          <div class="section-heading">
+            <p class="eyebrow">Workflow Model</p>
+            <h2>
+              Forge’s planning workflow belongs here, not on the landing page.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Planning sequence</h3>
+              <p>
+                The canonical Forge planning flow is:
+                <strong
+                  >PRD -&gt; issues -&gt; tasks -&gt; subtasks when needed -&gt;
+                  closeout</strong
+                >. Projects are PRD-backed, issues are vertical slices, and
+                tasks should fit one focused AI session.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Execution modes</h3>
+              <p>
+                Issues can be <code>AFK</code> or <code>HITL</code>. Task
+                generation typically follows
+                <code>Schema -&gt; Logic -&gt; API -&gt; UI</code>, with tests
+                interleaved instead of deferred.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Lean work item contract</h3>
+              <p>
+                Detailed work lives mainly in <code>description</code> and
+                <code>aiInstructions</code>. Structured workflow fields stay
+                narrow: execution mode, acceptance criteria, blocker links, and
+                completion reports with modified files, work summary, and linked
+                git refs.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Git workflow default</h3>
+              <p>
+                Forge defaults to direct commits on <code>main</code>. Feature
+                branches and pull requests can exist, but the product and agent
+                docs should not assume them as the default execution model.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-heading">
+            <p class="eyebrow">Primary Commands</p>
+            <h2>
+              The main commands for building, testing, and exporting docs.
+            </h2>
+          </div>
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>npm run dev</code></td>
+                <td>
+                  Run Fastify and Vite together for repo-local development.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run build</code></td>
+                <td>Build the main Forge web app.</td>
+              </tr>
+              <tr>
+                <td><code>npm run test</code></td>
+                <td>Run the Vitest frontend suite.</td>
+              </tr>
+              <tr>
+                <td><code>npm run test:server</code></td>
+                <td>Run the server test suite through Node + tsx.</td>
+              </tr>
+              <tr>
+                <td><code>npm run docs:openapi</code></td>
+                <td>
+                  Export the current generated OpenAPI document into the Pages
+                  artifact.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code></td>
+                <td>
+                  Build a disposable fake Forge data root for public docs
+                  screenshots. Never point it at a real Forge data root.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run media:web:docs-screenshots</code></td>
+                <td>
+                  Capture the live Forge web app into
+                  <code>plugins/openclaw/docs/assets/</code>, normally after
+                  serving Forge from the disposable screenshot data root.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run media:docs-ios</code></td>
+                <td>
+                  Regenerate the public iPhone companion docs media with
+                  docs-only fake data, without launching the simulator or
+                  touching a real companion install.
+                </td>
+              </tr>
+              <tr>
+                <td><code>npm run build:openclaw-plugin</code></td>
+                <td>
+                  Bundle the published OpenClaw package with the built Forge
+                  runtime payload.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="section" id="verification">
+          <div class="section-heading">
+            <p class="eyebrow">Verification</p>
+            <h2>
+              After changes, verify the product is still reachable and
+              trustworthy.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Static verification</h3>
+              <pre><code>npx tsc --noEmit
+node --import tsx --test --test-concurrency=1 apps/api/src/*.test.ts
+npm run test</code></pre>
+            </article>
+            <article class="card">
+              <h3>Live runtime verification</h3>
+              <pre><code>tailscale serve status
+curl -I http://127.0.0.1:4317/api/v1/health
+curl -I http://127.0.0.1:3027/forge/</code></pre>
+            </article>
+          </div>
+          <div class="note warning">
+            Forge treats live verification as mandatory. Passing types or unit
+            tests is not enough if the app shell or API mount is broken.
+          </div>
+        </section>
+
+        <section class="section" id="docs-pipeline">
+          <div class="section-heading">
+            <p class="eyebrow">Docs Pipeline</p>
+            <h2>
+              The public guide and API explorer are generated from the product
+              itself.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>Where the API contract comes from</h3>
+              <p>
+                Forge generates its OpenAPI document in
+                <code>apps/api/src/openapi.ts</code>. The runtime serves that same
+                document at <code>/api/v1/openapi.json</code>.
+              </p>
+            </article>
+            <article class="card">
+              <h3>How GitHub Pages stays accurate</h3>
+              <p>
+                The docs export script writes the current generated spec into
+                <code>plugins/openclaw/docs/api/openapi.json</code> so GitHub
+                Pages can render the same contract without a live Forge server.
+              </p>
+            </article>
+          </div>
+          <pre><code>npm run docs:openapi</code></pre>
+          <div class="note">
+            Web app screenshots are captured from a temporary fake-data root:
+            run <code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code>,
+            serve Forge with <code>FORGE_DATA_ROOT</code> pointed there, then
+            run <code>npm run media:web:docs-screenshots</code>. The fixture
+            refuses known protected Forge data roots.
+          </div>
+          <div class="note">
+            The companion phone screenshots in <code>media/ios/</code> are
+            generated with <code>npm run media:docs-ios</code> from fake
+            documentation-only data. Use the simulator capture only for actual
+            App Store/TestFlight media preparation.
+          </div>
+        </section>
+
+        <section class="section" id="release-adjacent">
+          <div class="section-heading">
+            <p class="eyebrow">Release Paths</p>
+            <h2>
+              These commands matter when Forge is being packaged or published.
+            </h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>OpenClaw package</h3>
+              <p>
+                Use <code>npm run build:openclaw-plugin</code> to produce the
+                published OpenClaw package payload with the built runtime.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Plugin parity</h3>
+              <p>
+                Run <code>npm run check:openclaw-plugin</code> when the adapter
+                surface, runtime packaging, or manifest behavior changes.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Pages deploy</h3>
+              <p>
+                The GitHub Pages workflow publishes the static docs site from
+                the repo’s docs artifact, including the exported OpenAPI JSON.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          If you are evaluating Forge operationally, start here, then move to
+          Integrations and the API reference as needed.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="./lightbox.js"></script>
+  </body>
+</html>

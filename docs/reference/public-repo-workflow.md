@@ -28,6 +28,6 @@
 
 The publishable OpenClaw package lives in:
 
-- [`openclaw-plugin`](../openclaw-plugin)
+- [`plugins/openclaw`](../plugins/openclaw)
 
 The full Forge app can stay private or semi-private operationally, but the plugin package, manifest, docs, and skill must be publishable on their own.

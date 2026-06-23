@@ -9,9 +9,9 @@ import {
   configureLegacyWikiAutoImport,
   getDatabase,
   initializeDatabase
-} from "../../server/src/db.ts";
-import { getNoteById } from "../../server/src/repositories/notes.ts";
-import { syncNoteWikiArtifacts } from "../../server/src/repositories/wiki-memory.ts";
+} from "../../apps/api/src/db.ts";
+import { getNoteById } from "../../apps/api/src/repositories/notes.ts";
+import { syncNoteWikiArtifacts } from "../../apps/api/src/repositories/wiki-memory.ts";
 
 type ParsedMarkdownFile = {
   frontmatter: Record<string, unknown>;

@@ -1,7 +1,0 @@
-include README.md
-recursive-include forge_hermes *.md
-recursive-include forge_hermes/scripts *.mjs
-include forge_hermes/runtime/package.json
-recursive-include forge_hermes/runtime/dist *
-recursive-include forge_hermes/runtime/server/migrations *.sql
-prune forge_hermes/runtime/node_modules

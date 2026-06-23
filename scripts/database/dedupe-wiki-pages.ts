@@ -5,8 +5,8 @@ import {
   configureDatabase,
   getDatabase,
   initializeDatabase
-} from "../../server/src/db.ts";
-import { deleteEntity } from "../../server/src/services/entity-crud.ts";
+} from "../../apps/api/src/db.ts";
+import { deleteEntity } from "../../apps/api/src/services/entity-crud.ts";
 
 type WikiNoteRow = {
   id: string;

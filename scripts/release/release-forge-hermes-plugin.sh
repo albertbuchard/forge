@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FORGE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-HERMES_PLUGIN_DIR="${FORGE_DIR}/plugins/forge-hermes"
+HERMES_PLUGIN_DIR="${FORGE_DIR}/plugins/hermes"
 HERMES_PLUGIN_MANIFEST="${HERMES_PLUGIN_DIR}/plugin.yaml"
 HERMES_PLUGIN_PACKAGE_VERSION="${HERMES_PLUGIN_DIR}/forge_hermes/version.py"
 HERMES_PLUGIN_RUNTIME_PACKAGE_JSON="${HERMES_PLUGIN_DIR}/forge_hermes/runtime/package.json"
@@ -13,9 +13,9 @@ HERMES_PLUGIN_PYTHON_DIST="${HERMES_PLUGIN_DIR}/python-dist"
 HERMES_PLUGIN_BUILD_DIR="${HERMES_PLUGIN_DIR}/build"
 HERMES_PLUGIN_EGG_INFO_DIR="${HERMES_PLUGIN_DIR}/forge_hermes_plugin.egg-info"
 HERMES_TAG_PREFIX="hermes-v"
-CODEX_RUNTIME_DIST_DIR="${FORGE_DIR}/plugins/forge-codex/runtime/dist"
-CODEX_RUNTIME_MIGRATIONS_DIR="${FORGE_DIR}/plugins/forge-codex/runtime/server/migrations"
-OPENCLAW_PLUGIN_PACKAGE_JSON="${FORGE_DIR}/openclaw-plugin/package.json"
+CODEX_RUNTIME_DIST_DIR="${FORGE_DIR}/plugins/codex/runtime/dist"
+CODEX_RUNTIME_MIGRATIONS_DIR="${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
+OPENCLAW_PLUGIN_PACKAGE_JSON="${FORGE_DIR}/plugins/openclaw/package.json"
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
 PACKAGING_VENV_DIR=""
@@ -123,8 +123,8 @@ require_git_auth() {
 restore_openclaw_build_side_effects() {
   rm -rf "${CODEX_RUNTIME_DIST_DIR}" "${CODEX_RUNTIME_MIGRATIONS_DIR}"
   git -C "${FORGE_DIR}" restore --source=HEAD --worktree -- \
-    "plugins/forge-codex/runtime/dist" \
-    "plugins/forge-codex/runtime/server/migrations" >/dev/null 2>&1 || true
+    "plugins/codex/runtime/dist" \
+    "plugins/codex/runtime/apps/api/migrations" >/dev/null 2>&1 || true
 }
 
 ensure_packaging_env() {
@@ -319,57 +319,57 @@ verify_version_alignment() {
 
 run_verification_suite() {
   rm -rf "${HERMES_PLUGIN_PYTHON_DIST}" "${HERMES_PLUGIN_BUILD_DIR}" "${HERMES_PLUGIN_EGG_INFO_DIR}"
-  echo "+ node ./plugins/forge-hermes/scripts/build-package-runtime.mjs"
+  echo "+ node ./plugins/hermes/scripts/build-package-runtime.mjs"
   (
     cd "${FORGE_DIR}"
-    node ./plugins/forge-hermes/scripts/build-package-runtime.mjs
+    node ./plugins/hermes/scripts/build-package-runtime.mjs
   )
   restore_openclaw_build_side_effects
   if is_publish_from_tag_mode; then
-    echo "+ python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py"
+    echo "+ python3 -m py_compile plugins/hermes/__init__.py plugins/hermes/forge_hermes/*.py"
     (
       cd "${FORGE_DIR}"
-      python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py
+      python3 -m py_compile plugins/hermes/__init__.py plugins/hermes/forge_hermes/*.py
     )
     ensure_packaging_env
-    echo "+ ${PACKAGING_PYTHON} -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes"
+    echo "+ ${PACKAGING_PYTHON} -m build --sdist --wheel --outdir plugins/hermes/python-dist plugins/hermes"
     (
       cd "${FORGE_DIR}"
-      "${PACKAGING_PYTHON}" -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes
+      "${PACKAGING_PYTHON}" -m build --sdist --wheel --outdir plugins/hermes/python-dist plugins/hermes
     )
-    echo "+ ${PACKAGING_PYTHON} -m twine check plugins/forge-hermes/python-dist/*"
+    echo "+ ${PACKAGING_PYTHON} -m twine check plugins/hermes/python-dist/*"
     (
       cd "${FORGE_DIR}"
-      "${PACKAGING_PYTHON}" -m twine check plugins/forge-hermes/python-dist/*
+      "${PACKAGING_PYTHON}" -m twine check plugins/hermes/python-dist/*
     )
     return 0
   fi
 
-  echo "+ npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts"
+  echo "+ npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
   (
     cd "${FORGE_DIR}"
-    npm exec -- vitest run src/openclaw/parity.test.ts src/openclaw/index.test.ts src/openclaw/api-client.test.ts src/openclaw/manifest.test.ts src/openclaw/tool-contract.test.ts
+    npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts
   )
-  echo "+ node --import tsx --test --test-concurrency=1 server/src/app.test.ts"
+  echo "+ node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts"
   (
     cd "${FORGE_DIR}"
-    node --import tsx --test --test-concurrency=1 server/src/app.test.ts
+    node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts
   )
-  echo "+ python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py"
+  echo "+ python3 -m py_compile plugins/hermes/__init__.py plugins/hermes/forge_hermes/*.py"
   (
     cd "${FORGE_DIR}"
-    python3 -m py_compile plugins/forge-hermes/__init__.py plugins/forge-hermes/forge_hermes/*.py
+    python3 -m py_compile plugins/hermes/__init__.py plugins/hermes/forge_hermes/*.py
   )
   ensure_packaging_env
-  echo "+ ${PACKAGING_PYTHON} -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes"
+  echo "+ ${PACKAGING_PYTHON} -m build --sdist --wheel --outdir plugins/hermes/python-dist plugins/hermes"
   (
     cd "${FORGE_DIR}"
-    "${PACKAGING_PYTHON}" -m build --sdist --wheel --outdir plugins/forge-hermes/python-dist plugins/forge-hermes
+    "${PACKAGING_PYTHON}" -m build --sdist --wheel --outdir plugins/hermes/python-dist plugins/hermes
   )
-  echo "+ ${PACKAGING_PYTHON} -m twine check plugins/forge-hermes/python-dist/*"
+  echo "+ ${PACKAGING_PYTHON} -m twine check plugins/hermes/python-dist/*"
   (
     cd "${FORGE_DIR}"
-    "${PACKAGING_PYTHON}" -m twine check plugins/forge-hermes/python-dist/*
+    "${PACKAGING_PYTHON}" -m twine check plugins/hermes/python-dist/*
   )
 }
 
@@ -426,7 +426,7 @@ registered_names = sorted(
     tool["name"] for tool in ctx.tools if isinstance(tool.get("name"), str)
 )
 manifest_names = sorted(
-    read_manifest_tools(Path("plugins/forge-hermes/plugin.yaml"))
+    read_manifest_tools(Path("plugins/hermes/plugin.yaml"))
 )
 assert registered_names == manifest_names, (
     len(registered_names),

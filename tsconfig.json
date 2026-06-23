@@ -10,12 +10,12 @@
     "baseUrl": ".",
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./apps/web/src/*"]
     }
   },
   "include": [
-    "src",
-    "server/src/**/*.d.ts",
+    "apps/web/src",
+    "apps/api/src/**/*.d.ts",
     "vite.config.ts",
     "eslint.config.js",
     "vitest.setup.ts"

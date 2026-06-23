@@ -32,6 +32,17 @@ Forge should stay modern and production-grade:
 - SwiftUI watchOS companion command surface
 - optional GitHub Release-hosted gamification art packs installed into the local Forge data root
 
+The source checkout should stay organized around explicit production ownership
+boundaries: `apps/web` for the React/Vite app, `apps/api` for the Fastify API
+and migrations, `apps/desktop-tauri` for the desktop shell,
+`apps/ios-companion` for the native companion, `plugins/openclaw`,
+`plugins/codex`, and `plugins/hermes` for host adapters, `packages/forge-memory`
+and `packages/companion-iroh` for public/shared packages, `tests` for E2E and
+shared fixtures, `scripts` for grouped operational tooling, `docs` for public
+references, and `assets` for source-owned visual inputs. Private goal prompts,
+handoffs, automation memory, internal audits, GPT Pro response captures, and
+conversation-derived planning notes must remain outside the public Forge repo.
+
 Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
 
 Forge should make `npx forge-memory` the preferred public install path for UI-only use and for OpenClaw, Hermes, Codex, and Claude Code. The installer should feel like a polished Forge surface, always install the Forge UI/runtime as the base layer, run automated discovery in the background, ask a guided question flow, show an OpenClaw-quality checkbox menu for host adapters only with every detected runtime selected by default, missing runtimes as disabled rows, Space to toggle rows, and a Skip option, route selected runtimes to one shared data folder, expose configure/status/doctor/runtime commands, make `configure` rerun the full flow with the current state as defaults, support source-backed development installs through `npx forge-memory --dev` that default to the real shared Forge data folder, and offer iOS companion pairing with yes selected by default before falling back to advanced manual adapter docs.

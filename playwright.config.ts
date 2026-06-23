@@ -8,7 +8,7 @@ const e2ePort =
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}/forge/`;
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./tests/e2e",
   timeout: 30_000,
   expect: {
     timeout: 10_000
@@ -34,7 +34,7 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: `npm run build && PORT=${e2ePort} node --import tsx server/src/e2e-server.ts`,
+    command: `npm run build && PORT=${e2ePort} node --import tsx apps/api/src/e2e-server.ts`,
     port: e2ePort,
     timeout: 120_000,
     reuseExistingServer: e2ePort === 4317 && !process.env.CI

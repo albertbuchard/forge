@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
-import { buildForgeHmrConfig } from "./src/lib/vite-hmr";
+import { buildForgeHmrConfig } from "./apps/web/src/lib/vite-hmr";
 
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
@@ -22,11 +22,12 @@ export default defineConfig(({ command }) => {
   const apiTarget = process.env.FORGE_API_ORIGIN ?? "http://127.0.0.1:4317";
 
   return {
+    root: path.resolve(__dirname, "apps/web"),
     base,
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src")
+        "@": path.resolve(__dirname, "./apps/web/src")
       }
     },
     server: {
@@ -53,6 +54,8 @@ export default defineConfig(({ command }) => {
       strictPort: true
     },
     build: {
+      outDir: path.resolve(__dirname, "dist"),
+      emptyOutDir: true,
       sourcemap: false,
       rollupOptions: {
         output: {
@@ -140,7 +143,7 @@ export default defineConfig(({ command }) => {
     },
     test: {
       environment: "jsdom",
-      setupFiles: "./vitest.setup.ts",
+      setupFiles: path.resolve(__dirname, "vitest.setup.ts"),
       include: ["src/**/*.test.{ts,tsx}"]
     }
   };

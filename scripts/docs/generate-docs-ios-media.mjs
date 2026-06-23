@@ -3,7 +3,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 
 const projectRoot = path.resolve(new URL("../..", import.meta.url).pathname);
-const outputDir = path.join(projectRoot, "openclaw-plugin/docs/media/ios");
+const outputDir = path.join(projectRoot, "plugins/openclaw/docs/media/ios");
 
 const screens = [
   {
