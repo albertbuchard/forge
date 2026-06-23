@@ -4,7 +4,8 @@ Repo-local Codex plugin for Forge.
 
 This plugin exposes the Forge MCP tool surface through the same curated contract as the Forge OpenClaw adapter.
 
-It also carries a bundled built Forge runtime under [`runtime/`](./runtime), so local Codex use does not depend on a separately started Forge process.
+It also carries a generated Forge runtime package under [`runtime/`](./runtime),
+so local Codex use does not depend on a globally installed Forge process.
 The current Codex integration model is MCP-first: Codex connects to a local MCP
 server and shares that MCP setup across the CLI and IDE extension. This adapter
 therefore ships the Codex plugin metadata in
@@ -35,9 +36,10 @@ The current PM contract it should understand is:
 - direct work on `main` by default
 
 The MCP server is launched by [`./scripts/run-mcp.sh`](./scripts/run-mcp.sh),
-which starts the bundled MCP bridge and reuses the built Forge OpenClaw tool
-registrations from the packaged runtime. When this script is run from the Forge
-checkout it defaults to source-backed development mode:
+which starts the MCP bridge and reuses the Forge OpenClaw tool registrations
+from the generated runtime bundle. If the bundle is missing in a clean checkout,
+the wrapper builds it before starting the MCP server. When this script is run
+from the Forge checkout it defaults to source-backed development mode:
 
 - `FORGE_OPENCLAW_DEV=1`
 - `FORGE_DEV_WEB_ORIGIN=http://127.0.0.1:3027/forge/`

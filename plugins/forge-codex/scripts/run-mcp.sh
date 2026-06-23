@@ -18,4 +18,5 @@ if [[ -z "${FORGE_DATA_ROOT:-}" && -d "$shared_data_root" ]]; then
 fi
 
 cd "$project_root"
+node "$plugin_root/scripts/ensure-runtime-bundle.mjs"
 exec node "$plugin_root/scripts/forge-codex-mcp.mjs"
