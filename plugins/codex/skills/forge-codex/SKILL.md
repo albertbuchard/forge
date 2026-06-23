@@ -4,17 +4,22 @@ Use this plugin when you want Codex to work directly with Forge through the cura
 MCP tool surface.
 
 Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
-wiki surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
+wiki surfaces, read-model surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
 The planning side covers goals, projects, strategies, tasks,
 habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The health side covers `sleep_session`,
 `workout_session`, and the read-only `training_load` surface for cardiovascular
-load and HR zone review. The preferences side covers `preference_catalog`,
+load and HR zone review, plus the `weight_loss` read and nutrition evidence
+workflow. The preferences side covers `preference_catalog`,
 `preference_catalog_item`, `preference_context`, and `preference_item` plus the game,
 judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
 modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion
 definitions, `questionnaire_instrument`, `questionnaire_run`, and the note-backed
-self-observation calendar. Movement, Life Force, and Workbench use dedicated route
+self-observation calendar. Read-model surfaces include `operator_overview`,
+`operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`,
+`training_load`, `weight_loss`, and the self-observation calendar; ask what
+practical decision the read should support before adding write-shaped questions.
+Movement, Life Force, and Workbench use dedicated route
 families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
 many users with `userId` or repeated `userIds`, and cross-user links are valid when
@@ -426,15 +431,17 @@ Surface rule:
 6. Action and workflow entities are `task_run`, `questionnaire_run`, the
    preferences game and judgment/signal tools, calendar sync/setup flows, work-log
    adjustments, and similar action-heavy operations.
-7. Read-model-only surfaces include operator overview/context, sleep overview,
-   sports overview, training load, self-observation calendar, and calendar overview.
+7. Read-model-only surfaces include operator overview/context, calendar overview,
+   sleep overview, sports overview, training load, weight loss, and the
+   self-observation calendar.
    In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`,
-   operator, calendar, self-observation, sleep, sports, and training-load read models are
+   operator, calendar, self-observation, sleep, sports, training-load, and
+   weight-loss read models are
    available under camelCase names and entity-style aliases where useful,
    including `operatorOverview`, `operatorContext`, `calendarOverview`,
-   `sleepOverview`, `sportsOverview`, `trainingLoad`, `operator_overview`,
+   `sleepOverview`, `sportsOverview`, `trainingLoad`, `weightLoss`, `operator_overview`,
    `operator_context`, `calendar_overview`, `self_observation`,
-   `sleep_overview`, `sports_overview`, and `training_load`. Treat those as
+   `sleep_overview`, `sports_overview`, `training_load`, and `weight_loss`. Treat those as
    read-only overview surfaces, not batch CRUD entities.
    Use `forge_get_operator_overview` for broad Forge status,
    `forge_get_operator_context` for current work and risk, and

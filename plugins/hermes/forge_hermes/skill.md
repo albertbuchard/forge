@@ -5,19 +5,24 @@ tool surface.
 
 ## Core model
 
-Forge has four major stored-entity surfaces and three specialized domain surfaces.
+Forge has four major stored-entity surfaces, read-model surfaces, and three specialized domain surfaces.
 The planning side covers goals, projects, strategies,
 tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The Health side covers sleep sessions,
 sports and workout sessions, the read-only training-load surface for cardiovascular
-load and HR zone review, companion pairing, and habit-generated workout records.
+load and HR zone review, the weight-loss and nutrition workflow, companion pairing,
+and habit-generated workout records.
 The Preferences side covers contextual taste modeling, pairwise comparisons, direct
 signals, editable concept libraries, and preference items. The Psyche side covers
 values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards,
 trigger reports, event types, reusable emotion definitions, structured questionnaires, questionnaire
 runs, and a self-observation calendar backed by note-based observations. Forge also has a SQLite-backed Wiki
 memory layer with explicit spaces, Markdown content in database rows, backlinks, optional
-embeddings, and structured Forge links. The specialized domain surfaces are Movement,
+embeddings, and structured Forge links. Read-model surfaces include
+`operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
+`sports_overview`, `training_load`, `weight_loss`, and the self-observation
+calendar; ask what practical decision the read should support before adding
+write-shaped questions. The specialized domain surfaces are Movement,
 Life Force, and Workbench; Hermes must use their dedicated route families instead of
 forcing them through batch CRUD. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
@@ -416,14 +421,14 @@ For wiki-specific recall:
 - Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
-- Read-model-only surfaces: operator overview/context, sleep overview, sports overview, training load, self-observation calendar, and calendar overview.
+- Read-model-only surfaces: operator overview/context, calendar overview, sleep overview, sports overview, training load, weight loss, and the self-observation calendar.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
   calendar, self-observation, sleep, and sports read models are available under
   camelCase names and entity-style aliases where useful, including
   `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `operator_overview`, `operator_context`,
+  `sportsOverview`, `trainingLoad`, `weightLoss`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`, and
-  `sports_overview`, `trainingLoad`, and `training_load`. Treat those as
+  `sports_overview`, `training_load`, and `weight_loss`. Treat those as
   read-only overview surfaces, not batch CRUD entities.
 - Use `forge_get_operator_overview` for broad Forge status, `forge_get_operator_context`
   for current work and risk, and `forge_get_calendar_overview` before calendar-aware

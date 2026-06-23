@@ -979,6 +979,32 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 1 retest: compact adapter skills include current read-model and nutrition surfaces", () => {
+    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
+    const hermesRootSkill = readRepoFile("plugins/hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/codex/skills/forge-codex/SKILL.md"
+    );
+
+    for (const source of [openClawSkill, hermesSkill, hermesRootSkill, codexSkill]) {
+      expect(source).toMatch(/read-model surfaces/i);
+      expect(source).toMatch(/`operator_overview`/);
+      expect(source).toMatch(/`operator_context`/);
+      expect(source).toMatch(/`calendar_overview`/);
+      expect(source).toMatch(/`sleep_overview`/);
+      expect(source).toMatch(/`sports_overview`/);
+      expect(source).toMatch(/`training_load`/);
+      expect(source).toMatch(/`weight_loss`/);
+      expect(source).toMatch(/weight-loss and nutrition workflow|nutrition evidence\s+workflow/i);
+      expect(source).toMatch(
+        /practical decision[\s\S]*before adding\s+write-shaped questions/i
+      );
+      expect(source).toMatch(/forge_get_weight_loss_overview/);
+      expect(source).toMatch(/weightLoss/);
+    }
+  });
+
   it("cycle 1 retest: Psyche flows contrast nearby containers before saving", () => {
     const contrast = getSectionSlice(psychePlaybook, "Entity Contrast Check");
 
