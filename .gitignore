@@ -1,6 +1,7 @@
 .DS_Store
 .codex-runs/
 $CODEX_HOME/
+docs/internal/
 node_modules/
 dist/
 data/
