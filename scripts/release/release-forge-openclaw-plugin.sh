@@ -92,6 +92,7 @@ cleanup_release_workspace() {
     "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_JSON}" \
     "${FORGE_MEMORY_PACKAGE_LOCK_JSON}" \
+    "plugins/openclaw/server" \
     "plugins/openclaw/apps/api/migrations" \
     "plugins/codex/runtime/dist" \
     "plugins/codex/runtime/apps/api/migrations" >/dev/null 2>&1 || true
