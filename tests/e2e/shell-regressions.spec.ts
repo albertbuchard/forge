@@ -10,9 +10,18 @@ test("desktop shell keeps the current route visible until next-route data is rea
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Desktop-only shell regression");
 
+  let delayedMovementRequest: Promise<void> | null = null;
   await page.route("**/api/v1/movement/**", async (route) => {
-    await page.waitForTimeout(900);
-    await route.continue();
+    if (delayedMovementRequest) {
+      await route.continue();
+      return;
+    }
+    delayedMovementRequest = new Promise((resolve) =>
+      setTimeout(resolve, 900)
+    ).then(async () => {
+      await route.continue();
+    });
+    await delayedMovementRequest;
   });
 
   await page.goto("overview");
@@ -27,6 +36,7 @@ test("desktop shell keeps the current route visible until next-route data is rea
   await expect(header).toContainText("Overview");
 
   await expect(header).toContainText("Movement");
+  await delayedMovementRequest;
 });
 
 test("desktop shell header collapses on long routes", async ({ page }, testInfo) => {

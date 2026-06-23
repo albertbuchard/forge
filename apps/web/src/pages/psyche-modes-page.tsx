@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -112,6 +112,7 @@ export function PsycheModesPage() {
   const [editingMode, setEditingMode] = useState<ModeProfile | null>(null);
   const [draft, setDraft] = useState<ModeProfileInput>(DEFAULT_MODE_INPUT);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const handledCreateParamRef = useRef(false);
   const modesQuery = useQuery({
     queryKey: ["forge-psyche-modes"],
     queryFn: listModes
@@ -139,16 +140,29 @@ export function PsycheModesPage() {
 
   usePsycheFocusTarget(focusedModeId);
 
-  useEffect(() => {
-    if (searchParams.get("create") === "1") {
-      setDialogOpen(true);
-      setEditingMode(null);
-      setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
-      const next = new URLSearchParams(searchParams);
-      next.delete("create");
-      setSearchParams(next, { replace: true });
+  const clearCreateSearchParam = () => {
+    if (searchParams.get("create") !== "1") {
+      return;
     }
-  }, [defaultUserId, searchParams, setSearchParams]);
+    const next = new URLSearchParams(searchParams);
+    next.delete("create");
+    setSearchParams(next, { replace: true });
+    handledCreateParamRef.current = false;
+  };
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "1") {
+      handledCreateParamRef.current = false;
+      return;
+    }
+    if (handledCreateParamRef.current) {
+      return;
+    }
+    handledCreateParamRef.current = true;
+    setDialogOpen(true);
+    setEditingMode(null);
+    setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
+  }, [defaultUserId, searchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (input: ModeProfileInput) => {
@@ -163,6 +177,7 @@ export function PsycheModesPage() {
       setEditingMode(null);
       setDraft({ ...DEFAULT_MODE_INPUT, userId: defaultUserId });
       setSubmitError(null);
+      clearCreateSearchParam();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-modes"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] })
@@ -738,7 +753,12 @@ export function PsycheModesPage() {
 
       <QuestionFlowDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            clearCreateSearchParam();
+          }
+        }}
         eyebrow="Mode"
         title={editingMode ? "Refine cast member" : "Create mode"}
         description="Use this guided flow to define the mode, how it shows up, what it is protecting, and where it comes from."

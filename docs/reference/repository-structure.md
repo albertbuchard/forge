@@ -146,11 +146,12 @@ linked plugin runtime.
 
 ## Public Repository Privacy
 
-Private goal prompts, `/goal` handoffs, personal discussion summaries,
-automation memory, internal audits, GPT Pro response captures, and
+Private goal prompts, `/goal` handoffs, private discussion summaries,
+automation memory, internal audits, private model-response captures, and
 conversation-derived planning notes do not belong in the public Forge
-repository. The old `docs/internal/**` location is forbidden in public Forge.
-Keep those artifacts in the private parent monorepo or under `$CODEX_HOME`.
+repository. Do not preserve or recreate any historical private-docs subtree in
+public Forge. Keep those artifacts in the private parent monorepo or under
+`$CODEX_HOME`.
 
 Before public commits and pushes, scan tracked and staged docs/Markdown for
 private terms and move any private artifact out of the public repo.

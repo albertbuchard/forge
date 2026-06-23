@@ -40,8 +40,9 @@ and migrations, `apps/desktop-tauri` for the desktop shell,
 and `packages/companion-iroh` for public/shared packages, `tests` for E2E and
 shared fixtures, `scripts` for grouped operational tooling, `docs` for public
 references, and `assets` for source-owned visual inputs. Private goal prompts,
-handoffs, automation memory, internal audits, GPT Pro response captures, and
-conversation-derived planning notes must remain outside the public Forge repo.
+handoffs, automation memory, internal audits, private model-response captures,
+and conversation-derived planning notes must remain outside the public Forge
+repo.
 
 Forge should also make progress feel alive through a selected-user-first gamified layer. XP, levels, streaks, trophies, cosmetic unlocks, and the Forge Smith mascot should be grounded in the existing auditable reward ledger, not in a disconnected points game. The mascot should feel like a dramatic blacksmith mentor: visually enchanting, sometimes wise, sometimes stern, and forceful enough to make streak drift visible without becoming unsafe or cruel.
 
