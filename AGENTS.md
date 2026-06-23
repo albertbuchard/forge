@@ -17,7 +17,7 @@ The parent monorepo may mirror Forge files, but parent merge resolution is not a
 
 - Do not let a parent-monorepo checkout, merge, or conflict resolution downgrade Forge files.
 - If parent and Forge disagree, inspect Forge `main` first and restore from the Forge repository's `HEAD`.
-- Before staging Forge release metadata, run `scripts/audit-release-guard.sh`.
+- Before staging Forge release metadata, run `scripts/release/audit-release-guard.sh`.
 - The local Forge pre-commit hook also runs the release guard. It fails if the working or staged iOS marketing version is older than the latest `ios-testflight-v*` tag.
 
 ## OpenClaw plugin rule

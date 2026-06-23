@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up Safe Chain
-        run: ./scripts/setup-safe-chain-ci.sh
+        run: ./scripts/ci/setup-safe-chain-ci.sh
 
       - name: Install dependencies
         run: npm ci
@@ -54,7 +54,7 @@ jobs:
         run: |
           FORGE_RELEASE_MODE=publish-from-tag \
           FORGE_RELEASE_SKIP_UPLOAD=1 \
-            ./scripts/release-forge-hermes-plugin.sh "${RELEASE_VERSION#hermes-v}"
+            ./scripts/release/release-forge-hermes-plugin.sh "${RELEASE_VERSION#hermes-v}"
 
       - name: Upload PyPI artifacts
         uses: actions/upload-artifact@v4

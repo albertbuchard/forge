@@ -43,7 +43,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Safe Chain
-        run: ./scripts/setup-safe-chain-ci.sh
+        run: ./scripts/ci/setup-safe-chain-ci.sh
 
       - name: Upgrade npm for trusted publishing
         run: npm install --global npm@^11.5.1
@@ -57,4 +57,4 @@ jobs:
           FORGE_COMPANION_IROH_PACKAGE_MODE: source-only
         run: |
           FORGE_RELEASE_MODE=publish-from-tag \
-            ./scripts/release-forge-openclaw-plugin.sh "${RELEASE_VERSION#v}"
+            ./scripts/release/release-forge-openclaw-plugin.sh "${RELEASE_VERSION#v}"

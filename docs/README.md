@@ -14,6 +14,7 @@ This directory separates current references from preserved planning history.
 - [Multi-user and strategies](./reference/multi-user-and-strategies.md): shared runtime, identity, and strategy model notes.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.
 - [Public repo workflow](./reference/public-repo-workflow.md): public repository and publication workflow.
+- [Repository structure](./reference/repository-structure.md): top-level tree, package boundaries, release-sensitive paths, and generated-output rules.
 
 ## Release References
 

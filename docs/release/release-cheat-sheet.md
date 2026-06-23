@@ -34,8 +34,8 @@ same `v<version>` tag triggers both the OpenClaw package workflow and the Forge
 Memory workflow. Local verification should use:
 
 ```bash
-npm --prefix packages/forge-memory test
-npm --prefix packages/forge-memory pack
+npm run test:forge-memory
+npm run pack:forge-memory
 version=$(node -p "require('./packages/forge-memory/package.json').version")
 npm exec --yes --package ./packages/forge-memory/forge-memory-${version}.tgz -- forge-memory --help
 ```
@@ -83,7 +83,7 @@ One-time registry setup:
 Release flow:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh patch
 ```
 
 The workflow verifies the tag is on `main`, checks that
@@ -217,20 +217,20 @@ The OpenClaw release script also rewrites shared Forge plugin version surfaces, 
 the correct alignment order is:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh patch
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh <same-version>
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-hermes-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh <same-version>
 ```
 
 Patch release:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh patch
 ```
 
 Explicit version:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh 0.2.27
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh 0.2.27
 ```
 
 What it does:
@@ -251,13 +251,13 @@ What happens next:
 Patch release:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-hermes-plugin.sh patch
 ```
 
 Explicit version:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh 0.2.27
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-hermes-plugin.sh 0.2.27
 ```
 
 What it does:
@@ -373,7 +373,7 @@ When a `v*` tag lands on a `main` commit, the workflow:
 - verifies the tag commit is on `origin/main`
 - installs Node and npm
 - installs dependencies
-- runs `FORGE_RELEASE_MODE=publish-from-tag ./scripts/release-forge-openclaw-plugin.sh <version>`
+- runs `FORGE_RELEASE_MODE=publish-from-tag ./scripts/release/release-forge-openclaw-plugin.sh <version>`
 - publishes to npm through Trusted Publishing
 
 ### Hermes workflow

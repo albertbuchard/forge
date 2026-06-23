@@ -12,6 +12,7 @@ tmp/
 !.env.local.example
 .npmrc
 *.log
+*.bak-*
 server/*.sqlite
 server/*.sqlite-shm
 server/*.sqlite-wal

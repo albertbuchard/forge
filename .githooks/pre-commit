@@ -2,4 +2,4 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-"$repo_root/scripts/audit-release-guard.sh"
+"$repo_root/scripts/release/audit-release-guard.sh"

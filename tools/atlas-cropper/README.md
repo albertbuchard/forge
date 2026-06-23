@@ -20,7 +20,7 @@ Open `http://127.0.0.1:4325/`.
 6. Run:
 
 ```bash
-node --import tsx scripts/generate-gamification-assets.mjs
+node --import tsx scripts/assets/generate-gamification-assets.mjs
 ```
 
 Saved crop files live under:

@@ -542,7 +542,7 @@ The repo now supports a tag-driven GitHub Actions release path for step 1. The n
 prep flow from a clean checkout on `main` is:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-openclaw-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh patch
 ```
 
 That command bumps the aligned plugin versions, runs the verification suite, commits

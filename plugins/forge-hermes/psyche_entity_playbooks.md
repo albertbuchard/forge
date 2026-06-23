@@ -279,6 +279,38 @@ example makes the hypothesis plausible, then let the user correct the danger,
 protection, payoff, cost, or wording. If the correction is usable, revise once and move
 toward the record shape instead of asking for another broad story.
 
+## Psyche hypothesis examples
+
+These are examples of active formulation, not scripts to recite. Use them when a
+concrete example is visible and another broad question would make the user do all the
+interpretive work alone.
+
+- `behavior_pattern`: "When the feedback arrives, your body seems to read exposure
+  before you can evaluate the actual content. One hypothesis is that the over-editing
+  protects you from the feared cost of being seen as unserious, while also keeping the
+  work from reaching people. Does that fit, or is the protection somewhere else?"
+- `belief_entry`: "The sentence seems less like 'I need to improve this' and more
+  like 'If this is seen, they will discover I am not legitimate.' Is that the belief,
+  or is there a sharper wording?"
+- `mode_profile`: "This part sounds like it takes control by tightening standards so
+  no one else gets a chance to judge first. Is its job mainly protection from shame,
+  or from losing control?"
+- `mode_guide_session`: "Right now the active part seems to be trying to stop
+  exposure immediately, not solve the whole project. Does it want you to hide, fix,
+  attack, freeze, or ask for help?"
+- `trigger_report`: "The meeting itself may be the trigger, but the charged moment
+  seems to be when silence started meaning danger. Is that the sequence to preserve,
+  or did the reaction begin earlier?"
+- `event_type`: "This sounds like a recurring 'feedback becomes danger' moment rather
+  than a generic meeting event. Would future reports recognize that category?"
+- `emotion_definition`: "This dread seems to include a body brake, a prediction of
+  exposure, and an urge to disappear. Is that what distinguishes it from ordinary
+  anxiety?"
+
+After using an example-shaped hypothesis, ask exactly one correction question. If the
+user accepts or corrects it, bridge to the saveable record instead of asking for a new
+origin story.
+
 ## Hypothesis Without Cross-Examination
 
 A hypothesis is meant to reduce the user's burden of formulation, not make them prove

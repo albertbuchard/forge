@@ -145,7 +145,7 @@ and lets the user choose how many days of automatic backups Forge should keep.
 For a real release, the recommended prep flow from a clean checkout on `main` is:
 
 ```bash
-FORGE_RELEASE_MODE=prepare ./scripts/release-forge-hermes-plugin.sh patch
+FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-hermes-plugin.sh patch
 ```
 
 That script bumps the Hermes plugin version in `plugin.yaml` and
@@ -167,10 +167,10 @@ For the full cross-registry release reference, including tag names and GitHub se
 names, use `docs/release/release-cheat-sheet.md`.
 
 If you want Hermes and OpenClaw to ship on the exact same version in one pass, use the
-shared monorepo wrapper instead:
+shared monorepo wrapper from the parent monorepo root instead:
 
 ```bash
-../scripts/release-forge-agent-plugins.sh patch
+(cd ../.. && ./scripts/release-forge-agent-plugins.sh patch)
 ```
 
 ## Local runtime behavior

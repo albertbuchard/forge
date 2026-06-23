@@ -5969,6 +5969,8 @@
               "saveSuggestionPlacement",
               "saveSuggestionTone",
               "maxQuestionsPerTurn",
+              "depthCalibrationRule",
+              "operationLaneRule",
               "psycheExplorationRule",
               "specializedSurfaceRule",
               "reviewShortcutRule",
@@ -5997,6 +5999,12 @@
               },
               "maxQuestionsPerTurn": {
                 "type": "integer"
+              },
+              "depthCalibrationRule": {
+                "type": "string"
+              },
+              "operationLaneRule": {
+                "type": "string"
               },
               "psycheExplorationRule": {
                 "type": "string"
@@ -6360,7 +6368,8 @@
                 "enum": [
                   "openclaw",
                   "hermes",
-                  "codex"
+                  "codex",
+                  "claude"
                 ]
               },
               {
@@ -6598,7 +6607,8 @@
             "enum": [
               "openclaw",
               "hermes",
-              "codex"
+              "codex",
+              "claude"
             ]
           },
           "sessionKey": {
@@ -13287,15 +13297,21 @@
                   "text": {
                     "type": "string"
                   },
-                  "imageDescription": {
-                    "type": "string"
-                  },
-                  "loggedAt": {
+                  "mealTime": {
                     "type": "string",
                     "format": "date-time"
                   },
-                  "mealLabel": {
+                  "imageRefs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "connectionId": {
                     "type": "string"
+                  },
+                  "commitCandidate": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -13312,6 +13328,7 @@
                   "required": [
                     "candidate",
                     "log",
+                    "parseSummary",
                     "clarificationQuestions",
                     "uncertaintyReasons"
                   ],
@@ -13328,6 +13345,41 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "parseSummary": {
+                      "type": "object",
+                      "required": [
+                        "itemCount",
+                        "completeNutritionItemCount",
+                        "catalogResolvedItemCount",
+                        "chatGptEstimatedItemCount",
+                        "chatGptValidatedItemCount",
+                        "elapsedMs",
+                        "llmCallCount"
+                      ],
+                      "properties": {
+                        "itemCount": {
+                          "type": "number"
+                        },
+                        "completeNutritionItemCount": {
+                          "type": "number"
+                        },
+                        "catalogResolvedItemCount": {
+                          "type": "number"
+                        },
+                        "chatGptEstimatedItemCount": {
+                          "type": "number"
+                        },
+                        "chatGptValidatedItemCount": {
+                          "type": "number"
+                        },
+                        "elapsedMs": {
+                          "type": "number"
+                        },
+                        "llmCallCount": {
+                          "type": "number"
+                        }
+                      }
                     },
                     "clarificationQuestions": {
                       "type": "array",

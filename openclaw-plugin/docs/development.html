@@ -128,7 +128,7 @@ npx forge-memory stop</code></pre>
               <h3>CI release guard</h3>
               <p>
                 Forge release workflows run
-                <code>scripts/setup-safe-chain-ci.sh</code> before npm, PyPI,
+                <code>scripts/ci/setup-safe-chain-ci.sh</code> before npm, PyPI,
                 and docs package steps where Safe Chain can protect the install
                 surface. Cargo, Bundler, Xcode, and binary toolchains still need
                 normal lockfile and release-review discipline.

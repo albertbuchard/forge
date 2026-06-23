@@ -190,6 +190,10 @@ under [`docs/release/`](./docs/release/), and historical goals, audits, and hand
 are preserved under [`docs/internal/`](./docs/internal/) so they do not compete with
 the current user-facing docs.
 
+New contributors should also read the
+[`Repository Structure`](./docs/reference/repository-structure.md) reference before
+moving files or changing release/package boundaries.
+
 ## What Forge Covers
 
 - planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits

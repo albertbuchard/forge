@@ -32,7 +32,12 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const repoRoot = path.resolve(packageRoot, "..");
 const builtRuntimeEntry = path.join(packageRoot, "dist", "server", "server", "src", "index.js");
 const devRuntimeEntry = path.join(repoRoot, "server", "src", "index.ts");
-const devDataRootWrapper = path.join(repoRoot, "scripts", "with-openclaw-plugin-data-root.mjs");
+const devDataRootWrapper = path.join(
+  repoRoot,
+  "scripts",
+  "dev",
+  "with-openclaw-plugin-data-root.mjs"
+);
 const tsxCliEntry = path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const devModeFlag = (process.env.FORGE_OPENCLAW_DEV ?? "").trim().toLowerCase();
 const useDevRuntime = devModeFlag === "1" || devModeFlag === "true" || devModeFlag === "yes";
