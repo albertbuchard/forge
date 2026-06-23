@@ -1,10 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { userInfo } from "node:os";
-import packageJson from "../../../../package.json" with { type: "json" };
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ensureForgeRuntimeReady } from "./local-runtime.js";
 
 const DEFAULT_REQUEST_BODY_LIMIT = 256_000;
 const DEFAULT_RESPONSE_BODY_LIMIT = 2_000_000;
+const FORGE_PLUGIN_VERSION = readForgePluginVersion();
 
 export type ForgeHttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
@@ -27,6 +30,33 @@ type OperatorSessionState = {
 };
 
 const operatorSessionStates = new Map<string, OperatorSessionState>();
+
+function readForgePluginVersion() {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(currentDir, "../../package.json"),
+    path.resolve(currentDir, "../../../../plugins/openclaw/package.json"),
+    path.resolve(currentDir, "../../../../package.json")
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(readFileSync(candidate, "utf8")) as {
+        version?: unknown;
+      };
+      if (typeof parsed.version === "string" && parsed.version.trim()) {
+        return parsed.version;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return "unknown";
+}
 
 export type CallForgeApiArgs = {
   baseUrl: string;
@@ -208,7 +238,7 @@ function buildRequestHeaders(args: CallForgeApiArgs) {
   const headers: Record<string, string> = {
     accept: "application/json",
     "x-forge-source": "openclaw",
-    "x-forge-plugin-version": packageJson.version
+    "x-forge-plugin-version": FORGE_PLUGIN_VERSION
   };
 
   if (args.actorLabel) {

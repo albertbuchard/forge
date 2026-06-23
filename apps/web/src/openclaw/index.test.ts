@@ -936,4 +936,17 @@ describe("forge openclaw plugin", () => {
       "./apps/web/src/openclaw/index.legacy.ts"
     ]);
   });
+
+  it("does not bake monorepo-only package metadata paths into the packaged client", () => {
+    const apiClientSource = readFileSync(
+      join(process.cwd(), "apps/web/src/openclaw/api-client.ts"),
+      "utf8"
+    );
+
+    expect(apiClientSource).not.toMatch(
+      /import\s+\w+\s+from\s+["']\.\.\/\.\.\/\.\.\/\.\.\/package\.json/
+    );
+    expect(apiClientSource).toContain("../../../../plugins/openclaw/package.json");
+    expect(apiClientSource).toContain("../../package.json");
+  });
 });

@@ -448,7 +448,7 @@ create_release_commit() {
     "plugins/codex/runtime/dist" \
     "plugins/codex/runtime/server/migrations"
   do
-    if [[ -e "${FORGE_DIR}/${runtime_path}" ]] || [[ -n "$(git -C "${FORGE_DIR}" ls-files -- "${runtime_path}")" ]]; then
+    if [[ -n "$(git -C "${FORGE_DIR}" ls-files -- "${runtime_path}")" ]]; then
       runtime_paths+=("${FORGE_DIR}/${runtime_path}")
     fi
   done
