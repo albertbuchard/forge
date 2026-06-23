@@ -442,9 +442,19 @@ run_verification_suite() {
 create_release_commit() {
   local version="$1"
   git -C "${FORGE_DIR}" add "${ROOT_MANIFEST}" "${PLUGIN_PACKAGE_JSON}" "${PLUGIN_PACKAGE_LOCK_JSON}" "${PLUGIN_MANIFEST}" "${CODEX_PLUGIN_MANIFEST}" "${CODEX_RUNTIME_PACKAGE_JSON}" "${HERMES_PLUGIN_MANIFEST}" "${HERMES_PLUGIN_PACKAGE_VERSION}" "${HERMES_PLUGIN_RUNTIME_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_JSON}" "${FORGE_MEMORY_PACKAGE_LOCK_JSON}"
-  git -C "${FORGE_DIR}" add -A \
-    "${FORGE_DIR}/plugins/codex/runtime/dist" \
-    "${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
+  local runtime_path
+  local runtime_paths=()
+  for runtime_path in \
+    "plugins/codex/runtime/dist" \
+    "plugins/codex/runtime/server/migrations"
+  do
+    if [[ -e "${FORGE_DIR}/${runtime_path}" ]] || [[ -n "$(git -C "${FORGE_DIR}" ls-files -- "${runtime_path}")" ]]; then
+      runtime_paths+=("${FORGE_DIR}/${runtime_path}")
+    fi
+  done
+  if [[ ${#runtime_paths[@]} -gt 0 ]]; then
+    git -C "${FORGE_DIR}" add -A "${runtime_paths[@]}"
+  fi
   git -C "${FORGE_DIR}" commit -m "release(openclaw): v${version}"
   RELEASE_COMMIT_CREATED=1
   git -C "${FORGE_DIR}" tag "v${version}"
