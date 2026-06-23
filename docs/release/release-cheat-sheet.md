@@ -23,7 +23,7 @@ Forge currently has four release tracks:
 The GitHub Actions workflows live in:
 
 - `.github/workflows/release-forge-memory.yml`
-- `.github/workflows/release-plugins/openclaw.yml`
+- `.github/workflows/release-openclaw-plugin.yml`
 - `.github/workflows/release-hermes-plugin.yml`
 - `.github/workflows/release-ios-companion.yml`
 
@@ -102,7 +102,7 @@ One-time registry setup:
 
 1. Open npm package settings for `forge-openclaw-plugin`
 2. Configure Trusted Publishing for this GitHub repository
-3. Point it at the `release-plugins/openclaw.yml` workflow
+3. Point it at the `release-openclaw-plugin.yml` workflow
 4. Keep the workflow on GitHub-hosted runners
 
 Notes:

@@ -4,9 +4,9 @@ Use this checklist before publishing `forge-openclaw-plugin`.
 
 1. Confirm the public Forge repo is up to date and `projects/forge` is being worked as a nested public repo.
 2. Bump versions in:
-   - plugin [`plugins/openclaw/openclaw.plugin.json`](../plugins/openclaw/openclaw.plugin.json)
-   - public package [`plugins/openclaw/package.json`](../plugins/openclaw/package.json)
-   - public package [`plugins/openclaw/openclaw.plugin.json`](../plugins/openclaw/openclaw.plugin.json)
+   - plugin [`plugins/openclaw/openclaw.plugin.json`](../../plugins/openclaw/openclaw.plugin.json)
+   - public package [`plugins/openclaw/package.json`](../../plugins/openclaw/package.json)
+   - public package [`plugins/openclaw/openclaw.plugin.json`](../../plugins/openclaw/openclaw.plugin.json)
 3. Run:
    - `npm exec -- tsc --noEmit`
    - `npm exec -- tsc -p apps/api/tsconfig.json --noEmit`
