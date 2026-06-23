@@ -1,4 +1,4 @@
-import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import { definePluginEntry, type OpenClawPluginDefinition } from "openclaw/plugin-sdk/plugin-entry";
 import {
   FORGE_PLUGIN_DESCRIPTION,
   FORGE_PLUGIN_ID,
@@ -8,7 +8,7 @@ import {
   resolveForgePluginConfig
 } from "./plugin-entry-shared.js";
 
-const pluginEntry = definePluginEntry({
+const pluginEntry: OpenClawPluginDefinition = definePluginEntry({
   id: FORGE_PLUGIN_ID,
   name: FORGE_PLUGIN_NAME,
   description: FORGE_PLUGIN_DESCRIPTION,

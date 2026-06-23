@@ -108,7 +108,7 @@ One-time registry setup:
 Notes:
 
 - npm Trusted Publishing currently requires GitHub-hosted runners
-- the workflow installs Node `22.14.0` and upgrades npm to `11.5.1+` because that is
+- the workflow installs Node `22.19.0` and upgrades npm to `11.5.1+` because that is
   required for npm trusted publishing
 - the workflow installs Rust stable so smoke tests can build the bundled
   `companion-iroh-src` on the target machine; the published npm package should not

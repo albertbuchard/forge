@@ -255,7 +255,7 @@ openclaw forge health
 openclaw forge ui
 ```
 
-Tested on OpenClaw `2026.5.4`: plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround.
+Tested on OpenClaw `2026.6.9`: plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround.
 
 Check what OpenClaw loaded:
 

@@ -64,6 +64,7 @@
     "@fontsource-variable/sora": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
     "@hookform/resolvers": "^5.1.1",
+    "@mariozechner/pi-agent-core": "^0.73.1",
     "@radix-ui/react-dialog": "^1.1.14",
     "@reduxjs/toolkit": "^2.11.2",
     "@sinclair/typebox": "^0.34.49",
@@ -88,8 +89,8 @@
     "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^0.525.0",
     "maplibre-gl": "^5.24.0",
-    "node-ical": "^0.20.1",
-    "openclaw": "2026.5.4",
+    "node-ical": "^0.26.1",
+    "openclaw": "2026.6.9",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-arborist": "^3.4.3",
@@ -110,7 +111,8 @@
     "axios": "^1.16.0",
     "follow-redirects": "^1.16.0",
     "hono": "4.12.14",
-    "ip-address": "^10.2.0"
+    "ip-address": "^10.2.0",
+    "markdown-it": "^14.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
