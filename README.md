@@ -186,9 +186,9 @@ codex mcp list
 
 Start with [`docs/README.md`](./docs/README.md). Durable setup and architecture
 references live under [`docs/reference/`](./docs/reference/), release procedures live
-under [`docs/release/`](./docs/release/), and historical goals, audits, and handoffs
-are preserved under [`docs/internal/`](./docs/internal/) so they do not compete with
-the current user-facing docs.
+under [`docs/release/`](./docs/release/). Private goals, automation reports, audit
+handoffs, and conversation-derived planning notes do not belong in this public
+repository.
 
 New contributors should also read the
 [`Repository Structure`](./docs/reference/repository-structure.md) reference before

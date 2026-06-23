@@ -1916,101 +1916,24 @@ describe("question flow simulation cycles", () => {
     }
   });
 
-  it("cycle 3 report retest: durable automation report covers this full run", () => {
-    const report = readRepoFile(
-      "docs/internal/audits/question-flow-improvement-cycles.md"
+  it("keeps private automation reports out of the public repository contract", () => {
+    const readme = readRepoFile("README.md");
+    const docsReadme = readRepoFile("docs/README.md");
+    const structureReference = readRepoFile(
+      "docs/reference/repository-structure.md"
     );
-    const latestRun = getSectionSlice(report, "2026-06-23 Automation Pass");
 
-    expect(report).toMatch(/Latest run date: 2026-06-23/);
-    expect(latestRun).toMatch(/data\/forge\/forge\.sqlite/i);
-    expect(latestRun).toMatch(/repo-local[\s\S]*openclaw-plugin\/dist\/openclaw\/index\.js/i);
-    expect(latestRun).toMatch(/repo-local[\s\S]*plugins\/forge-hermes/i);
-    expect(latestRun).toMatch(/forge-openclaw-plugin 0\.3\.14/i);
-    expect(latestRun).toMatch(/forge-hermes-plugin 0\.3\.14/i);
-    expect(latestRun).toMatch(/\/api\/v1\/agents\/onboarding/i);
-    expect(latestRun).toMatch(/\/api\/v1\/agent\/onboarding[\s\S]*stale/i);
-    expect(latestRun).toMatch(/43 entity\s+catalog entries/i);
-    expect(latestRun).toMatch(/199 OpenAPI\s+paths/i);
-    expect(latestRun).toMatch(/41\s+focused Vitest tests/i);
-    expect(latestRun).toMatch(
-      /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/entities\/update[\s\S]*\/api\/v1\/entities\/delete[\s\S]*\/api\/v1\/entities\/restore[\s\S]*\/api\/v1\/entities\/search/i
-    );
-    expect(latestRun).toMatch(/GET \/api\/v1\/movement\/day/i);
-    expect(latestRun).toMatch(/GET \/api\/v1\/movement\/month/i);
-    expect(latestRun).toMatch(/PUT\s+\/api\/v1\/life-force\/templates\/:weekday/i);
-    expect(latestRun).toMatch(/antiDriftRule/i);
-    expect(latestRun).toMatch(/depthCalibrationRule/i);
-    expect(latestRun).toMatch(/operationLaneRule/i);
-    expect(latestRun).toMatch(/psycheHypothesisRule/i);
-    expect(latestRun).toMatch(/progressiveDisclosureRule/i);
-    expect(latestRun).toMatch(/writeConfirmationRule/i);
-    expect(latestRun).toMatch(/Internal action trace/i);
-    expect(latestRun).toMatch(/Hypothesis Without Cross-Examination/i);
-    expect(latestRun).toMatch(/Hypothesis To Record Bridge/i);
-    expect(latestRun).toMatch(/Write\/read\/run confirmation loop/i);
-    expect(latestRun).toMatch(/Psyche after-save close/i);
-    expect(latestRun).toMatch(/Depth calibration/i);
-    expect(latestRun).toMatch(/Psyche depth calibration/i);
-    expect(latestRun).toMatch(/Dedicated surface route fallback/i);
-    expect(latestRun).toMatch(/Specialized route-contract handshake/i);
-    expect(latestRun).toMatch(/No-question gate/i);
-    expect(latestRun).toMatch(/Question Calibration Loop/i);
-    expect(latestRun).toMatch(/Post-read synthesis/i);
-    expect(latestRun).toMatch(/Flashcard support sequence/i);
-    expect(latestRun).toMatch(/route key[\s\S]*batch route[\s\S]*grounding question/i);
-    expect(latestRun).toMatch(/Operation coverage\s+checkpoint/i);
-    expect(latestRun).toMatch(
-      /normal stored entities[\s\S]*add[\s\S]*update[\s\S]*review[\s\S]*link/i
-    );
-    expect(latestRun).toMatch(
-      /start,\s+continue,\s+complete[\s\S]*adjust,\s+judge,\s+signal,\s+publish,\s+sync,\s+or\s+observe/i
-    );
-    expect(latestRun).toMatch(
-      /review, correct, repair, run, inspect, publish, or preserve/i
-    );
-    expect(latestRun).toMatch(/formulation lane before storage/i);
-    expect(latestRun).toMatch(/methodRoutes/i);
-    expect(latestRun).toMatch(/pathParams/i);
-    expect(latestRun).toMatch(/:pointId/i);
-    expect(latestRun).toMatch(/answer-changing\s+uncertainty/i);
-    expect(latestRun).toMatch(/cue\s+or\s+urge\s+sentence[\s\S]*short\s+message/i);
-    expect(latestRun).toMatch(/do not\s+fall back to generic batch CRUD/i);
-    expect(latestRun).toMatch(/flowDetail[\s\S]*runHistory/i);
-    expect(latestRun).toMatch(/After a Movement read/i);
-    expect(latestRun).toMatch(/After a Life Force overview/i);
-    expect(latestRun).toMatch(/After a\s+Workbench read/i);
-    expect(latestRun).toMatch(/Do not leave the user with interpretation alone/i);
-    expect(latestRun).toMatch(/Psyche hypothesis examples/i);
-    expect(latestRun).toMatch(/active formulation/i);
-    expect(latestRun).toMatch(/polished extra\s+question/i);
-    expect(latestRun).toMatch(/route-contract\s+handshake/i);
-    expect(latestRun).toMatch(/missing\s+product\s+noun/i);
-    expect(latestRun).toMatch(/contract bug/i);
-    expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
-    expect(latestRun).toMatch(
-      /goal, project, strategy, task,\s+habit, tag, note, insight, task_run, work_adjustment/i
-    );
-    expect(latestRun).toMatch(
-      /preference_catalog[\s\S]*preference_catalog_item[\s\S]*preference_context[\s\S]*preference_item[\s\S]*preference_judgment[\s\S]*preference_signal/i
-    );
-    expect(latestRun).toMatch(
-      /psyche_value[\s\S]*behavior_pattern[\s\S]*behavior[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*flashcard[\s\S]*trigger_report[\s\S]*event_type[\s\S]*emotion_definition/i
-    );
-    expect(latestRun).toMatch(/training_load[\s\S]*weight_loss/i);
-    expect(latestRun).toMatch(/Movement[\s\S]*Life Force[\s\S]*Workbench/i);
-    expect(latestRun).toMatch(
-      /Cycle 1[\s\S]*answer-changing follow-up/i
-    );
-    expect(latestRun).toMatch(
-      /Cycle 2[\s\S]*flashcard support/i
-    );
-    expect(latestRun).toMatch(
-      /Cycle 3[\s\S]*pathParams[\s\S]*methodRoutes/i
-    );
-    expect(latestRun).toMatch(/batch-first\s+normal entity routing/i);
-    expect(latestRun).toMatch(/specialized route-key examples/i);
-    expect(latestRun).toMatch(/focused retest passed/i);
-    expect(latestRun).toMatch(/What happened after retesting/i);
+    expect(readme).not.toMatch(/docs\/internal/i);
+    expect(docsReadme).not.toMatch(/docs\/internal/i);
+    expect(structureReference).not.toMatch(/docs\/internal/i);
+    const privateReportPath = [
+      "docs",
+      "internal",
+      "audits",
+      ["question", "flow", "improvement", "cycles"].join("-") + ".md"
+    ].join("/");
+    expect(() =>
+      readRepoFile(privateReportPath)
+    ).toThrow();
   });
 });
