@@ -84,6 +84,7 @@ describe("forge skill playbook parity", () => {
   it("keeps the agent-facing skills explicit about preferences, questionnaires, self-observation, and health surfaces", () => {
     const openclawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
+    const hermesRootSkill = readRepoFile("plugins/hermes/skill.md");
     const codexSkill = readRepoFile("plugins/codex/skills/forge-codex/SKILL.md");
 
     expect(openclawSkill).toMatch(/forge_get_preferences_workspace/);
@@ -108,13 +109,15 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/caloriesKcal[\s\S]*proteinG[\s\S]*carbsG[\s\S]*fatG/);
     expect(openclawSkill).toMatch(/never save a name-only food/i);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
-    expect(openclawSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
+    expect(openclawSkill).toMatch(
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+and three specialized domain surfaces/i
+    );
     expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
     expect(openclawSkill).toMatch(/dedicated route families instead of forcing them through batch CRUD/i);
     expect(openclawSkill).toMatch(/Movement is a specialized domain surface, not batch CRUD/i);
     expect(openclawSkill).toMatch(/Life Force is a specialized domain surface, not batch CRUD/i);
     expect(openclawSkill).toMatch(/Workbench is a specialized domain surface, not batch CRUD/i);
-    for (const skill of [openclawSkill, hermesSkill, codexSkill]) {
+    for (const skill of [openclawSkill, hermesSkill, hermesRootSkill, codexSkill]) {
       expect(skill).toMatch(/## Entity Route Posture/i);
       expect(skill).toMatch(/Keep the operation lane explicit across every entity family/i);
       expect(skill).toMatch(
@@ -174,6 +177,22 @@ describe("forge skill playbook parity", () => {
       );
       expect(skill).toMatch(
         /save, update, review,\s+link, schedule, correct, run, publish, preserve,\s+enrich, open the UI, or stop/i
+      );
+      expect(skill).toMatch(/user-facing wording guard/i);
+      expect(skill).toMatch(
+        /do not say "that sounds important" unless you name the specific stake/i
+      );
+      expect(skill).toMatch(
+        /do not ask\s+"what would you like to do with this\?"[\s\S]*one next action visible/i
+      );
+      expect(skill).toMatch(
+        /replace endpoint, payload, mutation, batch\s+route, and route key language with product nouns/i
+      );
+      expect(skill).toMatch(
+        /missing stay[\s\S]*weekday\s+energy curve[\s\S]*saved flow[\s\S]*failed run[\s\S]*node output[\s\S]*belief sentence/i
+      );
+      expect(skill).toMatch(
+        /no answer-changing\s+uncertainty remains[\s\S]*summarize the product result and stop/i
       );
       expect(skill).toMatch(/Psyche save-readiness checkpoint/i);
       expect(skill).toMatch(/belief sentence[\s\S]*functional loop[\s\S]*flashcard cue\/message/i);
@@ -308,7 +327,9 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/PATCH \/api\/v1\/workbench\/flows\/:id/i);
     expect(hermesSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
     expect(hermesSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/chat/i);
-    expect(hermesSkill).toMatch(/four major stored-entity surfaces and three specialized domain surfaces/i);
+    expect(hermesSkill).toMatch(
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+and three specialized domain surfaces/i
+    );
     expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
     expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);
     expect(hermesSkill).toMatch(/item\.foodId/);

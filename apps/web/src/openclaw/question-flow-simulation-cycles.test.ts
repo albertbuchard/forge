@@ -1793,6 +1793,10 @@ describe("question flow simulation cycles", () => {
   it("cycle 3 retest: follow-ups, flashcard support, and specialized path params stay explicit", () => {
     const questionLoop = getSectionSlice(entityPlaybook, "Question Calibration Loop");
     const noQuestionGate = getSectionSlice(entityPlaybook, "No-question gate");
+    const wordingGuard = getSectionSlice(
+      entityPlaybook,
+      "User-facing wording guard"
+    );
     const postRead = getSectionSlice(entityPlaybook, "Post-read synthesis");
     const routeFallback = getSectionSlice(
       entityPlaybook,
@@ -1834,6 +1838,24 @@ describe("question flow simulation cycles", () => {
     );
     expect(noQuestionGate).toMatch(
       /would only make the conversation feel warmer, more complete, or\s+more like a form/i
+    );
+    expect(wordingGuard).toMatch(
+      /Later turns, read summaries, and\s+confirmations should stay as concrete as the first question/i
+    );
+    expect(wordingGuard).toMatch(
+      /Do not say "that sounds important" unless you name the stake/i
+    );
+    expect(wordingGuard).toMatch(
+      /Do not ask "what would you like to do with this\?"[\s\S]*one next action visible/i
+    );
+    expect(wordingGuard).toMatch(
+      /Replace implementation words with product nouns[\s\S]*missing stay[\s\S]*weekday energy curve[\s\S]*node output[\s\S]*belief sentence/i
+    );
+    expect(wordingGuard).toMatch(
+      /endpoint, payload, mutation, batch route, or\s+route key/i
+    );
+    expect(wordingGuard).toMatch(
+      /summarize the result in product language and\s+stop/i
     );
     expect(postRead).toMatch(
       /read's decision value[\s\S]*rules\s+in[\s\S]*rules\s+out[\s\S]*answer-changing uncertainty/i
