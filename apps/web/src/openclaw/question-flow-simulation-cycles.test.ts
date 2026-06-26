@@ -42,6 +42,7 @@ async function loadOnboardingPayload() {
           notes?: string[];
         }
       >;
+      readModelOnlySurfaces: Record<string, string>;
     };
   };
 }
@@ -73,6 +74,7 @@ async function loadAgentContractPayloads() {
             methodRoutes?: Record<string, string>;
           }
         >;
+        readModelOnlySurfaces: Record<string, string>;
       };
     },
     openApi: openApiResponse.json() as {
@@ -100,6 +102,18 @@ const entityPlaybook = readRepoFile(
 const psychePlaybook = readRepoFile(
   "plugins/openclaw/skills/forge-openclaw/psyche_entity_playbooks.md"
 );
+const hermesRootEntityPlaybook = readRepoFile(
+  "plugins/hermes/entity_conversation_playbooks.md"
+);
+const hermesPackagedEntityPlaybook = readRepoFile(
+  "plugins/hermes/forge_hermes/entity_conversation_playbooks.md"
+);
+const hermesRootPsychePlaybook = readRepoFile(
+  "plugins/hermes/psyche_entity_playbooks.md"
+);
+const hermesPackagedPsychePlaybook = readRepoFile(
+  "plugins/hermes/forge_hermes/psyche_entity_playbooks.md"
+);
 
 function getSectionSlice(document: string, section: string) {
   const headingRegex = new RegExp(`^## ${section}$`, "m");
@@ -117,12 +131,16 @@ function getSectionSlice(document: string, section: string) {
 function getPreferredOpeningQuestion(sectionSlice: string) {
   const marker = "Preferred opening question:";
   const markerIndex = sectionSlice.indexOf(marker);
-  expect(markerIndex, "preferred opening marker should exist").toBeGreaterThanOrEqual(
-    0
-  );
+  expect(
+    markerIndex,
+    "preferred opening marker should exist"
+  ).toBeGreaterThanOrEqual(0);
   const afterMarker = sectionSlice.slice(markerIndex + marker.length);
   const match = /-\s+"([^"]+)"/.exec(afterMarker);
-  expect(match?.[1], "preferred opening question should be quoted").toBeTruthy();
+  expect(
+    match?.[1],
+    "preferred opening question should be quoted"
+  ).toBeTruthy();
   return match![1];
 }
 
@@ -332,6 +350,20 @@ describe("question flow simulation cycles", () => {
     cycle3: simulatedOperationLanes
   } as const;
 
+  const taskWorkItemLevelScenarios = {
+    issue:
+      "Create an HITL vertical-slice issue under the Forge project for question-flow contract drift.",
+    task: "Create one focused AI-session task under that issue to patch the simulation harness.",
+    subtask:
+      "Split the task into a small child step for checking Hermes playbook sync."
+  } as const;
+
+  const taskWorkItemLevelCoverageByCycle = {
+    cycle1: taskWorkItemLevelScenarios,
+    cycle2: taskWorkItemLevelScenarios,
+    cycle3: taskWorkItemLevelScenarios
+  } as const;
+
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
     | "batch"
@@ -435,6 +467,25 @@ describe("question flow simulation cycles", () => {
     emotion_definition: "Emotion Definition"
   } as const;
 
+  const readModelAliasFlowSectionByKey = {
+    operatorOverview: "Operator Overview",
+    operator_overview: "Operator Overview",
+    operatorContext: "Operator Context",
+    operator_context: "Operator Context",
+    calendarOverview: "Calendar Overview",
+    calendar_overview: "Calendar Overview",
+    sleepOverview: "Sleep Overview",
+    sleep_overview: "Sleep Overview",
+    sportsOverview: "Sports Overview",
+    sports_overview: "Sports Overview",
+    trainingLoad: "Training Load",
+    training_load: "Training Load",
+    weightLoss: "Weight Loss",
+    weight_loss: "Weight Loss",
+    selfObservation: "Self Observation",
+    self_observation: "Self Observation"
+  } as const;
+
   const requiredRouteMatrixEntityTypes = [
     "goal",
     "project",
@@ -489,7 +540,8 @@ describe("question flow simulation cycles", () => {
       day: "Review one day of movement before interpreting time in place.",
       month: "Review a month before answering a travel behavior question.",
       allTime: "Check all-time dominant places without creating a record.",
-      timeline: "Inspect the life timeline before correcting an uncertain span.",
+      timeline:
+        "Inspect the life timeline before correcting an uncertain span.",
       places: "Review known places before linking or renaming one.",
       boxDetail: "Inspect a saved movement box before repairing it.",
       tripDetail: "Open one trip detail before editing or interpreting it.",
@@ -511,7 +563,8 @@ describe("question flow simulation cycles", () => {
       tripPointDelete: "Delete one trip point."
     },
     "Life Force": {
-      overview: "Read the current energy picture before deciding what to change.",
+      overview:
+        "Read the current energy picture before deciding what to change.",
       profile: "Patch durable capacity assumptions.",
       weekdayTemplate: "Change a repeated weekday curve.",
       fatigueSignal: "Log a right-now tired or recovered signal."
@@ -552,7 +605,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(/Operational record:/i);
     expect(entityPlaybook).toMatch(/Dedicated surface lane translation/i);
     expect(entityPlaybook).toMatch(/Mixed-intent sequencing/i);
-    expect(entityPlaybook).toMatch(/Search-before-write and existing-record disambiguation/i);
+    expect(entityPlaybook).toMatch(
+      /Search-before-write and existing-record disambiguation/i
+    );
     expect(entityPlaybook).toMatch(/Destructive and replacement actions/i);
     expect(entityPlaybook).toMatch(/## Operation coverage checkpoint/i);
     expect(entityPlaybook).toMatch(
@@ -582,10 +637,31 @@ describe("question flow simulation cycles", () => {
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
       /project for an issue, issue for a task, or\s+parent task for a subtask/i
     );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /Level-specific handling:[\s\S]*For `issue`[\s\S]*vertical slice[\s\S]*AFK or HITL/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /For `task`[\s\S]*one focused session[\s\S]*which issue it belongs\s+under/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /For `subtask`[\s\S]*parent task[\s\S]*small child step/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /Do not collapse all three into "task"[\s\S]*API entity type is `task`/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /shared batch entity route[\s\S]*`entityType: "task"`[\s\S]*appropriate `level`/i
+    );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/aiInstructions/);
-    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(/human\/bot assignees/i);
-    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/human\/bot assignees/i);
-    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(/project PRD or brief/i);
+    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(
+      /human\/bot assignees/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /human\/bot assignees/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Project")).toMatch(
+      /project PRD or brief/i
+    );
     expect(getSectionSlice(entityPlaybook, "Project")).toMatch(
       /workflow lane[\s\S]*scheduling\s+rules|scheduling\s+rules[\s\S]*workflow lane/i
     );
@@ -670,6 +746,23 @@ describe("question flow simulation cycles", () => {
       }
     }
 
+    for (const [cycleName, levelScenarios] of Object.entries(
+      taskWorkItemLevelCoverageByCycle
+    )) {
+      expect(
+        Object.keys(levelScenarios).sort(),
+        `${cycleName} should exercise every task work-item level`
+      ).toEqual(["issue", "subtask", "task"]);
+      for (const [level, scenario] of Object.entries(levelScenarios)) {
+        expect(
+          scenario,
+          `${cycleName} ${level} scenario should be user-facing`
+        ).not.toMatch(
+          /\b(API|CRUD|endpoint|payload|mutation path|route key)\b/i
+        );
+      }
+    }
+
     for (const section of nonPsycheSections) {
       expect(simulatedUserScenarios[section], `${section} scenario`).toMatch(
         /\w/
@@ -713,9 +806,7 @@ describe("question flow simulation cycles", () => {
       liveCatalogFlowSectionByEntityType
     )) {
       expect(
-        simulatedUserScenarios[
-          section as keyof typeof simulatedUserScenarios
-        ],
+        simulatedUserScenarios[section as keyof typeof simulatedUserScenarios],
         `${entityType} should have a simulated user scenario`
       ).toBeTruthy();
       expect(
@@ -747,6 +838,45 @@ describe("question flow simulation cycles", () => {
         [...simulatedRouteKeys].sort(),
         `${surfaceKey} route-key scenarios should match onboarding`
       ).toEqual([...liveRouteKeys].sort());
+    }
+  });
+
+  it("cycle 3 retest: duplicated OpenClaw and Hermes playbooks stay synchronized", () => {
+    expect(hermesRootEntityPlaybook).toBe(entityPlaybook);
+    expect(hermesPackagedEntityPlaybook).toBe(entityPlaybook);
+    expect(hermesRootPsychePlaybook).toBe(psychePlaybook);
+    expect(hermesPackagedPsychePlaybook).toBe(psychePlaybook);
+  });
+
+  it("cycle 2 retest: read-model aliases stay synchronized with live onboarding", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const liveReadModelKeys = Object.keys(
+      onboarding.entityRouteModel.readModelOnlySurfaces
+    ).sort();
+
+    expect(Object.keys(readModelAliasFlowSectionByKey).sort()).toEqual(
+      liveReadModelKeys
+    );
+
+    const aliasGuidance = getSectionSlice(
+      entityPlaybook,
+      "Read-Model Alias Handling"
+    );
+    for (const [aliasKey, section] of Object.entries(
+      readModelAliasFlowSectionByKey
+    )) {
+      expect(
+        aliasGuidance,
+        `${aliasKey} should be named in alias handling`
+      ).toMatch(new RegExp(`\\\`${escapeRegExp(aliasKey)}\\\``));
+      expect(
+        simulatedUserScenarios[section as keyof typeof simulatedUserScenarios],
+        `${aliasKey} should map to a simulated flow section`
+      ).toBeTruthy();
+      expect(
+        getSectionSlice(entityPlaybook, section),
+        `${aliasKey} should have user-facing guidance`
+      ).toMatch(/Preferred opening question:/);
     }
   });
 
@@ -826,7 +956,9 @@ describe("question flow simulation cycles", () => {
   });
 
   it("uses explicit specialized route-lane scenarios in every cycle", () => {
-    const expectedSurfaceNames = Object.keys(specializedSurfaceRouteScenarios).sort();
+    const expectedSurfaceNames = Object.keys(
+      specializedSurfaceRouteScenarios
+    ).sort();
 
     for (const [cycleName, cycleSurfaces] of Object.entries(
       specializedRouteCoverageByCycle
@@ -843,7 +975,9 @@ describe("question flow simulation cycles", () => {
           ]
         ).sort();
         const actualRouteKeys = Object.keys(
-          cycleSurfaces[surfaceName as keyof typeof specializedSurfaceRouteScenarios]
+          cycleSurfaces[
+            surfaceName as keyof typeof specializedSurfaceRouteScenarios
+          ]
         ).sort();
         expect(
           actualRouteKeys,
@@ -857,9 +991,10 @@ describe("question flow simulation cycles", () => {
     )) {
       const sectionSlice = getSectionSlice(entityPlaybook, surfaceName);
       for (const [routeKey, scenario] of Object.entries(routeScenarios)) {
-        expect(scenario, `${surfaceName}.${routeKey} scenario should be plain`).not.toMatch(
-          /\b(API|CRUD|endpoint|payload|mutation path)\b/i
-        );
+        expect(
+          scenario,
+          `${surfaceName}.${routeKey} scenario should be plain`
+        ).not.toMatch(/\b(API|CRUD|endpoint|payload|mutation path)\b/i);
         expect(
           sectionSlice,
           `${surfaceName}.${routeKey} should be grounded in the playbook`
@@ -878,40 +1013,48 @@ describe("question flow simulation cycles", () => {
       const opening = getPreferredOpeningQuestion(
         getSectionSlice(entityPlaybook, section)
       );
-      expect(opening, `${section} opening should be one question`).toMatch(/\?$/);
+      expect(opening, `${section} opening should be one question`).toMatch(
+        /\?$/
+      );
       expect(opening, `${section} opening should stay concise`).toSatisfy(
         (value: string) => value.length <= 150
       );
       expect(opening, `${section} opening should avoid API jargon`).not.toMatch(
         userFacingJargon
       );
-      expect(opening, `${section} opening should not start like a form`).not.toMatch(
-        coldFormOpeners
-      );
+      expect(
+        opening,
+        `${section} opening should not start like a form`
+      ).not.toMatch(coldFormOpeners);
     }
 
     for (const section of psycheSections) {
       const opening = getPreferredOpeningQuestion(
         getSectionSlice(psychePlaybook, section)
       );
-      expect(opening, `${section} opening should be one grounded question`).toMatch(
-        /\?$/
-      );
+      expect(
+        opening,
+        `${section} opening should be one grounded question`
+      ).toMatch(/\?$/);
       expect(opening, `${section} opening should stay concise`).toSatisfy(
         (value: string) => value.length <= 165
       );
-      expect(opening, `${section} opening should stay close to lived experience`).toMatch(
-        /^(When|What|Where|If|Can)\b/i
-      );
-      expect(opening, `${section} opening should not ask for diagnosis or fields`).not.toMatch(
-        /diagnos|schema|field|API|CRUD|route|payload/i
-      );
+      expect(
+        opening,
+        `${section} opening should stay close to lived experience`
+      ).toMatch(/^(When|What|Where|If|Can)\b/i);
+      expect(
+        opening,
+        `${section} opening should not ask for diagnosis or fields`
+      ).not.toMatch(/diagnos|schema|field|API|CRUD|route|payload/i);
     }
   });
 
   it("cycle 1: every simulated flow has a clear API posture before questioning deepens", () => {
     expect(entityPlaybook).toMatch(/## Route posture checkpoint/i);
-    expect(entityPlaybook).toMatch(/Every normal entity section below inherits that batch-route default/i);
+    expect(entityPlaybook).toMatch(
+      /Every normal entity section below inherits that batch-route default/i
+    );
     expect(entityPlaybook).toMatch(/specialized CRUD areas/i);
     expect(entityPlaybook).toMatch(/action workflows/i);
     expect(entityPlaybook).toMatch(/specialized domain areas/i);
@@ -921,7 +1064,9 @@ describe("question flow simulation cycles", () => {
       if ((psycheSections as readonly string[]).includes(section)) {
         const sectionSlice = getSectionSlice(psychePlaybook, section);
         expect(sectionSlice).toMatch(/Ready to save/i);
-        expect(psychePlaybook).toMatch(/shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i);
+        expect(psychePlaybook).toMatch(
+          /shared batch entity routes[\s\S]*psyche_value[\s\S]*emotion_definition/i
+        );
         expect(posture, `${section} posture`).toBe("batch");
         continue;
       }
@@ -933,15 +1078,21 @@ describe("question flow simulation cycles", () => {
         continue;
       }
       if (posture === "action") {
-        expect(sectionSlice).toMatch(/action workflow|dedicated|note-backed|task-run tool/i);
+        expect(sectionSlice).toMatch(
+          /action workflow|dedicated|note-backed|task-run tool/i
+        );
         continue;
       }
       if (posture === "specializedCrud") {
-        expect(sectionSlice).toMatch(/specialized CRUD|wiki page|calendar connection/i);
+        expect(sectionSlice).toMatch(
+          /specialized CRUD|wiki page|calendar connection/i
+        );
         continue;
       }
       if (posture === "readModel") {
-        expect(sectionSlice).toMatch(/read-model-only|overview route|overview read/i);
+        expect(sectionSlice).toMatch(
+          /read-model-only|overview route|overview read/i
+        );
         continue;
       }
       if (posture === "healthWorkflow") {
@@ -962,7 +1113,9 @@ describe("question flow simulation cycles", () => {
     expect(matrix).toMatch(/action workflow/i);
     expect(matrix).toMatch(/note-backed workflow/i);
     expect(matrix).toMatch(/read-model-only health surface/i);
-    expect(matrix).toMatch(/health read model plus dedicated nutrition write workflow/i);
+    expect(matrix).toMatch(
+      /health read model plus dedicated nutrition write workflow/i
+    );
     expect(matrix).toMatch(/specialized domain surface/i);
     expect(matrix).toMatch(/dedicated movement routes/i);
     expect(matrix).toMatch(/dedicated Life Force routes/i);
@@ -980,14 +1133,21 @@ describe("question flow simulation cycles", () => {
   });
 
   it("cycle 1 retest: compact adapter skills include current read-model and nutrition surfaces", () => {
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const hermesRootSkill = readRepoFile("plugins/hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
     );
 
-    for (const source of [openClawSkill, hermesSkill, hermesRootSkill, codexSkill]) {
+    for (const source of [
+      openClawSkill,
+      hermesSkill,
+      hermesRootSkill,
+      codexSkill
+    ]) {
       expect(source).toMatch(/read-model surfaces/i);
       expect(source).toMatch(/`operator_overview`/);
       expect(source).toMatch(/`operator_context`/);
@@ -996,7 +1156,9 @@ describe("question flow simulation cycles", () => {
       expect(source).toMatch(/`sports_overview`/);
       expect(source).toMatch(/`training_load`/);
       expect(source).toMatch(/`weight_loss`/);
-      expect(source).toMatch(/weight-loss and nutrition workflow|nutrition evidence\s+workflow/i);
+      expect(source).toMatch(
+        /weight-loss and nutrition workflow|nutrition evidence\s+workflow/i
+      );
       expect(source).toMatch(
         /practical decision[\s\S]*before adding\s+write-shaped questions/i
       );
@@ -1008,7 +1170,9 @@ describe("question flow simulation cycles", () => {
   it("cycle 1 retest: Psyche flows contrast nearby containers before saving", () => {
     const contrast = getSectionSlice(psychePlaybook, "Entity Contrast Check");
 
-    expect(contrast).toMatch(/Do not ask the\s+user to choose from a taxonomy menu/i);
+    expect(contrast).toMatch(
+      /Do not ask the\s+user to choose from a taxonomy menu/i
+    );
     expect(contrast).toMatch(
       /trigger_report[\s\S]*one charged episode[\s\S]*situation, feeling, meaning, action, and\s+consequence/i
     );
@@ -1037,7 +1201,9 @@ describe("question flow simulation cycles", () => {
       "Psyche progressive disclosure"
     );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
@@ -1089,13 +1255,17 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 1 retest: route planning stays internal while user-facing wording stays concrete", () => {
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
     );
 
-    expect(entityPlaybook).toMatch(/## Internal action trace, external wording/);
+    expect(entityPlaybook).toMatch(
+      /## Internal action trace, external wording/
+    );
     expect(entityPlaybook).toMatch(
       /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool,[\s\S]*required target identifiers/i
     );
@@ -1112,7 +1282,9 @@ describe("question flow simulation cycles", () => {
       hermesSkill,
       codexSkill
     ]) {
-      expect(source).toMatch(/Keep that route plan internal|private action trace/i);
+      expect(source).toMatch(
+        /Keep that route plan internal|private action trace/i
+      );
       expect(source).toMatch(
         /intent,[\s\S]*entity or dedicated domain lane,[\s\S]*exact tool or route key|exact read\/write\/run tool/i
       );
@@ -1206,8 +1378,12 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(/Hypothesis To Record Bridge/i);
     expect(psychePlaybook).toMatch(/collaborative formulations/i);
-    expect(psychePlaybook).toMatch(/protecting, predicting, relieving, or\s+costing/i);
-    expect(psychePlaybook).toMatch(/Hypotheses are not decorative reassurance/i);
+    expect(psychePlaybook).toMatch(
+      /protecting, predicting, relieving, or\s+costing/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Hypotheses are not decorative reassurance/i
+    );
     expect(psychePlaybook).toMatch(
       /one concrete example is visible[\s\S]*offer one careful hypothesis[\s\S]*tests or corrects it/i
     );
@@ -1287,9 +1463,14 @@ describe("question flow simulation cycles", () => {
   });
 
   it("cycle 2 retest: Psyche hypotheses are entity-specific, functional, and correctable", () => {
-    const hypothesisMap = getSectionSlice(psychePlaybook, "Psyche Hypothesis Map");
+    const hypothesisMap = getSectionSlice(
+      psychePlaybook,
+      "Psyche Hypothesis Map"
+    );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
@@ -1316,10 +1497,18 @@ describe("question flow simulation cycles", () => {
     expect(hypothesisMap).toMatch(
       /cue[\s\S]*body\/emotion[\s\S]*short-term payoff[\s\S]*long-term cost/i
     );
-    expect(hypothesisMap).toMatch(/rule, prediction, or self\/other\/world sentence/i);
-    expect(hypothesisMap).toMatch(/protective job[\s\S]*feared danger[\s\S]*burden/i);
-    expect(hypothesisMap).toMatch(/feeling's body signature[\s\S]*urge[\s\S]*warning/i);
-    expect(hypothesisMap).toMatch(/Do not flatten schema work into a loose\s+self-observation/i);
+    expect(hypothesisMap).toMatch(
+      /rule, prediction, or self\/other\/world sentence/i
+    );
+    expect(hypothesisMap).toMatch(
+      /protective job[\s\S]*feared danger[\s\S]*burden/i
+    );
+    expect(hypothesisMap).toMatch(
+      /feeling's body signature[\s\S]*urge[\s\S]*warning/i
+    );
+    expect(hypothesisMap).toMatch(
+      /Do not flatten schema work into a loose\s+self-observation/i
+    );
 
     for (const source of [
       onboardingSource,
@@ -1348,7 +1537,9 @@ describe("question flow simulation cycles", () => {
       "Dedicated surface verification loop"
     );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
@@ -1363,9 +1554,7 @@ describe("question flow simulation cycles", () => {
     expect(verificationLoop).toMatch(
       /After Workbench flow creation\/edit\/deletion[\s\S]*saved-flow execution[\s\S]*one-off\s+execution[\s\S]*read back the flow detail,\s+run\s+detail, node result, latest node output, published output, or run history/i
     );
-    expect(verificationLoop).toMatch(
-      /Do not perform a read-back as ceremony/i
-    );
+    expect(verificationLoop).toMatch(/Do not perform a read-back as ceremony/i);
 
     expect(getSectionSlice(entityPlaybook, "Movement")).toMatch(
       /known-place edit[\s\S]*settings change[\s\S]*overlay deletion[\s\S]*automatic-box invalidation[\s\S]*verify through the relevant dedicated read/i
@@ -1405,7 +1594,9 @@ describe("question flow simulation cycles", () => {
       "Psyche after-save close"
     );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
@@ -1510,7 +1701,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(entityPlaybook).toMatch(/run from a one-off input contract/i);
     expect(entityPlaybook).toMatch(/structured\s+input details/i);
-    expect(getSectionSlice(entityPlaybook, "Workbench")).not.toMatch(/\bpayload\b/i);
+    expect(getSectionSlice(entityPlaybook, "Workbench")).not.toMatch(
+      /\bpayload\b/i
+    );
     expect(entityPlaybook).toMatch(
       /delete or archive a flow[\s\S]*future run, published output, or public contract/i
     );
@@ -1606,14 +1799,26 @@ describe("question flow simulation cycles", () => {
   it("cycle 3: specialized route examples cover Movement, Life Force, and Workbench without guessing", () => {
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
     const typeSource = readRepoFile("apps/web/src/lib/types.ts");
-    const skillSource = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const skillSource = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
 
     expect(onboardingSource).toMatch(/specializedRouteToolExamples:/);
-    expect(onboardingSource).toMatch(/operator_context:\s*"\/api\/v1\/operator\/context"/);
-    expect(onboardingSource).toMatch(/calendar_overview:\s*"\/api\/v1\/calendar\/overview"/);
-    expect(onboardingSource).toMatch(/focus:\s*"operator_overview"[\s\S]*forge_get_operator_overview/i);
-    expect(onboardingSource).toMatch(/focus:\s*"operator_context"[\s\S]*forge_get_operator_context/i);
-    expect(onboardingSource).toMatch(/focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i);
+    expect(onboardingSource).toMatch(
+      /operator_context:\s*"\/api\/v1\/operator\/context"/
+    );
+    expect(onboardingSource).toMatch(
+      /calendar_overview:\s*"\/api\/v1\/calendar\/overview"/
+    );
+    expect(onboardingSource).toMatch(
+      /focus:\s*"operator_overview"[\s\S]*forge_get_operator_overview/i
+    );
+    expect(onboardingSource).toMatch(
+      /focus:\s*"operator_context"[\s\S]*forge_get_operator_context/i
+    );
+    expect(onboardingSource).toMatch(
+      /focus:\s*"calendar_overview"[\s\S]*forge_get_calendar_overview/i
+    );
     expect(typeSource).toMatch(
       /conceptModel:[\s\S]*movement: string;[\s\S]*lifeForce: string;[\s\S]*workbench: string;[\s\S]*weightLoss: string;/
     );
@@ -1791,7 +1996,10 @@ describe("question flow simulation cycles", () => {
   });
 
   it("cycle 3 retest: follow-ups, flashcard support, and specialized path params stay explicit", () => {
-    const questionLoop = getSectionSlice(entityPlaybook, "Question Calibration Loop");
+    const questionLoop = getSectionSlice(
+      entityPlaybook,
+      "Question Calibration Loop"
+    );
     const noQuestionGate = getSectionSlice(entityPlaybook, "No-question gate");
     const wordingGuard = getSectionSlice(
       entityPlaybook,
@@ -1815,7 +2023,9 @@ describe("question flow simulation cycles", () => {
       "Psyche hypothesis examples"
     );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
-    const openClawSkill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
     const codexSkill = readRepoFile(
       "plugins/codex/skills/forge-codex/SKILL.md"
@@ -1980,8 +2190,6 @@ describe("question flow simulation cycles", () => {
       "audits",
       ["question", "flow", "improvement", "cycles"].join("-") + ".md"
     ].join("/");
-    expect(() =>
-      readRepoFile(privateReportPath)
-    ).toThrow();
+    expect(() => readRepoFile(privateReportPath)).toThrow();
   });
 });
