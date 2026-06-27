@@ -108,11 +108,17 @@ const hermesRootEntityPlaybook = readRepoFile(
 const hermesPackagedEntityPlaybook = readRepoFile(
   "plugins/hermes/forge_hermes/entity_conversation_playbooks.md"
 );
+const codexEntityPlaybook = readRepoFile(
+  "plugins/codex/skills/forge-codex/entity_conversation_playbooks.md"
+);
 const hermesRootPsychePlaybook = readRepoFile(
   "plugins/hermes/psyche_entity_playbooks.md"
 );
 const hermesPackagedPsychePlaybook = readRepoFile(
   "plugins/hermes/forge_hermes/psyche_entity_playbooks.md"
+);
+const codexPsychePlaybook = readRepoFile(
+  "plugins/codex/skills/forge-codex/psyche_entity_playbooks.md"
 );
 
 function getSectionSlice(document: string, section: string) {
@@ -841,11 +847,13 @@ describe("question flow simulation cycles", () => {
     }
   });
 
-  it("cycle 3 retest: duplicated OpenClaw and Hermes playbooks stay synchronized", () => {
+  it("cycle 3 retest: duplicated OpenClaw, Hermes, and Codex playbooks stay synchronized", () => {
     expect(hermesRootEntityPlaybook).toBe(entityPlaybook);
     expect(hermesPackagedEntityPlaybook).toBe(entityPlaybook);
+    expect(codexEntityPlaybook).toBe(entityPlaybook);
     expect(hermesRootPsychePlaybook).toBe(psychePlaybook);
     expect(hermesPackagedPsychePlaybook).toBe(psychePlaybook);
+    expect(codexPsychePlaybook).toBe(psychePlaybook);
   });
 
   it("cycle 2 retest: read-model aliases stay synchronized with live onboarding", async () => {

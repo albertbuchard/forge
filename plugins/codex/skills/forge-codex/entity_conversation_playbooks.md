@@ -637,6 +637,24 @@ Use this quick split before the conversation gets too detailed.
 - If the tool schema and live onboarding disagree about a specialized route key or
   path, treat that as a contract mismatch to fix. Do not guess a nearby route.
 
+## Read-Model Alias Handling
+
+Live onboarding publishes several read-model surfaces with both camelCase and
+entity-style aliases. Treat each pair as the same user-facing flow and normalize it
+internally before asking questions:
+
+- `operatorOverview` and `operator_overview`
+- `operatorContext` and `operator_context`
+- `calendarOverview` and `calendar_overview`
+- `sleepOverview` and `sleep_overview`
+- `sportsOverview` and `sports_overview`
+- `trainingLoad` and `training_load`
+- `weightLoss` and `weight_loss`
+- `selfObservation` and `self_observation`
+
+Do not ask the user which alias they mean. Ask the practical question the read should
+answer, then use the published read route for that alias pair.
+
 ## Full Route Posture Matrix
 
 Use this as an internal checklist when simulating or handling an entity flow. Do not
@@ -1272,6 +1290,22 @@ Arc:
    AI or agent session.
 5. Ask what would make it easier to do: due date, priority, owner, human/bot
    assignees, acceptance criteria, or one line of context.
+
+Level-specific handling:
+
+- For `issue`, ask what vertical slice of the project should become true and whether
+  it is AFK or HITL before asking for one-session execution instructions.
+- For `task`, ask what one focused session should finish and which issue it belongs
+  under when the hierarchy matters.
+- For `subtask`, ask which parent task it breaks down and what small child step it
+  names. Do not inflate a subtask into a full task or issue unless the described work
+  no longer fits as a lightweight child step.
+- When the user already says issue, task, or subtask, keep that word in the
+  user-facing reflection and confirmation. Do not collapse all three into "task" just
+  because the API entity type is `task`.
+- All three levels still use the shared batch entity route with `entityType: "task"`
+  and the appropriate `level`. The level distinction is product meaning, not a
+  separate route family.
 
 Helpful follow-up lanes:
 
@@ -2154,9 +2188,9 @@ Arc:
 9. If the truth of one uncertain span is still unclear, read the timeline or saved-box
    detail before you mutate it.
 10. Skip the meta lane question when the user already named the exact correction or
-   review target and only one ambiguity remains.
+    review target and only one ambiguity remains.
 11. Use the dedicated movement route once you know whether the user needs timeline
-   review, overlay, place or trip detail, selection summary, settings, or repair.
+    review, overlay, place or trip detail, selection summary, settings, or repair.
 
 Direct action rules:
 
@@ -2377,10 +2411,10 @@ Arc:
 9. If the user already named the flow and action clearly, skip the meta lane
    question and ask only for the missing run, node, or output scope.
 10. If the user wants a stable public input contract or published output, prefer those
-   dedicated reads instead of detouring through run history first.
+    dedicated reads instead of detouring through run history first.
 11. If the user is debugging one failed run, ask whether the useful artifact is the run
-   summary, one node result, the latest node output, or the published output before
-   you start asking for edits.
+    summary, one node result, the latest node output, or the published output before
+    you start asking for edits.
 12. Route to the dedicated workbench route family once the execution lane is clear.
 
 Helpful follow-up lanes:
