@@ -9,6 +9,7 @@ provides_tools:
   - forge_call_movement_route
   - forge_call_life_force_route
   - forge_call_workbench_route
+  - forge_call_artifact_route
   - forge_get_doctor
   - forge_get_user_directory
   - forge_get_wiki_settings
