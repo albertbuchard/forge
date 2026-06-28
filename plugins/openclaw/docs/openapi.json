@@ -8215,6 +8215,810 @@
           "$ref": "#/components/schemas/NoteSummary"
         }
       },
+      "EntityLink": {
+        "type": "object",
+        "required": [
+          "sourceEntityType",
+          "sourceEntityId",
+          "targetEntityType",
+          "targetEntityId",
+          "anchorKey",
+          "relationship",
+          "createdByActor",
+          "createdAt"
+        ],
+        "properties": {
+          "sourceEntityType": {
+            "type": "string"
+          },
+          "sourceEntityId": {
+            "type": "string"
+          },
+          "targetEntityType": {
+            "type": "string"
+          },
+          "targetEntityId": {
+            "type": "string"
+          },
+          "anchorKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relationship": {
+            "type": "string"
+          },
+          "createdByActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "EntityLinkInput": {
+        "type": "object",
+        "required": [
+          "entityType",
+          "entityId"
+        ],
+        "properties": {
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "anchorKey": {
+            "type": "string"
+          },
+          "relationship": {
+            "type": "string",
+            "default": "related"
+          }
+        }
+      },
+      "ArtifactScanFinding": {
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "low",
+              "moderate",
+              "high",
+              "blocked"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactScanResult": {
+        "type": "object",
+        "required": [
+          "scannedAt",
+          "scannerVersion",
+          "declaredExtension",
+          "detectedMimeType",
+          "extensionAllowed",
+          "byteSize",
+          "findings",
+          "extractedTextSample",
+          "extractedTextTruncated"
+        ],
+        "properties": {
+          "scannedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scannerVersion": {
+            "type": "string"
+          },
+          "declaredExtension": {
+            "type": "string"
+          },
+          "detectedMimeType": {
+            "type": "string"
+          },
+          "extensionAllowed": {
+            "type": "boolean"
+          },
+          "byteSize": {
+            "type": "integer"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "severity",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "info",
+                    "low",
+                    "moderate",
+                    "high",
+                    "blocked"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "extractedTextSample": {
+            "type": "string"
+          },
+          "extractedTextTruncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Artifact": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "shortDescription",
+          "description",
+          "originalFileName",
+          "storageKey",
+          "storagePath",
+          "contentSha256",
+          "byteSize",
+          "detectedExtension",
+          "declaredMimeType",
+          "detectedMimeType",
+          "formatFamily",
+          "sourceKind",
+          "sourceLabel",
+          "uploadedByUserId",
+          "uploadedByAgentId",
+          "actingForUserId",
+          "artifactState",
+          "dangerScore",
+          "dangerLevel",
+          "downloadPolicy",
+          "scanResults",
+          "enrichmentResults",
+          "metadata",
+          "links",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "storageKey": {
+            "type": "string"
+          },
+          "storagePath": {
+            "type": "string"
+          },
+          "contentSha256": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "integer"
+          },
+          "detectedExtension": {
+            "type": "string"
+          },
+          "declaredMimeType": {
+            "type": "string"
+          },
+          "detectedMimeType": {
+            "type": "string"
+          },
+          "formatFamily": {
+            "type": "string",
+            "enum": [
+              "spreadsheet",
+              "document",
+              "presentation",
+              "pdf",
+              "text",
+              "structured_text",
+              "image"
+            ]
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "agent_upload",
+              "wiki_ingest",
+              "external_reference",
+              "manual"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string"
+          },
+          "uploadedByUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uploadedByAgentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actingForUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifactState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "blocked",
+              "archived",
+              "metadata_only"
+            ]
+          },
+          "dangerScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "dangerLevel": {
+            "type": "string",
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "blocked"
+            ]
+          },
+          "downloadPolicy": {
+            "type": "string",
+            "enum": [
+              "human_only",
+              "disabled"
+            ]
+          },
+          "scanResults": {
+            "type": "object",
+            "required": [
+              "scannedAt",
+              "scannerVersion",
+              "declaredExtension",
+              "detectedMimeType",
+              "extensionAllowed",
+              "byteSize",
+              "findings",
+              "extractedTextSample",
+              "extractedTextTruncated"
+            ],
+            "properties": {
+              "scannedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "scannerVersion": {
+                "type": "string"
+              },
+              "declaredExtension": {
+                "type": "string"
+              },
+              "detectedMimeType": {
+                "type": "string"
+              },
+              "extensionAllowed": {
+                "type": "boolean"
+              },
+              "byteSize": {
+                "type": "integer"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "severity",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "info",
+                        "low",
+                        "moderate",
+                        "high",
+                        "blocked"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "extractedTextSample": {
+                "type": "string"
+              },
+              "extractedTextTruncated": {
+                "type": "boolean"
+              }
+            }
+          },
+          "enrichmentResults": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sourceEntityType",
+                "sourceEntityId",
+                "targetEntityType",
+                "targetEntityId",
+                "anchorKey",
+                "relationship",
+                "createdByActor",
+                "createdAt"
+              ],
+              "properties": {
+                "sourceEntityType": {
+                  "type": "string"
+                },
+                "sourceEntityId": {
+                  "type": "string"
+                },
+                "targetEntityType": {
+                  "type": "string"
+                },
+                "targetEntityId": {
+                  "type": "string"
+                },
+                "anchorKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "relationship": {
+                  "type": "string"
+                },
+                "createdByActor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactUploadInput": {
+        "type": "object",
+        "required": [
+          "originalFileName",
+          "contentBase64"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "declaredMimeType": {
+            "type": "string"
+          },
+          "contentBase64": {
+            "type": "string",
+            "description": "Base64 file bytes. Forge stores and statically scans bytes; agents must not execute or open file contents."
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "agent_upload",
+              "wiki_ingest",
+              "external_reference",
+              "manual"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string"
+          },
+          "uploadedByUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "uploadedByAgentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actingForUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "downloadPolicy": {
+            "type": "string",
+            "enum": [
+              "human_only",
+              "disabled"
+            ]
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "entityType",
+                "entityId"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "entityId": {
+                  "type": "string"
+                },
+                "anchorKey": {
+                  "type": "string"
+                },
+                "relationship": {
+                  "type": "string",
+                  "default": "related"
+                }
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "useLlmEnrichment": {
+            "type": "boolean"
+          },
+          "llmProfileId": {
+            "type": "string"
+          }
+        }
+      },
+      "ArtifactMetadataPatchInput": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "sourceLabel": {
+            "type": "string"
+          },
+          "artifactState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "blocked",
+              "archived",
+              "metadata_only"
+            ]
+          },
+          "downloadPolicy": {
+            "type": "string",
+            "enum": [
+              "human_only",
+              "disabled"
+            ]
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "entityType",
+                "entityId"
+              ],
+              "properties": {
+                "entityType": {
+                  "type": "string"
+                },
+                "entityId": {
+                  "type": "string"
+                },
+                "anchorKey": {
+                  "type": "string"
+                },
+                "relationship": {
+                  "type": "string",
+                  "default": "related"
+                }
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ArtifactTrustPatchInput": {
+        "type": "object",
+        "required": [
+          "artifactState",
+          "reason"
+        ],
+        "properties": {
+          "artifactState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "blocked",
+              "archived",
+              "metadata_only"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "downloadPolicy": {
+            "type": "string",
+            "enum": [
+              "human_only",
+              "disabled"
+            ]
+          }
+        }
+      },
+      "ArtifactEnrichmentInput": {
+        "type": "object",
+        "properties": {
+          "llmProfileId": {
+            "type": "string"
+          },
+          "fillMissingOnly": {
+            "type": "boolean",
+            "default": true
+          },
+          "explicitApiKey": {
+            "type": "string",
+            "description": "Optional transient key for the selected LLM provider. It is not persisted by Forge."
+          }
+        }
+      },
+      "ArtifactVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "artifactId",
+          "versionNumber",
+          "contentSha256",
+          "storageKey",
+          "byteSize",
+          "originalFileName",
+          "scanResults",
+          "enrichmentResults",
+          "createdByActor",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string"
+          },
+          "versionNumber": {
+            "type": "integer"
+          },
+          "contentSha256": {
+            "type": "string"
+          },
+          "storageKey": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "integer"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "scanResults": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "enrichmentResults": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdByActor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactAuditEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "artifactId",
+          "eventType",
+          "actor",
+          "source",
+          "metadata",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "artifactId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "openclaw",
+              "agent",
+              "system"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "HealthLink": {
         "type": "object",
         "additionalProperties": false,
@@ -12163,6 +12967,577 @@
     }
   },
   "paths": {
+    "/api/v1/artifacts": {
+      "get": {
+        "summary": "List artifact metadata",
+        "description": "Lists stored file artifacts and their metadata, scan state, danger score, and generic entity links. This route does not return file bytes.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifactState",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "quarantined",
+                "blocked",
+                "archived",
+                "metadata_only"
+              ]
+            }
+          },
+          {
+            "name": "dangerLevel",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "moderate",
+                "high",
+                "blocked"
+              ]
+            }
+          },
+          {
+            "name": "formatFamily",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spreadsheet",
+                "document",
+                "presentation",
+                "pdf",
+                "text",
+                "structured_text",
+                "image"
+              ]
+            }
+          },
+          {
+            "name": "linkedEntityType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "linkedEntityId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artifact list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifacts"
+                  ],
+                  "properties": {
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Artifact"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getartifacts"
+      },
+      "post": {
+        "summary": "Upload a trusted file artifact",
+        "description": "Stores base64 file bytes only for trusted human sessions or trusted/autonomous agent tokens with artifact upload scopes. Forge statically scans and stores the file for human download; it does not execute or autonomously open the file.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactUploadInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts"
+      }
+    },
+    "/api/v1/artifacts/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get artifact metadata",
+        "responses": {
+          "200": {
+            "description": "Artifact metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getartifacts_id"
+      },
+      "patch": {
+        "summary": "Patch artifact metadata",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactMetadataPatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "patchartifacts_id"
+      }
+    },
+    "/api/v1/artifacts/{id}/download": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Download artifact bytes for a human operator",
+        "description": "Returns the stored file bytes only to an authenticated human/operator session. Agent tokens are not allowed to download artifacts.",
+        "responses": {
+          "200": {
+            "description": "Artifact file bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getartifacts_id_download"
+      }
+    },
+    "/api/v1/artifacts/{id}/scan": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Rescan an artifact with the static safety scanner",
+        "responses": {
+          "200": {
+            "description": "Rescanned artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts_id_scan"
+      }
+    },
+    "/api/v1/artifacts/{id}/enrich": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Use a configured LLM to fill missing artifact metadata",
+        "description": "LLM enrichment receives only safe metadata, scan findings, and static text samples. It may propose title, short description, description, tags, and a danger score, but Forge never lowers the deterministic scanner danger score.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactEnrichmentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enriched artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts_id_enrich"
+      }
+    },
+    "/api/v1/artifacts/{id}/links": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Replace generic entity links for an artifact",
+        "description": "Stores artifact relationships through Forge's reusable entity_links model. Use this to connect artifacts to goals, projects, tasks, wiki-backed notes, Psyche records, calendar entities, and other supported Forge entities.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "links"
+                ],
+                "properties": {
+                  "links": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/EntityLinkInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Relinked artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts_id_links"
+      }
+    },
+    "/api/v1/artifacts/{id}/trust": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Apply a trusted artifact state override",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTrustPatchInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trust-updated artifact",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "artifact"
+                  ],
+                  "properties": {
+                    "artifact": {
+                      "$ref": "#/components/schemas/Artifact"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "postartifacts_id_trust"
+      }
+    },
+    "/api/v1/artifacts/{id}/versions": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "List artifact versions",
+        "responses": {
+          "200": {
+            "description": "Artifact versions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "versions"
+                  ],
+                  "properties": {
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArtifactVersion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getartifacts_id_versions"
+      }
+    },
+    "/api/v1/artifacts/{id}/audit": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "List artifact audit events",
+        "responses": {
+          "200": {
+            "description": "Artifact audit events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "events"
+                  ],
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ArtifactAuditEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Artifacts"
+        ],
+        "operationId": "getartifacts_id_audit"
+      }
+    },
     "/api/v1/health": {
       "get": {
         "summary": "Get Forge API health and watchdog status",
@@ -23138,6 +24513,10 @@
       "description": "SQLite-backed wiki settings, pages, ingest, sync, health, and search."
     },
     {
+      "name": "Artifacts",
+      "description": "Trusted file artifact storage, metadata, static safety scans, human-only downloads, links, versions, and audit events."
+    },
+    {
       "name": "Preferences",
       "description": "Preference profiles, comparisons, concepts, contexts, and learned scores."
     },
@@ -23216,6 +24595,7 @@
       "name": "Knowledge And Reflection",
       "tags": [
         "Wiki",
+        "Artifacts",
         "Preferences",
         "Psyche",
         "Questionnaires"

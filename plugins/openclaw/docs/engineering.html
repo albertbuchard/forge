@@ -88,7 +88,7 @@
               <h3>Web application</h3>
               <p>
                 The user-facing app is mounted under <code>/forge/</code>. The
-                UI includes execution, calendar, notes, wiki, health,
+                UI includes execution, calendar, notes, wiki, artifacts, health,
                 preferences, and Psyche surfaces.
               </p>
             </article>
@@ -343,6 +343,15 @@
                 <td>
                   Wiki pages, ingest, search, embeddings, and Markdown evidence
                   records.
+                </td>
+              </tr>
+              <tr>
+                <td>Artifacts</td>
+                <td><code>/api/v1/artifacts/*</code></td>
+                <td>
+                  Trusted file upload, metadata, static safety scans, danger
+                  scoring, generic entity links, versions, audit history, and
+                  human-only downloads.
                 </td>
               </tr>
               <tr>

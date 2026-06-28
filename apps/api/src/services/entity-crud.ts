@@ -16,6 +16,15 @@ import {
   updateWorkoutSession,
   updateWorkoutSessionSchema
 } from "../health.js";
+import {
+  artifactMetadataCreateSchema,
+  artifactMetadataPatchSchema,
+  createArtifactMetadata,
+  deleteArtifactMetadata,
+  getArtifactById,
+  listArtifacts,
+  updateArtifactMetadata
+} from "./artifacts.js";
 import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
 import {
   createCalendarEvent,
@@ -405,6 +414,21 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,
     hardDelete: (id) => deleteTaskTimebox(id) as Record<string, unknown> | undefined
   },
+  artifact: {
+    entityType: "artifact",
+    routeBase: "/api/v1/artifacts",
+    deleteMode: "soft_default",
+    inBin: true,
+    list: () => listArtifacts() as Array<Record<string, unknown>>,
+    get: (id) => getArtifactById(id) as Record<string, unknown> | undefined,
+    create: () => createArtifactMetadata() as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateArtifactMetadata(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteArtifactMetadata(id, context) as Record<string, unknown> | undefined
+  },
   sleep_session: {
     entityType: "sleep_session",
     routeBase: "/api/v1/health/sleep",
@@ -633,6 +657,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: createCalendarEventSchema,
   work_block_template: createWorkBlockTemplateSchema,
   task_timebox: createTaskTimeboxSchema,
+  artifact: artifactMetadataCreateSchema,
   sleep_session: createSleepSessionSchema,
   workout_session: createWorkoutSessionSchema,
   psyche_value: createPsycheValueSchema,
@@ -664,6 +689,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: updateCalendarEventSchema,
   work_block_template: updateWorkBlockTemplateSchema,
   task_timebox: updateTaskTimeboxSchema,
+  artifact: artifactMetadataPatchSchema,
   sleep_session: updateSleepSessionSchema,
   workout_session: updateWorkoutSessionSchema,
   psyche_value: updatePsycheValueSchema,
@@ -1053,6 +1079,19 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
       return (
         (linkedTo.entityType === "task" && entity.taskId === linkedTo.id) ||
         (linkedTo.entityType === "project" && entity.projectId === linkedTo.id)
+      );
+    case "artifact":
+      return (
+        Array.isArray(entity.links) &&
+        entity.links.some(
+          (link) =>
+            typeof link === "object" &&
+            link !== null &&
+            "entityType" in link &&
+            "entityId" in link &&
+            link.entityType === linkedTo.entityType &&
+            link.entityId === linkedTo.id
+        )
       );
     case "psyche_value":
       return (

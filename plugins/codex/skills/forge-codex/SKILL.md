@@ -4,7 +4,7 @@ Use this plugin when you want Codex to work directly with Forge through the cura
 MCP tool surface.
 
 Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
-wiki surfaces, read-model surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
+wiki surfaces, the Artifact Store, read-model surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
 The planning side covers goals, projects, strategies, tasks,
 habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The health side covers `sleep_session`,
@@ -15,7 +15,10 @@ workflow. The preferences side covers `preference_catalog`,
 judgments, and signals. The Psyche side covers values, patterns, behaviors, beliefs,
 modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion
 definitions, `questionnaire_instrument`, `questionnaire_run`, and the note-backed
-self-observation calendar. Read-model surfaces include `operator_overview`,
+self-observation calendar. The Artifact Store is a specialized CRUD surface for
+trusted stored files such as spreadsheets, documents, PDFs, text, structured text,
+and images; artifact relationships use the general `entity_links` model, and Codex
+must not download, open, execute, preview, or transform stored file bytes. Read-model surfaces include `operator_overview`,
 `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`,
 `training_load`, `weight_loss`, and the self-observation calendar; ask what
 practical decision the read should support before adding write-shaped questions.
@@ -74,7 +77,7 @@ For logistical records, keep the reflection short and ask for the operational de
 Use the route execution handoff before any read, write, run, repair, or publish call:
 freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only
 for catalog entities, use named tools or documented routes for specialized CRUD and
-action workflows, and for Movement, Life Force, or Workbench verify `routeKey`,
+action workflows, and for Movement, Life Force, Workbench, or Artifact Store verify `routeKey`,
 method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
@@ -82,8 +85,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
-- `wiki_page` and `calendar_connection` are specialized CRUD surfaces. Use the wiki
-  tools for wiki pages and the calendar connection tools for provider setup and sync.
+- `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
+  Use the wiki tools for wiki pages, the calendar connection tools for provider setup
+  and sync, and the Artifact Store route family for trusted file upload, metadata,
+  static scan, LLM metadata enrichment, generic entity links, trust state, versions,
+  and audit. Batch CRUD may search, update, delete, and restore artifact metadata, but
+  it must not create file artifacts or access file bytes.
 - `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
   `preference_signal`, and `self_observation` are action workflows. Use their
   dedicated tools or note-backed write model instead of generic entity create/update
@@ -96,6 +103,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   route-key tools after the conversation has selected the lane. Life Force may be
   keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
   to the same `/api/v1/life-force/*` route family.
+- Artifact Store route keys live under
+  `forge_get_agent_onboarding.entityRouteModel.specializedCrudEntities.artifact`.
+  When Codex exposes `forge_call_artifact_route`, use it for artifact list, trusted
+  upload, metadata update, static rescan, LLM enrichment, generic entity-link
+  replacement, trust state, versions, or audit. Do not expose or call the download
+  route from agent tools; downloads are human-operator-only.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
@@ -185,6 +198,16 @@ Concrete route-key examples for internal use:
   `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
   `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
+- Artifact metadata list:
+  `{"routeKey":"list","query":{"query":"thesis budget","formatFamily":"spreadsheet","limit":20}}`
+- Artifact trusted upload:
+  `{"routeKey":"createWithBytes","body":{"originalFileName":"budget.xlsx","contentBase64":"<base64>","title":"Thesis budget workbook","sourceLabel":"Uploaded by the operator from local files","useLlmEnrichment":true,"links":[{"entityType":"project","entityId":"project_thesis","relationship":"evidence"}]}}`
+- Artifact generic entity-link replacement:
+  `{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_thesis_budget","relationship":"embedded_reference"}]}}`
+- Artifact audit read:
+  `{"routeKey":"audit","pathParams":{"id":"artifact_123"}}`
+- Artifact forbidden agent action:
+  do not call `/api/v1/artifacts/:id/download`; hand the human to the Forge web app for download.
 
 ## Project Management Hierarchy Rule
 

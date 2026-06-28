@@ -24,6 +24,7 @@ describe("entity visuals", () => {
       "calendar_event",
       "work_block",
       "timebox",
+      "artifact",
       "value",
       "pattern",
       "behavior",
@@ -75,6 +76,7 @@ describe("entity visuals", () => {
       "emotion"
     );
     expect(getEntityKindForCrudEntityType("flashcard")).toBe("flashcard");
+    expect(getEntityKindForCrudEntityType("artifact")).toBe("artifact");
     expect(getEntityKindForCrudEntityType("note", { noteKind: "wiki" })).toBe(
       "wiki_page"
     );

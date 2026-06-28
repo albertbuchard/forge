@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Archive,
   Bot,
   CalendarDays,
   Compass,
@@ -39,6 +40,7 @@ export const ENTITY_KINDS = [
   "calendar_event",
   "work_block",
   "timebox",
+  "artifact",
   "value",
   "pattern",
   "behavior",
@@ -184,6 +186,13 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     accentRgb: [244, 114, 182]
   },
   {
+    kind: "artifact",
+    label: "Artifact",
+    icon: Archive,
+    iconName: "Archive",
+    accentRgb: [45, 212, 191]
+  },
+  {
     kind: "value",
     label: "Value",
     icon: Heart,
@@ -326,6 +335,7 @@ const CRUD_ENTITY_KIND_MAP: Partial<Record<CrudEntityType, EntityKind>> = {
   calendar_event: "calendar_event",
   work_block_template: "work_block",
   task_timebox: "timebox",
+  artifact: "artifact",
   psyche_value: "value",
   behavior_pattern: "pattern",
   behavior: "behavior",

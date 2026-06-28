@@ -378,6 +378,25 @@ import {
   searchEntities,
   updateEntities
 } from "./services/entity-crud.js";
+import {
+  artifactEnrichmentRequestSchema,
+  artifactListQuerySchema,
+  artifactMetadataPatchSchema,
+  artifactTrustPatchSchema,
+  artifactUploadSchema,
+  createArtifactFromUpload,
+  entityLinkInputSchema,
+  enrichArtifactWithLlm,
+  getArtifactById,
+  listArtifactAuditEvents,
+  listArtifactVersions,
+  listArtifacts,
+  patchArtifactTrust,
+  readArtifactDownload,
+  replaceArtifactEntityLinks,
+  rescanArtifact,
+  updateArtifactMetadata
+} from "./services/artifacts.js";
 import { getPsycheOverview } from "./services/psyche.js";
 import {
   getPsycheMetricsViewData,
@@ -3000,6 +3019,9 @@ function classifyOnboardingEntity(
   if (entityType === "wiki_page" || entityType === "calendar_connection") {
     return "specialized_crud_entity";
   }
+  if (entityType === "artifact") {
+    return "specialized_crud_entity";
+  }
   if (
     entityType === "movement" ||
     entityType === "life_force" ||
@@ -3029,6 +3051,8 @@ function buildPreferredMutationPath(entityType: string) {
       return "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.";
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
+    case "artifact":
+      return "Use POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET /api/v1/artifacts/:id/download only for human operator downloads. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
       return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
     case "questionnaire_run":
@@ -3075,6 +3099,8 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_upsert_wiki_page";
     case "calendar_connection":
       return "forge_connect_calendar_provider | forge_sync_calendar_connection | mirrored calendar connection routes";
+    case "artifact":
+      return "forge_call_artifact_route | forge_search_entities | forge_update_entities | forge_delete_entities | forge_restore_entities";
     case "task_run":
       return "forge_start_task_run | forge_heartbeat_task_run | forge_focus_task_run | forge_complete_task_run | forge_release_task_run";
     case "questionnaire_run":
@@ -3116,6 +3142,8 @@ function buildPreferredReadPath(entityType: string) {
       return "/api/v1/wiki/pages/:id";
     case "calendar_connection":
       return "/api/v1/calendar/connections";
+    case "artifact":
+      return "/api/v1/artifacts";
     case "task_run":
       return "/api/v1/operator/context";
     case "questionnaire_run":
@@ -3793,6 +3821,78 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         type: "string",
         required: true,
         description: "Markdown body."
+      }
+    ]
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "artifact",
+    purpose:
+      "A trusted stored file artifact with precise metadata, provenance, static safety scan results, optional LLM-assisted metadata enrichment, generic links to other Forge entities, version history, audit events, and human-only download access.",
+    minimumCreateFields: ["originalFileName", "contentBase64"],
+    relationshipRules: [
+      "Artifact file upload is not batch CRUD. Use POST /api/v1/artifacts so Forge can enforce trust, store bytes content-addressably, run static inspection, preserve provenance, and create the metadata record.",
+      "Artifact relationships use the general entity_links model and are exposed as artifact.links with sourceEntityType/sourceEntityId and targetEntityType/targetEntityId; do not invent artifact-specific link routes or relationship semantics.",
+      "Batch CRUD can search, patch metadata, soft-delete, restore, or hard-delete artifact metadata, but it must not create file artifacts or transfer bytes.",
+      "Only trusted human sessions or trusted/autonomous agent tokens with artifact.create and artifact.uploadBytes may upload bytes.",
+      "Agents must not download, open, execute, transform, parse with external programs, or autonomously run stored files. GET /api/v1/artifacts/:id/download is for human operator sessions only.",
+      "LLM enrichment may fill missing title, shortDescription, description, tags, and danger interpretation from safe metadata and static text samples; it must never lower the deterministic scanner danger score."
+    ],
+    searchHints: [
+      "Before uploading, ask only for missing decision-critical metadata: what the file is, why it should be preserved, where it came from, and which Forge records it should stay linked to.",
+      "If the user gave a file but no metadata, accept a concise title and provenance as enough; optional tags and links can be added later.",
+      "If the file may be sensitive or risky, confirm whether it should be stored at all and whether download should remain disabled or human-only.",
+      "For a review request, list or read artifact metadata and safety findings first; do not ask for upload details unless the user is adding a file."
+    ],
+    fieldGuide: [
+      {
+        name: "title",
+        type: "string",
+        required: false,
+        description: "Human-readable artifact title. LLM enrichment may fill it when missing."
+      },
+      {
+        name: "shortDescription",
+        type: "string",
+        required: false,
+        description: "Compact display summary. LLM enrichment may fill it when missing."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Longer purpose, provenance, and retrieval context."
+      },
+      {
+        name: "originalFileName",
+        type: "string",
+        required: true,
+        description: "Original user-facing filename; extension must be allowed."
+      },
+      {
+        name: "contentBase64",
+        type: "string",
+        required: true,
+        description:
+          "Base64 bytes sent only through the dedicated artifact upload route."
+      },
+      {
+        name: "sourceLabel",
+        type: "string",
+        required: false,
+        description: "Provenance label such as source, project, export, or sender."
+      },
+      {
+        name: "links",
+        type: "Array<{ entityType, entityId, anchorKey?, relationship? }>",
+        required: false,
+        description: "Generic Forge entity links stored through entity_links."
+      },
+      {
+        name: "useLlmEnrichment",
+        type: "boolean",
+        required: false,
+        description:
+          "When true and an LLM profile is configured, Forge fills missing metadata from safe scan context."
       }
     ]
   }),
@@ -5276,6 +5376,24 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
   },
   {
+    toolName: "forge_call_artifact_route",
+    summary:
+      "Call one allowed Artifact Store route for trusted file upload, metadata, scans, enrichment, generic entity links, trust state, versions, or audit.",
+    whenToUse:
+      "Use for artifact list/read/update/upload flows after the user wants a file preserved or reviewed as metadata. Use shared batch CRUD only for artifact metadata search/update/delete/restore. Do not use this tool to download, open, preview, execute, or transform file bytes.",
+    inputShape:
+      '{ routeKey: "list"|"createWithBytes"|"readMetadata"|"updateMetadata"|"rescan"|"enrichWithLlm"|"replaceGenericLinks"|"trustState"|"versions"|"audit", pathParams?: { id?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "The download route is intentionally absent from the agent tool surface; it is human-operator-only.",
+      "For createWithBytes, the body must include originalFileName and contentBase64, and the actor must be trusted and scoped for artifact byte upload.",
+      "For replaceGenericLinks, links are generic entity link inputs identifying target entityType, entityId, optional anchorKey, and relationship.",
+      "Optional LLM enrichment can fill missing metadata, but it must not lower the deterministic scanner danger score."
+    ],
+    example:
+      '{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_budget_model","relationship":"embedded_reference","anchorKey":"budget-workbook"}]}}'
+  },
+  {
     toolName: "forge_get_sleep_overview",
     summary:
       "Read the sleep surface with recent nights, scores, regularity, stage averages, and linked reflective context.",
@@ -5805,7 +5923,13 @@ function buildAgentOnboardingPayload(request: {
       "psyche.write",
       "psyche.note",
       "psyche.insight",
-      "psyche.mode"
+      "psyche.mode",
+      "artifact.readMetadata",
+      "artifact.create",
+      "artifact.uploadBytes",
+      "artifact.updateMetadata",
+      "artifact.link",
+      "artifact.enrichWithLlm"
     ],
     recommendedTrustLevel: "trusted" as const,
     recommendedAutonomyMode: "approval_required" as const,
@@ -5862,6 +5986,8 @@ function buildAgentOnboardingPayload(request: {
         "A live work session attached to a task. Start, heartbeat, focus, complete, and release runs instead of faking work with status alone.",
       note: "A Markdown work note that can link to one or many entities. Use notes for progress evidence, context, and close-out summaries.",
       wiki: "KarpaWiki is the SQLite-backed memory layer: Markdown content in notes rows plus media, backlinks, optional embeddings, explicit spaces, and structured links back to Forge entities.",
+      artifact:
+        "Artifacts are trusted stored files such as spreadsheets, documents, PDFs, text, structured text, or images. Forge stores bytes content-addressably, records provenance and metadata, runs static safety scans, exposes generic entity links, and serves downloads only to human operator sessions. Agents may upload only when trusted and scoped, and must not autonomously download, open, execute, or transform stored files.",
       sleepSession:
         "A sleep session is a first-class health record with timing, sleep and bed duration, stage breakdown, recovery metrics, annotations, and Forge links back to planning or Psyche context.",
       workoutSession:
@@ -5943,6 +6069,7 @@ function buildAgentOnboardingPayload(request: {
       "Habits are recurring records that can connect directly to goals, projects, tasks, and durable Psyche entities.",
       "Task runs represent live work sessions on tasks and are separate from task status.",
       "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
+      "Artifacts are linkable stored entities backed by the general entity_links model; use generic entity links to attach a file to goals, projects, tasks, wiki-backed notes, Psyche records, calendar records, or other meaningful Forge context.",
       "Psyche values can link to goals, projects, and tasks.",
       "Behavior patterns, behaviors, beliefs, modes, flashcards, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
@@ -6000,6 +6127,55 @@ function buildAgentOnboardingPayload(request: {
           update: "/api/v1/calendar/connections/:id",
           sync: "/api/v1/calendar/connections/:id/sync",
           delete: "/api/v1/calendar/connections/:id"
+        },
+        artifact: {
+          list: "/api/v1/artifacts",
+          createWithBytes: "/api/v1/artifacts",
+          readMetadata: "/api/v1/artifacts/:id",
+          updateMetadata: "/api/v1/artifacts/:id",
+          humanDownloadOnly: "/api/v1/artifacts/:id/download",
+          rescan: "/api/v1/artifacts/:id/scan",
+          enrichWithLlm: "/api/v1/artifacts/:id/enrich",
+          replaceGenericLinks: "/api/v1/artifacts/:id/links",
+          trustState: "/api/v1/artifacts/:id/trust",
+          versions: "/api/v1/artifacts/:id/versions",
+          audit: "/api/v1/artifacts/:id/audit",
+          batchMetadata: {
+            search: "/api/v1/entities/search",
+            updateMetadata: "/api/v1/entities/update",
+            deleteMetadata: "/api/v1/entities/delete",
+            restoreMetadata: "/api/v1/entities/restore"
+          },
+          routeKeys: [
+            "list",
+            "createWithBytes",
+            "readMetadata",
+            "updateMetadata",
+            "rescan",
+            "enrichWithLlm",
+            "replaceGenericLinks",
+            "trustState",
+            "versions",
+            "audit"
+          ],
+          methodRoutes: {
+            list: { method: "GET", path: "/api/v1/artifacts" },
+            createWithBytes: { method: "POST", path: "/api/v1/artifacts" },
+            readMetadata: { method: "GET", path: "/api/v1/artifacts/:id" },
+            updateMetadata: { method: "PATCH", path: "/api/v1/artifacts/:id" },
+            rescan: { method: "POST", path: "/api/v1/artifacts/:id/scan" },
+            enrichWithLlm: { method: "POST", path: "/api/v1/artifacts/:id/enrich" },
+            replaceGenericLinks: { method: "POST", path: "/api/v1/artifacts/:id/links" },
+            trustState: { method: "POST", path: "/api/v1/artifacts/:id/trust" },
+            versions: { method: "GET", path: "/api/v1/artifacts/:id/versions" },
+            audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
+          },
+          safetyRules: [
+            "Do not expose the download route to agent tools. It is a human operator route only.",
+            "Do not execute, preview, parse externally, or transform stored file bytes autonomously.",
+            "Use general entity links for relationships; do not create artifact-specific link models.",
+            "Use batch CRUD only for artifact metadata search/update/delete/restore, never for file-byte creation."
+          ]
         }
       },
       actionEntities: {
@@ -6527,6 +6703,15 @@ function buildAgentOnboardingPayload(request: {
         "/api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
       workbenchLatestNodeOutput:
         "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
+      artifacts: "/api/v1/artifacts",
+      artifactDetail: "/api/v1/artifacts/:id",
+      artifactDownloadHumanOnly: "/api/v1/artifacts/:id/download",
+      artifactScan: "/api/v1/artifacts/:id/scan",
+      artifactEnrich: "/api/v1/artifacts/:id/enrich",
+      artifactEntityLinks: "/api/v1/artifacts/:id/links",
+      artifactTrust: "/api/v1/artifacts/:id/trust",
+      artifactVersions: "/api/v1/artifacts/:id/versions",
+      artifactAudit: "/api/v1/artifacts/:id/audit",
       wikiSettings: "/api/v1/wiki/settings",
       wikiSearch: "/api/v1/wiki/search",
       wikiHealth: "/api/v1/wiki/health",
@@ -6574,6 +6759,13 @@ function buildAgentOnboardingPayload(request: {
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route"
+      ],
+      artifactWorkflow: [
+        "forge_call_artifact_route",
+        "forge_search_entities",
+        "forge_update_entities",
+        "forge_delete_entities",
+        "forge_restore_entities"
       ],
       entityWorkflow: [
         "forge_search_entities",
@@ -6650,6 +6842,8 @@ function buildAgentOnboardingPayload(request: {
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:
         "For Movement, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
+      artifactStoreRule:
+        "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, open, run, execute, transform, or preview stored file bytes as an agent; downloads are human-operator-only.",
       reviewShortcutRule:
         "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
       readModelWriteRule:
@@ -6695,7 +6889,7 @@ function buildAgentOnboardingPayload(request: {
       searchRule:
         "forge_search_entities accepts searches as an array. Search before create or update when duplicate risk exists.",
       createRule:
-        "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities.",
+        "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities. Artifact file-byte creation is the exception: use POST /api/v1/artifacts or forge_call_artifact_route createWithBytes, not batch create.",
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
@@ -9235,6 +9429,296 @@ export async function buildServer(
     );
     return context;
   };
+  const requireArtifactReadAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = authenticateRequest(headers);
+    managers.authorization.requireAuthenticatedActor(context, detail);
+    if (!context.session) {
+      managers.authorization.requireAnyTokenScope(
+        context,
+        ["artifact.readMetadata", "read"],
+        detail
+      );
+    }
+    return context;
+  };
+  const requireTrustedArtifactUploadAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = authenticateRequest(headers);
+    managers.authorization.requireAuthenticatedActor(context, detail);
+    if (!context.session) {
+      managers.authorization.requireAnyTokenScope(
+        context,
+        ["artifact.create"],
+        detail
+      );
+      managers.authorization.requireAnyTokenScope(
+        context,
+        ["artifact.uploadBytes"],
+        detail
+      );
+      if (
+        context.token?.trustLevel !== "trusted" &&
+        context.token?.trustLevel !== "autonomous"
+      ) {
+        throw new HttpError(
+          403,
+          "artifact_untrusted_agent",
+          "Artifact uploads require a trusted agent identity.",
+          {
+            trustLevel: context.token?.trustLevel ?? null,
+            requiredTrustLevels: ["trusted", "autonomous"],
+            ...(detail ?? {})
+          }
+        );
+      }
+    }
+    return context;
+  };
+  const requireArtifactMetadataWriteAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = authenticateRequest(headers);
+    managers.authorization.requireAuthenticatedActor(context, detail);
+    if (!context.session) {
+      managers.authorization.requireAnyTokenScope(
+        context,
+        ["artifact.updateMetadata", "write"],
+        detail
+      );
+    }
+    return context;
+  };
+  const requireArtifactDownloadAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = authenticateRequest(headers);
+    managers.authorization.requireAuthenticatedOperator(context, detail);
+    return context;
+  };
+  const requireArtifactTrustAccess = (
+    headers: Record<string, unknown>,
+    detail?: Record<string, unknown>
+  ) => {
+    const context = authenticateRequest(headers);
+    managers.authorization.requireAuthenticatedActor(context, detail);
+    if (!context.session) {
+      managers.authorization.requireAnyTokenScope(
+        context,
+        ["artifact.manageTrust", "artifact.overrideQuarantine"],
+        detail
+      );
+      if (
+        context.token?.trustLevel !== "trusted" &&
+        context.token?.trustLevel !== "autonomous"
+      ) {
+        throw new HttpError(
+          403,
+          "artifact_untrusted_agent",
+          "Artifact trust overrides require a trusted agent identity.",
+          {
+            trustLevel: context.token?.trustLevel ?? null,
+            requiredTrustLevels: ["trusted", "autonomous"],
+            ...(detail ?? {})
+          }
+        );
+      }
+    }
+    return context;
+  };
+
+  app.get("/api/v1/artifacts", async (request) => {
+    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
+      route: "/api/v1/artifacts"
+    });
+    return {
+      artifacts: listArtifacts(
+        artifactListQuerySchema.parse(request.query ?? {})
+      )
+    };
+  });
+  app.post(
+    "/api/v1/artifacts",
+    { bodyLimit: 150 * 1024 * 1024 },
+    async (request, reply) => {
+      const auth = requireTrustedArtifactUploadAccess(
+        request.headers as Record<string, unknown>,
+        { route: "/api/v1/artifacts" }
+      );
+      const artifact = await createArtifactFromUpload(
+        artifactUploadSchema.parse(request.body ?? {}),
+        auth,
+        { llm: managers.llm }
+      );
+      reply.code(201);
+      return { artifact };
+    }
+  );
+  app.get("/api/v1/artifacts/:id", async (request, reply) => {
+    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
+      route: "/api/v1/artifacts/:id"
+    });
+    const { id } = request.params as { id: string };
+    const artifact = getArtifactById(id);
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.patch("/api/v1/artifacts/:id", async (request, reply) => {
+    const auth = requireArtifactMetadataWriteAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const artifact = updateArtifactMetadata(
+      id,
+      artifactMetadataPatchSchema.parse(request.body ?? {}),
+      auth
+    );
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.get("/api/v1/artifacts/:id/download", async (request, reply) => {
+    const auth = requireArtifactDownloadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/download" }
+    );
+    const { id } = request.params as { id: string };
+    const result = await readArtifactDownload(id);
+    if (!result) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    const fileName = result.artifact.originalFileName.replace(/["\\\r\n]/g, "_");
+    recordActivityEvent({
+      entityType: "artifact",
+      entityId: result.artifact.id,
+      eventType: "artifact.downloaded",
+      title: `Artifact downloaded: ${result.artifact.title}`,
+      description:
+        "A human operator downloaded stored artifact bytes. Forge did not execute the file.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        contentSha256: result.artifact.contentSha256,
+        byteSize: result.artifact.byteSize
+      }
+    });
+    return reply
+      .header("content-type", result.artifact.detectedMimeType)
+      .header("content-length", String(result.bytes.byteLength))
+      .header("content-disposition", `attachment; filename="${fileName}"`)
+      .send(result.bytes);
+  });
+  app.post("/api/v1/artifacts/:id/scan", async (request, reply) => {
+    const auth = requireArtifactMetadataWriteAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/scan" }
+    );
+    const { id } = request.params as { id: string };
+    const artifact = await rescanArtifact(id, auth);
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.post("/api/v1/artifacts/:id/enrich", async (request, reply) => {
+    const auth = requireArtifactMetadataWriteAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/enrich" }
+    );
+    if (!auth.session) {
+      managers.authorization.requireAnyTokenScope(
+        auth,
+        ["artifact.enrichWithLlm"],
+        { route: "/api/v1/artifacts/:id/enrich" }
+      );
+    }
+    const { id } = request.params as { id: string };
+    const artifact = await enrichArtifactWithLlm(
+      id,
+      artifactEnrichmentRequestSchema.parse(request.body ?? {}),
+      auth,
+      { llm: managers.llm }
+    );
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.post("/api/v1/artifacts/:id/links", async (request, reply) => {
+    const auth = requireArtifactMetadataWriteAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/links" }
+    );
+    if (!auth.session) {
+      managers.authorization.requireAnyTokenScope(auth, ["artifact.link"], {
+        route: "/api/v1/artifacts/:id/links"
+      });
+    }
+    const { id } = request.params as { id: string };
+    const body = z
+      .object({ links: z.array(entityLinkInputSchema) })
+      .parse(request.body ?? {});
+    const artifact = replaceArtifactEntityLinks(id, body.links, auth);
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.post("/api/v1/artifacts/:id/trust", async (request, reply) => {
+    const auth = requireArtifactTrustAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/trust" }
+    );
+    const { id } = request.params as { id: string };
+    const artifact = patchArtifactTrust(
+      id,
+      artifactTrustPatchSchema.parse(request.body ?? {}),
+      auth
+    );
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
+  });
+  app.get("/api/v1/artifacts/:id/versions", async (request, reply) => {
+    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
+      route: "/api/v1/artifacts/:id/versions"
+    });
+    const { id } = request.params as { id: string };
+    if (!getArtifactById(id)) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { versions: listArtifactVersions(id) };
+  });
+  app.get("/api/v1/artifacts/:id/audit", async (request, reply) => {
+    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
+      route: "/api/v1/artifacts/:id/audit"
+    });
+    const { id } = request.params as { id: string };
+    if (!getArtifactById(id)) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { events: listArtifactAuditEvents(id) };
+  });
 
   app.get("/api/health", async () => buildHealthPayload(taskRunWatchdog));
 

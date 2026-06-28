@@ -16,6 +16,16 @@ import type {
   OperatorSession,
   CreateManualRewardGrantInput,
   ApprovalRequest,
+  Artifact,
+  ArtifactAuditEvent,
+  ArtifactDangerLevel,
+  ArtifactEnrichmentInput,
+  ArtifactFormatFamily,
+  ArtifactMetadataPatchInput,
+  ArtifactState,
+  ArtifactTrustPatchInput,
+  ArtifactUploadInput,
+  ArtifactVersion,
   CalendarAvailability,
   CalendarConnection,
   CalendarDiscoveryPayload,
@@ -32,6 +42,7 @@ import type {
   CompanionPairingTransportMode,
   DiagnosticLogEntry,
   EventLogEntry,
+  EntityLinkInput,
   FitnessViewData,
   TrainingLoadViewData,
   HealthZoneProfileRecord,
@@ -1532,6 +1543,129 @@ export function createNote(input: {
     method: "POST",
     body: JSON.stringify(input)
   });
+}
+
+export async function listArtifacts(
+  options: {
+    query?: string;
+    artifactState?: ArtifactState;
+    dangerLevel?: ArtifactDangerLevel;
+    formatFamily?: ArtifactFormatFamily;
+    linkedEntityType?: string;
+    linkedEntityId?: string;
+    limit?: number;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (options.query?.trim()) {
+    search.set("query", options.query.trim());
+  }
+  if (options.artifactState) {
+    search.set("artifactState", options.artifactState);
+  }
+  if (options.dangerLevel) {
+    search.set("dangerLevel", options.dangerLevel);
+  }
+  if (options.formatFamily) {
+    search.set("formatFamily", options.formatFamily);
+  }
+  if (options.linkedEntityType?.trim() && options.linkedEntityId?.trim()) {
+    search.set("linkedEntityType", options.linkedEntityType.trim());
+    search.set("linkedEntityId", options.linkedEntityId.trim());
+  }
+  if (options.limit) {
+    search.set("limit", String(options.limit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ artifacts: Artifact[] }>(`/api/v1/artifacts${suffix}`);
+}
+
+export function getArtifact(artifactId: string) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}`
+  );
+}
+
+export function uploadArtifact(input: ArtifactUploadInput) {
+  return request<{ artifact: Artifact }>("/api/v1/artifacts", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function patchArtifact(
+  artifactId: string,
+  patch: ArtifactMetadataPatchInput
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
+}
+
+export function downloadArtifact(artifactId: string) {
+  return requestBlob(`/api/v1/artifacts/${encodeURIComponent(artifactId)}/download`);
+}
+
+export function rescanArtifact(artifactId: string) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/scan`,
+    { method: "POST" }
+  );
+}
+
+export function enrichArtifact(
+  artifactId: string,
+  input: ArtifactEnrichmentInput = {}
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/enrich`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function replaceArtifactEntityLinks(
+  artifactId: string,
+  links: EntityLinkInput[]
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/links`,
+    {
+      method: "POST",
+      body: JSON.stringify({ links })
+    }
+  );
+}
+
+export function patchArtifactTrust(
+  artifactId: string,
+  input: ArtifactTrustPatchInput
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/trust`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function listArtifactVersions(artifactId: string) {
+  return request<{ versions: ArtifactVersion[] }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions`
+  );
+}
+
+export function listArtifactAuditEvents(artifactId: string) {
+  return request<{ events: ArtifactAuditEvent[] }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/audit`
+  );
 }
 
 export function getNote(noteId: string) {

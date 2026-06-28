@@ -110,7 +110,7 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/never save a name-only food/i);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
     expect(openclawSkill).toMatch(
-      /four major stored-entity surfaces,\s+read-model surfaces,\s+and three specialized domain surfaces/i
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and three specialized domain surfaces/i
     );
     expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
     expect(openclawSkill).toMatch(/dedicated route families instead of forcing them through batch CRUD/i);
@@ -328,7 +328,7 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
     expect(hermesSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/chat/i);
     expect(hermesSkill).toMatch(
-      /four major stored-entity surfaces,\s+read-model surfaces,\s+and three specialized domain surfaces/i
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and three specialized domain surfaces/i
     );
     expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
     expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);

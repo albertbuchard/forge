@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  Archive,
   BarChart3,
   BatteryCharging,
   BookCopy,
@@ -104,6 +105,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     label: "Knowledge Graph",
     detail: ROUTE_VIEW_CATALOG["knowledge-graph-index"].description,
     icon: Orbit
+  },
+  {
+    id: "artifacts",
+    to: "/artifacts",
+    label: "Artifacts",
+    detail: ROUTE_VIEW_CATALOG["artifacts-index"].description,
+    icon: Archive
   },
   {
     id: "workbench",

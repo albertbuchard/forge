@@ -18,6 +18,8 @@ Forge should treat projects as PRD-backed initiatives, issues as vertical slices
 
 Forge should also distinguish stable agent identity from user ownership. OpenClaw, Hermes, Codex, and Claude Code are durable agent runtimes that may reconnect many times, create bot users, or spawn subagents, but repeated runtime sessions must not become repeated top-level agents. A stable agent ID can link to one or several human or bot users, and each linked bot user can own its own Kanban work.
 
+Forge should provide an Artifact Store for trusted stored files that belong in the same memory graph as goals, projects, tasks, wiki pages, Psyche records, calendar records, and notes. Artifacts are files such as spreadsheets, documents, PDFs, structured text, plain text, and images. Forge stores their bytes content-addressably, records precise title, short description, long description, file identity, provenance, source, state, scan results, danger score, versions, and audit events, and links them to other Forge records through the general `entity_links` model. Agents may create artifacts only when they are trusted and scoped, and they must not autonomously download, open, execute, preview, or transform stored file bytes.
+
 Forge should stay modern and production-grade:
 
 - React 19
@@ -63,6 +65,7 @@ Forge should not rely on sprawling schemas for work items. The main contract sho
 Forge already has strong foundations:
 
 - goals, projects, strategies, tasks, task runs, habits, notes, wiki, preferences, health, movement, and Psyche surfaces
+- an Artifact Store for trusted human-download-only files with precise metadata, provenance, static scans, danger scoring, versions, audit history, optional LLM metadata enrichment, a dedicated web view, and relationships stored through general entity links
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`

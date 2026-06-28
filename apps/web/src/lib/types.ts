@@ -91,6 +91,7 @@ export type CrudEntityType =
   | "calendar_event"
   | "work_block_template"
   | "task_timebox"
+  | "artifact"
   | "psyche_value"
   | "behavior_pattern"
   | "behavior"
@@ -125,6 +126,162 @@ export type RewardableEntityType =
   | "flashcard"
   | "trigger_report";
 export type DeleteMode = "soft" | "hard";
+
+export type ArtifactState =
+  | "active"
+  | "quarantined"
+  | "blocked"
+  | "archived"
+  | "metadata_only";
+export type ArtifactDangerLevel = "low" | "moderate" | "high" | "blocked";
+export type ArtifactDownloadPolicy = "human_only" | "disabled";
+export type ArtifactFormatFamily =
+  | "spreadsheet"
+  | "document"
+  | "presentation"
+  | "pdf"
+  | "text"
+  | "structured_text"
+  | "image";
+export type ArtifactSourceKind =
+  | "upload"
+  | "agent_upload"
+  | "wiki_ingest"
+  | "external_reference"
+  | "manual";
+
+export interface EntityLink {
+  sourceEntityType: string;
+  sourceEntityId: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  anchorKey: string | null;
+  relationship: string;
+  createdByActor: string | null;
+  createdAt: string;
+}
+
+export interface ArtifactScanFinding {
+  code: string;
+  severity: "info" | "low" | "moderate" | "high" | "blocked";
+  message: string;
+}
+
+export interface ArtifactScanResult {
+  scannedAt: string;
+  scannerVersion: string;
+  declaredExtension: string;
+  detectedMimeType: string;
+  extensionAllowed: boolean;
+  byteSize: number;
+  findings: ArtifactScanFinding[];
+  extractedTextSample: string;
+  extractedTextTruncated: boolean;
+}
+
+export interface Artifact {
+  id: string;
+  title: string;
+  shortDescription: string;
+  description: string;
+  originalFileName: string;
+  storageKey: string;
+  storagePath: string;
+  contentSha256: string;
+  byteSize: number;
+  detectedExtension: string;
+  declaredMimeType: string;
+  detectedMimeType: string;
+  formatFamily: ArtifactFormatFamily;
+  sourceKind: ArtifactSourceKind;
+  sourceLabel: string;
+  uploadedByUserId: string | null;
+  uploadedByAgentId: string | null;
+  actingForUserId: string | null;
+  artifactState: ArtifactState;
+  dangerScore: number;
+  dangerLevel: ArtifactDangerLevel;
+  downloadPolicy: ArtifactDownloadPolicy;
+  scanResults: ArtifactScanResult | Record<string, unknown>;
+  enrichmentResults: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  links: EntityLink[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ArtifactVersion {
+  id: string;
+  artifactId: string;
+  versionNumber: number;
+  contentSha256: string;
+  storageKey: string;
+  byteSize: number;
+  originalFileName: string;
+  scanResults: Record<string, unknown>;
+  enrichmentResults: Record<string, unknown>;
+  createdByActor: string | null;
+  createdAt: string;
+}
+
+export interface ArtifactAuditEvent {
+  id: string;
+  artifactId: string;
+  eventType: string;
+  actor: string | null;
+  source: "ui" | "openclaw" | "agent" | "system";
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface EntityLinkInput {
+  entityType: string;
+  entityId: string;
+  anchorKey?: string;
+  relationship?: string;
+}
+
+export interface ArtifactUploadInput {
+  title?: string;
+  shortDescription?: string;
+  description?: string;
+  originalFileName: string;
+  declaredMimeType?: string;
+  contentBase64: string;
+  sourceKind?: ArtifactSourceKind;
+  sourceLabel?: string;
+  uploadedByUserId?: string | null;
+  uploadedByAgentId?: string | null;
+  actingForUserId?: string | null;
+  downloadPolicy?: ArtifactDownloadPolicy;
+  links?: EntityLinkInput[];
+  metadata?: Record<string, unknown>;
+  useLlmEnrichment?: boolean;
+  llmProfileId?: string;
+}
+
+export interface ArtifactMetadataPatchInput {
+  title?: string;
+  shortDescription?: string;
+  description?: string;
+  sourceLabel?: string;
+  artifactState?: ArtifactState;
+  downloadPolicy?: ArtifactDownloadPolicy;
+  links?: EntityLinkInput[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ArtifactTrustPatchInput {
+  artifactState: ArtifactState;
+  reason: string;
+  downloadPolicy?: ArtifactDownloadPolicy;
+}
+
+export interface ArtifactEnrichmentInput {
+  llmProfileId?: string;
+  fillMissingOnly?: boolean;
+  explicitApiKey?: string;
+}
 
 export type UserKind = "human" | "bot";
 

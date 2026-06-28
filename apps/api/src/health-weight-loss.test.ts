@@ -39,6 +39,17 @@ function insertVitalsDay(input: {
     .run(input.id, input.dayKey, JSON.stringify(input.metrics), now, now);
 }
 
+function currentLocalDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "00";
+  return `${read("year")}-${read("month")}-${read("day")}`;
+}
+
 test("weight loss overview reflects food logs and body check-ins", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-weight-loss-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -145,7 +156,7 @@ test("weight loss overview reflects food logs and body check-ins", async () => {
     });
     assert.equal(bodyCheckin.statusCode, 201);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
     const updateTarget = await app.inject({
       method: "PATCH",
@@ -1551,7 +1562,7 @@ test("weight loss overview seeds latest weight from HealthKit body mass", async 
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
     getDatabase()
       .prepare(
@@ -1613,7 +1624,7 @@ test("weight loss overview uses same-day workout, movement, and step active calo
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
 
     const updateTarget = await app.inject({
@@ -1946,7 +1957,7 @@ test("weight loss overview uses movement calories when only movement trips exist
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
     const updateTarget = await app.inject({
       method: "PATCH",
@@ -2053,7 +2064,7 @@ test("weight loss overview estimates active calories from steps before using the
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
     const updateTarget = await app.inject({
       method: "PATCH",
@@ -2176,7 +2187,7 @@ test("weight loss overview keeps the default active calories when only trivial s
 
   try {
     const cookie = await issueOperatorSessionCookie(app);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = currentLocalDateKey();
     const now = new Date().toISOString();
     const updateTarget = await app.inject({
       method: "PATCH",

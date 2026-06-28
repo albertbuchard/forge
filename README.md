@@ -66,7 +66,9 @@ records that humans and agents can inspect and update over time.
 
 Forge uses one local runtime and one shared entity model. That model is the structured
 layer behind the prose: goals, projects, Psyche records, preferences, health context, and
-agent work can refer to each other instead of becoming isolated text fragments.
+agent work can refer to each other instead of becoming isolated text fragments. Trusted
+files can also become Artifact Store records with precise metadata, provenance, safety
+scans, danger scores, and human-only downloads.
 
 Psyche is the clearest example. Values, beliefs, modes, behavior patterns, trigger
 reports, and related reflective records stay useful because they are connected records,
@@ -77,6 +79,7 @@ It gives you one place to:
 - turn goals into strategies, projects, issues, tasks, and subtasks
 - run a mixed Kanban board and a compact hierarchy view
 - keep notes, wiki pages, preferences, Psyche records, sleep, workouts, and movement context beside the work they explain
+- store trusted file artifacts such as spreadsheets, documents, PDFs, text, structured text, and images with metadata, provenance, versions, static scans, and links to the Forge records they support
 - let OpenClaw, Hermes, Codex, Claude Code, the browser app, and the iPhone companion use the same local Forge runtime
 - keep the database local by default, with optional explicit data folders and backups in `Settings -> Data`
 
@@ -94,8 +97,10 @@ truthful delivery trail instead of only changing a status field.
 Forge also connects the operational record to the rest of life. Notes and wiki pages
 preserve reasoning. Preferences store comparisons and signals. Psyche records keep values,
 beliefs, modes, behavior patterns, trigger reports, and flashcards connected to the work
-they affect. Sleep, workouts, movement history, and iPhone HealthKit imports give recovery
-and context their own first-class surfaces.
+they affect. Artifacts preserve trusted files as local, scanned, human-download-only
+records that can be embedded from wiki pages or linked to any meaningful Forge entity.
+Sleep, workouts, movement history, and iPhone HealthKit imports give recovery and context
+their own first-class surfaces.
 
 Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5,
 SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, Claude Code MCP, a Rust
@@ -280,6 +285,7 @@ has opened.
 
 - planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits
 - memory: notes, wiki pages, search, ingest, backlinks, and linked Forge context
+- artifact store: trusted spreadsheets, documents, PDFs, structured text, text, and images with metadata, provenance, scans, versions, generic entity links, and human-only downloads
 - reflection: preferences, Psyche values, behavior patterns, beliefs, modes, and trigger reports
 - health: sleep nights, workouts, movement history, and iPhone HealthKit import
 - collaboration: explicit human and bot users, owner/assignee filters, agent sessions, and audited actions

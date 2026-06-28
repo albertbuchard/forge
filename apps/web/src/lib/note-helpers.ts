@@ -61,6 +61,8 @@ export function getEntityRoute(entityType: CrudEntityType, entityId: string) {
       return `/tasks/${entityId}`;
     case "strategy":
       return `/strategies/${entityId}`;
+    case "artifact":
+      return `/artifacts/${entityId}`;
     case "psyche_value":
       return `/psyche/values?focus=${entityId}#values-atlas`;
     case "behavior_pattern":

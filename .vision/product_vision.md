@@ -44,8 +44,13 @@ current source-controlled catalog item IDs.
 
 Forge is not one page. The planning side spans goals, strategies, projects, issues, tasks,
 subtasks, and live task runs. The reflection side spans notes, Psyche, preferences, wiki,
-and health. The companion side includes the iPhone app and related agent/tooling surfaces.
-All of those pieces should use one shared entity language and one shared data model.
+and health. The memory side also includes an Artifact Store for trusted files such as
+spreadsheets, documents, PDFs, structured text, plain text, and images. Artifacts keep
+precise metadata, provenance, static safety scans, danger scores, versions, audit history,
+and human-only downloads while using the general Forge entity-link graph to connect files
+to goals, projects, tasks, wiki pages, Psyche records, calendar records, and notes. The
+companion side includes the iPhone app and related agent/tooling surfaces. All of those
+pieces should use one shared entity language and one shared data model.
 
 The gamified layer should make the operating system feel consequential without turning it
 into a toy. The Forge Smith mascot, level ring, XP progress, streak state, Trophy Hall,

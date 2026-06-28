@@ -275,6 +275,43 @@ const workbenchRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const artifactRouteSpecs = {
+  list: { method: "GET", path: "/api/v1/artifacts" },
+  createWithBytes: {
+    method: "POST",
+    path: "/api/v1/artifacts",
+    requiresToken: true
+  },
+  readMetadata: { method: "GET", path: "/api/v1/artifacts/:id" },
+  updateMetadata: {
+    method: "PATCH",
+    path: "/api/v1/artifacts/:id",
+    requiresToken: true
+  },
+  rescan: {
+    method: "POST",
+    path: "/api/v1/artifacts/:id/scan",
+    requiresToken: true
+  },
+  enrichWithLlm: {
+    method: "POST",
+    path: "/api/v1/artifacts/:id/enrich",
+    requiresToken: true
+  },
+  replaceGenericLinks: {
+    method: "POST",
+    path: "/api/v1/artifacts/:id/links",
+    requiresToken: true
+  },
+  trustState: {
+    method: "POST",
+    path: "/api/v1/artifacts/:id/trust",
+    requiresToken: true
+  },
+  versions: { method: "GET", path: "/api/v1/artifacts/:id/versions" },
+  audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
@@ -768,6 +805,14 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
     routeSpecs: workbenchRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_artifact_route",
+    label: "Forge Artifact Route",
+    description:
+      "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
+    routeSpecs: artifactRouteSpecs
   });
 
   registerReadTool(api, config, {

@@ -20005,6 +20005,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
   const entityTypes = matrix.map((entry) => entry.entityType).sort();
 
   assert.deepEqual(entityTypes, [
+    "artifact",
     "behavior",
     "behavior_pattern",
     "belief_entry",
@@ -20503,7 +20504,13 @@ test("settings and local agent token management persist through the versioned AP
       "psyche.write",
       "psyche.note",
       "psyche.insight",
-      "psyche.mode"
+      "psyche.mode",
+      "artifact.readMetadata",
+      "artifact.create",
+      "artifact.uploadBytes",
+      "artifact.updateMetadata",
+      "artifact.link",
+      "artifact.enrichWithLlm"
     ]);
     assert.equal(
       onboardingBody.onboarding.recommendedAutonomyMode,

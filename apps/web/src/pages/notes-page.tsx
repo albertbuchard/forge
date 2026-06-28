@@ -77,6 +77,7 @@ const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "project",
   "task",
   "strategy",
+  "artifact",
   "habit",
   "tag",
   "psyche_value",

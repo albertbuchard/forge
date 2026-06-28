@@ -153,6 +153,19 @@ WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "latestNodeOutput": {"method": "GET", "path": "/api/v1/workbench/flows/:id/nodes/:nodeId/output"},
 }
 
+ARTIFACT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "list": {"method": "GET", "path": "/api/v1/artifacts"},
+    "createWithBytes": {"method": "POST", "path": "/api/v1/artifacts", "write": True},
+    "readMetadata": {"method": "GET", "path": "/api/v1/artifacts/:id"},
+    "updateMetadata": {"method": "PATCH", "path": "/api/v1/artifacts/:id", "write": True},
+    "rescan": {"method": "POST", "path": "/api/v1/artifacts/:id/scan", "write": True},
+    "enrichWithLlm": {"method": "POST", "path": "/api/v1/artifacts/:id/enrich", "write": True},
+    "replaceGenericLinks": {"method": "POST", "path": "/api/v1/artifacts/:id/links", "write": True},
+    "trustState": {"method": "POST", "path": "/api/v1/artifacts/:id/trust", "write": True},
+    "versions": {"method": "GET", "path": "/api/v1/artifacts/:id/versions"},
+    "audit": {"method": "GET", "path": "/api/v1/artifacts/:id/audit"},
+}
+
 
 def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
     return object_schema(
@@ -684,6 +697,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(WORKBENCH_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(WORKBENCH_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_artifact_route",
+        "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
+        "parameters": specialized_route_parameters(ARTIFACT_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(ARTIFACT_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(ARTIFACT_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(ARTIFACT_ROUTE_SPECS, args),
     },
     {
         "name": "forge_get_doctor",

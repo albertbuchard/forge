@@ -164,6 +164,7 @@ describe("question flow simulation cycles", () => {
     "Tag",
     "Note",
     "Wiki Page",
+    "Artifact",
     "Insight",
     "Calendar Event",
     "Work Block Template",
@@ -223,6 +224,8 @@ describe("question flow simulation cycles", () => {
     Note: "Preserve this reflection without turning it into a full Psyche record yet.",
     "Wiki Page":
       "Create a durable reference page for a recurring research method.",
+    Artifact:
+      "Store this spreadsheet so I can retrieve it later with its provenance and project context.",
     Insight:
       "Save the pattern I noticed from the last three blocked work sessions.",
     "Calendar Event": "Schedule a focused review call in local time.",
@@ -301,6 +304,7 @@ describe("question flow simulation cycles", () => {
     Tag: ["add", "update", "review", "link"],
     Note: ["add", "update", "review", "link"],
     "Wiki Page": ["create", "read", "update", "browse"],
+    Artifact: ["trusted-upload", "metadata-update", "enrich", "link"],
     Insight: ["add", "review", "link", "preserve"],
     "Calendar Event": ["add", "update", "review", "delete"],
     "Work Block Template": ["add", "update", "review", "delete"],
@@ -387,6 +391,7 @@ describe("question flow simulation cycles", () => {
     Tag: "batch",
     Note: "batch",
     "Wiki Page": "specializedCrud",
+    Artifact: "specializedCrud",
     Insight: "batch",
     "Calendar Event": "batch",
     "Work Block Template": "batch",
@@ -450,6 +455,7 @@ describe("question flow simulation cycles", () => {
     weight_loss: "Weight Loss",
     calendar_connection: "Calendar Connection",
     wiki_page: "Wiki Page",
+    artifact: "Artifact",
     preference_catalog: "Preference Catalog",
     preference_catalog_item: "Preference Catalog Item",
     preference_context: "Preference Context",
@@ -523,6 +529,7 @@ describe("question flow simulation cycles", () => {
     "emotion_definition",
     "wiki_page",
     "calendar_connection",
+    "artifact",
     "operator_overview",
     "operator_context",
     "calendar_overview",
@@ -1093,7 +1100,7 @@ describe("question flow simulation cycles", () => {
       }
       if (posture === "specializedCrud") {
         expect(sectionSlice).toMatch(
-          /specialized CRUD|wiki page|calendar connection/i
+          /specialized CRUD|wiki page|calendar connection|artifact/i
         );
         continue;
       }
@@ -2190,7 +2197,7 @@ describe("question flow simulation cycles", () => {
       /catalog `entityType` exactly[\s\S]*Search or read first for update,[\s\S]*duplicate-disambiguation, or review work/i
     );
     expect(routeExecutionHandoff).toMatch(
-      /wiki pages, calendar connections, task runs, work adjustments, questionnaire\s+runs, preference judgments\/signals, and self-observation notes/i
+      /wiki pages,[\s\S]*calendar connections,[\s\S]*artifacts,[\s\S]*task runs,[\s\S]*work adjustments,[\s\S]*questionnaire\s+runs,[\s\S]*preference judgments\/signals,[\s\S]*self-observation notes/i
     );
     expect(routeExecutionHandoff).toMatch(
       /Movement, Life Force, and Workbench[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`[\s\S]*Do not put IDs into `routeKey`/i

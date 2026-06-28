@@ -139,7 +139,8 @@ With the user, say the human thing:
 - "Movement timeline", "place", "trip", "missing block", or "time window"
 - "Energy model", "weekday pattern", or "fatigue signal"
 - "Workbench flow", "run", "published output", or "node result"
-- "Wiki page", "note", "trigger report", "behavior pattern", "belief", or "mode"
+- "Wiki page", "artifact file", "provenance", "note", "trigger report",
+  "behavior pattern", "belief", or "mode"
 
 The API path still matters, but it should not leak into the question unless the user
 is explicitly asking about implementation.
@@ -157,8 +158,8 @@ confirmations should stay as concrete as the first question.
 - Replace implementation words with product nouns before the sentence reaches the
   user. Say missing stay, place boundary, weekday energy curve, saved flow, failed
   run, node output, belief sentence, pattern, flashcard, wiki page, calendar
-  connection, or task run instead of endpoint, payload, mutation, batch route, or
-  route key.
+  connection, artifact file, provenance, generic entity link, or task run instead of
+  endpoint, payload, mutation, batch route, or route key.
 - If the only honest next sentence would be a generic reflection or a route-shaped
   question, pause and identify the product noun internally. If you still cannot name
   it, ask one grounding question about the real moment, span, object, or decision.
@@ -418,6 +419,10 @@ to the stronger container:
   label will improve future trigger reports.
 - Use `wiki_page` when the user wants durable memory, a book/article/source summary,
   a reference page, a concept page, or a reusable personal manual.
+- Use `artifact` when the user wants Forge to store a trusted file for human
+  retrieval, audit, provenance, or evidence. Link it to other Forge records through
+  the general entity-link model; do not create an artifact-specific relationship
+  system.
 - Use a linked `note` when nuance should be preserved without pretending it is the
   whole structured model.
 
@@ -637,9 +642,12 @@ Use this quick split before the conversation gets too detailed.
 - Every normal entity section below inherits that batch-route default unless its own
   route note says otherwise. Do not invent one-off entity endpoints for ordinary
   stored records.
-- `wiki_page` and `calendar_connection` are specialized CRUD areas. Use the wiki
-  page routes and calendar connection setup or sync routes instead of pretending they
-  are simple batch records.
+- `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD areas. Use
+  the wiki page routes, calendar connection setup or sync routes, and artifact routes
+  instead of pretending they are simple batch records. Batch CRUD may search, update,
+  delete, and restore artifact metadata, but file upload, scan, enrichment, trust,
+  versions, audit, and generic entity-link replacement stay on the Artifact Store
+  route family.
 - `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
@@ -675,8 +683,8 @@ user-facing API explanation.
    create/update/delete/restore/search routes. Search or read first for update,
    delete, restore, link, duplicate-disambiguation, or review work.
 4. For specialized CRUD or action workflows, use the named tool or documented route
-   for wiki pages, calendar connections, task runs, work adjustments, questionnaire
-   runs, preference judgments/signals, and self-observation notes.
+   for wiki pages, calendar connections, artifacts, task runs, work adjustments,
+   questionnaire runs, preference judgments/signals, and self-observation notes.
 5. For Movement, Life Force, and Workbench, verify the `routeKey`, method, path, and
    every placeholder in `methodRoutes`; fill `pathParams` by placeholder name before
    the call. Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,
@@ -733,6 +741,11 @@ still knowing the exact write/read family before it acts.
 - `calendar_connection`: specialized CRUD. Use provider discovery, connection CRUD,
   selected-calendar rediscovery, sync, and delete routes rather than batch entity
   tools.
+- `artifact`: specialized CRUD. Use `/api/v1/artifacts` for trusted file upload,
+  metadata reads and updates, static rescan, optional LLM metadata enrichment,
+  trust-state decisions, version and audit reads, and replacement of general
+  `entity_links`. Do not download, open, execute, preview, or transform file bytes as
+  an agent; download is a human-operator-only action.
 - `operator_overview`: read-model-only operator surface. Use
   `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
   the current Forge picture, attention cues, or broad status before choosing a
@@ -1533,6 +1546,62 @@ Ready to save when:
 Preferred opening question:
 
 - "What do you want this wiki page to help you remember or reuse later?"
+
+## Artifact
+
+Aim: store a trusted file so a human can find it, understand what it is, trace where
+it came from, and download it later without letting agents run or inspect the file
+bytes.
+
+Arc:
+
+1. Ask what the file should help the human retrieve, prove, review, or preserve later.
+2. Ask for the human-readable title, short description, provenance, and source path
+   only when the user has not already supplied them.
+3. Ask which Forge record the artifact should be linked to only when that link will
+   improve retrieval or context. Use Forge's general entity-to-entity link model.
+4. Ask whether optional LLM enrichment should fill missing description/provenance
+   fields and produce a danger summary when an LLM connection exists.
+5. Keep trust explicit: only a trusted human/operator or trusted agent may add file
+   bytes, and the agent must not download, open, execute, preview, or transform the
+   stored file.
+6. After upload, summarize the stored artifact metadata, scan result, danger score,
+   and linked Forge records in product language.
+
+Helpful follow-up lanes:
+
+- what the file should help someone retrieve, prove, review, or preserve
+- missing title, short description, provenance, source path, or owner
+- whether the artifact belongs with a project, task, wiki page, note, Psyche record,
+  or other Forge entity through a general `entity_links` relationship
+- whether to request LLM metadata enrichment when descriptions are missing
+- whether the static scan or danger score requires quarantine, rejection, or a human
+  trust decision
+
+Routing rule:
+
+- `artifact` is a specialized CRUD surface. Use the Artifact Store route family for
+  trusted file upload, metadata reads and updates, static scan, LLM enrichment,
+  trust-state changes, versions, audit reads, and replacement of general
+  `entity_links`.
+- Do not create or use artifact-specific links. Artifact relationships are normal
+  Forge entity-to-entity links with `sourceEntityType`, `sourceEntityId`,
+  `targetEntityType`, `targetEntityId`, optional `relationship`, and optional
+  `anchorKey`.
+- Agents may list and update artifact metadata when authorized, but they must not
+  download, open, execute, preview, transform, or autonomously process stored file
+  bytes.
+
+Ready to save when:
+
+- the file is present and the actor is trusted to upload it
+- title or filename, provenance or source path, and basic purpose are clear enough
+- the desired generic Forge entity links are known or intentionally absent
+- the user has chosen whether missing metadata should be filled by LLM enrichment
+
+Preferred opening question:
+
+- "What should this file help you find, prove, review, or preserve later?"
 
 ## Insight
 

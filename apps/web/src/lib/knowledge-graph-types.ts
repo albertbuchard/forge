@@ -18,6 +18,7 @@ export type KnowledgeGraphEntityKind =
   | "calendar_event"
   | "work_block"
   | "timebox"
+  | "artifact"
   | "value"
   | "pattern"
   | "behavior"
@@ -46,6 +47,7 @@ export type KnowledgeGraphRelationKind =
   | "strategy_step"
   | "strategy_link"
   | "habit_link"
+  | "entity_link"
   | "note_link"
   | "wiki_parent"
   | "wiki_link"
@@ -272,6 +274,11 @@ export const KNOWLEDGE_GRAPH_HIERARCHY_LANES = [
     kinds: ["calendar_event", "work_block", "timebox"]
   },
   {
+    id: "artifacts",
+    label: "Artifacts",
+    kinds: ["artifact"]
+  },
+  {
     id: "values",
     label: "Values",
     kinds: ["value"]
@@ -337,6 +344,7 @@ export const KNOWLEDGE_GRAPH_RELATION_LABELS: Record<
   strategy_step: "Strategy step",
   strategy_link: "Strategy context",
   habit_link: "Habit link",
+  entity_link: "Entity link",
   note_link: "Note link",
   wiki_parent: "Wiki parent",
   wiki_link: "Wiki link",
@@ -406,6 +414,7 @@ export const KNOWLEDGE_GRAPH_RELATION_FAMILY_MAP: Record<
   strategy_step: "structural",
   strategy_link: "contextual",
   habit_link: "contextual",
+  entity_link: "contextual",
   note_link: "contextual",
   wiki_parent: "structural",
   wiki_link: "contextual",
@@ -507,6 +516,8 @@ export function getKnowledgeGraphEntityHref(
     case "work_block_template":
     case "task_timebox":
       return `/calendar`;
+    case "artifact":
+      return `/artifacts/${encodeURIComponent(entityId)}`;
     case "event_type":
     case "emotion_definition":
       return "/psyche/reports";

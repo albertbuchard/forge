@@ -177,6 +177,7 @@ export const activityEntityTypeSchema = z.enum([
   "work_block",
   "work_block_template",
   "task_timebox",
+  "artifact",
   "sleep_session",
   "workout_session"
 ]);
@@ -368,6 +369,7 @@ export const crudEntityTypeSchema = z.enum([
   "calendar_event",
   "work_block_template",
   "task_timebox",
+  "artifact",
   "psyche_value",
   "behavior_pattern",
   "behavior",

@@ -60,6 +60,7 @@ const ACTIVITY_ENTITY_LABELS: Record<ActivityEntityType, string> = {
   work_block: "Work block",
   work_block_template: "Work block template",
   task_timebox: "Task timebox",
+  artifact: "Artifact",
   preference_catalog: "Preference catalog",
   preference_catalog_item: "Preference concept",
   preference_context: "Preference context",

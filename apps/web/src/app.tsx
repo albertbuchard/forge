@@ -7,6 +7,7 @@ import {
 } from "@/lib/diagnostics";
 import {
   ActivityPage,
+  ArtifactsPage,
   CalendarPage,
   CompanionSyncLabPage,
   GoalDetailPage,
@@ -275,6 +276,24 @@ export function App() {
               "Knowledge Graph",
               "One connected map of Forge entities and explicit relationships.",
               <KnowledgeGraphPage />
+            )}
+          />
+          <Route
+            path="artifacts"
+            element={surface(
+              "artifacts-index",
+              "Artifacts",
+              "Trusted file artifact store, safety scans, metadata, and links.",
+              <ArtifactsPage />
+            )}
+          />
+          <Route
+            path="artifacts/:artifactId"
+            element={surface(
+              "artifacts-index",
+              "Artifacts",
+              "Trusted file artifact store, safety scans, metadata, and links.",
+              <ArtifactsPage />
             )}
           />
           <Route

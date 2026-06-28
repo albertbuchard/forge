@@ -44,6 +44,8 @@ The current progression direction is Forge Gamification: one canonical source-co
 
 Psyche flashcards are first-class Psyche records stored through shared batch CRUD. They hold one main therapeutic message plus retrieval cues such as tags, trigger sentence, trigger situation, optional compact title, and links to values, behaviors, patterns, beliefs, modes, or trigger reports. The web app should render them as polished flexible cards with selectable colors, typography, layout, visual tone, and optional images. OpenClaw, Hermes, Codex, and Claude Code skills should search flashcards when the user reports an urge or trigger, show the card message first, and then wrap it with brief psychotherapy-informed support.
 
+The Artifact Store is a first-class specialized CRUD surface for trusted files. It stores spreadsheets, documents, presentations, PDFs, plain text, structured text, and images as content-addressed blobs with metadata rows, versions, static safety scans, danger scores, provenance, and audit events. Artifacts are linkable Forge entities, but their relationships must use the reusable `entity_links` model rather than an artifact-specific link table or schema. Agents may list, upload with trusted scoped authority, update metadata, replace generic entity links, rescan, request LLM metadata enrichment, and read versions or audit events. Agents must not download, open, execute, preview, or transform artifact bytes; downloads are a human web/API action only.
+
 ## Core Requirements
 
 ### 1. Project Management Hierarchy
@@ -236,6 +238,46 @@ Public docs, GitHub Pages docs, README, and agent-facing docs must all explain:
 - owner + assignee model
 - git refs + completion reports
 - direct-to-`main` workflow
+
+### 10A. Artifact Store Contract
+
+The Artifact Store is a local-first file evidence surface, not an execution sandbox. It must preserve user data without deleting, rewriting, or running file contents autonomously.
+
+Artifact records must include precise durable metadata:
+
+- `id`
+- title
+- short description
+- long description
+- original file name
+- detected extension
+- declared and detected MIME type
+- content SHA-256
+- byte size
+- content-addressed storage key
+- storage path
+- source kind and source label
+- uploader or acting actor provenance
+- artifact state
+- download policy
+- danger score and danger level
+- scan results
+- enrichment results
+- user metadata
+- generic entity links
+- created and updated timestamps
+
+The supported create path is `POST /api/v1/artifacts`, which accepts trusted file bytes as base64 and immediately writes metadata, a content-addressed blob, a version row, static scan results, and an audit event. `GET /api/v1/artifacts` and `GET /api/v1/artifacts/:id` return metadata only. `PATCH /api/v1/artifacts/:id` changes metadata only. `POST /api/v1/artifacts/:id/links` replaces relationships through `entity_links` with the artifact as the source entity. `POST /api/v1/artifacts/:id/scan` reruns static scanning. `POST /api/v1/artifacts/:id/enrich` uses a configured LLM to fill missing title, descriptions, source/provenance notes, metadata, and risk explanation from safe metadata and scanner samples when requested. `POST /api/v1/artifacts/:id/trust` records explicit trusted state changes. `GET /api/v1/artifacts/:id/versions` and `GET /api/v1/artifacts/:id/audit` expose history. `GET /api/v1/artifacts/:id/download` is available only to an authenticated human operator session.
+
+The static scanner must be deterministic and conservative. It should block disallowed extensions, flag size and MIME mismatches, inspect Office zip structure for macros, encryption, embedded objects, external relationships, hidden sheets, links, and formulas, inspect PDFs for JavaScript/actions/embedded files, inspect CSV/TSV formula-like cells, and validate structured text where possible. Optional LLM enrichment can add descriptions and risk explanation, but it must never lower the deterministic danger score.
+
+Agent-facing surfaces must expose the same contract:
+
+- OpenAPI documents every artifact route and the `EntityLink` / `EntityLinkInput` schemas.
+- OpenClaw, Hermes, Codex, and Claude Code use a dedicated artifact route tool for artifact operations.
+- Batch CRUD may search, update, soft-delete, restore, and hard-delete artifact metadata only; it must not create file artifacts or expose bytes.
+- Agent tools must not expose the download route.
+- Wiki and other entity surfaces may embed or reference artifacts through normal Forge links to `/artifacts/:id` and through general entity links, not through a separate artifact-link model.
 
 ### 11. Health Workout Adapter Contract
 

@@ -47,6 +47,7 @@ Forge keeps that hierarchy connected to:
 
 - task runs, completion summaries, and linked git refs
 - notes, wiki pages, search, backlinks, and ingest
+- trusted file artifacts with precise metadata, provenance, static scans, danger scores, versions, audit history, human-only downloads, and general entity links
 - preferences, judgments, signals, and context-specific profiles
 - Psyche values, beliefs, behavior patterns, modes, flashcards, and trigger reports
 - calendar events, work blocks, and task timeboxes
@@ -116,6 +117,7 @@ checks.
 - [Calendar provider setup](./reference/calendar-provider-setup.md): Google Calendar and OAuth configuration.
 - [Multi-user and strategies](./reference/multi-user-and-strategies.md): shared runtime, identity, and strategy model notes.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.
+- [Artifact Store](./reference/artifact-store.md): trusted file storage, metadata, safety scans, generic entity links, and human-only downloads.
 - [Public repo workflow](./reference/public-repo-workflow.md): public repository and publication workflow.
 - [Repository structure](./reference/repository-structure.md): top-level tree, package boundaries, release-sensitive paths, and generated-output rules.
 

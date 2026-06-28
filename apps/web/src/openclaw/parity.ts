@@ -20,6 +20,7 @@ export type ForgeSupportedPluginApiRoute = {
     | "movement"
     | "life_force"
     | "workbench"
+    | "artifact"
     | "preferences"
     | "questionnaires";
 };
@@ -170,6 +171,16 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
       purpose: "workbench"
     },
+    { method: "GET", path: "/api/v1/artifacts", purpose: "artifact" },
+    { method: "POST", path: "/api/v1/artifacts", purpose: "artifact" },
+    { method: "GET", path: "/api/v1/artifacts/:id", purpose: "artifact" },
+    { method: "PATCH", path: "/api/v1/artifacts/:id", purpose: "artifact" },
+    { method: "POST", path: "/api/v1/artifacts/:id/scan", purpose: "artifact" },
+    { method: "POST", path: "/api/v1/artifacts/:id/enrich", purpose: "artifact" },
+    { method: "POST", path: "/api/v1/artifacts/:id/links", purpose: "artifact" },
+    { method: "POST", path: "/api/v1/artifacts/:id/trust", purpose: "artifact" },
+    { method: "GET", path: "/api/v1/artifacts/:id/versions", purpose: "artifact" },
+    { method: "GET", path: "/api/v1/artifacts/:id/audit", purpose: "artifact" },
     { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
     {
       method: "GET",

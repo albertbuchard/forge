@@ -59,6 +59,17 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain(
       "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
     );
+    expect(report.mirrored).toContain("GET /api/v1/artifacts");
+    expect(report.mirrored).toContain("POST /api/v1/artifacts");
+    expect(report.mirrored).toContain("GET /api/v1/artifacts/:id");
+    expect(report.mirrored).toContain("PATCH /api/v1/artifacts/:id");
+    expect(report.mirrored).toContain("POST /api/v1/artifacts/:id/scan");
+    expect(report.mirrored).toContain("POST /api/v1/artifacts/:id/enrich");
+    expect(report.mirrored).toContain("POST /api/v1/artifacts/:id/links");
+    expect(report.mirrored).toContain("POST /api/v1/artifacts/:id/trust");
+    expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/versions");
+    expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/audit");
+    expect(report.mirrored).not.toContain("GET /api/v1/artifacts/:id/download");
     expect(report.mirrored).toContain("GET /api/v1/calendar/overview");
     expect(report.mirrored).toContain(
       "GET /api/v1/calendar/macos-local/discovery"
@@ -125,6 +136,12 @@ describe("forge plugin route parity", () => {
     expect(supported.has("GET /api/v1/workbench/flows/:id/runs")).toBe(true);
     expect(supported.has("GET /api/v1/workbench/flows/by-slug/:slug")).toBe(
       true
+    );
+    expect(supported.has("GET /api/v1/artifacts")).toBe(true);
+    expect(supported.has("POST /api/v1/artifacts")).toBe(true);
+    expect(supported.has("POST /api/v1/artifacts/:id/links")).toBe(true);
+    expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
     );
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
     expect(supported.has("GET /api/v1/calendar/macos-local/discovery")).toBe(
@@ -210,6 +227,27 @@ describe("forge plugin route parity", () => {
         `${route} should stay mirrored`
       ).toBe(true);
     }
+
+    for (const route of [
+      "GET /api/v1/artifacts",
+      "POST /api/v1/artifacts",
+      "GET /api/v1/artifacts/:id",
+      "PATCH /api/v1/artifacts/:id",
+      "POST /api/v1/artifacts/:id/scan",
+      "POST /api/v1/artifacts/:id/enrich",
+      "POST /api/v1/artifacts/:id/links",
+      "POST /api/v1/artifacts/:id/trust",
+      "GET /api/v1/artifacts/:id/versions",
+      "GET /api/v1/artifacts/:id/audit"
+    ]) {
+      expect(
+        supported.has(route as ApiRouteKey),
+        `${route} should stay mirrored`
+      ).toBe(true);
+    }
+    expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
+    );
   });
 
   it("labels specialized domain route families with their own route purposes", () => {
@@ -236,6 +274,11 @@ describe("forge plugin route parity", () => {
     expect(
       purposeByRoute.get("GET /api/v1/workbench/flows/:id/nodes/:nodeId/output")
     ).toBe("workbench");
+    expect(purposeByRoute.get("GET /api/v1/artifacts")).toBe("artifact");
+    expect(purposeByRoute.get("POST /api/v1/artifacts/:id/links")).toBe(
+      "artifact"
+    );
+    expect(purposeByRoute.get("GET /api/v1/artifacts/:id/download")).toBeUndefined();
   });
 
   it("mirrors exactly the curated upstream routes", () => {

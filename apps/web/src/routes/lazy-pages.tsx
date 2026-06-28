@@ -5,6 +5,11 @@ export const ActivityPage = lazy(() =>
     default: module.ActivityPage
   }))
 );
+export const ArtifactsPage = lazy(() =>
+  import("@/pages/artifacts-page").then((module) => ({
+    default: module.ArtifactsPage
+  }))
+);
 export const CalendarPage = lazy(() =>
   import("@/pages/calendar-page").then((module) => ({
     default: module.CalendarPage

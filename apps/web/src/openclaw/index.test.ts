@@ -383,6 +383,7 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/movement",
       "/forge/v1/life-force",
       "/forge/v1/workbench",
+      "/forge/v1/artifacts",
       "/forge/v1/calendar",
       "/forge/v1/preferences/workspace",
       "/forge/v1/psyche/self-observation/calendar",
@@ -414,6 +415,7 @@ describe("forge openclaw plugin", () => {
     expect(toolNames).toEqual([
       "forge_adjust_work_minutes",
       "forge_apply_doctor_fix",
+      "forge_call_artifact_route",
       "forge_call_life_force_route",
       "forge_call_movement_route",
       "forge_call_workbench_route",

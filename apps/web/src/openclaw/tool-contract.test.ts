@@ -42,7 +42,7 @@ afterEach(() => {
   }
 });
 
-async function loadOnboardingSpecializedSurfaces() {
+async function loadOnboardingRouteContracts() {
   const dataRoot = mkdtempSync(path.join(os.tmpdir(), "forge-tool-contract-"));
   tempRoots.push(dataRoot);
   const app = await buildServer({ dataRoot, taskRunWatchdog: false });
@@ -58,10 +58,30 @@ async function loadOnboardingSpecializedSurfaces() {
     string,
     { routeKeys: string[]; methodRoutes: Record<string, string> }
   >;
+  const specializedCrudEntities = response.json().onboarding.entityRouteModel
+    .specializedCrudEntities as Record<
+    string,
+    {
+      routeKeys?: string[];
+      methodRoutes?: Record<string, string | { method: string; path: string }>;
+    }
+  >;
+  const artifactMethodRoutes = Object.fromEntries(
+    Object.entries(specializedCrudEntities.artifact?.methodRoutes ?? {}).map(
+      ([routeKey, route]) => [
+        routeKey,
+        typeof route === "string" ? route : `${route.method} ${route.path}`
+      ]
+    )
+  );
   return {
     movement: surfaces.movement,
     lifeForce: surfaces.lifeForce,
-    workbench: surfaces.workbench
+    workbench: surfaces.workbench,
+    artifact: {
+      routeKeys: specializedCrudEntities.artifact?.routeKeys ?? [],
+      methodRoutes: artifactMethodRoutes
+    }
   };
 }
 
@@ -214,7 +234,8 @@ describe("openclaw tool contracts", () => {
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
-    const onboardingSurfaces = await loadOnboardingSpecializedSurfaces();
+    const artifact = requireTool(tools, "forge_call_artifact_route");
+    const onboardingSurfaces = await loadOnboardingRouteContracts();
     const movementRouteKeys = readTypeBoxUnionValues(
       movement.parameters ?? {},
       "routeKey"
@@ -227,6 +248,10 @@ describe("openclaw tool contracts", () => {
       workbench.parameters ?? {},
       "routeKey"
     );
+    const artifactRouteKeys = readTypeBoxUnionValues(
+      artifact.parameters ?? {},
+      "routeKey"
+    );
 
     expect(movementRouteKeys).toEqual(
       [...onboardingSurfaces.movement.routeKeys].sort()
@@ -236,6 +261,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(workbenchRouteKeys).toEqual(
       [...onboardingSurfaces.workbench.routeKeys].sort()
+    );
+    expect(artifactRouteKeys).toEqual(
+      [...onboardingSurfaces.artifact.routeKeys].sort()
     );
     expect(
       readRouteGuideFromDescription(
@@ -252,6 +280,11 @@ describe("openclaw tool contracts", () => {
         readPropertyDescription(workbench.parameters ?? {}, "routeKey")
       )
     ).toEqual(onboardingSurfaces.workbench.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(artifact.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.artifact.methodRoutes);
 
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
@@ -308,14 +341,31 @@ describe("openclaw tool contracts", () => {
         "latestNodeOutput"
       ])
     );
+    expect(artifactRouteKeys).toEqual([
+      "audit",
+      "createWithBytes",
+      "enrichWithLlm",
+      "list",
+      "readMetadata",
+      "replaceGenericLinks",
+      "rescan",
+      "trustState",
+      "updateMetadata",
+      "versions"
+    ]);
+    expect(artifactRouteKeys).not.toContain("humanDownloadOnly");
 
-    for (const tool of [movement, lifeForce, workbench]) {
+    for (const tool of [movement, lifeForce, workbench, artifact]) {
       expect(tool.parameters?.required).toEqual(["routeKey"]);
       expect(tool.description ?? "").toMatch(/dedicated/i);
+    }
+    for (const tool of [movement, lifeForce, workbench]) {
       expect(tool.description ?? "").toMatch(
         /Do not use.*batch CRUD|normal stored entities.*batch CRUD/i
       );
     }
+    expect(artifact.description ?? "").toMatch(/Do not expose download/i);
+    expect(artifact.description ?? "").toMatch(/generic entity-link/i);
 
     expect(readPropertyDescription(movement.parameters ?? {}, "routeKey")).toMatch(
       /day: GET \/api\/v1\/movement\/day[\s\S]*userBoxCreate: POST \/api\/v1\/movement\/user-boxes[\s\S]*tripPointDelete: DELETE \/api\/v1\/movement\/trips\/:id\/points\/:pointId/
@@ -326,8 +376,14 @@ describe("openclaw tool contracts", () => {
     expect(readPropertyDescription(workbench.parameters ?? {}, "routeKey")).toMatch(
       /listFlows: GET \/api\/v1\/workbench\/flows[\s\S]*runFlow: POST \/api\/v1\/workbench\/flows\/:id\/run[\s\S]*latestNodeOutput: GET \/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output/
     );
+    expect(readPropertyDescription(artifact.parameters ?? {}, "routeKey")).toMatch(
+      /list: GET \/api\/v1\/artifacts[\s\S]*createWithBytes: POST \/api\/v1\/artifacts[\s\S]*replaceGenericLinks: POST \/api\/v1\/artifacts\/:id\/links[\s\S]*audit: GET \/api\/v1\/artifacts\/:id\/audit/
+    );
+    expect(readPropertyDescription(artifact.parameters ?? {}, "routeKey")).not.toMatch(
+      /download/i
+    );
 
-    for (const tool of [movement, lifeForce, workbench]) {
+    for (const tool of [movement, lifeForce, workbench, artifact]) {
       expect(readPropertyDescription(tool.parameters ?? {}, "routeKey")).toMatch(
         /fill pathParams with that exact placeholder name[\s\S]*do not put raw paths or ids into routeKey/i
       );
@@ -338,7 +394,7 @@ describe("openclaw tool contracts", () => {
   });
 
   it("keeps Hermes specialized route specs aligned with live onboarding", async () => {
-    const onboardingSurfaces = await loadOnboardingSpecializedSurfaces();
+    const onboardingSurfaces = await loadOnboardingRouteContracts();
 
     expect(readHermesRouteSpecs("MOVEMENT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.movement.methodRoutes
@@ -348,6 +404,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(readHermesRouteSpecs("WORKBENCH_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.workbench.methodRoutes
+    );
+    expect(readHermesRouteSpecs("ARTIFACT_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.artifact.methodRoutes
     );
   });
 });

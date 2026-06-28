@@ -72,7 +72,7 @@ const toolGroups = [
   {
     id: "specialized",
     title: "Specialized Domain Surfaces",
-    match: (tool: string) => /movement|life_force|workbench/.test(tool)
+    match: (tool: string) => /movement|life_force|workbench|artifact/.test(tool)
   }
 ];
 

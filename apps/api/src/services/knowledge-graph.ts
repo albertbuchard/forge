@@ -36,6 +36,7 @@ import {
   selectKnowledgeGraphVisibleNodeIds
 } from "@/lib/knowledge-graph.js";
 import { getEntityVisual } from "@/lib/entity-visuals.js";
+import { listArtifacts } from "./artifacts.js";
 import {
   KNOWLEDGE_GRAPH_RELATION_FAMILY_MAP,
   KNOWLEDGE_GRAPH_RELATION_LABELS,
@@ -91,6 +92,7 @@ const BASE_NODE_SIZE: Record<KnowledgeGraphEntityKind, number> = {
   calendar_event: 34,
   work_block: 32,
   timebox: 33,
+  artifact: 36,
   value: 38,
   pattern: 38,
   behavior: 38,
@@ -336,6 +338,15 @@ export function buildKnowledgeGraph(
   const calendarEvents = listCalendarEvents({ ...GRAPH_RANGE, userIds });
   const workBlocks = listWorkBlockTemplates({ userIds });
   const timeboxes = listTaskTimeboxes({ ...GRAPH_RANGE, userIds });
+  const artifacts = listArtifacts().filter((artifact) => {
+    if (selectedUserIds.size === 0) {
+      return true;
+    }
+    return Boolean(
+      (artifact.uploadedByUserId && selectedUserIds.has(artifact.uploadedByUserId)) ||
+        (artifact.actingForUserId && selectedUserIds.has(artifact.actingForUserId))
+    );
+  });
   const eventTypes = filterOwnedEntities("event_type", listEventTypes(), userIds);
   const emotions = filterOwnedEntities(
     "emotion_definition",
@@ -957,6 +968,49 @@ export function buildKnowledgeGraph(
         relationKind: "timebox_project",
         label: "Timeboxes project",
         strength: 0.78,
+        directional: true,
+        structural: false
+      });
+    }
+  }
+
+  for (const artifact of artifacts) {
+    nodes.set(
+      buildKnowledgeGraphNodeId("artifact", artifact.id),
+      makeNode({
+        entityType: "artifact",
+        entityId: artifact.id,
+        entityKind: "artifact",
+        title: artifact.title,
+        subtitle: `${artifact.detectedExtension.toUpperCase()} · ${artifact.dangerLevel}`,
+        description: artifact.shortDescription || artifact.description,
+        searchText: JSON.stringify({
+          title: artifact.title,
+          shortDescription: artifact.shortDescription,
+          description: artifact.description,
+          originalFileName: artifact.originalFileName,
+          sourceLabel: artifact.sourceLabel,
+          metadata: artifact.metadata
+        }),
+        previewStats: [
+          { label: "Format", value: artifact.formatFamily },
+          { label: "Danger", value: `${artifact.dangerScore}/100` },
+          { label: "Links", value: artifact.links.length }
+        ],
+        href: getKnowledgeGraphEntityHref("artifact", artifact.id),
+        updatedAt: artifact.updatedAt
+      })
+    );
+    for (const link of artifact.links) {
+      addEdge(edges, {
+        source: buildKnowledgeGraphNodeId("artifact", artifact.id),
+        target: buildKnowledgeGraphNodeId(
+          link.targetEntityType as KnowledgeGraphEntityType,
+          link.targetEntityId
+        ),
+        relationKind: "entity_link",
+        label: link.relationship || "Entity link",
+        strength: 0.7,
         directional: true,
         structural: false
       });

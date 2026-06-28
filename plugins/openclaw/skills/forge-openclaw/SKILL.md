@@ -1,6 +1,6 @@
 ---
 name: forge-openclaw-plugin
-description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
+description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
@@ -59,7 +59,7 @@ PM surface rule:
   human/bot ownership filters.
 - Guided modal flows handle create, edit, move, link, and closeout actions.
 
-Forge has four major stored-entity surfaces, read-model surfaces, and three specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, the read-only training-load surface for cardiovascular load and HR zone review, the weight-loss and nutrition workflow, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion definitions, questionnaire instruments, questionnaire runs, and the note-backed self-observation calendar. Read-model surfaces include `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`, `training_load`, `weight_loss`, and the self-observation calendar; ask what practical decision the read should support before adding write-shaped questions. The specialized domain surfaces are Movement, Life Force, and Workbench; agents must use their dedicated route families instead of forcing them through batch CRUD. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Forge has four major stored-entity surfaces, read-model surfaces, specialized CRUD surfaces, and three specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, the read-only training-load surface for cardiovascular load and HR zone review, the weight-loss and nutrition workflow, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion definitions, questionnaire instruments, questionnaire runs, and the note-backed self-observation calendar. Read-model surfaces include `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`, `training_load`, `weight_loss`, and the self-observation calendar; ask what practical decision the read should support before adding write-shaped questions. The specialized domain surfaces are Movement, Life Force, and Workbench; agents must use their dedicated route families instead of forcing them through batch CRUD. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. The Artifact Store is a specialized CRUD surface for trusted stored files such as spreadsheets, documents, PDFs, text, structured text, and images; artifact relationships use the general `entity_links` model, and agents must not download, open, execute, preview, or transform stored file bytes. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -98,7 +98,7 @@ For logistical records, keep the reflection short and ask for the operational de
 Use the route execution handoff before any read, write, run, repair, or publish call:
 freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only
 for catalog entities, use named tools or documented routes for specialized CRUD and
-action workflows, and for Movement, Life Force, or Workbench verify `routeKey`,
+action workflows, and for Movement, Life Force, Workbench, or Artifact Store verify `routeKey`,
 method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
@@ -106,8 +106,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
-- `wiki_page` and `calendar_connection` are specialized CRUD surfaces. Use the wiki
-  tools for wiki pages and the calendar connection tools for provider setup and sync.
+- `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
+  Use the wiki tools for wiki pages, the calendar connection tools for provider setup
+  and sync, and the Artifact Store route family for trusted file upload, metadata,
+  static scan, LLM metadata enrichment, generic entity links, trust state, versions,
+  and audit. Batch CRUD may search, update, delete, and restore artifact metadata, but
+  it must not create file artifacts or access file bytes.
 - `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
   `preference_signal`, and `self_observation` are action workflows. Use their
   dedicated tools or note-backed write model instead of generic entity create/update
@@ -121,6 +125,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   exact `/api/v1/*` route or OpenClaw `/forge/v1/*` mirror published in onboarding.
   Life Force may be keyed as `lifeForce` and as the entity-style alias `life_force`;
   both point to the same `/api/v1/life-force/*` route family.
+- Artifact Store route keys live under
+  `forge_get_agent_onboarding.entityRouteModel.specializedCrudEntities.artifact`.
+  When the adapter exposes `forge_call_artifact_route`, use it for artifact list,
+  trusted upload, metadata update, static rescan, LLM enrichment, generic entity-link
+  replacement, trust state, versions, or audit. Do not expose or call the download
+  route from agent tools; downloads are human-operator-only.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
@@ -210,6 +220,16 @@ Concrete route-key examples for internal use:
   `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
   `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
+- Artifact metadata list:
+  `{"routeKey":"list","query":{"query":"thesis budget","formatFamily":"spreadsheet","limit":20}}`
+- Artifact trusted upload:
+  `{"routeKey":"createWithBytes","body":{"originalFileName":"budget.xlsx","contentBase64":"<base64>","title":"Thesis budget workbook","sourceLabel":"Uploaded by the operator from local files","useLlmEnrichment":true,"links":[{"entityType":"project","entityId":"project_thesis","relationship":"evidence"}]}}`
+- Artifact generic entity-link replacement:
+  `{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_thesis_budget","relationship":"embedded_reference"}]}}`
+- Artifact audit read:
+  `{"routeKey":"audit","pathParams":{"id":"artifact_123"}}`
+- Artifact forbidden agent action:
+  do not call `/api/v1/artifacts/:id/download`; hand the human to the Forge web app for download.
 
 Preferences rule:
 
@@ -947,6 +967,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_call_movement_route`
 `forge_call_life_force_route`
 `forge_call_workbench_route`
+`forge_call_artifact_route`
 `forge_get_user_directory`
 `forge_get_ui_entrypoint`
 `forge_get_psyche_overview`

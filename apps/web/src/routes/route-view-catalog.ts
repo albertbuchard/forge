@@ -118,6 +118,13 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "knowledge",
     skeleton: { blocks: 4, columns: 2, sideRail: true }
   },
+  "artifacts-index": {
+    surfaceId: "artifacts-index",
+    title: "Artifacts",
+    description: "Store trusted files with precise metadata, safety scans, provenance, links, and human downloads.",
+    tone: "knowledge",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
   "movement-index": {
     surfaceId: "movement-index",
     title: "Movement",
@@ -548,6 +555,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "preferences-index", match: startsWithSegment("/preferences") },
   { viewId: "calendar-index", match: exactly("/calendar") },
   { viewId: "knowledge-graph-index", match: exactly("/knowledge-graph") },
+  { viewId: "artifacts-index", match: startsWithSegment("/artifacts") },
   { viewId: "movement-index", match: exactly("/movement") },
   { viewId: "sleep-index", match: exactly("/sleep") },
   {

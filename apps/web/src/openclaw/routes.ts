@@ -686,6 +686,94 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     ]
   },
   {
+    path: "/forge/v1/artifacts",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/artifacts$/,
+        upstreamPath: "/api/v1/artifacts",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/artifacts", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/artifacts$/,
+        upstreamPath: "/api/v1/artifacts",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/artifacts", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)$/,
+        upstreamPath: "/api/v1/artifacts/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}`, url)
+      },
+      {
+        method: "PATCH",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)$/,
+        upstreamPath: "/api/v1/artifacts/:id",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/scan$/,
+        upstreamPath: "/api/v1/artifacts/:id/scan",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/scan`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/enrich$/,
+        upstreamPath: "/api/v1/artifacts/:id/enrich",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/enrich`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/links$/,
+        upstreamPath: "/api/v1/artifacts/:id/links",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/links`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/trust$/,
+        upstreamPath: "/api/v1/artifacts/:id/trust",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/trust`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/versions$/,
+        upstreamPath: "/api/v1/artifacts/:id/versions",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/versions`, url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/artifacts\/([^/]+)\/audit$/,
+        upstreamPath: "/api/v1/artifacts/:id/audit",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/artifacts/${match[1]}/audit`, url)
+      }
+    ]
+  },
+  {
     path: "/forge/v1/calendar",
     match: "prefix",
     operations: [
