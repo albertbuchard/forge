@@ -267,7 +267,12 @@ npm run dev:plugins/openclaw-runtime</code></pre>
                 </td>
               </tr>
               <tr>
-                <td><code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code></td>
+                <td>
+                  <code
+                    >npm run media:web:docs-fixture --
+                    /tmp/forge-docs-screenshots-demo</code
+                  >
+                </td>
                 <td>
                   Build a disposable fake Forge data root for public docs
                   screenshots. Never point it at a real Forge data root.
@@ -341,8 +346,8 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
               <h3>Where the API contract comes from</h3>
               <p>
                 Forge generates its OpenAPI document in
-                <code>apps/api/src/openapi.ts</code>. The runtime serves that same
-                document at <code>/api/v1/openapi.json</code>.
+                <code>apps/api/src/openapi.ts</code>. The runtime serves that
+                same document at <code>/api/v1/openapi.json</code>.
               </p>
             </article>
             <article class="card">
@@ -357,8 +362,11 @@ curl -I http://127.0.0.1:3027/forge/</code></pre>
           <pre><code>npm run docs:openapi</code></pre>
           <div class="note">
             Web app screenshots are captured from a temporary fake-data root:
-            run <code>npm run media:web:docs-fixture -- /tmp/forge-docs-screenshots-demo</code>,
-            serve Forge with <code>FORGE_DATA_ROOT</code> pointed there, then
+            run
+            <code
+              >npm run media:web:docs-fixture --
+              /tmp/forge-docs-screenshots-demo</code
+            >, serve Forge with <code>FORGE_DATA_ROOT</code> pointed there, then
             run <code>npm run media:web:docs-screenshots</code>. The fixture
             refuses known protected Forge data roots.
           </div>

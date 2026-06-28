@@ -47,13 +47,30 @@ land in terminal logs or chat transcripts. The result is that the user has to re
 why work mattered, what changed, what evidence supported it, and which next action is
 actually safe.
 
+OpenClaw, Codex, Hermes, Claude Code, and other agent harnesses are good at
+open-ended natural-language memory: they can preserve the conversation, the
+reasoning, and the texture of what the user said. But that unstructured memory
+does not by itself keep the work usable. A transcript may show that a belief,
+decision, trigger, task, preference, sleep night, workout, or piece of evidence
+came up, but it does not give that item identity, links, state, or history.
+Forge adds that structured layer where it matters.
+
 Forge exists to keep that chain intact. It is built for people who want a local-first
 operating system where planning, execution, reflection, health context, and agent work
-can point at the same records.
+can point at the same records. This is Forge's central move: it complements the
+unstructured memory of those harnesses with structured memory. Prose can stay in notes
+and wiki pages, while the parts that need review, automation, comparison, or future
+action become records that humans and agents can inspect and update over time.
 
 ## How Forge Solves It
 
-Forge uses one local runtime and one shared entity model.
+Forge uses one local runtime and one shared entity model. That model is the structured
+layer behind the prose: goals, projects, Psyche records, preferences, health context, and
+agent work can refer to each other instead of becoming isolated text fragments.
+
+Psyche is the clearest example. Values, beliefs, modes, behavior patterns, trigger
+reports, and related reflective records stay useful because they are connected records,
+not scattered chat excerpts.
 
 It gives you one place to:
 

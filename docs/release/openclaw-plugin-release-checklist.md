@@ -44,9 +44,12 @@ Use this checklist before publishing `forge-openclaw-plugin`.
    - if npm 2FA is enabled, use `npm publish --access public --otp=<code>`
 9. Re-run a clean install using the published package name and confirm `openclaw forge doctor` and `openclaw forge overview` still succeed.
 10. Submit or update the OpenClaw community plugin listing entry with:
-   - npm package: `forge-openclaw-plugin`
-   - repo: `https://github.com/albertbuchard/forge`
-   - install docs: `plugins/openclaw/README.md`
+
+- npm package: `forge-openclaw-plugin`
+- repo: `https://github.com/albertbuchard/forge`
+- install docs: `plugins/openclaw/README.md`
+
 11. ClawHub follow-up if desired:
-   - publish a companion Forge skill there for discovery
-   - do not treat ClawHub as the primary Forge plugin distribution path unless OpenClaw's plugin docs change
+
+- publish a companion Forge skill there for discovery
+- do not treat ClawHub as the primary Forge plugin distribution path unless OpenClaw's plugin docs change

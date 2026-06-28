@@ -85,7 +85,7 @@ Use the published PyPI package for a normal Hermes install:
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade forge-hermes-plugin
 ```
 
-That does three things:
+That command path:
 
 - installs the plugin into Hermes' own Python environment through `pip`
 - creates `~/.hermes/forge/config.json` automatically on first plugin load if it is missing

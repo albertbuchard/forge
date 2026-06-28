@@ -56,9 +56,9 @@
             </h1>
             <p class="lede">
               Forge is designed so your browser, agent hosts, and companion app
-              all work from the same underlying system. The important idea is
-              continuity: one origin, one data root, one evolving picture of
-              your tasks, notes, health, and movement.
+              all work from the same underlying system. The continuity rule is
+              simple: one origin, one data root, one evolving picture of your
+              tasks, notes, health, and movement.
             </p>
           </div>
           <aside class="hero-card">
@@ -155,14 +155,15 @@ userIds:  explicit on cross-owner reads</code></pre>
         <section class="section" id="agent-identity">
           <div class="section-heading">
             <p class="eyebrow">Agent Identity</p>
-            <h2>Agents, sessions, and users are different things in Forge.</h2>
+            <h2>Agents, sessions, and users have different jobs in Forge.</h2>
           </div>
 
           <div class="card-grid two">
             <article class="card">
               <h3>The short version</h3>
               <p>
-                OpenClaw, Hermes, Codex, and Claude Code each connect as a stable
+                OpenClaw, Hermes, Codex, and Claude Code each connect as a
+                stable
                 <strong>agent identity</strong>. That identity is based on the
                 provider, machine or data root, and persona. It is not based on
                 a cron id, process id, timestamp, WhatsApp thread, or temporary
@@ -239,7 +240,10 @@ userIds:  explicit on cross-owner reads</code></pre>
               <div class="flow-node forge-core">
                 <strong>Forge canonical agent</strong>
                 <span>agent_identities.identity_key</span>
-                <small>one OpenClaw, one Hermes, one Codex, one Claude Code per install</small>
+                <small
+                  >one OpenClaw, one Hermes, one Codex, one Claude Code per
+                  install</small
+                >
               </div>
 
               <div class="flow-branch">
@@ -498,8 +502,8 @@ codex mcp list</code></pre>
             <article class="card">
               <h3>What it is for</h3>
               <p>
-                The Codex adapter lives in <code>plugins/codex/</code> and
-                is built for shared-runtime work against the same local Forge
+                The Codex adapter lives in <code>plugins/codex/</code> and is
+                built for shared-runtime work against the same local Forge
                 system used by the browser, OpenClaw, and Hermes.
               </p>
             </article>

@@ -111,9 +111,16 @@ By default, Forge stores its SQLite data under the active runtime root:
 - if `dataRoot` is set in the OpenClaw plugin config, the database is `<dataRoot>/forge.sqlite`
 - if `FORGE_DATA_ROOT` is set for a launched runtime, the database is `$FORGE_DATA_ROOT/forge.sqlite`
 
-Do not assume the fallback path when answering a storage question. Check the configured `dataRoot` and, when the runtime is live, verify the database file handle before moving, restoring, or merging data.
+Do not assume the fallback path when answering a storage question. Check the
+configured `dataRoot`. When the runtime is live, also verify the database file
+handle before moving, restoring, or merging data.
 
-Users can also manage storage from the Forge web app in `Settings -> Data`. The page shows the live data folder, can move current data or adopt an existing Forge data folder, creates manual backups, enables recurring automatic backups, and lets the user choose how many days of automatic backups Forge should keep. Automatic retention only cleans automatic backups; manual and safety backups are kept.
+Users can also manage storage from the Forge web app in `Settings -> Data`. The
+page shows the live data folder, can move current data or adopt an existing
+Forge data folder, creates manual backups, enables recurring automatic backups,
+and lets the user choose how many days of automatic backups Forge should keep.
+Automatic retention only cleans automatic backups; manual and safety backups
+are kept.
 
 ## Screenshots
 
@@ -213,7 +220,7 @@ The execution rule is:
 
 Forge now assumes that one runtime can serve several humans and bots.
 
-The important model is:
+Ownership model:
 
 - `userId` controls ownership
 - `userId` or repeated `userIds` control read scope
@@ -284,9 +291,18 @@ Forge also now exposes per-user XP summaries through the user directory so
 humans and bot agents can each accumulate their own visible reward trail while
 still collaborating inside one shared runtime.
 
-The plugin no longer mirrors every Forge route. Forge itself still has the full `/api/v1` surface for the web app and internal runtime.
-Instead, the plugin exposes the parts the agent actually needs: overview, current context, Psyche and XP reads, batch entity mutations, signed minute corrections, completion-style retroactive work logging, real task-run control, insight posting, and UI entry.
-When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts the bundled Forge runtime. Default localhost installs prefer `4317`, but if that port is already occupied the plugin now moves to the next free local port and remembers it for future runs unless the user explicitly pinned a different port.
+The plugin no longer mirrors every Forge route. Forge itself still has the full
+`/api/v1` surface for the web app and internal runtime.
+
+Instead, the plugin exposes the parts the agent actually needs: overview,
+current context, Psyche and XP reads, batch entity mutations, signed minute
+corrections, completion-style retroactive work logging, real task-run control,
+insight posting, and UI entry.
+
+When the configured origin is `localhost` or `127.0.0.1`, the plugin auto-starts
+the bundled Forge runtime. Default localhost installs prefer `4317`. If that
+port is already occupied, the plugin moves to the next free local port and
+remembers it for future runs unless the user explicitly pinned a different port.
 
 ## Agent understanding contract
 
@@ -308,7 +324,7 @@ The intended usage is:
 2. use the exact field names from onboarding
 3. do not invent friendlier aliases that the API does not accept
 
-Important examples:
+Field examples:
 
 - `belief_entry` uses `statement` and `beliefType`, not ad-hoc fields like `title` or `belief`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
@@ -342,7 +358,11 @@ openclaw forge health
 openclaw forge ui
 ```
 
-Tested on OpenClaw `2026.6.9`: plain `openclaw plugins install forge-openclaw-plugin` is blocked by the plugin scanner because Forge contains local runtime startup helpers. The documented command uses OpenClaw's explicit approval flag and installs without the old config-edit workaround.
+Tested on OpenClaw `2026.6.9`: plain
+`openclaw plugins install forge-openclaw-plugin` is blocked by the plugin
+scanner because Forge contains local runtime startup helpers. The documented
+command uses OpenClaw's explicit approval flag and installs without the old
+config-edit workaround.
 
 Verify what OpenClaw loaded:
 
@@ -769,6 +789,18 @@ openclaw forge doctor --fix
 openclaw forge route-check
 ```
 
-`openclaw forge doctor` checks connectivity, onboarding, curated route coverage, runtime health, settings, SQLite storage, entity links, hierarchy consistency, rewards, and gamification state. The default output is readable; use `--json` for the full payload and `--fix` to apply Doctor-marked safe fixes.
-`openclaw forge start`, `openclaw forge stop`, `openclaw forge restart`, and `openclaw forge status` manage the local Forge runtime when it is being handled by the OpenClaw plugin. If Forge was started some other way, they report that instead of killing random local processes.
-If the local runtime fails before it becomes healthy, check `~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log` for the captured Forge stdout/stderr from the plugin-managed child process. On clean installs, the plugin also attempts to repair missing bundled runtime dependencies on first local start before it launches Forge.
+`openclaw forge doctor` checks connectivity, onboarding, curated route coverage,
+runtime health, settings, SQLite storage, entity links, hierarchy consistency,
+rewards, and gamification state. The default output is readable. Use `--json`
+for the full payload and `--fix` to apply Doctor-marked safe fixes.
+
+`openclaw forge start`, `openclaw forge stop`, `openclaw forge restart`, and
+`openclaw forge status` manage the local Forge runtime when it is being handled
+by the OpenClaw plugin. If Forge was started some other way, they report that
+instead of killing random local processes.
+
+If the local runtime fails before it becomes healthy, check
+`~/.openclaw/logs/forge-openclaw-plugin/127.0.0.1-4317.log` for the captured
+Forge stdout/stderr from the plugin-managed child process. On clean installs,
+the plugin also attempts to repair missing bundled runtime dependencies on first
+local start before it launches Forge.

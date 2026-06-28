@@ -332,7 +332,7 @@ git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge tag ios-app-store
 git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge push origin ios-app-store-v1.0
 ```
 
-Important iOS rule:
+iOS release rule:
 
 - the marketing version in `apps/ios-companion/release/release.yml` must exactly match the
   version embedded in the iOS release tag
@@ -493,7 +493,7 @@ prompts, these are the practical fallbacks:
 - run `npm login` once on the machine so npm stores credentials in `~/.npmrc`
 - then run the OpenClaw release script without `FORGE_RELEASE_MODE=prepare`
 
-Important:
+npm fallback constraints:
 
 - if npm package settings force interactive 2FA for every publish, local direct publish
   may still prompt

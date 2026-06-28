@@ -24,10 +24,19 @@ Forge exists to keep that chain visible. It gives the user and their agents one
 local-first runtime where the work, the reasons for the work, the context around the work,
 and the record of what changed can point at the same entities.
 
+That is where structured memory matters. Forge complements the unstructured memory of
+agent harnesses such as OpenClaw, Codex, Hermes, and Claude Code instead of replacing it.
+Notes and wiki pages keep the original prose; goals, beliefs, project decisions, trigger
+reports, tasks, preferences, sleep, workouts, movement, and evidence can become records
+with identity, links, state, and history when they need to be reviewed, compared,
+updated, or acted on.
+
 ## How Forge Solves It
 
 Forge uses one shared entity model across the web app, API, OpenClaw, Hermes, Codex,
-Claude Code, and the iPhone companion.
+Claude Code, and the iPhone companion. The model is the structured layer behind the
+prose, so work records, Psyche records, preferences, calendar records, sleep, workouts,
+movement, and evidence can stay linked instead of being trapped inside chat history.
 
 The planning hierarchy is explicit:
 

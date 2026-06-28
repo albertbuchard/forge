@@ -33,8 +33,9 @@ Every Forge user is one of:
 - `human`
 - `bot`
 
-Every important Forge entity can carry a `userId`, including goals, projects,
-tasks, habits, notes, strategies, calendar records, and Psyche records.
+Every Forge entity that needs ownership can carry a `userId`, including goals,
+projects, tasks, habits, notes, strategies, calendar records, and Psyche
+records.
 
 Ownership means "whose record is this".
 Linkage means "what does this record connect to".
@@ -66,7 +67,7 @@ Relevant routes:
 - `GET /api/v1/users/directory`
 - read routes that accept `userId` or repeated `userIds`
 
-The important operating rule is simple:
+Operating rule:
 
 - writes should set `userId` intentionally
 - reads should scope with `userId` or `userIds` when ownership matters
@@ -132,7 +133,7 @@ Recommended OpenClaw config shape:
 }
 ```
 
-Important points:
+OpenClaw config notes:
 
 - `origin` is the protocol + host
 - `port` is stored separately
@@ -161,7 +162,7 @@ Recommended Hermes config at `~/.hermes/forge/config.json`:
 }
 ```
 
-Important points:
+Hermes config notes:
 
 - use the same `origin`, `port`, and `dataRoot` as OpenClaw if they are meant
   to share one Forge runtime

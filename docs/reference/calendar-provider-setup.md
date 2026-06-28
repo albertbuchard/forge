@@ -28,8 +28,8 @@ Forge now has five guided provider paths:
 - `Exchange Online`
 - `Custom CalDAV`
 
-The important change for Apple is that Forge no longer expects raw calendar
-collection URLs up front. It starts from
+For Apple Calendar, Forge no longer expects raw calendar collection URLs up
+front. It starts from
 [https://caldav.icloud.com](https://caldav.icloud.com), authenticates, discovers
 the current user principal and calendar home, then lets you choose which
 calendars to mirror and which calendar Forge should write into.
@@ -42,7 +42,7 @@ What you need:
 - the relevant calendars already configured in Calendar.app
 - Calendar full access granted to Forge on that Mac
 
-Important notes:
+Provider behavior:
 
 - Forge uses Apple's EventKit API against the host calendar store.
 - This path can surface iCloud, Google, Exchange, local, subscribed, and other
@@ -77,7 +77,7 @@ What you need:
 - the public client ID for that app registration
 - optionally a tenant-specific authority if you do not want to use `common`
 
-Important note:
+Microsoft behavior:
 
 - Forge uses Microsoft Graph for Exchange Online / Microsoft 365 calendars.
 - The current Forge implementation is read-only for Microsoft: it mirrors the
@@ -103,7 +103,7 @@ Step by step for a self-hosted local Forge install:
    - `User.Read`
    - `Calendars.Read`
    - `offline_access`
-   [https://learn.microsoft.com/en-us/graph/permissions-reference](https://learn.microsoft.com/en-us/graph/permissions-reference)
+     [https://learn.microsoft.com/en-us/graph/permissions-reference](https://learn.microsoft.com/en-us/graph/permissions-reference)
 7. Grant admin consent if your tenant requires it, or complete the normal
    user-consent path later during sign-in.
 8. Copy the Application (client) ID from the Microsoft app registration.
@@ -126,7 +126,7 @@ Step by step for a self-hosted local Forge install:
 16. Select which calendars Forge should mirror into the Calendar page.
 17. Save the connection and run the first sync.
 
-Important notes:
+Microsoft setup constraints:
 
 - No Microsoft client secret is required for the local self-hosted Forge flow.
 - Complete Microsoft setup from a browser on the same machine that is running
@@ -146,7 +146,7 @@ What you need:
 - the Google Calendar API enabled in that same Google Cloud project
 - the exact Forge redirect URI registered on that OAuth client
 
-Important notes:
+OAuth behavior:
 
 - End users do not create their own Google OAuth app.
 - The local Forge runtime uses one Google OAuth client ID.
@@ -199,7 +199,7 @@ Step by step:
 14. Select which calendars Forge should mirror into the Calendar page.
 15. Select the calendar Forge should write into for work blocks and timeboxes.
 16. If no write calendar named `Forge` exists yet, choose `Create a new Forge
-    calendar`.
+calendar`.
 17. Save the connection and run the first sync.
 
 Developer note for Google Cloud Console:
@@ -218,7 +218,7 @@ What you need:
 - the Apple account email
 - an Apple app-specific password
 
-Important note:
+Apple discovery behavior:
 
 - You do not need to paste raw iCloud calendar collection URLs into Forge.
 - Forge starts from `https://caldav.icloud.com` and performs CalDAV discovery
@@ -252,7 +252,7 @@ What you need:
 - the username or email
 - the password or app password
 
-Important note:
+CalDAV discovery behavior:
 
 - Use the base CalDAV server URL, not a single calendar collection URL.
 - Forge discovers the actual calendars before saving the connection.
