@@ -14,8 +14,14 @@
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="icon" href="./assets/brand-icons/forge-logo-imagegen2-mark-transparent.png" />
-    <link rel="apple-touch-icon" href="./assets/brand-icons/forge-logo-imagegen2-mark-transparent.png" />
+    <link
+      rel="icon"
+      href="./assets/brand-icons/forge-logo-imagegen2-mark-transparent.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="./assets/brand-icons/forge-logo-imagegen2-mark-transparent.png"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -51,45 +57,51 @@
       <main class="page">
         <section class="hero split">
           <div class="hero-card">
-            <p class="eyebrow">What Forge Is</p>
+            <p class="eyebrow">Forge</p>
             <h1>
-              Forge is a local-first operating system for your work and life.
+              A local-first operating system for planning, execution, memory,
+              health context, and agents.
             </h1>
             <p class="lede">
-              Forge is a local-first system for goals, projects, tasks, task
-              runs, notes, wiki pages, calendar planning, preferences, health
-              records, movement history, sleep, and Psyche data. This site
-              explains the product itself: what each area is for, how the pieces
-              fit together, and where to go when you want to plan, act, reflect,
-              or connect Forge to your tools.
-            </p>
-            <p class="lede" style="margin-top: 14px">
-              Forge keeps planning, execution, memory, health, and agent access
-              inside one shared runtime. Start with the single-command install,
-              then use the guide map below to go deeper into features,
-              engineering, integrations, or the API.
+              Forge gives humans and AI agents one shared place to turn goals
+              into projects, issues, tasks, evidence, health signals, and
+              durable memory. It is built for people who need the chain between
+              intention, action, context, and review to stay visible.
             </p>
             <div class="pill-row">
               <span class="pill">React 19 + Vite 6</span>
               <span class="pill secondary">Fastify 5 + OpenAPI 3.1</span>
               <span class="pill">SQLite-backed wiki</span>
-              <span class="pill secondary">OpenClaw + Hermes + Codex + Claude</span>
+              <span class="pill secondary"
+                >OpenClaw + Hermes + Codex + Claude</span
+              >
               <span class="pill">Iroh iPhone pairing</span>
             </div>
             <div class="hero-actions" style="margin-top: 18px">
-              <a class="button primary" href="#quick-start">Get started</a>
-              <a class="button" href="#guide-map">Browse docs</a>
+              <a class="button primary" href="#why-forge">Why Forge</a>
+              <a class="button" href="#quick-start">Install Forge</a>
             </div>
           </div>
 
           <aside class="hero-card">
-            <p class="eyebrow">Quick Links</p>
-            <div class="link-row">
-              <a class="button" href="#quick-start">Getting started</a>
-              <a class="button" href="./features.html">Features</a>
-              <a class="button" href="./integrations.html">Integrations</a>
-              <a class="button" href="./api/openapi.json">Raw OpenAPI JSON</a>
-            </div>
+            <p class="eyebrow">Table Of Contents</p>
+            <ul
+              class="guide-list"
+              style="
+                box-shadow: none;
+                padding: 0;
+                border: 0;
+                background: transparent;
+              "
+            >
+              <li><a href="#why-forge">Why Forge</a></li>
+              <li><a href="#how-forge-solves-it">How Forge solves it</a></li>
+              <li><a href="#quick-start">How to install it</a></li>
+              <li><a href="#guide-map">Guide map</a></li>
+              <li><a href="./features.html">Features</a></li>
+              <li><a href="./integrations.html">Integrations</a></li>
+              <li><a href="./api/openapi.json">Raw OpenAPI JSON</a></li>
+            </ul>
             <div class="kpi-list">
               <div class="metric">
                 <strong>`/forge/`</strong>
@@ -107,6 +119,103 @@
           </aside>
         </section>
 
+        <section class="section" id="why-forge">
+          <div class="section-heading">
+            <p class="eyebrow">Why Forge</p>
+            <h2>
+              The hard part is not remembering one task. It is keeping the full
+              chain of meaning intact.
+            </h2>
+          </div>
+          <div class="card-grid two">
+            <article class="card">
+              <h3>The problem</h3>
+              <p>
+                Real work carries strategy, constraints, notes, meetings,
+                emotional friction, recovery, preferences, and unfinished
+                reasoning. Most tools split those pieces apart: tasks in one
+                place, notes in another, health on the phone, and agent work in
+                chat transcripts or terminal history.
+              </p>
+              <p>
+                That split makes the user carry the system in their head. They
+                have to remember why a project mattered, what changed, which
+                evidence supports it, and what action is safe to take next.
+              </p>
+            </article>
+            <article class="card">
+              <h3>The value</h3>
+              <p>
+                Forge exists so the work, the reason for the work, the context
+                around the work, and the record of what changed can point at the
+                same local records. It is not only a productivity dashboard. It
+                is a system of record for planning, execution, reflection,
+                health context, and agent collaboration.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="how-forge-solves-it">
+          <div class="section-heading">
+            <p class="eyebrow">How Forge Solves It</p>
+            <h2>
+              Forge uses one local runtime and one shared entity model instead
+              of another disconnected app silo.
+            </h2>
+          </div>
+          <div class="card-grid three">
+            <article class="card">
+              <h3>Explicit planning ladder</h3>
+              <p>
+                Forge turns goals into strategies, PRD-backed projects,
+                vertical-slice issues, one-session tasks, and small subtasks.
+                The board and hierarchy views show the same structure from
+                different working angles.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Linked context</h3>
+              <p>
+                Notes, wiki pages, preferences, Psyche records, sleep, workouts,
+                movement history, and nutrition context can stay beside the work
+                they explain instead of becoming detached side records.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Shared agent runtime</h3>
+              <p>
+                OpenClaw, Hermes, Codex, Claude Code, the browser app, and the
+                iPhone companion use the same Forge runtime, API, and local data
+                model when they are configured together.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Local-first storage</h3>
+              <p>
+                Forge keeps the database local by default, with explicit data
+                folders, backups, and a Settings -> Data surface for inspection
+                and recovery.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Health and recovery context</h3>
+              <p>
+                The iPhone companion imports HealthKit sleep and workouts,
+                captures movement history, and helps Forge treat recovery and
+                location context as first-class signals.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Open contracts</h3>
+              <p>
+                The Fastify API publishes generated OpenAPI 3.1, and the docs
+                include both human guides and agent-facing route references.
+              </p>
+            </article>
+          </div>
+        </section>
+
         <section class="section" id="quick-start">
           <div class="section-heading">
             <p class="eyebrow">Getting Started</p>
@@ -119,8 +228,8 @@
                 Start here for the browser UI, OpenClaw, Hermes, Codex, Claude
                 Code, or all of them together. The guided installer sets up the
                 local Forge runtime, discovers agent hosts in the background,
-                and lets you keep or change the real data folder before
-                optional iPhone pairing.
+                and lets you keep or change the real data folder before optional
+                iPhone pairing.
               </p>
               <pre><code>npx forge-memory</code></pre>
               <p>
@@ -189,10 +298,9 @@ npx forge-memory pair-ios</code></pre>
             <article class="card">
               <h3>Advanced adapter docs</h3>
               <p>
-                The manual OpenClaw, Hermes, Codex, and Claude Code commands
-                are still documented for recovery, source-linking, and
-                host-specific debugging. They are reference paths, not the
-                normal quickstart.
+                The manual OpenClaw, Hermes, Codex, and Claude Code commands are
+                still documented for recovery, source-linking, and host-specific
+                debugging. They are reference paths, not the normal quickstart.
               </p>
               <div class="link-row">
                 <a class="button" href="./integrations.html#advanced-adapters"
@@ -259,9 +367,8 @@ npx forge-memory pair-ios</code></pre>
               </h3>
               <p>
                 Understand why OpenClaw, Hermes, Codex, and Claude Code are
-                stable agents, why reconnects are sessions, and how those
-                agents link to human or bot users with their own Kanban
-                ownership.
+                stable agents, why reconnects are sessions, and how those agents
+                link to human or bot users with their own Kanban ownership.
               </p>
             </article>
             <article class="card">
@@ -286,8 +393,8 @@ npx forge-memory pair-ios</code></pre>
           <div class="section-heading">
             <p class="eyebrow">Product At A Glance</p>
             <h2>
-              These screenshots show the core Forge surfaces before you dive
-              into the deeper docs.
+              The core surfaces show how Forge keeps work, memory, movement, and
+              recovery in one local-first system.
             </h2>
           </div>
           <div class="card-grid two">
@@ -300,6 +407,17 @@ npx forge-memory pair-ios</code></pre>
                 The overview dashboard is the fastest way to understand the
                 product: active work, linked context, health signals, and
                 reflection all show up in one local-first runtime.
+              </figcaption>
+            </figure>
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-project-hierarchy.png"
+                alt="Forge hierarchy view showing the goal-to-subtask tree, shared filters, and operational progress."
+              />
+              <figcaption>
+                The hierarchy view keeps the whole planning ladder visible at
+                once, so goals, projects, issues, tasks, and subtasks stay
+                legible without flattening them into one lane list.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -322,6 +440,16 @@ npx forge-memory pair-ios</code></pre>
                 Notes and wiki memory stay close to execution, so context
                 becomes part of the system instead of getting stranded in
                 external documents.
+              </figcaption>
+            </figure>
+            <figure class="shot feature-shot">
+              <img
+                src="./assets/forge-movement-life-timeline.png"
+                alt="Forge Movement page showing the life timeline with stays and trips."
+              />
+              <figcaption>
+                Movement turns passive place and trip history into a life
+                timeline with stays, places, corrections, and linked context.
               </figcaption>
             </figure>
             <figure class="shot feature-shot">
@@ -467,74 +595,6 @@ Development: /forge/development.html
 Integrations: /forge/integrations.html
 API docs: /forge/api/</code></pre>
             </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <figure class="shot">
-            <img
-              src="./assets/forge-overview-dashboard.png"
-              alt="Forge overview dashboard"
-            />
-            <figcaption>
-              Forge keeps execution, planning, memory, health, and Psyche
-              records in one runtime. Use the UI when the work is visual; use
-              the API or agent adapters when the work is operational.
-            </figcaption>
-          </figure>
-        </section>
-
-        <section class="section">
-          <div class="section-heading">
-            <p class="eyebrow">Core Product Areas</p>
-            <h2>
-              These screenshots show how Forge turns planning and reflection
-              into daily practice.
-            </h2>
-          </div>
-          <div class="card-grid two">
-            <figure class="shot feature-shot">
-              <img
-                src="./assets/forge-kanban-board.png"
-                alt="Forge Kanban board showing task lanes and execution controls."
-              />
-              <figcaption>
-                Kanban is the flagship execution board, with lane movement,
-                filters, owner scopes, and direct task actions.
-              </figcaption>
-            </figure>
-            <figure class="shot feature-shot">
-              <img
-                src="./assets/forge-project-hierarchy.png"
-                alt="Forge hierarchy view showing the goal-to-subtask tree, shared filters, and operational progress."
-              />
-              <figcaption>
-                The hierarchy view keeps the whole planning ladder visible at
-                once, so goals, projects, issues, tasks, and subtasks stay
-                legible without flattening them into one lane list.
-              </figcaption>
-            </figure>
-            <figure class="shot feature-shot">
-              <img
-                src="./assets/forge-movement-life-timeline.png"
-                alt="Forge Movement page showing the life timeline with stays and trips."
-              />
-              <figcaption>
-                Movement turns passive place and trip history into a life
-                timeline with stays, places, corrections, and linked context.
-              </figcaption>
-            </figure>
-            <figure class="shot feature-shot">
-              <img
-                src="./assets/forge-sleep-overview.png"
-                alt="Forge Sleep page showing the last-night summary, sleep calendar, and selected-night detail."
-              />
-              <figcaption>
-                Sleep is now night-first: last-night recovery, weekly baseline,
-                calendar browsing, selected-night phases, and raw evidence on
-                demand all live in one health workspace.
-              </figcaption>
-            </figure>
           </div>
         </section>
 

@@ -10,11 +10,50 @@
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6ba539?logo=openapiinitiative&logoColor=white)](https://www.openapis.org/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-8ab4ff)](https://albertbuchard.github.io/forge/)
 
-Forge is a local-first workspace for planning, execution, memory, health context, and agent collaboration.
+# Forge
 
-Read the full published documentation on the [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
+Forge is a local-first workspace for planning, execution, memory, health context,
+reflection, and agent collaboration. It gives humans and AI agents one shared place to
+turn goals into projects, issues, tasks, evidence, health signals, and durable memory
+without splitting the story across disconnected apps.
 
-![Forge overview dashboard](./plugins/openclaw/docs/assets/forge-overview-dashboard.png)
+Read the full published documentation on the
+[Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
+
+## Table Of Contents
+
+- [Why Forge](#why-forge)
+- [How Forge Solves It](#how-forge-solves-it)
+- [Install Forge](#install-forge)
+- [Run The Source App Locally](#run-the-source-app-locally)
+- [Advanced Adapter Setup](#advanced-adapter-setup)
+- [Data Location And Backups](#data-location-and-backups)
+- [What Forge Covers](#what-forge-covers)
+- [Screenshots](#screenshots)
+- [Documentation](#documentation)
+- [Contributor Checks](#contributor-checks)
+- [License](#license)
+
+## Why Forge
+
+Modern work is not only a task list. Real projects carry strategy, constraints,
+decisions, notes, meetings, health context, emotional friction, preferences, and
+unfinished reasoning. AI agents make that problem sharper: they can move quickly, but
+they need a grounded system of record or they lose the chain from intention to action.
+
+Most tools split that chain. Tasks live in one app. Notes and wiki pages live in
+another. Health, sleep, movement, and recovery signals stay on the phone. Agent actions
+land in terminal logs or chat transcripts. The result is that the user has to remember
+why work mattered, what changed, what evidence supported it, and which next action is
+actually safe.
+
+Forge exists to keep that chain intact. It is built for people who want a local-first
+operating system where planning, execution, reflection, health context, and agent work
+can point at the same records.
+
+## How Forge Solves It
+
+Forge uses one local runtime and one shared entity model.
 
 It gives you one place to:
 
@@ -24,9 +63,29 @@ It gives you one place to:
 - let OpenClaw, Hermes, Codex, Claude Code, the browser app, and the iPhone companion use the same local Forge runtime
 - keep the database local by default, with optional explicit data folders and backups in `Settings -> Data`
 
-Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5, SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, Claude Code MCP, a Rust Iroh companion transport, and a Swift iPhone companion that links the same Rust transport core natively.
+The planning ladder is explicit:
 
-## Start Here
+```text
+Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask
+```
+
+Projects are PRD-backed initiatives. Issues are vertical slices across the stack. Tasks
+are one focused AI session each. Subtasks are small child steps. Completion records can
+preserve modified files, a work summary, and linked git refs, so agents leave behind a
+truthful delivery trail instead of only changing a status field.
+
+Forge also connects the operational record to the rest of life. Notes and wiki pages
+preserve reasoning. Preferences store comparisons and signals. Psyche records keep values,
+beliefs, modes, behavior patterns, trigger reports, and flashcards connected to the work
+they affect. Sleep, workouts, movement history, and iPhone HealthKit imports give recovery
+and context their own first-class surfaces.
+
+Forge is built with React 19, TypeScript 5.x, Vite 6, Tailwind CSS 4, Fastify 5,
+SQLite, generated OpenAPI, Tauri 2, OpenClaw, Hermes, Codex MCP, Claude Code MCP, a Rust
+Iroh companion transport, and a Swift iPhone companion that links the same Rust transport
+core natively.
+
+## Install Forge
 
 ### Single-command Install
 
@@ -36,11 +95,17 @@ The preferred install for everyone is one guided command:
 npx forge-memory
 ```
 
-`forge-memory` is the front door for Forge. It installs the local Forge UI/runtime, discovers OpenClaw, Hermes, Codex, and Claude Code in the background, shows detected host adapters in a checkbox menu, selects every detected adapter by default, leaves missing adapters visible as disabled `not found` rows, lets Space toggle adapter choices, and can pair the iOS companion at the end.
+`forge-memory` is the front door for Forge. It installs the local Forge UI/runtime,
+discovers OpenClaw, Hermes, Codex, and Claude Code in the background, shows detected host
+adapters in a checkbox menu, selects every detected adapter by default, leaves missing
+adapters visible as disabled `not found` rows, lets Space toggle adapter choices, and can
+pair the iOS companion at the end.
 
-Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude Code, or all of them sharing one local Forge memory system.
+Use the same command whether you want the browser UI, OpenClaw, Hermes, Codex, Claude
+Code, or all of them sharing one local Forge memory system.
 
-Development installs use the same flow, but link adapters to this source checkout and default to the real shared Forge data folder:
+Development installs use the same flow, but link adapters to this source checkout and
+default to the real shared Forge data folder:
 
 ```bash
 npx forge-memory --dev
@@ -72,12 +137,12 @@ restarts the runtime when allowed, and prints concrete next steps without deleti
 data.
 
 `pair-ios` prefers Tailscale when it is installed, authenticated, and Forge is reachable
-through the Mac's MagicDNS HTTPS URL. That gives the iPhone a normal phone-reachable
-Forge URL for sync and the embedded WebView. If Tailscale is not available or is
-declined, Forge falls back to an Iroh QR with the desktop Iroh node id, pairing token,
-optional relay hint, and ALPN `forge-companion/1`. The CLI uses a compact QR and saves
-the same compact payload under `~/.forge/pairing/` so you can paste it into the iPhone
-app if the camera cannot scan.
+through the Mac's MagicDNS HTTPS URL. That gives the iPhone a normal phone-reachable Forge
+URL for sync and the embedded WebView. If Tailscale is not available or is declined, Forge
+falls back to an Iroh QR with the desktop Iroh node id, pairing token, optional relay hint,
+and ALPN `forge-companion/1`. The CLI uses a compact QR and saves the same compact payload
+under `~/.forge/pairing/` so you can paste it into the iPhone app if the camera cannot
+scan.
 
 Explicit direct HTTP/TCP pairing remains available for deliberate LAN, Tailscale, or
 debugging setups. A physical iPhone needs a phone-reachable URL:
@@ -89,15 +154,16 @@ npx forge-memory pair-ios --public-url https://your-mac.tailnet.ts.net/forge/
 Loopback URLs such as `127.0.0.1` are useful for the iOS Simulator but are rejected for
 physical-phone pairing.
 
-The short install path is intentionally the whole base setup. If you want the lower
-level networking details, read the companion transport reference in
+The short install path is intentionally the whole base setup. If you want the lower level
+networking details, read the companion transport reference in
 [`docs/reference/companion-iroh.md`](./docs/reference/companion-iroh.md) or the published
 [Companion Transport guide](https://albertbuchard.github.io/forge/companion-transport.html).
 
-`export` creates a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache but keeps the Forge data folder by default; use `--remove-data` only when you explicitly want to delete the data too.
-`update` backs up the Forge data folder when appropriate, refreshes the runtime and
-selected adapters, preserves user data, and reports the backup location before making
-changes.
+`export` creates a portable backup of the real Forge data folder. `uninstall` removes the
+Forge Memory runtime manager and cache but keeps the Forge data folder by default; use
+`--remove-data` only when you explicitly want to delete the data too. `update` backs up
+the Forge data folder when appropriate, refreshes the runtime and selected adapters,
+preserves user data, and reports the backup location before making changes.
 
 After install, the usual local addresses are:
 
@@ -105,15 +171,13 @@ After install, the usual local addresses are:
 - API: `http://127.0.0.1:4317/api/v1/`
 - OpenAPI: `http://127.0.0.1:4317/api/v1/openapi.json`
 
-Manual OpenClaw, Hermes, Codex, and Claude Code setup still exists for advanced cases in [`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md), [`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md), [`plugins/codex/README.md`](./plugins/codex/README.md), and [`docs/reference/claude-code-adapter.md`](./docs/reference/claude-code-adapter.md).
+Manual OpenClaw, Hermes, Codex, and Claude Code setup still exists for advanced cases in
+[`docs/reference/openclaw-plugin.md`](./docs/reference/openclaw-plugin.md),
+[`docs/reference/hermes-plugin.md`](./docs/reference/hermes-plugin.md),
+[`plugins/codex/README.md`](./plugins/codex/README.md), and
+[`docs/reference/claude-code-adapter.md`](./docs/reference/claude-code-adapter.md).
 
-## License
-
-Forge-owned public code is licensed under Apache-2.0. The license is permissive,
-commercial-use friendly, and includes an explicit patent grant, which keeps a clean path
-for future closed-source commercial Forge forks.
-
-### Run The Source App Locally
+## Run The Source App Locally
 
 Use this when you are developing Forge itself.
 
@@ -128,11 +192,15 @@ Open Forge through the backend URL:
 http://127.0.0.1:4317/forge/
 ```
 
-Vite may also run on `3027` during development, but the stable app entrypoint is still the backend mount on `4317`.
+Vite may also run on `3027` during development, but the stable app entrypoint is still
+the backend mount on `4317`.
 
-### Advanced: Install The Local OpenClaw Plugin While Developing
+## Advanced Adapter Setup
 
-This is an advanced adapter-only path. Prefer `npx forge-memory --dev` unless you are specifically debugging OpenClaw's plugin installer.
+The guided `npx forge-memory` flow is the normal path. Use these commands only for
+adapter-specific debugging, local source-linking, or recovery.
+
+### OpenClaw Plugin While Developing
 
 From the Forge repo root:
 
@@ -144,11 +212,10 @@ openclaw plugins inspect forge-openclaw-plugin --runtime
 openclaw forge health
 ```
 
-Use `--link` when you want OpenClaw to use this checkout directly. Omit `--link` when you want to test a copied package install.
+Use `--link` when you want OpenClaw to use this checkout directly. Omit `--link` when you
+want to test a copied package install.
 
-### Advanced: Hermes Adapter Commands
-
-This is an advanced adapter-only path. Prefer `npx forge-memory` for released installs and `npx forge-memory --dev` for source-backed installs.
+### Hermes Adapter Commands
 
 Use the published PyPI package when you want Hermes to load the released plugin:
 
@@ -166,11 +233,10 @@ Use this from the Forge repo instead when you want Hermes to follow local source
 ~/.hermes/hermes-agent/venv/bin/python -m pip install --upgrade --editable ./plugins/hermes
 ```
 
-### Advanced: Codex MCP Commands
+### Codex MCP Commands
 
-This is an advanced MCP-only path. Prefer `npx forge-memory`, which writes the Forge MCP entry through its guided configuration flow.
-
-Codex uses the Forge MCP bridge from this repo:
+Prefer `npx forge-memory`, which writes the Forge MCP entry through its guided
+configuration flow. Codex uses the Forge MCP bridge from this repo:
 
 ```bash
 codex mcp add forge \
@@ -181,6 +247,36 @@ codex mcp add forge \
   -- /bin/zsh /absolute/path/to/forge/plugins/codex/scripts/run-mcp.sh
 codex mcp list
 ```
+
+## Data Location And Backups
+
+By default, local plugin installs store Forge data under `~/.forge`. You can choose
+another folder by setting `dataRoot` in the plugin config or by using `Settings -> Data`
+in the web app.
+
+If OpenClaw, Hermes, Codex, Claude Code, and the browser should share one Forge system,
+point them at the same origin, port, and data root. Before moving or merging data
+folders, back up every candidate `forge.sqlite` and verify which database the live runtime
+has opened.
+
+## What Forge Covers
+
+- planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits
+- memory: notes, wiki pages, search, ingest, backlinks, and linked Forge context
+- reflection: preferences, Psyche values, behavior patterns, beliefs, modes, and trigger reports
+- health: sleep nights, workouts, movement history, and iPhone HealthKit import
+- collaboration: explicit human and bot users, owner/assignee filters, agent sessions, and audited actions
+- progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
+
+## Screenshots
+
+| Surface              | Screenshot                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Overview             | ![Forge overview dashboard](./plugins/openclaw/docs/assets/forge-overview-dashboard.png) |
+| Projects             | ![Forge projects board](./plugins/openclaw/docs/assets/forge-projects-board.png)         |
+| Execution board      | ![Forge Kanban board](./plugins/openclaw/docs/assets/forge-kanban-board.png)             |
+| Knowledge and memory | ![Forge wiki memory](./plugins/openclaw/docs/assets/forge-wiki-memory.png)               |
+| Sleep and health     | ![Forge sleep overview](./plugins/openclaw/docs/assets/forge-sleep-overview.png)         |
 
 ## Documentation
 
@@ -193,32 +289,6 @@ repository.
 New contributors should also read the
 [`Repository Structure`](./docs/reference/repository-structure.md) reference before
 moving files or changing release/package boundaries.
-
-## What Forge Covers
-
-- planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits
-- memory: notes, wiki pages, search, ingest, backlinks, and linked Forge context
-- reflection: preferences, Psyche values, behavior patterns, beliefs, modes, and trigger reports
-- health: sleep nights, workouts, movement history, and iPhone HealthKit import
-- collaboration: explicit human and bot users, owner/assignee filters, agent sessions, and audited actions
-- progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
-
-## Data Location And Backups
-
-By default, local plugin installs store Forge data under `~/.forge`. You can choose another folder by setting `dataRoot` in the plugin config or by using `Settings -> Data` in the web app.
-
-If OpenClaw, Hermes, Codex, Claude Code, and the browser should share one Forge system, point them at the same origin, port, and data root. Before moving or merging data folders, back up every candidate `forge.sqlite` and verify which database the live runtime has opened.
-
-## Screenshots
-
-| Surface              | Screenshot                                                                      |
-| -------------------- | ------------------------------------------------------------------------------- |
-| Projects             | ![Forge projects board](./plugins/openclaw/docs/assets/forge-projects-board.png) |
-| Execution board      | ![Forge Kanban board](./plugins/openclaw/docs/assets/forge-kanban-board.png)     |
-| Knowledge and memory | ![Forge wiki memory](./plugins/openclaw/docs/assets/forge-wiki-memory.png)       |
-| Sleep and health     | ![Forge sleep overview](./plugins/openclaw/docs/assets/forge-sleep-overview.png) |
-
-## Documentation
 
 - Docs home: [albertbuchard.github.io/forge](https://albertbuchard.github.io/forge/)
 - Features: [albertbuchard.github.io/forge/features.html](https://albertbuchard.github.io/forge/features.html)
@@ -235,4 +305,15 @@ npm run test
 npm run test:server
 ```
 
-Contributor and runtime details live in the [Development guide](https://albertbuchard.github.io/forge/development.html) and [Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The publishable OpenClaw package lives in [`plugins/openclaw/`](./plugins/openclaw), the Hermes adapter in [`plugins/hermes/`](./plugins/hermes), and the Codex and Claude Code MCP adapters use Forge Memory's shared MCP entrypoint.
+Contributor and runtime details live in the
+[Development guide](https://albertbuchard.github.io/forge/development.html) and
+[Engineering reference](https://albertbuchard.github.io/forge/engineering.html). The
+publishable OpenClaw package lives in [`plugins/openclaw/`](./plugins/openclaw), the
+Hermes adapter in [`plugins/hermes/`](./plugins/hermes), and the Codex and Claude Code
+MCP adapters use Forge Memory's shared MCP entrypoint.
+
+## License
+
+Forge-owned public code is licensed under Apache-2.0. The license is permissive,
+commercial-use friendly, and includes an explicit patent grant, which keeps a clean path
+for future closed-source commercial Forge forks.
