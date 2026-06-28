@@ -87,6 +87,16 @@ describe("question flow quality coverage", () => {
       /After each substantive answer, briefly say what is becoming clearer/i
     );
     expect(entityPlaybook).toMatch(/## Turn shapes/i);
+    expect(entityPlaybook).toMatch(/## Active-listening turn contract/i);
+    expect(entityPlaybook).toMatch(
+      /Reflect the specific stake, working shape, or product object/i
+    );
+    expect(entityPlaybook).toMatch(
+      /wording, boundary, placement, timing,[\s\S]*route scope,[\s\S]*support action,[\s\S]*verification read,[\s\S]*preservation choice,[\s\S]*consent/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For Movement, Life Force, and Workbench,[\s\S]*movement span, place boundary, weekday curve, fatigue signal, flow, run, node output/i
+    );
     expect(entityPlaybook).toMatch(/## Second-turn discipline/i);
     expect(entityPlaybook).toMatch(
       /After the user answers the opening question[\s\S]*choose exactly one next lane/i
@@ -140,11 +150,46 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /tool schema, live onboarding, and OpenAPI disagree[\s\S]*contract bug/i
     );
+    expect(entityPlaybook).toMatch(/## Route execution handoff/i);
+    expect(entityPlaybook).toMatch(
+      /Freeze the accepted user-facing formulation or target object/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Choose exactly one execution lane:[\s\S]*shared batch CRUD,[\s\S]*specialized CRUD,[\s\S]*action\s+workflow,[\s\S]*read-model route,[\s\S]*specialized domain route/i
+    );
+    expect(entityPlaybook).toMatch(
+      /For shared batch CRUD,[\s\S]*catalog `entityType`[\s\S]*batch\s+create\/update\/delete\/restore\/search routes/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement, Life Force, and Workbench,[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,\s+or use nearby guessed paths/i
+    );
     expect(entityPlaybook).toMatch(/## Internal action trace, external wording/i);
     expect(entityPlaybook).toMatch(
       /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool/i
     );
     expect(entityPlaybook).toMatch(/Do not narrate that trace to the user/i);
+    expect(entityPlaybook).toMatch(/## Known-target fast path/i);
+    expect(entityPlaybook).toMatch(
+      /already name the object, action, and likely route lane/i
+    );
+    expect(entityPlaybook).toMatch(
+      /task hierarchy[\s\S]*project, issue, or parent task/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement[\s\S]*missing interval, boundary, saved\s+object, or\s+confirmation/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Life Force[\s\S]*weekday\/time shape, profile field, signal\s+intensity, or planning effect/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Workbench[\s\S]*flow, run, node, input, output, or\s+preservation choice/i
+    );
+    expect(entityPlaybook).toMatch(
+      /direct Psyche saves[\s\S]*accuracy or consent question instead of restarting\s+exploration/i
+    );
     expect(entityPlaybook).toMatch(
       /saved the belief,[\s\S]*corrected the missing stay,[\s\S]*updated the weekday energy pattern,[\s\S]*read the failed\s+node/i
     );
@@ -189,6 +234,18 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(/## Psyche progressive disclosure/i);
     expect(psychePlaybook).toMatch(/## Psyche depth calibration/i);
+    expect(psychePlaybook).toMatch(
+      /## Psyche active-listening turn contract/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Reflect the specific felt stake or protective move[\s\S]*danger, shame,[\s\S]*protection, relief, cost, or value conflict/i
+    );
+    expect(psychePlaybook).toMatch(
+      /belief sentence,[\s\S]*functional loop,[\s\S]*mode voice,[\s\S]*trigger sequence,[\s\S]*emotion signature,[\s\S]*flashcard cue/i
+    );
+    expect(psychePlaybook).toMatch(
+      /tentative hypothesis and one fit-or-correction question instead of asking another\s+broad exploratory question/i
+    );
     expect(psychePlaybook).toMatch(
       /Direct save:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*ask one accuracy or consent question/i
     );
@@ -662,6 +719,9 @@ describe("question flow quality coverage", () => {
   it("keeps the Psyche playbook paced around reflection before interpretation or repair", () => {
     expect(psychePlaybook).toMatch(
       /Name the emotional center or lived stake in plain language before the next question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /active listening, not just mirroring[\s\S]*names what seems at stake[\s\S]*keeps the hypothesis correctable/i
     );
     expect(psychePlaybook).toMatch(
       /ask permission before moving from understanding into[\s\S]*naming, challenging, or solution-finding/i

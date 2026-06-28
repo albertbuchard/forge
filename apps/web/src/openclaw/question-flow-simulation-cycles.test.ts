@@ -1229,6 +1229,22 @@ describe("question flow simulation cycles", () => {
     expect(progressiveDisclosure).toMatch(
       /For specialized Movement, Life Force, and Workbench work,[\s\S]*skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
     );
+    expect(entityPlaybook).toMatch(/## Known-target fast path/i);
+    expect(entityPlaybook).toMatch(
+      /normal stored entities[\s\S]*parent, owner, or duplicate-disambiguation/i
+    );
+    expect(entityPlaybook).toMatch(
+      /task hierarchy[\s\S]*project, issue, or parent task/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Movement[\s\S]*missing interval, boundary, saved\s+object, or\s+confirmation/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Life Force[\s\S]*weekday\/time shape, profile field, signal\s+intensity, or planning effect/i
+    );
+    expect(entityPlaybook).toMatch(
+      /Workbench[\s\S]*flow, run, node, input, output, or\s+preservation choice/i
+    );
     expect(psycheProgressiveDisclosure).toMatch(
       /offered belief sentence, value phrase, part voice, urge sentence, trigger\s+episode, event kind, emotion signature, or functional loop/i
     );
@@ -1242,6 +1258,12 @@ describe("question flow simulation cycles", () => {
       hermesSkill,
       codexSkill
     ]) {
+      expect(source).toMatch(/known-target fast path/i);
+      expect(source).toMatch(
+        /parent, owner, or duplicate disambiguation|parent, owner, or duplicate-disambiguation/i
+      );
+      expect(source).toMatch(/weekday, profile field, signal intensity/i);
+      expect(source).toMatch(/flow, run, node, input, output/i);
       expect(source).toMatch(/Treat partial answers as progress/i);
       expect(source).toMatch(
         /operation, entity or surface, target record or time span, working\s+wording, owner or placement, route lane, and consent/i
@@ -1306,9 +1328,41 @@ describe("question flow simulation cycles", () => {
   });
 
   it("cycle 2: all flows keep a guided reflective stance, with stronger therapist-like pacing for Psyche", () => {
+    const activeListeningContract = getSectionSlice(
+      entityPlaybook,
+      "Active-listening turn contract"
+    );
+    const psycheActiveListeningContract = getSectionSlice(
+      psychePlaybook,
+      "Psyche active-listening turn contract"
+    );
+    const onboardingSource = readRepoFile("apps/api/src/app.ts");
+    const openClawSkill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
+    const hermesSkill = readRepoFile("plugins/hermes/forge_hermes/skill.md");
+    const codexSkill = readRepoFile(
+      "plugins/codex/skills/forge-codex/SKILL.md"
+    );
+
     expect(entityPlaybook).toMatch(/feels important to keep true/i);
     expect(entityPlaybook).toMatch(/Close cleanly/i);
     expect(entityPlaybook).toMatch(/what seems clear now is/i);
+    expect(activeListeningContract).toMatch(
+      /Reflect the specific stake, working shape, or product object/i
+    );
+    expect(activeListeningContract).toMatch(
+      /wording, boundary, placement, timing,[\s\S]*route scope,[\s\S]*support action,[\s\S]*verification read,[\s\S]*preservation choice,[\s\S]*consent/i
+    );
+    expect(activeListeningContract).toMatch(
+      /If the answer would only add polish, optional metadata, or therapist-like color/i
+    );
+    expect(activeListeningContract).toMatch(
+      /Psyche-adjacent material[\s\S]*felt stake, protection,[\s\S]*payoff, cost, or value conflict/i
+    );
+    expect(activeListeningContract).toMatch(
+      /For Movement, Life Force, and Workbench[\s\S]*movement span, place boundary, weekday curve, fatigue signal, flow, run, node output/i
+    );
     expect(entityPlaybook).toMatch(
       /For review requests, ask what practical question they want the read to answer/i
     );
@@ -1360,6 +1414,18 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
     expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
+    expect(psycheActiveListeningContract).toMatch(
+      /felt stake or protective move[\s\S]*danger, shame,[\s\S]*relief, cost, or value conflict/i
+    );
+    expect(psycheActiveListeningContract).toMatch(
+      /belief sentence,[\s\S]*functional loop,[\s\S]*behavior move,[\s\S]*mode voice,[\s\S]*trigger sequence,[\s\S]*emotion signature,[\s\S]*flashcard cue/i
+    );
+    expect(psycheActiveListeningContract).toMatch(
+      /tentative hypothesis and one fit-or-correction question instead of asking another\s+broad exploratory question/i
+    );
+    expect(psycheActiveListeningContract).toMatch(
+      /active listening, not just mirroring[\s\S]*reduces the user's burden of wording/i
+    );
     expect(psychePlaybook).toMatch(/Hypothesis Wording Shape/i);
     expect(psychePlaybook).toMatch(/Hypothesis Timing Checkpoint/i);
     expect(psychePlaybook).toMatch(/Hypothesis Without Cross-Examination/i);
@@ -1467,6 +1533,26 @@ describe("question flow simulation cycles", () => {
       const sectionSlice = getSectionSlice(psychePlaybook, section);
       expect(sectionSlice).toMatch(/Helpful follow-up lanes:/);
       expect(sectionSlice).toMatch(/Likely linked entities:/);
+    }
+
+    for (const source of [
+      onboardingSource,
+      openClawSkill,
+      hermesSkill,
+      codexSkill
+    ]) {
+      expect(source).toMatch(/active-listening turn contract/i);
+      expect(source).toMatch(
+        /specific stake,[\s\S]*working shape,[\s\S]*product object/i
+      );
+      expect(source).toMatch(
+        /wording,[\s\S]*placement,[\s\S]*timing,[\s\S]*route scope,[\s\S]*support action,[\s\S]*verification read,[\s\S]*preservation choice,[\s\S]*consent/i
+      );
+      expect(source).toMatch(
+        /felt stake,[\s\S]*protection,[\s\S]*prediction,[\s\S]*payoff,[\s\S]*cost,[\s\S]*value conflict/i
+      );
+      expect(source).toMatch(/fit-or-correction question/i);
+      expect(source).toMatch(/logistical records[\s\S]*operational detail/i);
     }
   });
 
@@ -2022,6 +2108,10 @@ describe("question flow simulation cycles", () => {
       entityPlaybook,
       "Specialized route-contract handshake"
     );
+    const routeExecutionHandoff = getSectionSlice(
+      entityPlaybook,
+      "Route execution handoff"
+    );
     const flashcardSupport = getSectionSlice(
       psychePlaybook,
       "Flashcard support sequence"
@@ -2090,6 +2180,24 @@ describe("question flow simulation cycles", () => {
     expect(routeHandshake).toMatch(
       /report a\s+contract bug instead of silently using generic batch CRUD or a nearby route/i
     );
+    expect(routeExecutionHandoff).toMatch(
+      /accepted user-facing formulation or target object[\s\S]*title, belief\s+sentence, movement span, weekday, flow, run, node, or published result/i
+    );
+    expect(routeExecutionHandoff).toMatch(
+      /Choose exactly one execution lane:[\s\S]*shared batch CRUD,[\s\S]*specialized CRUD,[\s\S]*action\s+workflow,[\s\S]*read-model route,[\s\S]*specialized domain route/i
+    );
+    expect(routeExecutionHandoff).toMatch(
+      /catalog `entityType` exactly[\s\S]*Search or read first for update,[\s\S]*duplicate-disambiguation, or review work/i
+    );
+    expect(routeExecutionHandoff).toMatch(
+      /wiki pages, calendar connections, task runs, work adjustments, questionnaire\s+runs, preference judgments\/signals, and self-observation notes/i
+    );
+    expect(routeExecutionHandoff).toMatch(
+      /Movement, Life Force, and Workbench[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`[\s\S]*Do not put IDs into `routeKey`/i
+    );
+    expect(routeExecutionHandoff).toMatch(
+      /confirm the product result[\s\S]*verification read only when it proves a repair, explains impact, or grounds the\s+next decision/i
+    );
     expect(routeFallback).toMatch(
       /methodRoutes[\s\S]*:id[\s\S]*:weekday[\s\S]*:slug[\s\S]*:runId[\s\S]*:nodeId[\s\S]*:pointId/i
     );
@@ -2144,6 +2252,22 @@ describe("question flow simulation cycles", () => {
         /warmth, completeness, optional\s+metadata, or form polish/i
       );
       expect(source).toMatch(/route-contract\s+handshake/i);
+      expect(source).toMatch(/route execution handoff/i);
+      expect(source).toContain("freeze the accepted user-facing target");
+      expect(source).toContain("choose exactly one lane");
+      expect(source).toContain("batch CRUD only");
+      expect(source).toContain("catalog entities");
+      expect(source).toContain("named tools or documented routes");
+      expect(source).toContain("Movement, Life Force, or Workbench");
+      expect(source).toContain("routeKey");
+      expect(source).toContain("method");
+      expect(source).toContain("path");
+      expect(source).toContain("pathParams");
+      expect(source).toContain("methodRoutes");
+      expect(source).toContain("Never hide placeholders");
+      expect(source).toContain("query");
+      expect(source).toContain("body");
+      expect(source).toContain("never guess a nearby path");
       expect(source).toMatch(
         /routeKey[\s\S]*routeKeys[\s\S]*methodRoutes[\s\S]*pathParams[\s\S]*missing\s+product\s+noun/i
       );
