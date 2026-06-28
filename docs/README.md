@@ -24,12 +24,11 @@ Forge exists to keep that chain visible. It gives the user and their agents one
 local-first runtime where the work, the reasons for the work, the context around the work,
 and the record of what changed can point at the same entities.
 
-That is where structured memory matters. Forge complements the unstructured memory of
-agent harnesses such as OpenClaw, Codex, Hermes, and Claude Code instead of replacing it.
-Notes and wiki pages keep the original prose; goals, beliefs, project decisions, trigger
-reports, tasks, preferences, sleep, workouts, movement, and evidence can become records
-with identity, links, state, and history when they need to be reviewed, compared,
-updated, or acted on.
+Forge complements the unstructured memory of agent harnesses such as OpenClaw, Codex,
+Hermes, and Claude Code instead of replacing it. Notes and wiki pages keep the original
+prose; goals, beliefs, project decisions, trigger reports, tasks, preferences, sleep,
+workouts, movement, and evidence can become structured memory with identity, links,
+state, and history when they need to be reviewed, compared, updated, or acted on.
 
 ## How Forge Solves It
 
