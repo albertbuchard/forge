@@ -33,6 +33,43 @@ describe("Forge docs site agent tool reference", () => {
     }
   });
 
+  it("documents specialized route-key tool inputs instead of empty placeholders", () => {
+    const toolDocs = readJson<{
+      tools: Array<{
+        name: string;
+        inputShape: string;
+        requiredFields: string[];
+        notes: string[];
+      }>;
+    }>("plugins/openclaw/docs/agent-tools.json");
+    const toolsByName = new Map(toolDocs.tools.map((tool) => [tool.name, tool]));
+
+    for (const toolName of [
+      "forge_call_movement_route",
+      "forge_call_life_force_route",
+      "forge_call_workbench_route"
+    ]) {
+      const tool = toolsByName.get(toolName);
+      expect(tool, toolName).toBeDefined();
+      expect(tool?.inputShape, toolName).toMatch(/routeKey/);
+      expect(tool?.inputShape, toolName).toMatch(/pathParams/);
+      expect(tool?.requiredFields, toolName).toContain("routeKey");
+      expect(tool?.notes.join(" "), toolName).toMatch(
+        /live onboarding|methodRoutes|exact placeholder/i
+      );
+    }
+
+    expect(
+      toolsByName.get("forge_call_movement_route")?.inputShape
+    ).toMatch(/tripPointDelete/);
+    expect(
+      toolsByName.get("forge_call_life_force_route")?.inputShape
+    ).toMatch(/weekdayTemplate/);
+    expect(
+      toolsByName.get("forge_call_workbench_route")?.inputShape
+    ).toMatch(/latestNodeOutput/);
+  });
+
   it("links the tools page from the docs navigation and uses generated data", () => {
     const toolsPage = readText("plugins/openclaw/docs/tools.html");
     const toolsScript = readText("plugins/openclaw/docs/tools.js");

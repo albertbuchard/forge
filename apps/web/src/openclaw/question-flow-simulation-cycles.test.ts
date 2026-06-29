@@ -1990,6 +1990,27 @@ describe("question flow simulation cycles", () => {
       /movementUserBoxDelete[\s\S]*"routeKey":"userBoxDelete"[\s\S]*"pathParams"[\s\S]*"id":"box_manual_123"/
     );
     expect(onboardingSource).toMatch(
+      /movementAutomaticBoxInvalidate[\s\S]*"routeKey":"automaticBoxInvalidate"[\s\S]*"pathParams"[\s\S]*"id":"box_auto_123"[\s\S]*"reason"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementStayUpdate[\s\S]*"routeKey":"stayUpdate"[\s\S]*"pathParams"[\s\S]*"id":"stay_123"[\s\S]*"body"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementStayDelete[\s\S]*"routeKey":"stayDelete"[\s\S]*"pathParams"[\s\S]*"id":"stay_123"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementTripUpdate[\s\S]*"routeKey":"tripUpdate"[\s\S]*"pathParams"[\s\S]*"id":"trip_123"[\s\S]*"body"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementTripDelete[\s\S]*"routeKey":"tripDelete"[\s\S]*"pathParams"[\s\S]*"id":"trip_123"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementTripPointUpdate[\s\S]*"routeKey":"tripPointUpdate"[\s\S]*"pathParams"[\s\S]*"pointId":"point_456"[\s\S]*"body"/
+    );
+    expect(onboardingSource).toMatch(
+      /movementTripPointDelete[\s\S]*"routeKey":"tripPointDelete"[\s\S]*"pathParams"[\s\S]*"pointId":"point_456"/
+    );
+    expect(onboardingSource).toMatch(
       /lifeForceOverview[\s\S]*"routeKey":"overview"/
     );
     expect(onboardingSource).toMatch(

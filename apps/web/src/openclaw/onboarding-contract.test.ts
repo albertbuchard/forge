@@ -59,6 +59,12 @@ async function loadOnboardingPayload() {
       preferredReadPath: string | null;
       preferredMutationTool?: string | null;
     }>;
+    toolInputCatalog: Array<{
+      toolName: string;
+      inputShape: string;
+      requiredFields: string[];
+      notes: string[];
+    }>;
     entityConversationPlaybooks: Array<{
       focus: string;
       openingQuestion: string;
@@ -873,7 +879,7 @@ describe("forge onboarding contract", () => {
       ]
     );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
-      /forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
+      /forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
     );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /Life Force overview route key maps to GET \/api\/v1\/life-force[\s\S]*do not invent \/api\/v1\/life-force\/overview/i
@@ -955,6 +961,31 @@ describe("forge onboarding contract", () => {
         )
       })
     );
+    expect(specializedExamples).toEqual(
+      expect.objectContaining({
+        movementAutomaticBoxInvalidate: expect.stringMatching(
+          /routeKey[\s\S]*automaticBoxInvalidate[\s\S]*pathParams[\s\S]*box_auto_123[\s\S]*body[\s\S]*reason/
+        ),
+        movementStayUpdate: expect.stringMatching(
+          /routeKey[\s\S]*stayUpdate[\s\S]*pathParams[\s\S]*stay_123[\s\S]*body/
+        ),
+        movementStayDelete: expect.stringMatching(
+          /routeKey[\s\S]*stayDelete[\s\S]*pathParams[\s\S]*stay_123/
+        ),
+        movementTripUpdate: expect.stringMatching(
+          /routeKey[\s\S]*tripUpdate[\s\S]*pathParams[\s\S]*trip_123[\s\S]*body/
+        ),
+        movementTripDelete: expect.stringMatching(
+          /routeKey[\s\S]*tripDelete[\s\S]*pathParams[\s\S]*trip_123/
+        ),
+        movementTripPointUpdate: expect.stringMatching(
+          /routeKey[\s\S]*tripPointUpdate[\s\S]*pathParams[\s\S]*pointId[\s\S]*body/
+        ),
+        movementTripPointDelete: expect.stringMatching(
+          /routeKey[\s\S]*tripPointDelete[\s\S]*pathParams[\s\S]*pointId/
+        )
+      })
+    );
     expect(specializedExamples.movementSelection).not.toMatch(/"query"/);
   });
 
@@ -1003,6 +1034,46 @@ describe("forge onboarding contract", () => {
           example.body,
           `${exampleName} GET should not send body`
         ).toBeUndefined();
+      }
+    }
+  });
+
+  it("keeps specialized tool input catalog route keys synced with live onboarding surfaces", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const toolByName = new Map(
+      onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
+    );
+    const surfaceToolPairs = [
+      ["movement", "forge_call_movement_route"],
+      ["lifeForce", "forge_call_life_force_route"],
+      ["workbench", "forge_call_workbench_route"]
+    ] as const;
+
+    for (const [surfaceKey, toolName] of surfaceToolPairs) {
+      const surface =
+        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
+      const tool = toolByName.get(toolName);
+
+      expect(surface, `${surfaceKey} surface`).toBeTruthy();
+      expect(tool, `${toolName} input catalog`).toBeTruthy();
+      expect(tool?.requiredFields).toContain("routeKey");
+      expect(tool?.inputShape).toMatch(/routeKey/);
+      expect(tool?.inputShape).toMatch(/pathParams/);
+      expect(tool?.inputShape).toMatch(/query/);
+      expect(tool?.inputShape).toMatch(/body/);
+      expect(tool?.notes.join(" ")).toMatch(/live onboarding/i);
+      expect(tool?.notes.join(" ")).toMatch(/methodRoutes/);
+      expect(tool?.notes.join(" ")).toMatch(/pathParams/);
+
+      for (const routeKey of surface.routeKeys) {
+        expect(
+          tool?.inputShape,
+          `${toolName} should advertise ${routeKey}`
+        ).toContain(`"${routeKey}"`);
+        expect(
+          surface.methodRoutes[routeKey],
+          `${surfaceKey}.${routeKey} method route`
+        ).toBeTruthy();
       }
     }
   });

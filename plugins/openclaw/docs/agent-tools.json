@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-29T16:40:59.741Z",
+  "generatedAt": "2026-06-29T20:13:12.372Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -106,39 +106,63 @@
       "groupId": "specialized",
       "groupTitle": "Specialized Domain Surfaces",
       "label": "Forge Life Force Route",
-      "summary": "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, profile update, weekday template, or fatigue signal. Do not use batch CRUD for Life Force.",
-      "whenToUse": "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, profile update, weekday template, or fatigue signal. Do not use batch CRUD for Life Force.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, durable profile assumptions, weekday template, or fatigue signal.",
+      "whenToUse": "Use for Life Force overview reads, profile edits, repeated weekday energy curves, and right-now fatigue or recovery signals. Do not use batch CRUD for Life Force.",
+      "inputShape": "{ routeKey: \"overview\"|\"profile\"|\"weekdayTemplate\"|\"fatigueSignal\", pathParams?: { weekday?: \"monday\"|\"tuesday\"|\"wednesday\"|\"thursday\"|\"friday\"|\"saturday\"|\"sunday\" }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.lifeForce routeKeys and methodRoutes.",
+        "The overview routeKey maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview.",
+        "Fill weekday through pathParams.weekday for weekdayTemplate; do not put the weekday inside routeKey, query, or body.",
+        "Patch profile only for durable personal assumptions, update weekdayTemplate for repeated energy curves, and use fatigueSignal for a right-now tired or recovered observation.",
+        "After a profile, template, or fatigue write, read the overview back when the user is making a planning decision from the change."
+      ],
+      "example": "{\"routeKey\":\"weekdayTemplate\",\"pathParams\":{\"weekday\":\"monday\"},\"body\":{\"points\":[{\"hour\":13,\"freeAp\":-4}]}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_call_movement_route",
       "groupId": "specialized",
       "groupTitle": "Specialized Domain Surfaces",
       "label": "Forge Movement Route",
-      "summary": "Call one allowed dedicated Movement route after the conversation has narrowed to day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair work. Do not use this for normal stored entities; those stay on batch CRUD.",
-      "whenToUse": "Call one allowed dedicated Movement route after the conversation has narrowed to day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair work. Do not use this for normal stored entities; those stay on batch CRUD.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Call one allowed dedicated Movement route after the conversation has narrowed to a day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair job.",
+      "whenToUse": "Use for Movement day/month/all-time/timeline/place/trip/selection reads and for settings, place, manual-overlay, stay, trip, or trip-point repair actions. Do not use batch CRUD for Movement.",
+      "inputShape": "{ routeKey: \"day\"|\"month\"|\"allTime\"|\"timeline\"|\"places\"|\"boxDetail\"|\"tripDetail\"|\"selection\"|\"settings\"|\"settingsUpdate\"|\"placeCreate\"|\"placeUpdate\"|\"userBoxPreflight\"|\"userBoxCreate\"|\"userBoxUpdate\"|\"userBoxDelete\"|\"automaticBoxInvalidate\"|\"stayUpdate\"|\"stayDelete\"|\"tripUpdate\"|\"tripDelete\"|\"tripPointUpdate\"|\"tripPointDelete\", pathParams?: { id?: string, pointId?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.movement.routeKeys and methodRoutes.",
+        "Fill every :placeholder through pathParams using the exact placeholder name; do not put ids or point ids inside routeKey, query, or body.",
+        "Use query for GET filters such as userIds, date, from, to, limit, or offset; use body for POST/PATCH route keys such as selection, settingsUpdate, placeCreate, and overlay repair.",
+        "If a missing-data gap is being corrected, usually preflight then create a user-defined overlay box instead of patching a raw stay or trip.",
+        "After a Movement repair, read back the relevant timeline, box detail, place list, settings, or selection view when it proves the practical correction."
+      ],
+      "example": "{\"routeKey\":\"userBoxPreflight\",\"body\":{\"kind\":\"stay\",\"startedAt\":\"2026-05-06T13:00:00.000Z\",\"endedAt\":\"2026-05-06T15:00:00.000Z\",\"placeLabel\":\"Home\",\"userId\":\"user_operator\"}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_call_workbench_route",
       "groupId": "specialized",
       "groupTitle": "Specialized Domain Surfaces",
       "label": "Forge Workbench Route",
-      "summary": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
-      "whenToUse": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog/detail, flow CRUD, execution, run history, published output, node result, or latest node output.",
+      "whenToUse": "Use for Workbench saved-flow discovery, flow creation or edits, one-off runs, saved-flow execution, chat follow-ups, run detail, node results, latest node output, and published output. Do not use batch CRUD for Workbench.",
+      "inputShape": "{ routeKey: \"listFlows\"|\"flowDetail\"|\"flowById\"|\"flowBySlug\"|\"publishedOutput\"|\"runHistory\"|\"runs\"|\"runDetail\"|\"runNodes\"|\"nodeResult\"|\"latestNodeOutput\"|\"boxCatalog\"|\"createFlow\"|\"updateFlow\"|\"deleteFlow\"|\"runFlow\"|\"runByPayload\"|\"chatFlow\", pathParams?: { id?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.workbench.routeKeys and methodRoutes.",
+        "Fill every :placeholder through pathParams using the exact placeholder name; do not put flow, slug, run, or node ids inside routeKey, query, or body.",
+        "Use runByPayload for one-off execution; createFlow only when the user wants a reusable saved flow.",
+        "Use publishedOutput, nodeResult, latestNodeOutput, runDetail, or runHistory reads before editing when the user is inspecting an existing artifact.",
+        "After a Workbench run or edit, read back the flow detail, run detail, node output, published output, or run history when that verifies the user's practical goal."
+      ],
+      "example": "{\"routeKey\":\"nodeResult\",\"pathParams\":{\"id\":\"flow_research_digest\",\"runId\":\"run_123\",\"nodeId\":\"node_summary\"}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_clone_questionnaire",

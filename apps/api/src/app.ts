@@ -5397,6 +5397,63 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_budget_model","relationship":"embedded_reference","anchorKey":"budget-workbook"}]}}'
   },
   {
+    toolName: "forge_call_movement_route",
+    summary:
+      "Call one allowed dedicated Movement route after the conversation has narrowed to a day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair job.",
+    whenToUse:
+      "Use for Movement day/month/all-time/timeline/place/trip/selection reads and for settings, place, manual-overlay, stay, trip, or trip-point repair actions. Do not use batch CRUD for Movement.",
+    inputShape:
+      '{ routeKey: "day"|"month"|"allTime"|"timeline"|"places"|"boxDetail"|"tripDetail"|"selection"|"settings"|"settingsUpdate"|"placeCreate"|"placeUpdate"|"userBoxPreflight"|"userBoxCreate"|"userBoxUpdate"|"userBoxDelete"|"automaticBoxInvalidate"|"stayUpdate"|"stayDelete"|"tripUpdate"|"tripDelete"|"tripPointUpdate"|"tripPointDelete", pathParams?: { id?: string, pointId?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.movement.routeKeys and methodRoutes.",
+      "Fill every :placeholder through pathParams using the exact placeholder name; do not put ids or point ids inside routeKey, query, or body.",
+      "Use query for GET filters such as userIds, date, from, to, limit, or offset; use body for POST/PATCH route keys such as selection, settingsUpdate, placeCreate, and overlay repair.",
+      "If a missing-data gap is being corrected, usually preflight then create a user-defined overlay box instead of patching a raw stay or trip.",
+      "After a Movement repair, read back the relevant timeline, box detail, place list, settings, or selection view when it proves the practical correction."
+    ],
+    example:
+      '{"routeKey":"userBoxPreflight","body":{"kind":"stay","startedAt":"2026-05-06T13:00:00.000Z","endedAt":"2026-05-06T15:00:00.000Z","placeLabel":"Home","userId":"user_operator"}}'
+  },
+  {
+    toolName: "forge_call_life_force_route",
+    summary:
+      "Call one allowed dedicated Life Force route after the conversation has narrowed to overview, durable profile assumptions, weekday template, or fatigue signal.",
+    whenToUse:
+      "Use for Life Force overview reads, profile edits, repeated weekday energy curves, and right-now fatigue or recovery signals. Do not use batch CRUD for Life Force.",
+    inputShape:
+      '{ routeKey: "overview"|"profile"|"weekdayTemplate"|"fatigueSignal", pathParams?: { weekday?: "monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday"|"sunday" }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.lifeForce routeKeys and methodRoutes.",
+      "The overview routeKey maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview.",
+      "Fill weekday through pathParams.weekday for weekdayTemplate; do not put the weekday inside routeKey, query, or body.",
+      "Patch profile only for durable personal assumptions, update weekdayTemplate for repeated energy curves, and use fatigueSignal for a right-now tired or recovered observation.",
+      "After a profile, template, or fatigue write, read the overview back when the user is making a planning decision from the change."
+    ],
+    example:
+      '{"routeKey":"weekdayTemplate","pathParams":{"weekday":"monday"},"body":{"points":[{"hour":13,"freeAp":-4}]}}'
+  },
+  {
+    toolName: "forge_call_workbench_route",
+    summary:
+      "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog/detail, flow CRUD, execution, run history, published output, node result, or latest node output.",
+    whenToUse:
+      "Use for Workbench saved-flow discovery, flow creation or edits, one-off runs, saved-flow execution, chat follow-ups, run detail, node results, latest node output, and published output. Do not use batch CRUD for Workbench.",
+    inputShape:
+      '{ routeKey: "listFlows"|"flowDetail"|"flowById"|"flowBySlug"|"publishedOutput"|"runHistory"|"runs"|"runDetail"|"runNodes"|"nodeResult"|"latestNodeOutput"|"boxCatalog"|"createFlow"|"updateFlow"|"deleteFlow"|"runFlow"|"runByPayload"|"chatFlow", pathParams?: { id?: string, slug?: string, runId?: string, nodeId?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.workbench.routeKeys and methodRoutes.",
+      "Fill every :placeholder through pathParams using the exact placeholder name; do not put flow, slug, run, or node ids inside routeKey, query, or body.",
+      "Use runByPayload for one-off execution; createFlow only when the user wants a reusable saved flow.",
+      "Use publishedOutput, nodeResult, latestNodeOutput, runDetail, or runHistory reads before editing when the user is inspecting an existing artifact.",
+      "After a Workbench run or edit, read back the flow detail, run detail, node output, published output, or run history when that verifies the user's practical goal."
+    ],
+    example:
+      '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}'
+  },
+  {
     toolName: "forge_get_sleep_overview",
     summary:
       "Read the sleep surface with recent nights, scores, regularity, stage averages, and linked reflective context.",
@@ -6916,7 +6973,7 @@ function buildAgentOnboardingPayload(request: {
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
-        "forge_call_movement_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Choose routeKey from the tool schema or entityRouteModel.specializedDomainSurfaces, fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs or weekdays inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Normal stored entities still use the shared batch entity tools.",
+        "forge_call_movement_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs or weekdays inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Normal stored entities still use the shared batch entity tools.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
@@ -6948,6 +7005,20 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"userBoxUpdate","pathParams":{"id":"box_manual_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","note":"Extended after checking the timeline detail."}}',
         movementUserBoxDelete:
           '{"routeKey":"userBoxDelete","pathParams":{"id":"box_manual_123"}}',
+        movementAutomaticBoxInvalidate:
+          '{"routeKey":"automaticBoxInvalidate","pathParams":{"id":"box_auto_123"},"body":{"reason":"Automatic stay merged a clinic visit into home after reviewing the timeline."}}',
+        movementStayUpdate:
+          '{"routeKey":"stayUpdate","pathParams":{"id":"stay_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","placeId":"place_home","note":"Corrected after opening the stay detail."}}',
+        movementStayDelete:
+          '{"routeKey":"stayDelete","pathParams":{"id":"stay_123"}}',
+        movementTripUpdate:
+          '{"routeKey":"tripUpdate","pathParams":{"id":"trip_123"},"body":{"mode":"train","note":"Mode corrected after reviewing the trip detail."}}',
+        movementTripDelete:
+          '{"routeKey":"tripDelete","pathParams":{"id":"trip_123"}}',
+        movementTripPointUpdate:
+          '{"routeKey":"tripPointUpdate","pathParams":{"id":"trip_123","pointId":"point_456"},"body":{"lat":46.2044,"lon":6.1432,"capturedAt":"2026-05-06T14:10:00.000Z"}}',
+        movementTripPointDelete:
+          '{"routeKey":"tripPointDelete","pathParams":{"id":"trip_123","pointId":"point_456"}}',
         lifeForceOverview: '{"routeKey":"overview"}',
         lifeForceProfile:
           '{"routeKey":"profile","body":{"baselineDailyAp":24,"recoveryNotes":"Clinic-admin days need a lower expected afternoon load."}}',
