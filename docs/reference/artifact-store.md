@@ -17,6 +17,20 @@ The first supported format families are:
 
 Files are stored under the Forge data root by SHA-256 content address. Metadata rows can be soft-deleted, restored, or hard-deleted through shared entity tooling, but hard-deleting metadata does not remove the content-addressed blob.
 
+## Web Upload Workflow
+
+The Artifact Store web page uses Forge's guided modal flow for creation. The page itself stays focused on artifact search, filtering, review, selected-artifact metadata, safety findings, generic entity links, versions, audit events, rescans, enrichment, and human downloads.
+
+The `Add artifacts` action opens a modal with three stages:
+
+- file selection: choose or drop one or more supported files
+- file queue: review each selected file, add a quick short description, or open that file's details
+- upload review: create one artifact per file and show per-file success or failure
+
+The per-file details view lets the human refine title, short description, long description, source kind, source/provenance label, optional metadata JSON, generic entity links, and whether a configured LLM should fill missing metadata. Saving details returns the human to the queue so several files can be finished deliberately before upload.
+
+Image files use the same flow as documents and spreadsheets. Supported image uploads are `.png`, `.jpg`, `.jpeg`, and `.webp`.
+
 ## Artifact Metadata
 
 Each artifact record is expected to carry enough information for future review without reopening the file:

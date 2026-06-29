@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase } from "./db.js";
@@ -214,6 +215,90 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     await access(uploadBody.artifact.storagePath);
   } finally {
     await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("artifact repair migration restores shared entity_links for existing artifact databases and image upload", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-artifacts-repair-"));
+  const databasePath = path.join(rootDir, "forge.sqlite");
+  const initialApp = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  await initialApp.close();
+  closeDatabase();
+
+  const sqlite = new DatabaseSync(databasePath);
+  try {
+    sqlite.exec(`
+      DROP TABLE IF EXISTS entity_links;
+      DELETE FROM migrations WHERE id = '073_artifact_entity_links_repair.sql';
+    `);
+  } finally {
+    sqlite.close();
+  }
+
+  const repairedApp = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    const cookie = await issueOperatorSessionCookie(repairedApp);
+    const listBeforeUpload = await repairedApp.inject({
+      method: "GET",
+      url: "/api/v1/artifacts",
+      headers: { cookie }
+    });
+    assert.equal(listBeforeUpload.statusCode, 200);
+
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      "base64"
+    );
+    const upload = await repairedApp.inject({
+      method: "POST",
+      url: "/api/v1/artifacts",
+      headers: { cookie },
+      payload: {
+        title: "Tiny evidence image",
+        shortDescription: "One-pixel PNG used to verify image artifact upload.",
+        originalFileName: "tiny-proof.png",
+        declaredMimeType: "image/png",
+        contentBase64: pngBytes.toString("base64"),
+        sourceLabel: "artifact repair migration test",
+        links: [
+          {
+            entityType: "project",
+            entityId: "project_forge_mobile",
+            relationship: "evidence"
+          }
+        ]
+      }
+    });
+    assert.equal(upload.statusCode, 201);
+    const uploadBody = upload.json() as {
+      artifact: {
+        id: string;
+        formatFamily: string;
+        detectedExtension: string;
+        links: Array<{ targetEntityType: string; targetEntityId: string }>;
+      };
+    };
+    assert.equal(uploadBody.artifact.formatFamily, "image");
+    assert.equal(uploadBody.artifact.detectedExtension, "png");
+    assert.equal(uploadBody.artifact.links[0]?.targetEntityType, "project");
+    assert.equal(uploadBody.artifact.links[0]?.targetEntityId, "project_forge_mobile");
+
+    const linkedList = await repairedApp.inject({
+      method: "GET",
+      url: "/api/v1/artifacts?linkedEntityType=project&linkedEntityId=project_forge_mobile",
+      headers: { cookie }
+    });
+    assert.equal(linkedList.statusCode, 200);
+    assert.ok(
+      (linkedList.json() as { artifacts: Array<{ id: string }> }).artifacts.some(
+        (artifact) => artifact.id === uploadBody.artifact.id
+      )
+    );
+  } finally {
+    await repairedApp.close();
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }

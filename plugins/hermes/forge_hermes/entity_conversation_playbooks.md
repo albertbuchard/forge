@@ -1555,17 +1555,20 @@ bytes.
 
 Arc:
 
-1. Ask what the file should help the human retrieve, prove, review, or preserve later.
-2. Ask for the human-readable title, short description, provenance, and source path
+1. Ask what the file or file set should help the human retrieve, prove, review, or preserve later.
+2. If there are several files, treat them as a queue: get a quick short description per file,
+   then open per-file details only where title, provenance, links, metadata JSON, or LLM enrichment
+   choices need more care.
+3. Ask for the human-readable title, short description, provenance, and source path
    only when the user has not already supplied them.
-3. Ask which Forge record the artifact should be linked to only when that link will
+4. Ask which Forge record the artifact should be linked to only when that link will
    improve retrieval or context. Use Forge's general entity-to-entity link model.
-4. Ask whether optional LLM enrichment should fill missing description/provenance
+5. Ask whether optional LLM enrichment should fill missing description/provenance
    fields and produce a danger summary when an LLM connection exists.
-5. Keep trust explicit: only a trusted human/operator or trusted agent may add file
+6. Keep trust explicit: only a trusted human/operator or trusted agent may add file
    bytes, and the agent must not download, open, execute, preview, or transform the
    stored file.
-6. After upload, summarize the stored artifact metadata, scan result, danger score,
+7. After upload, summarize the stored artifact metadata, scan result, danger score,
    and linked Forge records in product language.
 
 Helpful follow-up lanes:

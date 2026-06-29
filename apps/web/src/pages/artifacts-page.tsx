@@ -2,15 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  CheckCircle2,
   Download,
   FileSearch,
+  Files,
   Link2,
+  Pencil,
   RefreshCw,
   ShieldAlert,
   Sparkles,
+  Trash2,
   Upload
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  FlowField,
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +45,7 @@ import type {
   ArtifactFormatFamily,
   ArtifactScanFinding,
   ArtifactScanResult,
+  ArtifactSourceKind,
   ArtifactState,
   ArtifactUploadInput,
   EntityLinkInput
@@ -119,6 +129,76 @@ function fileToBase64(file: File) {
   });
 }
 
+function createUploadQueueItem(file: File): ArtifactUploadQueueItem {
+  const title = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  const randomId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`;
+  return {
+    id: randomId,
+    file,
+    title,
+    shortDescription: "",
+    description: "",
+    sourceLabel: "",
+    sourceKind: "upload",
+    useLlmEnrichment: false,
+    genericLinksText: "",
+    metadataText: ""
+  };
+}
+
+function appendUploadFiles(value: ArtifactUploadFlowValue, files: File[]) {
+  if (files.length === 0) {
+    return value;
+  }
+  return {
+    ...value,
+    items: [...value.items, ...files.map(createUploadQueueItem)],
+    activeItemId: null
+  };
+}
+
+function updateUploadItem(
+  value: ArtifactUploadFlowValue,
+  itemId: string,
+  patch: Partial<ArtifactUploadQueueItem>
+): ArtifactUploadFlowValue {
+  return {
+    ...value,
+    items: value.items.map((item) =>
+      item.id === itemId ? { ...item, ...patch } : item
+    )
+  };
+}
+
+function removeUploadItem(
+  value: ArtifactUploadFlowValue,
+  itemId: string
+): ArtifactUploadFlowValue {
+  return {
+    items: value.items.filter((item) => item.id !== itemId),
+    activeItemId: value.activeItemId === itemId ? null : value.activeItemId
+  };
+}
+
+function parseMetadataText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Metadata JSON must be an object.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 type UploadDraft = {
   title: string;
   shortDescription: string;
@@ -127,6 +207,65 @@ type UploadDraft = {
   useLlmEnrichment: boolean;
   genericLinksText: string;
 };
+
+type ArtifactUploadQueueItem = UploadDraft & {
+  id: string;
+  file: File;
+  sourceKind: ArtifactSourceKind;
+  metadataText: string;
+};
+
+type ArtifactUploadFlowValue = {
+  items: ArtifactUploadQueueItem[];
+  activeItemId: string | null;
+};
+
+type ArtifactUploadResult =
+  | {
+      itemId: string;
+      fileName: string;
+      status: "success";
+      artifactId: string;
+      title: string;
+    }
+  | {
+      itemId: string;
+      fileName: string;
+      status: "error";
+      error: string;
+    };
+
+const EMPTY_UPLOAD_FLOW_VALUE: ArtifactUploadFlowValue = {
+  items: [],
+  activeItemId: null
+};
+
+const ARTIFACT_ACCEPT_EXTENSIONS = [
+  ".xlsx",
+  ".xlsm",
+  ".docx",
+  ".pptx",
+  ".pdf",
+  ".csv",
+  ".tsv",
+  ".txt",
+  ".md",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp"
+].join(",");
+
+const SOURCE_KIND_OPTIONS: ArtifactSourceKind[] = [
+  "upload",
+  "agent_upload",
+  "wiki_ingest",
+  "external_reference",
+  "manual"
+];
 
 function parseGenericLinksText(value: string): EntityLinkInput[] {
   return value
@@ -210,6 +349,32 @@ function ArtifactListItem({
   );
 }
 
+function UploadResultBadge({
+  result
+}: {
+  result: ArtifactUploadResult | undefined;
+}) {
+  if (!result) {
+    return (
+      <Badge size="xs" tone="meta">
+        Pending
+      </Badge>
+    );
+  }
+  if (result.status === "success") {
+    return (
+      <Badge size="xs" className="border-emerald-300/35 bg-emerald-400/10 text-emerald-100">
+        Uploaded
+      </Badge>
+    );
+  }
+  return (
+    <Badge size="xs" className="border-red-400/40 bg-red-500/12 text-red-100">
+      Failed
+    </Badge>
+  );
+}
+
 export function ArtifactsPage() {
   const { artifactId } = useParams();
   const navigate = useNavigate();
@@ -217,15 +382,14 @@ export function ArtifactsPage() {
   const [query, setQuery] = useState("");
   const [dangerLevel, setDangerLevel] = useState<ArtifactDangerLevel | "">("");
   const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadDraft, setUploadDraft] = useState<UploadDraft>({
-    title: "",
-    shortDescription: "",
-    description: "",
-    sourceLabel: "",
-    useLlmEnrichment: false,
-    genericLinksText: ""
-  });
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadFlowValue, setUploadFlowValue] = useState<ArtifactUploadFlowValue>(
+    EMPTY_UPLOAD_FLOW_VALUE
+  );
+  const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>([]);
+  const [uploadDialogError, setUploadDialogError] = useState<string | null>(null);
+  const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] =
+    useState<string | null>(null);
   const [genericLinksText, setGenericLinksText] = useState("");
 
   const artifactsQuery = useQuery({
@@ -258,10 +422,17 @@ export function ArtifactsPage() {
   });
 
   useEffect(() => {
-    if (!artifactId && selectedArtifact) {
+    if (!artifactId && selectedArtifact && !uploadDialogOpen) {
       navigate(`/artifacts/${selectedArtifact.id}`, { replace: true });
     }
-  }, [artifactId, navigate, selectedArtifact]);
+  }, [artifactId, navigate, selectedArtifact, uploadDialogOpen]);
+
+  useEffect(() => {
+    if (!uploadDialogOpen && uploadedArtifactToOpenId) {
+      navigate(`/artifacts/${uploadedArtifactToOpenId}`);
+      setUploadedArtifactToOpenId(null);
+    }
+  }, [navigate, uploadDialogOpen, uploadedArtifactToOpenId]);
 
   const invalidateArtifacts = async () => {
     await Promise.all([
@@ -273,35 +444,58 @@ export function ArtifactsPage() {
   };
 
   const uploadMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedFile) {
-        throw new Error("Choose a file first.");
+    mutationFn: async (items: ArtifactUploadQueueItem[]) => {
+      if (items.length === 0) {
+        throw new Error("Choose one or more files first.");
       }
-      const input: ArtifactUploadInput = {
-        title: uploadDraft.title || undefined,
-        shortDescription: uploadDraft.shortDescription,
-        description: uploadDraft.description,
-        originalFileName: selectedFile.name,
-        declaredMimeType: selectedFile.type,
-        contentBase64: await fileToBase64(selectedFile),
-        sourceLabel: uploadDraft.sourceLabel,
-        links: parseGenericLinksText(uploadDraft.genericLinksText),
-        useLlmEnrichment: uploadDraft.useLlmEnrichment
-      };
-      return uploadArtifact(input);
+      const results: ArtifactUploadResult[] = [];
+      for (const item of items) {
+        try {
+          const input: ArtifactUploadInput = {
+            title: item.title.trim() || undefined,
+            shortDescription: item.shortDescription,
+            description: item.description,
+            originalFileName: item.file.name,
+            declaredMimeType: item.file.type,
+            contentBase64: await fileToBase64(item.file),
+            sourceKind: item.sourceKind,
+            sourceLabel: item.sourceLabel,
+            metadata: parseMetadataText(item.metadataText),
+            links: parseGenericLinksText(item.genericLinksText),
+            useLlmEnrichment: item.useLlmEnrichment
+          };
+          const { artifact } = await uploadArtifact(input);
+          results.push({
+            itemId: item.id,
+            fileName: item.file.name,
+            status: "success",
+            artifactId: artifact.id,
+            title: artifact.title
+          });
+        } catch (error) {
+          results.push({
+            itemId: item.id,
+            fileName: item.file.name,
+            status: "error",
+            error: readErrorMessage(error)
+          });
+        }
+      }
+      return results;
     },
-    onSuccess: async ({ artifact }) => {
-      setSelectedFile(null);
-      setUploadDraft({
-        title: "",
-        shortDescription: "",
-        description: "",
-        sourceLabel: "",
-        useLlmEnrichment: false,
-        genericLinksText: ""
+    onSuccess: async (results) => {
+      setUploadResults((current) => {
+        const merged = new Map(current.map((result) => [result.itemId, result]));
+        for (const result of results) {
+          merged.set(result.itemId, result);
+        }
+        return Array.from(merged.values());
       });
       await invalidateArtifacts();
-      navigate(`/artifacts/${artifact.id}`);
+      const firstSuccess = results.find((result) => result.status === "success");
+      if (firstSuccess?.status === "success") {
+        setUploadedArtifactToOpenId(firstSuccess.artifactId);
+      }
     }
   });
 
@@ -352,6 +546,395 @@ export function ArtifactsPage() {
     );
   }, [selectedArtifact?.id, selectedArtifact?.links.length, selectedArtifact?.updatedAt]);
 
+  const uploadResultByItemId = useMemo(
+    () => new Map(uploadResults.map((result) => [result.itemId, result])),
+    [uploadResults]
+  );
+
+  const openUploadDialog = () => {
+    setUploadFlowValue(EMPTY_UPLOAD_FLOW_VALUE);
+    setUploadResults([]);
+    setUploadDialogError(null);
+    setUploadedArtifactToOpenId(null);
+    setUploadDialogOpen(true);
+  };
+
+  const uploadFlowSteps = useMemo<Array<QuestionFlowStep<ArtifactUploadFlowValue>>>(
+    () => [
+      {
+        id: "files",
+        eyebrow: "Select",
+        title: "Choose the files to preserve",
+        description:
+          "Select one or more trusted files. Forge stores bytes content-addressably, scans them conservatively, and keeps downloads human-only.",
+        render: (value, setValue) => (
+          <div className="grid gap-4">
+            <div
+              className="rounded-[26px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                setUploadResults([]);
+                setValue(
+                  appendUploadFiles(value, Array.from(event.dataTransfer.files))
+                );
+              }}
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Files className="size-4 text-[var(--primary)]" />
+                    Files
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
+                    Spreadsheets, documents, PDFs, text, structured text, and images are supported.
+                  </p>
+                </div>
+                <Input
+                  aria-label="Artifact files"
+                  type="file"
+                  multiple
+                  accept={ARTIFACT_ACCEPT_EXTENSIONS}
+                  className="w-full sm:max-w-xs"
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    setUploadResults([]);
+                    setValue(appendUploadFiles(value, files));
+                    event.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+
+            {value.items.length === 0 ? (
+              <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-muted)]">
+                No files selected yet.
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {value.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex min-w-0 items-center justify-between gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{item.file.name}</div>
+                      <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                        {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
+                      </div>
+                    </div>
+                    <UploadResultBadge result={uploadResultByItemId.get(item.id)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      },
+      {
+        id: "queue",
+        eyebrow: "Describe",
+        title: "Review each file before upload",
+        description:
+          "Add quick descriptions from the queue, or open a file's details for provenance, links, metadata JSON, and LLM enrichment.",
+        render: (value, setValue) => {
+          const activeItem = value.items.find(
+            (item) => item.id === value.activeItemId
+          );
+
+          if (activeItem) {
+            return (
+              <div className="grid gap-4">
+                <div className="flex flex-col gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">{activeItem.file.name}</div>
+                    <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                      {formatBytes(activeItem.file.size)} · {activeItem.file.type || "unknown type"}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setValue({ activeItemId: null })}
+                  >
+                    Back to file queue
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FlowField label="Title">
+                    <Input
+                      value={activeItem.title}
+                      onChange={(event) =>
+                        setValue(
+                          updateUploadItem(value, activeItem.id, {
+                            title: event.target.value
+                          })
+                        )
+                      }
+                    />
+                  </FlowField>
+                  <FlowField label="Source kind">
+                    <select
+                      value={activeItem.sourceKind}
+                      onChange={(event) =>
+                        setValue(
+                          updateUploadItem(value, activeItem.id, {
+                            sourceKind: event.target.value as ArtifactSourceKind
+                          })
+                        )
+                      }
+                      className="interactive-tap min-h-10 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                    >
+                      {SOURCE_KIND_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {titleCase(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </FlowField>
+                </div>
+
+                <FlowField label="Short description">
+                  <Input
+                    value={activeItem.shortDescription}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          shortDescription: event.target.value
+                        })
+                      )
+                    }
+                  />
+                </FlowField>
+
+                <FlowField label="Long description">
+                  <Textarea
+                    value={activeItem.description}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          description: event.target.value
+                        })
+                      )
+                    }
+                  />
+                </FlowField>
+
+                <FlowField label="Source label or provenance note">
+                  <Input
+                    value={activeItem.sourceLabel}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          sourceLabel: event.target.value
+                        })
+                      )
+                    }
+                    placeholder="Where this file came from or why it is worth preserving"
+                  />
+                </FlowField>
+
+                <FlowField
+                  label="Generic entity links"
+                  hint="One per line: entityType:entityId:relationship:anchorKey"
+                >
+                  <Textarea
+                    value={activeItem.genericLinksText}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          genericLinksText: event.target.value
+                        })
+                      )
+                    }
+                  />
+                </FlowField>
+
+                <FlowField label="Metadata JSON" hint='Optional object, for example {"period":"Q2","owner":"Albert"}'>
+                  <Textarea
+                    value={activeItem.metadataText}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          metadataText: event.target.value
+                        })
+                      )
+                    }
+                  />
+                </FlowField>
+
+                <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
+                  <input
+                    type="checkbox"
+                    checked={activeItem.useLlmEnrichment}
+                    onChange={(event) =>
+                      setValue(
+                        updateUploadItem(value, activeItem.id, {
+                          useLlmEnrichment: event.target.checked
+                        })
+                      )
+                    }
+                  />
+                  Use configured LLM to fill missing metadata for this file
+                </label>
+              </div>
+            );
+          }
+
+          return (
+            <div className="grid gap-3">
+              {value.items.length === 0 ? (
+                <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-muted)]">
+                  Choose files first.
+                </div>
+              ) : (
+                value.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{item.file.name}</div>
+                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                          {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setValue({ activeItemId: item.id })}
+                        >
+                          <Pencil className="size-4" />
+                          Details
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setValue(removeUploadItem(value, item.id))}
+                        >
+                          <Trash2 className="size-4" />
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                    <Input
+                      aria-label={`Short description for ${item.file.name}`}
+                      value={item.shortDescription}
+                      onChange={(event) =>
+                        setValue(
+                          updateUploadItem(value, item.id, {
+                            shortDescription: event.target.value
+                          })
+                        )
+                      }
+                      placeholder="Quick short description"
+                    />
+                    <UploadResultBadge result={uploadResultByItemId.get(item.id)} />
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        }
+      },
+      {
+        id: "review",
+        eyebrow: "Upload",
+        title: "Upload artifacts",
+        description:
+          "Forge will create one artifact per file. Successful files stay saved even if another file fails.",
+        render: (value) => {
+          const successCount = uploadResults.filter(
+            (result) => result.status === "success"
+          ).length;
+          const failureCount = uploadResults.filter(
+            (result) => result.status === "error"
+          ).length;
+
+          return (
+            <div className="grid gap-4">
+              {uploadResults.length > 0 ? (
+                <div className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <CheckCircle2 className="size-4 text-[var(--primary)]" />
+                    Upload results
+                  </div>
+                  <p className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+                    {successCount} uploaded · {failureCount} failed
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="grid gap-3">
+                {value.items.map((item) => {
+                  const result = uploadResultByItemId.get(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {item.title || item.file.name}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                            {item.file.name} · {formatBytes(item.file.size)}
+                          </div>
+                          {item.shortDescription ? (
+                            <p className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+                              {item.shortDescription}
+                            </p>
+                          ) : null}
+                        </div>
+                        <UploadResultBadge result={result} />
+                      </div>
+                      {result?.status === "error" ? (
+                        <p className="mt-3 rounded-[18px] border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                          {result.error}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        }
+      }
+    ],
+    [uploadResultByItemId, uploadResults]
+  );
+
+  const submitUploadFlow = async () => {
+    const itemsToUpload = uploadFlowValue.items.filter(
+      (item) => uploadResultByItemId.get(item.id)?.status !== "success"
+    );
+    if (uploadFlowValue.items.length === 0) {
+      setUploadDialogError("Choose one or more files first.");
+      return;
+    }
+    if (itemsToUpload.length === 0) {
+      setUploadDialogOpen(false);
+      setUploadFlowValue(EMPTY_UPLOAD_FLOW_VALUE);
+      setUploadResults([]);
+      return;
+    }
+    try {
+      for (const item of itemsToUpload) {
+        parseMetadataText(item.metadataText);
+      }
+    } catch (error) {
+      setUploadDialogError(readErrorMessage(error));
+      return;
+    }
+    setUploadDialogError(null);
+    await uploadMutation.mutateAsync(itemsToUpload);
+  };
+
   return (
     <div className="min-h-full bg-[var(--ui-bg)] text-[var(--ui-ink-strong)]">
       <PageHero
@@ -362,12 +945,10 @@ export function ArtifactsPage() {
         actions={
           <Button
             type="button"
-            onClick={() => uploadMutation.mutate()}
-            pending={uploadMutation.isPending}
-            disabled={!selectedFile}
+            onClick={openUploadDialog}
           >
             <Upload className="size-4" />
-            Upload
+            Add artifacts
           </Button>
         }
       />
@@ -414,84 +995,6 @@ export function ArtifactsPage() {
                 ))}
               </select>
             </div>
-          </Card>
-
-          <Card className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Upload className="size-4 text-[var(--primary)]" />
-              Add File
-            </div>
-            <Input
-              type="file"
-              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            />
-            <Input
-              value={uploadDraft.title}
-              onChange={(event) =>
-                setUploadDraft((current) => ({ ...current, title: event.target.value }))
-              }
-              placeholder="Title"
-            />
-            <Input
-              value={uploadDraft.shortDescription}
-              onChange={(event) =>
-                setUploadDraft((current) => ({
-                  ...current,
-                  shortDescription: event.target.value
-                }))
-              }
-              placeholder="Short description"
-            />
-            <Input
-              value={uploadDraft.sourceLabel}
-              onChange={(event) =>
-                setUploadDraft((current) => ({
-                  ...current,
-                  sourceLabel: event.target.value
-                }))
-              }
-              placeholder="Provenance or source label"
-            />
-            <Textarea
-              value={uploadDraft.description}
-              onChange={(event) =>
-                setUploadDraft((current) => ({
-                  ...current,
-                  description: event.target.value
-                }))
-              }
-              placeholder="Description"
-            />
-            <Textarea
-              value={uploadDraft.genericLinksText}
-              onChange={(event) =>
-                setUploadDraft((current) => ({
-                  ...current,
-                  genericLinksText: event.target.value
-                }))
-              }
-              placeholder="Optional generic entity links, one per line: entityType:entityId:relationship:anchorKey"
-            />
-            <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
-              <input
-                type="checkbox"
-                checked={uploadDraft.useLlmEnrichment}
-                onChange={(event) =>
-                  setUploadDraft((current) => ({
-                    ...current,
-                    useLlmEnrichment: event.target.checked
-                  }))
-                }
-              />
-              Use configured LLM to fill missing metadata
-            </label>
-            {uploadMutation.error ? (
-              <p className="text-sm text-red-200">
-                {uploadMutation.error instanceof Error
-                  ? uploadMutation.error.message
-                  : "Upload failed."}
-              </p>
-            ) : null}
           </Card>
 
           <div className="space-y-2">
@@ -752,6 +1255,47 @@ export function ArtifactsPage() {
           )}
         </section>
       </main>
+
+      <QuestionFlowDialog
+        open={uploadDialogOpen}
+        onOpenChange={(open) => {
+          setUploadDialogOpen(open);
+          if (!open) {
+            setUploadDialogError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Add artifacts"
+        description="A guided flow for preserving trusted files with metadata, safety scans, provenance, and generic Forge entity links."
+        value={uploadFlowValue}
+        onChange={setUploadFlowValue}
+        steps={uploadFlowSteps}
+        pending={uploadMutation.isPending}
+        pendingLabel="Uploading"
+        submitLabel={
+          uploadFlowValue.items.some(
+            (item) => uploadResultByItemId.get(item.id)?.status !== "success"
+          )
+            ? "Upload artifacts"
+            : "All files uploaded"
+        }
+        error={
+          uploadDialogError ??
+          (uploadMutation.error instanceof Error
+            ? uploadMutation.error.message
+            : null)
+        }
+        resolveContinueNudge={(stepId, value) => {
+          if (stepId === "files" && value.items.length === 0) {
+            return "Choose one or more files first.";
+          }
+          if (stepId === "queue") {
+            return "Quick descriptions are enough; use Details when provenance matters.";
+          }
+          return null;
+        }}
+        onSubmit={submitUploadFlow}
+      />
     </div>
   );
 }
