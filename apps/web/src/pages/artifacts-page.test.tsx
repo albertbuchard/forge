@@ -1,10 +1,16 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ArtifactsPage } from "./artifacts-page";
-import { uploadArtifact } from "@/lib/api";
+import { deleteEntities, listArtifacts, uploadArtifact } from "@/lib/api";
 import type { Artifact } from "@/lib/types";
 
 vi.mock("@/components/shell/page-hero", () => ({
@@ -87,7 +93,14 @@ const mockArtifact: Artifact = {
 };
 
 vi.mock("@/lib/api", () => ({
-  listArtifacts: vi.fn(async () => ({ artifacts: [mockArtifact] })),
+  listArtifacts: vi.fn(async () => ({
+    artifacts: [mockArtifact],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    hasMore: false
+  })),
+  getArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   listArtifactVersions: vi.fn(async () => ({
     versions: [
       {
@@ -123,6 +136,7 @@ vi.mock("@/lib/api", () => ({
   patchArtifact: vi.fn(),
   replaceArtifactEntityLinks: vi.fn(),
   rescanArtifact: vi.fn(),
+  deleteEntities: vi.fn(async () => ({ results: [{ ok: true }] })),
   uploadArtifact: vi.fn()
 }));
 
@@ -142,6 +156,7 @@ function renderArtifactsPage() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/artifacts/artifact_123"]}>
         <Routes>
+          <Route path="/artifacts" element={<ArtifactsPage />} />
           <Route path="/artifacts/:artifactId" element={<ArtifactsPage />} />
         </Routes>
       </MemoryRouter>
@@ -153,12 +168,22 @@ describe("ArtifactsPage", () => {
   it("renders artifact metadata, safety findings, and generic entity links", async () => {
     renderArtifactsPage();
 
-    expect(await screen.findByRole("heading", { name: "Artifacts" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add artifacts/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Artifacts" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /add artifacts/i })
+    ).toBeInTheDocument();
     expect(screen.queryByText("Add File")).not.toBeInTheDocument();
-    expect((await screen.findAllByText("Thesis budget workbook")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Budget workbook for thesis planning.")).toBeInTheDocument();
-    expect(screen.getByText("office_external_relationship")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Thesis budget workbook")).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Budget workbook for thesis planning.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("office_external_relationship")
+    ).toBeInTheDocument();
     expect(screen.getByText("Project")).toBeInTheDocument();
     expect(screen.getByText("project_thesis")).toBeInTheDocument();
     expect(screen.getByText("Evidence")).toBeInTheDocument();
@@ -192,9 +217,13 @@ describe("ArtifactsPage", () => {
       });
     renderArtifactsPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /add artifacts/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
     expect(
-      await screen.findByRole("heading", { name: "Choose the files to preserve" })
+      await screen.findByRole("heading", {
+        name: "Choose the files to preserve"
+      })
     ).toBeInTheDocument();
 
     const image = new File(["png"], "evidence.png", { type: "image/png" });
@@ -210,12 +239,17 @@ describe("ArtifactsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     expect(
-      await screen.findByRole("heading", { name: "Review each file before upload" })
+      await screen.findByRole("heading", {
+        name: "Review each file before upload"
+      })
     ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Short description for evidence.png"), {
-      target: { value: "Photo from the whiteboard." }
-    });
+    fireEvent.change(
+      screen.getByLabelText("Short description for evidence.png"),
+      {
+        target: { value: "Photo from the whiteboard." }
+      }
+    );
     fireEvent.click(screen.getAllByRole("button", { name: /details/i })[1]);
     fireEvent.change(await screen.findByLabelText("Title"), {
       target: { value: "Protocol notes" }
@@ -223,10 +257,14 @@ describe("ArtifactsPage", () => {
     fireEvent.change(screen.getByLabelText("Source label or provenance note"), {
       target: { value: "Meeting folder" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /back to file queue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /back to file queue/i })
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    expect(await screen.findByRole("heading", { name: "Upload artifacts" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Upload artifacts" })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
 
     await waitFor(() => {
@@ -242,6 +280,73 @@ describe("ArtifactsPage", () => {
       title: "Protocol notes",
       sourceLabel: "Meeting folder"
     });
-    expect(await screen.findByText("2 uploaded · 0 failed")).toBeInTheDocument();
+    expect(
+      await screen.findByText("2 uploaded · 0 failed")
+    ).toBeInTheDocument();
+  });
+
+  it("uses paginated artifact list controls for large stores", async () => {
+    vi.mocked(listArtifacts).mockImplementation(async (options = {}) => {
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 50;
+      const count = offset === 0 ? 50 : 25;
+      return {
+        artifacts: Array.from({ length: count }, (_, index) => ({
+          ...mockArtifact,
+          id: `artifact_${offset + index}`,
+          title: `Artifact ${offset + index}`,
+          originalFileName: `artifact-${offset + index}.xlsx`
+        })),
+        total: 75,
+        limit,
+        offset,
+        hasMore: offset + count < 75
+      };
+    });
+    renderArtifactsPage();
+
+    expect(await screen.findByText("Showing 1-50 of 75")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listArtifacts).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50, offset: 0 })
+      );
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /next artifact page/i })
+    );
+
+    expect(await screen.findByText("Showing 51-75 of 75")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listArtifacts).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50, offset: 50 })
+      );
+    });
+  });
+
+  it("archives artifacts through shared soft-delete entity CRUD", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Delete this artifact record?"
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /delete artifact/i }));
+
+    await waitFor(() => {
+      expect(deleteEntities).toHaveBeenCalledWith({
+        atomic: true,
+        operations: [
+          {
+            entityType: "artifact",
+            id: "artifact_123",
+            mode: "soft",
+            reason: "Archived from the Artifact Store web app."
+          }
+        ]
+      });
+    });
   });
 });

@@ -311,6 +311,7 @@ function ShellFrame({
   const isPsyche = isPsycheRoute(routeLocation.pathname);
   const knowledgeGraphSurface =
     routeLocation.pathname.startsWith("/knowledge-graph");
+  const showGlobalCreateMenu = !routeLocation.pathname.startsWith("/artifacts");
   const immersiveMobileSurface = false;
   const fetching = useIsFetching();
   const mutating = useIsMutating();
@@ -980,10 +981,12 @@ function ShellFrame({
         recentIngestJobs={recentIngestJobs}
       />
 
-      <CreateMenu
-        className="fixed z-40 lg:bottom-6 lg:right-6"
-        actions={createActions.actions}
-      />
+      {showGlobalCreateMenu ? (
+        <CreateMenu
+          className="fixed z-40 lg:bottom-6 lg:right-6"
+          actions={createActions.actions}
+        />
+      ) : null}
     </div>
   );
 }

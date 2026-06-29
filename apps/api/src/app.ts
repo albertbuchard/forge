@@ -390,7 +390,7 @@ import {
   getArtifactById,
   listArtifactAuditEvents,
   listArtifactVersions,
-  listArtifacts,
+  listArtifactsPage,
   patchArtifactTrust,
   readArtifactDownload,
   replaceArtifactEntityLinks,
@@ -3052,7 +3052,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
     case "artifact":
-      return "Use POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET /api/v1/artifacts/:id/download only for human operator downloads. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
+      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET /api/v1/artifacts/:id/download only for human operator downloads. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
       return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
     case "questionnaire_run":
@@ -3848,13 +3848,15 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         name: "title",
         type: "string",
         required: false,
-        description: "Human-readable artifact title. LLM enrichment may fill it when missing."
+        description:
+          "Human-readable artifact title. LLM enrichment may fill it when missing."
       },
       {
         name: "shortDescription",
         type: "string",
         required: false,
-        description: "Compact display summary. LLM enrichment may fill it when missing."
+        description:
+          "Compact display summary. LLM enrichment may fill it when missing."
       },
       {
         name: "description",
@@ -3879,7 +3881,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         name: "sourceLabel",
         type: "string",
         required: false,
-        description: "Provenance label such as source, project, export, or sender."
+        description:
+          "Provenance label such as source, project, export, or sender."
       },
       {
         name: "links",
@@ -6159,13 +6162,32 @@ function buildAgentOnboardingPayload(request: {
             "audit"
           ],
           methodRoutes: {
-            list: { method: "GET", path: "/api/v1/artifacts" },
+            list: {
+              method: "GET",
+              path: "/api/v1/artifacts",
+              queryParams: [
+                "query",
+                "artifactState",
+                "dangerLevel",
+                "formatFamily",
+                "linkedEntityType",
+                "linkedEntityId",
+                "limit",
+                "offset"
+              ]
+            },
             createWithBytes: { method: "POST", path: "/api/v1/artifacts" },
             readMetadata: { method: "GET", path: "/api/v1/artifacts/:id" },
             updateMetadata: { method: "PATCH", path: "/api/v1/artifacts/:id" },
             rescan: { method: "POST", path: "/api/v1/artifacts/:id/scan" },
-            enrichWithLlm: { method: "POST", path: "/api/v1/artifacts/:id/enrich" },
-            replaceGenericLinks: { method: "POST", path: "/api/v1/artifacts/:id/links" },
+            enrichWithLlm: {
+              method: "POST",
+              path: "/api/v1/artifacts/:id/enrich"
+            },
+            replaceGenericLinks: {
+              method: "POST",
+              path: "/api/v1/artifacts/:id/links"
+            },
             trustState: { method: "POST", path: "/api/v1/artifacts/:id/trust" },
             versions: { method: "GET", path: "/api/v1/artifacts/:id/versions" },
             audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
@@ -6174,6 +6196,7 @@ function buildAgentOnboardingPayload(request: {
             "Do not expose the download route to agent tools. It is a human operator route only.",
             "Do not execute, preview, parse externally, or transform stored file bytes autonomously.",
             "Use general entity links for relationships; do not create artifact-specific link models.",
+            "Use limit and offset for artifact list calls; do not bulk-load large Artifact Stores.",
             "Use batch CRUD only for artifact metadata search/update/delete/restore, never for file-byte creation."
           ]
         }
@@ -7563,9 +7586,7 @@ function buildV1Context(
   };
 }
 
-function compactV1ContextForShell(
-  context: ReturnType<typeof buildV1Context>
-) {
+function compactV1ContextForShell(context: ReturnType<typeof buildV1Context>) {
   const stripTaskPeople = (task: Task) => {
     const {
       user: _user,
@@ -9537,11 +9558,9 @@ export async function buildServer(
     requireArtifactReadAccess(request.headers as Record<string, unknown>, {
       route: "/api/v1/artifacts"
     });
-    return {
-      artifacts: listArtifacts(
-        artifactListQuerySchema.parse(request.query ?? {})
-      )
-    };
+    return listArtifactsPage(
+      artifactListQuerySchema.parse(request.query ?? {})
+    );
   });
   app.post(
     "/api/v1/artifacts",
@@ -9600,7 +9619,10 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    const fileName = result.artifact.originalFileName.replace(/["\\\r\n]/g, "_");
+    const fileName = result.artifact.originalFileName.replace(
+      /["\\\r\n]/g,
+      "_"
+    );
     recordActivityEvent({
       entityType: "artifact",
       entityId: result.artifact.id,
@@ -9849,9 +9871,7 @@ export async function buildServer(
       request.headers as Record<string, unknown>
     );
     const query = request.query as Record<string, unknown>;
-    const context = buildV1Context(
-      resolveEffectiveReadScope(query, auth)
-    );
+    const context = buildV1Context(resolveEffectiveReadScope(query, auth));
     return shouldUseShellContextProfile(query)
       ? compactV1ContextForShell(context)
       : context;
@@ -11201,7 +11221,10 @@ export async function buildServer(
       return {
         chunk: {
           ...chunk,
-          serverProcessingMs: Math.max(0, Math.round(performance.now() - startedAt))
+          serverProcessingMs: Math.max(
+            0,
+            Math.round(performance.now() - startedAt)
+          )
         }
       };
     }

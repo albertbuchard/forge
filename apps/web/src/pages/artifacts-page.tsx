@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Download,
   FileSearch,
@@ -28,8 +30,10 @@ import { Input } from "@/components/ui/input";
 import { EmptyState, ErrorState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  deleteEntities,
   downloadArtifact,
   enrichArtifact,
+  getArtifact,
   listArtifactAuditEvents,
   listArtifacts,
   listArtifactVersions,
@@ -68,6 +72,8 @@ const FORMAT_FAMILIES: ArtifactFormatFamily[] = [
   "image"
 ];
 
+const ARTIFACT_PAGE_SIZE = 50;
+
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
     return "0 B";
@@ -101,7 +107,9 @@ function dangerClass(level: ArtifactDangerLevel) {
   return "border-emerald-300/35 bg-emerald-400/10 text-emerald-100";
 }
 
-function isScanResult(value: Artifact["scanResults"]): value is ArtifactScanResult {
+function isScanResult(
+  value: Artifact["scanResults"]
+): value is ArtifactScanResult {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -121,16 +129,22 @@ function fileToBase64(file: File) {
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      const base64 = result.includes(",") ? result.slice(result.indexOf(",") + 1) : result;
+      const base64 = result.includes(",")
+        ? result.slice(result.indexOf(",") + 1)
+        : result;
       resolve(base64);
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Unable to read file."));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Unable to read file."));
     reader.readAsDataURL(file);
   });
 }
 
 function createUploadQueueItem(file: File): ArtifactUploadQueueItem {
-  const title = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  const title = file.name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
   const randomId =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -278,9 +292,7 @@ function parseGenericLinksText(value: string): EntityLinkInput[] {
         entityId = "",
         relationship = "related",
         anchorKey = ""
-      ] = line
-        .split(":")
-        .map((part) => part.trim());
+      ] = line.split(":").map((part) => part.trim());
       return { entityType, entityId, relationship, anchorKey };
     })
     .filter((link) => link.entityType.length > 0 && link.entityId.length > 0);
@@ -330,7 +342,10 @@ function ArtifactListItem({
             {artifact.originalFileName}
           </div>
         </div>
-        <Badge size="xs" className={cn("shrink-0", dangerClass(artifact.dangerLevel))}>
+        <Badge
+          size="xs"
+          className={cn("shrink-0", dangerClass(artifact.dangerLevel))}
+        >
           {artifact.dangerScore}/100
         </Badge>
       </div>
@@ -363,7 +378,10 @@ function UploadResultBadge({
   }
   if (result.status === "success") {
     return (
-      <Badge size="xs" className="border-emerald-300/35 bg-emerald-400/10 text-emerald-100">
+      <Badge
+        size="xs"
+        className="border-emerald-300/35 bg-emerald-400/10 text-emerald-100"
+      >
         Uploaded
       </Badge>
     );
@@ -381,32 +399,56 @@ export function ArtifactsPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [dangerLevel, setDangerLevel] = useState<ArtifactDangerLevel | "">("");
-  const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">("");
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [uploadFlowValue, setUploadFlowValue] = useState<ArtifactUploadFlowValue>(
-    EMPTY_UPLOAD_FLOW_VALUE
+  const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">(
+    ""
   );
-  const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>([]);
-  const [uploadDialogError, setUploadDialogError] = useState<string | null>(null);
-  const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] =
-    useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [uploadFlowValue, setUploadFlowValue] =
+    useState<ArtifactUploadFlowValue>(EMPTY_UPLOAD_FLOW_VALUE);
+  const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>(
+    []
+  );
+  const [uploadDialogError, setUploadDialogError] = useState<string | null>(
+    null
+  );
+  const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] = useState<
+    string | null
+  >(null);
   const [genericLinksText, setGenericLinksText] = useState("");
 
   const artifactsQuery = useQuery({
-    queryKey: ["artifacts", query, dangerLevel, formatFamily],
+    queryKey: ["artifacts", query, dangerLevel, formatFamily, pageIndex],
     queryFn: () =>
       listArtifacts({
         query: query || undefined,
         dangerLevel: dangerLevel || undefined,
         formatFamily: formatFamily || undefined,
-        limit: 200
+        limit: ARTIFACT_PAGE_SIZE,
+        offset: pageIndex * ARTIFACT_PAGE_SIZE
       })
   });
 
   const artifacts = artifactsQuery.data?.artifacts ?? [];
+  const totalArtifacts = artifactsQuery.data?.total ?? artifacts.length;
+  const pageOffset =
+    artifactsQuery.data?.offset ?? pageIndex * ARTIFACT_PAGE_SIZE;
+  const pageStart = totalArtifacts === 0 ? 0 : pageOffset + 1;
+  const pageEnd = Math.min(pageOffset + artifacts.length, totalArtifacts);
+  const hasPreviousPage = pageIndex > 0;
+  const hasNextPage = Boolean(artifactsQuery.data?.hasMore);
+  const selectedArtifactQuery = useQuery({
+    queryKey: ["artifact", artifactId],
+    enabled: Boolean(artifactId),
+    queryFn: () => getArtifact(artifactId!)
+  });
   const selectedArtifact = useMemo(
-    () => artifacts.find((artifact) => artifact.id === artifactId) ?? artifacts[0] ?? null,
-    [artifactId, artifacts]
+    () =>
+      artifactId
+        ? (selectedArtifactQuery.data?.artifact ?? null)
+        : (artifacts[0] ?? null),
+    [artifactId, artifacts, selectedArtifactQuery.data?.artifact]
   );
 
   const versionsQuery = useQuery({
@@ -428,6 +470,22 @@ export function ArtifactsPage() {
   }, [artifactId, navigate, selectedArtifact, uploadDialogOpen]);
 
   useEffect(() => {
+    setPageIndex(0);
+  }, [query, dangerLevel, formatFamily]);
+
+  useEffect(() => {
+    if (pageIndex > 0 && artifactsQuery.data && artifacts.length === 0) {
+      setPageIndex((current) => Math.max(0, current - 1));
+    }
+  }, [artifacts.length, artifactsQuery.data, pageIndex]);
+
+  useEffect(() => {
+    if (!selectedArtifact) {
+      setArchiveDialogOpen(false);
+    }
+  }, [selectedArtifact]);
+
+  useEffect(() => {
     if (!uploadDialogOpen && uploadedArtifactToOpenId) {
       navigate(`/artifacts/${uploadedArtifactToOpenId}`);
       setUploadedArtifactToOpenId(null);
@@ -437,6 +495,7 @@ export function ArtifactsPage() {
   const invalidateArtifacts = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["artifacts"] }),
+      queryClient.invalidateQueries({ queryKey: ["artifact"] }),
       queryClient.invalidateQueries({ queryKey: ["artifact-versions"] }),
       queryClient.invalidateQueries({ queryKey: ["artifact-audit"] }),
       queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] })
@@ -485,14 +544,18 @@ export function ArtifactsPage() {
     },
     onSuccess: async (results) => {
       setUploadResults((current) => {
-        const merged = new Map(current.map((result) => [result.itemId, result]));
+        const merged = new Map(
+          current.map((result) => [result.itemId, result])
+        );
         for (const result of results) {
           merged.set(result.itemId, result);
         }
         return Array.from(merged.values());
       });
       await invalidateArtifacts();
-      const firstSuccess = results.find((result) => result.status === "success");
+      const firstSuccess = results.find(
+        (result) => result.status === "success"
+      );
       if (firstSuccess?.status === "success") {
         setUploadedArtifactToOpenId(firstSuccess.artifactId);
       }
@@ -500,8 +563,11 @@ export function ArtifactsPage() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: (patch: Partial<Pick<Artifact, "title" | "shortDescription" | "description">>) =>
-      patchArtifact(selectedArtifact!.id, patch),
+    mutationFn: (
+      patch: Partial<
+        Pick<Artifact, "title" | "shortDescription" | "description">
+      >
+    ) => patchArtifact(selectedArtifact!.id, patch),
     onSuccess: invalidateArtifacts
   });
 
@@ -511,7 +577,8 @@ export function ArtifactsPage() {
   });
 
   const enrichMutation = useMutation({
-    mutationFn: () => enrichArtifact(selectedArtifact!.id, { fillMissingOnly: true }),
+    mutationFn: () =>
+      enrichArtifact(selectedArtifact!.id, { fillMissingOnly: true }),
     onSuccess: invalidateArtifacts
   });
 
@@ -536,6 +603,40 @@ export function ArtifactsPage() {
     }
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const artifact = selectedArtifact!;
+      const response = await deleteEntities({
+        atomic: true,
+        operations: [
+          {
+            entityType: "artifact",
+            id: artifact.id,
+            mode: "soft",
+            reason: "Archived from the Artifact Store web app."
+          }
+        ]
+      });
+      const result = response.results[0] as
+        | { ok?: boolean; error?: { message?: string } | string }
+        | undefined;
+      if (!result?.ok) {
+        const error = result?.error;
+        const message =
+          typeof error === "string"
+            ? error
+            : (error?.message ?? "Forge could not archive this artifact.");
+        throw new Error(message);
+      }
+      return response;
+    },
+    onSuccess: async () => {
+      setArchiveDialogOpen(false);
+      await invalidateArtifacts();
+      navigate("/artifacts", { replace: true });
+    }
+  });
+
   const findings = scanFindings(selectedArtifact);
   const versionCount = versionsQuery.data?.versions.length ?? 0;
   const auditEvents = auditQuery.data?.events ?? [];
@@ -544,7 +645,11 @@ export function ArtifactsPage() {
     setGenericLinksText(
       selectedArtifact ? formatGenericLinksText(selectedArtifact.links) : ""
     );
-  }, [selectedArtifact?.id, selectedArtifact?.links.length, selectedArtifact?.updatedAt]);
+  }, [
+    selectedArtifact?.id,
+    selectedArtifact?.links.length,
+    selectedArtifact?.updatedAt
+  ]);
 
   const uploadResultByItemId = useMemo(
     () => new Map(uploadResults.map((result) => [result.itemId, result])),
@@ -559,7 +664,9 @@ export function ArtifactsPage() {
     setUploadDialogOpen(true);
   };
 
-  const uploadFlowSteps = useMemo<Array<QuestionFlowStep<ArtifactUploadFlowValue>>>(
+  const uploadFlowSteps = useMemo<
+    Array<QuestionFlowStep<ArtifactUploadFlowValue>>
+  >(
     () => [
       {
         id: "files",
@@ -587,7 +694,8 @@ export function ArtifactsPage() {
                     Files
                   </div>
                   <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-muted)]">
-                    Spreadsheets, documents, PDFs, text, structured text, and images are supported.
+                    Spreadsheets, documents, PDFs, text, structured text, and
+                    images are supported.
                   </p>
                 </div>
                 <Input
@@ -618,12 +726,17 @@ export function ArtifactsPage() {
                     className="flex min-w-0 items-center justify-between gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{item.file.name}</div>
+                      <div className="truncate text-sm font-medium">
+                        {item.file.name}
+                      </div>
                       <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                        {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
+                        {formatBytes(item.file.size)} ·{" "}
+                        {item.file.type || "unknown type"}
                       </div>
                     </div>
-                    <UploadResultBadge result={uploadResultByItemId.get(item.id)} />
+                    <UploadResultBadge
+                      result={uploadResultByItemId.get(item.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -647,9 +760,12 @@ export function ArtifactsPage() {
               <div className="grid gap-4">
                 <div className="flex flex-col gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{activeItem.file.name}</div>
+                    <div className="text-sm font-medium">
+                      {activeItem.file.name}
+                    </div>
                     <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                      {formatBytes(activeItem.file.size)} · {activeItem.file.type || "unknown type"}
+                      {formatBytes(activeItem.file.size)} ·{" "}
+                      {activeItem.file.type || "unknown type"}
                     </div>
                   </div>
                   <Button
@@ -751,7 +867,10 @@ export function ArtifactsPage() {
                   />
                 </FlowField>
 
-                <FlowField label="Metadata JSON" hint='Optional object, for example {"period":"Q2","owner":"Albert"}'>
+                <FlowField
+                  label="Metadata JSON"
+                  hint='Optional object, for example {"period":"Q2","owner":"Albert"}'
+                >
                   <Textarea
                     value={activeItem.metadataText}
                     onChange={(event) =>
@@ -796,9 +915,12 @@ export function ArtifactsPage() {
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{item.file.name}</div>
+                        <div className="truncate text-sm font-medium">
+                          {item.file.name}
+                        </div>
                         <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                          {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
+                          {formatBytes(item.file.size)} ·{" "}
+                          {item.file.type || "unknown type"}
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
@@ -813,7 +935,9 @@ export function ArtifactsPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          onClick={() => setValue(removeUploadItem(value, item.id))}
+                          onClick={() =>
+                            setValue(removeUploadItem(value, item.id))
+                          }
                         >
                           <Trash2 className="size-4" />
                           Remove
@@ -832,7 +956,9 @@ export function ArtifactsPage() {
                       }
                       placeholder="Quick short description"
                     />
-                    <UploadResultBadge result={uploadResultByItemId.get(item.id)} />
+                    <UploadResultBadge
+                      result={uploadResultByItemId.get(item.id)}
+                    />
                   </div>
                 ))
               )}
@@ -909,6 +1035,36 @@ export function ArtifactsPage() {
     [uploadResultByItemId, uploadResults]
   );
 
+  const archiveFlowSteps = useMemo<
+    Array<QuestionFlowStep<Record<string, never>>>
+  >(
+    () => [
+      {
+        id: "confirm",
+        eyebrow: "Delete",
+        title: "Delete this artifact record?",
+        description:
+          "Forge will move the artifact metadata to the shared bin. The stored file bytes are preserved, and the record can be restored through Forge's normal restore flow.",
+        render: () => (
+          <div className="rounded-[24px] border border-red-400/30 bg-red-500/10 p-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+            <div className="font-medium text-[var(--ui-ink-strong)]">
+              {selectedArtifact?.title ?? "Selected artifact"}
+            </div>
+            <div className="mt-1 break-all text-xs text-[var(--ui-ink-muted)]">
+              {selectedArtifact?.originalFileName ?? ""}
+            </div>
+            <p className="mt-3">
+              This is a metadata delete/archive action, not a file execution or
+              byte deletion. Human-only download and safety rules remain in
+              force.
+            </p>
+          </div>
+        )
+      }
+    ],
+    [selectedArtifact?.originalFileName, selectedArtifact?.title]
+  );
+
   const submitUploadFlow = async () => {
     const itemsToUpload = uploadFlowValue.items.filter(
       (item) => uploadResultByItemId.get(item.id)?.status !== "success"
@@ -941,12 +1097,9 @@ export function ArtifactsPage() {
         entityKind="artifact"
         title="Artifacts"
         description="Trusted file storage for precise metadata, safety scans, provenance, generic entity links, and human-only downloads."
-        badge={`${artifacts.length} stored`}
+        badge={`${totalArtifacts} stored`}
         actions={
-          <Button
-            type="button"
-            onClick={openUploadDialog}
-          >
+          <Button type="button" onClick={openUploadDialog}>
             <Upload className="size-4" />
             Add artifacts
           </Button>
@@ -983,7 +1136,9 @@ export function ArtifactsPage() {
               <select
                 value={formatFamily}
                 onChange={(event) =>
-                  setFormatFamily(event.target.value as ArtifactFormatFamily | "")
+                  setFormatFamily(
+                    event.target.value as ArtifactFormatFamily | ""
+                  )
                 }
                 className="interactive-tap min-h-10 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
               >
@@ -997,9 +1152,43 @@ export function ArtifactsPage() {
             </div>
           </Card>
 
-          <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
+            <span>
+              {totalArtifacts === 0
+                ? "No matching artifacts"
+                : `Showing ${pageStart}-${pageEnd} of ${totalArtifacts}`}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!hasPreviousPage || artifactsQuery.isFetching}
+                onClick={() =>
+                  setPageIndex((current) => Math.max(0, current - 1))
+                }
+                aria-label="Previous artifact page"
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!hasNextPage || artifactsQuery.isFetching}
+                onClick={() => setPageIndex((current) => current + 1)}
+                aria-label="Next artifact page"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(100vh-23rem)] min-h-[12rem] space-y-2 overflow-y-auto pr-1">
             {artifactsQuery.isLoading ? (
-              <Card className="text-sm text-[var(--ui-ink-muted)]">Loading artifacts...</Card>
+              <Card className="text-sm text-[var(--ui-ink-muted)]">
+                Loading artifacts...
+              </Card>
             ) : artifactsQuery.error ? (
               <ErrorState error={artifactsQuery.error} />
             ) : artifacts.length === 0 ? (
@@ -1021,7 +1210,13 @@ export function ArtifactsPage() {
         </section>
 
         <section className="min-w-0 space-y-4">
-          {!selectedArtifact ? (
+          {artifactId && selectedArtifactQuery.isLoading ? (
+            <Card className="text-sm text-[var(--ui-ink-muted)]">
+              Loading artifact...
+            </Card>
+          ) : artifactId && selectedArtifactQuery.error ? (
+            <ErrorState error={selectedArtifactQuery.error} />
+          ) : !selectedArtifact ? (
             <EmptyState
               title="Select an artifact"
               description="Choose an artifact from the list to inspect metadata, scans, links, versions, and audit history."
@@ -1032,17 +1227,26 @@ export function ArtifactsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge className={cn(dangerClass(selectedArtifact.dangerLevel))}>
+                      <Badge
+                        className={cn(
+                          dangerClass(selectedArtifact.dangerLevel)
+                        )}
+                      >
                         {titleCase(selectedArtifact.dangerLevel)} danger
                       </Badge>
-                      <Badge tone="meta">{titleCase(selectedArtifact.artifactState)}</Badge>
-                      <Badge tone="meta">{selectedArtifact.detectedExtension.toUpperCase()}</Badge>
+                      <Badge tone="meta">
+                        {titleCase(selectedArtifact.artifactState)}
+                      </Badge>
+                      <Badge tone="meta">
+                        {selectedArtifact.detectedExtension.toUpperCase()}
+                      </Badge>
                     </div>
                     <h2 className="mt-3 break-words text-2xl font-semibold">
                       {selectedArtifact.title}
                     </h2>
                     <p className="mt-2 max-w-3xl text-sm text-[var(--ui-ink-muted)]">
-                      {selectedArtifact.shortDescription || selectedArtifact.description}
+                      {selectedArtifact.shortDescription ||
+                        selectedArtifact.description}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1076,6 +1280,16 @@ export function ArtifactsPage() {
                       <Download className="size-4" />
                       Download
                     </Button>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      className="border-red-400/30 bg-red-500/10 text-red-100 hover:border-red-300/50 hover:bg-red-500/15"
+                      onClick={() => setArchiveDialogOpen(true)}
+                      pending={archiveMutation.isPending}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete
+                    </Button>
                   </div>
                 </div>
 
@@ -1093,7 +1307,9 @@ export function ArtifactsPage() {
                       <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         {label}
                       </div>
-                      <div className="mt-1 truncate text-sm font-medium">{value}</div>
+                      <div className="mt-1 truncate text-sm font-medium">
+                        {value}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1139,7 +1355,9 @@ export function ArtifactsPage() {
                     Safety Findings
                   </div>
                   {findings.length === 0 ? (
-                    <p className="text-sm text-[var(--ui-ink-muted)]">No findings recorded.</p>
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      No findings recorded.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {findings.map((finding) => (
@@ -1148,7 +1366,12 @@ export function ArtifactsPage() {
                           className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge size="xs" className={dangerClass(finding.severity as ArtifactDangerLevel)}>
+                            <Badge
+                              size="xs"
+                              className={dangerClass(
+                                finding.severity as ArtifactDangerLevel
+                              )}
+                            >
                               {titleCase(finding.severity)}
                             </Badge>
                             <span className="text-xs font-medium text-[var(--ui-ink-medium)]">
@@ -1170,7 +1393,9 @@ export function ArtifactsPage() {
                     Entity Links
                   </div>
                   {selectedArtifact.links.length === 0 ? (
-                    <p className="text-sm text-[var(--ui-ink-muted)]">No linked entities.</p>
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      No linked entities.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {selectedArtifact.links.map((link) => (
@@ -1178,7 +1403,9 @@ export function ArtifactsPage() {
                           key={`${link.targetEntityType}:${link.targetEntityId}:${link.relationship}`}
                           className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
                         >
-                          <div className="font-medium">{titleCase(link.targetEntityType)}</div>
+                          <div className="font-medium">
+                            {titleCase(link.targetEntityType)}
+                          </div>
                           <div className="mt-1 break-all text-xs text-[var(--ui-ink-muted)]">
                             {link.targetEntityId}
                           </div>
@@ -1196,7 +1423,9 @@ export function ArtifactsPage() {
                   )}
                   <Textarea
                     value={genericLinksText}
-                    onChange={(event) => setGenericLinksText(event.target.value)}
+                    onChange={(event) =>
+                      setGenericLinksText(event.target.value)
+                    }
                     placeholder="Generic entity links, one per line: entityType:entityId:relationship:anchorKey"
                     aria-label="Generic entity links"
                   />
@@ -1204,7 +1433,9 @@ export function ArtifactsPage() {
                     type="button"
                     variant="secondary"
                     onClick={() =>
-                      linksMutation.mutate(parseGenericLinksText(genericLinksText))
+                      linksMutation.mutate(
+                        parseGenericLinksText(genericLinksText)
+                      )
                     }
                     pending={linksMutation.isPending}
                   >
@@ -1225,9 +1456,12 @@ export function ArtifactsPage() {
                       key={version.id}
                       className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
                     >
-                      <div className="font-medium">Version {version.versionNumber}</div>
+                      <div className="font-medium">
+                        Version {version.versionNumber}
+                      </div>
                       <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                        {formatBytes(version.byteSize)} · {version.originalFileName}
+                        {formatBytes(version.byteSize)} ·{" "}
+                        {version.originalFileName}
                       </div>
                     </div>
                   ))}
@@ -1245,7 +1479,8 @@ export function ArtifactsPage() {
                     >
                       <div className="font-medium">{event.eventType}</div>
                       <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                        {new Date(event.createdAt).toLocaleString()} · {event.source}
+                        {new Date(event.createdAt).toLocaleString()} ·{" "}
+                        {event.source}
                       </div>
                     </div>
                   ))}
@@ -1295,6 +1530,27 @@ export function ArtifactsPage() {
           return null;
         }}
         onSubmit={submitUploadFlow}
+      />
+      <QuestionFlowDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        eyebrow="Artifact Store"
+        title="Delete artifact"
+        description="Move this artifact record to the shared Forge bin while preserving stored bytes."
+        value={{}}
+        onChange={() => undefined}
+        steps={archiveFlowSteps}
+        pending={archiveMutation.isPending}
+        pendingLabel="Deleting"
+        submitLabel="Delete artifact"
+        error={
+          archiveMutation.error instanceof Error
+            ? archiveMutation.error.message
+            : null
+        }
+        onSubmit={async () => {
+          await archiveMutation.mutateAsync();
+        }}
       />
     </div>
   );

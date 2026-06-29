@@ -210,6 +210,14 @@ export interface Artifact {
   updatedAt: string;
 }
 
+export interface ArtifactListResponse {
+  artifacts: Artifact[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface ArtifactVersion {
   id: string;
   artifactId: string;
@@ -2303,11 +2311,7 @@ export interface ScreenTimeSettingsPayload {
   userId: string;
   trackingEnabled: boolean;
   syncEnabled: boolean;
-  authorizationStatus:
-    | "not_determined"
-    | "denied"
-    | "approved"
-    | "unavailable";
+  authorizationStatus: "not_determined" | "denied" | "approved" | "unavailable";
   captureState:
     | "disabled"
     | "capturing"
@@ -2882,11 +2886,7 @@ export type GamificationCatalogCategory =
   | "psyche"
   | "wiki"
   | "agents";
-export type GamificationCatalogTier =
-  | "bronze"
-  | "silver"
-  | "gold"
-  | "platinum";
+export type GamificationCatalogTier = "bronze" | "silver" | "gold" | "platinum";
 export type GamificationCatalogRarity =
   | "common"
   | "rare"

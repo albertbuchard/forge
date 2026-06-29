@@ -17,9 +17,11 @@ The first supported format families are:
 
 Files are stored under the Forge data root by SHA-256 content address. Metadata rows can be soft-deleted, restored, or hard-deleted through shared entity tooling, but hard-deleting metadata does not remove the content-addressed blob.
 
+The web `Delete` action is a soft delete through shared entity CRUD. It moves the artifact metadata record to the Forge bin/archive, preserves the file bytes, and leaves restoration to the normal shared restore flow.
+
 ## Web Upload Workflow
 
-The Artifact Store web page uses Forge's guided modal flow for creation. The page itself stays focused on artifact search, filtering, review, selected-artifact metadata, safety findings, generic entity links, versions, audit events, rescans, enrichment, and human downloads.
+The Artifact Store web page uses Forge's guided modal flow for creation. The page itself stays focused on artifact search, filtering, paged review, selected-artifact metadata, safety findings, generic entity links, versions, audit events, rescans, enrichment, safe metadata deletion/archive, and human downloads.
 
 The `Add artifacts` action opens a modal with three stages:
 
@@ -106,7 +108,7 @@ Wiki pages and other entity surfaces should embed or reference artifacts through
 
 Artifact bytes and metadata use dedicated artifact routes:
 
-- `GET /api/v1/artifacts`: list artifact metadata, scan state, danger score, and generic links
+- `GET /api/v1/artifacts`: list artifact metadata, scan state, danger score, and generic links with `limit`/`offset` pagination and `{ total, limit, offset, hasMore }` response metadata
 - `POST /api/v1/artifacts`: upload trusted file bytes and create metadata, scan, version, and audit rows
 - `GET /api/v1/artifacts/:id`: read one artifact metadata record
 - `PATCH /api/v1/artifacts/:id`: patch artifact metadata only
@@ -127,6 +129,7 @@ OpenAPI, OpenClaw, Hermes, Codex, and Claude Code must present the same boundary
 - artifact routes are specialized CRUD routes, not normal batch create routes
 - `forge_call_artifact_route` handles trusted upload, metadata reads/patches, scans, enrichment, generic links, trust state, versions, and audit
 - the agent tool surface must not expose artifact download
+- list calls should use `limit` and `offset`; agents and plugins should not bulk-load a large Artifact Store
 - agents must confirm they are not being asked to run, open, preview, transform, or inspect file bytes autonomously
 - when linking artifacts, agents should say they are writing general Forge entity links
 

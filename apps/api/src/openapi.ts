@@ -5824,7 +5824,13 @@ export function buildOpenApiDocument() {
       },
       sourceKind: {
         type: "string",
-        enum: ["upload", "agent_upload", "wiki_ingest", "external_reference", "manual"]
+        enum: [
+          "upload",
+          "agent_upload",
+          "wiki_ingest",
+          "external_reference",
+          "manual"
+        ]
       },
       sourceLabel: { type: "string" },
       uploadedByUserId: nullable({ type: "string" }),
@@ -5835,7 +5841,10 @@ export function buildOpenApiDocument() {
         enum: ["active", "quarantined", "blocked", "archived", "metadata_only"]
       },
       dangerScore: { type: "integer", minimum: 0, maximum: 100 },
-      dangerLevel: { type: "string", enum: ["low", "moderate", "high", "blocked"] },
+      dangerLevel: {
+        type: "string",
+        enum: ["low", "moderate", "high", "blocked"]
+      },
       downloadPolicy: { type: "string", enum: ["human_only", "disabled"] },
       scanResults: artifactScanResult,
       enrichmentResults: { type: "object", additionalProperties: true },
@@ -5843,6 +5852,18 @@ export function buildOpenApiDocument() {
       links: arrayOf(entityLink),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const artifactListResponse = {
+    type: "object",
+    required: ["artifacts", "total", "limit", "offset", "hasMore"],
+    properties: {
+      artifacts: arrayOf({ $ref: "#/components/schemas/Artifact" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 500 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" }
     }
   };
 
@@ -5862,7 +5883,13 @@ export function buildOpenApiDocument() {
       },
       sourceKind: {
         type: "string",
-        enum: ["upload", "agent_upload", "wiki_ingest", "external_reference", "manual"]
+        enum: [
+          "upload",
+          "agent_upload",
+          "wiki_ingest",
+          "external_reference",
+          "manual"
+        ]
       },
       sourceLabel: { type: "string" },
       uploadedByUserId: nullable({ type: "string" }),
@@ -5951,7 +5978,15 @@ export function buildOpenApiDocument() {
 
   const artifactAuditEvent = {
     type: "object",
-    required: ["id", "artifactId", "eventType", "actor", "source", "metadata", "createdAt"],
+    required: [
+      "id",
+      "artifactId",
+      "eventType",
+      "actor",
+      "source",
+      "metadata",
+      "createdAt"
+    ],
     properties: {
       id: { type: "string" },
       artifactId: { type: "string" },
@@ -6075,6 +6110,7 @@ export function buildOpenApiDocument() {
         ArtifactScanFinding: artifactScanFinding,
         ArtifactScanResult: artifactScanResult,
         Artifact: artifact,
+        ArtifactListResponse: artifactListResponse,
         ArtifactUploadInput: artifactUploadInput,
         ArtifactMetadataPatchInput: artifactMetadataPatchInput,
         ArtifactTrustPatchInput: artifactTrustPatchInput,
@@ -6132,13 +6168,22 @@ export function buildOpenApiDocument() {
               in: "query",
               schema: {
                 type: "string",
-                enum: ["active", "quarantined", "blocked", "archived", "metadata_only"]
+                enum: [
+                  "active",
+                  "quarantined",
+                  "blocked",
+                  "archived",
+                  "metadata_only"
+                ]
               }
             },
             {
               name: "dangerLevel",
               in: "query",
-              schema: { type: "string", enum: ["low", "moderate", "high", "blocked"] }
+              schema: {
+                type: "string",
+                enum: ["low", "moderate", "high", "blocked"]
+              }
             },
             {
               name: "formatFamily",
@@ -6156,17 +6201,26 @@ export function buildOpenApiDocument() {
                 ]
               }
             },
-            { name: "linkedEntityType", in: "query", schema: { type: "string" } },
+            {
+              name: "linkedEntityType",
+              in: "query",
+              schema: { type: "string" }
+            },
             { name: "linkedEntityId", in: "query", schema: { type: "string" } },
-            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500 } }
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 500 }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0 }
+            }
           ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["artifacts"],
-                properties: { artifacts: arrayOf({ $ref: "#/components/schemas/Artifact" }) }
-              },
+              { $ref: "#/components/schemas/ArtifactListResponse" },
               "Artifact list"
             ),
             default: { $ref: "#/components/responses/Error" }
@@ -6189,7 +6243,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Created artifact"
             ),
@@ -6213,7 +6269,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Artifact metadata"
             ),
@@ -6226,7 +6284,9 @@ export function buildOpenApiDocument() {
             required: true,
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/ArtifactMetadataPatchInput" }
+                schema: {
+                  $ref: "#/components/schemas/ArtifactMetadataPatchInput"
+                }
               }
             }
           },
@@ -6235,7 +6295,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Updated artifact"
             ),
@@ -6285,7 +6347,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Rescanned artifact"
             ),
@@ -6319,7 +6383,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Enriched artifact"
             ),
@@ -6348,7 +6414,9 @@ export function buildOpenApiDocument() {
                   type: "object",
                   required: ["links"],
                   properties: {
-                    links: arrayOf({ $ref: "#/components/schemas/EntityLinkInput" })
+                    links: arrayOf({
+                      $ref: "#/components/schemas/EntityLinkInput"
+                    })
                   }
                 }
               }
@@ -6359,7 +6427,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Relinked artifact"
             ),
@@ -6391,7 +6461,9 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["artifact"],
-                properties: { artifact: { $ref: "#/components/schemas/Artifact" } }
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
               },
               "Trust-updated artifact"
             ),
@@ -6415,7 +6487,11 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["versions"],
-                properties: { versions: arrayOf({ $ref: "#/components/schemas/ArtifactVersion" }) }
+                properties: {
+                  versions: arrayOf({
+                    $ref: "#/components/schemas/ArtifactVersion"
+                  })
+                }
               },
               "Artifact versions"
             ),
@@ -6439,7 +6515,11 @@ export function buildOpenApiDocument() {
               {
                 type: "object",
                 required: ["events"],
-                properties: { events: arrayOf({ $ref: "#/components/schemas/ArtifactAuditEvent" }) }
+                properties: {
+                  events: arrayOf({
+                    $ref: "#/components/schemas/ArtifactAuditEvent"
+                  })
+                }
               },
               "Artifact audit events"
             ),

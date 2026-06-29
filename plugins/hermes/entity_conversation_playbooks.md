@@ -741,11 +741,13 @@ still knowing the exact write/read family before it acts.
 - `calendar_connection`: specialized CRUD. Use provider discovery, connection CRUD,
   selected-calendar rediscovery, sync, and delete routes rather than batch entity
   tools.
-- `artifact`: specialized CRUD. Use `/api/v1/artifacts` for trusted file upload,
+- `artifact`: specialized CRUD. Use `/api/v1/artifacts` for paged metadata listing
+  with `limit`/`offset` and trusted file upload, plus artifact detail routes for
   metadata reads and updates, static rescan, optional LLM metadata enrichment,
   trust-state decisions, version and audit reads, and replacement of general
-  `entity_links`. Do not download, open, execute, preview, or transform file bytes as
-  an agent; download is a human-operator-only action.
+  `entity_links`. Use batch CRUD for artifact metadata delete/restore. Do not
+  download, open, execute, preview, or transform file bytes as an agent; download is
+  a human-operator-only action.
 - `operator_overview`: read-model-only operator surface. Use
   `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
   the current Forge picture, attention cues, or broad status before choosing a

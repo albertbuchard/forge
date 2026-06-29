@@ -21,6 +21,7 @@ import type {
   ArtifactDangerLevel,
   ArtifactEnrichmentInput,
   ArtifactFormatFamily,
+  ArtifactListResponse,
   ArtifactMetadataPatchInput,
   ArtifactState,
   ArtifactTrustPatchInput,
@@ -1554,6 +1555,7 @@ export async function listArtifacts(
     linkedEntityType?: string;
     linkedEntityId?: string;
     limit?: number;
+    offset?: number;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -1576,8 +1578,11 @@ export async function listArtifacts(
   if (options.limit) {
     search.set("limit", String(options.limit));
   }
+  if (typeof options.offset === "number") {
+    search.set("offset", String(options.offset));
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ artifacts: Artifact[] }>(`/api/v1/artifacts${suffix}`);
+  return request<ArtifactListResponse>(`/api/v1/artifacts${suffix}`);
 }
 
 export function getArtifact(artifactId: string) {
@@ -1607,7 +1612,9 @@ export function patchArtifact(
 }
 
 export function downloadArtifact(artifactId: string) {
-  return requestBlob(`/api/v1/artifacts/${encodeURIComponent(artifactId)}/download`);
+  return requestBlob(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/download`
+  );
 }
 
 export function rescanArtifact(artifactId: string) {

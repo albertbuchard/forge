@@ -87,7 +87,8 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
   Use the wiki tools for wiki pages, the calendar connection tools for provider setup
-  and sync, and the Artifact Store route family for trusted file upload, metadata,
+  and sync, and the Artifact Store route family for paged metadata listing,
+  trusted file upload, metadata,
   static scan, LLM metadata enrichment, generic entity links, trust state, versions,
   and audit. Batch CRUD may search, update, delete, and restore artifact metadata, but
   it must not create file artifacts or access file bytes.
@@ -105,10 +106,11 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   to the same `/api/v1/life-force/*` route family.
 - Artifact Store route keys live under
   `forge_get_agent_onboarding.entityRouteModel.specializedCrudEntities.artifact`.
-  When Codex exposes `forge_call_artifact_route`, use it for artifact list, trusted
-  upload, metadata update, static rescan, LLM enrichment, generic entity-link
-  replacement, trust state, versions, or audit. Do not expose or call the download
-  route from agent tools; downloads are human-operator-only.
+  When Codex exposes `forge_call_artifact_route`, use it for artifact list with
+  `limit`/`offset`, trusted upload, metadata update, static rescan, LLM enrichment,
+  generic entity-link replacement, trust state, versions, or audit. Use batch CRUD
+  for artifact metadata delete/restore. Do not expose or call the download route
+  from agent tools; downloads are human-operator-only.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
@@ -547,7 +549,7 @@ Surface rule:
     `forge_call_life_force_route`, or `forge_call_workbench_route` after selecting
     the route key.
 14. Use `forge_get_ui_entrypoint` when the Forge UI is the better surface for Kanban,
-   detailed review, graph exploration, or complex Psyche work.
+    detailed review, graph exploration, or complex Psyche work.
 
 ## Entity contract
 

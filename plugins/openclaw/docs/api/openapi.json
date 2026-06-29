@@ -8687,6 +8687,40 @@
           }
         }
       },
+      "ArtifactListResponse": {
+        "type": "object",
+        "required": [
+          "artifacts",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ],
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Artifact"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
       "ArtifactUploadInput": {
         "type": "object",
         "required": [
@@ -13044,6 +13078,14 @@
               "minimum": 1,
               "maximum": 500
             }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -13052,18 +13094,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "artifacts"
-                  ],
-                  "properties": {
-                    "artifacts": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Artifact"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ArtifactListResponse"
                 }
               }
             }

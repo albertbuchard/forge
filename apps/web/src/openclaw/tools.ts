@@ -349,9 +349,7 @@ const calendarConnectionParametersSchema = Type.Object({
   }),
   forgeCalendarUrl: optionalString(),
   createForgeCalendar: optionalBoolean(),
-  replaceConnectionIds: Type.Optional(
-    Type.Array(Type.String({ minLength: 1 }))
-  )
+  replaceConnectionIds: Type.Optional(Type.Array(Type.String({ minLength: 1 })))
 });
 const healthLinkInputSchema = () =>
   Type.Object({
@@ -811,7 +809,7 @@ export function registerForgePluginTools(
     name: "forge_call_artifact_route",
     label: "Forge Artifact Route",
     description:
-      "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
+      "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Use shared batch CRUD for artifact metadata delete/restore. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
     routeSpecs: artifactRouteSpecs
   });
 
@@ -998,8 +996,7 @@ export function registerForgePluginTools(
   registerWriteTool(api, config, {
     name: "forge_sync_wiki_vault",
     label: "Forge Refresh Wiki Indexes",
-    description:
-      "Rebuild SQLite wiki search, link, and metadata indexes.",
+    description: "Rebuild SQLite wiki search, link, and metadata indexes.",
     parameters: Type.Object({
       spaceId: optionalString()
     }),
@@ -1341,7 +1338,9 @@ export function registerForgePluginTools(
       vascularity: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       facePuffiness: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       abdomenBloatLook: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
-      postureConfidence: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+      postureConfidence: Type.Optional(
+        Type.Union([Type.Number(), Type.Null()])
+      ),
       outfitFit: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       aestheticScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       notes: optionalNullableString()
@@ -1637,8 +1636,7 @@ export function registerForgePluginTools(
   registerWriteTool(api, config, {
     name: "forge_merge_preferences_contexts",
     label: "Forge Merge Preferences Contexts",
-    description:
-      "Merge one or more preference contexts into a target context.",
+    description: "Merge one or more preference contexts into a target context.",
     parameters: Type.Object({
       targetContextId: Type.String({ minLength: 1 }),
       sourceContextIds: Type.Array(Type.String({ minLength: 1 }))
@@ -1839,8 +1837,7 @@ export function registerForgePluginTools(
   api.registerTool({
     name: "forge_start_questionnaire_run",
     label: "Forge Start Questionnaire Run",
-    description:
-      "Start one questionnaire answer session for a specific user.",
+    description: "Start one questionnaire answer session for a specific user.",
     parameters: Type.Object({
       questionnaireId: Type.String({ minLength: 1 }),
       userId: Type.String({ minLength: 1 }),

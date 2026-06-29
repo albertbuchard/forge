@@ -54,7 +54,11 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       cookie,
       label: "Untrusted Artifact Agent",
       trustLevel: "standard",
-      scopes: ["artifact.create", "artifact.uploadBytes", "artifact.readMetadata"]
+      scopes: [
+        "artifact.create",
+        "artifact.uploadBytes",
+        "artifact.readMetadata"
+      ]
     });
     const trustedToken = await createAgentToken({
       app,
@@ -70,7 +74,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       ]
     });
 
-    const unsafeCsv = "name,value\nformula,=HYPERLINK(\"https://example.com\")\n";
+    const unsafeCsv = 'name,value\nformula,=HYPERLINK("https://example.com")\n';
     const untrustedUpload = await app.inject({
       method: "POST",
       url: "/api/v1/artifacts",
@@ -101,7 +105,8 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       payload: {
         title: "Risk worksheet",
         shortDescription: "Formula-like CSV used to test artifact scanning.",
-        description: "Uploaded by a trusted token and linked through generic entity_links.",
+        description:
+          "Uploaded by a trusted token and linked through generic entity_links.",
         originalFileName: "risk-sheet.csv",
         declaredMimeType: "text/csv",
         contentBase64: Buffer.from(unsafeCsv, "utf8").toString("base64"),
@@ -146,12 +151,21 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     );
     assert.equal(uploadBody.artifact.links.length, 1);
     assert.equal(uploadBody.artifact.links[0]?.sourceEntityType, "artifact");
-    assert.equal(uploadBody.artifact.links[0]?.sourceEntityId, uploadBody.artifact.id);
+    assert.equal(
+      uploadBody.artifact.links[0]?.sourceEntityId,
+      uploadBody.artifact.id
+    );
     assert.equal(uploadBody.artifact.links[0]?.targetEntityType, "goal");
-    assert.equal(uploadBody.artifact.links[0]?.targetEntityId, "goal_artifact_test");
+    assert.equal(
+      uploadBody.artifact.links[0]?.targetEntityId,
+      "goal_artifact_test"
+    );
     assert.equal(uploadBody.artifact.links[0]?.anchorKey, null);
     assert.equal(uploadBody.artifact.links[0]?.relationship, "evidence");
-    assert.equal(uploadBody.artifact.links[0]?.createdByActor, "Trusted Artifact Agent");
+    assert.equal(
+      uploadBody.artifact.links[0]?.createdByActor,
+      "Trusted Artifact Agent"
+    );
     await access(uploadBody.artifact.storagePath);
 
     const linkedList = await app.inject({
@@ -161,9 +175,9 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     });
     assert.equal(linkedList.statusCode, 200);
     assert.ok(
-      (linkedList.json() as { artifacts: Array<{ id: string }> }).artifacts.some(
-        (artifact) => artifact.id === uploadBody.artifact.id
-      )
+      (
+        linkedList.json() as { artifacts: Array<{ id: string }> }
+      ).artifacts.some((artifact) => artifact.id === uploadBody.artifact.id)
     );
 
     const tokenDownload = await app.inject({
@@ -183,6 +197,66 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     assert.match(
       humanDownload.headers["content-disposition"] as string,
       /attachment; filename="risk-sheet\.csv"/
+    );
+
+    const softDelete = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/delete",
+      headers: { cookie },
+      payload: {
+        operations: [
+          {
+            entityType: "artifact",
+            id: uploadBody.artifact.id,
+            mode: "soft",
+            reason: "operator archived the artifact metadata"
+          }
+        ]
+      }
+    });
+    assert.equal(softDelete.statusCode, 200);
+    assert.equal(
+      (softDelete.json() as { results: Array<{ ok: boolean }> }).results[0]?.ok,
+      true
+    );
+
+    const afterSoftDelete = await app.inject({
+      method: "GET",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}`,
+      headers: { cookie }
+    });
+    assert.equal(afterSoftDelete.statusCode, 404);
+
+    const afterSoftDeleteList = await app.inject({
+      method: "GET",
+      url: "/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=goal_artifact_test",
+      headers: { cookie }
+    });
+    assert.equal(afterSoftDeleteList.statusCode, 200);
+    assert.equal(
+      (
+        afterSoftDeleteList.json() as { artifacts: Array<{ id: string }> }
+      ).artifacts.some((artifact) => artifact.id === uploadBody.artifact.id),
+      false
+    );
+
+    const restore = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/restore",
+      headers: { cookie },
+      payload: {
+        operations: [
+          {
+            entityType: "artifact",
+            id: uploadBody.artifact.id
+          }
+        ]
+      }
+    });
+    assert.equal(restore.statusCode, 200);
+    assert.equal(
+      (restore.json() as { results: Array<{ ok: boolean }> }).results[0]?.ok,
+      true
     );
 
     const hardDelete = await app.inject({
@@ -220,10 +294,119 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
   }
 });
 
+test("artifact listing is paginated and keeps filters bounded for large stores", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-artifacts-scale-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    for (let index = 0; index < 65; index += 1) {
+      const upload = await app.inject({
+        method: "POST",
+        url: "/api/v1/artifacts",
+        headers: { cookie },
+        payload: {
+          title: `Scale fixture ${String(index).padStart(2, "0")}`,
+          shortDescription: "Scale fixture artifact.",
+          originalFileName: `scale-${index}.csv`,
+          declaredMimeType: "text/csv",
+          contentBase64: Buffer.from(
+            `name,value\nrow,${index}\n`,
+            "utf8"
+          ).toString("base64"),
+          sourceLabel: "Artifact scale fixture",
+          links:
+            index === 12
+              ? [
+                  {
+                    entityType: "goal",
+                    entityId: "goal_artifact_scale",
+                    relationship: "evidence"
+                  }
+                ]
+              : []
+        }
+      });
+      assert.equal(upload.statusCode, 201);
+    }
+
+    const firstPage = await app.inject({
+      method: "GET",
+      url: "/api/v1/artifacts?query=Scale%20fixture&limit=25&offset=0",
+      headers: { cookie }
+    });
+    assert.equal(firstPage.statusCode, 200);
+    const firstBody = firstPage.json() as {
+      artifacts: Array<{ id: string; links: unknown[] }>;
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+    };
+    assert.equal(firstBody.artifacts.length, 25);
+    assert.equal(firstBody.total, 65);
+    assert.equal(firstBody.limit, 25);
+    assert.equal(firstBody.offset, 0);
+    assert.equal(firstBody.hasMore, true);
+    assert.ok(
+      firstBody.artifacts.every((artifact) => Array.isArray(artifact.links))
+    );
+
+    const lastPage = await app.inject({
+      method: "GET",
+      url: "/api/v1/artifacts?query=Scale%20fixture&limit=25&offset=50",
+      headers: { cookie }
+    });
+    assert.equal(lastPage.statusCode, 200);
+    const lastBody = lastPage.json() as {
+      artifacts: Array<{ id: string }>;
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+    };
+    assert.equal(lastBody.artifacts.length, 15);
+    assert.equal(lastBody.total, 65);
+    assert.equal(lastBody.limit, 25);
+    assert.equal(lastBody.offset, 50);
+    assert.equal(lastBody.hasMore, false);
+
+    const linkedPage = await app.inject({
+      method: "GET",
+      url: "/api/v1/artifacts?linkedEntityType=goal&linkedEntityId=goal_artifact_scale&limit=10&offset=0",
+      headers: { cookie }
+    });
+    assert.equal(linkedPage.statusCode, 200);
+    const linkedBody = linkedPage.json() as {
+      artifacts: Array<{ links: Array<{ targetEntityId: string }> }>;
+      total: number;
+      hasMore: boolean;
+    };
+    assert.equal(linkedBody.total, 1);
+    assert.equal(linkedBody.artifacts.length, 1);
+    assert.equal(linkedBody.hasMore, false);
+    assert.equal(
+      linkedBody.artifacts[0]?.links[0]?.targetEntityId,
+      "goal_artifact_scale"
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("artifact repair migration restores shared entity_links for existing artifact databases and image upload", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-artifacts-repair-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-artifacts-repair-")
+  );
   const databasePath = path.join(rootDir, "forge.sqlite");
-  const initialApp = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const initialApp = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: true
+  });
 
   await initialApp.close();
   closeDatabase();
@@ -238,7 +421,10 @@ test("artifact repair migration restores shared entity_links for existing artifa
     sqlite.close();
   }
 
-  const repairedApp = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  const repairedApp = await buildServer({
+    dataRoot: rootDir,
+    seedDemoData: true
+  });
   try {
     const cookie = await issueOperatorSessionCookie(repairedApp);
     const listBeforeUpload = await repairedApp.inject({
@@ -284,7 +470,10 @@ test("artifact repair migration restores shared entity_links for existing artifa
     assert.equal(uploadBody.artifact.formatFamily, "image");
     assert.equal(uploadBody.artifact.detectedExtension, "png");
     assert.equal(uploadBody.artifact.links[0]?.targetEntityType, "project");
-    assert.equal(uploadBody.artifact.links[0]?.targetEntityId, "project_forge_mobile");
+    assert.equal(
+      uploadBody.artifact.links[0]?.targetEntityId,
+      "project_forge_mobile"
+    );
 
     const linkedList = await repairedApp.inject({
       method: "GET",
@@ -293,9 +482,9 @@ test("artifact repair migration restores shared entity_links for existing artifa
     });
     assert.equal(linkedList.statusCode, 200);
     assert.ok(
-      (linkedList.json() as { artifacts: Array<{ id: string }> }).artifacts.some(
-        (artifact) => artifact.id === uploadBody.artifact.id
-      )
+      (
+        linkedList.json() as { artifacts: Array<{ id: string }> }
+      ).artifacts.some((artifact) => artifact.id === uploadBody.artifact.id)
     );
   } finally {
     await repairedApp.close();

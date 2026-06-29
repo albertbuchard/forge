@@ -5,13 +5,16 @@ import path from "node:path";
 import AdmZip from "adm-zip";
 import { z } from "zod";
 import { getDatabase, resolveDataDir, runInTransaction } from "../db.js";
-import { filterDeletedEntities, isEntityDeleted } from "../repositories/deleted-entities.js";
+import { isEntityDeleted } from "../repositories/deleted-entities.js";
 import {
   listEntityLinksForSources,
   replaceEntityLinksForSource,
   type EntityLinkRecord
 } from "../repositories/entity-links.js";
-import { recordEventLog, type EventLogInput } from "../repositories/event-log.js";
+import {
+  recordEventLog,
+  type EventLogInput
+} from "../repositories/event-log.js";
 import { listWikiLlmProfiles } from "../repositories/wiki-memory.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
 import type { ActivitySource, CrudEntityType } from "../types.js";
@@ -74,10 +77,7 @@ export const artifactDangerLevelSchema = z.enum([
   "high",
   "blocked"
 ]);
-export const artifactDownloadPolicySchema = z.enum([
-  "human_only",
-  "disabled"
-]);
+export const artifactDownloadPolicySchema = z.enum(["human_only", "disabled"]);
 export const artifactFormatFamilySchema = z.enum([
   "spreadsheet",
   "document",
@@ -157,7 +157,8 @@ export const artifactListQuerySchema = z.object({
   formatFamily: artifactFormatFamilySchema.optional(),
   linkedEntityType: z.string().trim().optional(),
   linkedEntityId: z.string().trim().optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional().default(100)
+  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+  offset: z.coerce.number().int().min(0).optional().default(0)
 });
 
 export const artifactTrustPatchSchema = z.object({
@@ -175,7 +176,9 @@ export const artifactEnrichmentRequestSchema = z.object({
 export type ArtifactState = z.infer<typeof artifactStateSchema>;
 export type ArtifactDangerLevel = z.infer<typeof artifactDangerLevelSchema>;
 export type ArtifactFormatFamily = z.infer<typeof artifactFormatFamilySchema>;
-export type ArtifactDownloadPolicy = z.infer<typeof artifactDownloadPolicySchema>;
+export type ArtifactDownloadPolicy = z.infer<
+  typeof artifactDownloadPolicySchema
+>;
 export type ArtifactSourceKind = z.infer<typeof artifactSourceKindSchema>;
 export type ArtifactUploadInput = z.infer<typeof artifactUploadSchema>;
 export type ArtifactMetadataPatchInput = z.infer<
@@ -183,7 +186,12 @@ export type ArtifactMetadataPatchInput = z.infer<
 >;
 export type EntityLinkInput = z.infer<typeof entityLinkInputSchema>;
 
-export type ArtifactFindingSeverity = "info" | "low" | "moderate" | "high" | "blocked";
+export type ArtifactFindingSeverity =
+  | "info"
+  | "low"
+  | "moderate"
+  | "high"
+  | "blocked";
 
 export type ArtifactScanFinding = {
   code: string;
@@ -374,14 +382,22 @@ function normalizeNullableText(value: string | null | undefined) {
 }
 
 function sanitizeFileName(fileName: string) {
-  return path.basename(fileName).replace(/[^\w.\- ()[\]]+/g, "_").slice(0, 180);
+  return path
+    .basename(fileName)
+    .replace(/[^\w.\- ()[\]]+/g, "_")
+    .slice(0, 180);
 }
 
 function extensionFromFileName(fileName: string) {
-  return path.extname(sanitizeFileName(fileName)).replace(/^\./, "").toLowerCase();
+  return path
+    .extname(sanitizeFileName(fileName))
+    .replace(/^\./, "")
+    .toLowerCase();
 }
 
-function formatFamilyForExtension(extension: string): ArtifactFormatFamily | null {
+function formatFamilyForExtension(
+  extension: string
+): ArtifactFormatFamily | null {
   return extensionToFormatFamily[extension] ?? null;
 }
 
@@ -461,7 +477,9 @@ async function ensureBlobStored(buffer: Buffer, detectedMimeType: string) {
   const storagePath = resolveStoragePath(storageKey);
   const createdAt = nowIso();
   const existing = getDatabase()
-    .prepare("SELECT content_sha256 FROM artifact_blobs WHERE content_sha256 = ?")
+    .prepare(
+      "SELECT content_sha256 FROM artifact_blobs WHERE content_sha256 = ?"
+    )
     .get(contentSha256) as { content_sha256: string } | undefined;
 
   if (!existing && !existsSync(storagePath)) {
@@ -484,7 +502,13 @@ async function ensureBlobStored(buffer: Buffer, detectedMimeType: string) {
         content_sha256, storage_key, byte_size, detected_mime_type, created_at
       ) VALUES (?, ?, ?, ?, ?)`
     )
-    .run(contentSha256, storageKey, buffer.byteLength, detectedMimeType, createdAt);
+    .run(
+      contentSha256,
+      storageKey,
+      buffer.byteLength,
+      detectedMimeType,
+      createdAt
+    );
 
   return {
     contentSha256,
@@ -520,16 +544,29 @@ function severityScore(severity: ArtifactFindingSeverity) {
 function computeDanger(findings: ArtifactScanFinding[]) {
   const score = Math.min(
     100,
-    findings.reduce((max, finding) => Math.max(max, severityScore(finding.severity)), 0) +
+    findings.reduce(
+      (max, finding) => Math.max(max, severityScore(finding.severity)),
+      0
+    ) +
       Math.max(0, findings.length - 1) * 4
   );
   const level: ArtifactDangerLevel =
-    score >= 90 ? "blocked" : score >= 70 ? "high" : score >= 35 ? "moderate" : "low";
+    score >= 90
+      ? "blocked"
+      : score >= 70
+        ? "high"
+        : score >= 35
+          ? "moderate"
+          : "low";
   return { score, level };
 }
 
 function safeUtf8(buffer: Buffer, limit = MAX_TEXT_EXTRACTION_CHARS) {
-  return buffer.subarray(0, limit).toString("utf8").replace(/\u0000/g, "").trim();
+  return buffer
+    .subarray(0, limit)
+    .toString("utf8")
+    .replace(/\u0000/g, "")
+    .trim();
 }
 
 function stripXml(xml: string) {
@@ -543,7 +580,9 @@ function stripXml(xml: string) {
 }
 
 function zipEntryText(zip: AdmZip, name: string) {
-  const entry = zip.getEntries().find((candidate) => candidate.entryName === name);
+  const entry = zip
+    .getEntries()
+    .find((candidate) => candidate.entryName === name);
   return entry ? entry.getData().toString("utf8") : "";
 }
 
@@ -566,16 +605,25 @@ function extractOfficeText(zip: AdmZip, extension: string) {
     const sharedStrings = stripXml(zipEntryText(zip, "xl/sharedStrings.xml"));
     const sheetText = zip
       .getEntries()
-      .filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName))
+      .filter((entry) =>
+        /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName)
+      )
       .slice(0, 5)
       .map((entry) => stripXml(entry.getData().toString("utf8")))
       .join("\n");
-    return [sharedStrings, sheetText].filter(Boolean).join("\n").slice(0, MAX_TEXT_EXTRACTION_CHARS);
+    return [sharedStrings, sheetText]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, MAX_TEXT_EXTRACTION_CHARS);
   }
   return "";
 }
 
-function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScanFinding[]) {
+function scanOfficeZip(
+  buffer: Buffer,
+  extension: string,
+  findings: ArtifactScanFinding[]
+) {
   let extractedTextSample = "";
   try {
     const zip = new AdmZip(buffer);
@@ -598,7 +646,10 @@ function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScan
         "The archive has too many entries for safe static inspection."
       );
     }
-    if (totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES || ratio > MAX_ZIP_RATIO) {
+    if (
+      totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES ||
+      ratio > MAX_ZIP_RATIO
+    ) {
       addFinding(
         findings,
         "blocked",
@@ -622,7 +673,9 @@ function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScan
         "The Office document contains a VBA macro project."
       );
     }
-    if (entries.some((entry) => /oleObject|embeddings\//i.test(entry.entryName))) {
+    if (
+      entries.some((entry) => /oleObject|embeddings\//i.test(entry.entryName))
+    ) {
       addFinding(
         findings,
         "high",
@@ -652,7 +705,9 @@ function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScan
           "The workbook contains hidden sheets."
         );
       }
-      if (entries.some((entry) => /^xl\/externalLinks\//.test(entry.entryName))) {
+      if (
+        entries.some((entry) => /^xl\/externalLinks\//.test(entry.entryName))
+      ) {
         addFinding(
           findings,
           "moderate",
@@ -662,7 +717,9 @@ function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScan
       }
       if (
         entries
-          .filter((entry) => /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName))
+          .filter((entry) =>
+            /^xl\/worksheets\/sheet\d+\.xml$/.test(entry.entryName)
+          )
           .some((entry) => /<f(?:\s|>)/i.test(entry.getData().toString("utf8")))
       ) {
         addFinding(
@@ -686,7 +743,9 @@ function scanOfficeZip(buffer: Buffer, extension: string, findings: ArtifactScan
 }
 
 function scanPdf(buffer: Buffer, findings: ArtifactScanFinding[]) {
-  const text = buffer.subarray(0, Math.min(buffer.byteLength, 2_000_000)).toString("latin1");
+  const text = buffer
+    .subarray(0, Math.min(buffer.byteLength, 2_000_000))
+    .toString("latin1");
   if (/\/JavaScript|\/JS\b/i.test(text)) {
     addFinding(
       findings,
@@ -729,7 +788,11 @@ function scanDelimitedText(text: string, findings: ArtifactScanFinding[]) {
   }
 }
 
-function scanStructuredText(extension: string, text: string, findings: ArtifactScanFinding[]) {
+function scanStructuredText(
+  extension: string,
+  text: string,
+  findings: ArtifactScanFinding[]
+) {
   if (extension === "json") {
     try {
       JSON.parse(text);
@@ -762,7 +825,10 @@ export function scanArtifactBytes(input: {
   const formatFamily = formatFamilyForExtension(detectedExtension);
   const findings: ArtifactScanFinding[] = [];
 
-  if (!formatFamily || !(ALLOWED_EXTENSIONS as readonly string[]).includes(detectedExtension)) {
+  if (
+    !formatFamily ||
+    !(ALLOWED_EXTENSIONS as readonly string[]).includes(detectedExtension)
+  ) {
     addFinding(
       findings,
       "blocked",
@@ -778,7 +844,10 @@ export function scanArtifactBytes(input: {
       "The file exceeds Forge's artifact size limit."
     );
   }
-  if (input.declaredMimeType?.trim() && input.declaredMimeType !== detectedMimeType) {
+  if (
+    input.declaredMimeType?.trim() &&
+    input.declaredMimeType !== detectedMimeType
+  ) {
     addFinding(
       findings,
       "low",
@@ -788,9 +857,17 @@ export function scanArtifactBytes(input: {
   }
 
   let extractedTextSample = "";
-  if (formatFamily === "document" || formatFamily === "presentation" || formatFamily === "spreadsheet") {
+  if (
+    formatFamily === "document" ||
+    formatFamily === "presentation" ||
+    formatFamily === "spreadsheet"
+  ) {
     if (["docx", "pptx", "xlsx", "xlsm"].includes(detectedExtension)) {
-      extractedTextSample = scanOfficeZip(input.buffer, detectedExtension, findings);
+      extractedTextSample = scanOfficeZip(
+        input.buffer,
+        detectedExtension,
+        findings
+      );
     } else {
       extractedTextSample = safeUtf8(input.buffer);
       scanDelimitedText(extractedTextSample, findings);
@@ -814,7 +891,11 @@ export function scanArtifactBytes(input: {
 
   const danger = computeDanger(findings);
   const artifactState: ArtifactState =
-    danger.level === "blocked" ? "blocked" : danger.level === "high" ? "quarantined" : "active";
+    danger.level === "blocked"
+      ? "blocked"
+      : danger.level === "high"
+        ? "quarantined"
+        : "active";
   return {
     detectedExtension,
     detectedMimeType,
@@ -882,36 +963,74 @@ function mapArtifact(row: ArtifactRow, links: EntityLink[] = []): Artifact {
   };
 }
 
-function getArtifactRow(id: string): ArtifactRow | undefined {
-  return getDatabase()
-    .prepare(
-      `SELECT id, title, short_description, description, original_file_name,
+const ARTIFACT_SELECT_COLUMNS = `id, title, short_description, description, original_file_name,
               storage_key, storage_path, content_sha256, byte_size,
               detected_extension, declared_mime_type, detected_mime_type,
               format_family, source_kind, source_label, uploaded_by_user_id,
               uploaded_by_agent_id, acting_for_user_id, artifact_state,
               danger_score, danger_level, download_policy, scan_results_json,
-              enrichment_results_json, metadata_json, created_at, updated_at
+              enrichment_results_json, metadata_json, created_at, updated_at`;
+
+function getArtifactRow(id: string): ArtifactRow | undefined {
+  return getDatabase()
+    .prepare(
+      `SELECT ${ARTIFACT_SELECT_COLUMNS}
        FROM artifacts
        WHERE id = ?`
     )
     .get(id) as ArtifactRow | undefined;
 }
 
-function listArtifactRows(): ArtifactRow[] {
-  return getDatabase()
-    .prepare(
-      `SELECT id, title, short_description, description, original_file_name,
-              storage_key, storage_path, content_sha256, byte_size,
-              detected_extension, declared_mime_type, detected_mime_type,
-              format_family, source_kind, source_label, uploaded_by_user_id,
-              uploaded_by_agent_id, acting_for_user_id, artifact_state,
-              danger_score, danger_level, download_policy, scan_results_json,
-              enrichment_results_json, metadata_json, created_at, updated_at
-       FROM artifacts
-       ORDER BY updated_at DESC`
-    )
-    .all() as ArtifactRow[];
+function buildArtifactListWhere(
+  parsed: z.infer<typeof artifactListQuerySchema>
+): { sql: string; params: Array<string | number> } {
+  const clauses = [
+    `NOT EXISTS (
+       SELECT 1
+       FROM deleted_entities
+       WHERE deleted_entities.entity_type = 'artifact'
+         AND deleted_entities.entity_id = artifacts.id
+     )`
+  ];
+  const params: Array<string | number> = [];
+
+  if (parsed.artifactState) {
+    clauses.push("artifacts.artifact_state = ?");
+    params.push(parsed.artifactState);
+  }
+  if (parsed.dangerLevel) {
+    clauses.push("artifacts.danger_level = ?");
+    params.push(parsed.dangerLevel);
+  }
+  if (parsed.formatFamily) {
+    clauses.push("artifacts.format_family = ?");
+    params.push(parsed.formatFamily);
+  }
+  if (parsed.query) {
+    const needle = `%${parsed.query.toLowerCase()}%`;
+    clauses.push(`(
+      LOWER(COALESCE(artifacts.title, '')) LIKE ?
+      OR LOWER(COALESCE(artifacts.short_description, '')) LIKE ?
+      OR LOWER(COALESCE(artifacts.description, '')) LIKE ?
+      OR LOWER(COALESCE(artifacts.original_file_name, '')) LIKE ?
+      OR LOWER(COALESCE(artifacts.source_label, '')) LIKE ?
+      OR LOWER(COALESCE(artifacts.metadata_json, '')) LIKE ?
+    )`);
+    params.push(needle, needle, needle, needle, needle, needle);
+  }
+  if (parsed.linkedEntityType && parsed.linkedEntityId) {
+    clauses.push(`EXISTS (
+      SELECT 1
+      FROM entity_links artifact_link_filter
+      WHERE artifact_link_filter.source_entity_type = 'artifact'
+        AND artifact_link_filter.source_entity_id = artifacts.id
+        AND artifact_link_filter.target_entity_type = ?
+        AND artifact_link_filter.target_entity_id = ?
+    )`);
+    params.push(parsed.linkedEntityType, parsed.linkedEntityId);
+  }
+
+  return { sql: clauses.join(" AND "), params };
 }
 
 function toEventMetadata(
@@ -1020,7 +1139,12 @@ function insertArtifactVersion(input: {
 
 function deriveFallbackTitle(originalFileName: string) {
   const sanitized = sanitizeFileName(originalFileName);
-  return sanitized.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Artifact";
+  return (
+    sanitized
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim() || "Artifact"
+  );
 }
 
 export async function createArtifactFromUpload(
@@ -1042,7 +1166,8 @@ export async function createArtifactFromUpload(
   const id = artifactId();
   const createdAt = nowIso();
   const sourceKind =
-    parsed.sourceKind ?? (context.source === "agent" ? "agent_upload" : "upload");
+    parsed.sourceKind ??
+    (context.source === "agent" ? "agent_upload" : "upload");
   const uploadedByAgentId =
     parsed.uploadedByAgentId ?? context.token?.agentId ?? null;
   const metadata = {
@@ -1148,51 +1273,49 @@ export function createArtifactMetadata(): never {
   );
 }
 
-export function listArtifacts(input: z.input<typeof artifactListQuerySchema> = {}) {
+export function listArtifactsPage(
+  input: z.input<typeof artifactListQuerySchema> = {}
+) {
   const parsed = artifactListQuerySchema.parse(input);
-  const rows = filterDeletedEntities("artifact", listArtifactRows());
+  const where = buildArtifactListWhere(parsed);
+  const totalRow = getDatabase()
+    .prepare(`SELECT COUNT(*) AS total FROM artifacts WHERE ${where.sql}`)
+    .get(...where.params) as { total: number } | undefined;
+  const rows = getDatabase()
+    .prepare(
+      `SELECT ${ARTIFACT_SELECT_COLUMNS}
+       FROM artifacts
+       WHERE ${where.sql}
+       ORDER BY updated_at DESC, id ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...where.params, parsed.limit, parsed.offset) as ArtifactRow[];
   const linksByArtifactId = new Map<string, EntityLink[]>();
-  for (const linkRow of listEntityLinksForSources("artifact", rows.map((row) => row.id))) {
+  for (const linkRow of listEntityLinksForSources(
+    "artifact",
+    rows.map((row) => row.id)
+  )) {
     const current = linksByArtifactId.get(linkRow.sourceEntityId) ?? [];
     current.push(mapLink(linkRow));
     linksByArtifactId.set(linkRow.sourceEntityId, current);
   }
-  const query = parsed.query?.toLowerCase() ?? "";
-  return rows
-    .map((row) => mapArtifact(row, linksByArtifactId.get(row.id) ?? []))
-    .filter((artifact) =>
-      parsed.artifactState ? artifact.artifactState === parsed.artifactState : true
-    )
-    .filter((artifact) =>
-      parsed.dangerLevel ? artifact.dangerLevel === parsed.dangerLevel : true
-    )
-    .filter((artifact) =>
-      parsed.formatFamily ? artifact.formatFamily === parsed.formatFamily : true
-    )
-    .filter((artifact) =>
-      query
-        ? JSON.stringify({
-            title: artifact.title,
-            shortDescription: artifact.shortDescription,
-            description: artifact.description,
-            originalFileName: artifact.originalFileName,
-            sourceLabel: artifact.sourceLabel,
-            metadata: artifact.metadata
-          })
-            .toLowerCase()
-            .includes(query)
-        : true
-    )
-    .filter((artifact) =>
-      parsed.linkedEntityType && parsed.linkedEntityId
-        ? artifact.links.some(
-            (link) =>
-              link.targetEntityType === parsed.linkedEntityType &&
-              link.targetEntityId === parsed.linkedEntityId
-          )
-        : true
-    )
-    .slice(0, parsed.limit);
+  const artifacts = rows.map((row) =>
+    mapArtifact(row, linksByArtifactId.get(row.id) ?? [])
+  );
+  const total = totalRow?.total ?? 0;
+  return {
+    artifacts,
+    total,
+    limit: parsed.limit,
+    offset: parsed.offset,
+    hasMore: parsed.offset + artifacts.length < total
+  };
+}
+
+export function listArtifacts(
+  input: z.input<typeof artifactListQuerySchema> = {}
+) {
+  return listArtifactsPage(input).artifacts;
 }
 
 export function getArtifactById(id: string): Artifact | undefined {
@@ -1203,7 +1326,10 @@ export function getArtifactById(id: string): Artifact | undefined {
   if (!row) {
     return undefined;
   }
-  return mapArtifact(row, listEntityLinksForSources("artifact", [id]).map(mapLink));
+  return mapArtifact(
+    row,
+    listEntityLinksForSources("artifact", [id]).map(mapLink)
+  );
 }
 
 export function updateArtifactMetadata(
@@ -1220,12 +1346,14 @@ export function updateArtifactMetadata(
   const nextMetadata = parsed.metadata
     ? { ...existing.metadata, ...parsed.metadata }
     : existing.metadata;
-  const nextLinks = parsed.links ?? existing.links.map((link) => ({
-    entityType: link.targetEntityType,
-    entityId: link.targetEntityId,
-    anchorKey: link.anchorKey ?? "",
-    relationship: link.relationship
-  }));
+  const nextLinks =
+    parsed.links ??
+    existing.links.map((link) => ({
+      entityType: link.targetEntityType,
+      entityId: link.targetEntityId,
+      anchorKey: link.anchorKey ?? "",
+      relationship: link.relationship
+    }));
 
   runInTransaction(() => {
     getDatabase()
@@ -1291,7 +1419,10 @@ export async function readArtifactDownload(id: string) {
   if (!artifact) {
     return null;
   }
-  if (artifact.downloadPolicy !== "human_only" || artifact.artifactState === "blocked") {
+  if (
+    artifact.downloadPolicy !== "human_only" ||
+    artifact.artifactState === "blocked"
+  ) {
     throw new Error("This artifact is not downloadable in its current state.");
   }
   const storagePath = resolveStoragePath(artifact.storageKey);
@@ -1351,7 +1482,10 @@ export async function rescanArtifact(id: string, context: ArtifactContext) {
   return getArtifactById(id)!;
 }
 
-function updateArtifactEnrichment(id: string, enrichment: Record<string, unknown>) {
+function updateArtifactEnrichment(
+  id: string,
+  enrichment: Record<string, unknown>
+) {
   getDatabase()
     .prepare(
       `UPDATE artifacts
@@ -1457,7 +1591,10 @@ export async function enrichArtifactWithLlm(
     typeof generated.dangerScoreAdjustment === "number"
       ? generated.dangerScoreAdjustment
       : artifact.dangerScore;
-  const nextDangerScore = Math.max(artifact.dangerScore, Math.min(100, proposedScore));
+  const nextDangerScore = Math.max(
+    artifact.dangerScore,
+    Math.min(100, proposedScore)
+  );
   const enrichment = {
     generated: true,
     status: "completed",
