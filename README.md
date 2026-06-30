@@ -44,28 +44,42 @@ Read the full published documentation on the
 
 ## Why Forge
 
-Unstructured memory is not enough by itself.
+Forge is the structured memory layer beside unstructured memory.
 
-Agent harnesses are good at preserving what was said. They can remember the conversation,
-the reasoning, the uncertainty, and the emotional texture. That matters, but a transcript
-does not give an item an ID, owner, status, link graph, audit trail, danger score,
-calendar slot, completion state, or recovery history.
+Unstructured memory stores prose and context: conversations, notes, wiki pages,
+transcripts, reasoning traces, uncertainty, and wording. Forge does not try to turn all
+of that into database rows.
 
-Forge exists for the parts that need structure. It turns selected pieces of life and work
-into records that can be inspected, linked, updated, compared, restored, embedded,
-scheduled, assigned, reviewed, and acted on later.
+Forge stores a structured record when something needs a stable object. A structured
+record can have:
 
-That distinction is the product:
+- an ID
+- a type
+- title and description fields
+- state
+- timestamps and history
+- links to other records
+- owner, assignee, uploader, or acting-actor provenance
+- permissions
+- API routes and web views
+- audit events
 
-- unstructured memory keeps prose and context
-- Forge keeps structured memory with identity, state, relationships, and history
-- humans and trusted agents use both through one local runtime
+Examples:
 
-This matters because a life with agents is not only a task list. A useful memory system
-has to hold decisions, notes, meetings, values, beliefs, triggers, preferences, files,
-calendar plans, sleep, workouts, movement, fatigue, food, health signals, and unfinished
-reasoning. Without a structured layer, the user has to remember what each thing meant,
-what changed, what evidence supported it, and what should happen next.
+- a belief can become a `belief_entry`
+- a recurring part-state can become a `mode_profile`
+- a trigger episode can become a `trigger_report`
+- a file can become an `artifact`
+- a sleep night can become a `sleep_session`
+- a workout can become a `workout_session`
+- a movement segment can become movement timeline, trip, stay, or place data
+- a preference can become an item, judgment, signal, or context
+- a project decision can become a project, issue, task, note, wiki page, or linked
+  artifact
+
+That is the boundary. Prose stays useful as source context. The part that needs review,
+linking, scheduling, permissions, audit, comparison, recovery, or future action becomes
+a Forge record.
 
 ## How Forge Solves It
 
