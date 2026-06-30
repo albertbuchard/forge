@@ -19,10 +19,11 @@ pages, and chat transcripts can keep prose, context, reasoning, and texture. For
 the parts that need identity, state, links, history, permissions, review, automation, or
 future action.
 
-When a conversation surfaces a goal, project, task, belief, trigger, preference,
-decision, workout, calendar plan, wiki page, or file artifact, Forge can turn the useful
-part into a typed local record. That record can be searched, linked, audited, updated in
-the web app, and reused by trusted agents through the same local runtime.
+When a conversation surfaces a belief, trigger, preference, decision, goal, task,
+workout, sleep night, movement pattern, calendar plan, wiki page, file artifact, or
+agent action, Forge can turn the useful part into a typed local record. That record can
+be searched, linked, audited, updated in the web app, and reused by trusted agents
+through the same local runtime.
 
 Read the full published documentation on the
 [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
@@ -60,11 +61,11 @@ That distinction is the product:
 - Forge keeps structured memory with identity, state, relationships, and history
 - humans and trusted agents use both through one local runtime
 
-This matters because real work is not only a task list. Projects carry strategy,
-constraints, decisions, notes, meetings, preferences, files, health context, emotional
-friction, and unfinished reasoning. Without a structured layer, the user has to remember
-why work mattered, what changed, what evidence supported it, and which next action is
-safe.
+This matters because a life with agents is not only a task list. A useful memory system
+has to hold decisions, notes, meetings, values, beliefs, triggers, preferences, files,
+calendar plans, sleep, workouts, movement, fatigue, food, health signals, and unfinished
+reasoning. Without a structured layer, the user has to remember what each thing meant,
+what changed, what evidence supported it, and what should happen next.
 
 ## How Forge Solves It
 
@@ -75,24 +76,28 @@ each other instead of becoming isolated text fragments.
 
 Forge stores:
 
-- work memory: goals, strategies, projects, issues, tasks, subtasks, task runs, habits,
-  work adjustments, completion reports, and linked git refs
-- knowledge memory: notes, wiki pages, backlinks, ingest jobs, search indexes, and
-  evidence attached to the records it explains
 - Psyche memory: values, beliefs, modes, behavior patterns, behaviors, trigger reports,
   emotion definitions, event types, flashcards, questionnaire runs, and
   self-observation notes
+- knowledge memory: notes, wiki pages, backlinks, ingest jobs, search indexes, and
+  evidence attached to the records it explains
+- health and movement memory: sleep nights, workouts, HealthKit imports, training load,
+  nutrition and weight-loss context, movement timelines, places, trips, and recovery
+  context
 - preference memory: catalogs, items, judgments, signals, contexts, comparisons, and
   score updates
-- health and movement memory: sleep nights, workouts, HealthKit imports, training load,
-  movement timelines, places, trips, and recovery context
 - artifact memory: trusted spreadsheets, documents, PDFs, structured text, plain text,
   images, and other supported files with metadata, provenance, safety scans, danger
   scores, versions, audit events, and human-only downloads
+- calendar memory: native events, mirrored calendar events, work block templates,
+  task timeboxes, provider connections, sync state, and writable calendar projections
+- work memory: goals, strategies, projects, issues, tasks, subtasks, task runs, habits,
+  work adjustments, completion reports, and linked git refs
 - collaboration memory: human users, bot users, agent runtime sessions, ownership,
   assignees, approvals, and audited agent actions
 
-The planning ladder is explicit:
+Planning and project management are one important surface, not the whole product. The
+work hierarchy is explicit because structured work records need stable relationships:
 
 ```text
 Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask
@@ -103,10 +108,10 @@ are one focused AI session each. Subtasks are small child steps. Completion reco
 preserve modified files, a work summary, and linked git refs, so agents leave behind a
 truthful delivery trail instead of only changing a status field.
 
-Psyche is the clearest example of why structured memory matters. A chat can mention a
-belief, trigger, mode, value, or behavior pattern. Forge can store it as a connected
-record with links, dates, descriptions, related notes, and future review paths. The same
-principle applies to work, health, files, calendar plans, and preferences.
+Psyche is just as central. A chat can mention a belief, trigger, mode, value, or
+behavior pattern. Forge can store it as a connected record with links, dates,
+descriptions, related notes, and future review paths. The same principle applies to
+preferences, health, movement, files, calendar plans, work, and agent actions.
 
 Artifacts use the same model. A stored file is not just a blob in a folder. It is a
 typed artifact record with title, description, provenance, file identity, scan state,
@@ -114,6 +119,11 @@ danger score, versions, audit history, and generic links to the Forge records it
 supports. Agents may help create, enrich, scan, and link artifacts when trusted and
 scoped, but Forge does not let agents autonomously download, open, execute, preview, or
 transform stored file bytes.
+
+Health, movement, and recovery are also structured memory. Sleep nights, workouts,
+training load, nutrition context, places, trips, and movement timelines can sit beside
+the decisions, tasks, notes, and Psyche records they help explain instead of remaining
+trapped on the phone.
 
 The same records are used by the React web app, Fastify API, OpenClaw, Hermes, Codex,
 Claude Code, the iPhone companion, and the watchOS command surface. The database stays
@@ -300,12 +310,14 @@ has opened.
 
 ## What Forge Covers
 
-- planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, and habits
-- memory: notes, wiki pages, search, ingest, backlinks, and linked Forge context
-- artifact store: trusted spreadsheets, documents, PDFs, structured text, text, and images with metadata, provenance, scans, versions, generic entity links, and human-only downloads
-- reflection: preferences, Psyche values, behavior patterns, beliefs, modes, and trigger reports
-- health: sleep nights, workouts, movement history, and iPhone HealthKit import
-- collaboration: explicit human and bot users, owner/assignee filters, agent sessions, and audited actions
+- Psyche and reflection: values, beliefs, modes, behavior patterns, behaviors, trigger reports, emotion definitions, event types, flashcards, questionnaire runs, and self-observation
+- knowledge memory: notes, wiki pages, search, ingest, backlinks, evidence, and linked Forge context
+- artifacts: trusted spreadsheets, documents, PDFs, structured text, text, and images with metadata, provenance, scans, versions, generic entity links, and human-only downloads
+- health and body context: sleep nights, workouts, training load, movement history, nutrition and weight-loss context, HealthKit imports, and iPhone sync
+- preferences: catalogs, contexts, preference items, judgments, signals, comparisons, and score updates
+- calendar and time: native events, mirrored calendars, provider connections, work block templates, and task timeboxes
+- planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, habits, work adjustments, and git-linked completion reports
+- agents and collaboration: OpenClaw, Hermes, Codex, Claude Code, explicit human and bot users, owner/assignee filters, runtime sessions, approvals, and audited actions
 - progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history
 
 ## Screenshots
