@@ -67,6 +67,7 @@ async function loadAgentContractPayloads() {
   return {
     onboarding: onboardingResponse.json().onboarding as {
       entityRouteModel: {
+        batchRoutes: Record<string, string>;
         specializedDomainSurfaces: Record<
           string,
           {
@@ -1144,6 +1145,31 @@ describe("question flow simulation cycles", () => {
         matrix,
         `${entityType} should be explicit in the route posture matrix`
       ).toMatch(new RegExp(`\\\`${escapeRegExp(entityType)}\\\``));
+    }
+  });
+
+  it("cycle 1 retest: live shared batch routes use the published entity route map", async () => {
+    const { onboarding, openApi } = await loadAgentContractPayloads();
+    const expectedBatchRoutes = {
+      search: "/api/v1/entities/search",
+      create: "/api/v1/entities/create",
+      update: "/api/v1/entities/update",
+      delete: "/api/v1/entities/delete",
+      restore: "/api/v1/entities/restore"
+    };
+
+    expect(onboarding.entityRouteModel.batchRoutes).toEqual(expectedBatchRoutes);
+    expect(openApi.paths["/api/v1/entities/batch"]).toBeUndefined();
+
+    for (const [operation, routePath] of Object.entries(expectedBatchRoutes)) {
+      expect(
+        openApi.paths[routePath],
+        `${operation} should exist at ${routePath}`
+      ).toBeTruthy();
+      expect(
+        openApi.paths[routePath]?.post,
+        `${operation} should use POST ${routePath}`
+      ).toBeTruthy();
     }
   });
 
@@ -2248,7 +2274,13 @@ describe("question flow simulation cycles", () => {
       /These are examples of active formulation, not scripts to recite/i
     );
     expect(hypothesisExamples).toMatch(
+      /`psyche_value`:[\s\S]*hiding protects[\s\S]*authorship[\s\S]*courage, visibility, or honest\s+contribution/i
+    );
+    expect(hypothesisExamples).toMatch(
       /`behavior_pattern`:[\s\S]*over-editing[\s\S]*protects[\s\S]*cost/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`behavior`:[\s\S]*over-editing until submission[\s\S]*avoidance move[\s\S]*control move/i
     );
     expect(hypothesisExamples).toMatch(
       /`belief_entry`:[\s\S]*If this is seen[\s\S]*not legitimate/i
@@ -2258,6 +2290,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(hypothesisExamples).toMatch(
       /`trigger_report`:[\s\S]*silence started meaning danger/i
+    );
+    expect(hypothesisExamples).toMatch(
+      /`flashcard`:[\s\S]*hide this before they\s+see it[\s\S]*shame alarm[\s\S]*verdict/i
     );
     expect(hypothesisExamples).toMatch(
       /`event_type`:[\s\S]*feedback becomes danger/i

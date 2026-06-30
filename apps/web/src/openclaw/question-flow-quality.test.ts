@@ -39,6 +39,7 @@ describe("question flow quality coverage", () => {
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
       ["Wiki Page", /remember or reuse later/i, /durable memory/i],
+      ["Artifact", /find, prove, review, or preserve later/i, /trusted file/i],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
       ["Calendar Event", /what time should Forge hold/i, /timezone/i],
       ["Work Block Template", /when should this recurring block repeat/i, /allows or blocks work/i],
@@ -158,7 +159,7 @@ describe("question flow quality coverage", () => {
       /Choose exactly one execution lane:[\s\S]*shared batch CRUD,[\s\S]*specialized CRUD,[\s\S]*action\s+workflow,[\s\S]*read-model route,[\s\S]*specialized domain route/i
     );
     expect(entityPlaybook).toMatch(
-      /For shared batch CRUD,[\s\S]*catalog `entityType`[\s\S]*batch\s+create\/update\/delete\/restore\/search routes/i
+      /For shared batch CRUD,[\s\S]*catalog `entityType`[\s\S]*\/api\/v1\/entities\/search[\s\S]*\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/entities\/update[\s\S]*\/api\/v1\/entities\/delete[\s\S]*\/api\/v1\/entities\/restore/i
     );
     expect(entityPlaybook).toMatch(
       /Movement, Life Force, and Workbench,[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`/i
@@ -387,6 +388,9 @@ describe("question flow quality coverage", () => {
     );
     expect(entityPlaybook).toMatch(
       /After a Movement read, translate the returned data into one next action[\s\S]*manual overlay[\s\S]*place boundary correction[\s\S]*settings change[\s\S]*linked note/i
+    );
+    expect(entityPlaybook).toMatch(
+      /preserve movement context with another Forge record[\s\S]*do\s+not invent a movement-link route[\s\S]*dedicated Movement read or selection[\s\S]*normal linked `note`[\s\S]*`\/api\/v1\/entities\/create` or `\/api\/v1\/entities\/update`/i
     );
     expect(entityPlaybook).toMatch(
       /if the truth of one uncertain span is still unclear,[\s\S]*read the timeline or saved-box[\s\S]*detail before you mutate it/i

@@ -639,6 +639,9 @@ Use this quick split before the conversation gets too detailed.
   `/api/v1/entities/search`, `/api/v1/entities/create`,
   `/api/v1/entities/update`, `/api/v1/entities/delete`, and
   `/api/v1/entities/restore`.
+- The shared route model is batch-shaped because each request is array-first; the
+  actual paths are the five `/api/v1/entities/*` routes above. Do not invent
+  `/api/v1/entities/batch`, `/api/v1/batch`, or one-off per-entity CRUD paths.
 - Every normal entity section below inherits that batch-route default unless its own
   route note says otherwise. Do not invent one-off entity endpoints for ordinary
   stored records.
@@ -679,9 +682,11 @@ user-facing API explanation.
    sentence, movement span, weekday, flow, run, node, or published result.
 2. Choose exactly one execution lane: shared batch CRUD, specialized CRUD, action
    workflow, read-model route, or specialized domain route.
-3. For shared batch CRUD, use the catalog `entityType` exactly and the batch
-   create/update/delete/restore/search routes. Search or read first for update,
-   delete, restore, link, duplicate-disambiguation, or review work.
+3. For shared batch CRUD, use the catalog `entityType` exactly and the shared
+   `/api/v1/entities/search`, `/api/v1/entities/create`,
+   `/api/v1/entities/update`, `/api/v1/entities/delete`, and
+   `/api/v1/entities/restore` routes. Search or read first for update, delete,
+   restore, link, duplicate-disambiguation, or review work.
 4. For specialized CRUD or action workflows, use the named tool or documented route
    for wiki pages, calendar connections, artifacts, task runs, work adjustments,
    questionnaire runs, preference judgments/signals, and self-observation notes.
@@ -2372,6 +2377,13 @@ Direct action rules:
   a manual overlay, a place boundary correction, a settings change, or a linked note.
   Ask only for the missing span, place, boundary, or confirmation that enables that
   action.
+- If the next action is to preserve movement context with another Forge record, do
+  not invent a movement-link route. Use the dedicated Movement read or selection
+  route first, then create or update a normal linked `note` through
+  `/api/v1/entities/create` or `/api/v1/entities/update`; put the movement span,
+  place, trip, or stay summary in the note body and use normal Forge `links` to point
+  at the goal, project, task, Psyche record, wiki page, health record, or artifact
+  that should carry the context.
 - When the user has already given the real answer, for example "I stayed home during
   that missing block", do not ask a broad review question again. Confirm only the
   interval or place if that is still ambiguous, then act.
@@ -2388,6 +2400,8 @@ Helpful follow-up lanes:
 
 - whether the user wants time-in-place, travel history, one specific stay or trip, a
   place summary, or a link
+- whether a link should become a linked note/context summary after a Movement read or
+  a correction to movement history itself
 - what time window, place, stay, trip, or selection is in scope
 - what label, boundary, or future-use distinction makes a known place worth saving or
   renaming

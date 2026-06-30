@@ -309,6 +309,13 @@ interpretive work alone.
   before you can evaluate the actual content. One hypothesis is that the over-editing
   protects you from the feared cost of being seen as unserious, while also keeping the
   work from reaching people. Does that fit, or is the protection somewhere else?"
+- `psyche_value`: "The value may not just be 'professional courage' in the abstract;
+  it sounds alive because hiding protects you from shame but also costs you the kind
+  of authorship you want. Is the value closer to courage, visibility, or honest
+  contribution?"
+- `behavior`: "The move itself seems to be over-editing until submission no longer
+  has to happen today. Is the behavior mainly an avoidance move, a control move, or
+  an attempt to make the work safer?"
 - `belief_entry`: "The sentence seems less like 'I need to improve this' and more
   like 'If this is seen, they will discover I am not legitimate.' Is that the belief,
   or is there a sharper wording?"
@@ -321,6 +328,9 @@ interpretive work alone.
 - `trigger_report`: "The meeting itself may be the trigger, but the charged moment
   seems to be when silence started meaning danger. Is that the sequence to preserve,
   or did the reaction begin earlier?"
+- `flashcard`: "The hard moment seems to be the urge sentence 'hide this before they
+  see it.' A usable card might meet that with 'pause; this is the shame alarm, not the
+  verdict.' Would that message reach you in the moment, or should it be simpler?"
 - `event_type`: "This sounds like a recurring 'feedback becomes danger' moment rather
   than a generic meeting event. Would future reports recognize that category?"
 - `emotion_definition`: "This dread seems to include a body brake, a prediction of
