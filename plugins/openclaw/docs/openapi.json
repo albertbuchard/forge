@@ -5279,9 +5279,7 @@
                 "type": "object",
                 "additionalProperties": {
                   "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  }
+                  "additionalProperties": true
                 }
               },
               "actionEntities": {
@@ -18409,6 +18407,69 @@
           "Wiki"
         ],
         "operationId": "patchwiki_pages_id"
+      },
+      "delete": {
+        "summary": "Delete or hide one wiki page from the wiki surface",
+        "responses": {
+          "200": {
+            "description": "Deleted wiki page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Wiki"
+        ],
+        "operationId": "deletewiki_pages_id"
+      }
+    },
+    "/api/v1/wiki/by-slug/{slug}": {
+      "get": {
+        "summary": "Read one wiki page by slug or title-like slug",
+        "responses": {
+          "200": {
+            "description": "Wiki page detail by slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "page"
+                  ],
+                  "properties": {
+                    "page": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "tags": [
+          "Wiki"
+        ],
+        "operationId": "getwiki_by_slug_slug"
       }
     },
     "/api/v1/wiki/search": {

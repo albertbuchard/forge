@@ -45,6 +45,7 @@ import {
   deleteTaskTimebox,
   deleteWorkBlockTemplate,
   getCalendarOverview,
+  getLifeEventsTimeline,
   getLifeForce,
   patchCalendarEvent,
   patchTask,
@@ -393,6 +394,16 @@ export function CalendarPage() {
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...selectedUserIds],
     queryFn: () => getLifeForce(selectedUserIds)
+  });
+  const lifeEventsQuery = useQuery({
+    queryKey: ["life-events-timeline", range.from, range.to],
+    queryFn: async () =>
+      (
+        await getLifeEventsTimeline({
+          ...range,
+          limit: 500
+        })
+      ).timeline
   });
   const calendarOverviewQueryKey = [
     "forge-calendar-overview",
@@ -922,6 +933,15 @@ export function CalendarPage() {
       entityId: habit.id,
       label: habit.title,
       subtitle: describeLinkOwner("Habit", formatUserSummaryLine(habit.user))
+    })),
+    ...(lifeEventsQuery.data?.events ?? []).map((event) => ({
+      entityType: "life_event" as const,
+      entityId: event.id,
+      label: event.title,
+      subtitle: describeLinkOwner(
+        "Life Event",
+        formatUserSummaryLine(event.user)
+      )
     }))
   ];
   const linkLabelByKey = useMemo(

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   CalendarCheck2,
   CalendarClock,
@@ -21,7 +20,10 @@ import {
   Train,
   Users
 } from "lucide-react";
-import { QuestionFlowDialog, type QuestionFlowStep } from "@/components/flows/question-flow-dialog";
+import {
+  QuestionFlowDialog,
+  type QuestionFlowStep
+} from "@/components/flows/question-flow-dialog";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,7 +61,15 @@ type LifeEventDraft = {
   placeLabel: string;
   originLabel: string;
   destinationLabel: string;
-  transportMode: "plane" | "train" | "car" | "boat" | "walking" | "public_transit" | "other" | "";
+  transportMode:
+    | "plane"
+    | "train"
+    | "car"
+    | "boat"
+    | "walking"
+    | "public_transit"
+    | "other"
+    | "";
   calendarProjection: "link_or_create" | "link_existing_only" | "none";
 };
 
@@ -68,6 +78,94 @@ type TicketImportDraft = {
   sourceLabel: string;
   useLlm: boolean;
 };
+
+type LifeEventTravelStatusPayload = Awaited<
+  ReturnType<typeof getLifeEventTravelStatus>
+>["status"];
+
+type RoutePoint = {
+  label: string;
+  lat: number;
+  lon: number;
+  code?: string;
+};
+
+type RouteLineFeatureCollection = GeoJSON.FeatureCollection<
+  GeoJSON.LineString,
+  Record<string, unknown>
+>;
+type RouteStopFeatureCollection = GeoJSON.FeatureCollection<
+  GeoJSON.Point,
+  Record<string, unknown>
+>;
+
+const KNOWN_ROUTE_POINTS: Record<string, RoutePoint> = {
+  GVA: { code: "GVA", label: "Geneva Airport", lat: 46.2381, lon: 6.109 },
+  ZRH: { code: "ZRH", label: "Zurich Airport", lat: 47.4581, lon: 8.5555 },
+  LAX: {
+    code: "LAX",
+    label: "Los Angeles International",
+    lat: 33.9416,
+    lon: -118.4085
+  },
+  BUR: { code: "BUR", label: "Hollywood Burbank", lat: 34.2007, lon: -118.359 },
+  RNO: {
+    code: "RNO",
+    label: "Reno-Tahoe International",
+    lat: 39.4991,
+    lon: -119.7681
+  },
+  BRC: { code: "BRC", label: "Black Rock City", lat: 40.7864, lon: -119.2065 },
+  "LOS ANGELES": { label: "Los Angeles", lat: 34.0522, lon: -118.2437 },
+  RENO: { label: "Reno", lat: 39.5296, lon: -119.8138 },
+  GENEVA: { label: "Geneva", lat: 46.2044, lon: 6.1432 },
+  ZURICH: { label: "Zurich", lat: 47.3769, lon: 8.5417 }
+};
+
+const ROUTE_POINT_ALIASES: Record<string, string> = {
+  "GENEVA AIRPORT": "GVA",
+  "GENEVA COINTRIN": "GVA",
+  "ZURICH AIRPORT": "ZRH",
+  "ZUERICH AIRPORT": "ZRH",
+  "LOS ANGELES INTERNATIONAL AIRPORT": "LAX",
+  "LOS ANGELES INT": "LAX",
+  "HOLLYWOOD BURBANK AIRPORT": "BUR",
+  "BURBANK AIRPORT": "BUR",
+  "RENO-TAHOE INTERNATIONAL AIRPORT": "RNO",
+  "RENO TAHOE INTERNATIONAL AIRPORT": "RNO",
+  "BLACK ROCK CITY": "BRC"
+};
+
+const DEFAULT_GLOBE_STYLE = {
+  version: 8,
+  projection: { type: "globe" },
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "OpenStreetMap contributors"
+    }
+  },
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#dbeafe" }
+    },
+    {
+      id: "osm",
+      type: "raster",
+      source: "osm",
+      paint: {
+        "raster-saturation": -0.25,
+        "raster-contrast": 0.08,
+        "raster-brightness-min": 0.08,
+        "raster-brightness-max": 0.92
+      }
+    }
+  ]
+} as const;
 
 const EVENT_TYPES: Array<{
   value: LifeEventType;
@@ -158,7 +256,9 @@ function fileToBase64(file: File) {
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      resolve(result.includes(",") ? result.slice(result.indexOf(",") + 1) : result);
+      resolve(
+        result.includes(",") ? result.slice(result.indexOf(",") + 1) : result
+      );
     };
     reader.onerror = () =>
       reject(reader.error ?? new Error("Unable to read file."));
@@ -183,7 +283,10 @@ function formatTime(value: string) {
 }
 
 function formatEventType(type: LifeEventType) {
-  return EVENT_TYPES.find((entry) => entry.value === type)?.label ?? type.replaceAll("_", " ");
+  return (
+    EVENT_TYPES.find((entry) => entry.value === type)?.label ??
+    type.replaceAll("_", " ")
+  );
 }
 
 function eventIcon(type: LifeEventType) {
@@ -195,7 +298,8 @@ function timelineStats(timeline: LifeEventTimelinePayload | undefined) {
   const now = Date.now();
   const past = events.filter((event) => Date.parse(event.endsAt) < now).length;
   const current = events.filter(
-    (event) => Date.parse(event.startsAt) <= now && Date.parse(event.endsAt) >= now
+    (event) =>
+      Date.parse(event.startsAt) <= now && Date.parse(event.endsAt) >= now
   ).length;
   const upcoming = events.length - past - current;
   return { past, current, upcoming };
@@ -213,32 +317,394 @@ function buildEventSearchText(event: LifeEvent) {
     event.destinationLabel,
     event.originCity,
     event.destinationCity,
-    event.segments.map((segment) => `${segment.carrierCode}${segment.serviceNumber}`).join(" ")
+    event.segments
+      .map((segment) => `${segment.carrierCode}${segment.serviceNumber}`)
+      .join(" ")
   ]
     .join(" ")
     .toLowerCase();
 }
 
-function routePoints(event: LifeEvent) {
-  const origin =
-    event.originLatitude != null && event.originLongitude != null
-      ? { label: event.originLabel || event.originCity || "Origin", lat: event.originLatitude, lon: event.originLongitude }
-      : null;
-  const destination =
-    event.destinationLatitude != null && event.destinationLongitude != null
-      ? {
-          label: event.destinationLabel || event.destinationCity || "Destination",
-          lat: event.destinationLatitude,
-          lon: event.destinationLongitude
-        }
-      : null;
-  return origin && destination ? { origin, destination } : null;
+function normalizeRouteKey(value: string) {
+  return value.trim().toUpperCase().replace(/\s+/g, " ");
 }
 
-function LifeEventRoutePreview({ event, expanded }: { event: LifeEvent; expanded: boolean }) {
+function inferKnownRouteCode(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeRouteKey(value ?? "");
+    if (!normalized) {
+      continue;
+    }
+    if (KNOWN_ROUTE_POINTS[normalized]) {
+      return normalized;
+    }
+    if (ROUTE_POINT_ALIASES[normalized]) {
+      return ROUTE_POINT_ALIASES[normalized];
+    }
+    if (normalized.includes("GENEVA")) {
+      return "GVA";
+    }
+    if (normalized.includes("ZURICH") || normalized.includes("ZUERICH")) {
+      return "ZRH";
+    }
+    if (
+      normalized.includes("LOS ANGELES INTERNATIONAL") ||
+      normalized === "LOS ANGELES INT"
+    ) {
+      return "LAX";
+    }
+    if (normalized.includes("BURBANK")) {
+      return "BUR";
+    }
+    if (normalized.includes("RENO")) {
+      return "RNO";
+    }
+    if (normalized.includes("BLACK ROCK CITY")) {
+      return "BRC";
+    }
+    if (normalized === "LOS ANGELES") {
+      return "LOS ANGELES";
+    }
+  }
+  return null;
+}
+
+function routePointFromParts({
+  label,
+  iata,
+  city,
+  latitude,
+  longitude
+}: {
+  label: string;
+  iata?: string;
+  city?: string;
+  latitude: number | null;
+  longitude: number | null;
+}) {
+  if (latitude != null && longitude != null) {
+    return {
+      label: label || iata || city || "Route point",
+      lat: latitude,
+      lon: longitude,
+      code: iata || undefined
+    };
+  }
+  const code = inferKnownRouteCode(iata, label, city);
+  if (!code) {
+    return null;
+  }
+  const known = KNOWN_ROUTE_POINTS[code];
+  return {
+    ...known,
+    label: label || known.label,
+    code: iata || known.code
+  };
+}
+
+function sameRoutePoint(a: RoutePoint, b: RoutePoint) {
+  if (a.code && b.code && a.code === b.code) {
+    return true;
+  }
+  return Math.abs(a.lat - b.lat) < 0.001 && Math.abs(a.lon - b.lon) < 0.001;
+}
+
+function routeStops(event: LifeEvent) {
+  const stops: RoutePoint[] = [];
+  const addStop = (point: RoutePoint | null) => {
+    if (!point) {
+      return;
+    }
+    const last = stops.at(-1);
+    if (!last || !sameRoutePoint(last, point)) {
+      stops.push(point);
+    }
+  };
+
+  const segments = [...event.segments].sort(
+    (a, b) => a.sequenceIndex - b.sequenceIndex
+  );
+  for (const segment of segments) {
+    addStop(
+      routePointFromParts({
+        label: segment.originLabel,
+        iata: segment.originIata,
+        city: segment.originCity,
+        latitude: segment.originLatitude,
+        longitude: segment.originLongitude
+      })
+    );
+    addStop(
+      routePointFromParts({
+        label: segment.destinationLabel,
+        iata: segment.destinationIata,
+        city: segment.destinationCity,
+        latitude: segment.destinationLatitude,
+        longitude: segment.destinationLongitude
+      })
+    );
+  }
+
+  if (stops.length < 2) {
+    addStop(
+      routePointFromParts({
+        label: event.originLabel,
+        city: event.originCity,
+        latitude: event.originLatitude,
+        longitude: event.originLongitude
+      })
+    );
+    addStop(
+      routePointFromParts({
+        label: event.destinationLabel,
+        city: event.destinationCity,
+        latitude: event.destinationLatitude,
+        longitude: event.destinationLongitude
+      })
+    );
+  }
+
+  return stops.length >= 2 ? stops : null;
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function toDegrees(value: number) {
+  return (value * 180) / Math.PI;
+}
+
+function vectorFromPoint(point: RoutePoint) {
+  const lat = toRadians(point.lat);
+  const lon = toRadians(point.lon);
+  return {
+    x: Math.cos(lat) * Math.cos(lon),
+    y: Math.cos(lat) * Math.sin(lon),
+    z: Math.sin(lat)
+  };
+}
+
+function pointFromVector(vector: {
+  x: number;
+  y: number;
+  z: number;
+}): [number, number] {
+  const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
+  const x = vector.x / length;
+  const y = vector.y / length;
+  const z = vector.z / length;
+  return [toDegrees(Math.atan2(y, x)), toDegrees(Math.asin(z))];
+}
+
+function interpolateGreatCircle(from: RoutePoint, to: RoutePoint, steps = 72) {
+  const start = vectorFromPoint(from);
+  const end = vectorFromPoint(to);
+  const dot = Math.max(
+    -1,
+    Math.min(1, start.x * end.x + start.y * end.y + start.z * end.z)
+  );
+  const omega = Math.acos(dot);
+  if (omega < 0.000001) {
+    return [
+      [from.lon, from.lat],
+      [to.lon, to.lat]
+    ] as Array<[number, number]>;
+  }
+  const sinOmega = Math.sin(omega);
+  const coordinates: Array<[number, number]> = [];
+  for (let index = 0; index <= steps; index += 1) {
+    const t = index / steps;
+    const startWeight = Math.sin((1 - t) * omega) / sinOmega;
+    const endWeight = Math.sin(t * omega) / sinOmega;
+    coordinates.push(
+      pointFromVector({
+        x: startWeight * start.x + endWeight * end.x,
+        y: startWeight * start.y + endWeight * end.y,
+        z: startWeight * start.z + endWeight * end.z
+      })
+    );
+  }
+  return coordinates;
+}
+
+function routeLineFeatureCollection(
+  stops: RoutePoint[]
+): RouteLineFeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: stops.slice(1).map((stop, index) => {
+      const from = stops[index]!;
+      return {
+        type: "Feature",
+        properties: {
+          from: from.label,
+          to: stop.label,
+          sequence: index
+        },
+        geometry: {
+          type: "LineString",
+          coordinates: interpolateGreatCircle(from, stop)
+        }
+      };
+    })
+  };
+}
+
+function routeStopFeatureCollection(
+  stops: RoutePoint[]
+): RouteStopFeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: stops.map((stop, index) => ({
+      type: "Feature",
+      properties: {
+        label: stop.code || stop.label,
+        fullLabel: stop.label,
+        sequence: index
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [stop.lon, stop.lat]
+      }
+    }))
+  };
+}
+
+function fallbackProjection(point: RoutePoint) {
+  return {
+    x: 70 + ((point.lon + 180) / 360) * 500,
+    y: 42 + ((90 - point.lat) / 180) * 216
+  };
+}
+
+function fallbackArcPath(from: RoutePoint, to: RoutePoint) {
+  const start = fallbackProjection(from);
+  const end = fallbackProjection(to);
+  const lift = Math.min(88, Math.max(34, Math.abs(end.x - start.x) * 0.2));
+  return `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} Q ${((start.x + end.x) / 2).toFixed(1)} ${(
+    Math.min(start.y, end.y) - lift
+  ).toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+}
+
+function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
+  const first = stops[0]!;
+  const last = stops.at(-1)!;
+  return (
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.95),rgba(219,234,254,0.84)_34%,rgba(20,184,166,0.13)_100%)]">
+      <svg
+        className="h-full w-full"
+        viewBox="0 0 640 300"
+        role="img"
+        aria-label={`${first.label} to ${last.label}`}
+      >
+        <defs>
+          <radialGradient
+            id="life-event-globe-fallback-fill"
+            cx="35%"
+            cy="26%"
+            r="72%"
+          >
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="#dbeafe" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#bfdbfe" stopOpacity="0.7" />
+          </radialGradient>
+        </defs>
+        <ellipse
+          cx="320"
+          cy="150"
+          rx="248"
+          ry="118"
+          fill="url(#life-event-globe-fallback-fill)"
+          stroke="#93c5fd"
+          strokeWidth="1.5"
+        />
+        {[0, 1, 2, 3].map((line) => (
+          <ellipse
+            key={`longitude-${line}`}
+            cx="320"
+            cy="150"
+            rx={44 + line * 48}
+            ry="118"
+            fill="none"
+            stroke="#60a5fa"
+            strokeDasharray="4 6"
+            strokeOpacity="0.22"
+          />
+        ))}
+        {[84, 118, 150, 182, 216].map((y) => (
+          <path
+            key={`latitude-${y}`}
+            d={`M 92 ${y} Q 320 ${y - 24} 548 ${y}`}
+            fill="none"
+            stroke="#60a5fa"
+            strokeDasharray="4 6"
+            strokeOpacity="0.22"
+          />
+        ))}
+        {stops.slice(1).map((stop, index) => {
+          const from = stops[index]!;
+          return (
+            <path
+              key={`${from.label}-${stop.label}`}
+              d={fallbackArcPath(from, stop)}
+              fill="none"
+              stroke="#2563eb"
+              strokeLinecap="round"
+              strokeWidth="3.5"
+            />
+          );
+        })}
+        {stops.map((stop, index) => {
+          const point = fallbackProjection(stop);
+          return (
+            <g key={`${stop.label}-${index}`}>
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="6.5"
+                fill={index === stops.length - 1 ? "#99f6e4" : "#eff6ff"}
+                stroke="#2563eb"
+                strokeWidth="2"
+              />
+              <text
+                x={point.x}
+                y={point.y + 22}
+                textAnchor="middle"
+                fill="#334155"
+                fontSize="12"
+                fontWeight="600"
+              >
+                {stop.code || stop.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function LifeEventRoutePreview({
+  event,
+  expanded
+}: {
+  event: LifeEvent;
+  expanded: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [mapStatus, setMapStatus] = useState<"fallback" | "loading" | "ready">("fallback");
-  const points = routePoints(event);
+  const [mapStatus, setMapStatus] = useState<"fallback" | "loading" | "ready">(
+    "fallback"
+  );
+  const stops = useMemo(() => routeStops(event), [event]);
+  const routeData = useMemo(
+    () => (stops ? routeLineFeatureCollection(stops) : null),
+    [stops]
+  );
+  const stopData = useMemo(
+    () => (stops ? routeStopFeatureCollection(stops) : null),
+    [stops]
+  );
   const styleUrl =
     typeof window !== "undefined"
       ? window.localStorage.getItem("forge.maplibre.style-url")?.trim() ||
@@ -249,7 +715,13 @@ function LifeEventRoutePreview({ event, expanded }: { event: LifeEvent; expanded
   useEffect(() => {
     let cancelled = false;
     let map: import("maplibre-gl").Map | null = null;
-    if (!expanded || !points || !styleUrl || !containerRef.current) {
+    if (
+      !expanded ||
+      !stops ||
+      !routeData ||
+      !stopData ||
+      !containerRef.current
+    ) {
       setMapStatus("fallback");
       return undefined;
     }
@@ -259,35 +731,51 @@ function LifeEventRoutePreview({ event, expanded }: { event: LifeEvent; expanded
         return;
       }
       const rasterStyle = styleUrl.includes("{x}") || styleUrl.includes("{z}");
+      const mapStyle = rasterStyle
+        ? {
+            version: 8,
+            projection: { type: "globe" },
+            sources: {
+              tiles: { type: "raster", tiles: [styleUrl], tileSize: 256 }
+            },
+            layers: [{ id: "tiles", type: "raster", source: "tiles" }]
+          }
+        : styleUrl || DEFAULT_GLOBE_STYLE;
+      const first = stops[0]!;
       map = new maplibre.Map({
         container: containerRef.current,
-        style: rasterStyle
-          ? {
-              version: 8,
-              sources: {
-                tiles: { type: "raster", tiles: [styleUrl], tileSize: 256 }
-              },
-              layers: [{ id: "tiles", type: "raster", source: "tiles" }]
-            }
-          : styleUrl,
-        center: [points.origin.lon, points.origin.lat],
-        zoom: 3,
-        attributionControl: false
+        style: mapStyle as ConstructorParameters<
+          typeof maplibre.Map
+        >[0]["style"],
+        center: [first.lon, first.lat],
+        zoom: 1.45,
+        attributionControl: { compact: true }
+      });
+      map.scrollZoom.disable();
+      map.dragRotate.disable();
+      map.touchZoomRotate.disableRotation();
+      map.on("error", () => {
+        if (!cancelled) {
+          setMapStatus("fallback");
+        }
       });
       map.on("load", () => {
         if (!map) {
           return;
         }
-        const coordinates = [
-          [points.origin.lon, points.origin.lat],
-          [points.destination.lon, points.destination.lat]
-        ];
+        map.setProjection({ type: "globe" });
         map.addSource("life-event-route", {
           type: "geojson",
-          data: {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates }
+          data: routeData
+        });
+        map.addLayer({
+          id: "life-event-route-glow",
+          type: "line",
+          source: "life-event-route",
+          paint: {
+            "line-color": "#2563eb",
+            "line-opacity": 0.22,
+            "line-width": 11
           }
         });
         map.addLayer({
@@ -295,16 +783,56 @@ function LifeEventRoutePreview({ event, expanded }: { event: LifeEvent; expanded
           type: "line",
           source: "life-event-route",
           paint: {
-            "line-color": "#0f766e",
+            "line-color": "#2563eb",
+            "line-opacity": 0.96,
             "line-width": 4,
-            "line-dasharray": [1.5, 1]
+            "line-dasharray": [1.6, 0.7]
+          }
+        });
+        map.addSource("life-event-stops", {
+          type: "geojson",
+          data: stopData
+        });
+        map.addLayer({
+          id: "life-event-stops",
+          type: "circle",
+          source: "life-event-stops",
+          paint: {
+            "circle-radius": 6,
+            "circle-color": "#eff6ff",
+            "circle-stroke-color": "#2563eb",
+            "circle-stroke-width": 2
+          }
+        });
+        map.addLayer({
+          id: "life-event-stop-labels",
+          type: "symbol",
+          source: "life-event-stops",
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 12,
+            "text-font": ["Open Sans Semibold"],
+            "text-offset": [0, 1.15],
+            "text-anchor": "top"
+          },
+          paint: {
+            "text-color": "#0f172a",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5
           }
         });
         const bounds = new maplibre.LngLatBounds(
-          coordinates[0] as [number, number],
-          coordinates[1] as [number, number]
+          [first.lon, first.lat],
+          [first.lon, first.lat]
         );
-        map.fitBounds(bounds, { padding: 56, maxZoom: 8 });
+        for (const stop of stops.slice(1)) {
+          bounds.extend([stop.lon, stop.lat]);
+        }
+        map.fitBounds(bounds.adjustAntiMeridian(), {
+          padding: 52,
+          maxZoom: 3.4,
+          duration: 0
+        });
         setMapStatus("ready");
       });
     });
@@ -312,25 +840,77 @@ function LifeEventRoutePreview({ event, expanded }: { event: LifeEvent; expanded
       cancelled = true;
       map?.remove();
     };
-  }, [expanded, points, styleUrl]);
+  }, [expanded, routeData, stopData, stops, styleUrl]);
+
+  if (!stops) {
+    return null;
+  }
 
   return (
-    <div className="relative min-h-[190px] overflow-hidden rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
-      <div ref={containerRef} className={cn("absolute inset-0", mapStatus !== "ready" && "hidden")} />
+    <div className="relative min-h-[280px] overflow-hidden rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
+      <LifeEventGlobeFallback stops={stops} />
+      <div
+        ref={containerRef}
+        className={cn(
+          "absolute inset-0 transition-opacity duration-300",
+          mapStatus === "ready"
+            ? "opacity-100"
+            : "pointer-events-none opacity-0"
+        )}
+      />
       {mapStatus !== "ready" ? (
-        <div className="absolute inset-0 grid place-items-center p-4">
-          <div className="relative h-28 w-full max-w-xl">
-            <div className="absolute left-[12%] top-1/2 h-px w-[76%] -translate-y-1/2 border-t border-dashed border-[var(--primary)]/55" />
-            <div className="absolute left-[10%] top-1/2 size-4 -translate-y-1/2 rounded-full border border-[var(--primary)] bg-[var(--ui-surface-1)]" />
-            <div className="absolute right-[10%] top-1/2 size-4 -translate-y-1/2 rounded-full border border-[var(--success)] bg-[var(--ui-surface-1)]" />
-            <Plane className="absolute left-1/2 top-[38%] size-6 -translate-x-1/2 text-[var(--primary)]" />
-            <div className="absolute left-0 top-[calc(50%+1.25rem)] max-w-[42%] text-xs text-[var(--ui-ink-soft)]">
-              {event.originLabel || event.originCity || "Origin"}
-            </div>
-            <div className="absolute right-0 top-[calc(50%+1.25rem)] max-w-[42%] text-right text-xs text-[var(--ui-ink-soft)]">
-              {event.destinationLabel || event.destinationCity || "Destination"}
-            </div>
-          </div>
+        <div className="absolute right-3 top-3 rounded-full border border-[var(--ui-border-subtle)] bg-white/85 px-3 py-1 text-xs font-medium text-[var(--ui-ink-medium)] shadow-sm">
+          {mapStatus === "loading" ? "Loading globe" : "Route preview"}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LifeEventTravelStatusPanel({
+  status,
+  loading
+}: {
+  status: LifeEventTravelStatusPayload | null | undefined;
+  loading: boolean;
+}) {
+  const checkedAt = status?.checkedAt ? new Date(status.checkedAt) : null;
+  const checkedLabel =
+    status && checkedAt && !Number.isNaN(checkedAt.getTime())
+      ? `${formatDate(status.checkedAt)} · ${formatTime(status.checkedAt)}`
+      : null;
+  return (
+    <div className="grid gap-2 rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Clock3 className="size-4 text-[var(--primary)]" />
+        <span className="font-medium text-[var(--ui-ink-strong)]">
+          Flight status
+        </span>
+        {status ? (
+          <Badge tone={status.providerConfigured ? "signal" : "meta"} size="xs">
+            {status.providerConfigured
+              ? status.provider || "Live provider"
+              : "Scheduled data"}
+          </Badge>
+        ) : null}
+      </div>
+      <div className="leading-6 text-[var(--ui-ink-medium)]">
+        {loading
+          ? "Checking travel status..."
+          : (status?.message ?? "No travel status response yet.")}
+      </div>
+      {status ? (
+        <div className="flex flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
+          {status.flightNumber ? (
+            <Badge tone="meta" size="xs">
+              {status.flightNumber}
+            </Badge>
+          ) : null}
+          <span>{status.status.replaceAll("_", " ")}</span>
+          {checkedLabel ? <span>Checked {checkedLabel}</span> : null}
+          {!status.providerConfigured ? (
+            <span>Live provider not configured</span>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -341,6 +921,8 @@ function LifeEventCard({
   event,
   next,
   expanded,
+  travelStatus,
+  travelStatusLoading,
   onToggle,
   onEdit,
   onSyncCalendar
@@ -348,6 +930,8 @@ function LifeEventCard({
   event: LifeEvent;
   next: boolean;
   expanded: boolean;
+  travelStatus?: LifeEventTravelStatusPayload | null;
+  travelStatusLoading?: boolean;
   onToggle: () => void;
   onEdit: () => void;
   onSyncCalendar: () => void;
@@ -360,14 +944,17 @@ function LifeEventCard({
     [event.destinationLabel, event.destinationCity, event.destinationCountry]
       .filter(Boolean)
       .join(", ") ||
-    [event.originLabel, event.originCity, event.originCountry].filter(Boolean).join(", ");
+    [event.originLabel, event.originCity, event.originCountry]
+      .filter(Boolean)
+      .join(", ");
 
   return (
     <Card
       data-testid="life-event-card"
       className={cn(
         "relative overflow-hidden p-0",
-        next && "border-[color-mix(in_srgb,var(--primary)_38%,var(--ui-border-subtle)_62%)]"
+        next &&
+          "border-[color-mix(in_srgb,var(--primary)_38%,var(--ui-border-subtle)_62%)]"
       )}
     >
       <button
@@ -383,8 +970,14 @@ function LifeEventCard({
             <span className="min-w-0 break-words text-base font-semibold text-[var(--ui-ink-strong)]">
               {event.title}
             </span>
-            {next ? <Badge tone="signal" size="xs">Next</Badge> : null}
-            <Badge tone="meta" size="xs">{formatEventType(event.eventType)}</Badge>
+            {next ? (
+              <Badge tone="signal" size="xs">
+                Next
+              </Badge>
+            ) : null}
+            <Badge tone="meta" size="xs">
+              {formatEventType(event.eventType)}
+            </Badge>
           </span>
           <span className="mt-1 block text-sm text-[var(--ui-ink-soft)]">
             {formatDate(event.startsAt)} · {timeRange}
@@ -412,21 +1005,41 @@ function LifeEventCard({
         <div className="grid gap-4 border-t border-[var(--ui-border-subtle)] p-4">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
-              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">When</div>
-              <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">{timeRange}</div>
-            </div>
-            <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
-              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">Calendar</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
+                When
+              </div>
               <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">
-                {event.primaryCalendarEventId ? event.calendarSyncState.replaceAll("_", " ") : "Not linked"}
+                {timeRange}
               </div>
             </div>
             <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
-              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">Links</div>
-              <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">{event.links.length}</div>
+              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
+                Calendar
+              </div>
+              <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">
+                {event.primaryCalendarEventId
+                  ? event.calendarSyncState.replaceAll("_", " ")
+                  : "Not linked"}
+              </div>
+            </div>
+            <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
+              <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
+                Links
+              </div>
+              <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">
+                {event.links.length}
+              </div>
             </div>
           </div>
-          {isTravel ? <LifeEventRoutePreview event={event} expanded={expanded} /> : null}
+          {isTravel ? (
+            <LifeEventRoutePreview event={event} expanded={expanded} />
+          ) : null}
+          {isTravel ? (
+            <LifeEventTravelStatusPanel
+              status={travelStatus}
+              loading={Boolean(travelStatusLoading)}
+            />
+          ) : null}
           {event.segments.length > 0 ? (
             <div className="grid gap-2">
               {event.segments.map((segment) => (
@@ -436,25 +1049,41 @@ function LifeEventCard({
                 >
                   <div className="min-w-0">
                     <div className="font-medium text-[var(--ui-ink-strong)]">
-                      {segment.title || `${segment.originLabel} to ${segment.destinationLabel}`}
+                      {segment.title ||
+                        `${segment.originLabel} to ${segment.destinationLabel}`}
                     </div>
                     <div className="mt-1 text-[var(--ui-ink-soft)]">
-                      {[segment.originIata || segment.originLabel, segment.destinationIata || segment.destinationLabel]
+                      {[
+                        segment.originIata || segment.originLabel,
+                        segment.destinationIata || segment.destinationLabel
+                      ]
                         .filter(Boolean)
                         .join(" -> ")}
                     </div>
                   </div>
-                  <Badge tone="meta" size="sm">{segment.status}</Badge>
+                  <Badge tone="meta" size="sm">
+                    {segment.status}
+                  </Badge>
                 </div>
               ))}
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onEdit}
+            >
               <PencilLine className="size-4" />
               Edit
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={onSyncCalendar}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onSyncCalendar}
+            >
               <CalendarCheck2 className="size-4" />
               Sync calendar
             </Button>
@@ -499,7 +1128,12 @@ function FileDropZone({
         <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
           Drop tickets or confirmations here
         </div>
-        <Button type="button" variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+        >
           Choose files
         </Button>
         {files.length > 0 ? (
@@ -524,9 +1158,10 @@ export function LifeEventsPage() {
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<LifeEvent | null>(null);
   const [draft, setDraft] = useState<LifeEventDraft>(() => defaultDraft());
-  const [ticketDraft, setTicketDraft] = useState<TicketImportDraft>(() => defaultTicketDraft());
+  const [ticketDraft, setTicketDraft] = useState<TicketImportDraft>(() =>
+    defaultTicketDraft()
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const parentRef = useRef<HTMLDivElement | null>(null);
 
   const timelineQuery = useQuery({
     queryKey: ["life-events-timeline"],
@@ -539,15 +1174,11 @@ export function LifeEventsPage() {
     if (!needle) {
       return events;
     }
-    return events.filter((event) => buildEventSearchText(event).includes(needle));
+    return events.filter((event) =>
+      buildEventSearchText(event).includes(needle)
+    );
   }, [query, timeline?.events]);
   const stats = timelineStats(timeline);
-  const rowVirtualizer = useVirtualizer({
-    count: filteredEvents.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 212,
-    overscan: 8
-  });
 
   const buildLifeEventPayload = (value: LifeEventDraft) => {
     const startsAt = fromLocalDateTimeInput(value.startsAt);
@@ -588,7 +1219,9 @@ export function LifeEventsPage() {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["life-events-timeline"]
+      });
       await queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
       setDraft(defaultDraft());
       setEventDialogOpen(false);
@@ -615,7 +1248,9 @@ export function LifeEventsPage() {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["life-events-timeline"]
+      });
       await queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
       setDraft(defaultDraft());
       setEditingEvent(null);
@@ -629,7 +1264,10 @@ export function LifeEventsPage() {
         throw new Error("Choose one or more ticket files.");
       }
       for (const file of value.files) {
-        const title = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+        const title = file.name
+          .replace(/\.[^.]+$/, "")
+          .replace(/[_-]+/g, " ")
+          .trim();
         const input: ArtifactUploadInput = {
           title,
           shortDescription: "Ticket or travel confirmation",
@@ -661,7 +1299,8 @@ export function LifeEventsPage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (id: string) => syncLifeEventCalendar(id, { projection: "link_or_create" }),
+    mutationFn: (id: string) =>
+      syncLifeEventCalendar(id, { projection: "link_or_create" }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] }),
@@ -737,12 +1376,16 @@ export function LifeEventsPage() {
             />
             <Input
               value={value.shortDescription}
-              onChange={(event) => setValue({ shortDescription: event.target.value })}
+              onChange={(event) =>
+                setValue({ shortDescription: event.target.value })
+              }
               placeholder="Seeing family for the long weekend"
             />
             <Textarea
               value={value.description}
-              onChange={(event) => setValue({ description: event.target.value })}
+              onChange={(event) =>
+                setValue({ description: event.target.value })
+              }
               placeholder="What makes this event worth keeping in the life timeline?"
               rows={5}
             />
@@ -777,12 +1420,16 @@ export function LifeEventsPage() {
             />
             <Input
               value={value.originLabel}
-              onChange={(event) => setValue({ originLabel: event.target.value })}
+              onChange={(event) =>
+                setValue({ originLabel: event.target.value })
+              }
               placeholder="Origin"
             />
             <Input
               value={value.destinationLabel}
-              onChange={(event) => setValue({ destinationLabel: event.target.value })}
+              onChange={(event) =>
+                setValue({ destinationLabel: event.target.value })
+              }
               placeholder="Destination"
             />
           </div>
@@ -810,7 +1457,8 @@ export function LifeEventsPage() {
                 )}
                 onClick={() =>
                   setValue({
-                    calendarProjection: projection as LifeEventDraft["calendarProjection"]
+                    calendarProjection:
+                      projection as LifeEventDraft["calendarProjection"]
                   })
                 }
               >
@@ -845,7 +1493,9 @@ export function LifeEventsPage() {
           <div className="grid gap-3">
             <Input
               value={value.sourceLabel}
-              onChange={(event) => setValue({ sourceLabel: event.target.value })}
+              onChange={(event) =>
+                setValue({ sourceLabel: event.target.value })
+              }
               placeholder="Airline email, booking site, exported PDF"
             />
             <label className="flex items-center gap-3 rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm">
@@ -886,7 +1536,11 @@ export function LifeEventsPage() {
         badge={`${stats.upcoming} upcoming`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={() => setTicketDialogOpen(true)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setTicketDialogOpen(true)}
+            >
               <FileUp className="size-4" />
               Import tickets
             </Button>
@@ -928,64 +1582,47 @@ export function LifeEventsPage() {
           </div>
         </Card>
       ) : (
-        <div
-          ref={parentRef}
-          className="h-[min(72vh,760px)] overflow-auto rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
-        >
-          <div
-            className="relative w-full"
-            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const event = filteredEvents[virtualRow.index]!;
-              const isNext = event.id === timeline?.nextLifeEventId;
-              const isExpanded = expandedId === event.id;
-              return (
-                <div
-                  key={event.id}
-                  ref={rowVirtualizer.measureElement}
-                  data-index={virtualRow.index}
-                  className="absolute left-0 top-0 w-full pb-3"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
-                >
-                  <div className="grid grid-cols-[2rem_1fr] gap-3">
-                    <div className="relative flex justify-center">
-                      <div className="absolute bottom-0 top-0 w-px bg-[var(--ui-border-subtle)]" />
-                      <div
-                        className={cn(
-                          "z-10 mt-5 size-3 rounded-full border bg-[var(--ui-surface-1)]",
-                          isNext
-                            ? "border-[var(--primary)] shadow-[0_0_0_5px_color-mix(in_srgb,var(--primary)_16%,transparent)]"
-                            : "border-[var(--ui-border-strong)]"
-                        )}
-                      />
-                    </div>
-                    <LifeEventCard
-                      event={event}
-                      next={isNext}
-                      expanded={isExpanded}
-                      onToggle={() => setExpandedId(isExpanded ? null : event.id)}
-                      onEdit={() => {
-                        setEditingEvent(event);
-                        setDraft(draftFromLifeEvent(event));
-                        setEventDialogOpen(true);
-                      }}
-                      onSyncCalendar={() => syncMutation.mutate(event.id)}
-                    />
-                  </div>
+        <div className="relative grid gap-3">
+          <div className="absolute bottom-6 left-4 top-6 w-px bg-[var(--ui-border-subtle)]" />
+          {filteredEvents.map((event) => {
+            const isNext = event.id === timeline?.nextLifeEventId;
+            const isExpanded = expandedId === event.id;
+            return (
+              <div
+                key={event.id}
+                className="relative grid grid-cols-[2rem_1fr] gap-3"
+              >
+                <div className="relative flex justify-center">
+                  <div
+                    className={cn(
+                      "z-10 mt-5 size-3 rounded-full border bg-[var(--ui-surface-1)]",
+                      isNext
+                        ? "border-[var(--primary)] shadow-[0_0_0_5px_color-mix(in_srgb,var(--primary)_16%,transparent)]"
+                        : "border-[var(--ui-border-strong)]"
+                    )}
+                  />
                 </div>
-              );
-            })}
-          </div>
+                <LifeEventCard
+                  event={event}
+                  next={isNext}
+                  expanded={isExpanded}
+                  travelStatus={isExpanded ? statusQuery.data : null}
+                  travelStatusLoading={
+                    isExpanded ? statusQuery.isFetching : false
+                  }
+                  onToggle={() => setExpandedId(isExpanded ? null : event.id)}
+                  onEdit={() => {
+                    setEditingEvent(event);
+                    setDraft(draftFromLifeEvent(event));
+                    setEventDialogOpen(true);
+                  }}
+                  onSyncCalendar={() => syncMutation.mutate(event.id)}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
-
-      {expandedId && statusQuery.data ? (
-        <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
-          <Clock3 className="size-4" />
-          <span>{statusQuery.data.message}</span>
-        </div>
-      ) : null}
 
       <QuestionFlowDialog
         open={eventDialogOpen}
@@ -1007,7 +1644,9 @@ export function LifeEventsPage() {
         value={draft}
         onChange={setDraft}
         steps={steps}
-        draftPersistenceKey={editingEvent ? `life-event.edit.${editingEvent.id}` : "life-event.new"}
+        draftPersistenceKey={
+          editingEvent ? `life-event.edit.${editingEvent.id}` : "life-event.new"
+        }
         submitLabel={editingEvent ? "Update Life Event" : "Create Life Event"}
         pending={createMutation.isPending || updateMutation.isPending}
         error={submitError}
@@ -1019,7 +1658,10 @@ export function LifeEventsPage() {
           }
           try {
             if (editingEvent) {
-              await updateMutation.mutateAsync({ event: editingEvent, value: draft });
+              await updateMutation.mutateAsync({
+                event: editingEvent,
+                value: draft
+              });
             } else {
               await createMutation.mutateAsync(draft);
             }
@@ -1058,7 +1700,11 @@ export function LifeEventsPage() {
           try {
             await ticketMutation.mutateAsync(ticketDraft);
           } catch (error) {
-            setSubmitError(error instanceof Error ? error.message : "Unable to import tickets.");
+            setSubmitError(
+              error instanceof Error
+                ? error.message
+                : "Unable to import tickets."
+            );
           }
         }}
       />

@@ -68,6 +68,16 @@ async function loadAgentContractPayloads() {
     onboarding: onboardingResponse.json().onboarding as {
       entityRouteModel: {
         batchRoutes: Record<string, string>;
+        specializedCrudEntities: Record<
+          string,
+          {
+            routeKeys?: string[];
+            methodRoutes?: Record<
+              string,
+              string | { method: string; path: string; queryParams?: string[] }
+            >;
+          }
+        >;
         specializedDomainSurfaces: Record<
           string,
           {
@@ -94,6 +104,18 @@ function parseMethodRoute(route: string) {
   return {
     method: match![1].toLowerCase(),
     path: normalizeOpenApiRoutePath(match![2])
+  };
+}
+
+function normalizeSpecializedCrudRoute(
+  route: string | { method: string; path: string }
+) {
+  if (typeof route === "string") {
+    return parseMethodRoute(route);
+  }
+  return {
+    method: route.method.toLowerCase(),
+    path: normalizeOpenApiRoutePath(route.path)
   };
 }
 
@@ -584,11 +606,13 @@ describe("question flow simulation cycles", () => {
       tripPointDelete: "Delete one trip point."
     },
     "Life Events": {
-      timeline: "Read the Life Events chronology before interpreting or adding.",
+      timeline:
+        "Read the Life Events chronology before interpreting or adding.",
       read: "Read one Life Event with segments and links.",
       calendarSync: "Link or create the matching calendar event.",
       fromCalendarEvent: "Mark an existing calendar event as a Life Event.",
-      importTicket: "Draft or create a travel event from a trusted ticket artifact.",
+      importTicket:
+        "Draft or create a travel event from a trusted ticket artifact.",
       travelStatus: "Read scheduled or provider-backed travel status."
     },
     "Life Force": {
@@ -988,6 +1012,65 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 1 improvement retest: specialized CRUD method routes are present in OpenAPI", async () => {
+    const { onboarding, openApi } = await loadAgentContractPayloads();
+    const specializedCrud = onboarding.entityRouteModel.specializedCrudEntities;
+
+    for (const surfaceKey of [
+      "wiki_page",
+      "calendar_connection",
+      "artifact"
+    ] as const) {
+      const surface = specializedCrud[surfaceKey];
+      expect(
+        surface,
+        `${surfaceKey} should publish specialized CRUD`
+      ).toBeTruthy();
+      expect(surface.routeKeys, `${surfaceKey} route keys`).toBeTruthy();
+      expect(surface.methodRoutes, `${surfaceKey} method routes`).toBeTruthy();
+
+      for (const routeKey of surface.routeKeys ?? []) {
+        const methodRoute = surface.methodRoutes?.[routeKey];
+        expect(
+          methodRoute,
+          `${surfaceKey}.${routeKey} should publish a method route`
+        ).toBeTruthy();
+        const { method, path } = normalizeSpecializedCrudRoute(methodRoute!);
+        expect(
+          openApi.paths[path],
+          `${surfaceKey}.${routeKey} should exist in OpenAPI at ${path}`
+        ).toBeTruthy();
+        expect(
+          openApi.paths[path]?.[method],
+          `${surfaceKey}.${routeKey} should publish ${method.toUpperCase()} ${path}`
+        ).toBeTruthy();
+      }
+    }
+
+    expect(specializedCrud.wiki_page.routeKeys).toEqual(
+      expect.arrayContaining(["list", "search", "create", "read", "update"])
+    );
+    expect(specializedCrud.calendar_connection.routeKeys).toEqual(
+      expect.arrayContaining([
+        "list",
+        "discover",
+        "discoverMacOSLocal",
+        "rediscover",
+        "create",
+        "update",
+        "sync",
+        "delete"
+      ])
+    );
+    expect(specializedCrud.artifact.routeKeys).not.toEqual(
+      expect.arrayContaining([
+        "humanDownloadOnly",
+        "humanPasswordDownloadOnly",
+        "humanEncryptOnly"
+      ])
+    );
+  });
+
   it("uses explicit specialized route-lane scenarios in every cycle", () => {
     const expectedSurfaceNames = Object.keys(
       specializedSurfaceRouteScenarios
@@ -1175,7 +1258,9 @@ describe("question flow simulation cycles", () => {
       restore: "/api/v1/entities/restore"
     };
 
-    expect(onboarding.entityRouteModel.batchRoutes).toEqual(expectedBatchRoutes);
+    expect(onboarding.entityRouteModel.batchRoutes).toEqual(
+      expectedBatchRoutes
+    );
     expect(openApi.paths["/api/v1/entities/batch"]).toBeUndefined();
 
     for (const [operation, routePath] of Object.entries(expectedBatchRoutes)) {
@@ -2338,7 +2423,9 @@ describe("question flow simulation cycles", () => {
       expect(source).toContain("batch CRUD only");
       expect(source).toContain("catalog entities");
       expect(source).toContain("named tools or documented routes");
-      expect(source).toContain("Movement, Life Events, Life Force, or Workbench");
+      expect(source).toContain(
+        "Movement, Life Events, Life Force, or Workbench"
+      );
       expect(source).toContain("routeKey");
       expect(source).toContain("method");
       expect(source).toContain("path");

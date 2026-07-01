@@ -657,6 +657,11 @@ Use this quick split before the conversation gets too detailed.
   delete, and restore artifact metadata, but file upload, scan, enrichment, trust,
   versions, audit, and generic entity-link replacement stay on the Artifact Store
   route family.
+- `wiki_page`, `calendar_connection`, and `artifact` all publish route keys and
+  method/path maps under live onboarding `specializedCrudEntities`. Use those maps
+  for route verification before acting, just as you use `methodRoutes` for the
+  specialized domain surfaces. Do not guess wiki, calendar connection, or artifact
+  paths from memory when the route key is published.
 - `task_run`, `work_adjustment`, `questionnaire_run`, `preference_judgment`,
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
@@ -696,6 +701,9 @@ user-facing API explanation.
 4. For specialized CRUD or action workflows, use the named tool or documented route
    for wiki pages, calendar connections, artifacts, task runs, work adjustments,
    questionnaire runs, preference judgments/signals, and self-observation notes.
+   For `wiki_page`, `calendar_connection`, and `artifact`, verify route keys and
+   method/path entries from live onboarding `specializedCrudEntities` before calling
+   lower-level routes.
 5. For Movement, Life Events, Life Force, and Workbench, verify the `routeKey`, method, path, and
    every placeholder in `methodRoutes`; fill `pathParams` by placeholder name before
    the call. Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,

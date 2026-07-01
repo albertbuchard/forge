@@ -3878,19 +3878,22 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         name: "eventType",
         type: "travel_flight | travel_train | travel_car | travel_boat | travel_trip | concert | cinema | date | friends | family | work_milestone | thesis_milestone | medical | administrative | celebration | custom",
         required: false,
-        description: "Specific card family for timeline rendering and intake questions."
+        description:
+          "Specific card family for timeline rendering and intake questions."
       },
       {
         name: "startsAt",
         type: "datetime",
         required: true,
-        description: "When the event starts or when the user should leave/show up."
+        description:
+          "When the event starts or when the user should leave/show up."
       },
       {
         name: "endsAt",
         type: "datetime",
         required: false,
-        description: "When it ends or arrives. Forge defaults a one-hour placeholder when missing."
+        description:
+          "When it ends or arrives. Forge defaults a one-hour placeholder when missing."
       },
       {
         name: "transportMode",
@@ -6297,7 +6300,41 @@ function buildAgentOnboardingPayload(request: {
         wiki_page: {
           create: "/api/v1/wiki/pages",
           update: "/api/v1/wiki/pages/:id",
-          read: "/api/v1/wiki/pages/:id"
+          read: "/api/v1/wiki/pages/:id",
+          list: "/api/v1/wiki/pages",
+          search: "/api/v1/wiki/search",
+          readBySlug: "/api/v1/wiki/by-slug/:slug",
+          delete: "/api/v1/wiki/pages/:id",
+          health: "/api/v1/wiki/health",
+          sync: "/api/v1/wiki/sync",
+          reindex: "/api/v1/wiki/reindex",
+          ingest: "/api/v1/wiki/ingest-jobs",
+          routeKeys: [
+            "list",
+            "search",
+            "create",
+            "read",
+            "readBySlug",
+            "update",
+            "delete",
+            "health",
+            "sync",
+            "reindex",
+            "ingest"
+          ],
+          methodRoutes: {
+            list: { method: "GET", path: "/api/v1/wiki/pages" },
+            search: { method: "POST", path: "/api/v1/wiki/search" },
+            create: { method: "POST", path: "/api/v1/wiki/pages" },
+            read: { method: "GET", path: "/api/v1/wiki/pages/:id" },
+            readBySlug: { method: "GET", path: "/api/v1/wiki/by-slug/:slug" },
+            update: { method: "PATCH", path: "/api/v1/wiki/pages/:id" },
+            delete: { method: "DELETE", path: "/api/v1/wiki/pages/:id" },
+            health: { method: "GET", path: "/api/v1/wiki/health" },
+            sync: { method: "POST", path: "/api/v1/wiki/sync" },
+            reindex: { method: "POST", path: "/api/v1/wiki/reindex" },
+            ingest: { method: "POST", path: "/api/v1/wiki/ingest-jobs" }
+          }
         },
         calendar_connection: {
           list: "/api/v1/calendar/connections",
@@ -6307,7 +6344,42 @@ function buildAgentOnboardingPayload(request: {
           create: "/api/v1/calendar/connections",
           update: "/api/v1/calendar/connections/:id",
           sync: "/api/v1/calendar/connections/:id/sync",
-          delete: "/api/v1/calendar/connections/:id"
+          delete: "/api/v1/calendar/connections/:id",
+          routeKeys: [
+            "list",
+            "discover",
+            "discoverMacOSLocal",
+            "rediscover",
+            "create",
+            "update",
+            "sync",
+            "delete"
+          ],
+          methodRoutes: {
+            list: { method: "GET", path: "/api/v1/calendar/connections" },
+            discover: { method: "POST", path: "/api/v1/calendar/discovery" },
+            discoverMacOSLocal: {
+              method: "GET",
+              path: "/api/v1/calendar/macos-local/discovery"
+            },
+            rediscover: {
+              method: "GET",
+              path: "/api/v1/calendar/connections/:id/discovery"
+            },
+            create: { method: "POST", path: "/api/v1/calendar/connections" },
+            update: {
+              method: "PATCH",
+              path: "/api/v1/calendar/connections/:id"
+            },
+            sync: {
+              method: "POST",
+              path: "/api/v1/calendar/connections/:id/sync"
+            },
+            delete: {
+              method: "DELETE",
+              path: "/api/v1/calendar/connections/:id"
+            }
+          }
         },
         artifact: {
           list: "/api/v1/artifacts",
@@ -17341,11 +17413,9 @@ export async function buildServer(
     return { lifeEvent };
   });
   app.post("/api/v1/life-events/:id/calendar-sync", async (request, reply) => {
-    requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/life-events/:id/calendar-sync" }
-    );
+    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
+      route: "/api/v1/life-events/:id/calendar-sync"
+    });
     const { id } = request.params as { id: string };
     const result = syncLifeEventCalendar(
       id,
@@ -17357,22 +17427,25 @@ export async function buildServer(
     }
     return result;
   });
-  app.post("/api/v1/life-events/from-calendar-event", async (request, reply) => {
-    const auth = requireScopedAccess(
-      request.headers as Record<string, unknown>,
-      ["write"],
-      { route: "/api/v1/life-events/from-calendar-event" }
-    );
-    const result = createLifeEventFromCalendar(
-      lifeEventFromCalendarInputSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
-    if (!result) {
-      reply.code(404);
-      return { error: "Calendar event not found" };
+  app.post(
+    "/api/v1/life-events/from-calendar-event",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        { route: "/api/v1/life-events/from-calendar-event" }
+      );
+      const result = createLifeEventFromCalendar(
+        lifeEventFromCalendarInputSchema.parse(request.body ?? {}),
+        toActivityContext(auth)
+      );
+      if (!result) {
+        reply.code(404);
+        return { error: "Calendar event not found" };
+      }
+      return result;
     }
-    return result;
-  });
+  );
   app.post("/api/v1/life-events/import-ticket", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,

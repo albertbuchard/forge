@@ -142,7 +142,10 @@ export const lifeEventTimelineQuerySchema = z.object({
       Array.isArray(value)
         ? value
         : typeof value === "string" && value.trim().length > 0
-          ? value.split(",").map((item) => item.trim()).filter(Boolean)
+          ? value
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
           : []
     )
 });
@@ -388,7 +391,9 @@ function getLifeEventRow(lifeEventId: string): LifeEventRow | undefined {
 
 function putSegments(lifeEventId: string, segments: LifeEventSegmentInput[]) {
   const database = getDatabase();
-  database.prepare(`DELETE FROM life_event_segments WHERE life_event_id = ?`).run(lifeEventId);
+  database
+    .prepare(`DELETE FROM life_event_segments WHERE life_event_id = ?`)
+    .run(lifeEventId);
   const insert = database.prepare(
     `INSERT INTO life_event_segments (
       id, life_event_id, segment_type, transport_mode, sequence_index, title, starts_at, ends_at, timezone,
@@ -464,8 +469,12 @@ function scoreCalendarMatch(event: LifeEvent, calendarEvent: CalendarEvent) {
   ) {
     score += 0.2;
   }
-  const startDiff = Math.abs(Date.parse(event.startsAt) - Date.parse(calendarEvent.startAt));
-  const endDiff = Math.abs(Date.parse(event.endsAt) - Date.parse(calendarEvent.endAt));
+  const startDiff = Math.abs(
+    Date.parse(event.startsAt) - Date.parse(calendarEvent.startAt)
+  );
+  const endDiff = Math.abs(
+    Date.parse(event.endsAt) - Date.parse(calendarEvent.endAt)
+  );
   if (startDiff <= 5 * 60 * 1000) {
     score += 0.25;
   } else if (startDiff <= 60 * 60 * 1000) {
@@ -476,12 +485,24 @@ function scoreCalendarMatch(event: LifeEvent, calendarEvent: CalendarEvent) {
   } else if (endDiff <= 60 * 60 * 1000) {
     score += 0.08;
   }
-  const place = normalizeText(event.placeLabel || event.destinationCity || event.originCity);
-  const calendarLocation = normalizeText(calendarEvent.location || calendarEvent.place.label);
-  if (place && calendarLocation && (calendarLocation.includes(place) || place.includes(calendarLocation))) {
+  const place = normalizeText(
+    event.placeLabel || event.destinationCity || event.originCity
+  );
+  const calendarLocation = normalizeText(
+    calendarEvent.location || calendarEvent.place.label
+  );
+  if (
+    place &&
+    calendarLocation &&
+    (calendarLocation.includes(place) || place.includes(calendarLocation))
+  ) {
     score += 0.15;
   }
-  if (calendarEvent.links.some((link) => link.entityType === "life_event" && link.entityId === event.id)) {
+  if (
+    calendarEvent.links.some(
+      (link) => link.entityType === "life_event" && link.entityId === event.id
+    )
+  ) {
     score += 0.4;
   }
   return Math.min(1, score);
@@ -532,7 +553,10 @@ function ensureCalendarLink(event: LifeEvent, calendarEventId: string) {
   }
   const links = [
     ...calendarEvent.links
-      .filter((link) => !(link.entityType === "life_event" && link.entityId === event.id))
+      .filter(
+        (link) =>
+          !(link.entityType === "life_event" && link.entityId === event.id)
+      )
       .map((link) => ({
         entityType: link.entityType,
         entityId: link.entityId,
@@ -554,7 +578,9 @@ function buildCalendarInput(
   const location =
     event.placeLabel ||
     event.placeAddress ||
-    [event.destinationCity, event.destinationCountry].filter(Boolean).join(", ") ||
+    [event.destinationCity, event.destinationCountry]
+      .filter(Boolean)
+      .join(", ") ||
     [event.originCity, event.originCountry].filter(Boolean).join(", ");
   return {
     title: event.title,
@@ -621,7 +647,9 @@ export function listLifeEventTimeline(
     params.push(query.to);
   }
   if (query.eventTypes.length > 0) {
-    clauses.push(`event_type IN (${query.eventTypes.map(() => "?").join(", ")})`);
+    clauses.push(
+      `event_type IN (${query.eventTypes.map(() => "?").join(", ")})`
+    );
     params.push(...query.eventTypes);
   }
   const rows = getDatabase()
@@ -642,7 +670,8 @@ export function listLifeEventTimeline(
     .all(...params, query.limit, query.offset) as LifeEventRow[];
   const events = filterDeletedEntities("life_event", rows.map(mapLifeEvent));
   const now = new Date();
-  const next = events.find((event) => Date.parse(event.endsAt) >= now.getTime()) ?? null;
+  const next =
+    events.find((event) => Date.parse(event.endsAt) >= now.getTime()) ?? null;
   return {
     events,
     now: now.toISOString(),
@@ -775,9 +804,11 @@ export function updateLifeEvent(
     const next = {
       ...current,
       ...parsed,
-      endsAt: parsed.endsAt ?? (
-        parsed.startsAt && !input.endsAt ? defaultEndAt(parsed.startsAt) : current.endsAt
-      ),
+      endsAt:
+        parsed.endsAt ??
+        (parsed.startsAt && !input.endsAt
+          ? defaultEndAt(parsed.startsAt)
+          : current.endsAt),
       updatedAt: nowIso()
     };
     if (Date.parse(next.endsAt) <= Date.parse(next.startsAt)) {
@@ -861,7 +892,9 @@ export function updateLifeEvent(
       ensureCalendarLink(updated, parsed.primaryCalendarEventId);
     }
     if (parsed.calendarProjection && parsed.calendarProjection !== "none") {
-      syncLifeEventCalendar(lifeEventId, { projection: parsed.calendarProjection });
+      syncLifeEventCalendar(lifeEventId, {
+        projection: parsed.calendarProjection
+      });
       updated = getLifeEventById(lifeEventId)!;
     }
     if (activity) {
@@ -884,12 +917,17 @@ export function updateLifeEvent(
   });
 }
 
-export function deleteLifeEvent(lifeEventId: string, activity?: ActivityContext) {
+export function deleteLifeEvent(
+  lifeEventId: string,
+  activity?: ActivityContext
+) {
   const existing = getLifeEventById(lifeEventId);
   if (!existing) {
     return undefined;
   }
-  getDatabase().prepare(`DELETE FROM life_events WHERE id = ?`).run(lifeEventId);
+  getDatabase()
+    .prepare(`DELETE FROM life_events WHERE id = ?`)
+    .run(lifeEventId);
   if (activity) {
     recordActivityEvent({
       entityType: "life_event",
@@ -947,7 +985,10 @@ export function syncLifeEventCalendar(
         const updated = getLifeEventById(lifeEventId)!;
         replaceLifeEventLinks(
           lifeEventId,
-          buildStoredLinks(linkRowsToInputs(updated.links as EntityLinkRecord[]), updated)
+          buildStoredLinks(
+            linkRowsToInputs(updated.links as EntityLinkRecord[]),
+            updated
+          )
         );
         return {
           lifeEvent: updated,
@@ -968,7 +1009,10 @@ export function syncLifeEventCalendar(
       const updated = getLifeEventById(lifeEventId)!;
       replaceLifeEventLinks(
         lifeEventId,
-        buildStoredLinks(linkRowsToInputs(updated.links as EntityLinkRecord[]), updated)
+        buildStoredLinks(
+          linkRowsToInputs(updated.links as EntityLinkRecord[]),
+          updated
+        )
       );
       ensureCalendarLink(updated, match.calendarEvent.id);
       return {
@@ -1004,7 +1048,10 @@ export function syncLifeEventCalendar(
     const updated = getLifeEventById(lifeEventId)!;
     replaceLifeEventLinks(
       lifeEventId,
-      buildStoredLinks(linkRowsToInputs(updated.links as EntityLinkRecord[]), updated)
+      buildStoredLinks(
+        linkRowsToInputs(updated.links as EntityLinkRecord[]),
+        updated
+      )
     );
     return {
       lifeEvent: getLifeEventById(lifeEventId)!,
@@ -1078,17 +1125,23 @@ function extractTicketDraft(text: string, originalFileName: string) {
   const haystack = `${originalFileName}\n${text}`;
   const flightMatch = haystack.match(/\b([A-Z]{2,3})\s?(\d{2,4})\b/);
   const iataMatches = Array.from(
-    new Set((haystack.match(/\b[A-Z]{3}\b/g) ?? []).filter((code) => code !== "PDF"))
+    new Set(
+      (haystack.match(/\b[A-Z]{3}\b/g) ?? []).filter((code) => code !== "PDF")
+    )
   );
   const dateMatch = haystack.match(/\b(20\d{2}[-/]\d{1,2}[-/]\d{1,2})\b/);
   const timeMatches = haystack.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/g) ?? [];
   const startsAt =
     dateMatch && timeMatches[0]
-      ? new Date(`${dateMatch[1].replaceAll("/", "-")}T${timeMatches[0]}:00Z`).toISOString()
+      ? new Date(
+          `${dateMatch[1].replaceAll("/", "-")}T${timeMatches[0]}:00Z`
+        ).toISOString()
       : new Date().toISOString();
   const endsAt =
     dateMatch && timeMatches[1]
-      ? new Date(`${dateMatch[1].replaceAll("/", "-")}T${timeMatches[1]}:00Z`).toISOString()
+      ? new Date(
+          `${dateMatch[1].replaceAll("/", "-")}T${timeMatches[1]}:00Z`
+        ).toISOString()
       : defaultEndAt(startsAt);
   const carrierCode = flightMatch?.[1] ?? "";
   const serviceNumber = flightMatch?.[2] ?? "";
@@ -1096,7 +1149,10 @@ function extractTicketDraft(text: string, originalFileName: string) {
   const destinationIata = iataMatches[1] ?? "";
   const title = flightMatch
     ? `Flight ${carrierCode}${serviceNumber}`
-    : originalFileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Travel event";
+    : originalFileName
+        .replace(/\.[^.]+$/, "")
+        .replace(/[_-]+/g, " ")
+        .trim() || "Travel event";
   return {
     title,
     shortDescription:
@@ -1171,7 +1227,9 @@ export function importLifeEventTicket(
     ...draft,
     sourceKind: "artifact_ticket" as const,
     sourceArtifactId: artifact.id,
-    extractionStatus: parsed.useLlm ? ("llm_unavailable" as const) : ("drafted" as const),
+    extractionStatus: parsed.useLlm
+      ? ("llm_unavailable" as const)
+      : ("drafted" as const),
     extractionSummary: {
       ...draft.extractionSummary,
       artifactId: artifact.id,
@@ -1214,7 +1272,9 @@ export function getLifeEventTravelStatus(lifeEventId: string) {
   if (!event) {
     return undefined;
   }
-  const flightSegment = event.segments.find((segment) => segment.segmentType === "flight");
+  const flightSegment = event.segments.find(
+    (segment) => segment.segmentType === "flight"
+  );
   const status =
     event.status === "cancelled"
       ? "cancelled"
@@ -1230,7 +1290,8 @@ export function getLifeEventTravelStatus(lifeEventId: string) {
     provider: null,
     providerConfigured: false,
     providerOptions: [
-      "OpenSky",
+      "Lufthansa Open API / SWISS flight status",
+      "OpenSky Network ADS-B states",
       "FlightAware AeroAPI",
       "AeroDataBox",
       "Aviationstack",
@@ -1238,7 +1299,8 @@ export function getLifeEventTravelStatus(lifeEventId: string) {
     ],
     checkedAt: nowIso(),
     flightNumber: flightSegment
-      ? `${flightSegment.carrierCode}${flightSegment.serviceNumber}`.trim() || null
+      ? `${flightSegment.carrierCode}${flightSegment.serviceNumber}`.trim() ||
+        null
       : null,
     message:
       "Live travel providers are optional. This response uses scheduled Life Event data because no provider is configured."

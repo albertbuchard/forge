@@ -136,9 +136,7 @@ export type ArtifactState =
   | "metadata_only";
 export type ArtifactDangerLevel = "low" | "moderate" | "high" | "blocked";
 export type ArtifactDownloadPolicy = "human_only" | "disabled";
-export type ArtifactContentProtectionMode =
-  | "plaintext"
-  | "password_encrypted";
+export type ArtifactContentProtectionMode = "plaintext" | "password_encrypted";
 export type ArtifactFormatFamily =
   | "spreadsheet"
   | "document"
@@ -4563,7 +4561,17 @@ export interface AgentOnboardingPayload {
       delete: string;
       restore: string;
     };
-    specializedCrudEntities: Record<string, Record<string, string>>;
+    specializedCrudEntities: Record<
+      string,
+      {
+        [key: string]: unknown;
+        routeKeys?: string[];
+        methodRoutes?: Record<
+          string,
+          { method: string; path: string; queryParams?: string[] }
+        >;
+      }
+    >;
     actionEntities: Record<string, Record<string, unknown>>;
     specializedDomainSurfaces: Record<
       string,

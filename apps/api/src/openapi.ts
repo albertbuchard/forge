@@ -3955,7 +3955,7 @@ export function buildOpenApiDocument() {
             type: "object",
             additionalProperties: {
               type: "object",
-              additionalProperties: { type: "string" }
+              additionalProperties: true
             }
           },
           actionEntities: {
@@ -5827,7 +5827,15 @@ export function buildOpenApiDocument() {
       },
       transportMode: nullable({
         type: "string",
-        enum: ["plane", "train", "car", "boat", "walking", "public_transit", "other"]
+        enum: [
+          "plane",
+          "train",
+          "car",
+          "boat",
+          "walking",
+          "public_transit",
+          "other"
+        ]
       }),
       sequenceIndex: { type: "integer", minimum: 0 },
       title: { type: "string" },
@@ -5967,7 +5975,15 @@ export function buildOpenApiDocument() {
       destinationLongitude: nullable({ type: "number" }),
       transportMode: nullable({
         type: "string",
-        enum: ["plane", "train", "car", "boat", "walking", "public_transit", "other"]
+        enum: [
+          "plane",
+          "train",
+          "car",
+          "boat",
+          "walking",
+          "public_transit",
+          "other"
+        ]
       }),
       primaryCalendarEventId: nullable({ type: "string" }),
       calendarSyncState: {
@@ -5982,7 +5998,11 @@ export function buildOpenApiDocument() {
           "error"
         ]
       },
-      calendarMatchConfidence: nullable({ type: "number", minimum: 0, maximum: 1 }),
+      calendarMatchConfidence: nullable({
+        type: "number",
+        minimum: 0,
+        maximum: 1
+      }),
       sourceKind: {
         type: "string",
         enum: ["manual", "calendar", "artifact_ticket", "agent", "import"]
@@ -5990,7 +6010,14 @@ export function buildOpenApiDocument() {
       sourceArtifactId: nullable({ type: "string" }),
       extractionStatus: {
         type: "string",
-        enum: ["none", "pending", "drafted", "confirmed", "failed", "llm_unavailable"]
+        enum: [
+          "none",
+          "pending",
+          "drafted",
+          "confirmed",
+          "failed",
+          "llm_unavailable"
+        ]
       },
       extractionSummary: { type: "object", additionalProperties: true },
       travelDetails: { type: "object", additionalProperties: true },
@@ -6092,7 +6119,14 @@ export function buildOpenApiDocument() {
 
   const artifactContentProtection = {
     type: "object",
-    required: ["mode", "encryptedAt", "algorithm", "kdf", "kdfParams", "passwordHint"],
+    required: [
+      "mode",
+      "encryptedAt",
+      "algorithm",
+      "kdf",
+      "kdfParams",
+      "passwordHint"
+    ],
     properties: {
       mode: { type: "string", enum: ["plaintext", "password_encrypted"] },
       encryptedAt: nullable({ type: "string", format: "date-time" }),
@@ -6260,7 +6294,11 @@ export function buildOpenApiDocument() {
           {
             type: "object",
             properties: {
-              mode: { type: "string", enum: ["plaintext"], default: "plaintext" }
+              mode: {
+                type: "string",
+                enum: ["plaintext"],
+                default: "plaintext"
+              }
             }
           },
           {
@@ -6759,7 +6797,8 @@ export function buildOpenApiDocument() {
           }
         },
         post: {
-          summary: "Download password-encrypted artifact bytes for a human operator",
+          summary:
+            "Download password-encrypted artifact bytes for a human operator",
           description:
             "Accepts a transient password in the JSON request body, decrypts server-side, and returns the original plaintext bytes only to an authenticated human/operator session. The password is never stored, logged, returned, or exposed to agent tools.",
           requestBody: {
@@ -7139,7 +7178,12 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["lifeEvent", "calendarEvent", "action", "confidence"],
+                required: [
+                  "lifeEvent",
+                  "calendarEvent",
+                  "action",
+                  "confidence"
+                ],
                 properties: {
                   lifeEvent: { $ref: "#/components/schemas/LifeEvent" },
                   calendarEvent: nullable({
@@ -9125,6 +9169,40 @@ export function buildOpenApiDocument() {
                 }
               },
               "Updated wiki page"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete or hide one wiki page from the wiki surface",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["ok"],
+                properties: {
+                  ok: { type: "boolean" }
+                }
+              },
+              "Deleted wiki page"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/by-slug/{slug}": {
+        get: {
+          summary: "Read one wiki page by slug or title-like slug",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["page"],
+                properties: {
+                  page: { type: "object", additionalProperties: true }
+                }
+              },
+              "Wiki page detail by slug"
             ),
             "404": { $ref: "#/components/responses/Error" }
           }

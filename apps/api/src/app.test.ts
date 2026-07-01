@@ -3818,7 +3818,8 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
     assert.deepEqual(progressOnlyStatusPayload.upload.receivedChunkIds, []);
     assert.equal(progressOnlyStatusPayload.upload.progress.chunkCount, 1);
     assert.equal(
-      progressOnlyStatusPayload.upload.progress.receivedCounts.workout_summaries,
+      progressOnlyStatusPayload.upload.progress.receivedCounts
+        .workout_summaries,
       1
     );
     assert.equal(
@@ -3864,7 +3865,10 @@ test("mobile health chunked sync assembles workout summaries, HR samples, and ro
       JSON.parse(progressAfterDuplicate.byte_totals_json).workout_summaries,
       summaryChunk.byteCount
     );
-    assert.equal(progressAfterDuplicate.updated_at, progressAfterSummary.updated_at);
+    assert.equal(
+      progressAfterDuplicate.updated_at,
+      progressAfterSummary.updated_at
+    );
 
     const conflictResponse = await app.inject({
       method: "POST",
@@ -4883,7 +4887,10 @@ test("mobile health workout import state reuses count-complete historical eviden
       scopedUpload.workoutImportState.alreadyUploadedWorkoutExternalUids,
       ["hk-legacy-hr-and-route"]
     );
-    assert.equal(scopedUpload.workoutImportState.alreadyUploadedWorkoutCount, 1);
+    assert.equal(
+      scopedUpload.workoutImportState.alreadyUploadedWorkoutCount,
+      1
+    );
     assert.equal(scopedUpload.workoutImportState.existingWorkoutCount, 2);
     assert.equal(scopedUpload.workoutImportState.incompleteWorkoutCount, 1);
   } finally {
@@ -5753,10 +5760,9 @@ test("mobile health chunked completion supersedes repeated resumed logical slots
          WHERE external_uid IN (?, ?)
          ORDER BY external_uid ASC`
       )
-      .all(
-        "night_latest_resume_slot",
-        "night_stale_resume_slot"
-      ) as Array<{ external_uid: string }>;
+      .all("night_latest_resume_slot", "night_stale_resume_slot") as Array<{
+      external_uid: string;
+    }>;
     assert.deepEqual(
       storedSleepNights.map((row) => row.external_uid),
       ["night_latest_resume_slot"]
@@ -6500,17 +6506,16 @@ test("sleep view freshness uses the sleeper source timezone, not a server calend
          VALUES ('sleep_pacific_wake', 'sleep_pacific_wake', NULL, 'user_operator', 'apple_health', 'healthkit', 'iPhone', 'America/Los_Angeles', '2026-06-08',
            '2026-06-08T06:30:00.000Z', '2026-06-08T13:45:00.000Z', 26100, 25200, 900, 6, 82, 79, NULL, NULL, ?, '{}', '{}', '[]', '{}', '{}', '{}', ?, ?)`
       )
-      .run(
-        JSON.stringify([{ stage: "core", seconds: 25200 }]),
-        now,
-        now
-      );
+      .run(JSON.stringify([{ stage: "core", seconds: 25200 }]), now, now);
 
     const sleep = getSleepViewData(["user_operator"], {
       now: new Date("2026-06-09T06:30:00.000Z")
     });
 
-    assert.equal(sleep.latestNightFreshness.sourceTimezone, "America/Los_Angeles");
+    assert.equal(
+      sleep.latestNightFreshness.sourceTimezone,
+      "America/Los_Angeles"
+    );
     assert.equal(sleep.latestNightFreshness.expectedDateKey, "2026-06-08");
     assert.equal(sleep.latestNightFreshness.actualDateKey, "2026-06-08");
     assert.equal(sleep.latestNightFreshness.status, "current");
@@ -9559,32 +9564,30 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       }
     });
     assert.equal(bootstrapResponse.statusCode, 200);
-    const initialBootstrapBody = (
-      bootstrapResponse.json() as {
-        measurement: {
-          operation: string;
-          requestBytes: number;
-          responseBytes: number;
-          backendDurationMs: number;
-          surfaceCount: number;
-          habitCount: number;
-          promptCount: number;
-        };
-        watch: {
-          habits: Array<{
-            id: string;
-            dueToday: boolean;
-            alignedActionLabel: string;
-            unalignedActionLabel: string;
-            last7History: Array<{
-              current: boolean;
-              periodKey: string;
-              state: string;
-            }>;
+    const initialBootstrapBody = bootstrapResponse.json() as {
+      measurement: {
+        operation: string;
+        requestBytes: number;
+        responseBytes: number;
+        backendDurationMs: number;
+        surfaceCount: number;
+        habitCount: number;
+        promptCount: number;
+      };
+      watch: {
+        habits: Array<{
+          id: string;
+          dueToday: boolean;
+          alignedActionLabel: string;
+          unalignedActionLabel: string;
+          last7History: Array<{
+            current: boolean;
+            periodKey: string;
+            state: string;
           }>;
-        };
-      }
-    );
+        }>;
+      };
+    };
     const initialBootstrap = initialBootstrapBody.watch;
     assert.equal(initialBootstrapBody.measurement.operation, "watch.bootstrap");
     assert.ok(initialBootstrapBody.measurement.requestBytes > 0);
@@ -20405,7 +20408,14 @@ test("settings and local agent token management persist through the versioned AP
         }>;
         entityRouteModel: {
           batchCrudEntities: string[];
-          specializedCrudEntities: Record<string, Record<string, string>>;
+          specializedCrudEntities: Record<
+            string,
+            {
+              [key: string]: unknown;
+              routeKeys?: string[];
+              methodRoutes?: Record<string, { method: string; path: string }>;
+            }
+          >;
           actionEntities: Record<string, unknown>;
           specializedDomainSurfaces: Record<
             string,
@@ -21639,6 +21649,16 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.entityRouteModel.specializedCrudEntities
         .wiki_page?.create,
       "/api/v1/wiki/pages"
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.entityRouteModel.specializedCrudEntities
+        .wiki_page?.methodRoutes?.search,
+      { method: "POST", path: "/api/v1/wiki/search" }
+    );
+    assert.deepEqual(
+      onboardingBody.onboarding.entityRouteModel.specializedCrudEntities
+        .calendar_connection?.methodRoutes?.rediscover,
+      { method: "GET", path: "/api/v1/calendar/connections/:id/discovery" }
     );
     assert.match(
       onboardingBody.onboarding.mutationGuidance.createExample,
@@ -22875,8 +22895,7 @@ test("claude runtime sessions register with a canonical identity and reconnect p
     assert.equal(claudeAgent?.label, "Forge Claude Code");
     assert.ok(
       claudeAgent?.linkedUsers.some(
-        (link) =>
-          link.userId === "user_agent_claude" && link.role === "primary"
+        (link) => link.userId === "user_agent_claude" && link.role === "primary"
       )
     );
   } finally {

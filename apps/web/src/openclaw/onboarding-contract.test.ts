@@ -86,7 +86,14 @@ async function loadOnboardingPayload() {
     entityRouteModel: {
       batchCrudEntities: string[];
       batchRoutes: Record<string, string>;
-      specializedCrudEntities: Record<string, Record<string, string>>;
+      specializedCrudEntities: Record<
+        string,
+        {
+          [key: string]: unknown;
+          routeKeys?: string[];
+          methodRoutes?: Record<string, { method: string; path: string }>;
+        }
+      >;
       actionEntities: Record<string, Record<string, unknown>>;
       specializedDomainSurfaces: Record<
         string,
@@ -104,10 +111,7 @@ async function loadOnboardingPayload() {
       readModelOnlySurfaces: Record<string, string>;
     };
     interactionGuidance: Record<string, string>;
-    mutationGuidance: Record<
-      string,
-      string | Record<string, string> | boolean
-    >;
+    mutationGuidance: Record<string, string | Record<string, string> | boolean>;
     verificationPaths: Record<string, string>;
     recommendedPluginTools?: Record<string, string[]>;
     connectionGuides?: {
@@ -132,6 +136,24 @@ function collectRouteStrings(value: unknown): string[] {
     return [];
   }
   return Object.values(value).flatMap((child) => collectRouteStrings(child));
+}
+
+function parseMethodRoute(value: string | { method: string; path: string }): {
+  method: string;
+  path: string;
+} {
+  if (typeof value === "string") {
+    const match = /^([A-Z]+)\s+(\S+)$/.exec(value.trim());
+    expect(match, `${value} should be METHOD /path`).toBeTruthy();
+    return {
+      method: match![1].toLowerCase(),
+      path: normalizeRouteTemplate(match![2])
+    };
+  }
+  return {
+    method: value.method.toLowerCase(),
+    path: normalizeRouteTemplate(value.path)
+  };
 }
 
 describe("forge onboarding contract", () => {
@@ -275,9 +297,10 @@ describe("forge onboarding contract", () => {
       "blockerLinks",
       "completionReport"
     ]) {
-      expect(taskFields.has(field), `task field ${field} should be published`).toBe(
-        true
-      );
+      expect(
+        taskFields.has(field),
+        `task field ${field} should be published`
+      ).toBe(true);
     }
     expect(onboarding.psycheSubmoduleModel.flashcard).toMatch(
       /therapeutic reminder card/i
@@ -368,7 +391,21 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         create: "/api/v1/wiki/pages",
         update: "/api/v1/wiki/pages/:id",
-        read: "/api/v1/wiki/pages/:id"
+        read: "/api/v1/wiki/pages/:id",
+        routeKeys: expect.arrayContaining([
+          "list",
+          "search",
+          "create",
+          "read",
+          "update"
+        ]),
+        methodRoutes: expect.objectContaining({
+          list: { method: "GET", path: "/api/v1/wiki/pages" },
+          search: { method: "POST", path: "/api/v1/wiki/search" },
+          create: { method: "POST", path: "/api/v1/wiki/pages" },
+          read: { method: "GET", path: "/api/v1/wiki/pages/:id" },
+          update: { method: "PATCH", path: "/api/v1/wiki/pages/:id" }
+        })
       })
     );
     expect(routeModel.specializedCrudEntities.calendar_connection).toEqual(
@@ -379,7 +416,36 @@ describe("forge onboarding contract", () => {
         rediscover: "/api/v1/calendar/connections/:id/discovery",
         update: "/api/v1/calendar/connections/:id",
         sync: "/api/v1/calendar/connections/:id/sync",
-        delete: "/api/v1/calendar/connections/:id"
+        delete: "/api/v1/calendar/connections/:id",
+        routeKeys: expect.arrayContaining([
+          "list",
+          "discover",
+          "discoverMacOSLocal",
+          "rediscover",
+          "create",
+          "update",
+          "sync",
+          "delete"
+        ]),
+        methodRoutes: expect.objectContaining({
+          list: { method: "GET", path: "/api/v1/calendar/connections" },
+          discover: { method: "POST", path: "/api/v1/calendar/discovery" },
+          discoverMacOSLocal: {
+            method: "GET",
+            path: "/api/v1/calendar/macos-local/discovery"
+          },
+          rediscover: {
+            method: "GET",
+            path: "/api/v1/calendar/connections/:id/discovery"
+          },
+          create: { method: "POST", path: "/api/v1/calendar/connections" },
+          update: { method: "PATCH", path: "/api/v1/calendar/connections/:id" },
+          sync: {
+            method: "POST",
+            path: "/api/v1/calendar/connections/:id/sync"
+          },
+          delete: { method: "DELETE", path: "/api/v1/calendar/connections/:id" }
+        })
       })
     );
 
@@ -458,8 +524,7 @@ describe("forge onboarding contract", () => {
         selection: "POST /api/v1/movement/selection",
         userBoxPreflight: "POST /api/v1/movement/user-boxes/preflight",
         userBoxDelete: "DELETE /api/v1/movement/user-boxes/:id",
-        tripPointDelete:
-          "DELETE /api/v1/movement/trips/:id/points/:pointId"
+        tripPointDelete: "DELETE /api/v1/movement/trips/:id/points/:pointId"
       })
     );
     expect(routeModel.specializedDomainSurfaces.movement.routeKeys).toEqual(
@@ -516,7 +581,9 @@ describe("forge onboarding contract", () => {
         importTicket: "/api/v1/life-events/import-ticket"
       })
     );
-    expect(routeModel.specializedDomainSurfaces.lifeEvents.methodRoutes).toEqual(
+    expect(
+      routeModel.specializedDomainSurfaces.lifeEvents.methodRoutes
+    ).toEqual(
       expect.objectContaining({
         timeline: "GET /api/v1/life-events/timeline",
         read: "GET /api/v1/life-events/:id",
@@ -548,9 +615,9 @@ describe("forge onboarding contract", () => {
         expect.stringMatching(/trusted artifact id[\s\S]*LLM extraction/i)
       ])
     );
-    expect(routeModel.specializedDomainSurfaces.lifeEvents.notes.join(" ")).toMatch(
-      /generic entity_links/i
-    );
+    expect(
+      routeModel.specializedDomainSurfaces.lifeEvents.notes.join(" ")
+    ).toMatch(/generic entity_links/i);
 
     expect(routeModel.specializedDomainSurfaces.lifeForce.readRoutes).toEqual(
       expect.objectContaining({
@@ -599,7 +666,11 @@ describe("forge onboarding contract", () => {
     expect(routeModel.specializedDomainSurfaces.life_force).toEqual(
       expect.objectContaining({
         classification: "specialized_domain_surface",
-        aliases: expect.arrayContaining(["lifeForce", "life-force", "Life Force"]),
+        aliases: expect.arrayContaining([
+          "lifeForce",
+          "life-force",
+          "Life Force"
+        ]),
         readRoutes: expect.objectContaining({
           overview: "/api/v1/life-force"
         }),
@@ -612,12 +683,7 @@ describe("forge onboarding contract", () => {
           overview: "GET /api/v1/life-force",
           weekdayTemplate: "PUT /api/v1/life-force/templates/:weekday"
         }),
-        routeKeys: [
-          "overview",
-          "profile",
-          "weekdayTemplate",
-          "fatigueSignal"
-        ]
+        routeKeys: ["overview", "profile", "weekdayTemplate", "fatigueSignal"]
       })
     );
 
@@ -654,10 +720,8 @@ describe("forge onboarding contract", () => {
         deleteFlow: "DELETE /api/v1/workbench/flows/:id",
         runFlow: "POST /api/v1/workbench/flows/:id/run",
         chatFlow: "POST /api/v1/workbench/flows/:id/chat",
-        nodeResult:
-          "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
-        latestNodeOutput:
-          "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
+        nodeResult: "GET /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId",
+        latestNodeOutput: "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
       })
     );
     expect(routeModel.specializedDomainSurfaces.workbench.routeKeys).toEqual(
@@ -944,14 +1008,14 @@ describe("forge onboarding contract", () => {
         )
       })
     );
-    expect(onboarding.recommendedPluginTools?.specializedDomainWorkflow).toEqual(
-      [
-        "forge_call_movement_route",
-        "forge_call_life_event_route",
-        "forge_call_life_force_route",
-        "forge_call_workbench_route"
-      ]
-    );
+    expect(
+      onboarding.recommendedPluginTools?.specializedDomainWorkflow
+    ).toEqual([
+      "forge_call_movement_route",
+      "forge_call_life_event_route",
+      "forge_call_life_force_route",
+      "forge_call_workbench_route"
+    ]);
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
     );
@@ -961,11 +1025,8 @@ describe("forge onboarding contract", () => {
     expect(onboarding.mutationGuidance.specializedRouteToolExample).toMatch(
       /weekdayTemplate[\s\S]*monday/i
     );
-    const specializedExamples =
-      onboarding.mutationGuidance.specializedRouteToolExamples as Record<
-        string,
-        string
-      >;
+    const specializedExamples = onboarding.mutationGuidance
+      .specializedRouteToolExamples as Record<string, string>;
 
     expect(specializedExamples).toEqual(
       expect.objectContaining({
@@ -1000,9 +1061,7 @@ describe("forge onboarding contract", () => {
         lifeEventTravelStatus: expect.stringMatching(
           /routeKey[\s\S]*travelStatus[\s\S]*pathParams[\s\S]*id/
         ),
-        lifeForceOverview: expect.stringMatching(
-          /routeKey[\s\S]*overview/
-        ),
+        lifeForceOverview: expect.stringMatching(/routeKey[\s\S]*overview/),
         lifeForceProfile: expect.stringMatching(
           /routeKey[\s\S]*profile[\s\S]*baselineDailyAp/
         ),
@@ -1012,15 +1071,11 @@ describe("forge onboarding contract", () => {
         lifeForceFatigueSignal: expect.stringMatching(
           /routeKey[\s\S]*fatigueSignal[\s\S]*intensity/
         ),
-        workbenchFlowCatalog: expect.stringMatching(
-          /routeKey[\s\S]*listFlows/
-        ),
+        workbenchFlowCatalog: expect.stringMatching(/routeKey[\s\S]*listFlows/),
         workbenchFlowDetail: expect.stringMatching(
           /routeKey[\s\S]*flowDetail[\s\S]*pathParams[\s\S]*id/
         ),
-        workbenchBoxCatalog: expect.stringMatching(
-          /routeKey[\s\S]*boxCatalog/
-        ),
+        workbenchBoxCatalog: expect.stringMatching(/routeKey[\s\S]*boxCatalog/),
         workbenchCreateFlow: expect.stringMatching(
           /routeKey[\s\S]*createFlow[\s\S]*stable published summary/
         ),
@@ -1083,11 +1138,8 @@ describe("forge onboarding contract", () => {
 
   it("keeps specialized route examples aligned with their HTTP method shape", async () => {
     const onboarding = await loadOnboardingPayload();
-    const specializedExamples =
-      onboarding.mutationGuidance.specializedRouteToolExamples as Record<
-        string,
-        string
-      >;
+    const specializedExamples = onboarding.mutationGuidance
+      .specializedRouteToolExamples as Record<string, string>;
     const surfaces = onboarding.entityRouteModel.specializedDomainSurfaces;
 
     for (const [exampleName, exampleJson] of Object.entries(
@@ -1291,12 +1343,15 @@ describe("forge onboarding contract", () => {
     );
     const modeProfilePlaybook = psycheByFocus.get("mode_profile");
     expect(modeProfilePlaybook).toBeDefined();
-    const modeProfileSequence = modeProfilePlaybook?.askSequence.join(" ") ?? "";
+    const modeProfileSequence =
+      modeProfilePlaybook?.askSequence.join(" ") ?? "";
     expect(modeProfileSequence).toMatch(
       /protective job before choosing a family label/i
     );
     expect(
-      modeProfileSequence.indexOf("Clarify its fear, burden, and protective job"),
+      modeProfileSequence.indexOf(
+        "Clarify its fear, burden, and protective job"
+      ),
       "mode profile should formulate fear and burden before the family label"
     ).toBeLessThan(
       modeProfileSequence.indexOf("Choose the mode family only after")
@@ -1368,22 +1423,28 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("self_observation")?.openingQuestion).toMatch(
       /what happened in the situation/i
     );
-    expect(playbookByFocus.get("self_observation")?.askSequence.join(" ")).toMatch(
+    expect(
+      playbookByFocus.get("self_observation")?.askSequence.join(" ")
+    ).toMatch(
       /situation[\s\S]*cue[\s\S]*emotion[\s\S]*thought[\s\S]*behavior[\s\S]*consequence/i
     );
-    expect(playbookByFocus.get("self_observation")?.askSequence.join(" ")).toMatch(
-      /Do not promote self-observation over functional analysis/i
-    );
+    expect(
+      playbookByFocus.get("self_observation")?.askSequence.join(" ")
+    ).toMatch(/Do not promote self-observation over functional analysis/i);
 
-    expect(playbookByFocus.get("preference_item")?.askSequence.join(" ")).toMatch(
-      /batch CRUD[\s\S]*preference judgment or signal route/i
-    );
+    expect(
+      playbookByFocus.get("preference_item")?.askSequence.join(" ")
+    ).toMatch(/batch CRUD[\s\S]*preference judgment or signal route/i);
     expect(
       playbookByFocus.get("preference_judgment")?.askSequence.join(" ")
-    ).toMatch(/dedicated preference judgment action route[\s\S]*instead of batch CRUD/i);
+    ).toMatch(
+      /dedicated preference judgment action route[\s\S]*instead of batch CRUD/i
+    );
     expect(
       playbookByFocus.get("preference_signal")?.askSequence.join(" ")
-    ).toMatch(/dedicated preference signal action route[\s\S]*instead of batch CRUD/i);
+    ).toMatch(
+      /dedicated preference signal action route[\s\S]*instead of batch CRUD/i
+    );
     expect(
       playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
     ).toMatch(/batch CRUD[\s\S]*clone, draft, and publish actions/i);
@@ -1392,10 +1453,14 @@ describe("forge onboarding contract", () => {
     ).toMatch(/honest moment or decision/i);
     expect(
       playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
-    ).toMatch(/respondent should understand[\s\S]*item shape, response scale, scoring, or provenance/i);
+    ).toMatch(
+      /respondent should understand[\s\S]*item shape, response scale, scoring, or provenance/i
+    );
     expect(
       playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
-    ).toMatch(/dedicated questionnaire run start, read, update, and complete routes/i);
+    ).toMatch(
+      /dedicated questionnaire run start, read, update, and complete routes/i
+    );
     expect(playbookByFocus.get("questionnaire_run")?.openingQuestion).toMatch(
       /start, continue, review, or finish this run/i
     );
@@ -1550,7 +1615,9 @@ describe("forge onboarding contract", () => {
     );
     expect(
       playbookByFocus.get("emotion_definition")?.askSequence.join(" ")
-    ).toMatch(/felt signature[\s\S]*signal, protect, warn about, long for, or demand/i);
+    ).toMatch(
+      /felt signature[\s\S]*signal, protect, warn about, long for, or demand/i
+    );
   });
 
   it("keeps specialized onboarding routes present in generated OpenAPI", async () => {
@@ -1560,7 +1627,9 @@ describe("forge onboarding contract", () => {
     const openApiMethodsByPath = new Map(
       Object.entries(openapi.paths ?? {}).map(([route, methods]) => [
         route,
-        new Set(Object.keys(methods ?? {}).map((method) => method.toUpperCase()))
+        new Set(
+          Object.keys(methods ?? {}).map((method) => method.toUpperCase())
+        )
       ])
     );
     const openapiSchemas = (
@@ -1573,8 +1642,8 @@ describe("forge onboarding contract", () => {
     const psycheSubmoduleSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties?.psycheSubmoduleModel;
     const psychePlaybookSchema =
-      openapiSchemas?.AgentOnboardingPayload?.properties?.psycheCoachingPlaybooks
-        ?.items;
+      openapiSchemas?.AgentOnboardingPayload?.properties
+        ?.psycheCoachingPlaybooks?.items;
     const entityPlaybookSchema =
       openapiSchemas?.AgentOnboardingPayload?.properties
         ?.entityConversationPlaybooks?.items;
@@ -1602,7 +1671,9 @@ describe("forge onboarding contract", () => {
     for (const [surfaceName, surface] of Object.entries(
       onboarding.entityRouteModel.specializedDomainSurfaces
     )) {
-      for (const [routeKey, methodRoute] of Object.entries(surface.methodRoutes)) {
+      for (const [routeKey, methodRoute] of Object.entries(
+        surface.methodRoutes
+      )) {
         const match = /^([A-Z]+)\s+(\/api\/v1\/.+)$/.exec(methodRoute);
         expect(
           match,
@@ -1684,34 +1755,34 @@ describe("forge onboarding contract", () => {
     expect(interactionGuidanceSchema).toEqual(
       expect.objectContaining({
         additionalProperties: false,
-          required: expect.arrayContaining([
-            "depthCalibrationRule",
-            "operationLaneRule",
-            "specializedSurfaceRule",
-            "reviewShortcutRule",
-            "readModelWriteRule",
-            "psycheHypothesisRule",
-            "mixedIntentSequencingRule",
-            "duplicateDisambiguationRule",
-            "destructiveActionRule",
-            "followUpQuestionRule",
-            "antiDriftRule"
-          ]),
-          properties: expect.objectContaining({
-            depthCalibrationRule: { type: "string" },
-            operationLaneRule: { type: "string" },
-            specializedSurfaceRule: { type: "string" },
-            reviewShortcutRule: { type: "string" },
-            readModelWriteRule: { type: "string" },
-            psycheHypothesisRule: { type: "string" },
-            mixedIntentSequencingRule: { type: "string" },
-            duplicateDisambiguationRule: { type: "string" },
-            destructiveActionRule: { type: "string" },
-            followUpQuestionRule: { type: "string" },
-            antiDriftRule: { type: "string" }
-          })
+        required: expect.arrayContaining([
+          "depthCalibrationRule",
+          "operationLaneRule",
+          "specializedSurfaceRule",
+          "reviewShortcutRule",
+          "readModelWriteRule",
+          "psycheHypothesisRule",
+          "mixedIntentSequencingRule",
+          "duplicateDisambiguationRule",
+          "destructiveActionRule",
+          "followUpQuestionRule",
+          "antiDriftRule"
+        ]),
+        properties: expect.objectContaining({
+          depthCalibrationRule: { type: "string" },
+          operationLaneRule: { type: "string" },
+          specializedSurfaceRule: { type: "string" },
+          reviewShortcutRule: { type: "string" },
+          readModelWriteRule: { type: "string" },
+          psycheHypothesisRule: { type: "string" },
+          mixedIntentSequencingRule: { type: "string" },
+          duplicateDisambiguationRule: { type: "string" },
+          destructiveActionRule: { type: "string" },
+          followUpQuestionRule: { type: "string" },
+          antiDriftRule: { type: "string" }
         })
-      );
+      })
+    );
     expect(mutationGuidanceSchema).toEqual(
       expect.objectContaining({
         additionalProperties: false,
@@ -1754,6 +1825,15 @@ describe("forge onboarding contract", () => {
           `${surfaceName}.${routeName} should exist in OpenAPI`
         ).toBe(true);
       }
+      for (const [routeName, methodRoute] of Object.entries(
+        surface.methodRoutes ?? {}
+      )) {
+        const { method, path } = parseMethodRoute(methodRoute);
+        expect(
+          openApiMethodsByPath.get(path)?.has(method.toUpperCase()),
+          `${surfaceName}.${routeName} should publish ${method.toUpperCase()} ${path} in OpenAPI`
+        ).toBeTruthy();
+      }
     }
 
     for (const [entityName, routeMap] of Object.entries(
@@ -1764,6 +1844,14 @@ describe("forge onboarding contract", () => {
           openApiPaths.has(normalizeRouteTemplate(route)),
           `${entityName} specialized CRUD route ${route} should exist in OpenAPI`
         ).toBe(true);
+      }
+      const methodRoutes = routeMap.methodRoutes ?? {};
+      for (const [routeName, methodRoute] of Object.entries(methodRoutes)) {
+        const { method, path } = parseMethodRoute(methodRoute);
+        expect(
+          openApiMethodsByPath.get(path)?.has(method.toUpperCase()),
+          `${entityName}.${routeName} should publish ${method.toUpperCase()} ${path} in OpenAPI`
+        ).toBeTruthy();
       }
     }
 

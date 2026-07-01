@@ -116,6 +116,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   password and byte routes are human-operator-only. Codex may read
   `contentProtection` metadata and password hints, but must not receive, store,
   submit, or route artifact passwords.
+- Wiki page, calendar connection, and Artifact Store route keys and method/path maps
+  all live under
+  `forge_get_agent_onboarding.entityRouteModel.specializedCrudEntities`. Use the
+  published `routeKeys` and `methodRoutes` for those specialized CRUD surfaces before
+  calling lower-level routes, and cross-check OpenAPI when debugging a contract
+  mismatch. Do not guess wiki, calendar connection, or artifact paths from memory.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
