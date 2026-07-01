@@ -111,6 +111,13 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "core",
     skeleton: { blocks: 6, columns: 3, sideRail: false }
   },
+  "life-events-index": {
+    surfaceId: "life-events-index",
+    title: "Life Events",
+    description: "Review important life events as a chronological timeline with travel, calendar, artifacts, and links.",
+    tone: "core",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
   "knowledge-graph-index": {
     surfaceId: "knowledge-graph-index",
     title: "Knowledge Graph",
@@ -554,6 +561,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "strategy-detail", match: matches(/^\/strategies\/[^/]+$/) },
   { viewId: "preferences-index", match: startsWithSegment("/preferences") },
   { viewId: "calendar-index", match: exactly("/calendar") },
+  { viewId: "life-events-index", match: startsWithSegment("/life-events") },
   { viewId: "knowledge-graph-index", match: exactly("/knowledge-graph") },
   { viewId: "artifacts-index", match: startsWithSegment("/artifacts") },
   { viewId: "movement-index", match: exactly("/movement") },

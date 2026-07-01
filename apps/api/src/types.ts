@@ -177,6 +177,7 @@ export const activityEntityTypeSchema = z.enum([
   "work_block",
   "work_block_template",
   "task_timebox",
+  "life_event",
   "artifact",
   "sleep_session",
   "workout_session"
@@ -369,6 +370,7 @@ export const crudEntityTypeSchema = z.enum([
   "calendar_event",
   "work_block_template",
   "task_timebox",
+  "life_event",
   "artifact",
   "psyche_value",
   "behavior_pattern",
@@ -1207,6 +1209,191 @@ export const calendarEventSchema = z.object({
   links: z.array(calendarEventLinkSchema).default([]),
   actionProfile: actionProfileSchema.nullable().default(null),
   remoteUpdatedAt: z.string().nullable(),
+  deletedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  ...ownershipShape
+});
+
+export const lifeEventTypeSchema = z.enum([
+  "travel_flight",
+  "travel_train",
+  "travel_car",
+  "travel_boat",
+  "travel_trip",
+  "concert",
+  "cinema",
+  "date",
+  "friends",
+  "family",
+  "work_milestone",
+  "thesis_milestone",
+  "medical",
+  "administrative",
+  "celebration",
+  "custom"
+]);
+export const lifeEventStatusSchema = z.enum([
+  "planned",
+  "happening",
+  "completed",
+  "cancelled",
+  "tentative"
+]);
+export const lifeEventImportanceSchema = z.enum([
+  "ordinary",
+  "meaningful",
+  "major",
+  "life_changing"
+]);
+export const lifeEventTransportModeSchema = z.enum([
+  "plane",
+  "train",
+  "car",
+  "boat",
+  "walking",
+  "public_transit",
+  "other"
+]);
+export const lifeEventCalendarSyncStateSchema = z.enum([
+  "not_synced",
+  "linked",
+  "matched",
+  "created",
+  "disabled",
+  "needs_review",
+  "error"
+]);
+export const lifeEventCalendarProjectionSchema = z.enum([
+  "link_or_create",
+  "link_existing_only",
+  "none"
+]);
+export const lifeEventSourceKindSchema = z.enum([
+  "manual",
+  "calendar",
+  "artifact_ticket",
+  "agent",
+  "import"
+]);
+export const lifeEventExtractionStatusSchema = z.enum([
+  "none",
+  "pending",
+  "drafted",
+  "confirmed",
+  "failed",
+  "llm_unavailable"
+]);
+export const lifeEventSegmentTypeSchema = z.enum([
+  "flight",
+  "train",
+  "car",
+  "boat",
+  "walking",
+  "lodging",
+  "activity",
+  "checkpoint",
+  "custom"
+]);
+
+export const lifeEventEntityLinkInputSchema = z.object({
+  entityType: nonEmptyTrimmedString,
+  entityId: nonEmptyTrimmedString,
+  anchorKey: trimmedString.nullable().optional(),
+  relationship: nonEmptyTrimmedString.default("related")
+});
+
+export const lifeEventEntityLinkSchema = z.object({
+  sourceEntityType: nonEmptyTrimmedString,
+  sourceEntityId: nonEmptyTrimmedString,
+  targetEntityType: nonEmptyTrimmedString,
+  targetEntityId: nonEmptyTrimmedString,
+  anchorKey: trimmedString.nullable().default(null),
+  relationship: nonEmptyTrimmedString,
+  createdByActor: z.string().nullable(),
+  createdAt: z.string()
+});
+
+export const lifeEventSegmentSchema = z.object({
+  id: z.string(),
+  lifeEventId: z.string(),
+  segmentType: lifeEventSegmentTypeSchema,
+  transportMode: lifeEventTransportModeSchema.nullable().default(null),
+  sequenceIndex: z.number().int().nonnegative(),
+  title: trimmedString,
+  startsAt: z.string().nullable(),
+  endsAt: z.string().nullable(),
+  timezone: nonEmptyTrimmedString,
+  originLabel: trimmedString,
+  originIata: trimmedString,
+  originIcao: trimmedString,
+  originCity: trimmedString,
+  originCountry: trimmedString,
+  originLatitude: z.number().nullable(),
+  originLongitude: z.number().nullable(),
+  destinationLabel: trimmedString,
+  destinationIata: trimmedString,
+  destinationIcao: trimmedString,
+  destinationCity: trimmedString,
+  destinationCountry: trimmedString,
+  destinationLatitude: z.number().nullable(),
+  destinationLongitude: z.number().nullable(),
+  carrierName: trimmedString,
+  carrierCode: trimmedString,
+  serviceNumber: trimmedString,
+  bookingReference: trimmedString,
+  terminal: trimmedString,
+  gate: trimmedString,
+  seat: trimmedString,
+  status: trimmedString,
+  statusSource: trimmedString,
+  statusCheckedAt: z.string().nullable(),
+  routeGeometry: z.record(z.string(), z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export const lifeEventSchema = z.object({
+  id: z.string(),
+  title: nonEmptyTrimmedString,
+  shortDescription: trimmedString,
+  description: trimmedString,
+  eventType: lifeEventTypeSchema,
+  status: lifeEventStatusSchema,
+  importance: lifeEventImportanceSchema,
+  startsAt: z.string(),
+  endsAt: z.string(),
+  timezone: nonEmptyTrimmedString,
+  isAllDay: z.boolean(),
+  placeLabel: trimmedString,
+  placeAddress: trimmedString,
+  placeTimezone: trimmedString,
+  placeLatitude: z.number().nullable(),
+  placeLongitude: z.number().nullable(),
+  originLabel: trimmedString,
+  originCity: trimmedString,
+  originCountry: trimmedString,
+  originLatitude: z.number().nullable(),
+  originLongitude: z.number().nullable(),
+  destinationLabel: trimmedString,
+  destinationCity: trimmedString,
+  destinationCountry: trimmedString,
+  destinationLatitude: z.number().nullable(),
+  destinationLongitude: z.number().nullable(),
+  transportMode: lifeEventTransportModeSchema.nullable().default(null),
+  primaryCalendarEventId: z.string().nullable(),
+  calendarSyncState: lifeEventCalendarSyncStateSchema,
+  calendarMatchConfidence: z.number().nullable(),
+  sourceKind: lifeEventSourceKindSchema,
+  sourceArtifactId: z.string().nullable(),
+  extractionStatus: lifeEventExtractionStatusSchema,
+  extractionSummary: z.record(z.string(), z.unknown()).default({}),
+  travelDetails: z.record(z.string(), z.unknown()).default({}),
+  displayStyle: z.record(z.string(), z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  segments: z.array(lifeEventSegmentSchema).default([]),
+  links: z.array(lifeEventEntityLinkSchema).default([]),
   deletedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -3577,6 +3764,156 @@ export const createCalendarEventSchema = z
     }
   });
 
+export const lifeEventSegmentInputSchema = z.object({
+  id: trimmedString.optional(),
+  segmentType: lifeEventSegmentTypeSchema.default("custom"),
+  transportMode: lifeEventTransportModeSchema.nullable().optional(),
+  sequenceIndex: z.number().int().nonnegative().default(0),
+  title: trimmedString.default(""),
+  startsAt: z.string().datetime().nullable().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+  timezone: nonEmptyTrimmedString.default("UTC"),
+  originLabel: trimmedString.default(""),
+  originIata: trimmedString.default(""),
+  originIcao: trimmedString.default(""),
+  originCity: trimmedString.default(""),
+  originCountry: trimmedString.default(""),
+  originLatitude: z.number().nullable().optional(),
+  originLongitude: z.number().nullable().optional(),
+  destinationLabel: trimmedString.default(""),
+  destinationIata: trimmedString.default(""),
+  destinationIcao: trimmedString.default(""),
+  destinationCity: trimmedString.default(""),
+  destinationCountry: trimmedString.default(""),
+  destinationLatitude: z.number().nullable().optional(),
+  destinationLongitude: z.number().nullable().optional(),
+  carrierName: trimmedString.default(""),
+  carrierCode: trimmedString.default(""),
+  serviceNumber: trimmedString.default(""),
+  bookingReference: trimmedString.default(""),
+  terminal: trimmedString.default(""),
+  gate: trimmedString.default(""),
+  seat: trimmedString.default(""),
+  status: trimmedString.default("scheduled"),
+  statusSource: trimmedString.default("scheduled"),
+  statusCheckedAt: z.string().datetime().nullable().optional(),
+  routeGeometry: z.record(z.string(), z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({})
+});
+
+export const createLifeEventSchema = z
+  .object({
+    title: nonEmptyTrimmedString,
+    shortDescription: trimmedString.default(""),
+    description: trimmedString.default(""),
+    eventType: lifeEventTypeSchema.default("custom"),
+    status: lifeEventStatusSchema.default("planned"),
+    importance: lifeEventImportanceSchema.default("meaningful"),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().optional(),
+    timezone: nonEmptyTrimmedString.default("UTC"),
+    isAllDay: z.boolean().default(false),
+    placeLabel: trimmedString.default(""),
+    placeAddress: trimmedString.default(""),
+    placeTimezone: trimmedString.default(""),
+    placeLatitude: z.number().nullable().optional(),
+    placeLongitude: z.number().nullable().optional(),
+    originLabel: trimmedString.default(""),
+    originCity: trimmedString.default(""),
+    originCountry: trimmedString.default(""),
+    originLatitude: z.number().nullable().optional(),
+    originLongitude: z.number().nullable().optional(),
+    destinationLabel: trimmedString.default(""),
+    destinationCity: trimmedString.default(""),
+    destinationCountry: trimmedString.default(""),
+    destinationLatitude: z.number().nullable().optional(),
+    destinationLongitude: z.number().nullable().optional(),
+    transportMode: lifeEventTransportModeSchema.nullable().optional(),
+    primaryCalendarEventId: trimmedString.nullable().optional(),
+    calendarSyncState: lifeEventCalendarSyncStateSchema.default("not_synced"),
+    calendarMatchConfidence: z.number().min(0).max(1).nullable().optional(),
+    calendarProjection: lifeEventCalendarProjectionSchema.default("link_or_create"),
+    sourceKind: lifeEventSourceKindSchema.default("manual"),
+    sourceArtifactId: trimmedString.nullable().optional(),
+    extractionStatus: lifeEventExtractionStatusSchema.default("none"),
+    extractionSummary: z.record(z.string(), z.unknown()).default({}),
+    travelDetails: z.record(z.string(), z.unknown()).default({}),
+    displayStyle: z.record(z.string(), z.unknown()).default({}),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    userId: nonEmptyTrimmedString.nullable().optional(),
+    segments: z.array(lifeEventSegmentInputSchema).default([]),
+    links: z.array(lifeEventEntityLinkInputSchema).default([])
+  })
+  .superRefine((value, context) => {
+    if (
+      value.endsAt !== undefined &&
+      Date.parse(value.endsAt) <= Date.parse(value.startsAt)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endsAt"],
+        message: "endsAt must be after startsAt"
+      });
+    }
+  });
+
+export const updateLifeEventSchema = z
+  .object({
+    title: nonEmptyTrimmedString.optional(),
+    shortDescription: trimmedString.optional(),
+    description: trimmedString.optional(),
+    eventType: lifeEventTypeSchema.optional(),
+    status: lifeEventStatusSchema.optional(),
+    importance: lifeEventImportanceSchema.optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().optional(),
+    timezone: nonEmptyTrimmedString.optional(),
+    isAllDay: z.boolean().optional(),
+    placeLabel: trimmedString.optional(),
+    placeAddress: trimmedString.optional(),
+    placeTimezone: trimmedString.optional(),
+    placeLatitude: z.number().nullable().optional(),
+    placeLongitude: z.number().nullable().optional(),
+    originLabel: trimmedString.optional(),
+    originCity: trimmedString.optional(),
+    originCountry: trimmedString.optional(),
+    originLatitude: z.number().nullable().optional(),
+    originLongitude: z.number().nullable().optional(),
+    destinationLabel: trimmedString.optional(),
+    destinationCity: trimmedString.optional(),
+    destinationCountry: trimmedString.optional(),
+    destinationLatitude: z.number().nullable().optional(),
+    destinationLongitude: z.number().nullable().optional(),
+    transportMode: lifeEventTransportModeSchema.nullable().optional(),
+    primaryCalendarEventId: trimmedString.nullable().optional(),
+    calendarSyncState: lifeEventCalendarSyncStateSchema.optional(),
+    calendarMatchConfidence: z.number().min(0).max(1).nullable().optional(),
+    calendarProjection: lifeEventCalendarProjectionSchema.optional(),
+    sourceKind: lifeEventSourceKindSchema.optional(),
+    sourceArtifactId: trimmedString.nullable().optional(),
+    extractionStatus: lifeEventExtractionStatusSchema.optional(),
+    extractionSummary: z.record(z.string(), z.unknown()).optional(),
+    travelDetails: z.record(z.string(), z.unknown()).optional(),
+    displayStyle: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    userId: nonEmptyTrimmedString.nullable().optional(),
+    segments: z.array(lifeEventSegmentInputSchema).optional(),
+    links: z.array(lifeEventEntityLinkInputSchema).optional()
+  })
+  .superRefine((value, context) => {
+    if (
+      value.startsAt !== undefined &&
+      value.endsAt !== undefined &&
+      Date.parse(value.endsAt) <= Date.parse(value.startsAt)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endsAt"],
+        message: "endsAt must be after startsAt"
+      });
+    }
+  });
+
 export const habitListQuerySchema = z.object({
   status: habitStatusSchema.optional(),
   polarity: habitPolaritySchema.optional(),
@@ -4718,6 +5055,24 @@ export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export type CalendarEventLink = z.infer<typeof calendarEventLinkSchema>;
 export type CalendarEventOrigin = z.infer<typeof calendarEventOriginSchema>;
 export type CalendarEventSource = z.infer<typeof calendarEventSourceSchema>;
+export type LifeEvent = z.infer<typeof lifeEventSchema>;
+export type LifeEventSegment = z.infer<typeof lifeEventSegmentSchema>;
+export type LifeEventEntityLink = z.infer<typeof lifeEventEntityLinkSchema>;
+export type LifeEventType = z.infer<typeof lifeEventTypeSchema>;
+export type LifeEventStatus = z.infer<typeof lifeEventStatusSchema>;
+export type LifeEventImportance = z.infer<typeof lifeEventImportanceSchema>;
+export type LifeEventTransportMode = z.infer<typeof lifeEventTransportModeSchema>;
+export type LifeEventCalendarProjection = z.infer<
+  typeof lifeEventCalendarProjectionSchema
+>;
+export type LifeEventCalendarSyncState = z.infer<
+  typeof lifeEventCalendarSyncStateSchema
+>;
+export type LifeEventSourceKind = z.infer<typeof lifeEventSourceKindSchema>;
+export type LifeEventExtractionStatus = z.infer<
+  typeof lifeEventExtractionStatusSchema
+>;
+export type LifeEventSegmentType = z.infer<typeof lifeEventSegmentTypeSchema>;
 export type CalendarOverviewPayload = z.infer<
   typeof calendarOverviewPayloadSchema
 >;
@@ -4987,6 +5342,9 @@ export type CreateSessionEventInput = z.infer<typeof createSessionEventSchema>;
 export type CreateCalendarEventInput = z.infer<
   typeof createCalendarEventSchema
 >;
+export type CreateLifeEventInput = z.infer<typeof createLifeEventSchema>;
+export type UpdateLifeEventInput = z.infer<typeof updateLifeEventSchema>;
+export type LifeEventSegmentInput = z.infer<typeof lifeEventSegmentInputSchema>;
 export type CreateCalendarConnectionInput = z.infer<
   typeof createCalendarConnectionSchema
 >;

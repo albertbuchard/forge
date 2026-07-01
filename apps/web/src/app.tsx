@@ -16,6 +16,7 @@ import {
   InsightsPage,
   KanbanPage,
   KnowledgeGraphPage,
+  LifeEventsPage,
   LifeForcePage,
   MovementPage,
   NotesPage,
@@ -267,6 +268,15 @@ export function App() {
               "Calendar",
               "Calendar planning, timeboxes, and provider sync.",
               <CalendarPage />
+            )}
+          />
+          <Route
+            path="life-events"
+            element={surface(
+              "life-events-index",
+              "Life Events",
+              "Chronological life timeline, travel cards, calendar links, and artifacts.",
+              <LifeEventsPage />
             )}
           />
           <Route

@@ -106,7 +106,7 @@ It can also grant an explicit audited XP bonus or penalty through the dedicated 
 It can also add or remove tracked minutes on existing tasks or projects through a dedicated signed work-adjustment route without pretending that a live task run happened.
 It also understands Forge `note` records, which are Markdown-based, searchable, and linkable across one or many entities.
 It also exposes Forge's SQLite-backed wiki memory surface plus the first-class sleep and sports read models, so an agent can review recent nights, inspect workout context, update reflective metadata on health sessions, and work with wiki pages without touching raw storage.
-The curated plugin route surface now includes the dedicated wiki and health APIs directly, including wiki settings, page reads and writes, search, health, sync, reindex, background ingest, sleep review, sports review, and reflective updates on individual sleep or workout sessions.
+The curated plugin route surface now includes the dedicated wiki, Life Events, and health APIs directly, including wiki settings, page reads and writes, search, health, sync, reindex, background ingest, Life Events timeline/calendar/ticket/status actions, sleep review, sports review, and reflective updates on individual sleep or workout sessions.
 Notes support includes:
 
 - `note` as the durable collaboration entity
@@ -464,7 +464,7 @@ The live onboarding payload is the deep contract for agents. It now includes:
 - `psycheCoachingPlaybooks`: how to guide users through values work, functional analysis, behavior mapping, belief/schema intake, mode work, mode-guide sessions, and trigger reports with active listening instead of raw form prompts
 - `relationshipModel`: how goals, projects, tasks, task runs, Psyche entities, and insights connect
 - `entityCatalog`: exact field-level definitions for real Forge entity payloads
-- `entityRouteModel.specializedDomainSurfaces`: the dedicated route families for Movement, Life Force, and Workbench, including when not to use generic batch CRUD
+- `entityRouteModel.specializedDomainSurfaces`: the dedicated route families for Movement, Life Events, Life Force, and Workbench, including when not to use generic batch CRUD
 - `toolInputCatalog`: exact mutation and live-work input shapes with examples
 
 That means the agent should use the real route-facing fields, for example:

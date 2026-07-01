@@ -91,6 +91,7 @@ export type CrudEntityType =
   | "calendar_event"
   | "work_block_template"
   | "task_timebox"
+  | "life_event"
   | "artifact"
   | "psyche_value"
   | "behavior_pattern"
@@ -1259,6 +1260,167 @@ export interface CalendarEventLink {
   relationshipType: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type LifeEventType =
+  | "travel_flight"
+  | "travel_train"
+  | "travel_car"
+  | "travel_boat"
+  | "travel_trip"
+  | "concert"
+  | "cinema"
+  | "date"
+  | "friends"
+  | "family"
+  | "work_milestone"
+  | "thesis_milestone"
+  | "medical"
+  | "administrative"
+  | "celebration"
+  | "custom";
+export type LifeEventStatus =
+  | "planned"
+  | "happening"
+  | "completed"
+  | "cancelled"
+  | "tentative";
+export type LifeEventImportance =
+  | "ordinary"
+  | "meaningful"
+  | "major"
+  | "life_changing";
+export type LifeEventTransportMode =
+  | "plane"
+  | "train"
+  | "car"
+  | "boat"
+  | "walking"
+  | "public_transit"
+  | "other";
+export type LifeEventCalendarSyncState =
+  | "not_synced"
+  | "linked"
+  | "matched"
+  | "created"
+  | "disabled"
+  | "needs_review"
+  | "error";
+export type LifeEventSourceKind =
+  | "manual"
+  | "calendar"
+  | "artifact_ticket"
+  | "agent"
+  | "import";
+export type LifeEventExtractionStatus =
+  | "none"
+  | "pending"
+  | "drafted"
+  | "confirmed"
+  | "failed"
+  | "llm_unavailable";
+export type LifeEventSegmentType =
+  | "flight"
+  | "train"
+  | "car"
+  | "boat"
+  | "walking"
+  | "lodging"
+  | "activity"
+  | "checkpoint"
+  | "custom";
+
+export interface LifeEventSegment {
+  id: string;
+  lifeEventId: string;
+  segmentType: LifeEventSegmentType;
+  transportMode: LifeEventTransportMode | null;
+  sequenceIndex: number;
+  title: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  timezone: string;
+  originLabel: string;
+  originIata: string;
+  originIcao: string;
+  originCity: string;
+  originCountry: string;
+  originLatitude: number | null;
+  originLongitude: number | null;
+  destinationLabel: string;
+  destinationIata: string;
+  destinationIcao: string;
+  destinationCity: string;
+  destinationCountry: string;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
+  carrierName: string;
+  carrierCode: string;
+  serviceNumber: string;
+  bookingReference: string;
+  terminal: string;
+  gate: string;
+  seat: string;
+  status: string;
+  statusSource: string;
+  statusCheckedAt: string | null;
+  routeGeometry: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LifeEvent extends OwnedEntity {
+  id: string;
+  title: string;
+  shortDescription: string;
+  description: string;
+  eventType: LifeEventType;
+  status: LifeEventStatus;
+  importance: LifeEventImportance;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  isAllDay: boolean;
+  placeLabel: string;
+  placeAddress: string;
+  placeTimezone: string;
+  placeLatitude: number | null;
+  placeLongitude: number | null;
+  originLabel: string;
+  originCity: string;
+  originCountry: string;
+  originLatitude: number | null;
+  originLongitude: number | null;
+  destinationLabel: string;
+  destinationCity: string;
+  destinationCountry: string;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
+  transportMode: LifeEventTransportMode | null;
+  primaryCalendarEventId: string | null;
+  calendarSyncState: LifeEventCalendarSyncState;
+  calendarMatchConfidence: number | null;
+  sourceKind: LifeEventSourceKind;
+  sourceArtifactId: string | null;
+  extractionStatus: LifeEventExtractionStatus;
+  extractionSummary: Record<string, unknown>;
+  travelDetails: Record<string, unknown>;
+  displayStyle: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  segments: LifeEventSegment[];
+  links: EntityLink[];
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LifeEventTimelinePayload {
+  events: LifeEvent[];
+  now: string;
+  nextLifeEventId: string | null;
+  limit: number;
+  offset: number;
 }
 
 export interface WorkBlockTemplate extends OwnedEntity {

@@ -16,8 +16,8 @@ Forge is a local-first app, API, and agent runtime for structured memory.
 
 It stores the parts of work and life that need to stay usable over time: goals, projects,
 tasks, notes, wiki pages, Psyche records, preferences, calendar plans, sleep, workouts,
-movement, food, trusted files, and agent work. The same records are available in the web
-app, through the API, and through trusted agent integrations.
+movement, food, Life Events, trusted files, and agent work. The same records are
+available in the web app, through the API, and through trusted agent integrations.
 
 Unstructured memory keeps conversations, notes, wiki prose, transcripts, and reasoning
 traces. Forge complements it by saving selected things as records you can search, link,
@@ -299,7 +299,7 @@ has opened.
 - artifacts: trusted spreadsheets, documents, PDFs, structured text, text, and images with metadata, provenance, scans, versions, generic entity links, and human-only downloads
 - health and body context: sleep nights, workouts, training load, movement history, nutrition and weight-loss context, HealthKit imports, and iPhone sync
 - preferences: catalogs, contexts, preference items, judgments, signals, comparisons, and score updates
-- calendar and time: native events, mirrored calendars, provider connections, work block templates, and task timeboxes
+- calendar and time: native events, Life Events, mirrored calendars, provider connections, work block templates, and task timeboxes
 - planning and execution: goals, strategies, projects, issues, tasks, subtasks, task runs, habits, work adjustments, and git-linked completion reports
 - agents and collaboration: OpenClaw, Hermes, Codex, Claude Code, explicit human and bot users, owner/assignee filters, runtime sessions, approvals, and audited actions
 - progress: XP, levels, streaks, trophies, optional downloadable art packs, and local reward history

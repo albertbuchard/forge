@@ -186,6 +186,7 @@ describe("question flow simulation cycles", () => {
     "Preference Judgment",
     "Preference Signal",
     "Movement",
+    "Life Events",
     "Life Force",
     "Workbench",
     "Preference Catalog",
@@ -259,6 +260,8 @@ describe("question flow simulation cycles", () => {
       "Record which of two writing environments I prefer for deep work.",
     "Preference Signal": "Mark this cafe as a veto for serious writing.",
     Movement: "Correct a missing movement span and then review the timeline.",
+    "Life Events":
+      "Import a flight ticket, check the calendar match, and add it to the Life Events timeline.",
     "Life Force": "Change the model because Mondays crash after lunch.",
     Workbench:
       "Inspect a failed flow run and read the latest output for one node.",
@@ -326,6 +329,7 @@ describe("question flow simulation cycles", () => {
     "Preference Judgment": ["compare", "judge", "review", "record"],
     "Preference Signal": ["mark", "update", "review", "record"],
     Movement: ["review", "correct", "repair", "link"],
+    "Life Events": ["add", "calendar-sync", "ticket-import", "status"],
     "Life Force": ["overview", "profile", "weekday-template", "fatigue-signal"],
     Workbench: ["inspect", "run", "edit", "publish"],
     "Preference Catalog": ["add", "update", "review", "browse"],
@@ -413,6 +417,7 @@ describe("question flow simulation cycles", () => {
     "Preference Judgment": "action",
     "Preference Signal": "action",
     Movement: "specializedDomain",
+    "Life Events": "batch",
     "Life Force": "specializedDomain",
     Workbench: "specializedDomain",
     "Preference Catalog": "batch",
@@ -465,6 +470,7 @@ describe("question flow simulation cycles", () => {
     preference_signal: "Preference Signal",
     questionnaire_instrument: "Questionnaire Instrument",
     questionnaire_run: "Questionnaire Run",
+    life_event: "Life Events",
     movement: "Movement",
     life_force: "Life Force",
     workbench: "Workbench",
@@ -544,6 +550,7 @@ describe("question flow simulation cycles", () => {
     "sports_overview",
     "training_load",
     "weight_loss",
+    "life_event",
     "movement",
     "life_force",
     "workbench"
@@ -575,6 +582,14 @@ describe("question flow simulation cycles", () => {
       tripDelete: "Delete an already-recorded trip.",
       tripPointUpdate: "Patch one trip point.",
       tripPointDelete: "Delete one trip point."
+    },
+    "Life Events": {
+      timeline: "Read the Life Events chronology before interpreting or adding.",
+      read: "Read one Life Event with segments and links.",
+      calendarSync: "Link or create the matching calendar event.",
+      fromCalendarEvent: "Mark an existing calendar event as a Life Event.",
+      importTicket: "Draft or create a travel event from a trusted ticket artifact.",
+      travelStatus: "Read scheduled or provider-backed travel status."
     },
     "Life Force": {
       overview:
@@ -631,7 +646,7 @@ describe("question flow simulation cycles", () => {
       /Action workflows need action verbs[\s\S]*start, continue, complete,[\s\S]*adjust, judge, signal, publish, sync, or observe/i
     );
     expect(entityPlaybook).toMatch(
-      /Movement, Life Force, and Workbench need their dedicated operation lanes[\s\S]*review,\s+correct,\s+repair,\s+run,\s+inspect,\s+publish, or preserve/i
+      /Movement, Life Events, Life Force, and Workbench need their dedicated operation lanes[\s\S]*review,\s+correct,\s+repair,\s+run,\s+inspect,\s+publish,\s+preserve,\s+calendar-sync,\s+ticket-import,\s+or\s+status/i
     );
     expect(entityPlaybook).toMatch(
       /Psyche entities need a formulation lane before the storage lane/i
@@ -709,7 +724,7 @@ describe("question flow simulation cycles", () => {
       /read-model and review surfaces[\s\S]*practical question[\s\S]*scope that would change the answer/i
     );
     expect(entityPlaybook).toMatch(
-      /specialized Movement, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*target span\/object\/weekday\/flow\/run\/node/i
+      /specialized Movement, Life Events, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*target span\/object\/event\/artifact\/weekday\/flow\/run\/node/i
     );
 
     for (const section of nonPsycheSections) {
@@ -831,6 +846,7 @@ describe("question flow simulation cycles", () => {
 
     const surfaceToScenarioName = {
       movement: "Movement",
+      lifeEvents: "Life Events",
       lifeForce: "Life Force",
       life_force: "Life Force",
       workbench: "Workbench"
@@ -943,6 +959,7 @@ describe("question flow simulation cycles", () => {
 
     for (const surfaceKey of [
       "movement",
+      "lifeEvents",
       "lifeForce",
       "life_force",
       "workbench"
@@ -1260,7 +1277,7 @@ describe("question flow simulation cycles", () => {
       /For normal batch entities,[\s\S]*do not ask for tags, priority, status, color, links,\s+dates, or assignees unless/i
     );
     expect(progressiveDisclosure).toMatch(
-      /For specialized Movement, Life Force, and Workbench work,[\s\S]*skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
+      /For specialized Movement, Life Events, Life Force, and Workbench work,[\s\S]*skip the route-family question[\s\S]*target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
     );
     expect(entityPlaybook).toMatch(/## Known-target fast path/i);
     expect(entityPlaybook).toMatch(
@@ -1352,7 +1369,7 @@ describe("question flow simulation cycles", () => {
         /intent,[\s\S]*entity or dedicated domain lane,[\s\S]*exact tool or route key|exact read\/write\/run tool/i
       );
       expect(source).toMatch(
-        /span, place, weekday, flow, run, node, belief sentence, parent record,\s+or\s+save confirmation/i
+        /span, place, event, artifact, weekday, flow, run, node, belief sentence, parent record,\s+or\s+save confirmation/i
       );
       expect(source).toMatch(
         /saved the belief[\s\S]*corrected the\s+missing stay[\s\S]*updated the weekday energy pattern[\s\S]*read the failed node/i
@@ -1394,7 +1411,7 @@ describe("question flow simulation cycles", () => {
       /Psyche-adjacent material[\s\S]*felt stake, protection,[\s\S]*payoff, cost, or value conflict/i
     );
     expect(activeListeningContract).toMatch(
-      /For Movement, Life Force, and Workbench[\s\S]*movement span, place boundary, weekday curve, fatigue signal, flow, run, node output/i
+      /For Movement, Life Events, Life Force, and Workbench[\s\S]*movement span, place boundary, Life Event, calendar match, ticket artifact, travel status, weekday curve, fatigue signal, flow, run, node output/i
     );
     expect(entityPlaybook).toMatch(
       /For review requests, ask what practical question they want the read to answer/i
@@ -1703,7 +1720,7 @@ describe("question flow simulation cycles", () => {
         /correction, mutation, or\s+result-producing run[\s\S]*timeline or\s+place\/settings detail[\s\S]*Life Force overview[\s\S]*flow detail,\s+run\s+detail, node result, latest node output, published\s+output, or run history/i
       );
       expect(source).toMatch(
-        /After any dedicated(?: Movement, Life Force, or Workbench)? read[\s\S]*translate the result[\s\S]*into one next action[\s\S]*Movement overlay\/place\/settings\/link[\s\S]*Workbench/i
+        /After any dedicated(?: Movement, Life Events, Life Force, or Workbench)? read[\s\S]*translate the result[\s\S]*into one next action[\s\S]*Movement overlay\/place\/settings\/link[\s\S]*Workbench/i
       );
       expect(source).toMatch(
         /several (?:next )?actions[\s\S]*(?:choose|narrow)[\s\S]*most directly\s+supported[\s\S]*(?:broad menu|instead of handing)/i
@@ -1853,7 +1870,7 @@ describe("question flow simulation cycles", () => {
       /review, guide, inspect, compare, or understand before\s+changing anything/i
     );
     expect(entityPlaybook).toMatch(
-      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
     );
     expect(entityPlaybook).toMatch(
       /First answer the practical question[\s\S]*Name one implication or uncertainty/i
@@ -1862,7 +1879,7 @@ describe("question flow simulation cycles", () => {
       /Ask a follow-up only if it changes the next action/i
     );
     expect(entityPlaybook).toMatch(
-      /the span that is missing[\s\S]*weekday curve[\s\S]*failed run or node/i
+      /the span that is missing[\s\S]*Life Event calendar match, ticket import, or travel status[\s\S]*weekday curve[\s\S]*failed run or node/i
     );
     expect(entityPlaybook).toMatch(
       /already gave usable wording[\s\S]*rename it for style/i
@@ -1923,7 +1940,7 @@ describe("question flow simulation cycles", () => {
     );
   });
 
-  it("cycle 3: specialized route examples cover Movement, Life Force, and Workbench without guessing", () => {
+  it("cycle 3: specialized route examples cover Movement, Life Events, Life Force, and Workbench without guessing", () => {
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
     const typeSource = readRepoFile("apps/web/src/lib/types.ts");
     const skillSource = readRepoFile(
@@ -2235,7 +2252,7 @@ describe("question flow simulation cycles", () => {
       /report a\s+contract bug instead of silently using generic batch CRUD or a nearby route/i
     );
     expect(routeExecutionHandoff).toMatch(
-      /accepted user-facing formulation or target object[\s\S]*title, belief\s+sentence, movement span, weekday, flow, run, node, or published result/i
+      /accepted user-facing formulation or target object[\s\S]*title, belief\s+sentence, movement span, Life Event target, weekday, flow, run, node, or published result/i
     );
     expect(routeExecutionHandoff).toMatch(
       /Choose exactly one execution lane:[\s\S]*shared batch CRUD,[\s\S]*specialized CRUD,[\s\S]*action\s+workflow,[\s\S]*read-model route,[\s\S]*specialized domain route/i
@@ -2247,7 +2264,7 @@ describe("question flow simulation cycles", () => {
       /wiki pages,[\s\S]*calendar connections,[\s\S]*artifacts,[\s\S]*task runs,[\s\S]*work adjustments,[\s\S]*questionnaire\s+runs,[\s\S]*preference judgments\/signals,[\s\S]*self-observation notes/i
     );
     expect(routeExecutionHandoff).toMatch(
-      /Movement, Life Force, and Workbench[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`[\s\S]*Do not put IDs into `routeKey`/i
+      /Movement, Life Events, Life Force, and Workbench[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`[\s\S]*Do not put IDs into `routeKey`/i
     );
     expect(routeExecutionHandoff).toMatch(
       /confirm the product result[\s\S]*verification read only when it proves a repair, explains impact, or grounds the\s+next decision/i
@@ -2321,7 +2338,7 @@ describe("question flow simulation cycles", () => {
       expect(source).toContain("batch CRUD only");
       expect(source).toContain("catalog entities");
       expect(source).toContain("named tools or documented routes");
-      expect(source).toContain("Movement, Life Force, or Workbench");
+      expect(source).toContain("Movement, Life Events, Life Force, or Workbench");
       expect(source).toContain("routeKey");
       expect(source).toContain("method");
       expect(source).toContain("path");

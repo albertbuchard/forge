@@ -35,7 +35,8 @@ state, and history when they need to be reviewed, compared, updated, or acted on
 Forge uses one shared entity model across the web app, API, OpenClaw, Hermes, Codex,
 Claude Code, and the iPhone companion. The model is the structured layer behind the
 prose, so work records, Psyche records, preferences, calendar records, sleep, workouts,
-movement, and evidence can stay linked instead of being trapped inside chat history.
+movement, Life Events, and evidence can stay linked instead of being trapped inside
+chat history.
 
 The planning hierarchy is explicit:
 
@@ -50,7 +51,7 @@ Forge keeps that hierarchy connected to:
 - trusted file artifacts with precise metadata, provenance, static scans, danger scores, versions, audit history, human-only downloads, and general entity links
 - preferences, judgments, signals, and context-specific profiles
 - Psyche values, beliefs, behavior patterns, modes, flashcards, and trigger reports
-- calendar events, work blocks, and task timeboxes
+- calendar events, Life Events, work blocks, and task timeboxes
 - sleep nights, workouts, movement history, training load, and nutrition context
 - human and bot users with explicit ownership, assignment, and agent-session history
 
@@ -118,6 +119,7 @@ checks.
 - [Multi-user and strategies](./reference/multi-user-and-strategies.md): shared runtime, identity, and strategy model notes.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.
 - [Artifact Store](./reference/artifact-store.md): trusted file storage, metadata, safety scans, generic entity links, and human-only downloads.
+- [Life Events](./reference/life-events.md): chronological life-event records, calendar reconciliation, ticket import, and agent route rules.
 - [Public repo workflow](./reference/public-repo-workflow.md): public repository and publication workflow.
 - [Repository structure](./reference/repository-structure.md): top-level tree, package boundaries, release-sensitive paths, and generated-output rules.
 

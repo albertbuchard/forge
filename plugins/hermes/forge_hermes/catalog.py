@@ -166,6 +166,15 @@ ARTIFACT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "audit": {"method": "GET", "path": "/api/v1/artifacts/:id/audit"},
 }
 
+LIFE_EVENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "timeline": {"method": "GET", "path": "/api/v1/life-events/timeline"},
+    "read": {"method": "GET", "path": "/api/v1/life-events/:id"},
+    "calendarSync": {"method": "POST", "path": "/api/v1/life-events/:id/calendar-sync", "write": True},
+    "fromCalendarEvent": {"method": "POST", "path": "/api/v1/life-events/from-calendar-event", "write": True},
+    "importTicket": {"method": "POST", "path": "/api/v1/life-events/import-ticket", "write": True},
+    "travelStatus": {"method": "GET", "path": "/api/v1/life-events/:id/travel-status"},
+}
+
 
 def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
     return object_schema(
@@ -706,6 +715,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(ARTIFACT_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(ARTIFACT_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_life_event_route",
+        "description": "Call one allowed dedicated Life Events route for timeline reads, one-event reads, calendar linking or creation, marking a calendar event as a Life Event, ticket artifact import, or travel-status reads. Use shared batch CRUD for normal stored life_event create, update, delete, restore, and search. Use generic entity_links for relationships.",
+        "parameters": specialized_route_parameters(LIFE_EVENT_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(LIFE_EVENT_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(LIFE_EVENT_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(LIFE_EVENT_ROUTE_SPECS, args),
     },
     {
         "name": "forge_get_doctor",

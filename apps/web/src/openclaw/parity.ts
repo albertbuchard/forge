@@ -21,6 +21,7 @@ export type ForgeSupportedPluginApiRoute = {
     | "life_force"
     | "workbench"
     | "artifact"
+    | "life_event"
     | "preferences"
     | "questionnaires";
 };
@@ -181,6 +182,28 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "POST", path: "/api/v1/artifacts/:id/trust", purpose: "artifact" },
     { method: "GET", path: "/api/v1/artifacts/:id/versions", purpose: "artifact" },
     { method: "GET", path: "/api/v1/artifacts/:id/audit", purpose: "artifact" },
+    { method: "GET", path: "/api/v1/life-events/timeline", purpose: "life_event" },
+    { method: "GET", path: "/api/v1/life-events/:id", purpose: "life_event" },
+    {
+      method: "POST",
+      path: "/api/v1/life-events/:id/calendar-sync",
+      purpose: "life_event"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/life-events/from-calendar-event",
+      purpose: "life_event"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/life-events/import-ticket",
+      purpose: "life_event"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/life-events/:id/travel-status",
+      purpose: "life_event"
+    },
     { method: "GET", path: "/api/v1/calendar/overview", purpose: "calendar" },
     {
       method: "GET",

@@ -60,6 +60,7 @@ describe("question flow quality coverage", () => {
       ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
       ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
       ["Movement", /understand, correct, or preserve/i, /timeline[\s\S]*overlay[\s\S]*repair/i],
+      ["Life Events", /place on your life timeline/i, /chronology[\s\S]*calendar[\s\S]*ticket/i],
       ["Life Force", /energy picture right now/i, /dedicated life-force path/i],
       ["Workbench", /inspect, change, run, or publish/i, /dedicated workbench route family/i],
       ["Preference Catalog", /decision or taste question should this catalog help with/i, /comparison pool/i],
@@ -96,7 +97,7 @@ describe("question flow quality coverage", () => {
       /wording, boundary, placement, timing,[\s\S]*route scope,[\s\S]*support action,[\s\S]*verification read,[\s\S]*preservation choice,[\s\S]*consent/i
     );
     expect(entityPlaybook).toMatch(
-      /For Movement, Life Force, and Workbench,[\s\S]*movement span, place boundary, weekday curve, fatigue signal, flow, run, node output/i
+      /For Movement, Life Events, Life Force, and Workbench,[\s\S]*movement span, place boundary, Life Event, calendar match, ticket artifact, travel status, weekday curve, fatigue signal, flow, run, node output/i
     );
     expect(entityPlaybook).toMatch(/## Second-turn discipline/i);
     expect(entityPlaybook).toMatch(
@@ -116,7 +117,7 @@ describe("question flow quality coverage", () => {
       /Review-first:[\s\S]*Read the relevant stored entity, overview, or specialized surface/i
     );
     expect(entityPlaybook).toMatch(
-      /Action-first:[\s\S]*task run[\s\S]*Movement correction[\s\S]*Life Force signal\/template[\s\S]*Workbench\s+run\/output/i
+      /Action-first:[\s\S]*task run[\s\S]*Movement correction[\s\S]*Life Event calendar sync, ticket import, or\s+status read[\s\S]*Life Force signal\/template[\s\S]*Workbench\s+run\/output/i
     );
     expect(entityPlaybook).toMatch(
       /Do not downgrade psychologically meaningful material into quick capture/i
@@ -146,7 +147,7 @@ describe("question flow quality coverage", () => {
       /route-key tool is unavailable, stale, or lacks the needed route key[\s\S]*exact `methodRoutes` entry/i
     );
     expect(entityPlaybook).toMatch(
-      /Do not fall back to generic batch CRUD for Movement, Life Force, or Workbench/i
+      /Do not fall back to generic batch CRUD for Movement, Life Events, Life Force, or Workbench/i
     );
     expect(entityPlaybook).toMatch(
       /tool schema, live onboarding, and OpenAPI disagree[\s\S]*contract bug/i
@@ -162,7 +163,7 @@ describe("question flow quality coverage", () => {
       /For shared batch CRUD,[\s\S]*catalog `entityType`[\s\S]*\/api\/v1\/entities\/search[\s\S]*\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/entities\/update[\s\S]*\/api\/v1\/entities\/delete[\s\S]*\/api\/v1\/entities\/restore/i
     );
     expect(entityPlaybook).toMatch(
-      /Movement, Life Force, and Workbench,[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`/i
+      /Movement, Life Events, Life Force, and Workbench,[\s\S]*`routeKey`, method, path,[\s\S]*`methodRoutes`[\s\S]*`pathParams`/i
     );
     expect(entityPlaybook).toMatch(
       /Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,\s+or use nearby guessed paths/i
@@ -231,7 +232,7 @@ describe("question flow quality coverage", () => {
       /do not ask for tags, priority, status, color, links,\s+dates, or assignees/i
     );
     expect(entityPlaybook).toMatch(
-      /skip the route-family question[\s\S]*target span, place, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
+      /skip the route-family question[\s\S]*target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or\s+consent/i
     );
     expect(psychePlaybook).toMatch(/## Psyche progressive disclosure/i);
     expect(psychePlaybook).toMatch(/## Psyche depth calibration/i);
@@ -285,7 +286,7 @@ describe("question flow quality coverage", () => {
       /Use this when the user asks to review, guide, inspect, compare, or understand before\s+changing anything/i
     );
     expect(entityPlaybook).toMatch(
-      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+      /shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
     );
     expect(entityPlaybook).toMatch(
       /After the read, answer the practical question[\s\S]*before asking for\s+any write detail/i
@@ -300,7 +301,7 @@ describe("question flow quality coverage", () => {
       /Ask a follow-up only if it changes the next action:[\s\S]*save, update, correct, link,\s+schedule, run, publish, enrich, or open the UI/i
     );
     expect(entityPlaybook).toMatch(
-      /Movement, Life Force, Workbench, calendar, health, and operator overviews/i
+      /Movement, Life Events, Life Force, Workbench, calendar, health, and operator overviews/i
     );
     expect(entityPlaybook).toMatch(
       /For Psyche-adjacent reads,[\s\S]*Psyche formulation, a flashcard, a note, a task, a habit, or no\s+write at all/i
@@ -319,7 +320,7 @@ describe("question flow quality coverage", () => {
       /update that record, link to it, or become a separate new record/i
     );
     expect(entityPlaybook).toMatch(
-      /For Movement, Life Force, and Workbench,[\s\S]*dedicated read lane/i
+      /For Movement, Life Events, Life Force, and Workbench,[\s\S]*dedicated read lane/i
     );
     expect(entityPlaybook).toMatch(/## Destructive and replacement actions/i);
     expect(entityPlaybook).toMatch(

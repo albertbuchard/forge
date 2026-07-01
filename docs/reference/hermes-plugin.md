@@ -56,6 +56,7 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 - batch search, create, update, delete, and restore
 - explicit work adjustments, retroactive work logging, and task-run controls
 - calendar overview, work-block creation, and task timeboxing helpers
+- Life Events chronology, calendar reconciliation, ticket artifact import, and travel-status routes
 - wiki memory reads, search, ingest, health checks, and page upserts
 - sleep and sports overview reads plus reflective metadata updates on individual sessions
 - visual handoff to the Forge UI when the UI is genuinely the better surface
@@ -222,7 +223,8 @@ Forge's newer wiki and health surfaces follow the same rule:
 - wiki pages live in the same shared Forge memory system and should use the dedicated wiki tools, not the generic entity batch routes
 - sleep and sports sessions stay linkable across human and bot-owned goals, projects, habits, notes, and Psyche records
 - the sports UI route is `/sports`, but the backend overview route remains `/api/v1/health/fitness`
-- Hermes' curated route surface now mirrors the dedicated wiki and health APIs directly: `/api/v1/wiki/settings`, `/api/v1/wiki/pages`, `/api/v1/wiki/pages/:id`, `/api/v1/wiki/search`, `/api/v1/wiki/health`, `/api/v1/wiki/sync`, `/api/v1/wiki/reindex`, `/api/v1/wiki/ingest-jobs`, `/api/v1/health/sleep`, `/api/v1/health/sleep/:id`, `/api/v1/health/fitness`, and `/api/v1/health/workouts/:id`
+- Life Events use both paths deliberately: shared batch CRUD for normal `life_event` records and generic links; dedicated Life Event routes for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads
+- Hermes' curated route surface now mirrors the dedicated wiki, Life Events, and health APIs directly: `/api/v1/wiki/settings`, `/api/v1/wiki/pages`, `/api/v1/wiki/pages/:id`, `/api/v1/wiki/search`, `/api/v1/wiki/health`, `/api/v1/wiki/sync`, `/api/v1/wiki/reindex`, `/api/v1/wiki/ingest-jobs`, `/api/v1/life-events/timeline`, `/api/v1/life-events/:id`, `/api/v1/life-events/:id/calendar-sync`, `/api/v1/life-events/from-calendar-event`, `/api/v1/life-events/import-ticket`, `/api/v1/life-events/:id/travel-status`, `/api/v1/health/sleep`, `/api/v1/health/sleep/:id`, `/api/v1/health/fitness`, and `/api/v1/health/workouts/:id`
 
 If Hermes is meant to operate as its own bot user inside that shared runtime,
 create that bot in `Settings -> Users` and write records with that bot's

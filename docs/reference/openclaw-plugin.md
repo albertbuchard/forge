@@ -178,11 +178,12 @@ Hermes exposes dedicated Preferences tools directly, while OpenClaw should use
 the live onboarding contract for exact route-facing fields and prefer a UI
 handoff when the user wants to play the comparison game visually.
 
-## Wiki And Health Surfaces
+## Wiki, Life Events, And Health Surfaces
 
 Forge exposes several agent-facing surfaces that matter for OpenClaw:
 
 - Wiki is the SQLite-backed memory layer. Use the dedicated wiki tools so page rows, backlinks, search, and ingest metadata stay aligned.
+- Life Events are chronological records for important personal events. Use shared batch CRUD for normal `life_event` create, update, search, delete, restore, and generic links. Use `forge_call_life_event_route` for timeline reads, one-event reads, calendar sync, marking a calendar event as a Life Event, ticket artifact import, and travel-status reads.
 - Sleep is a first-class reflective surface. Use `forge_get_sleep_overview` for review and `forge_update_sleep_session` to attach tags, notes, or Forge links to one night.
 - Sports is the workout review surface. Use `forge_get_sports_overview` for read access and `forge_update_workout_session` to add subjective effort, narrative meaning, tags, or links to one workout.
 - Training Load is the cardiovascular load surface. Use `forge_get_training_load_overview` for HR zones, acute/chronic load, smart training modes, and target fit.
@@ -191,9 +192,10 @@ Forge exposes several agent-facing surfaces that matter for OpenClaw:
 The curated plugin route surface now mirrors those capabilities directly:
 
 - Wiki: `/api/v1/wiki/settings`, `/api/v1/wiki/pages`, `/api/v1/wiki/pages/:id`, `/api/v1/wiki/search`, `/api/v1/wiki/health`, `/api/v1/wiki/sync`, `/api/v1/wiki/reindex`, `/api/v1/wiki/ingest-jobs`
+- Life Events: `/api/v1/life-events/timeline`, `/api/v1/life-events/:id`, `/api/v1/life-events/:id/calendar-sync`, `/api/v1/life-events/from-calendar-event`, `/api/v1/life-events/import-ticket`, `/api/v1/life-events/:id/travel-status`
 - Health: `/api/v1/health/sleep`, `/api/v1/health/sleep/:id`, `/api/v1/health/fitness`, `/api/v1/health/workouts/:id`
 
-The Forge UI routes are `/forge/wiki`, `/forge/sleep`, and `/forge/sports`.
+The Forge UI routes are `/forge/wiki`, `/forge/life-events`, `/forge/sleep`, and `/forge/sports`.
 The backend overview routes are `/api/v1/health/sleep` and
 `/api/v1/health/fitness` for sleep and sports respectively.
 
@@ -570,6 +572,11 @@ The curated tool contract is:
 - `forge_recommend_task_timeboxes`
 - `forge_create_task_timebox`
 - `forge_post_insight`
+- `forge_call_movement_route`
+- `forge_call_life_event_route`
+- `forge_call_life_force_route`
+- `forge_call_workbench_route`
+- `forge_call_artifact_route`
 
 Live work rule:
 

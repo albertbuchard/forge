@@ -247,6 +247,7 @@ const API_TAG_GROUPS = [
       "Task Runs",
       "Habits",
       "Calendar",
+      "Life Events",
       "Notes",
       "Tags",
       "Activity",
@@ -284,6 +285,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/life-force")) {
     return ["Life Force"];
+  }
+  if (path.startsWith("/api/v1/life-events")) {
+    return ["Life Events"];
   }
   if (path.startsWith("/api/v1/workbench")) {
     return ["Workbench"];
@@ -5726,6 +5730,327 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const crudEntityType = {
+    type: "string",
+    enum: [
+      "goal",
+      "project",
+      "task",
+      "strategy",
+      "habit",
+      "tag",
+      "note",
+      "insight",
+      "calendar_event",
+      "work_block_template",
+      "task_timebox",
+      "life_event",
+      "artifact",
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "flashcard",
+      "event_type",
+      "emotion_definition",
+      "trigger_report",
+      "preference_catalog",
+      "preference_catalog_item",
+      "preference_context",
+      "preference_item",
+      "questionnaire_instrument",
+      "sleep_session",
+      "workout_session"
+    ]
+  };
+
+  const lifeEventSegment = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "lifeEventId",
+      "segmentType",
+      "transportMode",
+      "sequenceIndex",
+      "title",
+      "startsAt",
+      "endsAt",
+      "timezone",
+      "originLabel",
+      "originIata",
+      "originIcao",
+      "originCity",
+      "originCountry",
+      "originLatitude",
+      "originLongitude",
+      "destinationLabel",
+      "destinationIata",
+      "destinationIcao",
+      "destinationCity",
+      "destinationCountry",
+      "destinationLatitude",
+      "destinationLongitude",
+      "carrierName",
+      "carrierCode",
+      "serviceNumber",
+      "bookingReference",
+      "terminal",
+      "gate",
+      "seat",
+      "status",
+      "statusSource",
+      "statusCheckedAt",
+      "routeGeometry",
+      "metadata",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      lifeEventId: { type: "string" },
+      segmentType: {
+        type: "string",
+        enum: [
+          "flight",
+          "train",
+          "car",
+          "boat",
+          "walking",
+          "lodging",
+          "activity",
+          "checkpoint",
+          "custom"
+        ]
+      },
+      transportMode: nullable({
+        type: "string",
+        enum: ["plane", "train", "car", "boat", "walking", "public_transit", "other"]
+      }),
+      sequenceIndex: { type: "integer", minimum: 0 },
+      title: { type: "string" },
+      startsAt: nullable({ type: "string", format: "date-time" }),
+      endsAt: nullable({ type: "string", format: "date-time" }),
+      timezone: { type: "string" },
+      originLabel: { type: "string" },
+      originIata: { type: "string" },
+      originIcao: { type: "string" },
+      originCity: { type: "string" },
+      originCountry: { type: "string" },
+      originLatitude: nullable({ type: "number" }),
+      originLongitude: nullable({ type: "number" }),
+      destinationLabel: { type: "string" },
+      destinationIata: { type: "string" },
+      destinationIcao: { type: "string" },
+      destinationCity: { type: "string" },
+      destinationCountry: { type: "string" },
+      destinationLatitude: nullable({ type: "number" }),
+      destinationLongitude: nullable({ type: "number" }),
+      carrierName: { type: "string" },
+      carrierCode: { type: "string" },
+      serviceNumber: { type: "string" },
+      bookingReference: { type: "string" },
+      terminal: { type: "string" },
+      gate: { type: "string" },
+      seat: { type: "string" },
+      status: { type: "string" },
+      statusSource: { type: "string" },
+      statusCheckedAt: nullable({ type: "string", format: "date-time" }),
+      routeGeometry: { type: "object", additionalProperties: true },
+      metadata: { type: "object", additionalProperties: true },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const lifeEvent = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "title",
+      "shortDescription",
+      "description",
+      "eventType",
+      "status",
+      "importance",
+      "startsAt",
+      "endsAt",
+      "timezone",
+      "isAllDay",
+      "placeLabel",
+      "placeAddress",
+      "placeTimezone",
+      "placeLatitude",
+      "placeLongitude",
+      "originLabel",
+      "originCity",
+      "originCountry",
+      "originLatitude",
+      "originLongitude",
+      "destinationLabel",
+      "destinationCity",
+      "destinationCountry",
+      "destinationLatitude",
+      "destinationLongitude",
+      "transportMode",
+      "primaryCalendarEventId",
+      "calendarSyncState",
+      "calendarMatchConfidence",
+      "sourceKind",
+      "sourceArtifactId",
+      "extractionStatus",
+      "extractionSummary",
+      "travelDetails",
+      "displayStyle",
+      "metadata",
+      "segments",
+      "links",
+      "deletedAt",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      title: { type: "string" },
+      shortDescription: { type: "string" },
+      description: { type: "string" },
+      eventType: {
+        type: "string",
+        enum: [
+          "travel_flight",
+          "travel_train",
+          "travel_car",
+          "travel_boat",
+          "travel_trip",
+          "concert",
+          "cinema",
+          "date",
+          "friends",
+          "family",
+          "work_milestone",
+          "thesis_milestone",
+          "medical",
+          "administrative",
+          "celebration",
+          "custom"
+        ]
+      },
+      status: {
+        type: "string",
+        enum: ["planned", "happening", "completed", "cancelled", "tentative"]
+      },
+      importance: {
+        type: "string",
+        enum: ["ordinary", "meaningful", "major", "life_changing"]
+      },
+      startsAt: { type: "string", format: "date-time" },
+      endsAt: { type: "string", format: "date-time" },
+      timezone: { type: "string" },
+      isAllDay: { type: "boolean" },
+      placeLabel: { type: "string" },
+      placeAddress: { type: "string" },
+      placeTimezone: { type: "string" },
+      placeLatitude: nullable({ type: "number" }),
+      placeLongitude: nullable({ type: "number" }),
+      originLabel: { type: "string" },
+      originCity: { type: "string" },
+      originCountry: { type: "string" },
+      originLatitude: nullable({ type: "number" }),
+      originLongitude: nullable({ type: "number" }),
+      destinationLabel: { type: "string" },
+      destinationCity: { type: "string" },
+      destinationCountry: { type: "string" },
+      destinationLatitude: nullable({ type: "number" }),
+      destinationLongitude: nullable({ type: "number" }),
+      transportMode: nullable({
+        type: "string",
+        enum: ["plane", "train", "car", "boat", "walking", "public_transit", "other"]
+      }),
+      primaryCalendarEventId: nullable({ type: "string" }),
+      calendarSyncState: {
+        type: "string",
+        enum: [
+          "not_synced",
+          "linked",
+          "matched",
+          "created",
+          "disabled",
+          "needs_review",
+          "error"
+        ]
+      },
+      calendarMatchConfidence: nullable({ type: "number", minimum: 0, maximum: 1 }),
+      sourceKind: {
+        type: "string",
+        enum: ["manual", "calendar", "artifact_ticket", "agent", "import"]
+      },
+      sourceArtifactId: nullable({ type: "string" }),
+      extractionStatus: {
+        type: "string",
+        enum: ["none", "pending", "drafted", "confirmed", "failed", "llm_unavailable"]
+      },
+      extractionSummary: { type: "object", additionalProperties: true },
+      travelDetails: { type: "object", additionalProperties: true },
+      displayStyle: { type: "object", additionalProperties: true },
+      metadata: { type: "object", additionalProperties: true },
+      segments: arrayOf({ $ref: "#/components/schemas/LifeEventSegment" }),
+      links: arrayOf({ $ref: "#/components/schemas/EntityLink" }),
+      deletedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const lifeEventTimelinePayload = {
+    type: "object",
+    additionalProperties: false,
+    required: ["events", "now", "nextLifeEventId", "limit", "offset"],
+    properties: {
+      events: arrayOf({ $ref: "#/components/schemas/LifeEvent" }),
+      now: { type: "string", format: "date-time" },
+      nextLifeEventId: nullable({ type: "string" }),
+      limit: { type: "integer", minimum: 1, maximum: 500 },
+      offset: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const lifeEventCalendarSyncInput = {
+    type: "object",
+    properties: {
+      projection: {
+        type: "string",
+        enum: ["link_or_create", "link_existing_only", "none"],
+        default: "link_or_create"
+      },
+      preferredCalendarId: nullable({ type: "string" })
+    }
+  };
+
+  const lifeEventFromCalendarInput = {
+    type: "object",
+    required: ["calendarEventId"],
+    properties: {
+      calendarEventId: { type: "string" },
+      eventType: { type: "string", default: "custom" },
+      importance: { type: "string", default: "meaningful" }
+    }
+  };
+
+  const lifeEventTicketImportInput = {
+    type: "object",
+    required: ["artifactId"],
+    properties: {
+      artifactId: { type: "string" },
+      extractedText: { type: "string" },
+      createDraft: { type: "boolean", default: false },
+      useLlm: { type: "boolean", default: false },
+      llmProfileId: { type: "string" }
+    }
+  };
+
   const artifactScanFinding = {
     type: "object",
     required: ["code", "severity", "message"],
@@ -6198,8 +6523,15 @@ export function buildOpenApiDocument() {
         Note: note,
         NoteSummary: noteSummary,
         NotesSummaryByEntity: notesSummaryByEntity,
+        CrudEntityType: crudEntityType,
         EntityLink: entityLink,
         EntityLinkInput: entityLinkInput,
+        LifeEventSegment: lifeEventSegment,
+        LifeEvent: lifeEvent,
+        LifeEventTimelinePayload: lifeEventTimelinePayload,
+        LifeEventCalendarSyncInput: lifeEventCalendarSyncInput,
+        LifeEventFromCalendarInput: lifeEventFromCalendarInput,
+        LifeEventTicketImportInput: lifeEventTicketImportInput,
         ArtifactScanFinding: artifactScanFinding,
         ArtifactScanResult: artifactScanResult,
         ArtifactContentProtection: artifactContentProtection,
@@ -6698,6 +7030,226 @@ export function buildOpenApiDocument() {
                 }
               },
               "Artifact audit events"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/timeline": {
+        get: {
+          summary: "Read the virtualized Life Events chronology",
+          description:
+            "Returns chronological Life Event records for the dedicated timeline view. Normal stored life_event create, update, delete, restore, and search still use shared batch entity routes.",
+          parameters: [
+            {
+              name: "from",
+              in: "query",
+              schema: { type: "string", format: "date-time" }
+            },
+            {
+              name: "to",
+              in: "query",
+              schema: { type: "string", format: "date-time" }
+            },
+            {
+              name: "eventTypes",
+              in: "query",
+              schema: { type: "string" },
+              description:
+                "Comma-separated or repeated event type values such as travel_flight, concert, family, or custom."
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 500 }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["timeline"],
+                properties: {
+                  timeline: {
+                    $ref: "#/components/schemas/LifeEventTimelinePayload"
+                  }
+                }
+              },
+              "Life Events timeline"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/{id}": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        get: {
+          summary: "Read one Life Event",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["lifeEvent"],
+                properties: {
+                  lifeEvent: { $ref: "#/components/schemas/LifeEvent" }
+                }
+              },
+              "Life Event"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/{id}/calendar-sync": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        post: {
+          summary: "Link or project a Life Event into the calendar",
+          description:
+            "Searches for an existing calendar_event first. If a match is found, Forge links through entity_links and calendar event links. If no match is found and projection is link_or_create, Forge creates a native calendar_event.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/LifeEventCalendarSyncInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["lifeEvent", "calendarEvent", "action", "confidence"],
+                properties: {
+                  lifeEvent: { $ref: "#/components/schemas/LifeEvent" },
+                  calendarEvent: nullable({
+                    $ref: "#/components/schemas/CalendarEvent"
+                  }),
+                  action: { type: "string" },
+                  confidence: nullable({ type: "number" })
+                }
+              },
+              "Calendar reconciliation result"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/from-calendar-event": {
+        post: {
+          summary: "Create or link a Life Event from a calendar event",
+          description:
+            "Calendar UI action for marking an existing calendar_event as a Life Event. The relationship is stored through generic entity_links and mirrored to the calendar event link list.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/LifeEventFromCalendarInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["lifeEvent", "calendarEvent", "action"],
+                properties: {
+                  lifeEvent: { $ref: "#/components/schemas/LifeEvent" },
+                  calendarEvent: nullable({
+                    $ref: "#/components/schemas/CalendarEvent"
+                  }),
+                  action: { type: "string" }
+                }
+              },
+              "Life Event calendar conversion result"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/import-ticket": {
+        post: {
+          summary: "Draft or create a travel Life Event from a ticket artifact",
+          description:
+            "Uses an existing Artifact Store artifact as the ticket source. Agents must upload through Artifact Store first and must not download, execute, or parse stored bytes directly. Optional LLM extraction is only used when configured and approved.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/LifeEventTicketImportInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["draft", "artifact", "lifeEvent", "action"],
+                properties: {
+                  draft: { type: "object", additionalProperties: true },
+                  artifact: { $ref: "#/components/schemas/Artifact" },
+                  lifeEvent: nullable({
+                    $ref: "#/components/schemas/LifeEvent"
+                  }),
+                  action: { type: "string" }
+                }
+              },
+              "Ticket import result"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/life-events/{id}/travel-status": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        get: {
+          summary: "Read Life Event travel status",
+          description:
+            "Returns scheduled travel status by default. Optional live providers such as OpenSky, FlightAware AeroAPI, AeroDataBox, Aviationstack, or ADS-B Exchange are provider abstractions and require configuration, rate limiting, and caching.",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: {
+                    type: "object",
+                    additionalProperties: true
+                  }
+                }
+              },
+              "Travel status"
             ),
             default: { $ref: "#/components/responses/Error" }
           }

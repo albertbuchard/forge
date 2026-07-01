@@ -55,6 +55,11 @@ export const LifeForcePage = lazy(() =>
     default: module.LifeForcePage
   }))
 );
+export const LifeEventsPage = lazy(() =>
+  import("@/pages/life-events-page").then((module) => ({
+    default: module.LifeEventsPage
+  }))
+);
 export const MovementPage = lazy(() =>
   import("@/pages/movement-page").then((module) => ({
     default: module.MovementPage

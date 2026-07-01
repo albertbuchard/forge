@@ -110,10 +110,10 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/never save a name-only food/i);
     expect(openclawSkill).toMatch(/Batch CRUD is the default for simple entities|shared batch entity tools/i);
     expect(openclawSkill).toMatch(
-      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and three specialized domain surfaces/i
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and four specialized domain surfaces/i
     );
-    expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Force, and Workbench/i);
-    expect(openclawSkill).toMatch(/dedicated route families instead of forcing them through batch CRUD/i);
+    expect(openclawSkill).toMatch(/specialized domain surfaces are Movement, Life Events, Life Force, and Workbench/i);
+    expect(openclawSkill).toMatch(/dedicated route families for domain actions/i);
     expect(openclawSkill).toMatch(/Movement is a specialized domain surface, not batch CRUD/i);
     expect(openclawSkill).toMatch(/Life Force is a specialized domain surface, not batch CRUD/i);
     expect(openclawSkill).toMatch(/Workbench is a specialized domain surface, not batch CRUD/i);
@@ -127,7 +127,7 @@ describe("forge skill playbook parity", () => {
         /start, continue, complete, adjust, judge, signal, publish, sync,\s+or\s+observe/i
       );
       expect(skill).toMatch(
-        /Movement, Life Force, and Workbench[\s\S]*review, correct,\s+repair, run, inspect,\s+publish,\s+or\s+preserve/i
+        /Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct,\s+repair, run, inspect,\s+publish,\s+preserve,\s+calendar-sync,\s+ticket-import,\s+or\s+status/i
       );
       expect(skill).toMatch(/formulation before storage/i);
       expect(skill).toMatch(/Batch CRUD is the default for normal stored entities/i);
@@ -139,7 +139,7 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/forge_get_operator_overview[\s\S]*forge_get_operator_context[\s\S]*forge_get_calendar_overview/i);
       expect(skill).toMatch(/wiki_page[\s\S]*calendar_connection[\s\S]*specialized CRUD surfaces/i);
       expect(skill).toMatch(/task_run[\s\S]*work_adjustment[\s\S]*questionnaire_run[\s\S]*preference_judgment[\s\S]*preference_signal[\s\S]*self_observation[\s\S]*action workflows/i);
-      expect(skill).toMatch(/Movement, Life Force, and Workbench are specialized domain surfaces/i);
+      expect(skill).toMatch(/Movement, Life Events, Life Force, and Workbench are specialized domain surfaces/i);
       expect(skill).toMatch(/entityRouteModel\.specializedDomainSurfaces/i);
       expect(skill).toMatch(/forge_call_movement_route/);
       expect(skill).toMatch(/forge_call_life_force_route/);
@@ -210,7 +210,7 @@ describe("forge skill playbook parity", () => {
       expect(skill).toMatch(/Search before creating duplicates|check for duplicates/i);
       expect(skill).toMatch(/review-first requests/i);
       expect(skill).toMatch(
-        /shared batch search or read hints[\s\S]*wiki\/calendar[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+        /shared batch search or read hints[\s\S]*wiki\/calendar[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
       );
       expect(skill).toMatch(
         /answer the practical question[\s\S]*before asking for any save, correction,\s+link,\s+run, enrichment, or publish detail/i
@@ -328,7 +328,7 @@ describe("forge skill playbook parity", () => {
     expect(hermesSkill).toMatch(/DELETE \/api\/v1\/workbench\/flows\/:id/i);
     expect(hermesSkill).toMatch(/\/api\/v1\/workbench\/flows\/:id\/chat/i);
     expect(hermesSkill).toMatch(
-      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and three specialized domain surfaces/i
+      /four major stored-entity surfaces,\s+read-model surfaces,\s+specialized CRUD surfaces,\s+and four specialized domain surfaces/i
     );
     expect(hermesSkill).toMatch(/specialized domain surfaces are Movement,[\s\S]*Life Force,[\s\S]*Workbench/i);
     expect(hermesSkill).toMatch(/dedicated route families instead of[\s\S]*batch CRUD/i);
@@ -338,8 +338,8 @@ describe("forge skill playbook parity", () => {
     expect(codexSkill).toMatch(/forge_adjust_work_minutes/);
     expect(codexSkill).toMatch(/preference_judgment/i);
     expect(codexSkill).toMatch(/preference_signal/i);
-    expect(codexSkill).toMatch(/specialized Movement, Life Force, and Workbench domain surfaces/i);
-    expect(codexSkill).toMatch(/Movement, Life Force, and Workbench use dedicated route[\s\S]*batch CRUD/i);
+    expect(codexSkill).toMatch(/specialized Movement, Life Events, Life Force, and Workbench domain surfaces/i);
+    expect(codexSkill).toMatch(/Movement, Life Events, Life Force, and Workbench use dedicated route[\s\S]*batch CRUD/i);
     expect(codexSkill).toMatch(/item\.foodId/);
     expect(codexSkill).toMatch(/name-only custom foods/i);
 
@@ -518,7 +518,7 @@ describe("forge skill playbook parity", () => {
     );
     expect(entityPlaybook).toMatch(/stable public input contract or published output/i);
     expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
-    expect(entityPlaybook).toMatch(/Movement, Life Force, or Workbench work/i);
+    expect(entityPlaybook).toMatch(/Movement, Life Events, Life Force, or Workbench work/i);
     expect(entityPlaybook).toMatch(/Do not promote self-observation over functional analysis/i);
     expect(entityPlaybook).toMatch(/behavior_pattern` for recurring loops|Use `behavior_pattern` for a recurring loop/i);
     expect(entityPlaybook).toMatch(/wiki_page` when the user wants durable memory|Use `wiki_page` when the user wants durable memory/i);

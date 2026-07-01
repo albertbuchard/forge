@@ -49,6 +49,9 @@ spreadsheets, documents, PDFs, structured text, plain text, and images. Artifact
 precise metadata, provenance, static safety scans, danger scores, versions, audit history,
 and human-only downloads while using the general Forge entity-link graph to connect files
 to goals, projects, tasks, wiki pages, Psyche records, calendar records, and notes. The
+chronological memory side includes Life Events for important personal events, with
+calendar reconciliation, ticket artifact import, travel segments, status reads, and links
+back into the same general Forge entity graph.
 companion side includes the iPhone app and related agent/tooling surfaces. All of those
 pieces should use one shared entity language and one shared data model.
 

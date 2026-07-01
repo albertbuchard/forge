@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-01T10:39:13.360Z",
+  "generatedAt": "2026-07-01T11:32:16.043Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -99,6 +99,27 @@
         "Optional LLM enrichment can fill missing metadata, but it must not lower the deterministic scanner danger score."
       ],
       "example": "{\"routeKey\":\"replaceGenericLinks\",\"pathParams\":{\"id\":\"artifact_123\"},\"body\":{\"links\":[{\"entityType\":\"wiki_page\",\"entityId\":\"note_budget_model\",\"relationship\":\"embedded_reference\",\"anchorKey\":\"budget-workbook\"}]}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_life_event_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Life Event Route",
+      "summary": "Call one allowed Life Events route for timeline reads, one-event reads, calendar sync, calendar-to-Life-Event marking, trusted ticket-artifact import, or travel-status reads.",
+      "whenToUse": "Use after the job has narrowed to Life Events chronology, calendar reconciliation, ticket import, or travel status. Use shared batch CRUD for normal stored life_event create, update, search, delete, and restore.",
+      "inputShape": "{ routeKey: \"timeline\"|\"read\"|\"calendarSync\"|\"fromCalendarEvent\"|\"importTicket\"|\"travelStatus\", pathParams?: { id?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Choose routeKey from live onboarding specializedDomainSurfaces.lifeEvents routeKeys and methodRoutes.",
+        "Use batch create/update/delete/restore/search for the stored life_event record. The dedicated routes are for the chronology view and actions around calendar, ticket import, and status reads.",
+        "Fill every :id placeholder through pathParams.id; do not put ids inside routeKey, query, or body when the route path has :id.",
+        "Use importTicket with a trusted Artifact Store artifactId. It must link through generic entity_links and must not execute or autonomously open stored file bytes.",
+        "After calendarSync, fromCalendarEvent, or importTicket, read back the Life Events timeline or event detail when that verifies the user's practical goal."
+      ],
+      "example": "{\"routeKey\":\"calendarSync\",\"pathParams\":{\"id\":\"lifeevent_123\"},\"body\":{\"projection\":\"link_or_create\"}}",
       "catalogDocumented": true
     },
     {

@@ -165,6 +165,13 @@ import { createProject, deleteProject, getProjectById, listProjects, updateProje
 import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
 import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
+import {
+  createLifeEvent,
+  deleteLifeEvent,
+  getLifeEventById,
+  listLifeEvents,
+  updateLifeEvent
+} from "../repositories/life-events.js";
 import type {
   ActivitySource,
   BatchCreateEntitiesInput,
@@ -182,6 +189,7 @@ import {
   createGoalSchema,
   createHabitSchema,
   createInsightSchema,
+  createLifeEventSchema,
   createNoteSchema,
   createProjectSchema,
   createStrategySchema,
@@ -193,6 +201,7 @@ import {
   updateGoalSchema,
   updateHabitSchema,
   updateInsightSchema,
+  updateLifeEventSchema,
   updateNoteSchema,
   updateProjectSchema,
   updateStrategySchema,
@@ -413,6 +422,17 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     create: (data) => createTaskTimebox(data as never) as Record<string, unknown>,
     update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,
     hardDelete: (id) => deleteTaskTimebox(id) as Record<string, unknown> | undefined
+  },
+  life_event: {
+    entityType: "life_event",
+    routeBase: "/api/v1/life-events",
+    deleteMode: "soft_default",
+    inBin: true,
+    list: () => listLifeEvents() as Array<Record<string, unknown>>,
+    get: (id) => getLifeEventById(id) as Record<string, unknown> | undefined,
+    create: (data, context) => createLifeEvent(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) => updateLifeEvent(id, patch as never, context) as Record<string, unknown> | undefined,
+    hardDelete: (id, context) => deleteLifeEvent(id, context) as Record<string, unknown> | undefined
   },
   artifact: {
     entityType: "artifact",
@@ -657,6 +677,7 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: createCalendarEventSchema,
   work_block_template: createWorkBlockTemplateSchema,
   task_timebox: createTaskTimeboxSchema,
+  life_event: createLifeEventSchema,
   artifact: artifactMetadataCreateSchema,
   sleep_session: createSleepSessionSchema,
   workout_session: createWorkoutSessionSchema,
@@ -689,6 +710,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   calendar_event: updateCalendarEventSchema,
   work_block_template: updateWorkBlockTemplateSchema,
   task_timebox: updateTaskTimeboxSchema,
+  life_event: updateLifeEventSchema,
   artifact: artifactMetadataPatchSchema,
   sleep_session: updateSleepSessionSchema,
   workout_session: updateWorkoutSessionSchema,
@@ -1027,6 +1049,17 @@ function describeEntity(entityType: CrudEntityType, entity: Record<string, unkno
   return { title, subtitle };
 }
 
+function linkMatchesTarget(link: unknown, linkedTo: { entityType: CrudEntityType; id: string }) {
+  if (typeof link !== "object" || link === null) {
+    return false;
+  }
+  const candidate = link as Record<string, unknown>;
+  return (
+    (candidate.entityType === linkedTo.entityType && candidate.entityId === linkedTo.id) ||
+    (candidate.targetEntityType === linkedTo.entityType && candidate.targetEntityId === linkedTo.id)
+  );
+}
+
 function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unknown>, linkedTo: { entityType: CrudEntityType; id: string }) {
   switch (entityType) {
     case "project":
@@ -1048,32 +1081,17 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
     case "note":
       return (
         Array.isArray(entity.links) &&
-        entity.links.some(
-          (link) =>
-            typeof link === "object" &&
-            link !== null &&
-            "entityType" in link &&
-            "entityId" in link &&
-            link.entityType === linkedTo.entityType &&
-            link.entityId === linkedTo.id
-        )
+        entity.links.some((link) => linkMatchesTarget(link, linkedTo))
       );
     case "insight":
       return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
     case "calendar_event":
+    case "life_event":
     case "sleep_session":
     case "workout_session":
       return (
         Array.isArray(entity.links) &&
-        entity.links.some(
-          (link) =>
-            typeof link === "object" &&
-            link !== null &&
-            "entityType" in link &&
-            "entityId" in link &&
-            link.entityType === linkedTo.entityType &&
-            link.entityId === linkedTo.id
-        )
+        entity.links.some((link) => linkMatchesTarget(link, linkedTo))
       );
     case "task_timebox":
       return (
@@ -1083,15 +1101,7 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
     case "artifact":
       return (
         Array.isArray(entity.links) &&
-        entity.links.some(
-          (link) =>
-            typeof link === "object" &&
-            link !== null &&
-            "entityType" in link &&
-            "entityId" in link &&
-            link.entityType === linkedTo.entityType &&
-            link.entityId === linkedTo.id
-        )
+        entity.links.some((link) => linkMatchesTarget(link, linkedTo))
       );
     case "psyche_value":
       return (

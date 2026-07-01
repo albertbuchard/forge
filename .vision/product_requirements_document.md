@@ -46,6 +46,8 @@ Psyche flashcards are first-class Psyche records stored through shared batch CRU
 
 The Artifact Store is a first-class specialized CRUD surface for trusted files. It stores spreadsheets, documents, presentations, PDFs, plain text, structured text, and images as content-addressed blobs with metadata rows, versions, static safety scans, danger scores, provenance, and audit events. Artifacts are linkable Forge entities, but their relationships must use the reusable `entity_links` model rather than an artifact-specific link table or schema. Agents may list, upload with trusted scoped authority, update metadata, replace generic entity links, rescan, request LLM metadata enrichment, and read versions or audit events. Agents must not download, open, execute, preview, or transform artifact bytes; downloads are a human web/API action only.
 
+Life Events are a first-class chronological memory surface. They store important personal events in a linear timeline with start/end time, place, type, importance, calendar relationship, artifact relationship, travel details, segments, extraction state, and generic links to other Forge entities. The web view must be virtualized and must use Forge guided modal flows for event creation and ticket import. Life Events use shared batch CRUD for normal `life_event` record create, update, search, delete, restore, and generic links; they use a dedicated `/api/v1/life-events/*` route family for timeline reads, one-event reads, calendar reconciliation, marking a calendar event as a Life Event, trusted ticket artifact import, and travel-status reads.
+
 ## Core Requirements
 
 ### 1. Project Management Hierarchy
@@ -278,6 +280,48 @@ Agent-facing surfaces must expose the same contract:
 - Batch CRUD may search, update, soft-delete, restore, and hard-delete artifact metadata only; it must not create file artifacts or expose bytes.
 - Agent tools must not expose the download route.
 - Wiki and other entity surfaces may embed or reference artifacts through normal Forge links to `/artifacts/:id` and through general entity links, not through a separate artifact-link model.
+
+### 10B. Life Events Contract
+
+Life Events are the structured memory surface for important events in time. They are linked to the calendar but remain their own Forge entity because they preserve significance, context, evidence, travel details, and relationships beyond scheduling.
+
+Life Event records must include durable metadata:
+
+- title
+- short description and long description
+- event type
+- status and importance
+- start and end time, timezone, and all-day flag
+- place label, address, timezone, and optional coordinates
+- origin and destination labels, cities, countries, and optional coordinates
+- transport mode
+- primary calendar event id, sync state, and match confidence
+- source kind, source artifact id, extraction status, and extraction summary
+- travel details, display style, metadata, segments, ownership, timestamps, and deletion state
+- generic entity links to calendar events, artifacts, wiki pages, goals, projects, tasks, Psyche records, notes, movement context, and other Forge entities
+
+The supported route model is split deliberately:
+
+- normal `life_event` create, update, search, soft delete, restore, hard delete, and generic links use shared batch entity routes
+- `GET /api/v1/life-events/timeline` powers the virtualized chronology view
+- `GET /api/v1/life-events/:id` reads one event with segments and links
+- `POST /api/v1/life-events/:id/calendar-sync` links or creates the corresponding calendar event
+- `POST /api/v1/life-events/from-calendar-event` creates or links a Life Event from an existing `calendar_event`
+- `POST /api/v1/life-events/import-ticket` drafts or creates a travel Life Event from a trusted Artifact Store artifact
+- `GET /api/v1/life-events/:id/travel-status` reads scheduled or provider-backed travel status
+
+Life Event ticket import must start from a trusted Artifact Store artifact. Agents must not download, execute, decrypt, preview, transform, or independently parse stored artifact bytes. If LLM extraction is requested, it must use an approved configured extraction path and must expose when LLM extraction is unavailable rather than silently guessing.
+
+The Life Events web app surface must:
+
+- render a fast virtualized timeline that handles many events without crowding the UI
+- show past, current, and future events clearly
+- provide type-specific cards for travel, flights, train/car/boat trips, concerts, cinema, dates, friends/family, work or thesis milestones, health/admin events, celebrations, and custom events
+- use guided modal forms for event creation and ticket import
+- allow multiple ticket files in one import flow, with per-file review where missing information needs attention
+- use calendar reconciliation both directions: Life Event to calendar and calendar event to Life Event
+- keep maps and status detail lazy so the timeline stays responsive
+- use generic entity links for all cross-entity relationships
 
 ### 11. Health Workout Adapter Contract
 

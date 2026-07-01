@@ -72,6 +72,20 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).not.toContain("GET /api/v1/artifacts/:id/download");
     expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/download");
     expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/encrypt");
+    expect(report.mirrored).toContain("GET /api/v1/life-events/timeline");
+    expect(report.mirrored).toContain("GET /api/v1/life-events/:id");
+    expect(report.mirrored).toContain(
+      "POST /api/v1/life-events/:id/calendar-sync"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/life-events/from-calendar-event"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/life-events/import-ticket"
+    );
+    expect(report.mirrored).toContain(
+      "GET /api/v1/life-events/:id/travel-status"
+    );
     expect(report.mirrored).toContain("GET /api/v1/calendar/overview");
     expect(report.mirrored).toContain(
       "GET /api/v1/calendar/macos-local/discovery"
@@ -150,6 +164,18 @@ describe("forge plugin route parity", () => {
     );
     expect(supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)).toBe(
       false
+    );
+    expect(supported.has("GET /api/v1/life-events/timeline")).toBe(true);
+    expect(supported.has("GET /api/v1/life-events/:id")).toBe(true);
+    expect(supported.has("POST /api/v1/life-events/:id/calendar-sync")).toBe(
+      true
+    );
+    expect(supported.has("POST /api/v1/life-events/from-calendar-event")).toBe(
+      true
+    );
+    expect(supported.has("POST /api/v1/life-events/import-ticket")).toBe(true);
+    expect(supported.has("GET /api/v1/life-events/:id/travel-status")).toBe(
+      true
     );
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
     expect(supported.has("GET /api/v1/calendar/macos-local/discovery")).toBe(
@@ -253,6 +279,19 @@ describe("forge plugin route parity", () => {
         `${route} should stay mirrored`
       ).toBe(true);
     }
+    for (const route of [
+      "GET /api/v1/life-events/timeline",
+      "GET /api/v1/life-events/:id",
+      "POST /api/v1/life-events/:id/calendar-sync",
+      "POST /api/v1/life-events/from-calendar-event",
+      "POST /api/v1/life-events/import-ticket",
+      "GET /api/v1/life-events/:id/travel-status"
+    ]) {
+      expect(
+        supported.has(route as ApiRouteKey),
+        `${route} should stay mirrored`
+      ).toBe(true);
+    }
     expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
       false
     );
@@ -292,6 +331,12 @@ describe("forge plugin route parity", () => {
     expect(purposeByRoute.get("POST /api/v1/artifacts/:id/links")).toBe(
       "artifact"
     );
+    expect(purposeByRoute.get("GET /api/v1/life-events/timeline")).toBe(
+      "life_event"
+    );
+    expect(
+      purposeByRoute.get("POST /api/v1/life-events/from-calendar-event")
+    ).toBe("life_event");
     expect(purposeByRoute.get("GET /api/v1/artifacts/:id/download")).toBeUndefined();
   });
 

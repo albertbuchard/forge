@@ -14,6 +14,7 @@ import {
   HeartPulse,
   LayoutDashboard,
   Map,
+  Milestone,
   Moon,
   Network,
   NotebookPen,
@@ -98,6 +99,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.calendar",
     detailKey: "common.routeDetails.calendar",
     icon: CalendarDays
+  },
+  {
+    id: "life-events",
+    to: "/life-events",
+    label: "Life Events",
+    detail: ROUTE_VIEW_CATALOG["life-events-index"].description,
+    icon: Milestone
   },
   {
     id: "knowledge-graph",

@@ -774,6 +774,66 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     ]
   },
   {
+    path: "/forge/v1/life-events",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/life-events\/timeline$/,
+        upstreamPath: "/api/v1/life-events/timeline",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-events/timeline", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/life-events\/from-calendar-event$/,
+        upstreamPath: "/api/v1/life-events/from-calendar-event",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-events/from-calendar-event", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/life-events\/import-ticket$/,
+        upstreamPath: "/api/v1/life-events/import-ticket",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/life-events/import-ticket", url)
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/life-events\/([^/]+)$/,
+        upstreamPath: "/api/v1/life-events/:id",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(`/api/v1/life-events/${match[1]}`, url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/life-events\/([^/]+)\/calendar-sync$/,
+        upstreamPath: "/api/v1/life-events/:id/calendar-sync",
+        requestBody: "json",
+        requiresToken: true,
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/life-events/${match[1]}/calendar-sync`,
+            url
+          )
+      },
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/life-events\/([^/]+)\/travel-status$/,
+        upstreamPath: "/api/v1/life-events/:id/travel-status",
+        target: (match: RegExpMatchArray, url: URL) =>
+          passthroughSearch(
+            `/api/v1/life-events/${match[1]}/travel-status`,
+            url
+          )
+      }
+    ]
+  },
+  {
     path: "/forge/v1/calendar",
     match: "prefix",
     operations: [

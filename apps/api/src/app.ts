@@ -342,6 +342,18 @@ import {
   updateTaskTimebox,
   updateWorkBlockTemplate
 } from "./repositories/calendar.js";
+import {
+  createLifeEventFromCalendar,
+  getLifeEventById,
+  getLifeEventTravelStatus,
+  importLifeEventTicket,
+  lifeEventCalendarSyncInputSchema,
+  lifeEventFromCalendarInputSchema,
+  lifeEventTicketImportInputSchema,
+  lifeEventTimelineQuerySchema,
+  listLifeEventTimeline,
+  syncLifeEventCalendar
+} from "./repositories/life-events.js";
 import { getDashboard } from "./services/dashboard.js";
 import {
   getOverviewContext,
@@ -2968,6 +2980,7 @@ const AGENT_ONBOARDING_BATCH_ROUTE_BASES = {
   calendar_event: "/api/v1/calendar/events",
   work_block_template: "/api/v1/calendar/work-block-templates",
   task_timebox: "/api/v1/calendar/timeboxes",
+  life_event: "/api/v1/life-events",
   sleep_session: "/api/v1/health/sleep",
   workout_session: "/api/v1/health/workouts",
   psyche_value: "/api/v1/psyche/values",
@@ -3046,6 +3059,9 @@ function classifyOnboardingEntity(
 }
 
 function buildPreferredMutationPath(entityType: string) {
+  if (entityType === "life_event") {
+    return "Use shared batch CRUD for ordinary life_event create, search, update, delete, and restore. Use dedicated Life Event routes for chronology and actions: GET /api/v1/life-events/timeline, POST /api/v1/life-events/:id/calendar-sync, POST /api/v1/life-events/from-calendar-event, POST /api/v1/life-events/import-ticket, and GET /api/v1/life-events/:id/travel-status.";
+  }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
   }
@@ -3088,6 +3104,9 @@ function buildPreferredMutationPath(entityType: string) {
 }
 
 function buildPreferredMutationTool(entityType: string) {
+  if (entityType === "life_event") {
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_call_life_event_route";
+  }
   if (entityType === "sleep_session") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_sleep_session for reflective enrichment after review";
   }
@@ -3130,6 +3149,9 @@ function buildPreferredMutationTool(entityType: string) {
 }
 
 function buildPreferredReadPath(entityType: string) {
+  if (entityType === "life_event") {
+    return "/api/v1/life-events/timeline | /api/v1/life-events/:id | /api/v1/entities/search";
+  }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return AGENT_ONBOARDING_BATCH_ROUTE_BASES[
       entityType as keyof typeof AGENT_ONBOARDING_BATCH_ROUTE_BASES
@@ -3828,6 +3850,63 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ]
   }),
   enrichOnboardingEntityGuide({
+    entityType: "life_event",
+    purpose:
+      "A chronological record for an important life event, shown in the Life Events timeline and optionally projected to the calendar.",
+    minimumCreateFields: ["title", "startsAt"],
+    relationshipRules: [
+      "Use shared batch CRUD for the stored life_event record.",
+      "Use generic entity_links for every relationship to artifacts, calendar events, wiki-backed notes, goals, tasks, Psyche records, health records, and other Forge entities.",
+      "Use the dedicated Life Event routes for the timeline read model, ticket import, calendar reconciliation, calendar-to-life-event conversion, and travel status.",
+      "Do not create a special ticket-link or calendar-link model in agent reasoning. Tickets are Artifact Store records linked through entity_links; calendar projections are calendar_event records linked through entity_links and calendar event links."
+    ],
+    searchHints: [
+      "Ask first what happened or will happen, when it starts, where it is, how the user gets there or participates, and why it belongs in the Life Events timeline.",
+      "For travel, ask origin, destination, departure, arrival, transport mode, and whether a ticket or confirmation should be uploaded for extraction.",
+      "Before saving, search calendar_event and life_event for likely duplicates by title, time, location, and travel identifiers.",
+      "If a calendar event already exists, link it; if none exists and the user wants calendar projection, create the calendar_event through Life Event calendar sync.",
+      "For ticket flows, upload the file through Artifact Store first, never download or execute file bytes as an agent, then call the Life Event import-ticket route to produce a reviewed draft."
+    ],
+    fieldGuide: [
+      {
+        name: "title",
+        type: "string",
+        required: true,
+        description: "Human title for the event."
+      },
+      {
+        name: "eventType",
+        type: "travel_flight | travel_train | travel_car | travel_boat | travel_trip | concert | cinema | date | friends | family | work_milestone | thesis_milestone | medical | administrative | celebration | custom",
+        required: false,
+        description: "Specific card family for timeline rendering and intake questions."
+      },
+      {
+        name: "startsAt",
+        type: "datetime",
+        required: true,
+        description: "When the event starts or when the user should leave/show up."
+      },
+      {
+        name: "endsAt",
+        type: "datetime",
+        required: false,
+        description: "When it ends or arrives. Forge defaults a one-hour placeholder when missing."
+      },
+      {
+        name: "transportMode",
+        type: "plane | train | car | boat | walking | public_transit | other",
+        required: false,
+        description: "Travel mode for route/status cards."
+      },
+      {
+        name: "links",
+        type: "Array<{ entityType, entityId, anchorKey?, relationship? }>",
+        required: false,
+        description: "Generic Forge entity links stored through entity_links."
+      }
+    ]
+  }),
+  enrichOnboardingEntityGuide({
     entityType: "artifact",
     purpose:
       "A trusted stored file artifact with precise metadata, provenance, static safety scan results, optional LLM-assisted metadata enrichment, generic links to other Forge entities, version history, audit events, and human-only download access.",
@@ -4044,7 +4123,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
   "Use the active-listening turn contract before deepening: reflect the specific stake, working shape, or product object in one sentence; decide internally whether the next answer would change wording, placement, timing, route scope, support action, verification read, preservation choice, or consent; then ask one question. For Psyche, name the felt stake, protection, prediction, payoff, cost, or value conflict, and when a functional loop or belief sentence is already visible, offer one tentative hypothesis plus one fit-or-correction question instead of another broad exploration. For logistical records, keep the reflection short and ask for the operational detail.",
   "Before asking a follow-up, know what the user's answer would change: save, update, review, link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If no possible answer would change the next action, summarize and act instead of asking.",
-  "Use a minimum save-readiness checkpoint before asking another follow-up. For normal batch entities, act when you have accepted wording, meaningful body, and any ownership or placement that changes later use; do not ask for tags, links, priority, dates, assignees, or status just because optional fields exist. For operational records, act when the target action plus the time, object, or state that makes it truthful is clear. For read-model surfaces, read once the practical question and answer-changing scope are clear. For specialized Movement, Life Force, and Workbench writes, act once the lane plus target span/object/weekday/flow/run/node and intended correction or effect are clear.",
+  "Use a minimum save-readiness checkpoint before asking another follow-up. For normal batch entities, act when you have accepted wording, meaningful body, and any ownership or placement that changes later use; do not ask for tags, links, priority, dates, assignees, or status just because optional fields exist. For operational records, act when the target action plus the time, object, or state that makes it truthful is clear. For read-model surfaces, read once the practical question and answer-changing scope are clear. For specialized Movement, Life Events, Life Force, and Workbench writes, act once the lane plus target span/object/weekday/flow/run/node and intended correction or effect are clear.",
   "For strategic, reflective, or emotionally meaningful non-Psyche records, ask what feels important to keep true before you ask for labels, dates, or taxonomy.",
   "For reflection-sensitive non-Psyche records such as questionnaire_instrument, questionnaire_run, self_observation, reflective note, wiki_page, sleep_session, workout_session, preference_judgment, and preference_signal, first ask what the reflection should help the user understand, decide, notice, remember, or change later; then keep the API posture exact: batch CRUD for normal stored records, questionnaire run actions for answer lifecycle, self-observation calendar reads plus observed-note writes, and wiki routes for wiki pages.",
   "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
@@ -4053,7 +4132,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For direct update or review requests, the next question should usually narrow the saved object, timeframe, or route family instead of reopening the whole meaning-making arc.",
   "For updates, start with the smallest thing that now feels wrong, newly true, or newly visible rather than restarting the whole story.",
   "For review requests, ask what practical question the user wants the read to answer before you ask for more scope.",
-  "For review-first requests, use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail.",
+  "For review-first requests, use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Events, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail.",
   "After a review, overview, navigation, or specialized read returns data, first answer the user's practical question in plain language, then name one implication or uncertainty that matters for the next decision. Ask a follow-up only if it changes the next action: save, update, correct, link, schedule, run, publish, enrich, or open the UI.",
   "After a read, make the read's decision value explicit: what it rules in, what it rules out, and what one uncertainty remains. If no answer-changing uncertainty remains, close cleanly.",
   "Treat userId, owner, and human/bot assignees as accountability and scope, not as opening form fields. Ask whose record or owner scope matters only when it changes visibility, review results, collaboration, automation behavior, or later filtering.",
@@ -4061,7 +4140,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "The opening question should help the user understand what they are actually trying to save, decide, review, or change, not make them perform the schema out loud.",
   "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
   "Use the known-target fast path when the user already supplied the object, action, and likely lane: for normal entities ask only for parent, owner, or duplicate disambiguation that changes the write; for task hierarchy ask only for the project, issue, or parent task that changes placement; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice; for direct Psyche saves ask one accuracy or consent question instead of restarting exploration.",
-  "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for catalog entities, use named tools or documented routes for specialized CRUD and action workflows, and for Movement, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. Never hide placeholders in query or body, and never guess a nearby path.",
+  "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for catalog entities, use named tools or documented routes for specialized CRUD and action workflows, and for Movement, Life Events, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. Never hide placeholders in query or body, and never guess a nearby path.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
   "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, flashcard for a brief rehearsable reminder to use during a trigger or urge, and wiki_page for durable memory.",
   "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
@@ -4070,15 +4149,15 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "A useful Psyche hypothesis starts from the user's concrete example, names one possible protection, prediction, relief, or cost, and asks for correction before it becomes a saved record shape.",
   "When the user reports an urge or wants a Psyche flashcard, search flashcards first, show a matching card's message before adding support, and if no card fits create only after the cue or urge sentence and short message are clear; postpone visual style, colors, tags, and optional links until the intervention sentence works.",
   "For Psyche save-readiness, stop deepening once the user recognizes the working formulation and the minimum shape is present: belief sentence, functional loop, behavior move, part-state, trigger episode, value, event type, emotion definition, or flashcard cue/message. Ask one accuracy question at most, then save through shared batch CRUD when the user says yes.",
-  "Once the Movement, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, weekday template, published output, run detail, or node result instead of generic record language.",
+  "Once the Movement, Life Events, Life Force, or Workbench job is clear, speak in product nouns such as timeline, overlay, calendar match, ticket import, weekday template, published output, run detail, or node result instead of generic record language.",
   "If the next answer would not change the route, wording, timing, or write shape in a meaningful way, stop asking and act.",
   "Before saving, briefly summarize the working formulation in the user's own language when that would reduce ambiguity.",
   "Once the record is clear enough to name, stop exploring broadly and ask only for the last structural detail that still matters.",
   "If the record is already clear enough to save, save it instead of performing a ceremonial extra question.",
   "If the user accepts the wording or record shape, move to the write instead of reopening the intake.",
   "When updating an entity, start with what is changing, what should stay true, and what prompted the update now.",
-  "For action-heavy flows such as work adjustments, preference judgments, preference signals, and Movement, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or domain route instead of forcing the request into generic CRUD.",
-  "For Movement, Life Force, and Workbench, ask what would make the answer or change useful before you ask route-shaped details such as provider, weekday, flow id, run id, or trip id.",
+  "For action-heavy flows such as work adjustments, preference judgments, preference signals, and Movement, Life Events, Life Force, or Workbench work, first ask what the user is trying to understand, change, add, update, link, or run, then choose the dedicated action or domain route instead of forcing the request into generic CRUD.",
+  "For Movement, Life Events, Life Force, and Workbench, ask what would make the answer or change useful before you ask route-shaped details such as provider, Life Event id, artifact id, weekday, flow id, run id, or trip id.",
   "When the user already named a precise correction or review target, do not widen back out into a meta lane question. Confirm only the missing route-selecting detail and then act.",
   "Once the route family is clear, say it plainly enough that another agent could follow the same path without guessing.",
   "For Movement specifically, treat missing-data corrections as user-defined overlay boxes unless the user is editing an already-recorded stay or trip. When the user already gave a clear instruction like 'that missing block was home', act after only the last ambiguity is resolved.",
@@ -4559,6 +4638,24 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "If the user is reviewing answers, ask what the run should help them understand before proposing edits or completion.",
       "Use the dedicated questionnaire run start, read, update, and complete routes instead of generic entity CRUD.",
       "If answering is still in progress, ask only for the next answer or note that matters."
+    ]
+  },
+  {
+    focus: "life_event",
+    openingQuestion:
+      "What happened, or what is coming up, that should stay visible in your life timeline?",
+    coachingGoal:
+      "Clarify one meaningful chronological event, its time/place, significance, calendar relationship, ticket or artifact evidence, and links without turning it into a flat calendar form.",
+    askSequence: [
+      "Ask what happened or will happen and why it belongs in the Life Events timeline rather than only on the calendar.",
+      "Ask for the time, place, and timezone only to the level needed to create or match the calendar event.",
+      "Ask what type of event this is: travel, flight, train, car trip, concert, cinema, date, friends, family, work or thesis milestone, health or admin, celebration, or custom.",
+      "For travel, ask origin, destination, departure, arrival, transport mode, and whether a trusted ticket artifact should be imported.",
+      "Search likely life_event and calendar_event duplicates by title, time, place, and travel identifiers before creating a new record.",
+      "Use shared batch CRUD for normal life_event create, update, search, delete, restore, and generic links.",
+      "Use the dedicated Life Events route family for timeline reads, one-event reads, calendar reconciliation, calendar-to-Life-Event marking, trusted ticket-artifact import, and travel-status reads.",
+      "Use generic entity_links for links to artifacts, calendar events, wiki pages, goals, tasks, Psyche records, movement context, and other Forge records.",
+      "If the user already named the exact event and action, ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation."
     ]
   },
   {
@@ -5400,6 +5497,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_budget_model","relationship":"embedded_reference","anchorKey":"budget-workbook"}]}}'
   },
   {
+    toolName: "forge_call_life_event_route",
+    summary:
+      "Call one allowed Life Events route for timeline reads, one-event reads, calendar sync, calendar-to-Life-Event marking, trusted ticket-artifact import, or travel-status reads.",
+    whenToUse:
+      "Use after the job has narrowed to Life Events chronology, calendar reconciliation, ticket import, or travel status. Use shared batch CRUD for normal stored life_event create, update, search, delete, and restore.",
+    inputShape:
+      '{ routeKey: "timeline"|"read"|"calendarSync"|"fromCalendarEvent"|"importTicket"|"travelStatus", pathParams?: { id?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Choose routeKey from live onboarding specializedDomainSurfaces.lifeEvents routeKeys and methodRoutes.",
+      "Use batch create/update/delete/restore/search for the stored life_event record. The dedicated routes are for the chronology view and actions around calendar, ticket import, and status reads.",
+      "Fill every :id placeholder through pathParams.id; do not put ids inside routeKey, query, or body when the route path has :id.",
+      "Use importTicket with a trusted Artifact Store artifactId. It must link through generic entity_links and must not execute or autonomously open stored file bytes.",
+      "After calendarSync, fromCalendarEvent, or importTicket, read back the Life Events timeline or event detail when that verifies the user's practical goal."
+    ],
+    example:
+      '{"routeKey":"calendarSync","pathParams":{"id":"lifeevent_123"},"body":{"projection":"link_or_create"}}'
+  },
+  {
     toolName: "forge_call_movement_route",
     summary:
       "Call one allowed dedicated Movement route after the conversation has narrowed to a day, month, all-time, timeline, place, trip detail, selection aggregate, overlay, or repair job.",
@@ -6133,6 +6249,7 @@ function buildAgentOnboardingPayload(request: {
       "Task runs represent live work sessions on tasks and are separate from task status.",
       "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
       "Artifacts are linkable stored entities backed by the general entity_links model; use generic entity links to attach a file to goals, projects, tasks, wiki-backed notes, Psyche records, calendar records, or other meaningful Forge context.",
+      "Life Events are linkable stored entities backed by the general entity_links model; use them for important chronological events and use calendar_event links when the event should also exist on the calendar.",
       "Psyche values can link to goals, projects, and tasks.",
       "Behavior patterns, behaviors, beliefs, modes, flashcards, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
@@ -6148,6 +6265,7 @@ function buildAgentOnboardingPayload(request: {
         "note",
         "insight",
         "calendar_event",
+        "life_event",
         "work_block_template",
         "task_timebox",
         "psyche_value",
@@ -6337,6 +6455,53 @@ function buildAgentOnboardingPayload(request: {
         }
       },
       specializedDomainSurfaces: {
+        lifeEvents: {
+          classification: "specialized_domain_surface",
+          aliases: ["life_event", "life-events", "Life Events"],
+          summary:
+            "Dedicated Life Events action API. Use shared batch CRUD for the stored life_event record, then use these routes for chronology reads, calendar reconciliation, ticket-artifact import, and travel-status reads.",
+          routeKeys: [
+            "timeline",
+            "read",
+            "calendarSync",
+            "fromCalendarEvent",
+            "importTicket",
+            "travelStatus"
+          ],
+          routeSelectionQuestions: [
+            "Is the user trying to browse the life timeline, read one event, save or update the stored event, connect it to calendar, import a ticket, or check travel status?",
+            "If this is a save or edit, is the normal life_event record already clear enough for batch CRUD before any dedicated action?",
+            "If this belongs on the calendar, is there an existing calendar event to link, or should Forge search and create one if missing?",
+            "If this came from a ticket, which trusted artifact id should be used and should configured LLM extraction fill missing travel details?",
+            "If this is travel status, which Life Event id contains the flight, train, car, or trip record?"
+          ],
+          methodRoutes: {
+            timeline: "GET /api/v1/life-events/timeline",
+            read: "GET /api/v1/life-events/:id",
+            calendarSync: "POST /api/v1/life-events/:id/calendar-sync",
+            fromCalendarEvent: "POST /api/v1/life-events/from-calendar-event",
+            importTicket: "POST /api/v1/life-events/import-ticket",
+            travelStatus: "GET /api/v1/life-events/:id/travel-status"
+          },
+          readRoutes: {
+            timeline: "/api/v1/life-events/timeline",
+            read: "/api/v1/life-events/:id",
+            travelStatus: "/api/v1/life-events/:id/travel-status"
+          },
+          writeRoutes: {
+            calendarSync: "/api/v1/life-events/:id/calendar-sync",
+            fromCalendarEvent: "/api/v1/life-events/from-calendar-event",
+            importTicket: "/api/v1/life-events/import-ticket"
+          },
+          notes: [
+            "Life Events are normal stored Forge records for create, update, search, soft delete, restore, and generic links. Use shared batch CRUD for those operations.",
+            "Use the dedicated timeline route for the virtualized chronology view and large-list reads; pass limit and offset instead of bulk-loading every record.",
+            "Use calendarSync when an existing Life Event should find or create its matching calendar_event. Use fromCalendarEvent when the user marks an existing calendar event as a Life Event from the calendar side.",
+            "Ticket import starts from an Artifact Store record id. The import route may extract safe metadata from the artifact record and create a draft travel Life Event linked through generic entity_links; it must not execute or autonomously open stored file bytes.",
+            "Travel status is a read abstraction. It should return scheduled or provider-backed status evidence without pretending a live tracker exists when no provider is configured.",
+            "Do not create a special artifact-life-event link model. Artifact, calendar, wiki, Psyche, health, goal, project, task, and note relationships use generic entity_links."
+          ]
+        },
         movement: {
           classification: "specialized_domain_surface",
           aliases: ["movement", "Movement"],
@@ -6798,6 +6963,12 @@ function buildAgentOnboardingPayload(request: {
       artifactTrust: "/api/v1/artifacts/:id/trust",
       artifactVersions: "/api/v1/artifacts/:id/versions",
       artifactAudit: "/api/v1/artifacts/:id/audit",
+      lifeEventsTimeline: "/api/v1/life-events/timeline",
+      lifeEventDetail: "/api/v1/life-events/:id",
+      lifeEventCalendarSync: "/api/v1/life-events/:id/calendar-sync",
+      lifeEventFromCalendar: "/api/v1/life-events/from-calendar-event",
+      lifeEventImportTicket: "/api/v1/life-events/import-ticket",
+      lifeEventTravelStatus: "/api/v1/life-events/:id/travel-status",
       wikiSettings: "/api/v1/wiki/settings",
       wikiSearch: "/api/v1/wiki/search",
       wikiHealth: "/api/v1/wiki/health",
@@ -6843,6 +7014,7 @@ function buildAgentOnboardingPayload(request: {
       uiWorkflow: ["forge_get_ui_entrypoint"],
       specializedDomainWorkflow: [
         "forge_call_movement_route",
+        "forge_call_life_event_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route"
       ],
@@ -6919,19 +7091,19 @@ function buildAgentOnboardingPayload(request: {
       depthCalibrationRule:
         "Before deepening an intake, decide whether this is quick capture, guided formulation, review-first help, or action-first execution. Quick capture means the user already supplied usable wording and wants it saved, remembered, or logged; reflect the working shape once, ask only the one structural, accuracy, or consent detail that changes the write, and do not force full exploration. Guided formulation means the user asks to understand, name, map, decide, or work through unclear or charged material; use active listening, one lane at a time, and Psyche hypotheses when appropriate before saving. Review-first means read the relevant stored entity, overview, or specialized surface before asking write-shaped questions. Action-first means the target task run, work adjustment, preference signal or judgment, questionnaire run, Movement correction, Life Force signal or weekday template, or Workbench run or output is already clear, so act or ask only for the missing target, span, flow, run, node, weekday, correction, or consent. Do not downgrade psychologically meaningful material into quick capture when the user wants exploration, and do not expand a simple storage request into therapy or project planning.",
       operationLaneRule:
-        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up. Movement, Life Force, and Workbench use review, correct, repair, run, inspect, publish, or preserve lanes through their dedicated route keys. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
+        "Keep the operation lane explicit before asking for lower-level details. Normal stored entities can be added, updated, reviewed or navigated, linked, or placed. Action workflows use verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or observe. Specialized CRUD surfaces use lifecycle verbs such as create, read, update, sync, reconnect, delete, or browse. Read-model surfaces need a practical read question and scope before any write-shaped follow-up. Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated route keys. Psyche entities need a formulation lane before the storage lane when the user wants understanding; direct saves can move to one accuracy or consent question.",
       psycheExplorationRule:
         "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. After one concrete example is clear and a hypothesis lands or is corrected, translate it into a saveable record shape such as a belief sentence, functional loop, behavior, mode, trigger report, value, event type, or emotion definition; do not leave the user with interpretation alone, name the primary Forge record it is becoming, and ask one accuracy or consent question instead of reopening broad exploration, then use the shared batch entity routes after the user accepts the wording or explicitly asks to save. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       progressiveDisclosureRule:
-        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
+        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Events ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Events, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
       writeConfirmationRule:
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:
-        "For Movement, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
+        "For Movement, Life Events, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, calendar match, ticket import, travel status, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, event detail or timeline for Life Events, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, event, artifact, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-events, /forge/v1/life-force, and /forge/v1/workbench.",
       artifactStoreRule:
         "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, decrypt, open, run, execute, transform, preview stored file bytes, or submit artifact passwords as an agent; downloads and password encryption actions are human-operator-only.",
       reviewShortcutRule:
-        "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
+        "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Events, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
       readModelWriteRule:
         "Self-observation is note-backed and should be written through observed notes with frontmatter.observedAt only when a lightweight episode observation is the right container. Do not use it as the default bucket for Psyche material: prefer trigger_report for one emotionally meaningful episode, behavior_pattern for functional analysis of a recurring loop, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for a central part-state, and wiki_page for durable memory such as books, articles, concepts, sources, or personal manuals. Sleep and workout sessions stay on batch CRUD by default; use the reflective review helpers only when enriching one already-known record after review.",
       psycheOpeningQuestionRule:
@@ -6939,15 +7111,15 @@ function buildAgentOnboardingPayload(request: {
       psycheHypothesisRule:
         "When one concrete Psyche example is visible, a helpful hypothesis should start from evidence in the user's own example, offer one testable interpretation, name the function without blame such as protection, prediction, relief, or cost, and ask whether the danger, need, or wording fits. Use the hypothesis timing checkpoint before asking a second or third deepening question: offer a hypothesis when one concrete episode, body cue, belief sentence, behavior, or mode voice is visible and the hypothesis would change the record shape, wording, links, or next action. Use the Psyche hypothesis examples when another broad question would make the user do all the interpretation alone: behavior_pattern should test cue, protection, payoff, and cost; belief_entry should test the activated sentence; mode_profile and mode_guide_session should test the part's job and feared danger; trigger_report should test the sequence; event_type and emotion_definition should test future recognition. Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For behavior_pattern, belief_entry, mode_profile, mode_guide_session, and trigger_report, the next helpful move is usually one active formulation plus one correction question, not another passive reflection. Hypotheses should reduce the formulation burden. Do not make the user prove the experience: after one hypothesis, ask one fit-or-correction question rather than a stack of evidence, origin, and repair questions. If accuracy needs grounding, ask for the smallest lived cue or contrast that would change the wording, danger, protection, payoff, cost, or record shape. Do not hypothesize yet when no concrete moment is visible, the user only wants a direct mechanical save, the user is flooded or unsafe, or the only available interpretation would be diagnosis-like, an origin story, or a certainty claim. Do not present schema, mode, belief, or pattern language as a verdict. Do not leave the user with interpretation alone; name the primary Forge record and ask one accuracy or consent question that moves toward saving the corrected formulation. For flashcard support, search existing flashcards first and show a matching message before adding coaching; create only after the cue or urge sentence and short message are clear, and postpone visual style, colors, tags, and optional links until the intervention sentence works. If the user corrects the hypothesis, revise it once and move toward the saveable record shape instead of asking for another broad story.",
       mixedIntentSequencingRule:
-        "When one user message combines several Forge jobs, identify the primary job and the order of operations before asking a follow-up. If a read changes the truth of a later write, read first: Movement timeline or box detail before correction, Workbench run or node detail before editing or publishing, and Life Force overview before changing durable assumptions when the current energy picture is uncertain. If the user asks to understand and save Psyche material plus create a support record, formulate the primary Psyche record first, then derive the flashcard, note, link, task, or habit from the accepted wording. If the user already gave the concrete action, do not ask a broad lane question; say the product sequence briefly and ask only for the missing span, wording, flow, run, node, weekday, or link that changes the next action.",
+        "When one user message combines several Forge jobs, identify the primary job and the order of operations before asking a follow-up. If a read changes the truth of a later write, read first: Movement timeline or box detail before correction, Life Events timeline or event detail before calendar sync, ticket import, or travel-status interpretation, Workbench run or node detail before editing or publishing, and Life Force overview before changing durable assumptions when the current energy picture is uncertain. If the user asks to understand and save Psyche material plus create a support record, formulate the primary Psyche record first, then derive the flashcard, note, link, task, or habit from the accepted wording. If the user already gave the concrete action, do not ask a broad lane question; say the product sequence briefly and ask only for the missing span, wording, event, artifact, flow, run, node, weekday, or link that changes the next action.",
       duplicateDisambiguationRule:
-        "Before creating or updating a normal stored entity when duplicate risk is plausible, search the shared batch entity route by entity type, distinctive title or wording, owner scope, and linked content. If a likely existing record appears, ask whether the user wants to update that record, link to it, or save a separate new record; do not reopen the whole create flow. For Psyche records, a similar belief, pattern, mode, trigger report, value, or flashcard is a formulation choice, not a duplicate error: compare the sentence, cue/payoff/cost, protective job, episode, urge sentence, or message and let the user choose update, link, or new version. For wiki_page and calendar_connection, use dedicated search/list/read routes before creating another page or connection. For Movement, Life Force, and Workbench, use the dedicated read lanes instead of batch duplicate search.",
+        "Before creating or updating a normal stored entity when duplicate risk is plausible, search the shared batch entity route by entity type, distinctive title or wording, owner scope, and linked content. If a likely existing record appears, ask whether the user wants to update that record, link to it, or save a separate new record; do not reopen the whole create flow. For Life Events, search life_event and calendar_event by title, time, place, and travel identifiers before creating a duplicate. For Psyche records, a similar belief, pattern, mode, trigger report, value, or flashcard is a formulation choice, not a duplicate error: compare the sentence, cue/payoff/cost, protective job, episode, urge sentence, or message and let the user choose update, link, or new version. For wiki_page and calendar_connection, use dedicated search/list/read routes before creating another page or connection. For Movement, Life Events, Life Force, and Workbench, use the dedicated read lanes instead of batch duplicate search when the user is asking to inspect timeline, status, or action results.",
       destructiveActionRule:
         "Before deleting, archiving, invalidating, overwriting, disconnecting, or substantially replacing a Forge record or specialized object, confirm the exact target and what should remain understandable. Prefer normal soft-delete for stored entities unless the user explicitly asks for permanent removal. For Psyche records, preserve therapeutic history by asking whether the old belief, pattern, mode, trigger report, value, or flashcard should be updated, linked as history, archived, or kept distinct; do not delete it just because a cleaner formulation exists. For Movement, distinguish user-defined overlay deletion from automatic-box invalidation and stay/trip/point deletion, and read the specific span first when the target is uncertain. For calendar connections, Workbench flows, wiki pages, and questionnaire instruments, ask what downstream sync, published output, backlinks, run history, or completed runs should remain understandable before deleting or replacing the saved object.",
       followUpQuestionRule:
         "After a substantive answer, do not restart the opener or jump to the next schema field. First say what became clearer in concrete language, then choose exactly one next lane: wording, boundary, placement, timing, route scope, link, hypothesis, or write confirmation. Run the no-question gate before every follow-up: ask only if the answer can change record type, accepted wording, hierarchy placement, owner/accountability, timing, route lane, target object, correction, link, verification read, run/publish/preserve action, or consent. Ask the smallest question that would change the record shape, route choice, useful wording, timing, links, or next action. Before asking, be able to name what a possible answer would change: save, update, review, link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If nothing decision-relevant would change, stop asking, summarize the working record, and act with consent. If the question would only add warmth, completeness, optional metadata, or form polish, skip it.",
       antiDriftRule:
-        "Avoid vague reflective filler and internal route language. Keep a private action trace: intent, entity or dedicated domain lane, exact read/write/run tool, required target identifiers, and the one missing detail that would change the action. Do not narrate that trace to the user. Replace phrases like 'that sounds important' with the specific stake you heard, and replace API nouns like surface, CRUD, payload, mutation path, route key, batch route, or endpoint with user-facing product nouns such as belief, pattern, note, wiki page, timeline, overlay, missing stay, weekday template, flow, run, node result, or published output. Ask one product-language question when the trace is unclear; with the user, ask about the real thing: the span, place, weekday, flow, run, node, belief sentence, parent record, or save confirmation. If you cannot yet name the product noun, ask one grounding question instead of adding reflective filler. When reporting actions, say the product result first: saved the belief, corrected the missing stay, updated the weekday energy pattern, or read the failed node. Mention route keys, HTTP paths, payloads, or batch routes only for implementation debugging. If a question would only decorate the intake, skip it.",
+        "Avoid vague reflective filler and internal route language. Keep a private action trace: intent, entity or dedicated domain lane, exact read/write/run tool, required target identifiers, and the one missing detail that would change the action. Do not narrate that trace to the user. Replace phrases like 'that sounds important' with the specific stake you heard, and replace API nouns like surface, CRUD, payload, mutation path, route key, batch route, or endpoint with user-facing product nouns such as belief, pattern, note, wiki page, timeline, overlay, missing stay, calendar match, ticket import, travel status, weekday template, flow, run, node result, or published output. Ask one product-language question when the trace is unclear; with the user, ask about the real thing: the span, place, event, artifact, weekday, flow, run, node, belief sentence, parent record, or save confirmation. If you cannot yet name the product noun, ask one grounding question instead of adding reflective filler. When reporting actions, say the product result first: saved the belief, corrected the missing stay, updated the weekday energy pattern, or read the failed node. Mention route keys, HTTP paths, payloads, or batch routes only for implementation debugging. If a question would only decorate the intake, skip it.",
       duplicateCheckRoute: "/api/v1/entities/search",
       uiSuggestionRule:
         "offer_visual_ui_when_review_or_editing_would_be_easier",
@@ -6975,11 +7147,11 @@ function buildAgentOnboardingPayload(request: {
       searchRule:
         "forge_search_entities accepts searches as an array. Search before create or update when duplicate risk exists.",
       createRule:
-        "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities. Artifact file-byte creation is the exception: use POST /api/v1/artifacts or forge_call_artifact_route createWithBytes, not batch create.",
+        "Each create operation must include entityType and full data. entityType alone is not enough. This includes calendar_event, life_event, work_block_template, task_timebox, sleep_session, workout_session, preference CRUD entities, and questionnaire_instrument alongside the usual planning and Psyche entities. Artifact file-byte creation is the exception: use POST /api/v1/artifacts or forge_call_artifact_route createWithBytes, not batch create.",
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
-        "forge_call_movement_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs or weekdays inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Normal stored entities still use the shared batch entity tools.",
+        "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
@@ -7025,6 +7197,18 @@ function buildAgentOnboardingPayload(request: {
           '{"routeKey":"tripPointUpdate","pathParams":{"id":"trip_123","pointId":"point_456"},"body":{"lat":46.2044,"lon":6.1432,"capturedAt":"2026-05-06T14:10:00.000Z"}}',
         movementTripPointDelete:
           '{"routeKey":"tripPointDelete","pathParams":{"id":"trip_123","pointId":"point_456"}}',
+        lifeEventsTimeline:
+          '{"routeKey":"timeline","query":{"limit":100,"offset":0,"type":"travel_flight"}}',
+        lifeEventRead:
+          '{"routeKey":"read","pathParams":{"id":"lifeevent_123"}}',
+        lifeEventCalendarSync:
+          '{"routeKey":"calendarSync","pathParams":{"id":"lifeevent_123"},"body":{"projection":"link_or_create"}}',
+        lifeEventFromCalendar:
+          '{"routeKey":"fromCalendarEvent","body":{"calendarEventId":"cal_evt_123","eventType":"concert","importance":"meaningful"}}',
+        lifeEventImportTicket:
+          '{"routeKey":"importTicket","body":{"artifactId":"artifact_ticket_123","createDraft":true,"useLlm":true}}',
+        lifeEventTravelStatus:
+          '{"routeKey":"travelStatus","pathParams":{"id":"lifeevent_123"}}',
         lifeForceOverview: '{"routeKey":"overview"}',
         lifeForceProfile:
           '{"routeKey":"profile","body":{"baselineDailyAp":24,"recoveryNotes":"Clinic-admin days need a lower expected afternoon load."}}',
@@ -17129,6 +17313,95 @@ export async function buildServer(
       return { error: "Task not found" };
     }
     return { task };
+  });
+  app.get("/api/v1/life-events/timeline", async (request) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/life-events/timeline" }
+    );
+    return {
+      timeline: listLifeEventTimeline(
+        lifeEventTimelineQuerySchema.parse(request.query ?? {})
+      )
+    };
+  });
+  app.get("/api/v1/life-events/:id", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/life-events/:id" }
+    );
+    const { id } = request.params as { id: string };
+    const lifeEvent = getLifeEventById(id);
+    if (!lifeEvent) {
+      reply.code(404);
+      return { error: "Life Event not found" };
+    }
+    return { lifeEvent };
+  });
+  app.post("/api/v1/life-events/:id/calendar-sync", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/life-events/:id/calendar-sync" }
+    );
+    const { id } = request.params as { id: string };
+    const result = syncLifeEventCalendar(
+      id,
+      lifeEventCalendarSyncInputSchema.parse(request.body ?? {})
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: "Life Event not found" };
+    }
+    return result;
+  });
+  app.post("/api/v1/life-events/from-calendar-event", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/life-events/from-calendar-event" }
+    );
+    const result = createLifeEventFromCalendar(
+      lifeEventFromCalendarInputSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: "Calendar event not found" };
+    }
+    return result;
+  });
+  app.post("/api/v1/life-events/import-ticket", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/life-events/import-ticket" }
+    );
+    const result = importLifeEventTicket(
+      lifeEventTicketImportInputSchema.parse(request.body ?? {}),
+      toActivityContext(auth)
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return result;
+  });
+  app.get("/api/v1/life-events/:id/travel-status", async (request, reply) => {
+    requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/life-events/:id/travel-status" }
+    );
+    const { id } = request.params as { id: string };
+    const status = getLifeEventTravelStatus(id);
+    if (!status) {
+      reply.code(404);
+      return { error: "Life Event not found" };
+    }
+    return { status };
   });
   app.post("/api/v1/entities/create", async (request) => {
     const auth = requireScopedAccess(

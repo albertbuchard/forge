@@ -187,6 +187,7 @@ describe("forge onboarding contract", () => {
       "calendar_event",
       "work_block_template",
       "task_timebox",
+      "life_event",
       "calendar_connection",
       "preference_catalog",
       "preference_catalog_item",
@@ -296,6 +297,7 @@ describe("forge onboarding contract", () => {
       "calendar_event",
       "work_block_template",
       "task_timebox",
+      "life_event",
       "calendar_connection",
       "preference_catalog",
       "preference_catalog_item",
@@ -357,6 +359,7 @@ describe("forge onboarding contract", () => {
         "note",
         "sleep_session",
         "workout_session",
+        "life_event",
         "questionnaire_instrument"
       ])
     );
@@ -491,6 +494,62 @@ describe("forge onboarding contract", () => {
           /operating behavior[\s\S]*passive tracking[\s\S]*publish mode[\s\S]*retention/i
         )
       ])
+    );
+
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.readRoutes).toEqual(
+      expect.objectContaining({
+        timeline: "/api/v1/life-events/timeline",
+        read: "/api/v1/life-events/:id",
+        travelStatus: "/api/v1/life-events/:id/travel-status"
+      })
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.aliases).toEqual(
+      expect.arrayContaining(["life_event", "life-events", "Life Events"])
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.classification).toBe(
+      "specialized_domain_surface"
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.writeRoutes).toEqual(
+      expect.objectContaining({
+        calendarSync: "/api/v1/life-events/:id/calendar-sync",
+        fromCalendarEvent: "/api/v1/life-events/from-calendar-event",
+        importTicket: "/api/v1/life-events/import-ticket"
+      })
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.methodRoutes).toEqual(
+      expect.objectContaining({
+        timeline: "GET /api/v1/life-events/timeline",
+        read: "GET /api/v1/life-events/:id",
+        calendarSync: "POST /api/v1/life-events/:id/calendar-sync",
+        fromCalendarEvent: "POST /api/v1/life-events/from-calendar-event",
+        importTicket: "POST /api/v1/life-events/import-ticket",
+        travelStatus: "GET /api/v1/life-events/:id/travel-status"
+      })
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.routeKeys).toEqual(
+      Object.keys(routeModel.specializedDomainSurfaces.lifeEvents.methodRoutes)
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.routeKeys).toEqual([
+      "timeline",
+      "read",
+      "calendarSync",
+      "fromCalendarEvent",
+      "importTicket",
+      "travelStatus"
+    ]);
+    expect(
+      routeModel.specializedDomainSurfaces.lifeEvents.routeSelectionQuestions
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /browse the life timeline, read one event, save or update the stored event, connect it to calendar, import a ticket, or check travel status/i
+        ),
+        expect.stringMatching(/normal life_event record[\s\S]*batch CRUD/i),
+        expect.stringMatching(/trusted artifact id[\s\S]*LLM extraction/i)
+      ])
+    );
+    expect(routeModel.specializedDomainSurfaces.lifeEvents.notes.join(" ")).toMatch(
+      /generic entity_links/i
     );
 
     expect(routeModel.specializedDomainSurfaces.lifeForce.readRoutes).toEqual(
@@ -711,6 +770,20 @@ describe("forge onboarding contract", () => {
       );
     }
 
+    expect(entityByType.get("life_event")).toEqual(
+      expect.objectContaining({
+        classification: "batch_crud_entity",
+        preferredMutationPath: expect.stringMatching(
+          /shared batch CRUD[\s\S]*dedicated Life Event routes/i
+        ),
+        preferredReadPath:
+          "/api/v1/life-events/timeline | /api/v1/life-events/:id | /api/v1/entities/search",
+        preferredMutationTool: expect.stringMatching(
+          /forge_create_entities[\s\S]*forge_call_life_event_route/i
+        )
+      })
+    );
+
     expect(entityByType.get("wiki_page")).toEqual(
       expect.objectContaining({
         classification: "specialized_crud_entity",
@@ -846,13 +919,13 @@ describe("forge onboarding contract", () => {
           /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first[\s\S]*simple storage request/i
         ),
         operationLaneRule: expect.stringMatching(
-          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Movement, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, or preserve[\s\S]*Psyche entities[\s\S]*formulation lane/i
+          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status[\s\S]*Psyche entities[\s\S]*formulation lane/i
         ),
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Movement, Life Events, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-events[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
-          /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
+          /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
         ),
         readModelWriteRule: expect.stringMatching(
           /Self-observation is note-backed[\s\S]*Sleep and workout sessions stay on batch CRUD by default/i
@@ -861,10 +934,10 @@ describe("forge onboarding contract", () => {
           /concrete Psyche example[\s\S]*user's own example[\s\S]*protection, prediction, relief, or cost[\s\S]*hypothesis timing checkpoint[\s\S]*second or third deepening question[\s\S]*record shape, wording, links, or next action[\s\S]*Do not hypothesize yet[\s\S]*direct mechanical save[\s\S]*flooded or unsafe[\s\S]*Do not present schema, mode, belief, or pattern language as a verdict/i
         ),
         mixedIntentSequencingRule: expect.stringMatching(
-          /several Forge jobs[\s\S]*read first[\s\S]*Movement timeline or box detail[\s\S]*Workbench run or node detail[\s\S]*Life Force overview[\s\S]*primary Psyche record first[\s\S]*flashcard, note, link, task, or habit/i
+          /several Forge jobs[\s\S]*read first[\s\S]*Movement timeline or box detail[\s\S]*Life Events timeline or event detail[\s\S]*Workbench run or node detail[\s\S]*Life Force overview[\s\S]*primary Psyche record first[\s\S]*flashcard, note, link, task, or habit/i
         ),
         duplicateDisambiguationRule: expect.stringMatching(
-          /normal stored entity[\s\S]*search the shared batch entity route[\s\S]*update that record, link to it, or save a separate new record[\s\S]*Psyche records[\s\S]*formulation choice[\s\S]*wiki_page and calendar_connection[\s\S]*dedicated search\/list\/read routes[\s\S]*Movement, Life Force, and Workbench[\s\S]*dedicated read lanes/i
+          /normal stored entity[\s\S]*search the shared batch entity route[\s\S]*update that record, link to it, or save a separate new record[\s\S]*Psyche records[\s\S]*formulation choice[\s\S]*wiki_page and calendar_connection[\s\S]*dedicated search\/list\/read routes[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*dedicated read lanes/i
         ),
         destructiveActionRule: expect.stringMatching(
           /deleting, archiving, invalidating, overwriting, disconnecting,[\s\S]*confirm the exact target[\s\S]*soft-delete[\s\S]*Psyche records[\s\S]*updated, linked as history, archived, or kept distinct[\s\S]*Movement[\s\S]*automatic-box invalidation[\s\S]*calendar connections, Workbench flows, wiki pages, and questionnaire instruments/i
@@ -874,12 +947,13 @@ describe("forge onboarding contract", () => {
     expect(onboarding.recommendedPluginTools?.specializedDomainWorkflow).toEqual(
       [
         "forge_call_movement_route",
+        "forge_call_life_event_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route"
       ]
     );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
-      /forge_call_movement_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
+      /forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
     );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /Life Force overview route key maps to GET \/api\/v1\/life-force[\s\S]*do not invent \/api\/v1\/life-force\/overview/i
@@ -907,6 +981,24 @@ describe("forge onboarding contract", () => {
         ),
         movementMissingStayPreflight: expect.stringMatching(
           /routeKey[\s\S]*userBoxPreflight[\s\S]*startedAt[\s\S]*placeLabel/
+        ),
+        lifeEventsTimeline: expect.stringMatching(
+          /routeKey[\s\S]*timeline[\s\S]*type/
+        ),
+        lifeEventRead: expect.stringMatching(
+          /routeKey[\s\S]*read[\s\S]*pathParams[\s\S]*id/
+        ),
+        lifeEventCalendarSync: expect.stringMatching(
+          /routeKey[\s\S]*calendarSync[\s\S]*pathParams[\s\S]*projection/
+        ),
+        lifeEventFromCalendar: expect.stringMatching(
+          /routeKey[\s\S]*fromCalendarEvent[\s\S]*calendarEventId/
+        ),
+        lifeEventImportTicket: expect.stringMatching(
+          /routeKey[\s\S]*importTicket[\s\S]*artifactId/
+        ),
+        lifeEventTravelStatus: expect.stringMatching(
+          /routeKey[\s\S]*travelStatus[\s\S]*pathParams[\s\S]*id/
         ),
         lifeForceOverview: expect.stringMatching(
           /routeKey[\s\S]*overview/
@@ -1044,6 +1136,7 @@ describe("forge onboarding contract", () => {
       onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
     );
     const surfaceToolPairs = [
+      ["lifeEvents", "forge_call_life_event_route"],
       ["movement", "forge_call_movement_route"],
       ["lifeForce", "forge_call_life_force_route"],
       ["workbench", "forge_call_workbench_route"]
@@ -1161,6 +1254,12 @@ describe("forge onboarding contract", () => {
         apiAccessHint: expect.stringMatching(/\/api\/v1\/movement\/timeline/)
       })
     );
+    expect(playbookByFocus.get("life_event")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        apiAccessHint: expect.stringMatching(/\/api\/v1\/life-events\/timeline/)
+      })
+    );
     expect(playbookByFocus.get("life_force")).toEqual(
       expect.objectContaining({
         routePosture: "specialized_domain_surface",
@@ -1224,7 +1323,7 @@ describe("forge onboarding contract", () => {
       /understand, decide, notice, remember, or change later[\s\S]*batch CRUD[\s\S]*questionnaire run actions[\s\S]*self-observation calendar reads[\s\S]*wiki routes/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
-      /review-first requests[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Force, or Workbench dedicated reads/i
+      /review-first requests[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /Self-observation is not the default container[\s\S]*behavior_pattern for a recurring loop and functional analysis/i
@@ -1242,7 +1341,7 @@ describe("forge onboarding contract", () => {
       /After a substantive answer[\s\S]*exactly one next lane[\s\S]*stop asking/i
     );
     expect(onboarding.interactionGuidance.mixedIntentSequencingRule).toMatch(
-      /do not ask a broad lane question[\s\S]*span, wording, flow, run, node, weekday, or link/i
+      /do not ask a broad lane question[\s\S]*span, wording, event, artifact, flow, run, node, weekday, or link/i
     );
     expect(onboarding.interactionGuidance.duplicateDisambiguationRule).toMatch(
       /compare the sentence, cue\/payoff\/cost, protective job, episode, urge sentence, or message/i
@@ -1689,13 +1788,19 @@ describe("forge onboarding contract", () => {
     }
 
     for (const catalogEntry of onboarding.entityCatalog) {
-      if (!catalogEntry.preferredReadPath?.startsWith("/api/v1/")) {
+      const preferredReadPaths = (catalogEntry.preferredReadPath ?? "")
+        .split("|")
+        .map((route) => route.trim())
+        .filter((route) => route.startsWith("/api/v1/"));
+      if (preferredReadPaths.length === 0) {
         continue;
       }
-      expect(
-        openApiPaths.has(normalizeRouteTemplate(catalogEntry.preferredReadPath)),
-        `${catalogEntry.entityType} preferred read path ${catalogEntry.preferredReadPath} should exist in OpenAPI`
-      ).toBe(true);
+      for (const route of preferredReadPaths) {
+        expect(
+          openApiPaths.has(normalizeRouteTemplate(route)),
+          `${catalogEntry.entityType} preferred read path ${route} should exist in OpenAPI`
+        ).toBe(true);
+      }
     }
 
     for (const [routeName, route] of Object.entries(

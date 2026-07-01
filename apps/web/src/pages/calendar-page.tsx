@@ -7,6 +7,7 @@ import {
   Clock3,
   Copy,
   Link2,
+  Milestone,
   MoreHorizontal,
   PencilLine,
   RefreshCcw,
@@ -37,6 +38,7 @@ import { ErrorState } from "@/components/ui/page-state";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createCalendarEvent,
+  createLifeEventFromCalendar,
   createTaskTimebox,
   createWorkBlockTemplate,
   deleteCalendarEvent,
@@ -429,6 +431,8 @@ export function CalendarPage() {
   const invalidateCalendar = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["forge-calendar-overview"] }),
+      queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] }),
+      queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] }),
       invalidateForgeSnapshot(queryClient),
       queryClient.invalidateQueries({ queryKey: ["task-context"] }),
       queryClient.invalidateQueries({ queryKey: ["project-board"] })
@@ -804,6 +808,33 @@ export function CalendarPage() {
     },
     onSettled: invalidateCalendar
   });
+  const markLifeEventMutation = useMutation({
+    mutationFn: (calendarEventId: string) =>
+      createLifeEventFromCalendar({
+        calendarEventId,
+        eventType: "custom",
+        importance: "meaningful"
+      }),
+    onMutate: () => {
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Linking this calendar event to Life Events…"
+      });
+    },
+    onError: (error) => {
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not mark that event as a Life Event."
+      });
+    },
+    onSuccess: () => {
+      setEventSyncStatus(null);
+    },
+    onSettled: invalidateCalendar
+  });
   const calendarData = calendarQuery.data?.calendar;
   const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
   const overview = useMemo(
@@ -1102,6 +1133,14 @@ export function CalendarPage() {
 
     return [
       {
+        id: "mark-life-event",
+        label: "Mark as Life Event",
+        description:
+          "Create or link a Life Event so this appears in the chronological timeline.",
+        icon: Milestone,
+        onSelect: () => void markLifeEventMutation.mutateAsync(event.id)
+      },
+      {
         id: "rename",
         label: "Quick rename",
         description:
@@ -1165,6 +1204,7 @@ export function CalendarPage() {
     days,
     deleteEventMutation,
     deleteWorkBlockMutation,
+    markLifeEventMutation,
     menuState,
     overview.events,
     overview.workBlockTemplates,

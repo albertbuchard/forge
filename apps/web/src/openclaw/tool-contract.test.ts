@@ -78,6 +78,7 @@ async function loadOnboardingRouteContracts() {
     movement: surfaces.movement,
     lifeForce: surfaces.lifeForce,
     workbench: surfaces.workbench,
+    lifeEvents: surfaces.lifeEvents,
     artifact: {
       routeKeys: specializedCrudEntities.artifact?.routeKeys ?? [],
       methodRoutes: artifactMethodRoutes
@@ -235,6 +236,7 @@ describe("openclaw tool contracts", () => {
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
     const artifact = requireTool(tools, "forge_call_artifact_route");
+    const lifeEvents = requireTool(tools, "forge_call_life_event_route");
     const onboardingSurfaces = await loadOnboardingRouteContracts();
     const movementRouteKeys = readTypeBoxUnionValues(
       movement.parameters ?? {},
@@ -252,6 +254,10 @@ describe("openclaw tool contracts", () => {
       artifact.parameters ?? {},
       "routeKey"
     );
+    const lifeEventRouteKeys = readTypeBoxUnionValues(
+      lifeEvents.parameters ?? {},
+      "routeKey"
+    );
 
     expect(movementRouteKeys).toEqual(
       [...onboardingSurfaces.movement.routeKeys].sort()
@@ -264,6 +270,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(artifactRouteKeys).toEqual(
       [...onboardingSurfaces.artifact.routeKeys].sort()
+    );
+    expect(lifeEventRouteKeys).toEqual(
+      [...onboardingSurfaces.lifeEvents.routeKeys].sort()
     );
     expect(
       readRouteGuideFromDescription(
@@ -285,6 +294,11 @@ describe("openclaw tool contracts", () => {
         readPropertyDescription(artifact.parameters ?? {}, "routeKey")
       )
     ).toEqual(onboardingSurfaces.artifact.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(lifeEvents.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.lifeEvents.methodRoutes);
 
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
@@ -354,8 +368,16 @@ describe("openclaw tool contracts", () => {
       "versions"
     ]);
     expect(artifactRouteKeys).not.toContain("humanDownloadOnly");
+    expect(lifeEventRouteKeys).toEqual([
+      "calendarSync",
+      "fromCalendarEvent",
+      "importTicket",
+      "read",
+      "timeline",
+      "travelStatus"
+    ]);
 
-    for (const tool of [movement, lifeForce, workbench, artifact]) {
+    for (const tool of [movement, lifeForce, workbench, artifact, lifeEvents]) {
       expect(tool.parameters?.required).toEqual(["routeKey"]);
       expect(tool.description ?? "").toMatch(/dedicated/i);
     }
@@ -368,6 +390,8 @@ describe("openclaw tool contracts", () => {
     expect(artifact.description ?? "").toMatch(/password/i);
     expect(artifact.description ?? "").toMatch(/decrypt/i);
     expect(artifact.description ?? "").toMatch(/generic entity-link/i);
+    expect(lifeEvents.description ?? "").toMatch(/shared batch CRUD/i);
+    expect(lifeEvents.description ?? "").toMatch(/generic entity_links/i);
 
     expect(readPropertyDescription(movement.parameters ?? {}, "routeKey")).toMatch(
       /day: GET \/api\/v1\/movement\/day[\s\S]*userBoxCreate: POST \/api\/v1\/movement\/user-boxes[\s\S]*tripPointDelete: DELETE \/api\/v1\/movement\/trips\/:id\/points\/:pointId/
@@ -384,8 +408,11 @@ describe("openclaw tool contracts", () => {
     expect(readPropertyDescription(artifact.parameters ?? {}, "routeKey")).not.toMatch(
       /download/i
     );
+    expect(readPropertyDescription(lifeEvents.parameters ?? {}, "routeKey")).toMatch(
+      /timeline: GET \/api\/v1\/life-events\/timeline[\s\S]*calendarSync: POST \/api\/v1\/life-events\/:id\/calendar-sync[\s\S]*importTicket: POST \/api\/v1\/life-events\/import-ticket[\s\S]*travelStatus: GET \/api\/v1\/life-events\/:id\/travel-status/
+    );
 
-    for (const tool of [movement, lifeForce, workbench, artifact]) {
+    for (const tool of [movement, lifeForce, workbench, artifact, lifeEvents]) {
       expect(readPropertyDescription(tool.parameters ?? {}, "routeKey")).toMatch(
         /fill pathParams with that exact placeholder name[\s\S]*do not put raw paths or ids into routeKey/i
       );
@@ -409,6 +436,9 @@ describe("openclaw tool contracts", () => {
     );
     expect(readHermesRouteSpecs("ARTIFACT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.artifact.methodRoutes
+    );
+    expect(readHermesRouteSpecs("LIFE_EVENT_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.lifeEvents.methodRoutes
     );
   });
 });

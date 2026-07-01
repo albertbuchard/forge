@@ -10,5 +10,6 @@ These files are durable Forge references for setup, architecture, and current op
 - [Multi-user and strategies](./multi-user-and-strategies.md)
 - [Preferences system](./preferences-system.md)
 - [Artifact Store](./artifact-store.md)
+- [Life Events](./life-events.md)
 - [Public repo workflow](./public-repo-workflow.md)
 - [Repository structure](./repository-structure.md)

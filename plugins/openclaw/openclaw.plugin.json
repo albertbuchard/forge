@@ -25,6 +25,7 @@
       "forge_adjust_work_minutes",
       "forge_apply_doctor_fix",
       "forge_call_artifact_route",
+      "forge_call_life_event_route",
       "forge_call_life_force_route",
       "forge_call_movement_route",
       "forge_call_workbench_route",

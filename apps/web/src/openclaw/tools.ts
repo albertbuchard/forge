@@ -312,6 +312,30 @@ const artifactRouteSpecs = {
   audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const lifeEventRouteSpecs = {
+  timeline: { method: "GET", path: "/api/v1/life-events/timeline" },
+  read: { method: "GET", path: "/api/v1/life-events/:id" },
+  calendarSync: {
+    method: "POST",
+    path: "/api/v1/life-events/:id/calendar-sync",
+    requiresToken: true
+  },
+  fromCalendarEvent: {
+    method: "POST",
+    path: "/api/v1/life-events/from-calendar-event",
+    requiresToken: true
+  },
+  importTicket: {
+    method: "POST",
+    path: "/api/v1/life-events/import-ticket",
+    requiresToken: true
+  },
+  travelStatus: {
+    method: "GET",
+    path: "/api/v1/life-events/:id/travel-status"
+  }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
@@ -811,6 +835,14 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Use shared batch CRUD for artifact metadata delete/restore. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
     routeSpecs: artifactRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_life_event_route",
+    label: "Forge Life Event Route",
+    description:
+      "Call one allowed dedicated Life Events route for timeline reads, one-event reads, calendar linking or creation, marking a calendar event as a Life Event, ticket artifact import, or travel-status reads. Use shared batch CRUD for normal stored life_event create, update, delete, restore, and search. Use generic entity_links for relationships.",
+    routeSpecs: lifeEventRouteSpecs
   });
 
   registerReadTool(api, config, {

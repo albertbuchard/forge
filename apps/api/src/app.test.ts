@@ -20016,6 +20016,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "goal",
     "habit",
     "insight",
+    "life_event",
     "mode_guide_session",
     "mode_profile",
     "note",

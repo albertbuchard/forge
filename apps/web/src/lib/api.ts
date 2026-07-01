@@ -69,6 +69,8 @@ import type {
   LifeForcePayload,
   LifeForceProfilePatchInput,
   LifeForceTemplateUpdateInput,
+  LifeEvent,
+  LifeEventTimelinePayload,
   FatigueSignalInput,
   TaskSplitInput,
   PreferenceContext,
@@ -654,6 +656,106 @@ export function createFatigueSignal(
       body: JSON.stringify(input)
     }
   );
+}
+
+export function getLifeEventsTimeline(input?: {
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+  eventTypes?: string[];
+}) {
+  const search = new URLSearchParams();
+  if (input?.from) {
+    search.set("from", input.from);
+  }
+  if (input?.to) {
+    search.set("to", input.to);
+  }
+  if (typeof input?.limit === "number") {
+    search.set("limit", String(input.limit));
+  }
+  if (typeof input?.offset === "number") {
+    search.set("offset", String(input.offset));
+  }
+  for (const eventType of input?.eventTypes ?? []) {
+    search.append("eventTypes", eventType);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ timeline: LifeEventTimelinePayload }>(
+    `/api/v1/life-events/timeline${suffix}`
+  );
+}
+
+export function getLifeEvent(id: string) {
+  return request<{ lifeEvent: LifeEvent }>(`/api/v1/life-events/${id}`);
+}
+
+export function syncLifeEventCalendar(
+  id: string,
+  input: {
+    projection?: "link_or_create" | "link_existing_only" | "none";
+    preferredCalendarId?: string | null;
+  } = {}
+) {
+  return request<{
+    lifeEvent: LifeEvent;
+    calendarEvent: CalendarEvent | null;
+    action: string;
+    confidence: number | null;
+  }>(`/api/v1/life-events/${id}/calendar-sync`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function createLifeEventFromCalendar(input: {
+  calendarEventId: string;
+  eventType?: string;
+  importance?: string;
+}) {
+  return request<{
+    lifeEvent: LifeEvent;
+    calendarEvent: CalendarEvent | null;
+    action: string;
+  }>("/api/v1/life-events/from-calendar-event", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function importLifeEventTicket(input: {
+  artifactId: string;
+  extractedText?: string;
+  createDraft?: boolean;
+  useLlm?: boolean;
+  llmProfileId?: string;
+}) {
+  return request<{
+    draft: Record<string, unknown>;
+    artifact: Artifact;
+    lifeEvent: LifeEvent | null;
+    action: string;
+  }>("/api/v1/life-events/import-ticket", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getLifeEventTravelStatus(id: string) {
+  return request<{
+    status: {
+      lifeEventId: string;
+      status: string;
+      source: string;
+      provider: string | null;
+      providerConfigured: boolean;
+      providerOptions: string[];
+      checkedAt: string;
+      flightNumber: string | null;
+      message: string;
+    };
+  }>(`/api/v1/life-events/${id}/travel-status`);
 }
 
 export function getKnowledgeGraph(

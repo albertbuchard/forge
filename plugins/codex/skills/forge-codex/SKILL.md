@@ -4,7 +4,7 @@ Use this plugin when you want Codex to work directly with Forge through the cura
 MCP tool surface.
 
 Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
-wiki surfaces, the Artifact Store, read-model surfaces, and specialized Movement, Life Force, and Workbench domain surfaces.
+wiki surfaces, the Artifact Store, read-model surfaces, and specialized Movement, Life Events, Life Force, and Workbench domain surfaces.
 The planning side covers goals, projects, strategies, tasks,
 habits, tags, notes, calendar events, recurring work blocks, task timeboxes, live
 task runs, and agent-authored insights. The health side covers `sleep_session`,
@@ -23,7 +23,7 @@ submit artifact passwords. Read-model surfaces include `operator_overview`,
 `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`,
 `training_load`, `weight_loss`, and the self-observation calendar; ask what
 practical decision the read should support before adding write-shaped questions.
-Movement, Life Force, and Workbench use dedicated route
+Movement, Life Events, Life Force, and Workbench use dedicated route
 families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
 many users with `userId` or repeated `userIds`, and cross-user links are valid when
@@ -38,8 +38,9 @@ can be added, updated, reviewed or navigated, linked, or placed. Action workflow
 verbs such as start, continue, complete, adjust, judge, signal, publish, sync, or
 observe. Specialized CRUD uses lifecycle verbs such as create, read, update, sync,
 reconnect, delete, or browse. Read models need a practical read question and scope.
-Movement, Life Force, and Workbench use review, correct, repair, run, inspect,
-publish, or preserve lanes through their dedicated route keys. Psyche entities need
+Movement, Life Events, Life Force, and Workbench use review, correct, repair, run, inspect,
+publish, preserve, calendar-sync, ticket-import, or status lanes through their dedicated
+route keys. Psyche entities need
 formulation before storage when the user wants understanding rather than a direct
 save.
 
@@ -53,7 +54,7 @@ without guessing.
 Keep that route plan internal unless the user asks for implementation detail. Track
 the intent, entity or dedicated domain lane, exact tool or route key, target
 identifiers, and one missing detail privately; with the user, ask about the real
-thing: the span, place, weekday, flow, run, node, belief sentence, parent record, or
+thing: the span, place, event, artifact, weekday, flow, run, node, belief sentence, parent record, or
 save confirmation. Report product actions such as "saved the belief", "corrected the
 missing stay", "updated the weekday energy pattern", or "read the failed node" before
 any route-key or endpoint detail.
@@ -61,7 +62,7 @@ any route-key or endpoint detail.
 Use the known-target fast path when the user already supplied the object, action, and
 likely lane. For normal entities, ask only for parent, owner, or duplicate-disambiguation that changes the write. For task hierarchy, ask only for the project,
 issue, or parent task that changes placement. For Movement, ask only for the missing
-interval, boundary, saved object, or confirmation. For Life Force, ask only for the
+interval, boundary, saved object, or confirmation. For Life Events, ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation. For Life Force, ask only for the
 weekday, profile field, signal intensity, or planning effect. For Workbench, ask only
 for the missing flow, run, node, input, output, or preservation choice. For direct
 Psyche saves, ask one accuracy or consent question instead of restarting exploration.
@@ -78,12 +79,12 @@ For logistical records, keep the reflection short and ask for the operational de
 Use the route execution handoff before any read, write, run, repair, or publish call:
 freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only
 for catalog entities, use named tools or documented routes for specialized CRUD and
-action workflows, and for Movement, Life Force, Workbench, or Artifact Store verify `routeKey`,
+action workflows, and for Movement, Life Events, Life Force, Workbench, or Artifact Store verify `routeKey`,
 method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
 - Batch CRUD is the default for normal stored entities, including `goal`, `project`,
-  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`,
+  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `life_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
@@ -97,11 +98,11 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `preference_signal`, and `self_observation` are action workflows. Use their
   dedicated tools or note-backed write model instead of generic entity create/update
   when the action route is the real product behavior.
-- Movement, Life Force, and Workbench are specialized domain surfaces. Read
+- Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
-  the dedicated route families for timeline/overlay repair, energy templates/signals,
+  the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
   and flow execution/results. When an adapter exposes `forge_call_movement_route`,
-  `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
+  `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route`, use those
   route-key tools after the conversation has selected the lane. Life Force may be
   keyed as `lifeForce` and as the entity-style alias `life_force`; both names point
   to the same `/api/v1/life-force/*` route family.
@@ -130,10 +131,10 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   route.
 - If a specialized route-key tool is unavailable, stale, or missing the needed route
   key, do not fall back to generic batch CRUD and do not invent a nearby raw path. Read
-  live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life
+  live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life Events, Life
   Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
   and path.
-- Before every Movement, Life Force, or Workbench call, run a route-contract
+- Before every Movement, Life Events, Life Force, or Workbench call, run a route-contract
   handshake internally: select the product lane in plain language, verify the matching
   `routeKey` against live onboarding `routeKeys` and `methodRoutes`, fill any
   placeholders through `pathParams`, and ask the user only for the missing product
@@ -166,6 +167,18 @@ Concrete route-key examples for internal use:
   `{"routeKey":"userBoxUpdate","pathParams":{"id":"box_manual_123"},"body":{"endedAt":"2026-05-06T15:30:00.000Z","note":"Extended after checking the timeline detail."}}`
 - Movement saved-overlay delete:
   `{"routeKey":"userBoxDelete","pathParams":{"id":"box_manual_123"}}`
+- Life Events timeline read:
+  `{"routeKey":"timeline","query":{"limit":100,"offset":0}}`
+- Life Event detail read:
+  `{"routeKey":"read","pathParams":{"id":"lifeevent_123"}}`
+- Life Event calendar sync:
+  `{"routeKey":"calendarSync","pathParams":{"id":"lifeevent_123"},"body":{"projection":"link_or_create"}}`
+- Mark calendar event as Life Event:
+  `{"routeKey":"fromCalendarEvent","body":{"calendarEventId":"cal_evt_123","eventType":"concert","importance":"meaningful"}}`
+- Import ticket artifact into Life Events:
+  `{"routeKey":"importTicket","body":{"artifactId":"artifact_ticket_123","createDraft":true,"useLlm":true}}`
+- Life Event travel status:
+  `{"routeKey":"travelStatus","pathParams":{"id":"lifeevent_123"}}`
 - Life Force overview:
   `{"routeKey":"overview"}`
 - Life Force profile edit:
@@ -318,7 +331,8 @@ Surface rule:
   do not force full exploration. For guided formulation, use active listening and
   Psyche hypotheses when the user is trying to understand or name charged material.
   For review-first, read before write-shaped questions. For action-first, act or ask
-  only for the missing target, span, weekday, flow, run, node, correction, or consent.
+  only for the missing target, span, event, artifact, weekday, flow, run, node,
+  correction, or consent.
 - When one message combines several jobs, sequence them instead of turning them into a
   broad menu: read before a correction when the current truth is uncertain, formulate
   the primary Psyche record before deriving a flashcard or note, and ask only for the
@@ -363,7 +377,7 @@ Surface rule:
 - For review-first requests, use the correct read posture before asking write-shaped
   questions: shared batch search or read hints for normal entities, wiki/calendar
   dedicated reads for specialized CRUD, read-model routes for overviews, and
-  Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After
+  Movement, Life Events, Life Force, or Workbench dedicated reads for those domain surfaces. After
   the read, answer the practical question before asking for any save, correction,
   link, run, enrichment, or publish detail.
 - If several actions are possible after the read, choose the one most directly
@@ -542,7 +556,7 @@ Surface rule:
     and `fatG`; do not save name-only custom foods.
     The training-load read model includes zone-time buckets, Combat/Base/Endurance
     smart modes, next-week targets, and next-workout guidance.
-13. Movement, Life Force, and Workbench are specialized Forge API surfaces rather
+13. Movement, Life Events, Life Force, and Workbench are specialized Forge API surfaces rather
     than simple batch entities. For Movement in particular, treat the surface as a
     timeline of stays and trips that supports time-in-place questions, travel-history
     review, manual overlays, edits, and links to other Forge records.
@@ -612,30 +626,34 @@ Surface rule:
   Forge UI ingest review instead of pretending Codex can approve candidates inline.
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
-- Preferred API path for Movement, Life Force, and Workbench: use the dedicated
+- Preferred API path for Movement, Life Events, Life Force, and Workbench: use the dedicated
   route families published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces`.
-  Prefer `forge_call_movement_route`, `forge_call_life_force_route`, or
+  Prefer `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or
   `forge_call_workbench_route` when those route-key tools are present.
+- Life Events use both paths deliberately: shared batch CRUD for normal `life_event`
+  create, update, search, soft delete, restore, and generic `entity_links`; dedicated
+  `/api/v1/life-events/*` routes for chronology reads, one-event reads, calendar sync,
+  calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads.
 - When that onboarding payload includes `routeSelectionQuestions`, use them before
-  improvising follow-up questions for Movement, Life Force, or Workbench.
-- After the lane is clear, talk in product nouns such as timeline, overlay, weekday
+  improvising follow-up questions for Movement, Life Events, Life Force, or Workbench.
+- After the lane is clear, talk in product nouns such as timeline, overlay, calendar match, ticket import, travel status, weekday
   template, published output, run detail, or node result rather than generic "record"
   language. Keep implementation words like surface, CRUD, payload, read path, and
   mutation path out of user-facing questions unless the user asks about implementation.
-- If the truth of the current Movement, Life Force, or Workbench state is still
+- If the truth of the current Movement, Life Events, Life Force, or Workbench state is still
   unclear, prefer the dedicated read before the mutation so the correction stays
   truthful.
-- After a concrete Movement, Life Force, or Workbench correction, mutation, or
+- After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or
   result-producing run, read the relevant specialized view back when the user is
   trying to understand the result rather than only store it: timeline or
   place/settings detail for Movement, the Life Force overview for energy-planning
   impact, and flow detail, run detail, node result, latest node output, published
   output, or run history for Workbench.
-- After any dedicated Movement, Life Force, or Workbench read, translate the result
-  into one next action: no change, Movement overlay/place/settings/link, Life Force
+- After any dedicated Movement, Life Events, Life Force, or Workbench read, translate the result
+  into one next action: no change, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force
   workload/recovery/timebox/meeting/task-choice change, or Workbench
   rerun/node-inspection/flow-edit/publish/preserve/stop. Ask only for the missing
-  span, place, weekday, flow, run, node, output, correction, preservation choice, or
+  span, place, event, artifact, weekday, flow, run, node, output, correction, preservation choice, or
   confirmation that would change that action.
 - In the live onboarding catalog, those domains should read as
   `specialized_domain_surface`, not as read-only leftovers. If the classification and
