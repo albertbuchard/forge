@@ -1,6 +1,6 @@
 {
   "name": "forge-memory",
-  "version": "0.3.21",
+  "version": "0.3.22",
   "description": "Guided Forge installer and local runtime manager for the Forge UI, OpenClaw, Hermes, Codex, Claude Code, and iOS pairing.",
   "type": "module",
   "license": "Apache-2.0",
