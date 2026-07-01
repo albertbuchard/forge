@@ -13,6 +13,7 @@ import {
   MapPin,
   Milestone,
   Music,
+  PencilLine,
   Plane,
   Plus,
   Ship,
@@ -35,6 +36,7 @@ import {
   getLifeEventsTimeline,
   importLifeEventTicket,
   syncLifeEventCalendar,
+  updateEntities,
   uploadArtifact
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -111,6 +113,24 @@ const defaultTicketDraft = (): TicketImportDraft => ({
   sourceLabel: "Ticket upload",
   useLlm: true
 });
+
+function draftFromLifeEvent(event: LifeEvent): LifeEventDraft {
+  return {
+    title: event.title,
+    shortDescription: event.shortDescription,
+    description: event.description,
+    eventType: event.eventType,
+    importance: event.importance,
+    startsAt: toLocalDateTimeInput(event.startsAt),
+    endsAt: toLocalDateTimeInput(event.endsAt),
+    timezone: event.timezone,
+    placeLabel: event.placeLabel,
+    originLabel: event.originLabel,
+    destinationLabel: event.destinationLabel,
+    transportMode: event.transportMode ?? "",
+    calendarProjection: event.primaryCalendarEventId ? "link_or_create" : "none"
+  };
+}
 
 function toLocalDateTimeInput(value: string) {
   const date = new Date(value);
@@ -322,12 +342,14 @@ function LifeEventCard({
   next,
   expanded,
   onToggle,
+  onEdit,
   onSyncCalendar
 }: {
   event: LifeEvent;
   next: boolean;
   expanded: boolean;
   onToggle: () => void;
+  onEdit: () => void;
   onSyncCalendar: () => void;
 }) {
   const Icon = eventIcon(event.eventType);
@@ -428,6 +450,10 @@ function LifeEventCard({
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
+              <PencilLine className="size-4" />
+              Edit
+            </Button>
             <Button type="button" variant="secondary" size="sm" onClick={onSyncCalendar}>
               <CalendarCheck2 className="size-4" />
               Sync calendar
@@ -496,6 +522,7 @@ export function LifeEventsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<LifeEvent | null>(null);
   const [draft, setDraft] = useState<LifeEventDraft>(() => defaultDraft());
   const [ticketDraft, setTicketDraft] = useState<TicketImportDraft>(() => defaultTicketDraft());
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -522,32 +549,39 @@ export function LifeEventsPage() {
     overscan: 8
   });
 
+  const buildLifeEventPayload = (value: LifeEventDraft) => {
+    const startsAt = fromLocalDateTimeInput(value.startsAt);
+    const endsAt = fromLocalDateTimeInput(value.endsAt);
+    if (!startsAt) {
+      throw new Error("Add a valid start date and time.");
+    }
+    const data: Record<string, unknown> = {
+      title: value.title.trim(),
+      shortDescription: value.shortDescription.trim(),
+      description: value.description.trim(),
+      eventType: value.eventType,
+      importance: value.importance,
+      startsAt,
+      timezone: value.timezone.trim() || "UTC",
+      placeLabel: value.placeLabel.trim(),
+      originLabel: value.originLabel.trim(),
+      destinationLabel: value.destinationLabel.trim(),
+      calendarProjection: value.calendarProjection
+    };
+    if (endsAt) {
+      data.endsAt = endsAt;
+    }
+    if (value.transportMode) {
+      data.transportMode = value.transportMode;
+    } else {
+      data.transportMode = null;
+    }
+    return data;
+  };
+
   const createMutation = useMutation({
     mutationFn: async (value: LifeEventDraft) => {
-      const startsAt = fromLocalDateTimeInput(value.startsAt);
-      const endsAt = fromLocalDateTimeInput(value.endsAt);
-      if (!startsAt) {
-        throw new Error("Add a valid start date and time.");
-      }
-      const data: Record<string, unknown> = {
-        title: value.title.trim(),
-        shortDescription: value.shortDescription.trim(),
-        description: value.description.trim(),
-        eventType: value.eventType,
-        importance: value.importance,
-        startsAt,
-        timezone: value.timezone.trim() || "UTC",
-        placeLabel: value.placeLabel.trim(),
-        originLabel: value.originLabel.trim(),
-        destinationLabel: value.destinationLabel.trim(),
-        calendarProjection: value.calendarProjection
-      };
-      if (endsAt) {
-        data.endsAt = endsAt;
-      }
-      if (value.transportMode) {
-        data.transportMode = value.transportMode;
-      }
+      const data = buildLifeEventPayload(value);
       await createEntities({
         operations: [{ entityType: "life_event", data }],
         atomic: true
@@ -557,6 +591,34 @@ export function LifeEventsPage() {
       await queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] });
       await queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
       setDraft(defaultDraft());
+      setEventDialogOpen(false);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({
+      event,
+      value
+    }: {
+      event: LifeEvent;
+      value: LifeEventDraft;
+    }) => {
+      await updateEntities({
+        operations: [
+          {
+            entityType: "life_event",
+            id: event.id,
+            patch: buildLifeEventPayload(value)
+          }
+        ],
+        atomic: true
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["life-events-timeline"] });
+      await queryClient.invalidateQueries({ queryKey: ["knowledge-graph"] });
+      setDraft(defaultDraft());
+      setEditingEvent(null);
       setEventDialogOpen(false);
     }
   });
@@ -828,7 +890,14 @@ export function LifeEventsPage() {
               <FileUp className="size-4" />
               Import tickets
             </Button>
-            <Button type="button" onClick={() => setEventDialogOpen(true)}>
+            <Button
+              type="button"
+              onClick={() => {
+                setEditingEvent(null);
+                setDraft(defaultDraft());
+                setEventDialogOpen(true);
+              }}
+            >
               <Plus className="size-4" />
               Add event
             </Button>
@@ -896,6 +965,11 @@ export function LifeEventsPage() {
                       next={isNext}
                       expanded={isExpanded}
                       onToggle={() => setExpandedId(isExpanded ? null : event.id)}
+                      onEdit={() => {
+                        setEditingEvent(event);
+                        setDraft(draftFromLifeEvent(event));
+                        setEventDialogOpen(true);
+                      }}
                       onSyncCalendar={() => syncMutation.mutate(event.id)}
                     />
                   </div>
@@ -919,17 +993,23 @@ export function LifeEventsPage() {
           setEventDialogOpen(open);
           if (!open) {
             setSubmitError(null);
+            setEditingEvent(null);
+            setDraft(defaultDraft());
           }
         }}
         eyebrow="Life Event"
-        title="Add Life Event"
-        description="Capture the event with enough timing, place, meaning, and calendar behavior to keep it useful later."
+        title={editingEvent ? "Edit Life Event" : "Add Life Event"}
+        description={
+          editingEvent
+            ? "Update the event with the same guided structure used for creation."
+            : "Capture the event with enough timing, place, meaning, and calendar behavior to keep it useful later."
+        }
         value={draft}
         onChange={setDraft}
         steps={steps}
-        draftPersistenceKey="life-event.new"
-        submitLabel="Create Life Event"
-        pending={createMutation.isPending}
+        draftPersistenceKey={editingEvent ? `life-event.edit.${editingEvent.id}` : "life-event.new"}
+        submitLabel={editingEvent ? "Update Life Event" : "Create Life Event"}
+        pending={createMutation.isPending || updateMutation.isPending}
         error={submitError}
         onSubmit={async () => {
           setSubmitError(null);
@@ -938,9 +1018,19 @@ export function LifeEventsPage() {
             return;
           }
           try {
-            await createMutation.mutateAsync(draft);
+            if (editingEvent) {
+              await updateMutation.mutateAsync({ event: editingEvent, value: draft });
+            } else {
+              await createMutation.mutateAsync(draft);
+            }
           } catch (error) {
-            setSubmitError(error instanceof Error ? error.message : "Unable to create Life Event.");
+            setSubmitError(
+              error instanceof Error
+                ? error.message
+                : editingEvent
+                  ? "Unable to update Life Event."
+                  : "Unable to create Life Event."
+            );
           }
         }}
       />

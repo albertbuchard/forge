@@ -6,9 +6,10 @@ something is scheduled. A Life Event records why that moment matters, what happe
 will happen, how it connects to other Forge records, and what evidence belongs with it.
 
 The web app exposes the surface at `/forge/life-events`. The view is a virtualized
-timeline with past, current, and future events, plus guided modal flows for creating an
-event and importing ticket files. The page must not use side-panel upload forms; creation
-and ticket import use the same guided modal pattern as the other Forge surfaces.
+timeline with past, current, and future events, plus guided modal flows for creating,
+editing, and importing ticket files. The page must not use side-panel upload forms;
+event creation, event editing, and ticket import use the same guided modal pattern as
+the other Forge surfaces.
 
 ## Entity Contract
 
@@ -101,7 +102,7 @@ The Life Events view should stay fast and readable even with many events:
 - render the chronology with virtualization
 - keep filters and search cheap
 - show past, current, and future states without forcing the whole list into the DOM
-- use guided modal forms for creation and ticket import
+- use guided modal forms for creation, editing, and ticket import
 - allow several ticket files to be uploaded in one guided import flow
 - let the user open per-file detail when a ticket needs more description or review
 - keep travel and map rendering lazy so the timeline stays responsive

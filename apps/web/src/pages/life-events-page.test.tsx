@@ -8,6 +8,7 @@ import type { LifeEvent, LifeEventTimelinePayload } from "@/lib/types";
 const {
   getLifeEventsTimelineMock,
   createEntitiesMock,
+  updateEntitiesMock,
   syncLifeEventCalendarMock,
   getLifeEventTravelStatusMock,
   uploadArtifactMock,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
   getLifeEventsTimelineMock: vi.fn(),
   createEntitiesMock: vi.fn(),
+  updateEntitiesMock: vi.fn(),
   syncLifeEventCalendarMock: vi.fn(),
   getLifeEventTravelStatusMock: vi.fn(),
   uploadArtifactMock: vi.fn(),
@@ -40,11 +42,15 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     open,
     title,
     description,
+    submitLabel,
+    onSubmit,
     children
   }: {
     open: boolean;
     title: string;
     description: string;
+    submitLabel: string;
+    onSubmit: () => Promise<void>;
     children?: ReactNode;
   }) =>
     open ? (
@@ -52,12 +58,16 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
         <h2>{title}</h2>
         <p>{description}</p>
         {children}
+        <button type="button" onClick={() => void onSubmit()}>
+          {submitLabel}
+        </button>
       </div>
     ) : null
 }));
 
 vi.mock("@/lib/api", () => ({
   createEntities: createEntitiesMock,
+  updateEntities: updateEntitiesMock,
   getLifeEventTravelStatus: getLifeEventTravelStatusMock,
   getLifeEventsTimeline: getLifeEventsTimelineMock,
   importLifeEventTicket: importLifeEventTicketMock,
@@ -194,6 +204,44 @@ describe("LifeEventsPage", () => {
     await waitFor(() => {
       expect(screen.queryByText("Flight to Paris")).not.toBeInTheDocument();
       expect(screen.getByText("Cinema night")).toBeInTheDocument();
+    });
+  });
+
+  it("opens a guided edit flow and updates through batch life_event CRUD", async () => {
+    createEntitiesMock.mockResolvedValue({ results: [] });
+    updateEntitiesMock.mockResolvedValue({ results: [{ ok: true }] });
+    renderPage({
+      events: [buildLifeEvent()],
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_123",
+      limit: 500,
+      offset: 0
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /flight to paris/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    expect(screen.getByTestId("guided-question-flow")).toHaveTextContent(
+      "Edit Life Event"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /update life event/i }));
+
+    await waitFor(() => {
+      expect(updateEntitiesMock).toHaveBeenCalledWith({
+        atomic: true,
+        operations: [
+          expect.objectContaining({
+            entityType: "life_event",
+            id: "lifeevent_123",
+            patch: expect.objectContaining({
+              title: "Flight to Paris",
+              eventType: "travel_flight",
+              calendarProjection: "none"
+            })
+          })
+        ]
+      });
     });
   });
 });
