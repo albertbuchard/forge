@@ -809,7 +809,7 @@ export function registerForgePluginTools(
     name: "forge_call_artifact_route",
     label: "Forge Artifact Route",
     description:
-      "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Use shared batch CRUD for artifact metadata delete/restore. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
+      "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Use shared batch CRUD for artifact metadata delete/restore. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
     routeSpecs: artifactRouteSpecs
   });
 

@@ -380,12 +380,15 @@ import {
 } from "./services/entity-crud.js";
 import {
   artifactEnrichmentRequestSchema,
+  artifactEncryptRequestSchema,
   artifactListQuerySchema,
   artifactMetadataPatchSchema,
+  artifactPasswordDownloadSchema,
   artifactTrustPatchSchema,
   artifactUploadSchema,
   createArtifactFromUpload,
   entityLinkInputSchema,
+  encryptExistingArtifact,
   enrichArtifactWithLlm,
   getArtifactById,
   listArtifactAuditEvents,
@@ -3052,7 +3055,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
     case "artifact":
-      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET /api/v1/artifacts/:id/download only for human operator downloads. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
+      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET or POST /api/v1/artifacts/:id/download plus POST /api/v1/artifacts/:id/encrypt only for human operator surfaces. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
       return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
     case "questionnaire_run":
@@ -3834,7 +3837,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Artifact relationships use the general entity_links model and are exposed as artifact.links with sourceEntityType/sourceEntityId and targetEntityType/targetEntityId; do not invent artifact-specific link routes or relationship semantics.",
       "Batch CRUD can search, patch metadata, soft-delete, restore, or hard-delete artifact metadata, but it must not create file artifacts or transfer bytes.",
       "Only trusted human sessions or trusted/autonomous agent tokens with artifact.create and artifact.uploadBytes may upload bytes.",
-      "Agents must not download, open, execute, transform, parse with external programs, or autonomously run stored files. GET /api/v1/artifacts/:id/download is for human operator sessions only.",
+      "Agents must not download, decrypt, open, preview, execute, transform, parse with external programs, submit artifact passwords, or autonomously run stored files. Artifact download and existing-artifact encryption password submission routes are human operator sessions only.",
       "LLM enrichment may fill missing title, shortDescription, description, tags, and danger interpretation from safe metadata and static text samples; it must never lower the deterministic scanner danger score."
     ],
     searchHints: [
@@ -5383,13 +5386,13 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     summary:
       "Call one allowed Artifact Store route for trusted file upload, metadata, scans, enrichment, generic entity links, trust state, versions, or audit.",
     whenToUse:
-      "Use for artifact list/read/update/upload flows after the user wants a file preserved or reviewed as metadata. Use shared batch CRUD only for artifact metadata search/update/delete/restore. Do not use this tool to download, open, preview, execute, or transform file bytes.",
+      "Use for artifact list/read/update/upload flows after the user wants a file preserved or reviewed as metadata. Use shared batch CRUD only for artifact metadata search/update/delete/restore. Do not use this tool to download, decrypt, open, preview, execute, transform file bytes, or submit artifact passwords.",
     inputShape:
       '{ routeKey: "list"|"createWithBytes"|"readMetadata"|"updateMetadata"|"rescan"|"enrichWithLlm"|"replaceGenericLinks"|"trustState"|"versions"|"audit", pathParams?: { id?: string }, query?: object, body?: object }',
     requiredFields: ["routeKey"],
     notes: [
-      "The download route is intentionally absent from the agent tool surface; it is human-operator-only.",
-      "For createWithBytes, the body must include originalFileName and contentBase64, and the actor must be trusted and scoped for artifact byte upload.",
+      "Download, password download, decrypt, and existing-artifact encryption routes are intentionally absent from the agent tool surface; they are human-operator-only.",
+      "For createWithBytes, the body must include originalFileName and contentBase64, and the actor must be trusted and scoped for artifact byte upload. Agents must not include contentProtection.password; encrypted upload passwords belong in the web/operator flow.",
       "For replaceGenericLinks, links are generic entity link inputs identifying target entityType, entityId, optional anchorKey, and relationship.",
       "Optional LLM enrichment can fill missing metadata, but it must not lower the deterministic scanner danger score."
     ],
@@ -6194,6 +6197,8 @@ function buildAgentOnboardingPayload(request: {
           readMetadata: "/api/v1/artifacts/:id",
           updateMetadata: "/api/v1/artifacts/:id",
           humanDownloadOnly: "/api/v1/artifacts/:id/download",
+          humanPasswordDownloadOnly: "/api/v1/artifacts/:id/download",
+          humanEncryptOnly: "/api/v1/artifacts/:id/encrypt",
           rescan: "/api/v1/artifacts/:id/scan",
           enrichWithLlm: "/api/v1/artifacts/:id/enrich",
           replaceGenericLinks: "/api/v1/artifacts/:id/links",
@@ -6250,8 +6255,9 @@ function buildAgentOnboardingPayload(request: {
             audit: { method: "GET", path: "/api/v1/artifacts/:id/audit" }
           },
           safetyRules: [
-            "Do not expose the download route to agent tools. It is a human operator route only.",
-            "Do not execute, preview, parse externally, or transform stored file bytes autonomously.",
+            "Do not expose download, password download, decrypt, or existing-artifact encryption routes to agent tools. They are human operator routes only.",
+            "Agents can see contentProtection mode and password hints, but must not receive, store, submit, or route artifact passwords.",
+            "Do not execute, preview, parse externally, decrypt, or transform stored file bytes autonomously.",
             "Use general entity links for relationships; do not create artifact-specific link models.",
             "Use limit and offset for artifact list calls; do not bulk-load large Artifact Stores.",
             "Use batch CRUD only for artifact metadata search/update/delete/restore, never for file-byte creation."
@@ -6923,7 +6929,7 @@ function buildAgentOnboardingPayload(request: {
       specializedSurfaceRule:
         "For Movement, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-force, and /forge/v1/workbench.",
       artifactStoreRule:
-        "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, open, run, execute, transform, or preview stored file bytes as an agent; downloads are human-operator-only.",
+        "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, decrypt, open, run, execute, transform, preview stored file bytes, or submit artifact passwords as an agent; downloads and password encryption actions are human-operator-only.",
       reviewShortcutRule:
         "When the user is reviewing or correcting an existing record, ask what practical question they want the read or correction to answer, then narrow the saved object, timeframe, or route family first. Use the correct read posture before asking write-shaped questions: shared batch search or read hints for normal entities, wiki/calendar dedicated reads for specialized CRUD, read-model routes for overviews, and Movement, Life Force, or Workbench dedicated reads for those domain surfaces. After the read, answer the practical question before asking for any save, correction, link, run, enrichment, or publish detail, and state what the read rules in, rules out, or leaves uncertain. If several actions are possible, narrow to the one most directly supported by the read instead of handing the user a broad menu. Do not reopen the whole intake unless the user is actually redefining the record.",
       readModelWriteRule:
@@ -9713,6 +9719,60 @@ export async function buildServer(
       .header("content-length", String(result.bytes.byteLength))
       .header("content-disposition", `attachment; filename="${fileName}"`)
       .send(result.bytes);
+  });
+  app.post("/api/v1/artifacts/:id/download", async (request, reply) => {
+    const auth = requireArtifactDownloadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/download" }
+    );
+    const { id } = request.params as { id: string };
+    const body = artifactPasswordDownloadSchema.parse(request.body ?? {});
+    const result = await readArtifactDownload(id, body.password);
+    if (!result) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    const fileName = result.artifact.originalFileName.replace(
+      /["\\\r\n]/g,
+      "_"
+    );
+    recordActivityEvent({
+      entityType: "artifact",
+      entityId: result.artifact.id,
+      eventType: "artifact.downloaded",
+      title: `Artifact downloaded: ${result.artifact.title}`,
+      description:
+        "A human operator downloaded stored artifact bytes. Forge did not execute the file.",
+      actor: auth.actor ?? null,
+      source: auth.source,
+      metadata: {
+        contentSha256: result.artifact.contentSha256,
+        byteSize: result.artifact.byteSize,
+        contentProtectionMode: result.artifact.contentProtection.mode
+      }
+    });
+    return reply
+      .header("content-type", result.artifact.detectedMimeType)
+      .header("content-length", String(result.bytes.byteLength))
+      .header("content-disposition", `attachment; filename="${fileName}"`)
+      .send(result.bytes);
+  });
+  app.post("/api/v1/artifacts/:id/encrypt", async (request, reply) => {
+    const auth = requireArtifactDownloadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/encrypt" }
+    );
+    const { id } = request.params as { id: string };
+    const artifact = await encryptExistingArtifact(
+      id,
+      artifactEncryptRequestSchema.parse(request.body ?? {}),
+      auth
+    );
+    if (!artifact) {
+      reply.code(404);
+      return { error: "Artifact not found" };
+    }
+    return { artifact };
   });
   app.post("/api/v1/artifacts/:id/scan", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(

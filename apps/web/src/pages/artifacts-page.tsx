@@ -8,7 +8,9 @@ import {
   Download,
   FileSearch,
   Files,
+  KeyRound,
   Link2,
+  Lock,
   Pencil,
   RefreshCw,
   ShieldAlert,
@@ -32,6 +34,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   deleteEntities,
   downloadArtifact,
+  downloadArtifactWithPassword,
+  encryptArtifact,
   enrichArtifact,
   getArtifact,
   listArtifactAuditEvents,
@@ -192,6 +196,7 @@ function removeUploadItem(
   itemId: string
 ): ArtifactUploadFlowValue {
   return {
+    ...value,
     items: value.items.filter((item) => item.id !== itemId),
     activeItemId: value.activeItemId === itemId ? null : value.activeItemId
   };
@@ -213,6 +218,10 @@ function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isEncryptedArtifact(artifact: Artifact | null | undefined) {
+  return artifact?.contentProtection.mode === "password_encrypted";
+}
+
 type UploadDraft = {
   title: string;
   shortDescription: string;
@@ -232,6 +241,20 @@ type ArtifactUploadQueueItem = UploadDraft & {
 type ArtifactUploadFlowValue = {
   items: ArtifactUploadQueueItem[];
   activeItemId: string | null;
+  encryptContent: boolean;
+  contentPassword: string;
+  contentPasswordConfirm: string;
+  contentPasswordHint: string;
+};
+
+type PasswordFlowValue = {
+  password: string;
+};
+
+type EncryptFlowValue = {
+  password: string;
+  passwordConfirm: string;
+  passwordHint: string;
 };
 
 type ArtifactUploadResult =
@@ -251,7 +274,21 @@ type ArtifactUploadResult =
 
 const EMPTY_UPLOAD_FLOW_VALUE: ArtifactUploadFlowValue = {
   items: [],
-  activeItemId: null
+  activeItemId: null,
+  encryptContent: false,
+  contentPassword: "",
+  contentPasswordConfirm: "",
+  contentPasswordHint: ""
+};
+
+const EMPTY_PASSWORD_FLOW_VALUE: PasswordFlowValue = {
+  password: ""
+};
+
+const EMPTY_ENCRYPT_FLOW_VALUE: EncryptFlowValue = {
+  password: "",
+  passwordConfirm: "",
+  passwordHint: ""
 };
 
 const ARTIFACT_ACCEPT_EXTENSIONS = [
@@ -356,6 +393,12 @@ function ArtifactListItem({
         <Badge size="xs" tone="meta">
           {formatBytes(artifact.byteSize)}
         </Badge>
+        {isEncryptedArtifact(artifact) ? (
+          <Badge size="xs" tone="meta">
+            <Lock className="size-3" />
+            Encrypted
+          </Badge>
+        ) : null}
         <Badge size="xs" tone="meta">
           {titleCase(artifact.artifactState)}
         </Badge>
@@ -405,12 +448,26 @@ export function ArtifactsPage() {
   const [pageIndex, setPageIndex] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [downloadPasswordDialogOpen, setDownloadPasswordDialogOpen] =
+    useState(false);
+  const [encryptDialogOpen, setEncryptDialogOpen] = useState(false);
   const [uploadFlowValue, setUploadFlowValue] =
     useState<ArtifactUploadFlowValue>(EMPTY_UPLOAD_FLOW_VALUE);
+  const [downloadPasswordValue, setDownloadPasswordValue] =
+    useState<PasswordFlowValue>(EMPTY_PASSWORD_FLOW_VALUE);
+  const [encryptFlowValue, setEncryptFlowValue] = useState<EncryptFlowValue>(
+    EMPTY_ENCRYPT_FLOW_VALUE
+  );
   const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>(
     []
   );
   const [uploadDialogError, setUploadDialogError] = useState<string | null>(
+    null
+  );
+  const [downloadPasswordError, setDownloadPasswordError] = useState<
+    string | null
+  >(null);
+  const [encryptDialogError, setEncryptDialogError] = useState<string | null>(
     null
   );
   const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] = useState<
@@ -482,6 +539,8 @@ export function ArtifactsPage() {
   useEffect(() => {
     if (!selectedArtifact) {
       setArchiveDialogOpen(false);
+      setDownloadPasswordDialogOpen(false);
+      setEncryptDialogOpen(false);
     }
   }, [selectedArtifact]);
 
@@ -521,6 +580,13 @@ export function ArtifactsPage() {
             sourceLabel: item.sourceLabel,
             metadata: parseMetadataText(item.metadataText),
             links: parseGenericLinksText(item.genericLinksText),
+            contentProtection: uploadFlowValue.encryptContent
+              ? {
+                  mode: "password_encrypted",
+                  password: uploadFlowValue.contentPassword,
+                  passwordHint: uploadFlowValue.contentPasswordHint
+                }
+              : undefined,
             useLlmEnrichment: item.useLlmEnrichment
           };
           const { artifact } = await uploadArtifact(input);
@@ -591,6 +657,12 @@ export function ArtifactsPage() {
   const downloadMutation = useMutation({
     mutationFn: async () => {
       const artifact = selectedArtifact!;
+      if (isEncryptedArtifact(artifact)) {
+        setDownloadPasswordValue(EMPTY_PASSWORD_FLOW_VALUE);
+        setDownloadPasswordError(null);
+        setDownloadPasswordDialogOpen(true);
+        return;
+      }
       const result = await downloadArtifact(artifact.id);
       const url = URL.createObjectURL(result.blob);
       const anchor = document.createElement("a");
@@ -600,6 +672,48 @@ export function ArtifactsPage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+    }
+  });
+
+  const passwordDownloadMutation = useMutation({
+    mutationFn: async (password: string) => {
+      const artifact = selectedArtifact!;
+      const result = await downloadArtifactWithPassword(artifact.id, password);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.fileName ?? artifact.originalFileName;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      setDownloadPasswordDialogOpen(false);
+      setDownloadPasswordValue(EMPTY_PASSWORD_FLOW_VALUE);
+      setDownloadPasswordError(null);
+    },
+    onError: (error) => {
+      setDownloadPasswordError(readErrorMessage(error));
+    }
+  });
+
+  const encryptMutation = useMutation({
+    mutationFn: async (value: EncryptFlowValue) => {
+      const artifact = selectedArtifact!;
+      return encryptArtifact(artifact.id, {
+        password: value.password,
+        passwordHint: value.passwordHint
+      });
+    },
+    onSuccess: async () => {
+      setEncryptDialogOpen(false);
+      setEncryptFlowValue(EMPTY_ENCRYPT_FLOW_VALUE);
+      setEncryptDialogError(null);
+      await invalidateArtifacts();
+    },
+    onError: (error) => {
+      setEncryptDialogError(readErrorMessage(error));
     }
   });
 
@@ -741,6 +855,73 @@ export function ArtifactsPage() {
                 ))}
               </div>
             )}
+
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+                <input
+                  type="checkbox"
+                  checked={value.encryptContent}
+                  onChange={(event) =>
+                    setValue({
+                      ...value,
+                      encryptContent: event.target.checked,
+                      contentPassword: event.target.checked
+                        ? value.contentPassword
+                        : "",
+                      contentPasswordConfirm: event.target.checked
+                        ? value.contentPasswordConfirm
+                        : "",
+                      contentPasswordHint: event.target.checked
+                        ? value.contentPasswordHint
+                        : ""
+                    })
+                  }
+                />
+                Encrypt file content with a password
+              </label>
+              {value.encryptContent ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <FlowField label="Password">
+                    <Input
+                      type="password"
+                      value={value.contentPassword}
+                      onChange={(event) =>
+                        setValue({
+                          ...value,
+                          contentPassword: event.target.value
+                        })
+                      }
+                    />
+                  </FlowField>
+                  <FlowField label="Confirm password">
+                    <Input
+                      type="password"
+                      value={value.contentPasswordConfirm}
+                      onChange={(event) =>
+                        setValue({
+                          ...value,
+                          contentPasswordConfirm: event.target.value
+                        })
+                      }
+                    />
+                  </FlowField>
+                  <div className="md:col-span-2">
+                    <FlowField label="Password hint">
+                      <Input
+                        value={value.contentPasswordHint}
+                        onChange={(event) =>
+                          setValue({
+                            ...value,
+                            contentPasswordHint: event.target.value
+                          })
+                        }
+                        placeholder="Optional hint shown with encrypted metadata"
+                      />
+                    </FlowField>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         )
       },
@@ -771,7 +952,7 @@ export function ArtifactsPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setValue({ activeItemId: null })}
+                    onClick={() => setValue({ ...value, activeItemId: null })}
                   >
                     Back to file queue
                   </Button>
@@ -897,6 +1078,12 @@ export function ArtifactsPage() {
                   />
                   Use configured LLM to fill missing metadata for this file
                 </label>
+                {value.encryptContent && activeItem.useLlmEnrichment ? (
+                  <p className="text-xs leading-5 text-[var(--ui-ink-muted)]">
+                    For encrypted uploads, LLM enrichment uses metadata and
+                    scanner findings only, not decrypted file text.
+                  </p>
+                ) : null}
               </div>
             );
           }
@@ -927,7 +1114,9 @@ export function ArtifactsPage() {
                         <Button
                           type="button"
                           variant="secondary"
-                          onClick={() => setValue({ activeItemId: item.id })}
+                          onClick={() =>
+                            setValue({ ...value, activeItemId: item.id })
+                          }
                         >
                           <Pencil className="size-4" />
                           Details
@@ -1065,6 +1254,75 @@ export function ArtifactsPage() {
     [selectedArtifact?.originalFileName, selectedArtifact?.title]
   );
 
+  const passwordFlowSteps = useMemo<Array<QuestionFlowStep<PasswordFlowValue>>>(
+    () => [
+      {
+        id: "password",
+        eyebrow: "Download",
+        title: "Enter artifact password",
+        description: selectedArtifact?.contentProtection.passwordHint
+          ? `Hint: ${selectedArtifact.contentProtection.passwordHint}`
+          : "Encrypted content needs the artifact password before download.",
+        render: (value, setValue) => (
+          <FlowField label="Password">
+            <Input
+              type="password"
+              value={value.password}
+              onChange={(event) =>
+                setValue({ ...value, password: event.target.value })
+              }
+            />
+          </FlowField>
+        )
+      }
+    ],
+    [selectedArtifact?.contentProtection.passwordHint]
+  );
+
+  const encryptFlowSteps = useMemo<Array<QuestionFlowStep<EncryptFlowValue>>>(
+    () => [
+      {
+        id: "password",
+        eyebrow: "Encrypt",
+        title: "Encrypt file content",
+        description:
+          "Metadata, scan results, audit history, versions, and Forge links stay visible.",
+        render: (value, setValue) => (
+          <div className="grid gap-3">
+            <FlowField label="Password">
+              <Input
+                type="password"
+                value={value.password}
+                onChange={(event) =>
+                  setValue({ ...value, password: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Confirm password">
+              <Input
+                type="password"
+                value={value.passwordConfirm}
+                onChange={(event) =>
+                  setValue({ ...value, passwordConfirm: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Password hint">
+              <Input
+                value={value.passwordHint}
+                onChange={(event) =>
+                  setValue({ ...value, passwordHint: event.target.value })
+                }
+                placeholder="Optional hint shown with encrypted metadata"
+              />
+            </FlowField>
+          </div>
+        )
+      }
+    ],
+    []
+  );
+
   const submitUploadFlow = async () => {
     const itemsToUpload = uploadFlowValue.items.filter(
       (item) => uploadResultByItemId.get(item.id)?.status !== "success"
@@ -1079,6 +1337,19 @@ export function ArtifactsPage() {
       setUploadResults([]);
       return;
     }
+    if (uploadFlowValue.encryptContent) {
+      if (!uploadFlowValue.contentPassword) {
+        setUploadDialogError("Password is required when encryption is enabled.");
+        return;
+      }
+      if (
+        uploadFlowValue.contentPassword !==
+        uploadFlowValue.contentPasswordConfirm
+      ) {
+        setUploadDialogError("Password confirmation must match.");
+        return;
+      }
+    }
     try {
       for (const item of itemsToUpload) {
         parseMetadataText(item.metadataText);
@@ -1089,6 +1360,32 @@ export function ArtifactsPage() {
     }
     setUploadDialogError(null);
     await uploadMutation.mutateAsync(itemsToUpload);
+  };
+
+  const submitPasswordDownload = async () => {
+    if (!downloadPasswordValue.password) {
+      setDownloadPasswordError("Password is required.");
+      return;
+    }
+    setDownloadPasswordError(null);
+    try {
+      await passwordDownloadMutation.mutateAsync(downloadPasswordValue.password);
+    } catch {
+      // The mutation onError handler renders the password-specific message inline.
+    }
+  };
+
+  const submitEncryptFlow = async () => {
+    if (!encryptFlowValue.password) {
+      setEncryptDialogError("Password is required.");
+      return;
+    }
+    if (encryptFlowValue.password !== encryptFlowValue.passwordConfirm) {
+      setEncryptDialogError("Password confirmation must match.");
+      return;
+    }
+    setEncryptDialogError(null);
+    await encryptMutation.mutateAsync(encryptFlowValue);
   };
 
   return (
@@ -1240,6 +1537,12 @@ export function ArtifactsPage() {
                       <Badge tone="meta">
                         {selectedArtifact.detectedExtension.toUpperCase()}
                       </Badge>
+                      {isEncryptedArtifact(selectedArtifact) ? (
+                        <Badge tone="meta">
+                          <Lock className="size-3.5" />
+                          Encrypted content
+                        </Badge>
+                      ) : null}
                     </div>
                     <h2 className="mt-3 break-words text-2xl font-semibold">
                       {selectedArtifact.title}
@@ -1248,6 +1551,14 @@ export function ArtifactsPage() {
                       {selectedArtifact.shortDescription ||
                         selectedArtifact.description}
                     </p>
+                    {isEncryptedArtifact(selectedArtifact) ? (
+                      <p className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+                        Encrypted content
+                        {selectedArtifact.contentProtection.passwordHint
+                          ? ` · Hint: ${selectedArtifact.contentProtection.passwordHint}`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -1268,6 +1579,20 @@ export function ArtifactsPage() {
                       <Sparkles className="size-4" />
                       Enrich
                     </Button>
+                    {!isEncryptedArtifact(selectedArtifact) ? (
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        onClick={() => {
+                          setEncryptFlowValue(EMPTY_ENCRYPT_FLOW_VALUE);
+                          setEncryptDialogError(null);
+                          setEncryptDialogOpen(true);
+                        }}
+                      >
+                        <KeyRound className="size-4" />
+                        Encrypt
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       onClick={() => downloadMutation.mutate()}
@@ -1293,12 +1618,18 @@ export function ArtifactsPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-5">
                   {[
                     ["File", selectedArtifact.originalFileName],
                     ["Size", formatBytes(selectedArtifact.byteSize)],
                     ["Versions", versionCount],
-                    ["Links", selectedArtifact.links.length]
+                    ["Links", selectedArtifact.links.length],
+                    [
+                      "Protection",
+                      isEncryptedArtifact(selectedArtifact)
+                        ? "Encrypted"
+                        : "Plaintext"
+                    ]
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -1313,6 +1644,17 @@ export function ArtifactsPage() {
                     </div>
                   ))}
                 </div>
+                {isEncryptedArtifact(selectedArtifact) ? (
+                  <p className="text-sm text-[var(--ui-ink-muted)]">
+                    Existing scan results remain available; rescanning encrypted
+                    content needs password-gated support.
+                  </p>
+                ) : null}
+                {scanMutation.error instanceof Error ? (
+                  <p className="rounded-[18px] border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-sm text-yellow-100">
+                    {scanMutation.error.message}
+                  </p>
+                ) : null}
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input
@@ -1551,6 +1893,58 @@ export function ArtifactsPage() {
         onSubmit={async () => {
           await archiveMutation.mutateAsync();
         }}
+      />
+      <QuestionFlowDialog
+        open={downloadPasswordDialogOpen}
+        onOpenChange={(open) => {
+          setDownloadPasswordDialogOpen(open);
+          if (!open) {
+            setDownloadPasswordValue(EMPTY_PASSWORD_FLOW_VALUE);
+            setDownloadPasswordError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Download encrypted artifact"
+        description="Enter the password to download the original file bytes."
+        value={downloadPasswordValue}
+        onChange={setDownloadPasswordValue}
+        steps={passwordFlowSteps}
+        pending={passwordDownloadMutation.isPending}
+        pendingLabel="Downloading"
+        submitLabel="Download"
+        error={
+          downloadPasswordError ??
+          (passwordDownloadMutation.error instanceof Error
+            ? passwordDownloadMutation.error.message
+            : null)
+        }
+        onSubmit={submitPasswordDownload}
+      />
+      <QuestionFlowDialog
+        open={encryptDialogOpen}
+        onOpenChange={(open) => {
+          setEncryptDialogOpen(open);
+          if (!open) {
+            setEncryptFlowValue(EMPTY_ENCRYPT_FLOW_VALUE);
+            setEncryptDialogError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Encrypt artifact content"
+        description="Add password protection to the stored file bytes while keeping metadata and links visible."
+        value={encryptFlowValue}
+        onChange={setEncryptFlowValue}
+        steps={encryptFlowSteps}
+        pending={encryptMutation.isPending}
+        pendingLabel="Encrypting"
+        submitLabel="Encrypt artifact"
+        error={
+          encryptDialogError ??
+          (encryptMutation.error instanceof Error
+            ? encryptMutation.error.message
+            : null)
+        }
+        onSubmit={submitEncryptFlow}
       />
     </div>
   );

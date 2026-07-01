@@ -5765,6 +5765,32 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const artifactContentProtection = {
+    type: "object",
+    required: ["mode", "encryptedAt", "algorithm", "kdf", "kdfParams", "passwordHint"],
+    properties: {
+      mode: { type: "string", enum: ["plaintext", "password_encrypted"] },
+      encryptedAt: nullable({ type: "string", format: "date-time" }),
+      algorithm: nullable({
+        type: "string",
+        enum: ["libsodium-secretstream-xchacha20poly1305"]
+      }),
+      kdf: nullable({ type: "string", enum: ["argon2id"] }),
+      kdfParams: nullable({
+        type: "object",
+        required: ["memlimit", "opslimit", "parallelism"],
+        properties: {
+          memlimit: { type: "integer", minimum: 19922944 },
+          opslimit: { type: "integer", minimum: 2 },
+          parallelism: { type: "integer", enum: [1] }
+        }
+      }),
+      passwordHint: nullable({ type: "string" })
+    },
+    description:
+      "Safe content-protection metadata. It never includes password, salt, derived key, ciphertext header, plaintext snippets, or decrypted bytes."
+  };
+
   const artifact = {
     type: "object",
     required: [
@@ -5777,6 +5803,9 @@ export function buildOpenApiDocument() {
       "storagePath",
       "contentSha256",
       "byteSize",
+      "storedContentSha256",
+      "storedByteSize",
+      "contentProtection",
       "detectedExtension",
       "declaredMimeType",
       "detectedMimeType",
@@ -5807,6 +5836,9 @@ export function buildOpenApiDocument() {
       storagePath: { type: "string" },
       contentSha256: { type: "string" },
       byteSize: { type: "integer" },
+      storedContentSha256: { type: "string" },
+      storedByteSize: { type: "integer" },
+      contentProtection: artifactContentProtection,
       detectedExtension: { type: "string" },
       declaredMimeType: { type: "string" },
       detectedMimeType: { type: "string" },
@@ -5898,8 +5930,63 @@ export function buildOpenApiDocument() {
       downloadPolicy: { type: "string", enum: ["human_only", "disabled"] },
       links: arrayOf(entityLinkInput),
       metadata: { type: "object", additionalProperties: true },
+      contentProtection: {
+        oneOf: [
+          {
+            type: "object",
+            properties: {
+              mode: { type: "string", enum: ["plaintext"], default: "plaintext" }
+            }
+          },
+          {
+            type: "object",
+            required: ["mode", "password"],
+            properties: {
+              mode: { type: "string", enum: ["password_encrypted"] },
+              password: {
+                type: "string",
+                description:
+                  "Transient operator-entered password. Forge never returns, logs, or persists this value."
+              },
+              passwordHint: {
+                type: "string",
+                description:
+                  "Optional safe hint visible in metadata responses. Do not put the password here."
+              }
+            }
+          }
+        ]
+      },
       useLlmEnrichment: { type: "boolean" },
       llmProfileId: { type: "string" }
+    }
+  };
+
+  const artifactPasswordDownloadInput = {
+    type: "object",
+    properties: {
+      password: {
+        type: "string",
+        description:
+          "Transient operator-entered password for encrypted artifact download. It is never stored or returned."
+      }
+    }
+  };
+
+  const artifactEncryptInput = {
+    type: "object",
+    required: ["password"],
+    properties: {
+      password: {
+        type: "string",
+        description:
+          "Transient operator-entered password for encrypting existing plaintext artifact content. It is never stored or returned."
+      },
+      passwordHint: {
+        type: "string",
+        description:
+          "Optional safe hint visible in metadata responses. Do not put the password here."
+      }
     }
   };
 
@@ -5955,6 +6042,9 @@ export function buildOpenApiDocument() {
       "contentSha256",
       "storageKey",
       "byteSize",
+      "storedContentSha256",
+      "storedByteSize",
+      "contentProtection",
       "originalFileName",
       "scanResults",
       "enrichmentResults",
@@ -5968,6 +6058,9 @@ export function buildOpenApiDocument() {
       contentSha256: { type: "string" },
       storageKey: { type: "string" },
       byteSize: { type: "integer" },
+      storedContentSha256: { type: "string" },
+      storedByteSize: { type: "integer" },
+      contentProtection: artifactContentProtection,
       originalFileName: { type: "string" },
       scanResults: { type: "object", additionalProperties: true },
       enrichmentResults: { type: "object", additionalProperties: true },
@@ -6109,9 +6202,12 @@ export function buildOpenApiDocument() {
         EntityLinkInput: entityLinkInput,
         ArtifactScanFinding: artifactScanFinding,
         ArtifactScanResult: artifactScanResult,
+        ArtifactContentProtection: artifactContentProtection,
         Artifact: artifact,
         ArtifactListResponse: artifactListResponse,
         ArtifactUploadInput: artifactUploadInput,
+        ArtifactPasswordDownloadInput: artifactPasswordDownloadInput,
+        ArtifactEncryptInput: artifactEncryptInput,
         ArtifactMetadataPatchInput: artifactMetadataPatchInput,
         ArtifactTrustPatchInput: artifactTrustPatchInput,
         ArtifactEnrichmentInput: artifactEnrichmentInput,
@@ -6229,7 +6325,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Upload a trusted file artifact",
           description:
-            "Stores base64 file bytes only for trusted human sessions or trusted/autonomous agent tokens with artifact upload scopes. Forge statically scans and stores the file for human download; it does not execute or autonomously open the file.",
+            "Stores base64 file bytes only for trusted human sessions or trusted/autonomous agent tokens with artifact upload scopes. Human operator uploads may include optional password encryption. Forge scans plaintext before encryption, stores only ciphertext for encrypted uploads, and never returns or persists the password.",
           requestBody: {
             required: true,
             content: {
@@ -6317,7 +6413,7 @@ export function buildOpenApiDocument() {
         get: {
           summary: "Download artifact bytes for a human operator",
           description:
-            "Returns the stored file bytes only to an authenticated human/operator session. Agent tokens are not allowed to download artifacts.",
+            "Returns plaintext artifact bytes only to an authenticated human/operator session. Agent tokens are not allowed to download artifacts. For encrypted artifacts this GET route returns artifact_password_required; use the POST route with a request body password.",
           responses: {
             "200": {
               description: "Artifact file bytes",
@@ -6327,6 +6423,84 @@ export function buildOpenApiDocument() {
                 }
               }
             },
+            default: { $ref: "#/components/responses/Error" }
+          }
+        },
+        post: {
+          summary: "Download password-encrypted artifact bytes for a human operator",
+          description:
+            "Accepts a transient password in the JSON request body, decrypts server-side, and returns the original plaintext bytes only to an authenticated human/operator session. The password is never stored, logged, returned, or exposed to agent tools.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/ArtifactPasswordDownloadInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": {
+              description: "Artifact file bytes",
+              content: {
+                "application/octet-stream": {
+                  schema: { type: "string", format: "binary" }
+                }
+              }
+            },
+            "403": {
+              description: "Wrong password or non-operator caller",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            "409": {
+              description: "Password required for encrypted artifact",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" }
+                }
+              }
+            },
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/artifacts/{id}/encrypt": {
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        post: {
+          summary: "Encrypt existing plaintext artifact content",
+          description:
+            "Human/operator-only route. Reads the current plaintext blob, encrypts it with a transient password, verifies decrypt-before-switch, updates artifact/version protection metadata, and preserves existing scan, danger score, metadata, audit history, and generic entity links. This route is not exposed to agent tools.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ArtifactEncryptInput" }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["artifact"],
+                properties: {
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+                }
+              },
+              "Encrypted artifact"
+            ),
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -6342,6 +6516,8 @@ export function buildOpenApiDocument() {
         ],
         post: {
           summary: "Rescan an artifact with the static safety scanner",
+          description:
+            "Plaintext artifacts are rescanned from stored bytes. Encrypted artifacts return artifact_content_encrypted and keep the existing scan result available; password-gated rescan is not implemented in this route.",
           responses: {
             "200": jsonResponse(
               {

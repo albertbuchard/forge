@@ -1617,6 +1617,32 @@ export function downloadArtifact(artifactId: string) {
   );
 }
 
+export function downloadArtifactWithPassword(
+  artifactId: string,
+  password: string
+) {
+  return requestBlob(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/download`,
+    {
+      method: "POST",
+      body: JSON.stringify({ password })
+    }
+  );
+}
+
+export function encryptArtifact(
+  artifactId: string,
+  input: { password: string; passwordHint?: string }
+) {
+  return request<{ artifact: Artifact }>(
+    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/encrypt`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 export function rescanArtifact(artifactId: string) {
   return request<{ artifact: Artifact }>(
     `/api/v1/artifacts/${encodeURIComponent(artifactId)}/scan`,

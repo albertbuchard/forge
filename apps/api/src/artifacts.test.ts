@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -287,6 +287,231 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     });
     assert.equal(afterDelete.statusCode, 404);
     await access(uploadBody.artifact.storagePath);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("artifact store supports human password encryption without exposing passwords to agents", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-artifacts-encrypted-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const trustedToken = await createAgentToken({
+      app,
+      cookie,
+      label: "Trusted Artifact Agent",
+      trustLevel: "trusted",
+      scopes: [
+        "artifact.create",
+        "artifact.uploadBytes",
+        "artifact.readMetadata",
+        "artifact.updateMetadata"
+      ]
+    });
+    const csv = "name,value\nsecret,42\n";
+    const password = "operator sample passphrase";
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/v1/artifacts",
+      headers: { cookie },
+      payload: {
+        title: "Encrypted worksheet",
+        originalFileName: "encrypted.csv",
+        declaredMimeType: "text/csv",
+        contentBase64: Buffer.from(csv, "utf8").toString("base64"),
+        contentProtection: {
+          mode: "password_encrypted",
+          password,
+          passwordHint: "sample hint"
+        }
+      }
+    });
+    assert.equal(upload.statusCode, 201);
+    const uploadBody = upload.json() as {
+      artifact: {
+        id: string;
+        storagePath: string;
+        contentSha256: string;
+        storedContentSha256: string;
+        byteSize: number;
+        storedByteSize: number;
+        contentProtection: {
+          mode: string;
+          passwordHint: string | null;
+          kdfParams: { memlimit: number; opslimit: number; parallelism: number };
+        };
+      };
+    };
+    assert.equal(uploadBody.artifact.contentProtection.mode, "password_encrypted");
+    assert.equal(uploadBody.artifact.contentProtection.passwordHint, "sample hint");
+    assert.equal(uploadBody.artifact.contentProtection.kdfParams.memlimit >= 19 * 1024 * 1024, true);
+    assert.equal(uploadBody.artifact.contentProtection.kdfParams.opslimit >= 2, true);
+    assert.equal(uploadBody.artifact.contentProtection.kdfParams.parallelism, 1);
+    assert.notEqual(
+      uploadBody.artifact.contentSha256,
+      uploadBody.artifact.storedContentSha256
+    );
+    assert.ok(uploadBody.artifact.storedByteSize > uploadBody.artifact.byteSize);
+    assert.equal(JSON.stringify(uploadBody).includes(password), false);
+    assert.equal(
+      (await readFile(uploadBody.artifact.storagePath)).equals(
+        Buffer.from(csv, "utf8")
+      ),
+      false
+    );
+
+    const readMetadata = await app.inject({
+      method: "GET",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}`,
+      headers: { authorization: `Bearer ${trustedToken}` }
+    });
+    assert.equal(readMetadata.statusCode, 200);
+    assert.equal(
+      (readMetadata.json() as { artifact: { contentProtection: { mode: string } } })
+        .artifact.contentProtection.mode,
+      "password_encrypted"
+    );
+    assert.equal(readMetadata.body.includes(password), false);
+
+    const tokenPasswordDownload = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
+      headers: { authorization: `Bearer ${trustedToken}` },
+      payload: { password }
+    });
+    assert.equal(tokenPasswordDownload.statusCode, 401);
+
+    const getDownload = await app.inject({
+      method: "GET",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
+      headers: { cookie }
+    });
+    assert.equal(getDownload.statusCode, 409);
+    assert.equal(
+      (getDownload.json() as { code: string }).code,
+      "artifact_password_required"
+    );
+
+    const missingPassword = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
+      headers: { cookie },
+      payload: {}
+    });
+    assert.equal(missingPassword.statusCode, 409);
+    assert.equal(
+      (missingPassword.json() as { code: string }).code,
+      "artifact_password_required"
+    );
+
+    const wrongPassword = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
+      headers: { cookie },
+      payload: { password: "wrong sample passphrase" }
+    });
+    assert.equal(wrongPassword.statusCode, 403);
+    assert.equal(
+      (wrongPassword.json() as { code: string }).code,
+      "artifact_wrong_password"
+    );
+
+    const correctPassword = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/download`,
+      headers: { cookie },
+      payload: { password }
+    });
+    assert.equal(correctPassword.statusCode, 200);
+    assert.equal(correctPassword.body, csv);
+
+    const rescan = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${uploadBody.artifact.id}/scan`,
+      headers: { cookie }
+    });
+    assert.equal(rescan.statusCode, 409);
+    assert.equal((rescan.json() as { code: string }).code, "artifact_content_encrypted");
+
+    const agentEncryptedUpload = await app.inject({
+      method: "POST",
+      url: "/api/v1/artifacts",
+      headers: {
+        authorization: `Bearer ${trustedToken}`,
+        "x-forge-source": "agent",
+        "x-forge-actor": "Trusted Artifact Agent"
+      },
+      payload: {
+        originalFileName: "agent-secret.csv",
+        contentBase64: Buffer.from(csv, "utf8").toString("base64"),
+        contentProtection: { mode: "password_encrypted", password }
+      }
+    });
+    assert.equal(agentEncryptedUpload.statusCode, 403);
+    assert.equal(
+      (agentEncryptedUpload.json() as { code: string }).code,
+      "artifact_password_rejected_for_agent"
+    );
+
+    const plaintextUpload = await app.inject({
+      method: "POST",
+      url: "/api/v1/artifacts",
+      headers: { cookie },
+      payload: {
+        title: "Plain worksheet",
+        originalFileName: "plain.csv",
+        declaredMimeType: "text/csv",
+        contentBase64: Buffer.from(csv, "utf8").toString("base64")
+      }
+    });
+    assert.equal(plaintextUpload.statusCode, 201);
+    const plaintextId = (plaintextUpload.json() as { artifact: { id: string } })
+      .artifact.id;
+    const encryptExisting = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${plaintextId}/encrypt`,
+      headers: { cookie },
+      payload: { password, passwordHint: "existing hint" }
+    });
+    assert.equal(encryptExisting.statusCode, 200);
+    assert.equal(
+      (encryptExisting.json() as { artifact: { contentProtection: { mode: string; passwordHint: string | null } } })
+        .artifact.contentProtection.mode,
+      "password_encrypted"
+    );
+    assert.equal(
+      (encryptExisting.json() as { artifact: { contentProtection: { passwordHint: string | null } } })
+        .artifact.contentProtection.passwordHint,
+      "existing hint"
+    );
+    assert.equal(encryptExisting.body.includes(password), false);
+
+    const doubleEncrypt = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${plaintextId}/encrypt`,
+      headers: { cookie },
+      payload: { password }
+    });
+    assert.equal(doubleEncrypt.statusCode, 409);
+    assert.equal(
+      (doubleEncrypt.json() as { code: string }).code,
+      "artifact_already_encrypted"
+    );
+
+    const audit = await app.inject({
+      method: "GET",
+      url: `/api/v1/artifacts/${plaintextId}/audit`,
+      headers: { cookie }
+    });
+    assert.equal(audit.statusCode, 200);
+    assert.equal(audit.body.includes(password), false);
+    assert.ok(audit.body.includes("artifact.encrypted"));
   } finally {
     await app.close();
     closeDatabase();

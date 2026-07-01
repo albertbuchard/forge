@@ -70,6 +70,8 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/versions");
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/audit");
     expect(report.mirrored).not.toContain("GET /api/v1/artifacts/:id/download");
+    expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/download");
+    expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/encrypt");
     expect(report.mirrored).toContain("GET /api/v1/calendar/overview");
     expect(report.mirrored).toContain(
       "GET /api/v1/calendar/macos-local/discovery"
@@ -141,6 +143,12 @@ describe("forge plugin route parity", () => {
     expect(supported.has("POST /api/v1/artifacts")).toBe(true);
     expect(supported.has("POST /api/v1/artifacts/:id/links")).toBe(true);
     expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
+    );
+    expect(supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
+    );
+    expect(supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)).toBe(
       false
     );
     expect(supported.has("GET /api/v1/calendar/overview")).toBe(true);
@@ -246,6 +254,12 @@ describe("forge plugin route parity", () => {
       ).toBe(true);
     }
     expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
+    );
+    expect(supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
+      false
+    );
+    expect(supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)).toBe(
       false
     );
   });

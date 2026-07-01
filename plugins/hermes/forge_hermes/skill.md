@@ -21,8 +21,8 @@ memory layer with explicit spaces, Markdown content in database rows, backlinks,
 embeddings, and structured Forge links. The Artifact Store is a specialized CRUD
 surface for trusted stored files such as spreadsheets, documents, PDFs, text,
 structured text, and images; artifact relationships use the general `entity_links`
-model, and Hermes must not download, open, execute, preview, or transform stored file
-bytes. Read-model surfaces include
+model, and Hermes must not download, decrypt, open, execute, preview, transform stored
+file bytes, or submit artifact passwords. Read-model surfaces include
 `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
 `sports_overview`, `training_load`, `weight_loss`, and the self-observation
 calendar; ask what practical decision the read should support before adding
@@ -168,8 +168,11 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   When Hermes exposes `forge_call_artifact_route`, use it for artifact list with
   `limit`/`offset`, trusted upload, metadata update, static rescan, LLM enrichment,
   generic entity-link replacement, trust state, versions, or audit. Use batch CRUD
-  for artifact metadata delete/restore. Do not expose or call the download route
-  from agent tools; downloads are human-operator-only.
+  for artifact metadata delete/restore. Do not expose or call the download, password
+  download, decrypt, or existing-artifact encryption routes from agent tools;
+  password and byte routes are human-operator-only. Hermes may read
+  `contentProtection` metadata and password hints, but must not receive, store,
+  submit, or route artifact passwords.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
@@ -268,7 +271,7 @@ Concrete route-key examples for internal use:
 - Artifact audit read:
   `{"routeKey":"audit","pathParams":{"id":"artifact_123"}}`
 - Artifact forbidden agent action:
-  do not call `/api/v1/artifacts/:id/download`; hand the human to the Forge web app for download.
+  do not call `/api/v1/artifacts/:id/download`, submit artifact passwords, or decrypt/open/preview/transform bytes; hand the human to the Forge web app for download.
 
 Treat `note` as a first-class Markdown entity. Notes can link to one or many Forge
 entities, carry note-owned `tags`, and optionally self-delete when `destroyAt` is set.

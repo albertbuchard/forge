@@ -135,6 +135,9 @@ export type ArtifactState =
   | "metadata_only";
 export type ArtifactDangerLevel = "low" | "moderate" | "high" | "blocked";
 export type ArtifactDownloadPolicy = "human_only" | "disabled";
+export type ArtifactContentProtectionMode =
+  | "plaintext"
+  | "password_encrypted";
 export type ArtifactFormatFamily =
   | "spreadsheet"
   | "document"
@@ -179,6 +182,19 @@ export interface ArtifactScanResult {
   extractedTextTruncated: boolean;
 }
 
+export interface ArtifactContentProtection {
+  mode: ArtifactContentProtectionMode;
+  encryptedAt: string | null;
+  algorithm: "libsodium-secretstream-xchacha20poly1305" | null;
+  kdf: "argon2id" | null;
+  kdfParams: {
+    memlimit: number;
+    opslimit: number;
+    parallelism: number;
+  } | null;
+  passwordHint: string | null;
+}
+
 export interface Artifact {
   id: string;
   title: string;
@@ -189,6 +205,9 @@ export interface Artifact {
   storagePath: string;
   contentSha256: string;
   byteSize: number;
+  storedContentSha256: string;
+  storedByteSize: number;
+  contentProtection: ArtifactContentProtection;
   detectedExtension: string;
   declaredMimeType: string;
   detectedMimeType: string;
@@ -225,6 +244,9 @@ export interface ArtifactVersion {
   contentSha256: string;
   storageKey: string;
   byteSize: number;
+  storedContentSha256: string;
+  storedByteSize: number;
+  contentProtection: ArtifactContentProtection;
   originalFileName: string;
   scanResults: Record<string, unknown>;
   enrichmentResults: Record<string, unknown>;
@@ -264,6 +286,13 @@ export interface ArtifactUploadInput {
   downloadPolicy?: ArtifactDownloadPolicy;
   links?: EntityLinkInput[];
   metadata?: Record<string, unknown>;
+  contentProtection?:
+    | { mode?: "plaintext" }
+    | {
+        mode: "password_encrypted";
+        password: string;
+        passwordHint?: string;
+      };
   useLlmEnrichment?: boolean;
   llmProfileId?: string;
 }

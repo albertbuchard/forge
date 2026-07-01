@@ -5,6 +5,7 @@ import path from "node:path";
 import AdmZip from "adm-zip";
 import { z } from "zod";
 import { getDatabase, resolveDataDir, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { isEntityDeleted } from "../repositories/deleted-entities.js";
 import {
   listEntityLinksForSources,
@@ -18,6 +19,15 @@ import {
 import { listWikiLlmProfiles } from "../repositories/wiki-memory.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
 import type { ActivitySource, CrudEntityType } from "../types.js";
+import {
+  ArtifactDecryptionError,
+  decryptArtifactBytes,
+  encryptArtifactBytes,
+  safeContentProtectionFromEnvelope,
+  verifyArtifactEncryptionRoundTrip,
+  type ArtifactEncryptionEnvelope,
+  type SafeArtifactContentProtection
+} from "./artifact-encryption.js";
 
 const MAX_ARTIFACT_BYTES = 100 * 1024 * 1024;
 const MAX_TEXT_EXTRACTION_CHARS = 80_000;
@@ -94,6 +104,10 @@ export const artifactSourceKindSchema = z.enum([
   "external_reference",
   "manual"
 ]);
+export const artifactContentProtectionModeSchema = z.enum([
+  "plaintext",
+  "password_encrypted"
+]);
 
 const trimmedString = z.string().trim();
 const optionalTrimmedString = trimmedString.optional().default("");
@@ -105,6 +119,19 @@ export const entityLinkInputSchema = z.object({
   anchorKey: z.string().trim().optional().default(""),
   relationship: z.string().trim().optional().default("related")
 });
+
+export const artifactUploadContentProtectionSchema = z
+  .union([
+    z.object({
+      mode: z.literal("plaintext").optional().default("plaintext")
+    }),
+    z.object({
+      mode: z.literal("password_encrypted"),
+      password: z.string().min(1),
+      passwordHint: optionalTrimmedString
+    })
+  ])
+  .optional();
 
 export const artifactUploadSchema = z.object({
   title: trimmedString.optional(),
@@ -121,6 +148,7 @@ export const artifactUploadSchema = z.object({
   downloadPolicy: artifactDownloadPolicySchema.optional().default("human_only"),
   links: z.array(entityLinkInputSchema).optional().default([]),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  contentProtection: artifactUploadContentProtectionSchema,
   useLlmEnrichment: z.boolean().optional().default(false),
   llmProfileId: z.string().trim().optional()
 });
@@ -173,6 +201,15 @@ export const artifactEnrichmentRequestSchema = z.object({
   explicitApiKey: z.string().trim().optional()
 });
 
+export const artifactEncryptRequestSchema = z.object({
+  password: z.string().min(1),
+  passwordHint: optionalTrimmedString
+});
+
+export const artifactPasswordDownloadSchema = z.object({
+  password: z.string().optional().default("")
+});
+
 export type ArtifactState = z.infer<typeof artifactStateSchema>;
 export type ArtifactDangerLevel = z.infer<typeof artifactDangerLevelSchema>;
 export type ArtifactFormatFamily = z.infer<typeof artifactFormatFamilySchema>;
@@ -180,6 +217,9 @@ export type ArtifactDownloadPolicy = z.infer<
   typeof artifactDownloadPolicySchema
 >;
 export type ArtifactSourceKind = z.infer<typeof artifactSourceKindSchema>;
+export type ArtifactContentProtectionMode = z.infer<
+  typeof artifactContentProtectionModeSchema
+>;
 export type ArtifactUploadInput = z.infer<typeof artifactUploadSchema>;
 export type ArtifactMetadataPatchInput = z.infer<
   typeof artifactMetadataPatchSchema
@@ -239,6 +279,9 @@ export type ArtifactVersion = {
   contentSha256: string;
   storageKey: string;
   byteSize: number;
+  storedContentSha256: string;
+  storedByteSize: number;
+  contentProtection: SafeArtifactContentProtection;
   originalFileName: string;
   scanResults: Record<string, unknown>;
   enrichmentResults: Record<string, unknown>;
@@ -256,6 +299,9 @@ export type Artifact = {
   storagePath: string;
   contentSha256: string;
   byteSize: number;
+  storedContentSha256: string;
+  storedByteSize: number;
+  contentProtection: SafeArtifactContentProtection;
   detectedExtension: string;
   declaredMimeType: string;
   detectedMimeType: string;
@@ -298,6 +344,14 @@ type ArtifactRow = {
   storage_path: string;
   content_sha256: string;
   byte_size: number;
+  stored_content_sha256: string;
+  stored_byte_size: number;
+  content_protection_mode: ArtifactContentProtectionMode;
+  content_encryption_json: string;
+  encrypted_at: string | null;
+  encrypted_by_actor: string | null;
+  encrypted_source: string;
+  content_password_hint: string;
   detected_extension: string;
   declared_mime_type: string;
   detected_mime_type: string;
@@ -325,6 +379,12 @@ type ArtifactVersionRow = {
   content_sha256: string;
   storage_key: string;
   byte_size: number;
+  stored_content_sha256: string;
+  stored_byte_size: number;
+  content_protection_mode: ArtifactContentProtectionMode;
+  content_encryption_json: string;
+  encrypted_at: string | null;
+  content_password_hint: string;
   original_file_name: string;
   scan_results_json: string;
   enrichment_results_json: string;
@@ -374,6 +434,28 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function safeContentProtection(input: {
+  mode: ArtifactContentProtectionMode;
+  encryptedAt: string | null;
+  encryptionJson: string;
+  passwordHint: string;
+}): SafeArtifactContentProtection {
+  if (input.mode !== "password_encrypted") {
+    return safeContentProtectionFromEnvelope({
+      mode: "plaintext",
+      encryptedAt: null,
+      envelope: {},
+      passwordHint: ""
+    });
+  }
+  return safeContentProtectionFromEnvelope({
+    mode: "password_encrypted",
+    encryptedAt: input.encryptedAt,
+    envelope: parseJsonObject(input.encryptionJson),
+    passwordHint: input.passwordHint
+  });
 }
 
 function normalizeNullableText(value: string | null | undefined) {
@@ -471,22 +553,23 @@ function resolveStoragePath(storageKey: string) {
   return resolved;
 }
 
-async function ensureBlobStored(buffer: Buffer, detectedMimeType: string) {
-  const contentSha256 = sha256(buffer);
-  const storageKey = storageKeyForHash(contentSha256);
+async function ensureBlobStored(input: {
+  contentSha256: string;
+  plaintextByteSize: number;
+  storedBuffer: Buffer;
+  detectedMimeType: string;
+  contentProtectionMode: ArtifactContentProtectionMode;
+}) {
+  const storedContentSha256 = sha256(input.storedBuffer);
+  const storageKey = storageKeyForHash(storedContentSha256);
   const storagePath = resolveStoragePath(storageKey);
   const createdAt = nowIso();
-  const existing = getDatabase()
-    .prepare(
-      "SELECT content_sha256 FROM artifact_blobs WHERE content_sha256 = ?"
-    )
-    .get(contentSha256) as { content_sha256: string } | undefined;
 
-  if (!existing && !existsSync(storagePath)) {
+  if (!existsSync(storagePath)) {
     await mkdir(path.dirname(storagePath), { recursive: true });
     const tmpPath = `${storagePath}.${process.pid}.${Date.now()}.tmp`;
     try {
-      await writeFile(tmpPath, buffer, { flag: "wx" });
+      await writeFile(tmpPath, input.storedBuffer, { flag: "wx" });
       await rename(tmpPath, storagePath);
     } catch (error) {
       await rm(tmpPath, { force: true }).catch(() => undefined);
@@ -499,19 +582,25 @@ async function ensureBlobStored(buffer: Buffer, detectedMimeType: string) {
   getDatabase()
     .prepare(
       `INSERT OR IGNORE INTO artifact_blobs (
-        content_sha256, storage_key, byte_size, detected_mime_type, created_at
-      ) VALUES (?, ?, ?, ?, ?)`
+        content_sha256, storage_key, byte_size, detected_mime_type, created_at,
+        stored_content_sha256, stored_byte_size, content_protection_mode
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
-      contentSha256,
+      input.contentSha256,
       storageKey,
-      buffer.byteLength,
-      detectedMimeType,
-      createdAt
+      input.plaintextByteSize,
+      input.detectedMimeType,
+      createdAt,
+      storedContentSha256,
+      input.storedBuffer.byteLength,
+      input.contentProtectionMode
     );
 
   return {
-    contentSha256,
+    contentSha256: input.contentSha256,
+    storedContentSha256,
+    storedByteSize: input.storedBuffer.byteLength,
     storageKey,
     storagePath
   };
@@ -941,6 +1030,14 @@ function mapArtifact(row: ArtifactRow, links: EntityLink[] = []): Artifact {
     storagePath: row.storage_path,
     contentSha256: row.content_sha256,
     byteSize: row.byte_size,
+    storedContentSha256: row.stored_content_sha256 || row.content_sha256,
+    storedByteSize: row.stored_byte_size || row.byte_size,
+    contentProtection: safeContentProtection({
+      mode: row.content_protection_mode,
+      encryptedAt: row.encrypted_at,
+      encryptionJson: row.content_encryption_json,
+      passwordHint: row.content_password_hint
+    }),
     detectedExtension: row.detected_extension,
     declaredMimeType: row.declared_mime_type,
     detectedMimeType: row.detected_mime_type,
@@ -965,6 +1062,9 @@ function mapArtifact(row: ArtifactRow, links: EntityLink[] = []): Artifact {
 
 const ARTIFACT_SELECT_COLUMNS = `id, title, short_description, description, original_file_name,
               storage_key, storage_path, content_sha256, byte_size,
+              stored_content_sha256, stored_byte_size, content_protection_mode,
+              content_encryption_json, encrypted_at, encrypted_by_actor,
+              encrypted_source, content_password_hint,
               detected_extension, declared_mime_type, detected_mime_type,
               format_family, source_kind, source_label, uploaded_by_user_id,
               uploaded_by_agent_id, acting_for_user_id, artifact_state,
@@ -1098,10 +1198,17 @@ function replaceEntityLinksForArtifact(
 }
 
 function insertArtifactVersion(input: {
+  id?: string;
   artifactId: string;
   contentSha256: string;
   storageKey: string;
   byteSize: number;
+  storedContentSha256: string;
+  storedByteSize: number;
+  contentProtectionMode: ArtifactContentProtectionMode;
+  encryptionEnvelope?: ArtifactEncryptionEnvelope | null;
+  encryptedAt?: string | null;
+  passwordHint?: string;
   originalFileName: string;
   scanResults: Record<string, unknown>;
   enrichmentResults: Record<string, unknown>;
@@ -1118,17 +1225,25 @@ function insertArtifactVersion(input: {
     .prepare(
       `INSERT INTO artifact_versions (
         id, artifact_id, version_number, content_sha256, storage_key, byte_size,
+        stored_content_sha256, stored_byte_size, content_protection_mode,
+        content_encryption_json, encrypted_at, content_password_hint,
         original_file_name, scan_results_json, enrichment_results_json,
         created_by_actor, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
-      artifactVersionId(),
+      input.id ?? artifactVersionId(),
       input.artifactId,
       row.nextVersion,
       input.contentSha256,
       input.storageKey,
       input.byteSize,
+      input.storedContentSha256,
+      input.storedByteSize,
+      input.contentProtectionMode,
+      JSON.stringify(input.encryptionEnvelope ?? {}),
+      input.encryptedAt ?? null,
+      input.passwordHint ?? "",
       input.originalFileName,
       JSON.stringify(input.scanResults),
       JSON.stringify(input.enrichmentResults),
@@ -1157,14 +1272,65 @@ export async function createArtifactFromUpload(
   if (buffer.byteLength === 0) {
     throw new Error("Artifact upload content is empty or invalid base64.");
   }
+  const requestedProtection = parsed.contentProtection;
+  const encryptContent =
+    requestedProtection?.mode === "password_encrypted";
+  if (encryptContent && context.token) {
+    throw new HttpError(
+      403,
+      "artifact_password_rejected_for_agent",
+      "Artifact content passwords are accepted only from human operator flows.",
+      { route: "/api/v1/artifacts" }
+    );
+  }
   const scan = scanArtifactBytes({
     buffer,
     originalFileName: parsed.originalFileName,
     declaredMimeType: parsed.declaredMimeType
   });
-  const blob = await ensureBlobStored(buffer, scan.detectedMimeType);
   const id = artifactId();
+  const versionId = artifactVersionId();
   const createdAt = nowIso();
+  const plaintextSha256 = sha256(buffer);
+  let storedBuffer = buffer;
+  let encryptionEnvelope: ArtifactEncryptionEnvelope | null = null;
+  let encryptedAt: string | null = null;
+  let passwordHint = "";
+  let contentProtectionMode: ArtifactContentProtectionMode = "plaintext";
+  if (encryptContent) {
+    encryptedAt = createdAt;
+    passwordHint = requestedProtection.passwordHint;
+    const encrypted = await encryptArtifactBytes({
+      plaintext: buffer,
+      password: requestedProtection.password,
+      originalFileName: sanitizeFileName(parsed.originalFileName),
+      detectedMimeType: scan.detectedMimeType,
+      artifactId: id,
+      versionId,
+      encryptedAt
+    });
+    const roundTripOk = await verifyArtifactEncryptionRoundTrip({
+      ciphertext: encrypted.ciphertext,
+      password: requestedProtection.password,
+      envelope: encrypted.envelope,
+      expectedPlaintextSha256: plaintextSha256,
+      expectedPlaintextByteSize: buffer.byteLength
+    });
+    if (!roundTripOk) {
+      encrypted.ciphertext.fill(0);
+      throw new Error("Encrypted artifact verification failed.");
+    }
+    storedBuffer = encrypted.ciphertext;
+    encryptionEnvelope = encrypted.envelope;
+    contentProtectionMode = "password_encrypted";
+  }
+  const blob = await ensureBlobStored({
+    contentSha256: plaintextSha256,
+    plaintextByteSize: buffer.byteLength,
+    storedBuffer,
+    detectedMimeType: scan.detectedMimeType,
+    contentProtectionMode
+  });
   const sourceKind =
     parsed.sourceKind ??
     (context.source === "agent" ? "agent_upload" : "upload");
@@ -1186,11 +1352,14 @@ export async function createArtifactFromUpload(
         `INSERT INTO artifacts (
           id, title, short_description, description, original_file_name,
           storage_key, storage_path, content_sha256, byte_size, detected_extension,
+          stored_content_sha256, stored_byte_size, content_protection_mode,
+          content_encryption_json, encrypted_at, encrypted_by_actor,
+          encrypted_source, content_password_hint,
           declared_mime_type, detected_mime_type, format_family, source_kind,
           source_label, uploaded_by_user_id, uploaded_by_agent_id, acting_for_user_id,
           artifact_state, danger_score, danger_level, download_policy,
           scan_results_json, enrichment_results_json, metadata_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -1200,9 +1369,17 @@ export async function createArtifactFromUpload(
         sanitizeFileName(parsed.originalFileName),
         blob.storageKey,
         blob.storagePath,
-        blob.contentSha256,
+        plaintextSha256,
         buffer.byteLength,
         scan.detectedExtension,
+        blob.storedContentSha256,
+        blob.storedByteSize,
+        contentProtectionMode,
+        JSON.stringify(encryptionEnvelope ?? {}),
+        encryptedAt,
+        encryptContent ? (context.actor ?? null) : null,
+        encryptContent ? context.source : "",
+        passwordHint,
         parsed.declaredMimeType,
         scan.detectedMimeType,
         scan.formatFamily,
@@ -1223,22 +1400,37 @@ export async function createArtifactFromUpload(
       );
     replaceEntityLinksForArtifact(id, parsed.links, context);
     insertArtifactVersion({
+      id: versionId,
       artifactId: id,
-      contentSha256: blob.contentSha256,
+      contentSha256: plaintextSha256,
       storageKey: blob.storageKey,
       byteSize: buffer.byteLength,
+      storedContentSha256: blob.storedContentSha256,
+      storedByteSize: blob.storedByteSize,
+      contentProtectionMode,
+      encryptionEnvelope,
+      encryptedAt,
+      passwordHint,
       originalFileName: sanitizeFileName(parsed.originalFileName),
       scanResults: scan.scanResults,
       enrichmentResults: initialEnrichment,
       context
     });
     recordArtifactAudit(id, "artifact.created", context, {
-      contentSha256: blob.contentSha256,
+      contentSha256: plaintextSha256,
+      storedContentSha256: blob.storedContentSha256,
+      contentProtectionMode,
+      encrypted: encryptContent,
+      hasPasswordHint: passwordHint.length > 0,
       dangerScore: scan.dangerScore,
       dangerLevel: scan.dangerLevel,
       sourceKind
     });
   });
+  if (storedBuffer !== buffer) {
+    storedBuffer.fill(0);
+  }
+  buffer.fill(0);
 
   if (parsed.useLlmEnrichment) {
     await enrichArtifactWithLlm(
@@ -1414,7 +1606,15 @@ export function deleteArtifactMetadata(id: string, context: ArtifactContext) {
   return existing;
 }
 
-export async function readArtifactDownload(id: string) {
+function parseArtifactEncryptionEnvelope(artifact: Artifact) {
+  const row = getArtifactRow(artifact.id);
+  if (!row) {
+    return {};
+  }
+  return parseJsonObject(row.content_encryption_json);
+}
+
+export async function readArtifactDownload(id: string, password = "") {
   const artifact = getArtifactById(id);
   if (!artifact) {
     return null;
@@ -1426,16 +1626,232 @@ export async function readArtifactDownload(id: string) {
     throw new Error("This artifact is not downloadable in its current state.");
   }
   const storagePath = resolveStoragePath(artifact.storageKey);
+  const storedBytes = await readFile(storagePath);
+  if (artifact.contentProtection.mode === "password_encrypted") {
+    if (!password.trim()) {
+      throw new HttpError(
+        409,
+        "artifact_password_required",
+        "This artifact is encrypted. Enter its password to download the file.",
+        { artifactId: artifact.id }
+      );
+    }
+    try {
+      const decrypted = await decryptArtifactBytes({
+        ciphertext: storedBytes,
+        password,
+        envelope: parseArtifactEncryptionEnvelope(artifact)
+      });
+      return {
+        artifact,
+        bytes: decrypted.plaintext
+      };
+    } catch (error) {
+      if (error instanceof ArtifactDecryptionError) {
+        throw new HttpError(
+          403,
+          "artifact_wrong_password",
+          "The password did not decrypt this artifact.",
+          { artifactId: artifact.id }
+        );
+      }
+      throw error;
+    }
+  }
   return {
     artifact,
-    bytes: await readFile(storagePath)
+    bytes: storedBytes
   };
+}
+
+export async function encryptExistingArtifact(
+  id: string,
+  input: z.input<typeof artifactEncryptRequestSchema>,
+  context: ArtifactContext
+) {
+  const artifact = getArtifactById(id);
+  if (!artifact) {
+    return undefined;
+  }
+  const parsed = artifactEncryptRequestSchema.parse(input);
+  if (artifact.contentProtection.mode === "password_encrypted") {
+    throw new HttpError(
+      409,
+      "artifact_already_encrypted",
+      "This artifact is already password encrypted.",
+      { artifactId: id }
+    );
+  }
+  const storagePath = resolveStoragePath(artifact.storageKey);
+  if (!existsSync(storagePath)) {
+    runInTransaction(() => {
+      recordArtifactAudit(id, "artifact.encryption_failed", context, {
+        reason: "blob_missing",
+        storageKey: artifact.storageKey
+      });
+    });
+    throw new Error("Artifact blob is missing from local storage.");
+  }
+  const plaintext = await readFile(storagePath);
+  const plaintextSha256 = sha256(plaintext);
+  if (
+    plaintext.byteLength !== artifact.byteSize ||
+    plaintextSha256 !== artifact.contentSha256
+  ) {
+    plaintext.fill(0);
+    throw new HttpError(
+      409,
+      "artifact_plaintext_identity_mismatch",
+      "The stored artifact bytes no longer match the artifact metadata.",
+      { artifactId: id }
+    );
+  }
+
+  const latestVersion = getDatabase()
+    .prepare(
+      `SELECT id, storage_key
+       FROM artifact_versions
+       WHERE artifact_id = ?
+       ORDER BY version_number DESC
+       LIMIT 1`
+    )
+    .get(id) as { id: string; storage_key: string } | undefined;
+  const encryptedAt = nowIso();
+  const versionId = latestVersion?.id ?? artifactVersionId();
+  const encrypted = await encryptArtifactBytes({
+    plaintext,
+    password: parsed.password,
+    originalFileName: artifact.originalFileName,
+    detectedMimeType: artifact.detectedMimeType,
+    artifactId: id,
+    versionId,
+    encryptedAt
+  });
+  const roundTripOk = await verifyArtifactEncryptionRoundTrip({
+    ciphertext: encrypted.ciphertext,
+    password: parsed.password,
+    envelope: encrypted.envelope,
+    expectedPlaintextSha256: artifact.contentSha256,
+    expectedPlaintextByteSize: artifact.byteSize
+  });
+  if (!roundTripOk) {
+    plaintext.fill(0);
+    encrypted.ciphertext.fill(0);
+    throw new Error("Encrypted artifact verification failed.");
+  }
+  const blob = await ensureBlobStored({
+    contentSha256: artifact.contentSha256,
+    plaintextByteSize: artifact.byteSize,
+    storedBuffer: encrypted.ciphertext,
+    detectedMimeType: artifact.detectedMimeType,
+    contentProtectionMode: "password_encrypted"
+  });
+  const retainedPlaintextReference = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM (
+         SELECT storage_key FROM artifacts WHERE storage_key = ?
+         UNION ALL
+         SELECT storage_key FROM artifact_versions WHERE storage_key = ?
+       )`
+    )
+    .get(artifact.storageKey, artifact.storageKey) as { count: number };
+
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `UPDATE artifacts
+         SET storage_key = ?, storage_path = ?, stored_content_sha256 = ?,
+             stored_byte_size = ?, content_protection_mode = ?,
+             content_encryption_json = ?, encrypted_at = ?,
+             encrypted_by_actor = ?, encrypted_source = ?,
+             content_password_hint = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        blob.storageKey,
+        blob.storagePath,
+        blob.storedContentSha256,
+        blob.storedByteSize,
+        "password_encrypted",
+        JSON.stringify(encrypted.envelope),
+        encryptedAt,
+        context.actor ?? null,
+        context.source,
+        parsed.passwordHint,
+        encryptedAt,
+        id
+      );
+    if (latestVersion) {
+      getDatabase()
+        .prepare(
+          `UPDATE artifact_versions
+           SET storage_key = ?, stored_content_sha256 = ?, stored_byte_size = ?,
+               content_protection_mode = ?, content_encryption_json = ?,
+               encrypted_at = ?, content_password_hint = ?
+           WHERE id = ?`
+        )
+        .run(
+          blob.storageKey,
+          blob.storedContentSha256,
+          blob.storedByteSize,
+          "password_encrypted",
+          JSON.stringify(encrypted.envelope),
+          encryptedAt,
+          parsed.passwordHint,
+          latestVersion.id
+        );
+    } else {
+      insertArtifactVersion({
+        id: versionId,
+        artifactId: id,
+        contentSha256: artifact.contentSha256,
+        storageKey: blob.storageKey,
+        byteSize: artifact.byteSize,
+        storedContentSha256: blob.storedContentSha256,
+        storedByteSize: blob.storedByteSize,
+        contentProtectionMode: "password_encrypted",
+        encryptionEnvelope: encrypted.envelope,
+        encryptedAt,
+        passwordHint: parsed.passwordHint,
+        originalFileName: artifact.originalFileName,
+        scanResults: artifact.scanResults,
+        enrichmentResults: artifact.enrichmentResults,
+        context
+      });
+    }
+    recordArtifactAudit(id, "artifact.encrypted", context, {
+      contentSha256: artifact.contentSha256,
+      storedContentSha256: blob.storedContentSha256,
+      plaintextBlobPreserved: true,
+      plaintextBlobDeletionAttempted: false,
+      plaintextBlobReferenceCountBeforeSwitch: retainedPlaintextReference.count,
+      hasPasswordHint: parsed.passwordHint.length > 0
+    });
+  });
+  plaintext.fill(0);
+  encrypted.ciphertext.fill(0);
+  return getArtifactById(id)!;
 }
 
 export async function rescanArtifact(id: string, context: ArtifactContext) {
   const artifact = getArtifactById(id);
   if (!artifact) {
     return undefined;
+  }
+  if (artifact.contentProtection.mode === "password_encrypted") {
+    runInTransaction(() => {
+      recordArtifactAudit(id, "artifact.scan_skipped", context, {
+        reason: "content_encrypted",
+        existingScanPreserved: true
+      });
+    });
+    throw new HttpError(
+      409,
+      "artifact_content_encrypted",
+      "Artifact content is encrypted. The existing scan result remains available; password-gated rescan is not implemented yet.",
+      { artifactId: id }
+    );
   }
   const storagePath = resolveStoragePath(artifact.storageKey);
   if (!existsSync(storagePath)) {
@@ -1514,6 +1930,7 @@ function extractJsonObject(text: string): Record<string, unknown> {
 
 function compactArtifactForPrompt(artifact: Artifact) {
   const scan = artifact.scanResults as ArtifactScanResult;
+  const encrypted = artifact.contentProtection.mode === "password_encrypted";
   return {
     title: artifact.title,
     shortDescription: artifact.shortDescription,
@@ -1526,9 +1943,11 @@ function compactArtifactForPrompt(artifact: Artifact) {
     byteSize: artifact.byteSize,
     deterministicDangerScore: artifact.dangerScore,
     deterministicDangerLevel: artifact.dangerLevel,
+    contentProtectionMode: artifact.contentProtection.mode,
+    encryptedContent: encrypted,
     findings: Array.isArray(scan.findings) ? scan.findings : [],
     extractedTextSample:
-      typeof scan.extractedTextSample === "string"
+      !encrypted && typeof scan.extractedTextSample === "string"
         ? scan.extractedTextSample.slice(0, MAX_LLM_CONTEXT_CHARS)
         : ""
   };
@@ -1708,7 +2127,9 @@ export function listArtifactVersions(id: string) {
   return getDatabase()
     .prepare(
       `SELECT id, artifact_id, version_number, content_sha256, storage_key,
-              byte_size, original_file_name, scan_results_json,
+              byte_size, stored_content_sha256, stored_byte_size,
+              content_protection_mode, content_encryption_json, encrypted_at,
+              content_password_hint, original_file_name, scan_results_json,
               enrichment_results_json, created_by_actor, created_at
        FROM artifact_versions
        WHERE artifact_id = ?
@@ -1724,6 +2145,15 @@ export function listArtifactVersions(id: string) {
         contentSha256: version.content_sha256,
         storageKey: version.storage_key,
         byteSize: version.byte_size,
+        storedContentSha256:
+          version.stored_content_sha256 || version.content_sha256,
+        storedByteSize: version.stored_byte_size || version.byte_size,
+        contentProtection: safeContentProtection({
+          mode: version.content_protection_mode,
+          encryptedAt: version.encrypted_at,
+          encryptionJson: version.content_encryption_json,
+          passwordHint: version.content_password_hint
+        }),
         originalFileName: version.original_file_name,
         scanResults: parseJsonObject(version.scan_results_json),
         enrichmentResults: parseJsonObject(version.enrichment_results_json),

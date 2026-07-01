@@ -365,6 +365,8 @@ describe("openclaw tool contracts", () => {
       );
     }
     expect(artifact.description ?? "").toMatch(/Do not expose download/i);
+    expect(artifact.description ?? "").toMatch(/password/i);
+    expect(artifact.description ?? "").toMatch(/decrypt/i);
     expect(artifact.description ?? "").toMatch(/generic entity-link/i);
 
     expect(readPropertyDescription(movement.parameters ?? {}, "routeKey")).toMatch(

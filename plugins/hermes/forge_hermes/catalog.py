@@ -700,7 +700,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_call_artifact_route",
-        "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Do not expose download, open, execute, preview, or transform stored file bytes as an agent.",
+        "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
         "parameters": specialized_route_parameters(ARTIFACT_ROUTE_SPECS),
         "method_builder": lambda args: specialized_route_method(ARTIFACT_ROUTE_SPECS, args),
         "path_builder": lambda args: specialized_route_path(ARTIFACT_ROUTE_SPECS, args),

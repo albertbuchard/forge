@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-29T20:13:12.372Z",
+  "generatedAt": "2026-07-01T10:39:13.360Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -87,14 +87,14 @@
       "groupTitle": "Specialized Domain Surfaces",
       "label": "Forge Artifact Route",
       "summary": "Call one allowed Artifact Store route for trusted file upload, metadata, scans, enrichment, generic entity links, trust state, versions, or audit.",
-      "whenToUse": "Use for artifact list/read/update/upload flows after the user wants a file preserved or reviewed as metadata. Use shared batch CRUD only for artifact metadata search/update/delete/restore. Do not use this tool to download, open, preview, execute, or transform file bytes.",
+      "whenToUse": "Use for artifact list/read/update/upload flows after the user wants a file preserved or reviewed as metadata. Use shared batch CRUD only for artifact metadata search/update/delete/restore. Do not use this tool to download, decrypt, open, preview, execute, transform file bytes, or submit artifact passwords.",
       "inputShape": "{ routeKey: \"list\"|\"createWithBytes\"|\"readMetadata\"|\"updateMetadata\"|\"rescan\"|\"enrichWithLlm\"|\"replaceGenericLinks\"|\"trustState\"|\"versions\"|\"audit\", pathParams?: { id?: string }, query?: object, body?: object }",
       "requiredFields": [
         "routeKey"
       ],
       "notes": [
-        "The download route is intentionally absent from the agent tool surface; it is human-operator-only.",
-        "For createWithBytes, the body must include originalFileName and contentBase64, and the actor must be trusted and scoped for artifact byte upload.",
+        "Download, password download, decrypt, and existing-artifact encryption routes are intentionally absent from the agent tool surface; they are human-operator-only.",
+        "For createWithBytes, the body must include originalFileName and contentBase64, and the actor must be trusted and scoped for artifact byte upload. Agents must not include contentProtection.password; encrypted upload passwords belong in the web/operator flow.",
         "For replaceGenericLinks, links are generic entity link inputs identifying target entityType, entityId, optional anchorKey, and relationship.",
         "Optional LLM enrichment can fill missing metadata, but it must not lower the deterministic scanner danger score."
       ],

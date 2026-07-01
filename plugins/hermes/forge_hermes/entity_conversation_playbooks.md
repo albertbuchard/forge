@@ -751,8 +751,8 @@ still knowing the exact write/read family before it acts.
   metadata reads and updates, static rescan, optional LLM metadata enrichment,
   trust-state decisions, version and audit reads, and replacement of general
   `entity_links`. Use batch CRUD for artifact metadata delete/restore. Do not
-  download, open, execute, preview, or transform file bytes as an agent; download is
-  a human-operator-only action.
+  download, decrypt, open, execute, preview, transform file bytes, or submit artifact
+  passwords as an agent. Password and byte routes are human-operator-only actions.
 - `operator_overview`: read-model-only operator surface. Use
   `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
   the current Forge picture, attention cues, or broad status before choosing a
@@ -1557,8 +1557,8 @@ Preferred opening question:
 ## Artifact
 
 Aim: store a trusted file so a human can find it, understand what it is, trace where
-it came from, and download it later without letting agents run or inspect the file
-bytes.
+it came from, optionally password-encrypt it, and download it later without letting
+agents run, decrypt, or inspect the file bytes.
 
 Arc:
 
@@ -1573,7 +1573,8 @@ Arc:
 5. Ask whether optional LLM enrichment should fill missing description/provenance
    fields and produce a danger summary when an LLM connection exists.
 6. Keep trust explicit: only a trusted human/operator or trusted agent may add file
-   bytes, and the agent must not download, open, execute, preview, or transform the
+   bytes, encrypted upload passwords are human/operator-only, and the agent must not
+   download, decrypt, open, execute, preview, transform, or submit passwords for the
    stored file.
 7. After upload, summarize the stored artifact metadata, scan result, danger score,
    and linked Forge records in product language.
@@ -1587,6 +1588,8 @@ Helpful follow-up lanes:
 - whether to request LLM metadata enrichment when descriptions are missing
 - whether the static scan or danger score requires quarantine, rejection, or a human
   trust decision
+- whether the human wants password encryption, handled through the Forge web app or
+  human-only API request body, not through agent password collection
 
 Routing rule:
 
@@ -1599,8 +1602,9 @@ Routing rule:
   `targetEntityType`, `targetEntityId`, optional `relationship`, and optional
   `anchorKey`.
 - Agents may list and update artifact metadata when authorized, but they must not
-  download, open, execute, preview, transform, or autonomously process stored file
-  bytes.
+  download, decrypt, open, execute, preview, transform, submit passwords, or
+  autonomously process stored file bytes. Agents may read `contentProtection` mode and
+  password hints as metadata only.
 
 Ready to save when:
 

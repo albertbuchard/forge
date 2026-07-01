@@ -10,8 +10,32 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ArtifactsPage } from "./artifacts-page";
-import { deleteEntities, listArtifacts, uploadArtifact } from "@/lib/api";
+import {
+  deleteEntities,
+  downloadArtifact,
+  downloadArtifactWithPassword,
+  encryptArtifact,
+  getArtifact,
+  listArtifacts,
+  uploadArtifact
+} from "@/lib/api";
 import type { Artifact } from "@/lib/types";
+
+const createObjectURLMock = vi.fn(() => "blob:artifact-download");
+const revokeObjectURLMock = vi.fn();
+const anchorClickMock = vi.fn();
+
+Object.defineProperty(URL, "createObjectURL", {
+  configurable: true,
+  value: createObjectURLMock
+});
+Object.defineProperty(URL, "revokeObjectURL", {
+  configurable: true,
+  value: revokeObjectURLMock
+});
+vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+  anchorClickMock
+);
 
 vi.mock("@/components/shell/page-hero", () => ({
   PageHero: ({
@@ -41,6 +65,16 @@ const mockArtifact: Artifact = {
   storagePath: "/tmp/forge/artifacts/blobs/aa/bb/hash.bin",
   contentSha256: "hash",
   byteSize: 2048,
+  storedContentSha256: "hash",
+  storedByteSize: 2048,
+  contentProtection: {
+    mode: "plaintext",
+    encryptedAt: null,
+    algorithm: null,
+    kdf: null,
+    kdfParams: null,
+    passwordHint: null
+  },
   detectedExtension: "xlsx",
   declaredMimeType:
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -110,6 +144,9 @@ vi.mock("@/lib/api", () => ({
         contentSha256: "hash",
         storageKey: "sha256/aa/bb/hash.bin",
         byteSize: 2048,
+        storedContentSha256: "hash",
+        storedByteSize: 2048,
+        contentProtection: mockArtifact.contentProtection,
         originalFileName: "budget.xlsx",
         scanResults: {},
         enrichmentResults: {},
@@ -131,7 +168,17 @@ vi.mock("@/lib/api", () => ({
       }
     ]
   })),
-  downloadArtifact: vi.fn(),
+  downloadArtifact: vi.fn(async () => ({
+    blob: new Blob(["plain"]),
+    fileName: "budget.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  })),
+  downloadArtifactWithPassword: vi.fn(async () => ({
+    blob: new Blob(["plain"]),
+    fileName: "budget.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  })),
+  encryptArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   enrichArtifact: vi.fn(),
   patchArtifact: vi.fn(),
   replaceArtifactEntityLinks: vi.fn(),
@@ -283,6 +330,191 @@ describe("ArtifactsPage", () => {
     expect(
       await screen.findByText("2 uploaded · 0 failed")
     ).toBeInTheDocument();
+  });
+
+  it("validates guided upload encryption fields and applies one password to selected files", async () => {
+    vi.mocked(uploadArtifact).mockResolvedValue({
+      artifact: {
+        ...mockArtifact,
+        id: "artifact_encrypted",
+        title: "Encrypted evidence",
+        originalFileName: "encrypted.csv",
+        detectedExtension: "csv",
+        declaredMimeType: "text/csv",
+        detectedMimeType: "text/csv",
+        formatFamily: "spreadsheet",
+        contentProtection: {
+          mode: "password_encrypted",
+          encryptedAt: "2026-07-01T00:00:00.000Z",
+          algorithm: "libsodium-secretstream-xchacha20poly1305",
+          kdf: "argon2id",
+          kdfParams: { memlimit: 19922944, opslimit: 2, parallelism: 1 },
+          passwordHint: "shared hint"
+        }
+      }
+    });
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    const file = new File(["a,b\n1,2\n"], "encrypted.csv", {
+      type: "text/csv"
+    });
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: { files: [file] }
+    });
+    fireEvent.click(
+      screen.getByLabelText("Encrypt file content with a password")
+    );
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review each file before upload"
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /details/i }));
+    fireEvent.click(
+      await screen.findByLabelText(
+        "Use configured LLM to fill missing metadata for this file"
+      )
+    );
+    expect(
+      await screen.findByText(
+        "For encrypted uploads, LLM enrichment uses metadata and scanner findings only, not decrypted file text."
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /back to file queue/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    expect(
+      await screen.findByText("Password is required when encryption is enabled.")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review each file before upload"
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(
+      await screen.findByRole("heading", { name: "Choose the files to preserve" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "sample passphrase" }
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "different passphrase" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    expect(
+      await screen.findByText("Password confirmation must match.")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review each file before upload"
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    expect(
+      await screen.findByRole("heading", { name: "Choose the files to preserve" })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "sample passphrase" }
+    });
+    fireEvent.change(screen.getByLabelText("Password hint"), {
+      target: { value: "shared hint" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    await waitFor(() => {
+      expect(uploadArtifact).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalFileName: "encrypted.csv",
+          contentProtection: {
+            mode: "password_encrypted",
+            password: "sample passphrase",
+            passwordHint: "shared hint"
+          }
+        })
+      );
+    });
+  });
+
+  it("shows encrypted artifact state and downloads through the password modal", async () => {
+    const encryptedArtifact: Artifact = {
+      ...mockArtifact,
+      contentProtection: {
+        mode: "password_encrypted",
+        encryptedAt: "2026-07-01T00:00:00.000Z",
+        algorithm: "libsodium-secretstream-xchacha20poly1305",
+        kdf: "argon2id",
+        kdfParams: { memlimit: 19922944, opslimit: 2, parallelism: 1 },
+        passwordHint: "budget hint"
+      },
+      storedContentSha256: "cipherhash",
+      storedByteSize: 2100
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [encryptedArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({ artifact: encryptedArtifact });
+    vi.mocked(downloadArtifactWithPassword)
+      .mockRejectedValueOnce(new Error("The password did not decrypt this artifact."))
+      .mockResolvedValueOnce({
+        blob: new Blob(["plain"]),
+        fileName: "budget.xlsx",
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      });
+
+    renderArtifactsPage();
+
+    expect(await screen.findByText("Encrypted content")).toBeInTheDocument();
+    expect(screen.getByText(/Hint: budget hint/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^download$/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Enter artifact password" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
+    expect(await screen.findByText("Password is required.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "wrong" }
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
+    expect(
+      await screen.findByText("The password did not decrypt this artifact.")
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct" }
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
+
+    await waitFor(() => {
+      expect(downloadArtifactWithPassword).toHaveBeenLastCalledWith(
+        "artifact_123",
+        "correct"
+      );
+    });
+    expect(downloadArtifact).not.toHaveBeenCalled();
   });
 
   it("uses paginated artifact list controls for large stores", async () => {
