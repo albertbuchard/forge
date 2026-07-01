@@ -12,18 +12,16 @@
 
 # Forge
 
-Forge is a local-first structured memory system for humans and AI agents.
+Forge is a local-first app, API, and agent runtime for structured memory.
 
-It complements unstructured memory. OpenClaw, Codex, Hermes, Claude Code, notes, wiki
-pages, and chat transcripts can keep prose, context, reasoning, and texture. Forge keeps
-the parts that need identity, state, links, history, permissions, review, automation, or
-future action.
+It stores the parts of work and life that need to stay usable over time: goals, projects,
+tasks, notes, wiki pages, Psyche records, preferences, calendar plans, sleep, workouts,
+movement, food, trusted files, and agent work. The same records are available in the web
+app, through the API, and through trusted agent integrations.
 
-When a conversation surfaces a belief, trigger, preference, decision, goal, task,
-workout, sleep night, movement pattern, calendar plan, wiki page, file artifact, or
-agent action, Forge can turn the useful part into a typed local record. That record can
-be searched, linked, audited, updated in the web app, and reused by trusted agents
-through the same local runtime.
+Unstructured memory keeps conversations, notes, wiki prose, transcripts, and reasoning
+traces. Forge complements it by saving selected things as records you can search, link,
+review, schedule, update, embed, restore, and hand back to trusted agents.
 
 Read the full published documentation on the
 [Forge GitHub Pages docs](https://albertbuchard.github.io/forge/).
@@ -44,100 +42,72 @@ Read the full published documentation on the
 
 ## Why Forge
 
-Forge is the structured memory layer beside unstructured memory.
+Forge gives humans and AI agents the same local system of record.
 
-Unstructured memory stores prose and context: conversations, notes, wiki pages,
-transcripts, reasoning traces, uncertainty, and wording. Forge does not try to turn all
-of that into database rows.
+A user can talk through something in a chat, note, wiki page, or transcript, then save
+the part that needs follow-up in Forge. Forge can keep a goal, task, belief, trigger
+report, preference, file, calendar block, sleep night, workout, movement pattern, or
+agent action connected to the other records around it.
 
-Forge stores a structured record when something needs a stable object. A structured
-record can have:
+In practical use, Forge lets you save a belief from a conversation, connect a file to a
+project, attach a note to a workout, turn a decision into a task, review a trigger
+pattern, check preference history, or let an agent read the same context before it acts.
 
-- an ID
-- a type
-- title and description fields
-- state
-- timestamps and history
-- links to other records
-- owner, assignee, uploader, or acting-actor provenance
-- permissions
-- API routes and web views
-- audit events
-
-Examples:
-
-- a belief can become a `belief_entry`
-- a recurring part-state can become a `mode_profile`
-- a trigger episode can become a `trigger_report`
-- a file can become an `artifact`
-- a sleep night can become a `sleep_session`
-- a workout can become a `workout_session`
-- a movement segment can become movement timeline, trip, stay, or place data
-- a preference can become an item, judgment, signal, or context
-- a project decision can become a project, issue, task, note, wiki page, or linked
-  artifact
-
-That is the boundary. Prose stays useful as source context. The part that needs review,
-linking, scheduling, permissions, audit, comparison, recovery, or future action becomes
-a Forge record.
+A project can point to its wiki page, files, tasks, decisions, calendar blocks, recovery
+context, and agent runs. A Psyche pattern can point to trigger reports, beliefs, notes,
+and support flashcards. A trusted file can point to the goal, task, wiki page, note, or
+Psyche record it supports.
 
 ## How Forge Solves It
 
-Forge uses one local runtime and one shared entity model. The model is the structured
-layer behind the prose, so work records, Psyche records, preferences, calendar records,
-sleep, workouts, movement, wiki pages, notes, artifacts, and agent actions can point at
-each other instead of becoming isolated text fragments.
+Forge runs locally. The browser app, API, OpenClaw, Hermes, Codex, Claude Code, the
+iPhone companion, and the watchOS command surface can use the same Forge records when
+they are configured together.
 
-Forge stores:
+In Forge, you can:
 
-- Psyche memory: values, beliefs, modes, behavior patterns, behaviors, trigger reports,
-  emotion definitions, event types, flashcards, questionnaire runs, and
+- plan work through goals, strategies, projects, issues, tasks, subtasks, habits, task
+  runs, work adjustments, completion reports, and linked git refs
+- keep notes and wiki pages with backlinks, search, ingest jobs, and links to the
+  records they explain
+- store Psyche material as values, beliefs, modes, behavior patterns, behaviors, trigger
+  reports, emotion definitions, event types, flashcards, questionnaire runs, and
   self-observation notes
-- knowledge memory: notes, wiki pages, backlinks, ingest jobs, search indexes, and
-  evidence attached to the records it explains
-- health and movement memory: sleep nights, workouts, HealthKit imports, training load,
-  nutrition and weight-loss context, movement timelines, places, trips, and recovery
-  context
-- preference memory: catalogs, items, judgments, signals, contexts, comparisons, and
-  score updates
-- artifact memory: trusted spreadsheets, documents, PDFs, structured text, plain text,
-  images, and other supported files with metadata, provenance, safety scans, danger
-  scores, versions, audit events, and human-only downloads
-- calendar memory: native events, mirrored calendar events, work block templates,
-  task timeboxes, provider connections, sync state, and writable calendar projections
-- work memory: goals, strategies, projects, issues, tasks, subtasks, task runs, habits,
-  work adjustments, completion reports, and linked git refs
-- collaboration memory: human users, bot users, agent runtime sessions, ownership,
-  assignees, approvals, and audited agent actions
+- track preferences through catalogs, items, judgments, signals, contexts, comparisons,
+  and score updates
+- work with calendar events, work block templates, task timeboxes, provider connections,
+  sync state, and writable calendar projections
+- review sleep, workouts, HealthKit imports, training load, nutrition, weight-loss
+  context, movement timelines, places, trips, Life Force, and fatigue signals
+- store trusted spreadsheets, documents, PDFs, text, structured text, images, and other
+  supported files in the Artifact Store with provenance, scans, danger scores, versions,
+  audit events, links, and human downloads
+- coordinate human users, bot users, agent runtime sessions, owners, assignees,
+  approvals, and audited agent actions
 
-Planning and project management are one important surface, not the whole product. The
-work hierarchy is explicit because structured work records need stable relationships:
+The work hierarchy is explicit:
 
 ```text
 Goal -> Strategy -> Project -> Strategy -> Issue -> Task -> Subtask
 ```
 
 Projects are PRD-backed initiatives. Issues are vertical slices across the stack. Tasks
-are one focused AI session each. Subtasks are small child steps. Completion records can
-preserve modified files, a work summary, and linked git refs, so agents leave behind a
-truthful delivery trail instead of only changing a status field.
+are one focused AI session each. Subtasks are small child steps. Completion reports can
+record the files changed, summarize the work, and link the relevant git refs.
 
-Psyche is just as central. A chat can mention a belief, trigger, mode, value, or
-behavior pattern. Forge can store it as a connected record with links, dates,
-descriptions, related notes, and future review paths. The same principle applies to
-preferences, health, movement, files, calendar plans, work, and agent actions.
+Psyche is a core Forge surface. A conversation can surface a belief, trigger, mode,
+value, or behavior pattern; Forge can save it as a record connected to notes, flashcards,
+episodes, and future review.
 
-Artifacts use the same model. A stored file is not just a blob in a folder. It is a
-typed artifact record with title, description, provenance, file identity, scan state,
-danger score, versions, audit history, and generic links to the Forge records it
-supports. Agents may help create, enrich, scan, and link artifacts when trusted and
-scoped, but Forge does not let agents autonomously download, open, execute, preview, or
-transform stored file bytes.
+Artifacts are a core Forge surface too. A trusted file can become an Artifact Store
+record connected to the Forge records it supports. Agent access stays scoped to trusted
+uploads, metadata, scans, enrichment, links, versions, and audit history. Human users get
+the download path.
 
-Health, movement, and recovery are also structured memory. Sleep nights, workouts,
-training load, nutrition context, places, trips, and movement timelines can sit beside
-the decisions, tasks, notes, and Psyche records they help explain instead of remaining
-trapped on the phone.
+Health, movement, and recovery are part of the same memory graph. Sleep nights, workouts,
+training load, nutrition context, places, trips, Life Force, fatigue signals, and movement
+timelines can sit beside the decisions, tasks, notes, and Psyche records they help
+explain.
 
 The same records are used by the React web app, Fastify API, OpenClaw, Hermes, Codex,
 Claude Code, the iPhone companion, and the watchOS command surface. The database stays
