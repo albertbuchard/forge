@@ -179,6 +179,41 @@ function readHermesRouteSpecs(constantName: string) {
   );
 }
 
+function readHermesCatalogToolNames() {
+  const source = readFileSync(
+    path.join(repoRoot, "plugins/hermes/forge_hermes/catalog.py"),
+    "utf8"
+  );
+  const start = source.indexOf("TOOL_CATALOG");
+  expect(start, "Hermes TOOL_CATALOG should exist").toBeGreaterThanOrEqual(0);
+  return [...source.slice(start).matchAll(/"name":\s*"([^"]+)"/g)]
+    .map((match) => match[1])
+    .sort();
+}
+
+function readHermesManifestToolNames() {
+  const source = readFileSync(
+    path.join(repoRoot, "plugins/hermes/plugin.yaml"),
+    "utf8"
+  );
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === "provides_tools:");
+  expect(start, "Hermes plugin.yaml should list provides_tools").toBeGreaterThanOrEqual(
+    0
+  );
+  const tools: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("  - ")) {
+      tools.push(line.slice(4).trim());
+      continue;
+    }
+    if (line.trim() && !line.startsWith(" ")) {
+      break;
+    }
+  }
+  return tools.sort();
+}
+
 describe("openclaw tool contracts", () => {
   it("keeps current-work and calendar tools backed by mirrored curated routes", () => {
     const supportedRoutes = collectSupportedPluginApiRouteKeys();
@@ -440,5 +475,9 @@ describe("openclaw tool contracts", () => {
     expect(readHermesRouteSpecs("LIFE_EVENT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.lifeEvents.methodRoutes
     );
+  });
+
+  it("keeps Hermes plugin.yaml provides_tools aligned with the registered catalog", () => {
+    expect(readHermesManifestToolNames()).toEqual(readHermesCatalogToolNames());
   });
 });

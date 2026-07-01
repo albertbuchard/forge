@@ -37,6 +37,7 @@
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
+    "libsodium-wrappers-sumo": "^0.8.4",
     "lucide-react": "^0.525.0",
     "node-ical": "^0.26.1",
     "qrcode": "^1.5.4",
