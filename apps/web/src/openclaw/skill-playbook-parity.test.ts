@@ -119,6 +119,10 @@ describe("forge skill playbook parity", () => {
     expect(openclawSkill).toMatch(/Workbench is a specialized domain surface, not batch CRUD/i);
     for (const skill of [openclawSkill, hermesSkill, hermesRootSkill, codexSkill]) {
       expect(skill).toMatch(/## Entity Route Posture/i);
+      expect(skill).toMatch(/entityCatalog\[\]\.questionFlow/);
+      expect(skill).toMatch(
+        /opening question[\s\S]*coaching goal[\s\S]*readiness check[\s\S]*route posture/i
+      );
       expect(skill).toMatch(/Keep the operation lane explicit across every entity family/i);
       expect(skill).toMatch(
         /Normal stored entities[\s\S]*added, updated, reviewed(?: or |\/)navigated,[\s\S]*linked,[\s\S]*placed/i

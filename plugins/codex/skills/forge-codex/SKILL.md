@@ -699,7 +699,9 @@ Surface rule:
 - When the request is routed through the OpenClaw HTTP proxy instead of direct Forge
   runtime access, those same specialized families are mirrored under
   `/forge/v1/movement/*`, `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
-- Exact create-shape expectations live in `forge_get_agent_onboarding`. Use its
+- Exact create-shape and question-flow expectations live in
+  `forge_get_agent_onboarding`. Use `entityCatalog[].questionFlow` for the opening
+  question, coaching goal, readiness check, and route posture, and use the rest of
   `entityCatalog` as the schema source of truth for `minimumCreateFields`,
   `fieldGuide`, examples, classification, and preferred mutation path.
 - High-signal minimums worth remembering:

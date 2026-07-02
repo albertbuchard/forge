@@ -4419,6 +4419,20 @@ export interface AgentOnboardingEntityGuide {
   minimumCreateFields: string[];
   relationshipRules: string[];
   searchHints: string[];
+  questionFlow: {
+    openingQuestion: string;
+    coachingGoal: string;
+    askSequence: string[];
+    questionStyle:
+      | "therapist_like_active_listening"
+      | "active_listening_structured"
+      | "operational_fast_path"
+      | "dedicated_route_active_listening"
+      | "read_model_practical_scope";
+    readinessCheck: string;
+    routePosture: AgentOnboardingEntityClassification;
+    apiAccessHint: string;
+  };
   fieldGuide: AgentOnboardingFieldGuide[];
   examples?: string[];
   routeBase?: string | null;

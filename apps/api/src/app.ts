@@ -5240,6 +5240,103 @@ function enrichConversationPlaybookWithRouteInfo<T extends { focus: string }>(
   };
 }
 
+const THERAPEUTIC_QUESTION_FLOW_ENTITIES: ReadonlySet<string> = new Set([
+  "psyche_value",
+  "behavior_pattern",
+  "behavior",
+  "belief_entry",
+  "mode_profile",
+  "mode_guide_session",
+  "flashcard",
+  "trigger_report",
+  "event_type",
+  "emotion_definition"
+]);
+
+function buildQuestionFlowReadinessCheck(
+  guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
+) {
+  if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
+    return "Ready when the user recognizes the working formulation and one accuracy or consent check confirms it is true enough to save through shared batch CRUD.";
+  }
+  if (guide.classification === "specialized_domain_surface") {
+    return "Ready when the dedicated lane plus target span, event, weekday, flow, run, node, correction, or preservation choice is clear enough to call the published route key without guessing.";
+  }
+  if (guide.classification === "specialized_crud_entity") {
+    return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
+  }
+  if (guide.classification === "action_workflow_entity") {
+    return "Ready when the action verb, target object, and truthful state or answer detail are clear enough to use the dedicated workflow route.";
+  }
+  if (guide.classification === "read_model_only_surface") {
+    return "Ready when the practical question and answer-changing scope are clear enough to read before asking write-shaped follow-ups.";
+  }
+  return "Ready when the accepted wording, meaningful body, and any ownership or placement detail that changes later use are clear enough for the shared batch entity route.";
+}
+
+function buildQuestionFlowStyle(
+  guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
+) {
+  if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
+    return "therapist_like_active_listening" as const;
+  }
+  if (guide.classification === "specialized_domain_surface") {
+    return "dedicated_route_active_listening" as const;
+  }
+  if (guide.classification === "action_workflow_entity") {
+    return "operational_fast_path" as const;
+  }
+  if (guide.classification === "read_model_only_surface") {
+    return "read_model_practical_scope" as const;
+  }
+  return "active_listening_structured" as const;
+}
+
+function buildEntityQuestionFlow(
+  guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
+) {
+  const psychePlaybook = AGENT_ONBOARDING_PSYCHE_PLAYBOOKS.find(
+    (playbook) => playbook.focus === guide.entityType
+  );
+  const entityPlaybook = AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS.find(
+    (playbook) => playbook.focus === guide.entityType
+  );
+  const routeInfo = buildPlaybookRouteInfo(guide.entityType);
+
+  if (psychePlaybook) {
+    return {
+      openingQuestion:
+        psychePlaybook.exampleQuestions[0] ??
+        psychePlaybook.askSequence[0] ??
+        "What moment should we stay close to first?",
+      coachingGoal: psychePlaybook.coachingGoal,
+      askSequence: [...psychePlaybook.askSequence],
+      questionStyle: buildQuestionFlowStyle(guide),
+      readinessCheck: buildQuestionFlowReadinessCheck(guide),
+      ...routeInfo
+    };
+  }
+
+  return {
+    openingQuestion:
+      entityPlaybook?.openingQuestion ??
+      "What are you trying to save, review, change, or decide here?",
+    coachingGoal:
+      entityPlaybook?.coachingGoal ??
+      "Clarify the user's practical job, choose the correct Forge route posture internally, and ask only for the missing detail that changes the action.",
+    askSequence: entityPlaybook ? [...entityPlaybook.askSequence] : [...guide.searchHints],
+    questionStyle: buildQuestionFlowStyle(guide),
+    readinessCheck: buildQuestionFlowReadinessCheck(guide),
+    ...routeInfo
+  };
+}
+
+const AGENT_ONBOARDING_ENTITY_CATALOG_WITH_QUESTION_FLOW =
+  AGENT_ONBOARDING_ENTITY_CATALOG.map((guide) => ({
+    ...guide,
+    questionFlow: buildEntityQuestionFlow(guide)
+  }));
+
 export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_get_user_directory",
@@ -6897,7 +6994,7 @@ function buildAgentOnboardingPayload(request: {
         "Target progress plus off-plan counts: is the contract actually reaching the intended end state"
       ]
     },
-    entityCatalog: AGENT_ONBOARDING_ENTITY_CATALOG,
+    entityCatalog: AGENT_ONBOARDING_ENTITY_CATALOG_WITH_QUESTION_FLOW,
     toolInputCatalog: AGENT_ONBOARDING_TOOL_INPUT_CATALOG,
     connectionGuides: {
       openclaw: {

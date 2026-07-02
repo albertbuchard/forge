@@ -337,7 +337,11 @@ Write to Forge only with clear user consent. If the user is just thinking aloud,
 
 Entity conversation rule:
 
-- For all entity creation or update flows, first use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md) to decide the next best question.
+- For all entity creation or update flows, use
+  `forge_get_agent_onboarding.entityCatalog[].questionFlow` as the live compact
+  source of truth for the opening question, coaching goal, readiness check, and route
+  posture. Use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md)
+  for deeper examples and pacing details.
 - Calibrate depth before deepening: choose quick capture, guided formulation,
   review-first, or action-first. For quick capture, use the user's supplied wording,
   ask only the one structural, accuracy, or consent detail that changes the write, and

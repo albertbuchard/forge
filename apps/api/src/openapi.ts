@@ -4056,6 +4056,7 @@ export function buildOpenApiDocument() {
           "minimumCreateFields",
           "relationshipRules",
           "searchHints",
+          "questionFlow",
           "fieldGuide",
           "preferredMutationPath"
         ],
@@ -4075,6 +4076,46 @@ export function buildOpenApiDocument() {
           minimumCreateFields: arrayOf({ type: "string" }),
           relationshipRules: arrayOf({ type: "string" }),
           searchHints: arrayOf({ type: "string" }),
+          questionFlow: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "openingQuestion",
+              "coachingGoal",
+              "askSequence",
+              "questionStyle",
+              "readinessCheck",
+              "routePosture",
+              "apiAccessHint"
+            ],
+            properties: {
+              openingQuestion: { type: "string" },
+              coachingGoal: { type: "string" },
+              askSequence: arrayOf({ type: "string" }),
+              questionStyle: {
+                type: "string",
+                enum: [
+                  "therapist_like_active_listening",
+                  "active_listening_structured",
+                  "operational_fast_path",
+                  "dedicated_route_active_listening",
+                  "read_model_practical_scope"
+                ]
+              },
+              readinessCheck: { type: "string" },
+              routePosture: {
+                type: "string",
+                enum: [
+                  "batch_crud_entity",
+                  "specialized_crud_entity",
+                  "action_workflow_entity",
+                  "specialized_domain_surface",
+                  "read_model_only_surface"
+                ]
+              },
+              apiAccessHint: { type: "string" }
+            }
+          },
           routeBase: nullable({ type: "string" }),
           preferredMutationPath: { type: "string" },
           preferredReadPath: nullable({ type: "string" }),

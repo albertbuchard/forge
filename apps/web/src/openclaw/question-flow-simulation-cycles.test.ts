@@ -31,7 +31,19 @@ async function loadOnboardingPayload() {
   expect(response.statusCode).toBe(200);
   await app.close();
   return response.json().onboarding as {
-    entityCatalog: Array<{ entityType: string }>;
+    entityCatalog: Array<{
+      entityType: string;
+      classification: string;
+      questionFlow: {
+        openingQuestion: string;
+        coachingGoal: string;
+        askSequence: string[];
+        questionStyle: string;
+        readinessCheck: string;
+        routePosture: string;
+        apiAccessHint: string;
+      };
+    }>;
     entityRouteModel: {
       specializedDomainSurfaces: Record<
         string,
@@ -892,6 +904,66 @@ describe("question flow simulation cycles", () => {
         [...simulatedRouteKeys].sort(),
         `${surfaceKey} route-key scenarios should match onboarding`
       ).toEqual([...liveRouteKeys].sort());
+    }
+  });
+
+  it("cycle 2 retest: every live catalog entry publishes a usable question-flow capsule", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const userFacingJargon =
+      /\b(API|CRUD|endpoint|route family|payload|mutation path|read path|schema field)\b/i;
+
+    for (const entry of onboarding.entityCatalog) {
+      const flow = entry.questionFlow;
+      expect(flow, `${entry.entityType} question flow`).toBeTruthy();
+      expect(flow.openingQuestion, `${entry.entityType} opening`).toMatch(/\?$/);
+      expect(flow.openingQuestion, `${entry.entityType} opening`).not.toMatch(
+        userFacingJargon
+      );
+      expect(flow.coachingGoal, `${entry.entityType} coaching goal`).toMatch(
+        /\w/
+      );
+      expect(flow.askSequence.length, `${entry.entityType} sequence`).toBeGreaterThan(0);
+      expect(flow.routePosture, `${entry.entityType} route posture`).toBe(
+        entry.classification
+      );
+      expect(flow.apiAccessHint, `${entry.entityType} API hint`).toContain(
+        `Focus: ${entry.entityType}.`
+      );
+    }
+
+    for (const entityType of [
+      "psyche_value",
+      "behavior_pattern",
+      "behavior",
+      "belief_entry",
+      "mode_profile",
+      "mode_guide_session",
+      "flashcard",
+      "trigger_report",
+      "event_type",
+      "emotion_definition"
+    ] as const) {
+      const flow = onboarding.entityCatalog.find(
+        (entry) => entry.entityType === entityType
+      )?.questionFlow;
+      expect(flow?.questionStyle, `${entityType} style`).toBe(
+        "therapist_like_active_listening"
+      );
+      expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
+        /accuracy or consent/i
+      );
+    }
+
+    for (const entityType of ["movement", "life_force", "workbench"] as const) {
+      const flow = onboarding.entityCatalog.find(
+        (entry) => entry.entityType === entityType
+      )?.questionFlow;
+      expect(flow?.questionStyle, `${entityType} style`).toBe(
+        "dedicated_route_active_listening"
+      );
+      expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
+        /published route key[\s\S]*without guessing/i
+      );
     }
   });
 

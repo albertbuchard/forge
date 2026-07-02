@@ -65,6 +65,7 @@
     "@fontsource/space-grotesk": "^5.2.10",
     "@hookform/resolvers": "^5.1.1",
     "@mariozechner/pi-agent-core": "^0.73.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@reduxjs/toolkit": "^2.11.2",
     "@sinclair/typebox": "^0.34.49",

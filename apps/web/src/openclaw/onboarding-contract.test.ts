@@ -55,6 +55,15 @@ async function loadOnboardingPayload() {
       purpose?: string;
       relationshipRules?: string[];
       fieldGuide?: Array<{ name: string; description?: string }>;
+      questionFlow: {
+        openingQuestion: string;
+        coachingGoal: string;
+        askSequence: string[];
+        questionStyle: string;
+        readinessCheck: string;
+        routePosture: string;
+        apiAccessHint: string;
+      };
       preferredMutationPath: string | null;
       preferredReadPath: string | null;
       preferredMutationTool?: string | null;
@@ -194,6 +203,15 @@ describe("forge onboarding contract", () => {
     const psycheFocuses = new Set(
       onboarding.psycheCoachingPlaybooks.map((entry) => entry.focus)
     );
+    const entityPlaybooksByFocus = new Map(
+      onboarding.entityConversationPlaybooks.map((entry) => [
+        entry.focus,
+        entry
+      ])
+    );
+    const psychePlaybooksByFocus = new Map(
+      onboarding.psycheCoachingPlaybooks.map((entry) => [entry.focus, entry])
+    );
 
     const expected = [
       "goal",
@@ -247,6 +265,61 @@ describe("forge onboarding contract", () => {
         entityTypes.has(entityType),
         `${entityType} should be published`
       ).toBe(true);
+    }
+    for (const catalogEntry of onboarding.entityCatalog) {
+      const flow = catalogEntry.questionFlow;
+      expect(
+        flow.openingQuestion,
+        `${catalogEntry.entityType} should publish a question-flow opening`
+      ).toMatch(/\?$/);
+      expect(
+        flow.openingQuestion,
+        `${catalogEntry.entityType} opening should stay user-facing`
+      ).not.toMatch(
+        /\b(API|CRUD|endpoint|route family|payload|mutation path|read path|schema field)\b/i
+      );
+      expect(
+        flow.coachingGoal,
+        `${catalogEntry.entityType} should publish a coaching goal`
+      ).toMatch(/\w/);
+      expect(
+        flow.askSequence.length,
+        `${catalogEntry.entityType} should publish a sequenced flow`
+      ).toBeGreaterThan(0);
+      expect(flow.routePosture).toBe(catalogEntry.classification);
+      expect(flow.apiAccessHint).toContain(`Focus: ${catalogEntry.entityType}.`);
+      expect(flow.apiAccessHint).toContain(
+        `Route posture: ${catalogEntry.classification}.`
+      );
+
+      const psychePlaybook = psychePlaybooksByFocus.get(catalogEntry.entityType);
+      const entityPlaybook = entityPlaybooksByFocus.get(catalogEntry.entityType);
+      if (psychePlaybook) {
+        expect(flow.questionStyle).toBe("therapist_like_active_listening");
+        expect(flow.openingQuestion).toBe(psychePlaybook.openingQuestion);
+        expect(flow.readinessCheck).toMatch(/accuracy or consent/i);
+        expect(flow.readinessCheck).toMatch(/shared batch CRUD/i);
+      } else {
+        expect(
+          entityPlaybook,
+          `${catalogEntry.entityType} should have a matching entity conversation playbook`
+        ).toBeTruthy();
+        expect(flow.openingQuestion).toBe(entityPlaybook?.openingQuestion);
+      }
+
+      if (catalogEntry.classification === "specialized_domain_surface") {
+        expect(flow.questionStyle).toBe("dedicated_route_active_listening");
+        expect(flow.readinessCheck).toMatch(/published route key/i);
+        expect(flow.readinessCheck).toMatch(/without guessing/i);
+      }
+      if (catalogEntry.classification === "action_workflow_entity") {
+        expect(flow.questionStyle).toBe("operational_fast_path");
+        expect(flow.readinessCheck).toMatch(/dedicated workflow route/i);
+      }
+      if (catalogEntry.classification === "read_model_only_surface") {
+        expect(flow.questionStyle).toBe("read_model_practical_scope");
+        expect(flow.readinessCheck).toMatch(/read before asking write-shaped/i);
+      }
     }
     const taskCatalog = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "task"
