@@ -22,6 +22,7 @@ import {
   lifeEventCalendarProjectionSchema,
   lifeEventSegmentTypeSchema,
   lifeEventSchema,
+  lifeEventTypeSchema,
   lifeEventTransportModeSchema,
   updateLifeEventSchema,
   type ActivitySource,
@@ -157,26 +158,7 @@ export const lifeEventCalendarSyncInputSchema = z.object({
 
 export const lifeEventFromCalendarInputSchema = z.object({
   calendarEventId: z.string().trim().min(1),
-  eventType: z
-    .enum([
-      "travel_flight",
-      "travel_train",
-      "travel_car",
-      "travel_boat",
-      "travel_trip",
-      "concert",
-      "cinema",
-      "date",
-      "friends",
-      "family",
-      "work_milestone",
-      "thesis_milestone",
-      "medical",
-      "administrative",
-      "celebration",
-      "custom"
-    ])
-    .default("custom"),
+  eventType: lifeEventTypeSchema.default("custom"),
   importance: z
     .enum(["ordinary", "meaningful", "major", "life_changing"])
     .default("meaningful")

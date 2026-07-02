@@ -37,12 +37,43 @@ vi.mock("@tanstack/react-virtual", () => ({
   })
 }));
 
+vi.mock("maplibre-gl", () => {
+  class MockMap {
+    scrollZoom = { disable: vi.fn() };
+    dragRotate = { disable: vi.fn() };
+    touchZoomRotate = { disableRotation: vi.fn() };
+    on(event: string, callback: () => void) {
+      if (event === "load") {
+        callback();
+      }
+      return this;
+    }
+    setProjection = vi.fn();
+    addSource = vi.fn();
+    addLayer = vi.fn();
+    fitBounds = vi.fn();
+    remove = vi.fn();
+  }
+  class MockLngLatBounds {
+    extend = vi.fn(() => this);
+    adjustAntiMeridian = vi.fn(() => this);
+  }
+  return {
+    Map: MockMap,
+    LngLatBounds: MockLngLatBounds,
+    default: { Map: MockMap, LngLatBounds: MockLngLatBounds }
+  };
+});
+
 vi.mock("@/components/flows/question-flow-dialog", () => ({
   QuestionFlowDialog: ({
     open,
     title,
     description,
     submitLabel,
+    value,
+    onChange,
+    steps,
     onSubmit,
     children
   }: {
@@ -50,6 +81,16 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     title: string;
     description: string;
     submitLabel: string;
+    value: Record<string, unknown>;
+    onChange: (value: Record<string, unknown>) => void;
+    steps: Array<{
+      id: string;
+      title: string;
+      render: (
+        value: Record<string, unknown>,
+        setValue: (patch: Record<string, unknown>) => void
+      ) => ReactNode;
+    }>;
     onSubmit: () => Promise<void>;
     children?: ReactNode;
   }) =>
@@ -57,6 +98,12 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
       <div data-testid="guided-question-flow">
         <h2>{title}</h2>
         <p>{description}</p>
+        {steps?.map((step) => (
+          <section key={step.id}>
+            <h3>{step.title}</h3>
+            {step.render(value, (patch) => onChange({ ...value, ...patch }))}
+          </section>
+        ))}
         {children}
         <button type="button" onClick={() => void onSubmit()}>
           {submitLabel}
@@ -167,6 +214,11 @@ describe("LifeEventsPage", () => {
     expect(screen.getByTestId("guided-question-flow")).toHaveTextContent(
       "Add Life Event"
     );
+    expect(screen.getByText("Travel and stays")).toBeInTheDocument();
+    expect(screen.getByText("Festival")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /month or longer/i })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /import tickets/i }));
     expect(screen.getAllByTestId("guided-question-flow").at(-1)).toHaveTextContent(
@@ -180,11 +232,12 @@ describe("LifeEventsPage", () => {
         buildLifeEvent(),
         buildLifeEvent({
           id: "lifeevent_456",
-          title: "Cinema night",
-          eventType: "cinema",
-          startsAt: "2026-08-03T18:00:00.000Z",
-          endsAt: "2026-08-03T20:00:00.000Z",
-          destinationLabel: ""
+          title: "Summer festival stay",
+          eventType: "festival",
+          startsAt: "2026-06-01T10:00:00.000Z",
+          endsAt: "2026-09-01T09:00:00.000Z",
+          destinationLabel: "",
+          placeLabel: "Lisbon"
         })
       ],
       now: "2026-07-01T12:00:00.000Z",
@@ -194,16 +247,17 @@ describe("LifeEventsPage", () => {
     });
 
     expect(await screen.findByText("Flight to Paris")).toBeInTheDocument();
-    expect(screen.getByText("Cinema night")).toBeInTheDocument();
+    expect(screen.getByText("Summer festival stay")).toBeInTheDocument();
+    expect(screen.getByText("3 months")).toBeInTheDocument();
 
     fireEvent.change(
       screen.getByPlaceholderText(/search events, places/i),
-      { target: { value: "cinema" } }
+      { target: { value: "festival" } }
     );
 
     await waitFor(() => {
       expect(screen.queryByText("Flight to Paris")).not.toBeInTheDocument();
-      expect(screen.getByText("Cinema night")).toBeInTheDocument();
+      expect(screen.getByText("Summer festival stay")).toBeInTheDocument();
     });
   });
 

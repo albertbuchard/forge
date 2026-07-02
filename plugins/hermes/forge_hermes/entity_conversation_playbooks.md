@@ -2340,7 +2340,7 @@ Preferred opening question:
 
 ## Life Events
 
-Aim: preserve an important event in a person's life as a clear point on the
+Aim: preserve an important event or period in a person's life as a clear span on the
 chronology, connected to the calendar, artifacts, wiki pages, goals, Psyche records,
 and other Forge entities when those links help the event stay meaningful later.
 
@@ -2348,11 +2348,14 @@ Arc:
 
 1. Ask what happened or what is coming up, and what makes it significant enough to
    belong on the Life Events timeline instead of only the calendar.
-2. Ask for the missing time, place, and timezone details only when they are not clear
-   from the user or from a ticket artifact.
-3. Ask whether it is travel, flight, train, car trip, concert, cinema, date,
-   friends/family meeting, major work milestone, ceremony, health event, or a custom
-   life event.
+2. Ask for the missing start, end, place, and timezone details only when they are not
+   clear from the user or from a ticket artifact. Life Events can last hours, days,
+   weeks, or months.
+3. Ask whether it is travel, stay, lodging, holiday, vacation, visit, move, festival,
+   conference, retreat, concert, cinema, meal, party, ceremony, date,
+   friends/family meeting, work phase, major work milestone, thesis milestone,
+   class/course, exam, deadline, health episode, therapy, admin, legal/financial,
+   celebration, memory, or a custom life event.
 4. For travel, ask the practical route details: origin, destination, departure,
    arrival, transport mode, booking or ticket artifact, and when the user needs to
    leave or be ready.
@@ -2392,6 +2395,8 @@ Helpful follow-up lanes:
 
 - why this belongs on the Life Events timeline
 - when it starts, when it ends, and which timezone applies
+- whether this is a short event, overnight span, stay, festival, visit, work phase,
+  health episode, or longer period
 - where it starts, where it ends, and where the user needs to be
 - whether this is travel, entertainment, family/friends, work milestone, health,
   ceremony, or custom

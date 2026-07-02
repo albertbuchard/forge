@@ -3852,8 +3852,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
   enrichOnboardingEntityGuide({
     entityType: "life_event",
     purpose:
-      "A chronological record for an important life event, shown in the Life Events timeline and optionally projected to the calendar.",
-    minimumCreateFields: ["title", "startsAt"],
+      "A chronological record for an important life event or period, shown in the Life Events timeline and optionally projected to the calendar.",
+    minimumCreateFields: ["title", "startsAt", "endsAt"],
     relationshipRules: [
       "Use shared batch CRUD for the stored life_event record.",
       "Use generic entity_links for every relationship to artifacts, calendar events, wiki-backed notes, goals, tasks, Psyche records, health records, and other Forge entities.",
@@ -3861,9 +3861,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "Do not create a special ticket-link or calendar-link model in agent reasoning. Tickets are Artifact Store records linked through entity_links; calendar projections are calendar_event records linked through entity_links and calendar event links."
     ],
     searchHints: [
-      "Ask first what happened or will happen, when it starts, where it is, how the user gets there or participates, and why it belongs in the Life Events timeline.",
+      "Ask first what happened or will happen, when it starts and ends, where it is, how the user gets there or participates, and why it belongs in the Life Events timeline.",
+      "Life Events can be short events or longer spans such as stays, festivals, visits, retreats, vacations, work phases, courses, health episodes, memories, and custom periods.",
       "For travel, ask origin, destination, departure, arrival, transport mode, and whether a ticket or confirmation should be uploaded for extraction.",
-      "Before saving, search calendar_event and life_event for likely duplicates by title, time, location, and travel identifiers.",
+      "Before saving, search calendar_event and life_event for likely duplicates by title, interval, location, and travel identifiers.",
       "If a calendar event already exists, link it; if none exists and the user wants calendar projection, create the calendar_event through Life Event calendar sync.",
       "For ticket flows, upload the file through Artifact Store first, never download or execute file bytes as an agent, then call the Life Event import-ticket route to produce a reviewed draft."
     ],
@@ -4284,6 +4285,24 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     ]
   },
   {
+    focus: "artifact",
+    openingQuestion:
+      "What should this file help you find, prove, review, or preserve later?",
+    coachingGoal:
+      "Store a trusted file as precise metadata, provenance, scan state, danger score, and general Forge links while keeping file bytes human-download-only.",
+    askSequence: [
+      "Ask what the file or file set should help the human retrieve, prove, review, or preserve later.",
+      "If there are several files, treat them as a queue: get a quick short description per file, then open per-file details only where title, provenance, links, metadata JSON, or LLM enrichment choices need more care.",
+      "Ask for the human-readable title, short description, provenance, and source path only when the user has not already supplied them.",
+      "Ask which Forge record the artifact should be linked to only when that link will improve retrieval or context, and use the general entity_links model.",
+      "Ask whether optional LLM enrichment should fill missing description or provenance fields and produce a danger summary when an LLM connection exists.",
+      "Keep trust explicit: only a trusted human, operator, or trusted agent may add file bytes; encrypted upload passwords are human/operator-only.",
+      "Do not download, decrypt, open, execute, preview, transform, submit passwords for, or autonomously process stored file bytes.",
+      "Use the Artifact Store route family for trusted file upload, metadata reads and updates, static scan, LLM enrichment, trust-state changes, versions, audit reads, and replacement of general entity_links.",
+      "After upload, summarize the stored artifact metadata, scan result, danger score, and linked Forge records in product language."
+    ]
+  },
+  {
     focus: "insight",
     openingQuestion:
       "What is the clearest thing you want future-you or the agent to remember from this?",
@@ -4648,17 +4667,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "What happened, or what is coming up, that should stay visible in your life timeline?",
     coachingGoal:
-      "Clarify one meaningful chronological event, its time/place, significance, calendar relationship, ticket or artifact evidence, and links without turning it into a flat calendar form.",
+      "Clarify one meaningful chronological event or period, its start/end span, place, significance, calendar relationship, ticket or artifact evidence, and links without turning it into a flat calendar form.",
     askSequence: [
       "Ask what happened or will happen and why it belongs in the Life Events timeline rather than only on the calendar.",
-      "Ask for the time, place, and timezone only to the level needed to create or match the calendar event.",
-      "Ask what type of event this is: travel, flight, train, car trip, concert, cinema, date, friends, family, work or thesis milestone, health or admin, celebration, or custom.",
+      "Ask when it starts, when it ends, where it happens, and timezone only to the level needed to create or match the calendar event.",
+      "Ask what type of event this is: travel, stay, lodging, holiday, vacation, visit, move, festival, conference, retreat, concert, cinema, meal, date, friends, family, work phase or milestone, thesis milestone, course, exam, deadline, health episode, therapy, admin, legal or financial, celebration, memory, or custom.",
       "For travel, ask origin, destination, departure, arrival, transport mode, and whether a trusted ticket artifact should be imported.",
-      "Search likely life_event and calendar_event duplicates by title, time, place, and travel identifiers before creating a new record.",
+      "Search likely life_event and calendar_event duplicates by title, interval, place, and travel identifiers before creating a new record.",
       "Use shared batch CRUD for normal life_event create, update, search, delete, restore, and generic links.",
       "Use the dedicated Life Events route family for timeline reads, one-event reads, calendar reconciliation, calendar-to-Life-Event marking, trusted ticket-artifact import, and travel-status reads.",
       "Use generic entity_links for links to artifacts, calendar events, wiki pages, goals, tasks, Psyche records, movement context, and other Forge records.",
-      "If the user already named the exact event and action, ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation."
+      "If the user already named the exact event and action, ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation."
     ]
   },
   {
@@ -6349,7 +6368,7 @@ function buildAgentOnboardingPayload(request: {
       "Task runs represent live work sessions on tasks and are separate from task status.",
       "Notes can link to one or many entities and are the canonical place for Markdown progress context or close-out evidence.",
       "Artifacts are linkable stored entities backed by the general entity_links model; use generic entity links to attach a file to goals, projects, tasks, wiki-backed notes, Psyche records, calendar records, or other meaningful Forge context.",
-      "Life Events are linkable stored entities backed by the general entity_links model; use them for important chronological events and use calendar_event links when the event should also exist on the calendar.",
+      "Life Events are linkable stored entities backed by the general entity_links model; use them for important chronological events or periods and use calendar_event links when the event should also exist on the calendar.",
       "Psyche values can link to goals, projects, and tasks.",
       "Behavior patterns, behaviors, beliefs, modes, flashcards, and trigger reports cross-link to describe one reflective model rather than isolated records.",
       "Insights can point at one entity, but they exist to capture interpretation or advice rather than raw work items."
@@ -6640,6 +6659,7 @@ function buildAgentOnboardingPayload(request: {
           routeSelectionQuestions: [
             "Is the user trying to browse the life timeline, read one event, save or update the stored event, connect it to calendar, import a ticket, or check travel status?",
             "If this is a save or edit, is the normal life_event record already clear enough for batch CRUD before any dedicated action?",
+            "If this is a stay, festival, visit, retreat, work phase, health episode, or other period, what start/end interval should the calendar and timeline preserve?",
             "If this belongs on the calendar, is there an existing calendar event to link, or should Forge search and create one if missing?",
             "If this came from a ticket, which trusted artifact id should be used and should configured LLM extraction fill missing travel details?",
             "If this is travel status, which Life Event id contains the flight, train, car, or trip record?"
@@ -7264,7 +7284,7 @@ function buildAgentOnboardingPayload(request: {
       psycheExplorationRule:
         "When a Psyche entity needs understanding first, begin with one exploratory question before any working formulation, replacement belief, suggested title, or save pitch. Keep the opening reflection to one or two short sentences, stay in plain prose instead of bullets or numbered lists, keep that first reply short, do not mention Forge search or save structure yet, avoid colons or list-shaped phrasing, prefer what/when/how over why until the experience is grounded, wait for the user's answer before offering a fuller formulation, ask permission before moving from charged exploration into naming or challenge when needed, make the next question help the user feel more able to name the experience rather than more examined, do not widen into adjacent entities until the current one has a working sentence the user recognizes, and once the lived experience is coherent stop deepening and help the user name it cleanly. After one concrete example is clear and a hypothesis lands or is corrected, translate it into a saveable record shape such as a belief sentence, functional loop, behavior, mode, trigger report, value, event type, or emotion definition; do not leave the user with interpretation alone, name the primary Forge record it is becoming, and ask one accuracy or consent question instead of reopening broad exploration, then use the shared batch entity routes after the user accepts the wording or explicitly asks to save. When the user is updating a Psyche record because of one fresh episode, anchor in that episode before renaming the durable formulation, begin with the smallest part of the old wording that no longer fits, and do not reopen the full origin story unless the new understanding is truly structural. If the user accepts the wording, move toward the save instead of reopening deeper exploration.",
       progressiveDisclosureRule:
-        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Events ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Events, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
+        "Treat partial answers as progress, not as failed intake. Before asking another question, identify what is already usable: operation, entity or surface, target record or time span, working wording, owner or placement, route lane, and consent. Say the usable part back briefly, then ask only for the first missing detail that changes the action: duplicate disambiguation, hierarchy parent, time window, weekday, flow, run, node, correction, link, or save consent. Use the known-target fast path when the user's wording already names the object and action: for normal entities ask only for parent, owner, or duplicate disambiguation; for task hierarchy ask only for the project, issue, or parent task; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Events ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice. For normal batch entities, do not ask for optional tags, priority, status, dates, color, links, or assignees when the accepted wording and meaningful body are already enough unless that metadata changes accountability, retrieval, or execution. For Movement, Life Events, Life Force, and Workbench, if the user's wording already implies the dedicated lane, skip the broad route-family question and ask only for the target span, place, event, artifact, weekday, profile field, flow, run, node, output, correction, or consent that is still missing. For direct Psyche saves or updates, treat an offered belief sentence, functional loop, part voice, trigger episode, value phrase, event kind, emotion signature, or flashcard message as real data; ask one accuracy or consent question instead of reopening origin, evidence, or repair.",
       writeConfirmationRule:
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:
@@ -7282,7 +7302,7 @@ function buildAgentOnboardingPayload(request: {
       mixedIntentSequencingRule:
         "When one user message combines several Forge jobs, identify the primary job and the order of operations before asking a follow-up. If a read changes the truth of a later write, read first: Movement timeline or box detail before correction, Life Events timeline or event detail before calendar sync, ticket import, or travel-status interpretation, Workbench run or node detail before editing or publishing, and Life Force overview before changing durable assumptions when the current energy picture is uncertain. If the user asks to understand and save Psyche material plus create a support record, formulate the primary Psyche record first, then derive the flashcard, note, link, task, or habit from the accepted wording. If the user already gave the concrete action, do not ask a broad lane question; say the product sequence briefly and ask only for the missing span, wording, event, artifact, flow, run, node, weekday, or link that changes the next action.",
       duplicateDisambiguationRule:
-        "Before creating or updating a normal stored entity when duplicate risk is plausible, search the shared batch entity route by entity type, distinctive title or wording, owner scope, and linked content. If a likely existing record appears, ask whether the user wants to update that record, link to it, or save a separate new record; do not reopen the whole create flow. For Life Events, search life_event and calendar_event by title, time, place, and travel identifiers before creating a duplicate. For Psyche records, a similar belief, pattern, mode, trigger report, value, or flashcard is a formulation choice, not a duplicate error: compare the sentence, cue/payoff/cost, protective job, episode, urge sentence, or message and let the user choose update, link, or new version. For wiki_page and calendar_connection, use dedicated search/list/read routes before creating another page or connection. For Movement, Life Events, Life Force, and Workbench, use the dedicated read lanes instead of batch duplicate search when the user is asking to inspect timeline, status, or action results.",
+        "Before creating or updating a normal stored entity when duplicate risk is plausible, search the shared batch entity route by entity type, distinctive title or wording, owner scope, and linked content. If a likely existing record appears, ask whether the user wants to update that record, link to it, or save a separate new record; do not reopen the whole create flow. For Life Events, search life_event and calendar_event by title, interval, place, and travel identifiers before creating a duplicate. For Psyche records, a similar belief, pattern, mode, trigger report, value, or flashcard is a formulation choice, not a duplicate error: compare the sentence, cue/payoff/cost, protective job, episode, urge sentence, or message and let the user choose update, link, or new version. For wiki_page and calendar_connection, use dedicated search/list/read routes before creating another page or connection. For Movement, Life Events, Life Force, and Workbench, use the dedicated read lanes instead of batch duplicate search when the user is asking to inspect timeline, status, or action results.",
       destructiveActionRule:
         "Before deleting, archiving, invalidating, overwriting, disconnecting, or substantially replacing a Forge record or specialized object, confirm the exact target and what should remain understandable. Prefer normal soft-delete for stored entities unless the user explicitly asks for permanent removal. For Psyche records, preserve therapeutic history by asking whether the old belief, pattern, mode, trigger report, value, or flashcard should be updated, linked as history, archived, or kept distinct; do not delete it just because a cleaner formulation exists. For Movement, distinguish user-defined overlay deletion from automatic-box invalidation and stay/trip/point deletion, and read the specific span first when the target is uncertain. For calendar connections, Workbench flows, wiki pages, and questionnaire instruments, ask what downstream sync, published output, backlinks, run history, or completed runs should remain understandable before deleting or replacing the saved object.",
       followUpQuestionRule:

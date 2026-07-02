@@ -51,7 +51,9 @@ and human-only downloads while using the general Forge entity-link graph to conn
 to goals, projects, tasks, wiki pages, Psyche records, calendar records, and notes. The
 chronological memory side includes Life Events for important personal events, with
 calendar reconciliation, ticket artifact import, travel segments, status reads, and links
-back into the same general Forge entity graph.
+back into the same general Forge entity graph. Life Events can be brief moments or
+longer spans such as stays, festivals, visits, retreats, holidays, work phases, health
+episodes, and custom periods.
 companion side includes the iPhone app and related agent/tooling surfaces. All of those
 pieces should use one shared entity language and one shared data model.
 

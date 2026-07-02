@@ -62,7 +62,7 @@ any route-key or endpoint detail.
 Use the known-target fast path when the user already supplied the object, action, and
 likely lane. For normal entities, ask only for parent, owner, or duplicate-disambiguation that changes the write. For task hierarchy, ask only for the project,
 issue, or parent task that changes placement. For Movement, ask only for the missing
-interval, boundary, saved object, or confirmation. For Life Events, ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation. For Life Force, ask only for the
+interval, boundary, saved object, or confirmation. For Life Events, ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation. For Life Force, ask only for the
 weekday, profile field, signal intensity, or planning effect. For Workbench, ask only
 for the missing flow, run, node, input, output, or preservation choice. For direct
 Psyche saves, ask one accuracy or consent question instead of restarting exploration.
@@ -700,8 +700,8 @@ Surface rule:
   runtime access, those same specialized families are mirrored under
   `/forge/v1/movement/*`, `/forge/v1/life-force/*`, and `/forge/v1/workbench/*`.
 - Exact create-shape and question-flow expectations live in
-  `forge_get_agent_onboarding`. Use `entityCatalog[].questionFlow` for the opening
-  question, coaching goal, readiness check, and route posture, and use the rest of
+  `forge_get_agent_onboarding`. Use `entityCatalog[].questionFlow` for the opening question,
+  coaching goal, readiness check, and route posture, and use the rest of
   `entityCatalog` as the schema source of truth for `minimumCreateFields`,
   `fieldGuide`, examples, classification, and preferred mutation path.
 - High-signal minimums worth remembering:

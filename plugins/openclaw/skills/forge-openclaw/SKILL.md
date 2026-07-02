@@ -81,7 +81,7 @@ any route-key or endpoint detail.
 Use the known-target fast path when the user already supplied the object, action, and
 likely lane. For normal entities, ask only for parent, owner, or duplicate-disambiguation that changes the write. For task hierarchy, ask only for the project,
 issue, or parent task that changes placement. For Movement, ask only for the missing
-interval, boundary, saved object, or confirmation. For Life Events, ask only for the missing event id, time, place, calendar match, ticket artifact, travel status target, or confirmation. For Life Force, ask only for the
+interval, boundary, saved object, or confirmation. For Life Events, ask only for the missing event id, start/end span, place, calendar match, ticket artifact, travel status target, or confirmation. For Life Force, ask only for the
 weekday, profile field, signal intensity, or planning effect. For Workbench, ask only
 for the missing flow, run, node, input, output, or preservation choice. For direct
 Psyche saves, ask one accuracy or consent question instead of restarting exploration.
@@ -339,8 +339,8 @@ Entity conversation rule:
 
 - For all entity creation or update flows, use
   `forge_get_agent_onboarding.entityCatalog[].questionFlow` as the live compact
-  source of truth for the opening question, coaching goal, readiness check, and route
-  posture. Use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md)
+  source of truth for the opening question, coaching goal, readiness check, and
+  route posture. Use [`entity_conversation_playbooks.md`](./entity_conversation_playbooks.md)
   for deeper examples and pacing details.
 - Calibrate depth before deepening: choose quick capture, guided formulation,
   review-first, or action-first. For quick capture, use the user's supplied wording,
@@ -780,7 +780,7 @@ through `forge_create_entities` or `forge_update_entities`.
   `PATCH /api/v1/movement/trips/:id/points/:pointId`.
 - Use `PATCH /api/v1/movement/stays/:id` or `PATCH /api/v1/movement/trips/:id` only when the user is editing an existing recorded stay or recorded trip. Do not use those routes to fill a missing span.
 - If the user says something as explicit as "that missing block was me staying home", do not reopen broad intake. Confirm the interval or place only if it is still ambiguous, then create the overlay and read the timeline back.
-- Life Events store important chronological events as normal `life_event` records. Use shared batch CRUD for create, update, search, soft delete, restore, and generic entity links. Use `/api/v1/life-events/timeline` for the chronology view, `/api/v1/life-events/:id` for one event, `/api/v1/life-events/:id/calendar-sync` when an event should find or create its matching calendar event, `/api/v1/life-events/from-calendar-event` when the user marks an existing calendar event as a Life Event, `/api/v1/life-events/import-ticket` when a trusted Artifact Store ticket should draft a travel event, and `/api/v1/life-events/:id/travel-status` for scheduled or provider-backed travel status. Ticket import starts from an `artifactId`, must keep artifact relationships as generic `entity_links`, and must not execute or autonomously open stored file bytes.
+- Life Events store important chronological events or periods as normal `life_event` records. They can last hours, days, weeks, or months, including stays, festivals, visits, retreats, vacations, work phases, health episodes, and custom periods. Use shared batch CRUD for create, update, search, soft delete, restore, and generic entity links. Use `/api/v1/life-events/timeline` for the chronology view, `/api/v1/life-events/:id` for one event, `/api/v1/life-events/:id/calendar-sync` when an event should find or create its matching calendar event, `/api/v1/life-events/from-calendar-event` when the user marks an existing calendar event as a Life Event, `/api/v1/life-events/import-ticket` when a trusted Artifact Store ticket should draft a travel event, and `/api/v1/life-events/:id/travel-status` for scheduled or provider-backed travel status. Ticket import starts from an `artifactId`, must keep artifact relationships as generic `entity_links`, and must not execute or autonomously open stored file bytes.
 - Life Force lives under `/api/v1/life-force*`. Use `GET /api/v1/life-force` for the current energy overview, `PATCH /api/v1/life-force/profile` for durable profile changes, `PUT /api/v1/life-force/templates/:weekday` for weekday curve edits, and `POST /api/v1/life-force/fatigue-signals` for real-time tired or recovered signals.
 - Workbench lives under `/api/v1/workbench/*`. Use those dedicated routes for flow catalog reads, flow CRUD, runs, saved-flow chat follow-ups, published outputs, node results, and latest-node-output reads instead of trying to force Workbench through the batch entity routes.
 - If you need the OpenClaw HTTP mirror instead of the raw Forge runtime path, the

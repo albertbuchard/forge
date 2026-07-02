@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BedDouble,
+  BookOpen,
+  BriefcaseBusiness,
   CalendarCheck2,
   CalendarClock,
   Car,
@@ -9,15 +12,23 @@ import {
   Clapperboard,
   Clock3,
   FileUp,
+  GraduationCap,
+  HeartPulse,
+  Home,
+  Landmark,
+  MapPinned,
   MapPin,
   Milestone,
   Music,
+  PartyPopper,
   PencilLine,
   Plane,
   Plus,
   Ship,
   Sparkles,
+  Tent,
   Train,
+  Utensils,
   Users
 } from "lucide-react";
 import {
@@ -54,6 +65,12 @@ type LifeEventDraft = {
   shortDescription: string;
   description: string;
   eventType: LifeEventType;
+  spanPreset:
+    | "same_day"
+    | "overnight"
+    | "multi_day"
+    | "multi_month"
+    | "custom";
   importance: "ordinary" | "meaningful" | "major" | "life_changing";
   startsAt: string;
   endsAt: string;
@@ -167,37 +184,94 @@ const DEFAULT_GLOBE_STYLE = {
   ]
 } as const;
 
-const EVENT_TYPES: Array<{
+type LifeEventTypeOption = {
   value: LifeEventType;
   label: string;
+  hint: string;
   icon: typeof Plane;
+};
+
+const EVENT_TYPE_GROUPS: Array<{
+  label: string;
+  description: string;
+  items: LifeEventTypeOption[];
 }> = [
-  { value: "travel_flight", label: "Flight", icon: Plane },
-  { value: "travel_train", label: "Train", icon: Train },
-  { value: "travel_car", label: "Car trip", icon: Car },
-  { value: "travel_boat", label: "Boat", icon: Ship },
-  { value: "travel_trip", label: "Trip", icon: MapPin },
-  { value: "concert", label: "Concert", icon: Music },
-  { value: "cinema", label: "Cinema", icon: Clapperboard },
-  { value: "date", label: "Date", icon: Sparkles },
-  { value: "friends", label: "Friends", icon: Users },
-  { value: "family", label: "Family", icon: Users },
-  { value: "work_milestone", label: "Work", icon: Milestone },
-  { value: "thesis_milestone", label: "Thesis", icon: Milestone },
-  { value: "medical", label: "Medical", icon: CalendarClock },
-  { value: "administrative", label: "Admin", icon: CalendarCheck2 },
-  { value: "celebration", label: "Celebration", icon: Sparkles },
-  { value: "custom", label: "Custom", icon: Milestone }
+  {
+    label: "Travel and stays",
+    description: "Moving, arriving, staying, or being away for a period.",
+    items: [
+      { value: "travel_flight", label: "Flight", hint: "Plane journey", icon: Plane },
+      { value: "travel_train", label: "Train", hint: "Rail journey", icon: Train },
+      { value: "travel_car", label: "Car trip", hint: "Drive or road trip", icon: Car },
+      { value: "travel_boat", label: "Boat", hint: "Ferry, ship, boat", icon: Ship },
+      { value: "travel_trip", label: "Trip", hint: "Whole journey", icon: MapPinned },
+      { value: "travel_day", label: "Travel day", hint: "Transit day", icon: MapPin },
+      { value: "stay", label: "Stay", hint: "Days or months somewhere", icon: Home },
+      { value: "lodging", label: "Lodging", hint: "Hotel, Airbnb, host", icon: BedDouble },
+      { value: "holiday", label: "Holiday", hint: "Time off", icon: Sparkles },
+      { value: "vacation", label: "Vacation", hint: "Leisure trip", icon: Tent },
+      { value: "visit", label: "Visit", hint: "Seeing someone", icon: Users },
+      { value: "move", label: "Move", hint: "Changing place", icon: Home }
+    ]
+  },
+  {
+    label: "Culture and people",
+    description: "Events with people, venues, ceremonies, and shared time.",
+    items: [
+      { value: "festival", label: "Festival", hint: "Multi-day event", icon: Tent },
+      { value: "concert", label: "Concert", hint: "Music event", icon: Music },
+      { value: "cinema", label: "Cinema", hint: "Film or screening", icon: Clapperboard },
+      { value: "meal", label: "Meal", hint: "Dinner, lunch, tasting", icon: Utensils },
+      { value: "party", label: "Party", hint: "Social gathering", icon: PartyPopper },
+      { value: "ceremony", label: "Ceremony", hint: "Formal moment", icon: Landmark },
+      { value: "date", label: "Date", hint: "Romantic or personal", icon: Sparkles },
+      { value: "friends", label: "Friends", hint: "Friend time", icon: Users },
+      { value: "family", label: "Family", hint: "Family time", icon: Users },
+      { value: "celebration", label: "Celebration", hint: "Milestone moment", icon: PartyPopper }
+    ]
+  },
+  {
+    label: "Work and learning",
+    description: "Long phases, deadlines, study periods, and major work.",
+    items: [
+      { value: "work_milestone", label: "Work milestone", hint: "Launch or decision", icon: Milestone },
+      { value: "work_phase", label: "Work phase", hint: "Important work period", icon: BriefcaseBusiness },
+      { value: "thesis_milestone", label: "Thesis milestone", hint: "Thesis checkpoint", icon: GraduationCap },
+      { value: "creative_work", label: "Creative work", hint: "Making or shipping", icon: BookOpen },
+      { value: "class_course", label: "Class or course", hint: "Learning period", icon: GraduationCap },
+      { value: "exam", label: "Exam", hint: "Assessment", icon: BookOpen },
+      { value: "deadline", label: "Deadline", hint: "Due date", icon: CalendarClock },
+      { value: "conference", label: "Conference", hint: "Talks or congress", icon: BriefcaseBusiness },
+      { value: "retreat", label: "Retreat", hint: "Focused time away", icon: Tent }
+    ]
+  },
+  {
+    label: "Care and life admin",
+    description: "Health, administration, memory, and custom life records.",
+    items: [
+      { value: "medical", label: "Medical", hint: "Appointment", icon: CalendarClock },
+      { value: "health_episode", label: "Health episode", hint: "Days or weeks of symptoms", icon: HeartPulse },
+      { value: "therapy", label: "Therapy", hint: "Therapy session or period", icon: HeartPulse },
+      { value: "administrative", label: "Admin", hint: "Paperwork or process", icon: CalendarCheck2 },
+      { value: "legal_financial", label: "Legal or financial", hint: "Formal life admin", icon: Landmark },
+      { value: "errand", label: "Errand", hint: "Important practical task", icon: CalendarCheck2 },
+      { value: "memory", label: "Memory", hint: "Something to preserve", icon: Sparkles },
+      { value: "custom", label: "Custom", hint: "Write your own shape", icon: Milestone }
+    ]
+  }
 ];
+
+const EVENT_TYPES = EVENT_TYPE_GROUPS.flatMap((group) => group.items);
 
 const defaultDraft = (): LifeEventDraft => ({
   title: "",
   shortDescription: "",
   description: "",
   eventType: "custom",
+  spanPreset: "same_day",
   importance: "meaningful",
   startsAt: toLocalDateTimeInput(new Date().toISOString()),
-  endsAt: "",
+  endsAt: toLocalDateTimeInput(addHours(new Date(), 1).toISOString()),
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   placeLabel: "",
   originLabel: "",
@@ -218,6 +292,7 @@ function draftFromLifeEvent(event: LifeEvent): LifeEventDraft {
     shortDescription: event.shortDescription,
     description: event.description,
     eventType: event.eventType,
+    spanPreset: inferSpanPreset(event.startsAt, event.endsAt),
     importance: event.importance,
     startsAt: toLocalDateTimeInput(event.startsAt),
     endsAt: toLocalDateTimeInput(event.endsAt),
@@ -251,6 +326,74 @@ function fromLocalDateTimeInput(value: string) {
   return date.toISOString();
 }
 
+function addHours(date: Date, hours: number) {
+  const next = new Date(date);
+  next.setHours(next.getHours() + hours);
+  return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function inferSpanPreset(
+  startsAt: string,
+  endsAt: string
+): LifeEventDraft["spanPreset"] {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "custom";
+  }
+  const hours = (end.getTime() - start.getTime()) / 3_600_000;
+  if (hours <= 12 && start.toDateString() === end.toDateString()) {
+    return "same_day";
+  }
+  if (hours <= 36) {
+    return "overnight";
+  }
+  if (hours <= 24 * 14) {
+    return "multi_day";
+  }
+  if (hours >= 24 * 45) {
+    return "multi_month";
+  }
+  return "custom";
+}
+
+function applySpanPreset(
+  draft: LifeEventDraft,
+  preset: LifeEventDraft["spanPreset"]
+) {
+  const start = fromLocalDateTimeInput(draft.startsAt);
+  const startDate = start ? new Date(start) : new Date();
+  const endDate =
+    preset === "same_day"
+      ? addHours(startDate, 1)
+      : preset === "overnight"
+        ? addDays(startDate, 1)
+      : preset === "multi_day"
+        ? addDays(startDate, 3)
+        : preset === "multi_month"
+          ? addMonths(startDate, 1)
+          : draft.endsAt
+            ? new Date(fromLocalDateTimeInput(draft.endsAt) ?? addHours(startDate, 1))
+            : addHours(startDate, 1);
+  return {
+    spanPreset: preset,
+    startsAt: toLocalDateTimeInput(startDate.toISOString()),
+    endsAt: toLocalDateTimeInput(endDate.toISOString())
+  };
+}
+
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -280,6 +423,100 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatShortDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
+function isSameLocalDay(start: Date, end: Date) {
+  return (
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate()
+  );
+}
+
+function durationParts(startsAt: string, endsAt: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  const ms = Math.max(0, end.getTime() - start.getTime());
+  const hours = ms / 3_600_000;
+  const days = ms / 86_400_000;
+  return { start, end, ms, hours, days };
+}
+
+function formatDurationLabel(startsAt: string, endsAt: string) {
+  const { hours, days } = durationParts(startsAt, endsAt);
+  if (hours < 1) {
+    return "Under 1 hour";
+  }
+  if (hours < 24) {
+    const roundedHours = Math.max(1, Math.round(hours));
+    return `${roundedHours} ${roundedHours === 1 ? "hour" : "hours"}`;
+  }
+  if (days < 14) {
+    const roundedDays = Math.max(1, Math.ceil(days));
+    return `${roundedDays} ${roundedDays === 1 ? "day" : "days"}`;
+  }
+  if (days < 62) {
+    const roundedWeeks = Math.max(1, Math.round(days / 7));
+    return `${roundedWeeks} ${roundedWeeks === 1 ? "week" : "weeks"}`;
+  }
+  const roundedMonths = Math.max(1, Math.round(days / 30.4375));
+  return `${roundedMonths} ${roundedMonths === 1 ? "month" : "months"}`;
+}
+
+function formatSpanSummary(startsAt: string, endsAt: string) {
+  const { start, end } = durationParts(startsAt, endsAt);
+  if (isSameLocalDay(start, end)) {
+    return `${formatDate(startsAt)} · ${formatTime(startsAt)} - ${formatTime(endsAt)}`;
+  }
+  return `${formatShortDate(startsAt)} - ${formatShortDate(endsAt)} · ${formatDurationLabel(
+    startsAt,
+    endsAt
+  )}`;
+}
+
+function formatSpanDetail(startsAt: string, endsAt: string) {
+  const { start, end } = durationParts(startsAt, endsAt);
+  if (isSameLocalDay(start, end)) {
+    return `${formatDate(startsAt)} from ${formatTime(startsAt)} to ${formatTime(endsAt)}`;
+  }
+  return `${formatDate(startsAt)} ${formatTime(startsAt)} to ${formatDate(
+    endsAt
+  )} ${formatTime(endsAt)}`;
+}
+
+function eventTimingState(event: LifeEvent) {
+  const now = Date.now();
+  if (Date.parse(event.startsAt) <= now && Date.parse(event.endsAt) >= now) {
+    return "current";
+  }
+  return Date.parse(event.endsAt) < now ? "past" : "upcoming";
+}
+
+function transportModeForEventType(
+  eventType: LifeEventType,
+  fallback: LifeEventDraft["transportMode"]
+): LifeEventDraft["transportMode"] {
+  if (eventType === "travel_flight") {
+    return "plane";
+  }
+  if (eventType === "travel_train") {
+    return "train";
+  }
+  if (eventType === "travel_car") {
+    return "car";
+  }
+  if (eventType === "travel_boat") {
+    return "boat";
+  }
+  return fallback;
 }
 
 function formatEventType(type: LifeEventType) {
@@ -937,8 +1174,17 @@ function LifeEventCard({
   onSyncCalendar: () => void;
 }) {
   const Icon = eventIcon(event.eventType);
-  const isTravel = event.eventType.startsWith("travel_");
-  const timeRange = `${formatTime(event.startsAt)} - ${formatTime(event.endsAt)}`;
+  const isTravelStatusEvent = event.eventType.startsWith("travel_");
+  const hasRoutePreview =
+    isTravelStatusEvent ||
+    ["move", "vacation", "holiday", "visit", "stay", "travel_trip"].includes(
+      event.eventType
+    );
+  const spanSummary = formatSpanSummary(event.startsAt, event.endsAt);
+  const spanDetail = formatSpanDetail(event.startsAt, event.endsAt);
+  const durationLabel = formatDurationLabel(event.startsAt, event.endsAt);
+  const timingState = eventTimingState(event);
+  const showDurationBadge = durationParts(event.startsAt, event.endsAt).hours >= 24;
   const primaryLocation =
     event.placeLabel ||
     [event.destinationLabel, event.destinationCity, event.destinationCountry]
@@ -971,16 +1217,21 @@ function LifeEventCard({
               {event.title}
             </span>
             {next ? (
-              <Badge tone="signal" size="xs">
-                Next
+              <Badge tone={timingState === "current" ? "signal" : "meta"} size="xs">
+                {timingState === "current" ? "Now" : "Next"}
               </Badge>
             ) : null}
             <Badge tone="meta" size="xs">
               {formatEventType(event.eventType)}
             </Badge>
+            {showDurationBadge ? (
+              <Badge tone="signal" size="xs">
+                {durationLabel}
+              </Badge>
+            ) : null}
           </span>
           <span className="mt-1 block text-sm text-[var(--ui-ink-soft)]">
-            {formatDate(event.startsAt)} · {timeRange}
+            {spanSummary}
           </span>
           {primaryLocation ? (
             <span className="mt-2 flex min-w-0 items-center gap-1 text-sm text-[var(--ui-ink-medium)]">
@@ -1006,10 +1257,13 @@ function LifeEventCard({
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
               <div className="text-xs uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
-                When
+                Span
               </div>
               <div className="mt-1 text-sm text-[var(--ui-ink-strong)]">
-                {timeRange}
+                {spanDetail}
+              </div>
+              <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
+                {durationLabel}
               </div>
             </div>
             <div className="rounded-[var(--radius-card)] bg-[var(--ui-surface-1)] p-3">
@@ -1031,10 +1285,10 @@ function LifeEventCard({
               </div>
             </div>
           </div>
-          {isTravel ? (
+          {hasRoutePreview ? (
             <LifeEventRoutePreview event={event} expanded={expanded} />
           ) : null}
-          {isTravel ? (
+          {isTravelStatusEvent ? (
             <LifeEventTravelStatusPanel
               status={travelStatus}
               loading={Boolean(travelStatusLoading)}
@@ -1183,8 +1437,17 @@ export function LifeEventsPage() {
   const buildLifeEventPayload = (value: LifeEventDraft) => {
     const startsAt = fromLocalDateTimeInput(value.startsAt);
     const endsAt = fromLocalDateTimeInput(value.endsAt);
+    if (!value.title.trim()) {
+      throw new Error("Name the Life Event before saving it.");
+    }
     if (!startsAt) {
       throw new Error("Add a valid start date and time.");
+    }
+    if (!endsAt) {
+      throw new Error("Add a valid end date and time.");
+    }
+    if (Date.parse(endsAt) <= Date.parse(startsAt)) {
+      throw new Error("The Life Event must end after it starts.");
     }
     const data: Record<string, unknown> = {
       title: value.title.trim(),
@@ -1193,15 +1456,13 @@ export function LifeEventsPage() {
       eventType: value.eventType,
       importance: value.importance,
       startsAt,
+      endsAt,
       timezone: value.timezone.trim() || "UTC",
       placeLabel: value.placeLabel.trim(),
       originLabel: value.originLabel.trim(),
       destinationLabel: value.destinationLabel.trim(),
       calendarProjection: value.calendarProjection
     };
-    if (endsAt) {
-      data.endsAt = endsAt;
-    }
     if (value.transportMode) {
       data.transportMode = value.transportMode;
     } else {
@@ -1323,43 +1584,56 @@ export function LifeEventsPage() {
         eyebrow: "Kind",
         title: "What kind of event is this?",
         render: (value, setValue) => (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {EVENT_TYPES.map((entry) => {
-              const Icon = entry.icon;
-              const selected = value.eventType === entry.value;
-              return (
-                <button
-                  key={entry.value}
-                  type="button"
-                  className={cn(
-                    "flex min-h-20 min-w-0 items-center gap-3 rounded-[var(--radius-card)] border p-3 text-left transition",
-                    selected
-                      ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]"
-                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] hover:bg-[var(--ui-surface-hover)]"
-                  )}
-                  onClick={() =>
-                    setValue({
-                      eventType: entry.value,
-                      transportMode:
-                        entry.value === "travel_flight"
-                          ? "plane"
-                          : entry.value === "travel_train"
-                            ? "train"
-                            : entry.value === "travel_car"
-                              ? "car"
-                              : entry.value === "travel_boat"
-                                ? "boat"
-                                : value.transportMode
-                    })
-                  }
-                >
-                  <Icon className="size-5 shrink-0 text-[var(--primary)]" />
-                  <span className="min-w-0 break-words text-sm font-medium">
-                    {entry.label}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="grid gap-4">
+            {EVENT_TYPE_GROUPS.map((group) => (
+              <section key={group.label} className="grid gap-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
+                    {group.label}
+                  </div>
+                  <div className="text-xs leading-5 text-[var(--ui-ink-soft)]">
+                    {group.description}
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.items.map((entry) => {
+                    const Icon = entry.icon;
+                    const selected = value.eventType === entry.value;
+                    return (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        className={cn(
+                          "flex min-h-20 min-w-0 items-start gap-3 rounded-[var(--radius-card)] border p-3 text-left transition",
+                          selected
+                            ? "border-[var(--primary)] bg-[var(--ui-accent-soft)]"
+                            : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] hover:bg-[var(--ui-surface-hover)]"
+                        )}
+                        onClick={() =>
+                          setValue({
+                            eventType: entry.value,
+                            transportMode: transportModeForEventType(
+                              entry.value,
+                              value.transportMode
+                            )
+                          })
+                        }
+                      >
+                        <Icon className="mt-0.5 size-5 shrink-0 text-[var(--primary)]" />
+                        <span className="min-w-0">
+                          <span className="block break-words text-sm font-medium text-[var(--ui-ink-strong)]">
+                            {entry.label}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-[var(--ui-ink-soft)]">
+                            {entry.hint}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         )
       },
@@ -1395,43 +1669,116 @@ export function LifeEventsPage() {
       {
         id: "time-place",
         eyebrow: "When and where",
-        title: "Set the time and place.",
+        title: "Set the span and place.",
         render: (value, setValue) => (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              type="datetime-local"
-              value={value.startsAt}
-              onChange={(event) => setValue({ startsAt: event.target.value })}
-            />
-            <Input
-              type="datetime-local"
-              value={value.endsAt}
-              onChange={(event) => setValue({ endsAt: event.target.value })}
-            />
-            <Input
-              value={value.placeLabel}
-              onChange={(event) => setValue({ placeLabel: event.target.value })}
-              placeholder="Place or city"
-            />
-            <Input
-              value={value.timezone}
-              onChange={(event) => setValue({ timezone: event.target.value })}
-              placeholder="Timezone"
-            />
-            <Input
-              value={value.originLabel}
-              onChange={(event) =>
-                setValue({ originLabel: event.target.value })
-              }
-              placeholder="Origin"
-            />
-            <Input
-              value={value.destinationLabel}
-              onChange={(event) =>
-                setValue({ destinationLabel: event.target.value })
-              }
-              placeholder="Destination"
-            />
+          <div className="grid gap-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ["same_day", "Same day", "Hours"],
+                ["overnight", "Overnight", "One night"],
+                ["multi_day", "Several days", "Stay, visit, festival"],
+                ["multi_month", "Month or longer", "Course, phase, long stay"],
+                ["custom", "Custom span", "Set exact dates"]
+              ].map(([preset, label, hint]) => {
+                const selected = value.spanPreset === preset;
+                return (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={cn(
+                      "min-w-0 rounded-[var(--radius-card)] border p-3 text-left transition",
+                      selected
+                        ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)]"
+                    )}
+                    onClick={() =>
+                      setValue(
+                        applySpanPreset(
+                          value,
+                          preset as LifeEventDraft["spanPreset"]
+                        )
+                      )
+                    }
+                  >
+                    <span className="block text-sm font-medium">{label}</span>
+                    <span className="mt-1 block text-xs text-[var(--ui-ink-soft)]">
+                      {hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
+                  Starts
+                </span>
+                <Input
+                  type="datetime-local"
+                  value={value.startsAt}
+                  onChange={(event) =>
+                    setValue({
+                      startsAt: event.target.value,
+                      spanPreset: "custom"
+                    })
+                  }
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--ui-ink-faint)]">
+                  Ends
+                </span>
+                <Input
+                  type="datetime-local"
+                  value={value.endsAt}
+                  onChange={(event) =>
+                    setValue({
+                      endsAt: event.target.value,
+                      spanPreset: "custom"
+                    })
+                  }
+                />
+              </label>
+              <Input
+                value={value.placeLabel}
+                onChange={(event) =>
+                  setValue({ placeLabel: event.target.value })
+                }
+                placeholder="Place, venue, city, or region"
+              />
+              <Input
+                value={value.timezone}
+                onChange={(event) => setValue({ timezone: event.target.value })}
+                placeholder="Timezone"
+              />
+              <Input
+                value={value.originLabel}
+                onChange={(event) =>
+                  setValue({ originLabel: event.target.value })
+                }
+                placeholder="Origin, if travel matters"
+              />
+              <Input
+                value={value.destinationLabel}
+                onChange={(event) =>
+                  setValue({ destinationLabel: event.target.value })
+                }
+                placeholder="Destination, stay, or arrival place"
+              />
+            </div>
+            {value.startsAt && value.endsAt ? (
+              <div className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm text-[var(--ui-ink-medium)]">
+                <span className="font-medium text-[var(--ui-ink-strong)]">
+                  {formatDurationLabel(
+                    fromLocalDateTimeInput(value.startsAt) ??
+                      new Date().toISOString(),
+                    fromLocalDateTimeInput(value.endsAt) ??
+                      new Date().toISOString()
+                  )}
+                </span>{" "}
+                in the Life Events timeline
+              </div>
+            ) : null}
           </div>
         )
       },

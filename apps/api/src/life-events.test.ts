@@ -170,6 +170,87 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       )
     );
 
+    const periodCreateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        atomic: true,
+        operations: [
+          {
+            entityType: "life_event",
+            clientRef: "long-stay",
+            data: {
+              title: "Summer stay in Lisbon",
+              shortDescription: "Working from Portugal for the summer.",
+              eventType: "stay",
+              importance: "major",
+              startsAt: "2026-06-01T10:00:00.000Z",
+              endsAt: "2026-09-01T09:00:00.000Z",
+              timezone: "Europe/Lisbon",
+              placeLabel: "Lisbon",
+              calendarProjection: "none"
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(periodCreateResponse.statusCode, 200);
+    const periodCreated = (periodCreateResponse.json() as {
+      results: Array<{
+        ok: boolean;
+        id: string;
+        entity: {
+          eventType: string;
+          startsAt: string;
+          endsAt: string;
+        };
+      }>;
+    }).results[0]!;
+    assert.equal(periodCreated.ok, true);
+    assert.equal(periodCreated.entity.eventType, "stay");
+    assert.equal(periodCreated.entity.startsAt, "2026-06-01T10:00:00.000Z");
+    assert.equal(periodCreated.entity.endsAt, "2026-09-01T09:00:00.000Z");
+
+    const invalidIntervalResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        atomic: true,
+        operations: [
+          {
+            entityType: "life_event",
+            data: {
+              title: "Broken festival",
+              eventType: "festival",
+              startsAt: "2026-08-04T10:00:00.000Z",
+              endsAt: "2026-08-03T10:00:00.000Z",
+              calendarProjection: "none"
+            }
+          }
+        ]
+      }
+    });
+    assert.equal(invalidIntervalResponse.statusCode, 200);
+    const invalidIntervalBody = invalidIntervalResponse.json() as {
+      results: Array<{
+        ok: boolean;
+        error?: {
+          issues?: Array<{ path: string; message: string; code: string }>;
+        };
+      }>;
+    };
+    assert.equal(invalidIntervalBody.results[0]!.ok, false);
+    assert.deepEqual(
+      invalidIntervalBody.results[0]!.error?.issues?.[0],
+      {
+        path: "endsAt",
+        message: "endsAt must be after startsAt",
+        code: "custom"
+      }
+    );
+
     const searchResponse = await app.inject({
       method: "POST",
       url: "/api/v1/entities/search",
@@ -229,6 +310,21 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
           link.entityType === "life_event" && link.entityId === createdResult.id
       )
     );
+
+    const periodSyncResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/life-events/${periodCreated.id}/calendar-sync`,
+      headers: { cookie: operatorCookie },
+      payload: { projection: "link_or_create" }
+    });
+    assert.equal(periodSyncResponse.statusCode, 200);
+    const periodSyncBody = periodSyncResponse.json() as {
+      calendarEvent: { startAt: string; endAt: string };
+      lifeEvent: { calendarSyncState: string };
+    };
+    assert.equal(periodSyncBody.lifeEvent.calendarSyncState, "created");
+    assert.equal(periodSyncBody.calendarEvent.startAt, "2026-06-01T10:00:00.000Z");
+    assert.equal(periodSyncBody.calendarEvent.endAt, "2026-09-01T09:00:00.000Z");
 
     const calendarCreated = await app.inject({
       method: "POST",
@@ -325,6 +421,9 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
     };
     assert.ok(
       timeline.timeline.events.some((event) => event.id === createdResult.id)
+    );
+    assert.ok(
+      timeline.timeline.events.some((event) => event.id === periodCreated.id)
     );
     assert.equal(typeof timeline.timeline.nextLifeEventId, "string");
   } finally {

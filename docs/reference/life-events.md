@@ -4,6 +4,8 @@ Life Events are Forge's chronological memory surface for important events in a
 person's life. They are not a replacement for the calendar. A calendar event says
 something is scheduled. A Life Event records why that moment matters, what happened or
 will happen, how it connects to other Forge records, and what evidence belongs with it.
+It can be a short event or a span that lasts days, weeks, or months, such as a stay,
+festival, retreat, long visit, work phase, health episode, or course.
 
 The web app exposes the surface at `/forge/life-events`. The view is a virtualized
 timeline with past, current, and future events, plus guided modal flows for creating,
@@ -25,11 +27,17 @@ batch entity routes and tools:
 The durable Life Event record includes:
 
 - title, short description, and long description
-- type: travel flight, train, car, boat, trip, concert, cinema, date, friends, family,
-  work milestone, thesis milestone, medical, administrative, celebration, or custom
+- type: travel flight, train, car, boat, trip, travel day, stay, lodging, holiday,
+  vacation, visit, move, festival, conference, retreat, concert, cinema, meal,
+  party, ceremony, date, friends, family, work milestone, work phase, thesis
+  milestone, creative work, class or course, exam, deadline, medical, health
+  episode, therapy, administrative, legal or financial, errand, celebration,
+  memory, or custom
 - status: planned, happening, completed, cancelled, or tentative
 - importance: ordinary, meaningful, major, or life-changing
-- start, end, timezone, all-day flag
+- start, end, timezone, all-day flag; the start/end interval is canonical and may
+  represent a short event, an overnight stay, a multi-day event, or a multi-month
+  period
 - place label, address, timezone, and optional coordinates
 - origin and destination labels, cities, countries, and optional coordinates
 - transport mode when relevant
@@ -69,8 +77,9 @@ Use dedicated routes only for those actions. Use shared batch CRUD for ordinary
 Every Life Event can be connected to the calendar.
 
 When a user creates a Life Event first, Forge should try to find a matching calendar
-event around the same time and title. If it finds one, Forge links it. If it does not
-find one and projection is allowed, Forge creates a calendar event and records the link.
+event around the same interval and title. If it finds one, Forge links it. If it does
+not find one and projection is allowed, Forge creates a calendar event with the full
+Life Event span and records the link.
 
 When a user starts from the calendar and marks an event as a Life Event, Forge creates
 or returns the linked Life Event through `/api/v1/life-events/from-calendar-event`.
@@ -103,14 +112,18 @@ The Life Events view should stay fast and readable even with many events:
 - keep filters and search cheap
 - show past, current, and future states without forcing the whole list into the DOM
 - use guided modal forms for creation, editing, and ticket import
+- present event types in grouped choices rather than a raw enum list
+- ask for the event span deliberately, including same-day, overnight, multi-day,
+  month-scale, and custom spans
+- display long durations compactly on cards and expanded details
 - allow several ticket files to be uploaded in one guided import flow
 - let the user open per-file detail when a ticket needs more description or review
 - keep travel and map rendering lazy so the timeline stays responsive
 
-Travel cards can show origin, destination, departure, arrival, transport mode,
-segments, linked ticket artifacts, calendar sync state, and travel status. Maps use a
-fast fallback route drawing by default and only load MapLibre when a tile style is
-configured.
+Travel and stay cards can show origin, destination, departure, arrival, transport
+mode, segments, linked ticket artifacts, calendar sync state, and travel status when
+relevant. Maps use a fast fallback route drawing by default and only load MapLibre
+when a tile style is configured.
 
 ## Agent And Plugin Contract
 
@@ -125,6 +138,6 @@ OpenAPI, OpenClaw, Hermes, Codex, and Claude Code must expose the same route pos
   context, and other Forge entities
 
 Good agent questions ask for the missing real-world detail, not route names. The useful
-questions are about what happened, why it matters, when and where it happens, whether it
-belongs in the calendar, whether there is a ticket artifact, what the travel route is,
-and which Forge records should be linked.
+questions are about what happened, why it matters, when it starts and ends, where it
+happens or where the user stays, whether it belongs in the calendar, whether there is a
+ticket artifact, what the travel route is, and which Forge records should be linked.
