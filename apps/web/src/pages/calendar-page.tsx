@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
-  CalendarDays,
   ClipboardPaste,
   Clock3,
   Copy,
@@ -85,6 +84,10 @@ import {
   formatUserSummaryLine,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
+import {
+  formatTimeInTimeZone,
+  localDateKeyInTimeZone
+} from "@/lib/timezone-datetime";
 import {
   useForgeClipboardStore,
   type ForgeClipboardCalendarEventItem
@@ -283,6 +286,10 @@ function getEventBadgeLabel(
   return event.originType === "native"
     ? "Forge only"
     : formatProviderBadgeLabel(event.originType);
+}
+
+function calendarEventDateKey(event: CalendarEvent) {
+  return localDateKeyInTimeZone(event.startAt, event.timezone);
 }
 
 function formatWorkBlockKindLabel(kind: WorkBlockKind) {
@@ -1347,7 +1354,7 @@ export function CalendarPage() {
             const dayKey = day.toISOString().slice(0, 10);
             const dayEvents = overview.events.filter(
               (event) =>
-                event.startAt.slice(0, 10) === dayKey && !event.deletedAt
+                calendarEventDateKey(event) === dayKey && !event.deletedAt
             );
             const dayBlocks = overview.workBlockInstances.filter(
               (block) => block.dateKey === dayKey
@@ -1593,8 +1600,6 @@ export function CalendarPage() {
                       }
                     >
                       {(() => {
-                        const actionLoad =
-                          estimateCalendarEventActionPointLoad(event);
                         return (
                           <div className="flex min-w-0 items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -1602,18 +1607,15 @@ export function CalendarPage() {
                                 {event.title}
                               </div>
                               <div className="mt-1 text-[var(--ui-ink-soft)]">
-                                {new Date(event.startAt).toLocaleTimeString(
-                                  [],
-                                  {
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                  }
+                                {formatTimeInTimeZone(
+                                  event.startAt,
+                                  event.timezone
                                 )}{" "}
                                 -{" "}
-                                {new Date(event.endAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit"
-                                })}
+                                {formatTimeInTimeZone(
+                                  event.endAt,
+                                  event.timezone
+                                )}
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">

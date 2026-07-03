@@ -59,6 +59,14 @@ import type {
   LifeEventTimelinePayload,
   LifeEventType
 } from "@/lib/types";
+import {
+  formatDateInTimeZone,
+  formatDateTimeInputInTimeZone,
+  formatShortDateInTimeZone,
+  formatTimeInTimeZone,
+  isSameDateInTimeZone,
+  parseDateTimeInputInTimeZone
+} from "@/lib/timezone-datetime";
 
 type LifeEventDraft = {
   title: string;
@@ -263,22 +271,29 @@ const EVENT_TYPE_GROUPS: Array<{
 
 const EVENT_TYPES = EVENT_TYPE_GROUPS.flatMap((group) => group.items);
 
-const defaultDraft = (): LifeEventDraft => ({
-  title: "",
-  shortDescription: "",
-  description: "",
-  eventType: "custom",
-  spanPreset: "same_day",
-  importance: "meaningful",
-  startsAt: toLocalDateTimeInput(new Date().toISOString()),
-  endsAt: toLocalDateTimeInput(addHours(new Date(), 1).toISOString()),
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  placeLabel: "",
-  originLabel: "",
-  destinationLabel: "",
-  transportMode: "",
-  calendarProjection: "link_or_create"
-});
+const defaultDraft = (): LifeEventDraft => {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const now = new Date();
+  return {
+    title: "",
+    shortDescription: "",
+    description: "",
+    eventType: "custom",
+    spanPreset: "same_day",
+    importance: "meaningful",
+    startsAt: formatDateTimeInputInTimeZone(now.toISOString(), timezone),
+    endsAt: formatDateTimeInputInTimeZone(
+      addHours(now, 1).toISOString(),
+      timezone
+    ),
+    timezone,
+    placeLabel: "",
+    originLabel: "",
+    destinationLabel: "",
+    transportMode: "",
+    calendarProjection: "link_or_create"
+  };
+};
 
 const defaultTicketDraft = (): TicketImportDraft => ({
   files: [],
@@ -292,10 +307,10 @@ function draftFromLifeEvent(event: LifeEvent): LifeEventDraft {
     shortDescription: event.shortDescription,
     description: event.description,
     eventType: event.eventType,
-    spanPreset: inferSpanPreset(event.startsAt, event.endsAt),
+    spanPreset: inferSpanPreset(event.startsAt, event.endsAt, event.timezone),
     importance: event.importance,
-    startsAt: toLocalDateTimeInput(event.startsAt),
-    endsAt: toLocalDateTimeInput(event.endsAt),
+    startsAt: formatDateTimeInputInTimeZone(event.startsAt, event.timezone),
+    endsAt: formatDateTimeInputInTimeZone(event.endsAt, event.timezone),
     timezone: event.timezone,
     placeLabel: event.placeLabel,
     originLabel: event.originLabel,
@@ -303,27 +318,6 @@ function draftFromLifeEvent(event: LifeEvent): LifeEventDraft {
     transportMode: event.transportMode ?? "",
     calendarProjection: event.primaryCalendarEventId ? "link_or_create" : "none"
   };
-}
-
-function toLocalDateTimeInput(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromLocalDateTimeInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date.toISOString();
 }
 
 function addHours(date: Date, hours: number) {
@@ -346,7 +340,8 @@ function addMonths(date: Date, months: number) {
 
 function inferSpanPreset(
   startsAt: string,
-  endsAt: string
+  endsAt: string,
+  timezone?: string
 ): LifeEventDraft["spanPreset"] {
   const start = new Date(startsAt);
   const end = new Date(endsAt);
@@ -354,7 +349,7 @@ function inferSpanPreset(
     return "custom";
   }
   const hours = (end.getTime() - start.getTime()) / 3_600_000;
-  if (hours <= 12 && start.toDateString() === end.toDateString()) {
+  if (hours <= 12 && isSameDateInTimeZone(start, end, timezone)) {
     return "same_day";
   }
   if (hours <= 36) {
@@ -373,7 +368,7 @@ function applySpanPreset(
   draft: LifeEventDraft,
   preset: LifeEventDraft["spanPreset"]
 ) {
-  const start = fromLocalDateTimeInput(draft.startsAt);
+  const start = parseDateTimeInputInTimeZone(draft.startsAt, draft.timezone);
   const startDate = start ? new Date(start) : new Date();
   const endDate =
     preset === "same_day"
@@ -385,12 +380,21 @@ function applySpanPreset(
         : preset === "multi_month"
           ? addMonths(startDate, 1)
           : draft.endsAt
-            ? new Date(fromLocalDateTimeInput(draft.endsAt) ?? addHours(startDate, 1))
+            ? new Date(
+                parseDateTimeInputInTimeZone(draft.endsAt, draft.timezone) ??
+                  addHours(startDate, 1)
+              )
             : addHours(startDate, 1);
   return {
     spanPreset: preset,
-    startsAt: toLocalDateTimeInput(startDate.toISOString()),
-    endsAt: toLocalDateTimeInput(endDate.toISOString())
+    startsAt: formatDateTimeInputInTimeZone(
+      startDate.toISOString(),
+      draft.timezone
+    ),
+    endsAt: formatDateTimeInputInTimeZone(
+      endDate.toISOString(),
+      draft.timezone
+    )
   };
 }
 
@@ -407,38 +411,6 @@ function fileToBase64(file: File) {
       reject(reader.error ?? new Error("Unable to read file."));
     reader.readAsDataURL(file);
   });
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  }).format(new Date(value));
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  }).format(new Date(value));
-}
-
-function isSameLocalDay(start: Date, end: Date) {
-  return (
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate()
-  );
 }
 
 function durationParts(startsAt: string, endsAt: string) {
@@ -471,25 +443,42 @@ function formatDurationLabel(startsAt: string, endsAt: string) {
   return `${roundedMonths} ${roundedMonths === 1 ? "month" : "months"}`;
 }
 
-function formatSpanSummary(startsAt: string, endsAt: string) {
+function formatSpanSummary(
+  startsAt: string,
+  endsAt: string,
+  timezone?: string
+) {
   const { start, end } = durationParts(startsAt, endsAt);
-  if (isSameLocalDay(start, end)) {
-    return `${formatDate(startsAt)} · ${formatTime(startsAt)} - ${formatTime(endsAt)}`;
+  if (isSameDateInTimeZone(start, end, timezone)) {
+    return `${formatDateInTimeZone(startsAt, timezone)} · ${formatTimeInTimeZone(
+      startsAt,
+      timezone
+    )} - ${formatTimeInTimeZone(endsAt, timezone)}`;
   }
-  return `${formatShortDate(startsAt)} - ${formatShortDate(endsAt)} · ${formatDurationLabel(
+  return `${formatShortDateInTimeZone(
     startsAt,
-    endsAt
-  )}`;
+    timezone
+  )} - ${formatShortDateInTimeZone(
+    endsAt,
+    timezone
+  )} · ${formatDurationLabel(startsAt, endsAt)}`;
 }
 
-function formatSpanDetail(startsAt: string, endsAt: string) {
+function formatSpanDetail(startsAt: string, endsAt: string, timezone?: string) {
   const { start, end } = durationParts(startsAt, endsAt);
-  if (isSameLocalDay(start, end)) {
-    return `${formatDate(startsAt)} from ${formatTime(startsAt)} to ${formatTime(endsAt)}`;
+  if (isSameDateInTimeZone(start, end, timezone)) {
+    return `${formatDateInTimeZone(startsAt, timezone)} from ${formatTimeInTimeZone(
+      startsAt,
+      timezone
+    )} to ${formatTimeInTimeZone(endsAt, timezone)}`;
   }
-  return `${formatDate(startsAt)} ${formatTime(startsAt)} to ${formatDate(
-    endsAt
-  )} ${formatTime(endsAt)}`;
+  return `${formatDateInTimeZone(startsAt, timezone)} ${formatTimeInTimeZone(
+    startsAt,
+    timezone
+  )} to ${formatDateInTimeZone(endsAt, timezone)} ${formatTimeInTimeZone(
+    endsAt,
+    timezone
+  )}`;
 }
 
 function eventTimingState(event: LifeEvent) {
@@ -922,6 +911,22 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
   );
 }
 
+function canCreateWebGlContext() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(
+      canvas.getContext("webgl2") ||
+        canvas.getContext("webgl") ||
+        canvas.getContext("experimental-webgl")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function LifeEventRoutePreview({
   event,
   expanded
@@ -962,9 +967,21 @@ function LifeEventRoutePreview({
       setMapStatus("fallback");
       return undefined;
     }
+    if (!canCreateWebGlContext()) {
+      setMapStatus("fallback");
+      return undefined;
+    }
     setMapStatus("loading");
     void import("maplibre-gl").then((maplibre) => {
       if (cancelled || !containerRef.current) {
+        return;
+      }
+      const supportsWebGl =
+        "supported" in maplibre && typeof maplibre.supported === "function"
+          ? maplibre.supported({ failIfMajorPerformanceCaveat: false })
+          : true;
+      if (!supportsWebGl) {
+        setMapStatus("fallback");
         return;
       }
       const rasterStyle = styleUrl.includes("{x}") || styleUrl.includes("{z}");
@@ -979,15 +996,20 @@ function LifeEventRoutePreview({
           }
         : styleUrl || DEFAULT_GLOBE_STYLE;
       const first = stops[0]!;
-      map = new maplibre.Map({
-        container: containerRef.current,
-        style: mapStyle as ConstructorParameters<
-          typeof maplibre.Map
-        >[0]["style"],
-        center: [first.lon, first.lat],
-        zoom: 1.45,
-        attributionControl: { compact: true }
-      });
+      try {
+        map = new maplibre.Map({
+          container: containerRef.current,
+          style: mapStyle as ConstructorParameters<
+            typeof maplibre.Map
+          >[0]["style"],
+          center: [first.lon, first.lat],
+          zoom: 1.45,
+          attributionControl: { compact: true }
+        });
+      } catch {
+        setMapStatus("fallback");
+        return;
+      }
       map.scrollZoom.disable();
       map.dragRotate.disable();
       map.touchZoomRotate.disableRotation();
@@ -1000,78 +1022,86 @@ function LifeEventRoutePreview({
         if (!map) {
           return;
         }
-        map.setProjection({ type: "globe" });
-        map.addSource("life-event-route", {
-          type: "geojson",
-          data: routeData
-        });
-        map.addLayer({
-          id: "life-event-route-glow",
-          type: "line",
-          source: "life-event-route",
-          paint: {
-            "line-color": "#2563eb",
-            "line-opacity": 0.22,
-            "line-width": 11
+        try {
+          map.setProjection({ type: "globe" });
+          map.addSource("life-event-route", {
+            type: "geojson",
+            data: routeData
+          });
+          map.addLayer({
+            id: "life-event-route-glow",
+            type: "line",
+            source: "life-event-route",
+            paint: {
+              "line-color": "#2563eb",
+              "line-opacity": 0.22,
+              "line-width": 11
+            }
+          });
+          map.addLayer({
+            id: "life-event-route",
+            type: "line",
+            source: "life-event-route",
+            paint: {
+              "line-color": "#2563eb",
+              "line-opacity": 0.96,
+              "line-width": 4,
+              "line-dasharray": [1.6, 0.7]
+            }
+          });
+          map.addSource("life-event-stops", {
+            type: "geojson",
+            data: stopData
+          });
+          map.addLayer({
+            id: "life-event-stops",
+            type: "circle",
+            source: "life-event-stops",
+            paint: {
+              "circle-radius": 6,
+              "circle-color": "#eff6ff",
+              "circle-stroke-color": "#2563eb",
+              "circle-stroke-width": 2
+            }
+          });
+          map.addLayer({
+            id: "life-event-stop-labels",
+            type: "symbol",
+            source: "life-event-stops",
+            layout: {
+              "text-field": ["get", "label"],
+              "text-size": 12,
+              "text-font": ["Open Sans Semibold"],
+              "text-offset": [0, 1.15],
+              "text-anchor": "top"
+            },
+            paint: {
+              "text-color": "#0f172a",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 1.5
+            }
+          });
+          const bounds = new maplibre.LngLatBounds(
+            [first.lon, first.lat],
+            [first.lon, first.lat]
+          );
+          for (const stop of stops.slice(1)) {
+            bounds.extend([stop.lon, stop.lat]);
           }
-        });
-        map.addLayer({
-          id: "life-event-route",
-          type: "line",
-          source: "life-event-route",
-          paint: {
-            "line-color": "#2563eb",
-            "line-opacity": 0.96,
-            "line-width": 4,
-            "line-dasharray": [1.6, 0.7]
-          }
-        });
-        map.addSource("life-event-stops", {
-          type: "geojson",
-          data: stopData
-        });
-        map.addLayer({
-          id: "life-event-stops",
-          type: "circle",
-          source: "life-event-stops",
-          paint: {
-            "circle-radius": 6,
-            "circle-color": "#eff6ff",
-            "circle-stroke-color": "#2563eb",
-            "circle-stroke-width": 2
-          }
-        });
-        map.addLayer({
-          id: "life-event-stop-labels",
-          type: "symbol",
-          source: "life-event-stops",
-          layout: {
-            "text-field": ["get", "label"],
-            "text-size": 12,
-            "text-font": ["Open Sans Semibold"],
-            "text-offset": [0, 1.15],
-            "text-anchor": "top"
-          },
-          paint: {
-            "text-color": "#0f172a",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 1.5
-          }
-        });
-        const bounds = new maplibre.LngLatBounds(
-          [first.lon, first.lat],
-          [first.lon, first.lat]
-        );
-        for (const stop of stops.slice(1)) {
-          bounds.extend([stop.lon, stop.lat]);
+          map.fitBounds(bounds.adjustAntiMeridian(), {
+            padding: 52,
+            maxZoom: 3.4,
+            duration: 0
+          });
+          setMapStatus("ready");
+        } catch {
+          setMapStatus("fallback");
         }
-        map.fitBounds(bounds.adjustAntiMeridian(), {
-          padding: 52,
-          maxZoom: 3.4,
-          duration: 0
-        });
-        setMapStatus("ready");
       });
+    }).catch(() => {
+      if (!cancelled) {
+        setMapStatus("fallback");
+      }
     });
     return () => {
       cancelled = true;
@@ -1114,7 +1144,7 @@ function LifeEventTravelStatusPanel({
   const checkedAt = status?.checkedAt ? new Date(status.checkedAt) : null;
   const checkedLabel =
     status && checkedAt && !Number.isNaN(checkedAt.getTime())
-      ? `${formatDate(status.checkedAt)} · ${formatTime(status.checkedAt)}`
+      ? `${formatDateInTimeZone(status.checkedAt)} · ${formatTimeInTimeZone(status.checkedAt)}`
       : null;
   return (
     <div className="grid gap-2 rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm">
@@ -1180,8 +1210,16 @@ function LifeEventCard({
     ["move", "vacation", "holiday", "visit", "stay", "travel_trip"].includes(
       event.eventType
     );
-  const spanSummary = formatSpanSummary(event.startsAt, event.endsAt);
-  const spanDetail = formatSpanDetail(event.startsAt, event.endsAt);
+  const spanSummary = formatSpanSummary(
+    event.startsAt,
+    event.endsAt,
+    event.timezone
+  );
+  const spanDetail = formatSpanDetail(
+    event.startsAt,
+    event.endsAt,
+    event.timezone
+  );
   const durationLabel = formatDurationLabel(event.startsAt, event.endsAt);
   const timingState = eventTimingState(event);
   const showDurationBadge = durationParts(event.startsAt, event.endsAt).hours >= 24;
@@ -1435,8 +1473,11 @@ export function LifeEventsPage() {
   const stats = timelineStats(timeline);
 
   const buildLifeEventPayload = (value: LifeEventDraft) => {
-    const startsAt = fromLocalDateTimeInput(value.startsAt);
-    const endsAt = fromLocalDateTimeInput(value.endsAt);
+    const startsAt = parseDateTimeInputInTimeZone(
+      value.startsAt,
+      value.timezone
+    );
+    const endsAt = parseDateTimeInputInTimeZone(value.endsAt, value.timezone);
     if (!value.title.trim()) {
       throw new Error("Name the Life Event before saving it.");
     }
@@ -1770,9 +1811,15 @@ export function LifeEventsPage() {
               <div className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm text-[var(--ui-ink-medium)]">
                 <span className="font-medium text-[var(--ui-ink-strong)]">
                   {formatDurationLabel(
-                    fromLocalDateTimeInput(value.startsAt) ??
+                    parseDateTimeInputInTimeZone(
+                      value.startsAt,
+                      value.timezone
+                    ) ??
                       new Date().toISOString(),
-                    fromLocalDateTimeInput(value.endsAt) ??
+                    parseDateTimeInputInTimeZone(
+                      value.endsAt,
+                      value.timezone
+                    ) ??
                       new Date().toISOString()
                   )}
                 </span>{" "}

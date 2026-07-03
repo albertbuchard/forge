@@ -755,6 +755,90 @@ afterEach(() => {
 });
 
 describe("calendar routing surfaces", () => {
+  it("places timezone-aware calendar events on their event-local day", async () => {
+    restoreDate?.();
+    restoreDate = installMockDate("2026-09-10T09:00:00.000Z");
+    getCalendarOverviewMock.mockResolvedValueOnce({
+      calendar: {
+        generatedAt: "2026-09-10T09:00:00.000Z",
+        providers: [],
+        connections: [],
+        calendars: [
+          {
+            id: "calendar_forge",
+            connectionId: "conn_1",
+            remoteId: "remote_calendar_forge",
+            title: "Forge",
+            description: "",
+            color: "#7dd3fc",
+            timezone: "Europe/Zurich",
+            isPrimary: false,
+            canWrite: true,
+            selectedForSync: true,
+            forgeManaged: true,
+            lastSyncedAt: null,
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z"
+          }
+        ],
+        events: [
+          {
+            id: "event_lax_gva",
+            connectionId: "conn_1",
+            calendarId: "calendar_forge",
+            remoteId: "remote_event_lax_gva",
+            ownership: "forge",
+            originType: "native",
+            status: "confirmed",
+            title: "Fly Los Angeles to Geneva",
+            description: "",
+            location: "LAX -> ZRH -> GVA",
+            place: {
+              label: "LAX -> ZRH -> GVA",
+              address: "Los Angeles, Zurich, Geneva",
+              timezone: "America/Los_Angeles",
+              latitude: null,
+              longitude: null,
+              source: "life_event",
+              externalPlaceId: ""
+            },
+            startAt: "2026-09-13T02:35:00.000Z",
+            endAt: "2026-09-13T15:55:00.000Z",
+            timezone: "America/Los_Angeles",
+            isAllDay: false,
+            availability: "busy",
+            eventType: "life_event",
+            categories: ["life_event", "travel_flight"],
+            sourceMappings: [],
+            links: [],
+            remoteUpdatedAt: null,
+            deletedAt: null,
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z"
+          }
+        ],
+        workBlockTemplates: [],
+        workBlockInstances: [],
+        timeboxes: []
+      }
+    });
+
+    renderWithRouter(<CalendarPage />, "/calendar");
+
+    expect(await screen.findByText("Fly Los Angeles to Geneva")).toBeInTheDocument();
+    const saturday = document.querySelector('[data-calendar-day="2026-09-12"]');
+    const sunday = document.querySelector('[data-calendar-day="2026-09-13"]');
+    expect(saturday).toBeTruthy();
+    expect(sunday).toBeTruthy();
+    expect(
+      within(saturday as HTMLElement).getByText("Fly Los Angeles to Geneva")
+    ).toBeInTheDocument();
+    expect(within(saturday as HTMLElement).getByText(/19:35/)).toBeInTheDocument();
+    expect(
+      within(sunday as HTMLElement).queryByText("Fly Los Angeles to Geneva")
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the calendar page display-first and opens guided work-block flows", async () => {
     renderWithRouter(<CalendarPage />, "/calendar");
 

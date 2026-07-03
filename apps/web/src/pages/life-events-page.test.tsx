@@ -298,4 +298,56 @@ describe("LifeEventsPage", () => {
       });
     });
   });
+
+  it("renders and edits flight times in the event timezone", async () => {
+    updateEntitiesMock.mockResolvedValue({ results: [{ ok: true }] });
+    renderPage({
+      events: [
+        buildLifeEvent({
+          id: "lifeevent_lax_gva",
+          title: "Fly Los Angeles to Geneva",
+          startsAt: "2026-09-13T02:35:00.000Z",
+          endsAt: "2026-09-13T15:55:00.000Z",
+          timezone: "America/Los_Angeles",
+          originLabel: "LAX",
+          originCity: "Los Angeles",
+          destinationLabel: "GVA",
+          destinationCity: "Geneva"
+        })
+      ],
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_lax_gva",
+      limit: 500,
+      offset: 0
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /fly los angeles to geneva/i })
+    );
+    expect(screen.getAllByText(/2026/)[0]).toHaveTextContent(/12/);
+    expect(screen.getByText(/19:35/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(screen.getByDisplayValue("2026-09-12T19:35")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("America/Los_Angeles")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /update life event/i }));
+
+    await waitFor(() => {
+      expect(updateEntitiesMock).toHaveBeenCalledWith({
+        atomic: true,
+        operations: [
+          expect.objectContaining({
+            entityType: "life_event",
+            id: "lifeevent_lax_gva",
+            patch: expect.objectContaining({
+              startsAt: "2026-09-13T02:35:00.000Z",
+              endsAt: "2026-09-13T15:55:00.000Z",
+              timezone: "America/Los_Angeles"
+            })
+          })
+        ]
+      });
+    });
+  });
 });
