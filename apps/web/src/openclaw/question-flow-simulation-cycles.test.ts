@@ -419,6 +419,7 @@ describe("question flow simulation cycles", () => {
     | "specializedCrud"
     | "action"
     | "specializedDomain"
+    | "hybridBatchAndSpecializedDomain"
     | "readModel"
     | "healthWorkflow"
   > = {
@@ -451,7 +452,7 @@ describe("question flow simulation cycles", () => {
     "Preference Judgment": "action",
     "Preference Signal": "action",
     Movement: "specializedDomain",
-    "Life Events": "batch",
+    "Life Events": "hybridBatchAndSpecializedDomain",
     "Life Force": "specializedDomain",
     Workbench: "specializedDomain",
     "Preference Catalog": "batch",
@@ -1265,6 +1266,13 @@ describe("question flow simulation cycles", () => {
         expect(sectionSlice).toMatch(/dedicated/i);
         continue;
       }
+      if (posture === "hybridBatchAndSpecializedDomain") {
+        expect(sectionSlice).toMatch(/`life_event` is a normal stored entity/i);
+        expect(sectionSlice).toMatch(/shared batch entity tools/i);
+        expect(sectionSlice).toMatch(/dedicated Life Events route family/i);
+        expect(sectionSlice).toMatch(/Lane-to-route map:/);
+        continue;
+      }
       if (posture === "action") {
         expect(sectionSlice).toMatch(
           /action workflow|dedicated|note-backed|task-run tool/i
@@ -1306,6 +1314,7 @@ describe("question flow simulation cycles", () => {
     );
     expect(matrix).toMatch(/specialized domain surface/i);
     expect(matrix).toMatch(/dedicated movement routes/i);
+    expect(matrix).toMatch(/dedicated Life Events routes/i);
     expect(matrix).toMatch(/dedicated Life Force routes/i);
     expect(matrix).toMatch(/dedicated Workbench routes/i);
     expect(entityPlaybook).toMatch(
@@ -1850,6 +1859,9 @@ describe("question flow simulation cycles", () => {
       /After Movement overlays[\s\S]*place edits[\s\S]*settings changes[\s\S]*read back the timeline, place list, settings,\s+box\s+detail, or selection view/i
     );
     expect(verificationLoop).toMatch(
+      /After Life Event calendar sync[\s\S]*ticket import[\s\S]*travel-status work[\s\S]*read back the event detail or timeline/i
+    );
+    expect(verificationLoop).toMatch(
       /After Life Force profile edits[\s\S]*weekday-template edits[\s\S]*fatigue signals[\s\S]*read\s+the overview back/i
     );
     expect(verificationLoop).toMatch(
@@ -2388,6 +2400,9 @@ describe("question flow simulation cycles", () => {
       /Replace implementation words with product nouns[\s\S]*missing stay[\s\S]*weekday energy curve[\s\S]*node output[\s\S]*belief sentence/i
     );
     expect(wordingGuard).toMatch(
+      /Life Event[\s\S]*calendar match[\s\S]*ticket import[\s\S]*travel status/i
+    );
+    expect(wordingGuard).toMatch(
       /endpoint, payload, mutation, batch route, or\s+route key/i
     );
     expect(wordingGuard).toMatch(
@@ -2429,11 +2444,12 @@ describe("question flow simulation cycles", () => {
     expect(routeFallback).toMatch(
       /methodRoutes[\s\S]*:id[\s\S]*:weekday[\s\S]*:slug[\s\S]*:runId[\s\S]*:nodeId[\s\S]*:pointId/i
     );
+    expect(routeFallback).toMatch(/forge_call_life_event_route/);
     expect(routeFallback).toMatch(
       /Every placeholder must be filled through `pathParams`[\s\S]*never hide one inside `query`, `body`, or `routeKey`/i
     );
     expect(routeFallback).toMatch(
-      /saved place, movement box, trip, weekday, flow, slug, run, node, or trip point/i
+      /saved place, movement box, Life Event, trip, weekday, flow, slug, run, node, or\s+trip point/i
     );
     expect(flashcardSupport).toMatch(
       /Search existing `flashcard` records first[\s\S]*exact urge sentence[\s\S]*trigger situation[\s\S]*nearby Psyche wording/i

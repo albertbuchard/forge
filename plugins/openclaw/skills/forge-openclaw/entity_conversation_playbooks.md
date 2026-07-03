@@ -139,6 +139,8 @@ Keep API and architecture nouns inside your own reasoning. Do not ask the user a
 With the user, say the human thing:
 
 - "Movement timeline", "place", "trip", "missing block", or "time window"
+- "Life Event", "calendar match", "ticket import", "travel status", or
+  "life timeline"
 - "Energy model", "weekday pattern", or "fatigue signal"
 - "Workbench flow", "run", "published output", or "node result"
 - "Wiki page", "artifact file", "provenance", "note", "trigger report",
@@ -159,8 +161,9 @@ confirmations should stay as concrete as the first question.
   next action and ask only for the missing product detail, or close cleanly.
 - Replace implementation words with product nouns before the sentence reaches the
   user. Say missing stay, place boundary, weekday energy curve, saved flow, failed
-  run, node output, belief sentence, pattern, flashcard, wiki page, calendar
-  connection, artifact file, provenance, generic entity link, or task run instead of
+  run, node output, Life Event, calendar match, ticket import, travel status,
+  belief sentence, pattern, flashcard, wiki page, calendar connection, artifact file,
+  provenance, generic entity link, or task run instead of
   endpoint, payload, mutation, batch route, or route key.
 - If the only honest next sentence would be a generic reflection or a route-shaped
   question, pause and identify the product noun internally. If you still cannot name
@@ -239,8 +242,8 @@ Use this when the adapter tool surface is missing, stale, or narrower than live 
 onboarding.
 
 - First prefer the route-key tools when they exist:
-  `forge_call_movement_route`, `forge_call_life_force_route`, or
-  `forge_call_workbench_route`.
+  `forge_call_movement_route`, `forge_call_life_event_route`,
+  `forge_call_life_force_route`, or `forge_call_workbench_route`.
 - If a route-key tool is unavailable, stale, or lacks the needed route key, read live
   onboarding and use the exact `methodRoutes` entry for the selected lane. Cross-check
   OpenAPI only to confirm the same method and path.
@@ -254,7 +257,8 @@ onboarding.
   `:pointId`. Every placeholder must be filled through `pathParams` with the same
   name before the call; never hide one inside `query`, `body`, or `routeKey`.
 - If a required placeholder is missing, ask for the product noun that fills it: the
-  saved place, movement box, trip, weekday, flow, slug, run, node, or trip point.
+  saved place, movement box, Life Event, trip, weekday, flow, slug, run, node, or
+  trip point.
 - If tool schema, live onboarding, and OpenAPI disagree, trust live onboarding for the
   immediate call when it names the exact route, then treat the disagreement as a Forge
   contract bug to fix.
@@ -285,6 +289,9 @@ The dedicated route family is not finished just because a write returned `ok`.
 - After Movement overlays, place edits, settings changes, stay/trip repairs, or
   deletion/invalidation work, read back the timeline, place list, settings, box
   detail, or selection view that proves the user's practical question was answered.
+- After Life Event calendar sync, calendar-to-Life-Event marking, ticket import, or
+  travel-status work, read back the event detail or timeline when that proves the
+  chronology, calendar match, ticket-derived fields, or status question was answered.
 - After Life Force profile edits, weekday-template edits, or fatigue signals, read
   the overview back when the user is making a planning decision or wants to understand
   the practical impact of the change.
@@ -672,11 +679,12 @@ Use this quick split before the conversation gets too detailed.
   commitments, nights, workouts, cardiovascular load, recovery context, or health
   patterns before deciding whether a stored entity needs creation or enrichment.
 - Movement, Life Events, Life Force, and Workbench are specialized domain areas. Use their
-  dedicated route families for timelines and overlays, energy profile/templates and
-  fatigue signals, and Workbench flow execution or result artifacts. When available,
-  use `forge_call_movement_route`, `forge_call_life_force_route`, or
-  `forge_call_workbench_route` after selecting the lane; do not route these through
-  batch entity tools.
+  dedicated route families for timelines and overlays, Life Events chronology and
+  calendar/ticket/status actions, energy profile/templates and fatigue signals, and
+  Workbench flow execution or result artifacts. When available, use
+  `forge_call_movement_route`, `forge_call_life_event_route`,
+  `forge_call_life_force_route`, or `forge_call_workbench_route` after selecting the
+  lane; do not route these through batch entity tools.
 - Once the route posture is clear, keep the questioning focused on the missing detail
   that selects the route or payload. Do not ask route-neutral reflective questions
   after the action path is already obvious.
