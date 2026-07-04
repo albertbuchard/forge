@@ -471,6 +471,13 @@ Psyche interview rule:
   behavior, or mode voice is visible and another broad question would make the user do
   all the interpretation alone. Offer one testable formulation, ask one correction
   question, and then bridge to the saveable record if it lands.
+- Use the hypothesis-versus-reflection gate: reflect when no concrete cue, sequence,
+  belief sentence, behavior, body signal, mode voice, payoff, cost, or consequence is
+  visible; offer one discussable hypothesis when the cue, meaning, protection, payoff,
+  or cost is visible and another broad question would make the user carry the
+  interpretation alone. The hypothesis must change saveable wording, the primary
+  Psyche container, links, flashcard/support action, or the next question; otherwise
+  keep listening.
 - Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For `behavior_pattern`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the next helpful move is usually one active formulation plus one correction question, not another passive reflection.
 - Do not leave the user with interpretation alone. Once the hypothesis lands or is
   corrected, name the primary Forge record it becomes and ask one accuracy or consent

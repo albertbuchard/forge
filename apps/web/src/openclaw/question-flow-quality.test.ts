@@ -248,6 +248,13 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /tentative hypothesis and one fit-or-correction question instead of asking another\s+broad exploratory question/i
     );
+    expect(psychePlaybook).toMatch(/## Hypothesis versus reflection gate/i);
+    expect(psychePlaybook).toMatch(
+      /another broad question would make them\s+carry the interpretation alone/i
+    );
+    expect(psychePlaybook).toMatch(
+      /change the saveable wording, primary Psyche\s+container, likely links, flashcard\/support action, or next question/i
+    );
     expect(psychePlaybook).toMatch(
       /Direct save:[\s\S]*belief sentence[\s\S]*functional loop[\s\S]*ask one accuracy or consent question/i
     );

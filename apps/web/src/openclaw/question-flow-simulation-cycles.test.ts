@@ -1630,6 +1630,19 @@ describe("question flow simulation cycles", () => {
     expect(psychePlaybook).toMatch(/emotionally meaningful kind of moment/i);
     expect(psychePlaybook).toMatch(/lived signature/i);
     expect(psychePlaybook).toMatch(/Interpretive Hypotheses/i);
+    expect(psychePlaybook).toMatch(/Hypothesis versus reflection gate/i);
+    expect(psychePlaybook).toMatch(
+      /Reflect when the user has not yet given a concrete cue, sequence, belief sentence,[\s\S]*mode voice, payoff, cost, or consequence/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Offer one discussable hypothesis[\s\S]*another broad question would make them\s+carry the interpretation alone/i
+    );
+    expect(psychePlaybook).toMatch(
+      /change the saveable wording, primary Psyche\s+container, likely links, flashcard\/support action, or next question/i
+    );
+    expect(psychePlaybook).toMatch(
+      /one concrete observation[\s\S]*one possible function or danger[\s\S]*one fit-or-correction question/i
+    );
     expect(psycheActiveListeningContract).toMatch(
       /felt stake or protective move[\s\S]*danger, shame,[\s\S]*relief, cost, or value conflict/i
     );
@@ -1644,6 +1657,7 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(/Hypothesis Wording Shape/i);
     expect(psychePlaybook).toMatch(/Hypothesis Timing Checkpoint/i);
+    expect(psychePlaybook).toMatch(/Hypothesis versus reflection gate/i);
     expect(psychePlaybook).toMatch(/Hypothesis Without Cross-Examination/i);
     expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
     expect(psychePlaybook).toMatch(/function without blame/i);
@@ -1758,6 +1772,13 @@ describe("question flow simulation cycles", () => {
       codexSkill
     ]) {
       expect(source).toMatch(/active-listening turn contract/i);
+      expect(source).toMatch(/hypothesis-versus-reflection gate/i);
+      expect(source).toMatch(
+        /cue, sequence,[\s\S]*belief sentence,[\s\S]*mode voice,[\s\S]*payoff,[\s\S]*cost,[\s\S]*consequence/i
+      );
+      expect(source).toMatch(
+        /saveable wording,[\s\S]*primary\s+Psyche\s+container,[\s\S]*links,[\s\S]*flashcard\/support action,[\s\S]*next question/i
+      );
       expect(source).toMatch(
         /specific stake,[\s\S]*working shape,[\s\S]*product object/i
       );
@@ -1833,6 +1854,7 @@ describe("question flow simulation cycles", () => {
         /behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*mode_guide_session[\s\S]*trigger_report[\s\S]*active formulation/i
       );
       expect(source).toMatch(/reduce the formulation burden/i);
+      expect(source).toMatch(/hypothesis-versus-reflection gate/i);
       expect(source).toMatch(/one fit-or-correction question/i);
       expect(source).toMatch(/Do not make the user prove the experience/i);
       expect(source).toMatch(

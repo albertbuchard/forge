@@ -606,6 +606,13 @@ For wiki-specific recall:
 - Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. Once at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand the function, protection, cost, belief, mode, or schema theme.
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A good hypothesis says what the reaction may be protecting, predicting, relieving, or costing, then asks whether that lands or needs correction.
 - For Psyche hypotheses, reduce the formulation burden. After one concrete example, offer one tentative function, danger, protection, payoff, or cost hypothesis and ask one fit-or-correction question. Do not make the user prove the experience, list evidence, or design repair before the wording feels held.
+- Use the hypothesis-versus-reflection gate: reflect when no concrete cue, sequence,
+  belief sentence, behavior, body signal, mode voice, payoff, cost, or consequence is
+  visible; offer one discussable hypothesis when the cue, meaning, protection, payoff,
+  or cost is visible and another broad question would make the user carry the
+  interpretation alone. The hypothesis must change saveable wording, the primary
+  Psyche container, links, flashcard/support action, or the next question; otherwise
+  keep listening.
 - Do not leave the user with interpretation alone. Once the hypothesis lands or is
   corrected, name the primary Forge record it becomes and ask one accuracy or consent
   question that moves toward saving the corrected formulation.

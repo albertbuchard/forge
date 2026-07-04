@@ -248,6 +248,25 @@ material without a usable formulation.
   not stop at empathic reflection when the user's example already supports a
   functional interpretation.
 
+## Hypothesis versus reflection gate
+
+Use this gate before choosing another reflective question.
+
+- Reflect when the user has not yet given a concrete cue, sequence, belief sentence,
+  behavior, body signal, mode voice, payoff, cost, or consequence. In that case,
+  another question should locate the smallest lived example.
+- Offer one discussable hypothesis when the user has given enough of the cue,
+  meaning, protection, payoff, or cost that another broad question would make them
+  carry the interpretation alone.
+- The hypothesis must do useful work: change the saveable wording, primary Psyche
+  container, likely links, flashcard/support action, or next question. If it would
+  only add empathic color, keep listening instead.
+- A strong hypothesis turn has three parts: one concrete observation from the user's
+  example, one possible function or danger, and one fit-or-correction question.
+- If the user corrects it, revise once from their correction and move toward the
+  saveable record shape. Do not replace one rejected hypothesis with a stack of new
+  theories.
+
 ## Hypothesis Timing Checkpoint
 
 Use this before asking a second or third deepening question. The point is not to sound
