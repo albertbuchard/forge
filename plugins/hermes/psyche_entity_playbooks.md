@@ -202,6 +202,13 @@ accurately understood while still moving toward a saveable formulation.
 This is active listening, not just mirroring. A strong turn names what seems at stake,
 keeps the hypothesis correctable, and reduces the user's burden of wording.
 
+Do not drift into vague supportive filler such as "tell me more about that", "what
+feels important", or "can you expand on that" once a concrete moment, belief
+sentence, cue, mode voice, body signal, or trigger sequence is already visible.
+Name the lived stake you heard, then ask the one question that would change the
+belief, loop, mode, trigger report, flashcard cue, emotion signature, link, or save
+confirmation.
+
 ## Interpretive Hypotheses
 
 Use hypotheses when reflection alone would leave the user circling around the same

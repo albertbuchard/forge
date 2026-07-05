@@ -48,6 +48,7 @@ async function loadOnboardingPayload() {
       specializedDomainSurfaces: Record<
         string,
         {
+          routeTool: string;
           routeKeys: string[];
           methodRoutes?: Record<string, string>;
           routeSelectionQuestions?: string[];
@@ -93,6 +94,7 @@ async function loadAgentContractPayloads() {
         specializedDomainSurfaces: Record<
           string,
           {
+            routeTool: string;
             routeKeys: string[];
             methodRoutes?: Record<string, string>;
           }
@@ -956,15 +958,43 @@ describe("question flow simulation cycles", () => {
     }
 
     for (const entityType of ["movement", "life_force", "workbench"] as const) {
-      const flow = onboarding.entityCatalog.find(
+      const entry = onboarding.entityCatalog.find(
         (entry) => entry.entityType === entityType
-      )?.questionFlow;
+      );
+      const flow = entry?.questionFlow;
       expect(flow?.questionStyle, `${entityType} style`).toBe(
         "dedicated_route_active_listening"
       );
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
         /published route key[\s\S]*without guessing/i
       );
+    }
+
+    const specializedCapsules = [
+      ["life_event", "lifeEvents"],
+      ["movement", "movement"],
+      ["life_force", "lifeForce"],
+      ["workbench", "workbench"]
+    ] as const;
+
+    for (const [entityType, surfaceKey] of specializedCapsules) {
+      const flow = onboarding.entityCatalog.find(
+        (entry) => entry.entityType === entityType
+      )?.questionFlow;
+      const surface =
+        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
+      expect(flow?.apiAccessHint, `${entityType} surface key`).toContain(
+        `Specialized route surface: ${surfaceKey}.`
+      );
+      expect(flow?.apiAccessHint, `${entityType} route tool`).toContain(
+        `Route tool: ${surface.routeTool}.`
+      );
+      for (const routeKey of surface.routeKeys) {
+        expect(
+          flow?.apiAccessHint,
+          `${entityType} apiAccessHint should include route key ${routeKey}`
+        ).toContain(routeKey);
+      }
     }
   });
 

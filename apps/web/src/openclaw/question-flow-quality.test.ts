@@ -141,6 +141,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /Do not let API uncertainty leak out as vague wording/i
     );
+    expect(entityPlaybook).toMatch(
+      /Do not use vague reflective filler[\s\S]*tell me more about that[\s\S]*concrete\s+target, span, object, wording, or correction[\s\S]*one question that would change the save, read, run, link, or update/i
+    );
     expect(entityPlaybook).toMatch(/## Dedicated surface lane translation/i);
     expect(entityPlaybook).toMatch(/## Dedicated surface route fallback/i);
     expect(entityPlaybook).toMatch(
@@ -734,6 +737,9 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(
       /active listening, not just mirroring[\s\S]*names what seems at stake[\s\S]*keeps the hypothesis correctable/i
+    );
+    expect(psychePlaybook).toMatch(
+      /Do not drift into vague supportive filler[\s\S]*concrete moment, belief\s+sentence, cue, mode voice, body signal, or trigger sequence[\s\S]*one question that would change the\s+belief, loop, mode, trigger report, flashcard cue, emotion signature, link, or save\s+confirmation/i
     );
     expect(psychePlaybook).toMatch(
       /ask permission before moving from understanding into[\s\S]*naming, challenging, or solution-finding/i

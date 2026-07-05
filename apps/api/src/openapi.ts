@@ -3973,6 +3973,7 @@ export function buildOpenApiDocument() {
               required: [
                 "classification",
                 "aliases",
+                "routeTool",
                 "summary",
                 "routeKeys",
                 "methodRoutes",
@@ -3987,6 +3988,7 @@ export function buildOpenApiDocument() {
                   enum: ["specialized_domain_surface"]
                 },
                 aliases: arrayOf({ type: "string" }),
+                routeTool: { type: "string" },
                 summary: { type: "string" },
                 routeKeys: arrayOf({ type: "string" }),
                 methodRoutes: {

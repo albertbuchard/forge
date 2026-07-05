@@ -109,6 +109,7 @@ async function loadOnboardingPayload() {
         {
           classification?: string;
           aliases?: string[];
+          routeTool: string;
           routeKeys: string[];
           methodRoutes: Record<string, string>;
           readRoutes: Record<string, string>;
@@ -1727,6 +1728,9 @@ describe("forge onboarding contract", () => {
     const specializedSurfaceSchema =
       routeModelSchema?.properties?.specializedDomainSurfaces
         ?.additionalProperties;
+    const toolByName = new Map(
+      onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
+    );
     expect(openapiSchemas?.CalendarConnection?.properties?.provider).toEqual(
       expect.objectContaining({
         enum: expect.arrayContaining(["microsoft", "macos_local"])
@@ -1744,6 +1748,14 @@ describe("forge onboarding contract", () => {
     for (const [surfaceName, surface] of Object.entries(
       onboarding.entityRouteModel.specializedDomainSurfaces
     )) {
+      expect(
+        toolByName.has(surface.routeTool),
+        `${surfaceName} should publish a routeTool present in toolInputCatalog`
+      ).toBe(true);
+      expect(
+        toolByName.get(surface.routeTool)?.inputShape,
+        `${surfaceName} routeTool should advertise routeKey input`
+      ).toContain("routeKey");
       for (const [routeKey, methodRoute] of Object.entries(
         surface.methodRoutes
       )) {
@@ -1795,6 +1807,7 @@ describe("forge onboarding contract", () => {
         required: expect.arrayContaining([
           "classification",
           "aliases",
+          "routeTool",
           "summary",
           "routeKeys",
           "methodRoutes",
@@ -1810,6 +1823,7 @@ describe("forge onboarding contract", () => {
           aliases: expect.objectContaining({
             type: "array"
           }),
+          routeTool: { type: "string" },
           routeKeys: expect.objectContaining({
             type: "array"
           }),

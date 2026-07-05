@@ -3191,6 +3191,17 @@ function buildPreferredReadPath(entityType: string) {
   }
 }
 
+const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
+  life_event:
+    "Specialized route surface: lifeEvents. Route tool: forge_call_life_event_route. Route keys: timeline, read, calendarSync, fromCalendarEvent, importTicket, travelStatus.",
+  movement:
+    "Specialized route surface: movement. Route tool: forge_call_movement_route. Route keys: day, month, allTime, timeline, places, boxDetail, tripDetail, selection, settings, settingsUpdate, placeCreate, placeUpdate, userBoxCreate, userBoxPreflight, userBoxUpdate, userBoxDelete, automaticBoxInvalidate, stayUpdate, stayDelete, tripUpdate, tripDelete, tripPointUpdate, tripPointDelete.",
+  life_force:
+    "Specialized route surface: lifeForce. Route tool: forge_call_life_force_route. Route keys: overview, profile, weekdayTemplate, fatigueSignal.",
+  workbench:
+    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow."
+} as const satisfies Record<string, string>;
+
 function enrichOnboardingEntityGuide<
   T extends {
     entityType: string;
@@ -5239,6 +5250,12 @@ function buildPlaybookRouteInfo(focus: string) {
     guide?.preferredMutationTool
       ? `Tool: ${guide.preferredMutationTool}.`
       : null,
+    guide?.entityType &&
+    guide.entityType in QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS
+      ? QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS[
+          guide.entityType as keyof typeof QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS
+        ]
+      : null,
     `Entity type: ${focus}.`
   ]
     .filter(Boolean)
@@ -6647,6 +6664,7 @@ function buildAgentOnboardingPayload(request: {
         lifeEvents: {
           classification: "specialized_domain_surface",
           aliases: ["life_event", "life-events", "Life Events"],
+          routeTool: "forge_call_life_event_route",
           summary:
             "Dedicated Life Events action API. Use shared batch CRUD for the stored life_event record, then use these routes for chronology reads, calendar reconciliation, ticket-artifact import, and travel-status reads.",
           routeKeys: [
@@ -6695,6 +6713,7 @@ function buildAgentOnboardingPayload(request: {
         movement: {
           classification: "specialized_domain_surface",
           aliases: ["movement", "Movement"],
+          routeTool: "forge_call_movement_route",
           summary:
             "Dedicated movement workspace API. Use these routes for stays, trips, time-in-place questions, visited places, trip detail, selection aggregates, user-defined overlays, and repair actions on already-recorded movement data.",
           routeKeys: [
@@ -6798,6 +6817,7 @@ function buildAgentOnboardingPayload(request: {
         lifeForce: {
           classification: "specialized_domain_surface",
           aliases: ["life_force", "life-force", "Life Force"],
+          routeTool: "forge_call_life_force_route",
           summary:
             "Dedicated life-force API. Use it to read the current energy budget, drains, recommendations, and warnings, then patch only the parts that are meant to be user-controlled.",
           routeKeys: [
@@ -6842,6 +6862,7 @@ function buildAgentOnboardingPayload(request: {
         life_force: {
           classification: "specialized_domain_surface",
           aliases: ["lifeForce", "life-force", "Life Force"],
+          routeTool: "forge_call_life_force_route",
           summary:
             "Alias for the dedicated Life Force API keyed to the entity-style name `life_force`. Use the same overview, profile, weekday-template, and fatigue-signal routes as `lifeForce`.",
           routeKeys: [
@@ -6887,6 +6908,7 @@ function buildAgentOnboardingPayload(request: {
         workbench: {
           classification: "specialized_domain_surface",
           aliases: ["workbench", "Workbench"],
+          routeTool: "forge_call_workbench_route",
           summary:
             "Dedicated graph-flow API. Use it for flow catalog reads, flow CRUD, execution, run history, published outputs, node results, and latest successful node outputs.",
           routeKeys: [
