@@ -237,6 +237,14 @@ choice is an internal classification step, not a user-facing menu.
   the public result?"
 - If the user already gave the concrete object, time window, weekday, flow, run, or
   node, skip the route menu entirely and ask only for the missing product detail.
+- When the current truth is uncertain, choose the dedicated read lane before asking
+  write-shaped questions. Movement timeline, saved-box, trip, place, or settings
+  reads come before corrections; Life Force overview comes before profile/template
+  changes when the energy picture is unclear; Workbench flow, run, node, latest
+  output, or published-output reads come before edit or publish decisions.
+- After that read, ask only for the missing detail that changes the correction,
+  planning effect, rerun, edit, publish, or preservation choice. Do not restart a
+  broad lane question after the read has narrowed the work.
 - Once the lane is selected, use the exact route key internally and do not invent a
   friendlier path.
 
@@ -639,10 +647,10 @@ as real work, not only as a create form.
   write-shaped questions until the read creates a concrete follow-up.
 - Movement, Life Events, Life Force, and Workbench need their dedicated operation lanes: review,
   correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or
-  status. After the lane is clear, use
-  the exact dedicated route key internally and ask only for the span, place, event,
-  artifact, weekday, flow, run, node, output, correction, or preservation choice that
-  is still missing.
+  status. If the lane depends on current state, read first through the dedicated
+  surface and then ask only for the span, place, event, artifact, weekday, flow, run,
+  node, output, correction, planning effect, or preservation choice that is still
+  missing. After the lane is clear, use the exact dedicated route key internally.
 - Psyche entities need a formulation lane before the storage lane when the user wants
   understanding. Direct saves can move to one accuracy or consent question; guided
   formulation should stay with one lived example, one hypothesis when useful, and one

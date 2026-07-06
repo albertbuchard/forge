@@ -34,6 +34,7 @@ async function loadOnboardingPayload() {
     entityCatalog: Array<{
       entityType: string;
       classification: string;
+      preferredReadPath: string | null;
       questionFlow: {
         openingQuestion: string;
         coachingGoal: string;
@@ -688,6 +689,9 @@ describe("question flow simulation cycles", () => {
       /Movement, Life Events, Life Force, and Workbench need their dedicated operation lanes[\s\S]*review,\s+correct,\s+repair,\s+run,\s+inspect,\s+publish,\s+preserve,\s+calendar-sync,\s+ticket-import,\s+or\s+status/i
     );
     expect(entityPlaybook).toMatch(
+      /If the lane depends on current state,[\s\S]*read first through the dedicated\s+surface[\s\S]*span, place, event, artifact, weekday, flow, run,[\s\S]*planning effect,[\s\S]*preservation choice/i
+    );
+    expect(entityPlaybook).toMatch(
       /Psyche entities need a formulation lane before the storage lane/i
     );
     expect(entityPlaybook).toMatch(
@@ -955,6 +959,9 @@ describe("question flow simulation cycles", () => {
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
         /accuracy or consent/i
       );
+      expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
+        /concrete example[\s\S]*tentative hypothesis[\s\S]*fit-or-correction[\s\S]*saveable record shape[\s\S]*shared batch CRUD/i
+      );
     }
 
     for (const entityType of ["movement", "life_force", "workbench"] as const) {
@@ -969,6 +976,27 @@ describe("question flow simulation cycles", () => {
         /published route key[\s\S]*without guessing/i
       );
     }
+
+    const movementFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "movement"
+    )?.questionFlow;
+    expect(movementFlow?.askSequence.join("\n")).toMatch(
+      /current truth is uncertain[\s\S]*timeline, place list, box detail, trip detail, settings, or selection aggregate/i
+    );
+
+    const lifeForceFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "life_force"
+    )?.questionFlow;
+    expect(lifeForceFlow?.askSequence.join("\n")).toMatch(
+      /read the Life Force overview before asking write-shaped profile or template questions/i
+    );
+
+    const workbenchFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "workbench"
+    )?.questionFlow;
+    expect(workbenchFlow?.askSequence.join("\n")).toMatch(
+      /read the saved flow, run, node result, latest node output, or published output before asking edit-shaped questions/i
+    );
 
     const specializedCapsules = [
       ["life_event", "lifeEvents"],
@@ -1049,6 +1077,15 @@ describe("question flow simulation cycles", () => {
       onboarding.entityRouteModel.specializedDomainSurfaces.life_force;
     const workbench =
       onboarding.entityRouteModel.specializedDomainSurfaces.workbench;
+    const movementEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "movement"
+    );
+    const lifeForceEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "life_force"
+    );
+    const workbenchEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "workbench"
+    );
 
     expect(movement.routeSelectionQuestions?.join(" ")).toMatch(
       /known-place creation or cleanup[\s\S]*label[\s\S]*boundary[\s\S]*future-use/i
@@ -1058,6 +1095,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(movement.notes?.join(" ")).toMatch(
       /After a Movement read[\s\S]*one next action[\s\S]*manual overlay[\s\S]*place boundary correction[\s\S]*settings change[\s\S]*linked note/i
+    );
+    expect(movementEntry?.preferredReadPath).toMatch(
+      /\/api\/v1\/movement\/day[\s\S]*\/api\/v1\/movement\/month[\s\S]*\/api\/v1\/movement\/all-time[\s\S]*\/api\/v1\/movement\/timeline[\s\S]*\/api\/v1\/movement\/places[\s\S]*\/api\/v1\/movement\/boxes\/:id[\s\S]*\/api\/v1\/movement\/trips\/:id[\s\S]*\/api\/v1\/movement\/selection[\s\S]*\/api\/v1\/movement\/settings/
     );
     for (const surface of [lifeForce, lifeForceAlias]) {
       expect(surface.routeSelectionQuestions?.join(" ")).toMatch(
@@ -1070,6 +1110,9 @@ describe("question flow simulation cycles", () => {
         /After a Life Force overview[\s\S]*one planning implication[\s\S]*lighter workload[\s\S]*added recovery[\s\S]*protected timebox/i
       );
     }
+    expect(lifeForceEntry?.preferredReadPath).toMatch(
+      /Read \/api\/v1\/life-force first[\s\S]*current energy picture[\s\S]*\/api\/v1\/life-force\/profile[\s\S]*\/api\/v1\/life-force\/templates\/:weekday[\s\S]*\/api\/v1\/life-force\/fatigue-signals/i
+    );
     expect(workbench.routeSelectionQuestions?.join(" ")).toMatch(
       /saved flow[\s\S]*one-off input run[\s\S]*reusable/i
     );
@@ -1078,6 +1121,9 @@ describe("question flow simulation cycles", () => {
     );
     expect(workbench.notes?.join(" ")).toMatch(
       /After a Workbench read[\s\S]*one next action[\s\S]*rerun with clearer input[\s\S]*inspect a specific node[\s\S]*publish or preserve the output/i
+    );
+    expect(workbenchEntry?.preferredReadPath).toMatch(
+      /\/api\/v1\/workbench\/flows[\s\S]*\/api\/v1\/workbench\/flows\/:id[\s\S]*\/api\/v1\/workbench\/flows\/by-slug\/:slug[\s\S]*\/api\/v1\/workbench\/flows\/:id\/output[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId\/nodes[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId\/nodes\/:nodeId[\s\S]*\/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output[\s\S]*\/api\/v1\/workbench\/catalog\/boxes/
     );
   });
 

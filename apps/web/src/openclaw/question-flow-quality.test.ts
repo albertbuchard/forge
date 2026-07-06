@@ -320,6 +320,12 @@ describe("question flow quality coverage", () => {
       /Movement timeline or box\s+detail comes before correction[\s\S]*Workbench run or node detail comes before editing[\s\S]*Life Force overview comes before changing planning\s+assumptions/i
     );
     expect(entityPlaybook).toMatch(
+      /current truth is uncertain[\s\S]*Movement timeline, saved-box, trip, place, or settings[\s\S]*Life Force overview[\s\S]*Workbench flow, run, node, latest\s+output, or published-output/i
+    );
+    expect(entityPlaybook).toMatch(
+      /After that read,[\s\S]*missing detail[\s\S]*correction,[\s\S]*planning effect,[\s\S]*rerun,[\s\S]*edit,[\s\S]*publish,[\s\S]*preservation choice/i
+    );
+    expect(entityPlaybook).toMatch(
       /formulate the\s+Psyche record first[\s\S]*flashcard, note, value link, task, or habit/i
     );
     expect(entityPlaybook).toMatch(/## Search-before-write and existing-record disambiguation/i);

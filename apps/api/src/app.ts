@@ -3179,11 +3179,11 @@ function buildPreferredReadPath(entityType: string) {
     case "work_adjustment":
       return "/api/v1/operator/context";
     case "movement":
-      return "/api/v1/movement/timeline";
+      return "/api/v1/movement/day | /api/v1/movement/month | /api/v1/movement/all-time | /api/v1/movement/timeline | /api/v1/movement/places | /api/v1/movement/boxes/:id | /api/v1/movement/trips/:id | /api/v1/movement/selection | /api/v1/movement/settings";
     case "life_force":
-      return "/api/v1/life-force";
+      return "Read /api/v1/life-force first when the current energy picture matters; focused write lanes are /api/v1/life-force/profile, /api/v1/life-force/templates/:weekday, and /api/v1/life-force/fatigue-signals.";
     case "workbench":
-      return "/api/v1/workbench/flows";
+      return "/api/v1/workbench/flows | /api/v1/workbench/flows/:id | /api/v1/workbench/flows/by-slug/:slug | /api/v1/workbench/flows/:id/output | /api/v1/workbench/flows/:id/runs | /api/v1/workbench/flows/:id/runs/:runId | /api/v1/workbench/flows/:id/runs/:runId/nodes | /api/v1/workbench/flows/:id/runs/:runId/nodes/:nodeId | /api/v1/workbench/flows/:id/nodes/:nodeId/output | /api/v1/workbench/catalog/boxes";
     case "self_observation":
       return "/api/v1/psyche/self-observation/calendar";
     default:
@@ -4700,7 +4700,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Clarify whether the user wants a time-in-place query, travel-history review, a missing-gap overlay, one stay or trip change, one place summary, or a link before choosing the dedicated movement route.",
     askSequence: [
       "Ask what they are trying to make clearer, repair, or preserve about where they were before you narrow to the exact movement lane.",
-      "Ask whether the user is trying to query behavior, add something manually, update an existing movement item, or link movement to another Forge entity.",
+      "If the current truth is uncertain, read the timeline, place list, box detail, trip detail, settings, or selection aggregate before asking for correction details.",
+      "Ask whether the useful next action is to understand the timeline, add a missing overlay, repair an already-saved movement item, change a place boundary, adjust movement settings, or preserve context with another Forge record.",
       "Treat day, month, all-time, timeline, trip detail, and selection as internal route lanes. With the user, ask for the useful time window, place, selected span, stay, or trip instead of listing route choices.",
       "Ask whether the focus is a stay, a trip, a place, a timeline window, or a selected span.",
       "Ask for the time window, place, or movement item that makes the question concrete.",
@@ -4726,7 +4727,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Clarify whether the job is overview, profile change, weekday-template editing, or a real-time fatigue signal before choosing the dedicated life-force route.",
     askSequence: [
       "Ask what feels off, important, or worth tracking in their energy picture before you reduce it to one life-force lane.",
-      "Ask whether the job is overview, profile change, weekday-template change, or fatigue signaling.",
+      "If they are trying to understand or plan from energy first, read the Life Force overview before asking write-shaped profile or template questions.",
+      "Ask whether the useful next action is to understand the current energy picture, change a durable assumption, change a repeated weekday rhythm, or log a right-now fatigue/recovery signal.",
       "Treat overview, profile, weekday-template, and fatigue-signal as internal route lanes. With the user, ask whether this is a current read, a durable assumption, a repeated weekday rhythm, or a right-now state instead of reciting route names.",
       "Use routeKey overview for the current read; it maps to GET /api/v1/life-force, not /api/v1/life-force/overview.",
       "Ask what part of the current energy picture feels most important or inaccurate.",
@@ -4747,7 +4749,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Clarify whether the user wants flow discovery, editing, execution, run history, published outputs, or node-level inspection before using the dedicated workbench route family.",
     askSequence: [
       "Ask what they are trying to learn, repair, publish, or run through Workbench before you narrow to flow discovery, editing, execution, or results.",
-      "Ask whether the job is flow discovery, one flow edit, execution, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.",
+      "If the user is inspecting, debugging, or publishing, read the saved flow, run, node result, latest node output, or published output before asking edit-shaped questions.",
+      "Ask whether the useful next action is flow discovery, one flow edit, execution, run history, published output, node-level inspection, latest-node-output lookup, or a follow-up message in a saved flow chat.",
       "Treat saved-flow catalog, box catalog, run history, run detail, node result, latest node output, and published output as internal read lanes. With the user, ask whether they need the saved flow, its input contract, one run, one node, or the public result instead of listing route keys.",
       "Use listFlows for the saved flow catalog and boxCatalog for available input-box contracts; do not collapse both into a vague catalog read.",
       "Ask which flow, slug, run, or node the request is about.",
@@ -5294,7 +5297,7 @@ function buildQuestionFlowReadinessCheck(
   guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
 ) {
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
-    return "Ready when the user recognizes the working formulation and one accuracy or consent check confirms it is true enough to save through shared batch CRUD.";
+    return "Ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
   if (guide.classification === "specialized_domain_surface") {
     return "Ready when the dedicated lane plus target span, event, weekday, flow, run, node, correction, or preservation choice is clear enough to call the published route key without guessing.";
