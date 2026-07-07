@@ -1024,7 +1024,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.",
-        preferredReadPath: "/api/v1/movement/timeline",
+        preferredReadPath: expect.stringMatching(
+          /\/api\/v1\/movement\/day[\s\S]*\/api\/v1\/movement\/month[\s\S]*\/api\/v1\/movement\/all-time[\s\S]*\/api\/v1\/movement\/timeline[\s\S]*\/api\/v1\/movement\/places[\s\S]*\/api\/v1\/movement\/boxes\/:id[\s\S]*\/api\/v1\/movement\/trips\/:id[\s\S]*\/api\/v1\/movement\/selection[\s\S]*\/api\/v1\/movement\/settings/
+        ),
         preferredMutationTool: "forge_call_movement_route"
       })
     );
@@ -1033,7 +1035,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Life Force route family for overview, profile edits, weekday templates, and fatigue signals.",
-        preferredReadPath: "/api/v1/life-force",
+        preferredReadPath: expect.stringMatching(
+          /Read \/api\/v1\/life-force first[\s\S]*\/api\/v1\/life-force\/profile[\s\S]*\/api\/v1\/life-force\/templates\/:weekday[\s\S]*\/api\/v1\/life-force\/fatigue-signals/
+        ),
         preferredMutationTool: "forge_call_life_force_route"
       })
     );
@@ -1042,7 +1046,9 @@ describe("forge onboarding contract", () => {
         classification: "specialized_domain_surface",
         preferredMutationPath:
           "Use the dedicated Workbench route family for flow CRUD, execution, saved-flow chat follow-ups, run history, published outputs, node results, and latest-node-output reads.",
-        preferredReadPath: "/api/v1/workbench/flows",
+        preferredReadPath: expect.stringMatching(
+          /\/api\/v1\/workbench\/flows[\s\S]*\/api\/v1\/workbench\/flows\/:id[\s\S]*\/api\/v1\/workbench\/flows\/by-slug\/:slug[\s\S]*\/api\/v1\/workbench\/flows\/:id\/output[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId\/nodes[\s\S]*\/api\/v1\/workbench\/flows\/:id\/runs\/:runId\/nodes\/:nodeId[\s\S]*\/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output[\s\S]*\/api\/v1\/workbench\/catalog\/boxes/
+        ),
         preferredMutationTool: "forge_call_workbench_route"
       })
     );
@@ -1090,6 +1096,15 @@ describe("forge onboarding contract", () => {
       "forge_call_life_force_route",
       "forge_call_workbench_route"
     ]);
+    expect(onboarding.recommendedPluginTools?.readModels).toEqual(
+      expect.arrayContaining([
+        "forge_get_psyche_overview",
+        "forge_get_psyche_schema_catalog"
+      ])
+    );
+    expect(onboarding.verificationPaths.psycheSchemaCatalog).toBe(
+      "/api/v1/psyche/schema-catalog"
+    );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
     );

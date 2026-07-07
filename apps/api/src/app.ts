@@ -7219,6 +7219,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",
+        "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
         "forge_get_training_load_overview",

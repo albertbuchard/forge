@@ -44,6 +44,7 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "GET", path: "/api/v1/doctor", purpose: "diagnostics" },
     { method: "POST", path: "/api/v1/doctor/fixes", purpose: "diagnostics" },
     { method: "GET", path: "/api/v1/psyche/overview", purpose: "psyche" },
+    { method: "GET", path: "/api/v1/psyche/schema-catalog", purpose: "psyche" },
     { method: "GET", path: "/api/v1/metrics/xp", purpose: "xp" },
     { method: "GET", path: "/api/v1/reviews/weekly", purpose: "weekly_review" },
     { method: "GET", path: "/api/v1/wiki/settings", purpose: "wiki" },

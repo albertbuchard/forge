@@ -258,6 +258,12 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     target: (_match: RegExpMatchArray, url: URL) =>
       passthroughSearch("/api/v1/psyche/overview", url)
   }),
+  exact("/forge/v1/psyche/schema-catalog", {
+    method: "GET",
+    upstreamPath: "/api/v1/psyche/schema-catalog",
+    target: (_match: RegExpMatchArray, url: URL) =>
+      passthroughSearch("/api/v1/psyche/schema-catalog", url)
+  }),
   exact("/forge/v1/metrics/xp", {
     method: "GET",
     upstreamPath: "/api/v1/metrics/xp",

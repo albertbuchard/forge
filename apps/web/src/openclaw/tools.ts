@@ -878,6 +878,14 @@ export function registerForgePluginTools(
   });
 
   registerReadTool(api, config, {
+    name: "forge_get_psyche_schema_catalog",
+    label: "Forge Psyche Schema Catalog",
+    description:
+      "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
+    path: () => "/api/v1/psyche/schema-catalog"
+  });
+
+  registerReadTool(api, config, {
     name: "forge_get_xp_metrics",
     label: "Forge XP Metrics",
     description:

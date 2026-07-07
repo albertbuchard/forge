@@ -5297,6 +5297,7 @@
                   "required": [
                     "classification",
                     "aliases",
+                    "routeTool",
                     "summary",
                     "routeKeys",
                     "methodRoutes",
@@ -5317,6 +5318,9 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "routeTool": {
+                      "type": "string"
                     },
                     "summary": {
                       "type": "string"

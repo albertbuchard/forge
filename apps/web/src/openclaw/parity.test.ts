@@ -21,6 +21,7 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/users/directory");
     expect(report.mirrored).toContain("GET /api/v1/operator/overview");
     expect(report.mirrored).toContain("GET /api/v1/agents/onboarding");
+    expect(report.mirrored).toContain("GET /api/v1/psyche/schema-catalog");
     expect(report.mirrored).toContain("GET /api/v1/wiki/settings");
     expect(report.mirrored).toContain("GET /api/v1/wiki/pages");
     expect(report.mirrored).toContain("GET /api/v1/wiki/pages/:id");

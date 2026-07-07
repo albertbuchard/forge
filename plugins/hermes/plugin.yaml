@@ -59,6 +59,7 @@ provides_tools:
   - forge_get_self_observation_calendar
   - forge_get_ui_entrypoint
   - forge_get_psyche_overview
+  - forge_get_psyche_schema_catalog
   - forge_get_xp_metrics
   - forge_get_weekly_review
   - forge_get_current_work

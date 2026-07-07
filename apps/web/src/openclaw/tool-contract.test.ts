@@ -265,6 +265,24 @@ describe("openclaw tool contracts", () => {
     expect(required).toEqual(["label", "provider", "selectedCalendarUrls"]);
   });
 
+  it("publishes the Psyche schema catalog as a read-only reference tool", () => {
+    const tools = collectRegisteredTools();
+    const schemaCatalog = requireTool(
+      tools,
+      "forge_get_psyche_schema_catalog"
+    );
+
+    expect(schemaCatalog.description).toMatch(/read-only Psyche schema catalog/i);
+    expect(schemaCatalog.description).toMatch(/schemaId/i);
+    expect(schemaCatalog.description).toMatch(/not user-owned belief records/i);
+    expect(collectSupportedPluginApiRouteKeys()).toContain(
+      makeApiRouteKey("GET", "/api/v1/psyche/schema-catalog")
+    );
+    expect(collectMirroredApiRouteKeys()).toContain(
+      makeApiRouteKey("GET", "/api/v1/psyche/schema-catalog")
+    );
+  });
+
   it("publishes dedicated route-key tools for specialized domain surfaces", async () => {
     const tools = collectRegisteredTools();
     const movement = requireTool(tools, "forge_call_movement_route");

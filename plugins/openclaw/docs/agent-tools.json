@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T23:00:40.298Z",
+  "generatedAt": "2026-07-07T20:16:20.838Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -514,6 +514,19 @@
       "label": "Forge Psyche Overview",
       "summary": "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
       "whenToUse": "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
+      "inputShape": "{}",
+      "requiredFields": [],
+      "notes": [],
+      "example": "{}",
+      "catalogDocumented": false
+    },
+    {
+      "name": "forge_get_psyche_schema_catalog",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Psyche Schema Catalog",
+      "summary": "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
+      "whenToUse": "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
       "inputShape": "{}",
       "requiredFields": [],
       "notes": [],

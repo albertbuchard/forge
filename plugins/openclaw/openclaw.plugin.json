@@ -49,6 +49,7 @@
       "forge_get_operator_overview",
       "forge_get_preferences_workspace",
       "forge_get_psyche_overview",
+      "forge_get_psyche_schema_catalog",
       "forge_get_questionnaire",
       "forge_get_questionnaire_run",
       "forge_get_self_observation_calendar",

@@ -503,6 +503,9 @@ Surface rule:
    - `forge_update_entities`
    - `forge_delete_entities`
    - `forge_restore_entities`
+   Use `forge_get_psyche_schema_catalog` before setting `belief_entry.schemaId`;
+   the schema catalog is read-only reference material, not a user-owned belief
+   record.
 4. Batch CRUD entities are:
    - `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`
    - `calendar_event`, `work_block_template`, `task_timebox`

@@ -1009,6 +1009,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_user_directory`
 `forge_get_ui_entrypoint`
 `forge_get_psyche_overview`
+`forge_get_psyche_schema_catalog`
 `forge_get_xp_metrics`
 `forge_get_weekly_review`
 `forge_get_wiki_settings`
@@ -1085,6 +1086,7 @@ Additional first-class surfaces:
 - Keep the dedicated Preferences tools only for real preference actions and read models: `forge_get_preferences_workspace`, `forge_start_preferences_game`, `forge_merge_preferences_contexts`, `forge_enqueue_preferences_item_from_entity`, `forge_submit_preferences_judgment`, `forge_submit_preferences_signal`, and `forge_update_preferences_score`.
 - Keep the dedicated questionnaire tools only for real flow actions and read models: `forge_list_questionnaires`, `forge_get_questionnaire`, `forge_clone_questionnaire`, `forge_ensure_questionnaire_draft`, `forge_publish_questionnaire_draft`, `forge_start_questionnaire_run`, `forge_get_questionnaire_run`, `forge_update_questionnaire_run`, and `forge_complete_questionnaire_run`.
 - Self-observation is note-backed. Read the calendar through `forge_get_self_observation_calendar`, but create or update the stored observation as a `note` tagged `Self-observation` with `frontmatter.observedAt` and links to the relevant `behavior_pattern`, `trigger_report`, or other Forge records.
+- `forge_get_psyche_schema_catalog` is a read-only reference path for schema themes. Use it before setting `belief_entry.schemaId`; do not invent schema ids, and do not treat schema catalog entries as user-owned beliefs.
 - `sleep_session` and `workout_session` are first-class health records. Treat them like ordinary stored entities for CRUD, and use the dedicated health tools for read models or post-review enrichment rather than pretending they live on a special mutation island.
 - Movement is a specialized domain surface, not batch CRUD. Use the dedicated movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, user-defined overlays, and repair actions. The runtime paths live under `/api/v1/movement/*`, and the OpenClaw HTTP mirror exposes the same family under `/forge/v1/movement/*`.
 - Life Events use both paths deliberately. Use shared batch CRUD for normal `life_event` create, update, search, soft delete, restore, and generic `entity_links`. Use `/api/v1/life-events/*` only for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads. The OpenClaw HTTP mirror exposes the same family under `/forge/v1/life-events/*`.

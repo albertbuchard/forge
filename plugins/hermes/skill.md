@@ -438,12 +438,13 @@ When Hermes is trying to find the right wiki record, use these search patterns:
 ## Preferred workflow
 
 1. Start with `forge_get_operator_overview`.
-2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
+2. Use `forge_get_operator_context`, `forge_get_current_work`, `forge_get_psyche_overview`, `forge_get_psyche_schema_catalog`, `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_get_wiki_settings`, `forge_search_wiki`, or `forge_get_calendar_overview` when the request needs a more specific read model.
 3. Search before creating duplicates with `forge_search_entities`; if a likely match
    appears, ask whether to update it, link to it, or save a separate new record
    instead of reopening the whole create flow.
 4. Prefer the batch entity tools for normal stored-entity work. Batch CRUD is the default for simple entities, so do not build a huge one-route-per-entity mental model when the shared routes already fit:
    `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, `forge_restore_entities`.
+   Use `forge_get_psyche_schema_catalog` before setting `belief_entry.schemaId`; the schema catalog is read-only reference material, not a user-owned belief record.
 5. Use the wiki tools for SQLite-backed knowledge work:
    `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`.
    `forge_ingest_wiki_source` queues background ingest work; when the user wants to review candidate pages or entities before publishing, hand off to the Forge UI instead of pretending Hermes already has an inline review tool.

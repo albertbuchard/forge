@@ -1508,6 +1508,13 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: with_query("/api/v1/psyche/overview", args, ["userIds"]),
     },
     {
+        "name": "forge_get_psyche_schema_catalog",
+        "description": "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
+        "parameters": object_schema({}),
+        "method": "GET",
+        "path": "/api/v1/psyche/schema-catalog",
+    },
+    {
         "name": "forge_get_xp_metrics",
         "description": "Read the live XP, level, streak, momentum, and reward metrics.",
         "parameters": object_schema({}),
