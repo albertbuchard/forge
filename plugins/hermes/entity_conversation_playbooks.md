@@ -549,9 +549,12 @@ enough to act.
   scope that would change the answer. Once you have that, read the overview instead
   of asking for a preferred report shape.
 - For specialized Movement, Life Events, Life Force, and Workbench writes, the minimum is the
-  selected lane plus the target span/object/event/artifact/weekday/flow/run/node and the intended
-  correction or effect. Do not ask a reflective question after the dedicated route
-  and write shape are already selected.
+  selected lane plus the surface-specific target and intended effect:
+  Movement span/place/stay/trip/settings/correction, Life Event event/calendar
+  match/ticket artifact/travel-status target, Life Force weekday/profile/signal/planning
+  effect, or Workbench flow/run/node/input/output/preservation choice. Do not ask
+  a reflective question after the dedicated route and write shape are already
+  selected.
 - For reflective non-Psyche records, the minimum is what future review should
   remember and the container that preserves it. If a stronger Psyche container clearly
   emerges, route there; otherwise do not keep deepening just to make the note more
@@ -1420,8 +1423,10 @@ Arc:
    intentionally outside the PM hierarchy.
 4. Capture the execution contract in `aiInstructions` when the work is meant for an
    AI or agent session.
-5. Ask what would make it easier to do: due date, priority, owner, human/bot
-   assignees, acceptance criteria, or one line of context.
+5. Ask for due date, priority, owner, human/bot assignees, acceptance criteria, or
+   one line of context only when that detail changes execution, accountability, or
+   verification; otherwise save the one-session work item once the action and
+   placement are clear.
 
 Level-specific handling:
 
@@ -1644,6 +1649,9 @@ Routing rule:
   download, decrypt, open, execute, preview, transform, submit passwords, or
   autonomously process stored file bytes. Agents may read `contentProtection` mode and
   password hints as metadata only.
+- OpenAPI documents human-only download and encryption paths for the web/operator
+  surface, but those paths are intentionally absent from `forge_call_artifact_route`
+  and must not be called by agents.
 
 Ready to save when:
 

@@ -725,6 +725,12 @@ describe("question flow simulation cycles", () => {
       /shared batch entity route[\s\S]*`entityType: "task"`[\s\S]*appropriate `level`/i
     );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/aiInstructions/);
+    expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
+      /due date, priority, owner, human\/bot assignees, acceptance criteria[\s\S]*only when that detail changes execution, accountability, or\s+verification[\s\S]*save the one-session work item once the action and\s+placement are clear/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Task")).not.toMatch(
+      /Ask what would make it easier to do/i
+    );
     expect(getSectionSlice(entityPlaybook, "Project")).toMatch(
       /human\/bot assignees/i
     );
@@ -767,7 +773,7 @@ describe("question flow simulation cycles", () => {
       /read-model and review surfaces[\s\S]*practical question[\s\S]*scope that would change the answer/i
     );
     expect(entityPlaybook).toMatch(
-      /specialized Movement, Life Events, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*target span\/object\/event\/artifact\/weekday\/flow\/run\/node/i
+      /specialized Movement, Life Events, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*surface-specific target[\s\S]*Movement span\/place\/stay\/trip\/settings\/correction[\s\S]*Life Event event\/calendar[\s\S]*Life Force weekday\/profile\/signal[\s\S]*Workbench flow\/run\/node\/input\/output/i
     );
 
     for (const section of nonPsycheSections) {
@@ -976,6 +982,37 @@ describe("question flow simulation cycles", () => {
         /published route key[\s\S]*without guessing/i
       );
     }
+
+    const lifeEventReadiness = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "life_event"
+    )?.questionFlow.readinessCheck;
+    expect(lifeEventReadiness).toMatch(
+      /Life Event[\s\S]*working title[\s\S]*start\/end span[\s\S]*shared batch CRUD[\s\S]*calendar match[\s\S]*ticket import[\s\S]*travel-status/i
+    );
+
+    const movementReadiness = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "movement"
+    )?.questionFlow.readinessCheck;
+    expect(movementReadiness).toMatch(
+      /Movement lane[\s\S]*time window[\s\S]*place[\s\S]*stay[\s\S]*trip[\s\S]*settings change[\s\S]*correction/i
+    );
+    expect(movementReadiness).not.toMatch(/\bweekday|flow|run|node\b/i);
+
+    const lifeForceReadiness = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "life_force"
+    )?.questionFlow.readinessCheck;
+    expect(lifeForceReadiness).toMatch(
+      /Life Force lane[\s\S]*current-energy question[\s\S]*profile assumption[\s\S]*weekday curve[\s\S]*fatigue signal[\s\S]*planning effect/i
+    );
+    expect(lifeForceReadiness).not.toMatch(/\bmovement|stay|trip|flow|run|node\b/i);
+
+    const workbenchReadiness = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "workbench"
+    )?.questionFlow.readinessCheck;
+    expect(workbenchReadiness).toMatch(
+      /Workbench lane[\s\S]*saved flow[\s\S]*input contract[\s\S]*run[\s\S]*node[\s\S]*latest output[\s\S]*published result/i
+    );
+    expect(workbenchReadiness).not.toMatch(/\bmovement|weekday|fatigue|Life Event\b/i);
 
     const movementFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "movement"

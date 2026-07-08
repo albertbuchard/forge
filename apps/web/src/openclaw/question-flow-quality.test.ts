@@ -79,6 +79,9 @@ describe("question flow quality coverage", () => {
         purpose
       );
     }
+    expect(getSectionSlice(entityPlaybook, "Artifact")).toMatch(
+      /OpenAPI documents human-only download and encryption paths[\s\S]*intentionally absent from `forge_call_artifact_route`[\s\S]*must not be called by agents/i
+    );
   });
 
   it("keeps the shared stance centered on guided clarification instead of form filling", () => {

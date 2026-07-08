@@ -3071,7 +3071,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
     case "artifact":
-      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, GET /api/v1/artifacts/:id/versions and /audit for history, and GET or POST /api/v1/artifacts/:id/download plus POST /api/v1/artifacts/:id/encrypt only for human operator surfaces. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
+      return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, and GET /api/v1/artifacts/:id/versions plus /audit for history. Human-only download/password/encrypt routes exist in OpenAPI but are intentionally absent from agent route tools; do not call GET or POST /api/v1/artifacts/:id/download or POST /api/v1/artifacts/:id/encrypt from an agent. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
       return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
     case "questionnaire_run":
@@ -4138,7 +4138,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "After each substantive answer, briefly say what is becoming clearer and ask only for the next thing that still changes the record shape or usefulness.",
   "Use the active-listening turn contract before deepening: reflect the specific stake, working shape, or product object in one sentence; decide internally whether the next answer would change wording, placement, timing, route scope, support action, verification read, preservation choice, or consent; then ask one question. For Psyche, name the felt stake, protection, prediction, payoff, cost, or value conflict, and when a functional loop or belief sentence is already visible, offer one tentative hypothesis plus one fit-or-correction question instead of another broad exploration. For logistical records, keep the reflection short and ask for the operational detail.",
   "Before asking a follow-up, know what the user's answer would change: save, update, review, link, schedule, correct, run, publish, preserve, enrich, open the UI, or stop. If no possible answer would change the next action, summarize and act instead of asking.",
-  "Use a minimum save-readiness checkpoint before asking another follow-up. For normal batch entities, act when you have accepted wording, meaningful body, and any ownership or placement that changes later use; do not ask for tags, links, priority, dates, assignees, or status just because optional fields exist. For operational records, act when the target action plus the time, object, or state that makes it truthful is clear. For read-model surfaces, read once the practical question and answer-changing scope are clear. For specialized Movement, Life Events, Life Force, and Workbench writes, act once the lane plus target span/object/weekday/flow/run/node and intended correction or effect are clear.",
+  "Use a minimum save-readiness checkpoint before asking another follow-up. For normal batch entities, act when you have accepted wording, meaningful body, and any ownership or placement that changes later use; do not ask for tags, links, priority, dates, assignees, or status just because optional fields exist. For operational records, act when the target action plus the time, object, or state that makes it truthful is clear. For read-model surfaces, read once the practical question and answer-changing scope are clear. For specialized Movement, Life Events, Life Force, and Workbench writes, act once the lane plus surface-specific target is clear: Movement span/place/stay/trip/settings/correction, Life Event event/calendar match/ticket artifact/travel-status target, Life Force weekday/profile/signal/planning effect, or Workbench flow/run/node/input/output/preservation choice.",
   "For strategic, reflective, or emotionally meaningful non-Psyche records, ask what feels important to keep true before you ask for labels, dates, or taxonomy.",
   "For reflection-sensitive non-Psyche records such as questionnaire_instrument, questionnaire_run, self_observation, reflective note, wiki_page, sleep_session, workout_session, preference_judgment, and preference_signal, first ask what the reflection should help the user understand, decide, notice, remember, or change later; then keep the API posture exact: batch CRUD for normal stored records, questionnaire run actions for answer lifecycle, self-observation calendar reads plus observed-note writes, and wiki routes for wiki pages.",
   "For reusable records such as tags, event types, emotion definitions, preference contexts, or questionnaires, ask what distinction or decision the record should help with before you ask for wording.",
@@ -4239,7 +4239,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether this is an issue, one-session task, or subtask only when the level is not already obvious.",
       "Ask where it belongs in the hierarchy: project for an issue, issue for a task, or parent task for a subtask. Use goal or standalone only when the user is intentionally outside the PM hierarchy.",
       "Capture the execution contract in aiInstructions when the task is for an agent session.",
-      "Ask what would make it easier to do: due date, priority, owner, human/bot assignees, acceptance criteria, or brief context."
+      "Ask for due date, priority, owner, human/bot assignees, acceptance criteria, or brief context only when that detail changes execution, accountability, or verification; otherwise save the one-session work item once the action and placement are clear."
     ]
   },
   {
@@ -5296,11 +5296,23 @@ const THERAPEUTIC_QUESTION_FLOW_ENTITIES: ReadonlySet<string> = new Set([
 function buildQuestionFlowReadinessCheck(
   guide: (typeof AGENT_ONBOARDING_ENTITY_CATALOG)[number]
 ) {
+  if (guide.entityType === "life_event") {
+    return "Ready when the Life Event's working title or significance, start/end span or event target, place when it changes matching, and selected lane are clear: shared batch CRUD for ordinary saves and links, or the published Life Events route key for timeline, detail, calendar match, ticket import, or travel-status work.";
+  }
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
     return "Ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
+  if (guide.entityType === "movement") {
+    return "Ready when the Movement lane and the specific time window, place, stay, trip, movement box, settings change, correction, or preservation choice are clear enough to call the published route key without guessing.";
+  }
+  if (guide.entityType === "life_force") {
+    return "Ready when the Life Force lane and the current-energy question, profile assumption, weekday curve, fatigue signal, or planning effect are clear enough to call the published route key without guessing.";
+  }
+  if (guide.entityType === "workbench") {
+    return "Ready when the Workbench lane and the saved flow, input contract, run, node, latest output, published result, edit, execution, or preservation choice are clear enough to call the published route key without guessing.";
+  }
   if (guide.classification === "specialized_domain_surface") {
-    return "Ready when the dedicated lane plus target span, event, weekday, flow, run, node, correction, or preservation choice is clear enough to call the published route key without guessing.";
+    return "Ready when the dedicated lane plus the surface-specific target, correction, effect, or preservation choice are clear enough to call the published route key without guessing.";
   }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";

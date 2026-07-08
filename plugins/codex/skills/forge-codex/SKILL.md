@@ -304,7 +304,10 @@ Surface rule:
   checkpoint: if accepted wording, meaningful body, route lane, target object or time
   scope, and any ownership or placement that changes later use are already clear,
   summarize once and write, read, run, or update instead of collecting optional
-  fields.
+  fields. For Movement, Life Events, Life Force, and Workbench, interpret target
+  object or time scope in the surface's own nouns: movement span/place/stay/trip,
+  Life Event/calendar match/ticket/travel status, weekday/profile/fatigue signal,
+  or Workbench flow/run/node/input/output.
 - Run the no-question gate before every follow-up: ask only if the answer can change
   record type, accepted wording, hierarchy placement, owner/accountability, timing,
   route lane, target object, correction, link, verification read, run/publish/preserve

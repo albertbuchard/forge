@@ -322,6 +322,42 @@ describe("forge onboarding contract", () => {
         expect(flow.readinessCheck).toMatch(/read before asking write-shaped/i);
       }
     }
+    const readinessByType = new Map(
+      onboarding.entityCatalog.map((entry) => [
+        entry.entityType,
+        entry.questionFlow.readinessCheck
+      ])
+    );
+    expect(readinessByType.get("life_event")).toMatch(
+      /Life Event[\s\S]*working title[\s\S]*start\/end span[\s\S]*shared batch CRUD[\s\S]*published Life Events route key/i
+    );
+    expect(readinessByType.get("movement")).toMatch(
+      /Movement lane[\s\S]*time window[\s\S]*place[\s\S]*stay[\s\S]*trip[\s\S]*settings change[\s\S]*published route key/i
+    );
+    expect(readinessByType.get("movement")).not.toMatch(
+      /\bweekday|flow|run|node\b/i
+    );
+    expect(readinessByType.get("life_force")).toMatch(
+      /Life Force lane[\s\S]*current-energy question[\s\S]*profile assumption[\s\S]*weekday curve[\s\S]*fatigue signal[\s\S]*planning effect/i
+    );
+    expect(readinessByType.get("life_force")).not.toMatch(
+      /\bmovement|stay|trip|flow|run|node\b/i
+    );
+    expect(readinessByType.get("workbench")).toMatch(
+      /Workbench lane[\s\S]*saved flow[\s\S]*input contract[\s\S]*run[\s\S]*node[\s\S]*latest output[\s\S]*published result/i
+    );
+    expect(readinessByType.get("workbench")).not.toMatch(
+      /\bmovement|weekday|fatigue|Life Event\b/i
+    );
+    const artifactHint = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "artifact"
+    )?.questionFlow.apiAccessHint;
+    expect(artifactHint).toMatch(
+      /Human-only download\/password\/encrypt routes exist in OpenAPI[\s\S]*intentionally absent from agent route tools/i
+    );
+    expect(artifactHint).toMatch(
+      /do not call GET or POST \/api\/v1\/artifacts\/:id\/download or POST \/api\/v1\/artifacts\/:id\/encrypt from an agent/i
+    );
     const taskCatalog = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "task"
     );
@@ -357,6 +393,12 @@ describe("forge onboarding contract", () => {
     );
     expect(taskCatalog?.relationshipRules?.join(" ")).toMatch(
       /owner[\s\S]*assigneeUserIds/i
+    );
+    expect(taskCatalog?.questionFlow.askSequence.join(" ")).toMatch(
+      /due date, priority, owner, human\/bot assignees, acceptance criteria[\s\S]*only when that detail changes execution, accountability, or verification[\s\S]*save the one-session work item once the action and placement are clear/i
+    );
+    expect(taskCatalog?.questionFlow.askSequence.join(" ")).not.toMatch(
+      /Ask what would make it easier to do/i
     );
     const taskFields = new Set(
       taskCatalog?.fieldGuide?.map((field) => field.name) ?? []

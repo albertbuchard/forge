@@ -309,7 +309,10 @@ example, stake, or desired outcome before asking them to name the record.
 Before asking another follow-up, run the playbook's minimum save-readiness checkpoint:
 if accepted wording, meaningful body, route lane, target object or time scope, and any
 ownership or placement that changes later use are already clear, summarize once and
-write, read, run, or update instead of collecting optional fields.
+write, read, run, or update instead of collecting optional fields. For Movement, Life
+Events, Life Force, and Workbench, interpret target object or time scope in the
+surface's own nouns: movement span/place/stay/trip, Life Event/calendar match/ticket/travel
+status, weekday/profile/fatigue signal, or Workbench flow/run/node/input/output.
 Use the user-facing wording guard after openings, reads, writes, and confirmations:
 do not say "that sounds important" unless you name the specific stake; do not ask
 "what would you like to do with this?" when the user's verb or the read result
