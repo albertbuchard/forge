@@ -4,6 +4,12 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import { buildForgeHmrConfig } from "./apps/web/src/lib/vite-hmr";
 
+const testWorkerExecArgv = process.allowedNodeEnvironmentFlags.has(
+  "--no-experimental-webstorage"
+)
+  ? ["--no-experimental-webstorage"]
+  : [];
+
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
     return "/";
@@ -144,7 +150,15 @@ export default defineConfig(({ command }) => {
     test: {
       environment: "jsdom",
       setupFiles: path.resolve(__dirname, "vitest.setup.ts"),
-      include: ["src/**/*.test.{ts,tsx}"]
+      include: ["src/**/*.test.{ts,tsx}"],
+      poolOptions: {
+        threads: {
+          execArgv: testWorkerExecArgv
+        },
+        forks: {
+          execArgv: testWorkerExecArgv
+        }
+      }
     }
   };
 });

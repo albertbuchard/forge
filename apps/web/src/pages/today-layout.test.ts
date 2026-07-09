@@ -77,6 +77,19 @@ describe("normalizeTodayLayout", () => {
     expect(normalizeTodayLayout(customized)).toBe(customized);
   });
 
+  it("does not mistake an unsaved custom order for the generated default", () => {
+    const customized = layout([
+      "hero",
+      "calendar",
+      "runway",
+      "focus",
+      "metrics",
+      "life-force"
+    ]);
+
+    expect(normalizeTodayLayout(customized)).toBe(customized);
+  });
+
   it("is idempotent once the operational order is active", () => {
     const current = layout([
       "hero",

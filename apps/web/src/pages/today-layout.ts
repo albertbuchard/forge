@@ -8,6 +8,15 @@ const LEGACY_TODAY_CORE_ORDER = [
   "focus"
 ] as const;
 
+const GENERATED_TODAY_CORE_ORDER = [
+  "hero",
+  "life-force",
+  "metrics",
+  "runway",
+  "calendar",
+  "focus"
+] as const;
+
 const OPERATIONAL_TODAY_CORE_ORDER = [
   "hero",
   "runway",
@@ -31,7 +40,9 @@ function ordersEqual(left: string[], right: string[]) {
 export function normalizeTodayLayout(
   layout: SurfaceLayoutPayload
 ): SurfaceLayoutPayload {
-  const isGeneratedDefault = layout.updatedAt === new Date(0).toISOString();
+  const isGeneratedDefault =
+    layout.updatedAt === new Date(0).toISOString() &&
+    startsWithOrder(layout.order, GENERATED_TODAY_CORE_ORDER);
   const usesLegacyCoreOrder = startsWithOrder(
     layout.order,
     LEGACY_TODAY_CORE_ORDER

@@ -2,6 +2,7 @@ import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-worksp
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowRight } from "lucide-react";
 import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import {
   MiniCalendarWidget,
@@ -42,10 +43,10 @@ import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
 import type {
   MovementDayData,
-  SurfaceLayoutPayload,
   VitalsViewData
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { normalizeOverviewLayout } from "@/pages/overview-layout";
 
 const OVERVIEW_METRIC_HELP: Record<string, string> = {
   "Life Force":
@@ -59,68 +60,6 @@ const OVERVIEW_METRIC_HELP: Record<string, string> = {
   "Weekly XP":
     "Weekly XP is recent reward-ledger movement. It helps separate a genuinely active week from old accumulated progress."
 };
-
-function normalizeOverviewLayout(
-  layout: SurfaceLayoutPayload
-): SurfaceLayoutPayload {
-  const orderedIds = [
-    "gamification",
-    "summary",
-    "pipeline",
-    "body-signals",
-    "signals"
-  ] as const;
-  const nextOrder = [...layout.order];
-  let mutated = false;
-
-  for (const id of orderedIds) {
-    if (!nextOrder.includes(id)) {
-      nextOrder.push(id);
-      mutated = true;
-    }
-  }
-
-  const summaryIndex = nextOrder.indexOf("summary");
-  const pipelineIndex = nextOrder.indexOf("pipeline");
-  const bodySignalsIndex = nextOrder.indexOf("body-signals");
-  const signalsIndex = nextOrder.indexOf("signals");
-
-  if (
-    summaryIndex === -1 ||
-    pipelineIndex === -1 ||
-    bodySignalsIndex === -1 ||
-    signalsIndex === -1
-  ) {
-    return mutated
-      ? {
-          ...layout,
-          order: nextOrder
-        }
-      : layout;
-  }
-
-  if (
-    summaryIndex < pipelineIndex &&
-    pipelineIndex < bodySignalsIndex &&
-    bodySignalsIndex < signalsIndex &&
-    !mutated
-  ) {
-    return layout;
-  }
-
-  for (const id of orderedIds) {
-    const index = nextOrder.indexOf(id);
-    if (index !== -1) {
-      nextOrder.splice(index, 1);
-    }
-  }
-  const anchorIndex = nextOrder.indexOf("goals");
-  nextOrder.splice(anchorIndex === -1 ? 0 : anchorIndex, 0, ...orderedIds);
-  return {
-    ...layout,
-    order: nextOrder
-  };
-}
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -434,7 +373,7 @@ export function OverviewPage() {
         <PageHero
           title="Overview"
           titleText="Overview"
-          description={`${heroStatus}. Life Force, momentum, XP, goals, active projects, and top tasks all start here.`}
+          description={`${heroStatus}. Current capacity, progress, goals, work, health, and movement.`}
           badge={`Momentum ${snapshot.metrics.momentumScore}`}
         />
       )
@@ -445,7 +384,7 @@ export function OverviewPage() {
       description: "Selected-user level, XP, streak, trophy, and unlock state.",
       defaultWidth: 12,
       defaultHeight: 4,
-      removable: false,
+      defaultHidden: true,
       minHeight: 3,
       surfaceChrome: "none",
       defaultTitleVisible: false,
@@ -524,20 +463,23 @@ export function OverviewPage() {
       defaultWidth: 12,
       defaultHeight: 3,
       minWidth: 6,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: ({ compact }) => (
-        <div className="rounded-[24px] bg-[var(--ui-surface-1)] p-4">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Momentum summary
               </div>
               <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                Core live metrics
+                Current state
               </div>
-              <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Life Force, momentum, XP, and instant headroom stay grouped
-                here.
-              </div>
+              {!compact ? (
+                <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Capacity and recent progress across Forge.
+                </div>
+              ) : null}
             </div>
             <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
               {heroStatus}
@@ -552,7 +494,7 @@ export function OverviewPage() {
             {summaryMetrics.map((metric) => (
               <div
                 key={metric.label}
-                className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
+                className="min-w-0 border-l border-[var(--ui-border-subtle)] py-1 pl-3"
               >
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   <span>{metric.label}</span>
@@ -566,9 +508,11 @@ export function OverviewPage() {
                 <div className="mt-1 text-lg font-semibold text-[var(--ui-ink-strong)]">
                   {metric.value}
                 </div>
-                <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
-                  {metric.detail}
-                </div>
+                {!compact ? (
+                  <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-faint)]">
+                    {metric.detail}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -583,6 +527,9 @@ export function OverviewPage() {
       defaultWidth: 12,
       defaultHeight: 7,
       minWidth: 6,
+      defaultHidden: true,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
       render: () =>
         snapshot.lifeForce ? (
           <LifeForceOverviewWorkspace
@@ -607,7 +554,8 @@ export function OverviewPage() {
       defaultWidth: 12,
       defaultHeight: 4,
       minWidth: 6,
-      render: () => (
+      defaultDescriptionVisible: false,
+      render: ({ compact }) => (
         <div className="grid min-w-0 gap-4 xl:grid-cols-3">
           <Card className="rounded-[24px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex items-start justify-between gap-3">
@@ -629,7 +577,9 @@ export function OverviewPage() {
             </div>
             <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               {snapshot.lifeForce
-                ? `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today. Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)} with ${formatLifeForceRate(snapshot.lifeForce.currentDrainApPerHour)} current drain.`
+                ? compact
+                  ? `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today.`
+                  : `${Math.round(snapshot.lifeForce.spentTodayAp)} / ${Math.round(snapshot.lifeForce.dailyBudgetAp)} AP spent today. Remaining ${formatLifeForceAp(snapshot.lifeForce.remainingAp)} with ${formatLifeForceRate(snapshot.lifeForce.currentDrainApPerHour)} current drain.`
                 : "Once Life Force is configured, this block will show today's budget, remaining headroom, and live drain."}
             </div>
           </Card>
@@ -676,7 +626,7 @@ export function OverviewPage() {
                     </span>
                   </div>
                 ) : null}
-                {fitnessSummary ? (
+                {fitnessSummary && !compact ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Exercise</span>
                     <span className="font-medium text-[var(--ui-ink-strong)]">
@@ -684,7 +634,7 @@ export function OverviewPage() {
                     </span>
                   </div>
                 ) : null}
-                {fitnessSummary ? (
+                {fitnessSummary && !compact ? (
                   <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
                     {fitnessSummary.topWorkoutType
                       ? `${fitnessSummary.topWorkoutType} is the top workout type right now.`
@@ -693,17 +643,19 @@ export function OverviewPage() {
                 ) : null}
                 {vitalsHighlightRows.length > 0 ? (
                   <div className="mt-1 grid gap-2">
-                    {vitalsHighlightRows.map((metric) => (
-                      <div
-                        key={metric.metric}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2"
-                      >
-                        <span>{metric.label}</span>
-                        <span className="font-medium text-[var(--ui-ink-strong)]">
-                          {formatVitalOverviewValue(metric)}
-                        </span>
-                      </div>
-                    ))}
+                    {vitalsHighlightRows
+                      .slice(0, compact ? 1 : vitalsHighlightRows.length)
+                      .map((metric) => (
+                        <div
+                          key={metric.metric}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2"
+                        >
+                          <span>{metric.label}</span>
+                          <span className="font-medium text-[var(--ui-ink-strong)]">
+                            {formatVitalOverviewValue(metric)}
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 ) : null}
               </div>
@@ -783,16 +735,19 @@ export function OverviewPage() {
     },
     {
       id: "signals",
-      title: "Action signals",
-      description: "Direct links to the next things worth opening.",
-      defaultWidth: 7,
+      title: "Next actions",
+      description: "Open the work, reward, or evidence that needs attention.",
+      defaultWidth: 12,
       defaultHeight: 4,
-      minWidth: 4,
-      render: () => (
+      minWidth: 6,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: ({ compact }) => (
         <FlagshipSignalDeck
           eyebrow="Actions"
-          title="Open what matters now"
-          description="These cards stay compact by default so the page can fit more live context at once."
+          title="Next actions"
+          description="Open the top task, next reward, or latest recorded activity."
+          compact={compact}
           items={[
             {
               id: "top-task",
@@ -858,11 +813,12 @@ export function OverviewPage() {
       title: "Goals",
       description:
         "Long-range direction stays visible without taking over the whole page.",
-      defaultWidth: 8,
+      defaultWidth: 12,
       defaultHeight: 5,
-      minWidth: 4,
+      minWidth: 6,
+      defaultDescriptionVisible: false,
       render: ({ compact }) => (
-        <div className="grid gap-3">
+        <div className={cn("grid gap-3", !compact && "xl:grid-cols-2")}>
           {snapshot.overview.activeGoals
             .slice(0, compact ? 2 : 4)
             .map((goal) => (
@@ -933,102 +889,121 @@ export function OverviewPage() {
       defaultWidth: 12,
       defaultHeight: 5,
       minWidth: 6,
+      defaultDescriptionVisible: false,
       render: ({ compact }) => (
-        <div className="grid min-w-0 gap-4 xl:grid-cols-3">
-          <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-              Projects
-            </div>
-            {snapshot.overview.projects
-              .slice(0, compact ? 3 : 4)
-              .map((project) => (
-                <Link
-                  key={project.id}
-                  to={`/projects/${project.id}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                >
-                  <div className="flex min-w-0 items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                        {project.title}
-                      </div>
-                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                        {projectLookup.get(project.id)?.status ?? "active"}
-                      </div>
-                    </div>
-                    <Badge wrap className="max-w-[7rem] shrink-0">
-                      {project.earnedPoints} xp
-                    </Badge>
-                  </div>
-                  {!compact ? (
-                    <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                      {project.description}
-                    </div>
-                  ) : null}
-                </Link>
-              ))}
-          </div>
-          <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-              Due habits
-            </div>
-            {snapshot.overview.dueHabits
-              .slice(0, compact ? 3 : 4)
-              .map((habit) => (
-                <Link
-                  key={habit.id}
-                  to="/habits"
-                  aria-label={`Open habit ${habit.title}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                >
-                  <div className="flex min-w-0 items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                        {habit.title}
-                      </div>
-                      {!compact ? (
-                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                          {habit.description}
+        <div className="min-w-0">
+          <div className="grid min-w-0 gap-4 xl:grid-cols-3">
+            <div className="grid min-w-0 content-start gap-3">
+              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                Projects
+              </div>
+              {snapshot.overview.projects
+                .slice(0, compact ? 2 : 3)
+                .map((project) => (
+                  <Link
+                    key={project.id}
+                    to={`/projects/${project.id}`}
+                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
+                          {project.title}
                         </div>
-                      ) : null}
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                          {projectLookup.get(project.id)?.status ?? "active"}
+                        </div>
+                      </div>
+                      <Badge wrap className="max-w-[7rem] shrink-0">
+                        {project.earnedPoints} xp
+                      </Badge>
                     </div>
-                    <Badge
-                      wrap
-                      className="max-w-[7rem] shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]"
-                    >
-                      {habit.rewardXp} xp
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
-          </div>
-          <div className="grid min-w-0 gap-3">
-            <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-              Top tasks
+                    {!compact ? (
+                      <div className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                        {project.description}
+                      </div>
+                    ) : null}
+                  </Link>
+                ))}
             </div>
-            {snapshot.overview.topTasks
-              .slice(0, compact ? 3 : 4)
-              .map((task) => (
-                <Link
-                  key={task.id}
-                  to={`/tasks/${task.id}`}
-                  className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
-                >
-                  <div className="flex min-w-0 items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
-                        {task.title}
+            <div className="grid min-w-0 content-start gap-3">
+              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                Due habits
+              </div>
+              {snapshot.overview.dueHabits
+                .slice(0, compact ? 2 : 3)
+                .map((habit) => (
+                  <Link
+                    key={habit.id}
+                    to="/habits"
+                    aria-label={`Open habit ${habit.title}`}
+                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
+                          {habit.title}
+                        </div>
+                        {!compact ? (
+                          <div className="mt-1 line-clamp-2 text-sm text-[var(--ui-ink-soft)]">
+                            {habit.description}
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                        {task.status.replaceAll("_", " ")}
-                      </div>
+                      <Badge
+                        wrap
+                        className="max-w-[7rem] shrink-0 bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]"
+                      >
+                        {habit.rewardXp} xp
+                      </Badge>
                     </div>
-                    <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                      {task.points} xp
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))}
+            </div>
+            <div className="grid min-w-0 content-start gap-3">
+              <div className="text-[12px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                Top tasks
+              </div>
+              {snapshot.overview.topTasks
+                .slice(0, compact ? 2 : 3)
+                .map((task) => (
+                  <Link
+                    key={task.id}
+                    to={`/tasks/${task.id}`}
+                    className="block min-w-0 max-w-full rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
+                          {task.title}
+                        </div>
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                          {task.status.replaceAll("_", " ")}
+                        </div>
+                      </div>
+                      <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+                        {task.points} xp
+                      </Badge>
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-[var(--ui-border-subtle)] pt-3">
+            {[
+              ["All projects", "/projects"],
+              ["All habits", "/habits"],
+              ["All tasks", "/kanban"]
+            ].map(([label, href]) => (
+              <Link
+                key={href}
+                to={href}
+                className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--ui-ink-medium)] transition hover:text-[var(--ui-ink-strong)]"
+              >
+                {label}
+                <ArrowRight className="size-3.5" />
+              </Link>
+            ))}
           </div>
         </div>
       )

@@ -58,12 +58,19 @@ vi.mock("@/components/customization/ai-surface-workspace", () => ({
   }: {
     baseWidgets: Array<{
       id: string;
+      defaultHidden?: boolean;
       render: (args: { compact: boolean }) => ReactNode;
     }>;
   }) => (
     <div>
       {baseWidgets.map((widget) => (
-        <section key={widget.id}>{widget.render({ compact: false })}</section>
+        <section
+          key={widget.id}
+          data-testid={`overview-widget-${widget.id}`}
+          data-default-hidden={String(Boolean(widget.defaultHidden))}
+        >
+          {widget.render({ compact: false })}
+        </section>
       ))}
     </div>
   )
@@ -613,7 +620,7 @@ describe("OverviewPage", () => {
 
     renderOverviewPage();
 
-    const summaryHeading = screen.getAllByText("Core live metrics")[0]!;
+    const summaryHeading = screen.getAllByText("Current state")[0]!;
     const signalsHeading = screen.getByText("Signals");
     expect(
       summaryHeading.compareDocumentPosition(signalsHeading) &
@@ -700,6 +707,18 @@ describe("OverviewPage", () => {
     expect(
       screen.getByRole("link", { name: /Open rewards Level 8 threshold/i })
     ).toHaveAttribute("href", "/rewards");
+    expect(screen.getByRole("link", { name: /All projects/i })).toHaveAttribute(
+      "href",
+      "/projects"
+    );
+    expect(screen.getByRole("link", { name: /All habits/i })).toHaveAttribute(
+      "href",
+      "/habits"
+    );
+    expect(screen.getByRole("link", { name: /All tasks/i })).toHaveAttribute(
+      "href",
+      "/kanban"
+    );
   });
 
   it("renders the overview Life Force surface in compact mode", () => {
@@ -714,6 +733,29 @@ describe("OverviewPage", () => {
     expect(LifeForceOverviewWorkspaceMock).toHaveBeenCalledWith(
       expect.objectContaining({ showEditor: false }),
       undefined
+    );
+  });
+
+  it("keeps detailed reward and Life Force workspaces optional by default", () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: [],
+      refresh: vi.fn()
+    });
+
+    renderOverviewPage();
+
+    expect(screen.getByTestId("overview-widget-gamification")).toHaveAttribute(
+      "data-default-hidden",
+      "true"
+    );
+    expect(screen.getByTestId("overview-widget-life-force")).toHaveAttribute(
+      "data-default-hidden",
+      "true"
+    );
+    expect(screen.getByTestId("overview-widget-summary")).toHaveAttribute(
+      "data-default-hidden",
+      "false"
     );
   });
 
