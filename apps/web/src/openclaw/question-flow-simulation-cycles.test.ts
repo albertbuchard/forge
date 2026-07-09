@@ -970,6 +970,25 @@ describe("question flow simulation cycles", () => {
       );
     }
 
+    const selfObservationFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "self_observation"
+    )?.questionFlow;
+    expect(selfObservationFlow?.questionStyle).toBe(
+      "psyche_adjacent_active_listening"
+    );
+    expect(selfObservationFlow?.readinessCheck).toMatch(
+      /observed situation[\s\S]*timestamp or observedAt date[\s\S]*at least one meaningful[\s\S]*cue[\s\S]*emotion or body signal[\s\S]*thought or meaning[\s\S]*behavior or urge[\s\S]*consequence/i
+    );
+    expect(selfObservationFlow?.readinessCheck).toMatch(
+      /stronger Psyche container[\s\S]*trigger_report[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*mode_profile[\s\S]*emotion_definition[\s\S]*accepted or corrected by the user/i
+    );
+    expect(selfObservationFlow?.askSequence.join("\n")).toMatch(
+      /ask only one next question[\s\S]*does not require every link in the chain/i
+    );
+    expect(selfObservationFlow?.apiAccessHint).toMatch(
+      /frontmatter\.observedAt[\s\S]*forge_get_self_observation_calendar[\s\S]*forge_create_entities/i
+    );
+
     for (const entityType of ["movement", "life_force", "workbench"] as const) {
       const entry = onboarding.entityCatalog.find(
         (entry) => entry.entityType === entityType
@@ -1033,6 +1052,30 @@ describe("question flow simulation cycles", () => {
     )?.questionFlow;
     expect(workbenchFlow?.askSequence.join("\n")).toMatch(
       /read the saved flow, run, node result, latest node output, or published output before asking edit-shaped questions/i
+    );
+
+    const weightLossFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "weight_loss"
+    )?.questionFlow;
+    expect(weightLossFlow?.questionStyle).toBe("read_model_practical_scope");
+    expect(weightLossFlow?.readinessCheck).toMatch(
+      /practical food-body question[\s\S]*read before asking write-shaped follow-ups[\s\S]*dedicated nutrition action path[\s\S]*food log[\s\S]*body check-in[\s\S]*gut check-in[\s\S]*N-of-1 experiment/i
+    );
+    expect(weightLossFlow?.apiAccessHint).toMatch(
+      /forge_get_weight_loss_overview[\s\S]*forge_log_food[\s\S]*forge_log_body_checkin[\s\S]*forge_log_gut_checkin[\s\S]*forge_start_nutrition_experiment/i
+    );
+
+    const calendarConnectionFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "calendar_connection"
+    )?.questionFlow;
+    expect(calendarConnectionFlow?.askSequence.join("\n")).toMatch(
+      /updating, rediscovering, syncing, or removing an existing connection[\s\S]*which connection[\s\S]*exact lifecycle action/i
+    );
+    expect(calendarConnectionFlow?.askSequence.join("\n")).toMatch(
+      /discovery before first setup[\s\S]*connection-specific discovery before changing selected calendars/i
+    );
+    expect(calendarConnectionFlow?.readinessCheck).toMatch(
+      /provider or existing connection[\s\S]*selected-calendar change[\s\S]*sync[\s\S]*rediscovery[\s\S]*removal target[\s\S]*published calendar connection route/i
     );
 
     const specializedCapsules = [

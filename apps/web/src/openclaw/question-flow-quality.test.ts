@@ -48,7 +48,7 @@ describe("question flow quality coverage", () => {
       ["Work Adjustment", /time correction belong to/i, /truthfully/i],
       ["Operator Overview", /understand about Forge overall/i, /read-model-only operator surface/i],
       ["Operator Context", /current work, risk, or next move/i, /read-model-only operator surface/i],
-      ["Self Observation", /what happened in the situation/i, /situation, cue, emotion\/body, thought\/meaning, behavior\/urge, and consequence/i],
+      ["Self Observation", /what happened in the situation/i, /whichever parts are actually present/i],
       ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
       ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
       ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
@@ -81,6 +81,35 @@ describe("question flow quality coverage", () => {
     }
     expect(getSectionSlice(entityPlaybook, "Artifact")).toMatch(
       /OpenAPI documents human-only download and encryption paths[\s\S]*intentionally absent from `forge_call_artifact_route`[\s\S]*must not be called by agents/i
+    );
+    const selfObservationSection = getSectionSlice(
+      entityPlaybook,
+      "Self Observation"
+    );
+    expect(selfObservationSection).toMatch(/Psyche-adjacent note-backed workflow/i);
+    expect(selfObservationSection).toMatch(
+      /observed `note` with\s+`frontmatter\.observedAt`/i
+    );
+    expect(selfObservationSection).toMatch(/stronger Psyche container/i);
+    const weightLossSection = getSectionSlice(entityPlaybook, "Weight Loss");
+    expect(weightLossSection).toMatch(
+      /overview, food log, body check-in,[\s\S]*gut check-in,[\s\S]*N-of-1 experiment path/i
+    );
+    expect(weightLossSection).toMatch(
+      /searched `foodId`, barcode match,[\s\S]*researched calories, protein, carbohydrate, and fat/i
+    );
+    const calendarConnectionSection = getSectionSlice(
+      entityPlaybook,
+      "Calendar Connection"
+    );
+    expect(calendarConnectionSection).toMatch(
+      /updating or removing an existing connection[\s\S]*which connection[\s\S]*exact lifecycle action/i
+    );
+    expect(calendarConnectionSection).toMatch(
+      /rediscovery, selected-calendar update, sync, or removal/i
+    );
+    expect(calendarConnectionSection).toMatch(
+      /GET \/api\/v1\/calendar\/connections\/:id\/discovery[\s\S]*PATCH \/api\/v1\/calendar\/connections\/:id[\s\S]*DELETE \/api\/v1\/calendar\/connections\/:id/i
     );
   });
 
@@ -515,7 +544,7 @@ describe("question flow quality coverage", () => {
       /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
     );
     expect(entityPlaybook).toMatch(
-      /what happened in the situation[\s\S]*cue, trigger[\s\S]*emotion, body signal[\s\S]*what the user did/i
+      /what happened in the situation[\s\S]*Reflect what seems most important[\s\S]*Ask one next question[\s\S]*Do not require every link/i
     );
     expect(entityPlaybook).toMatch(
       /Do not promote self-observation over functional analysis/i

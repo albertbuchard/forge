@@ -4058,7 +4058,9 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ],
     searchHints: [
       "Read the self-observation calendar before proposing new reflected notes or edits.",
-      "Write through note creation or note update with frontmatter.observedAt instead of inventing a standalone self-observation mutation route."
+      "Write through note creation or note update with frontmatter.observedAt instead of inventing a standalone self-observation mutation route.",
+      "After the situation and observed time are clear, ask only one next question about the most meaningful missing cue, emotion or body signal, thought or meaning, behavior or urge, or consequence; a lightweight observation does not require every link in the chain.",
+      "If the material is already an emotionally meaningful episode, recurring functional loop, central belief, or part-state, offer trigger_report, behavior_pattern, belief_entry, mode_guide_session, or mode_profile as the stronger container and let the user confirm or correct that fit."
     ],
     fieldGuide: []
   }),
@@ -4387,6 +4389,8 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether the goal is read-only visibility, writable planning, or both.",
       "Ask what workflow they are trying to unlock so the connection stays grounded in a real use case.",
       "Ask only for the next provider-specific step that still matters, such as auth flow, label, or calendar selection.",
+      "If the user is updating, rediscovering, syncing, or removing an existing connection, ask which connection and what exact lifecycle action they want before touching credentials or calendar selection.",
+      "Use discovery before first setup and connection-specific discovery before changing selected calendars on an existing connection.",
       "Move into the actual connection flow once the setup goal is clear."
     ]
   },
@@ -4448,16 +4452,16 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "What happened in the situation, and what did you feel, think, or do next?",
     coachingGoal:
-      "Capture one observed episode as situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence, then choose the stronger Psyche or wiki container when one is visible.",
+      "Capture one observed episode with enough of the situation, cue, emotion/body, thought/meaning, behavior/urge, or consequence to be useful later without forcing every link, then offer a stronger Psyche or wiki container only when one is visible.",
     askSequence: [
       "Ask what happened in the situation.",
-      "Ask what cue, trigger, or body shift made the episode noticeable.",
-      "Ask what emotion, body signal, thought, or meaning showed up.",
-      "Ask what behavior showed up: what the user did, wanted to do, avoided, or repeated next.",
-      "Ask what the immediate consequence was, including short-term relief or cost if it is visible.",
+      "Ask when it happened or what observedAt date should anchor the note if the timing is not already clear.",
+      "Reflect what seems most important in what the user already said.",
+      "Ask only one next question about the most meaningful missing cue, emotion or body signal, thought or meaning, behavior or urge, or consequence; a lightweight observation does not require every link in the chain.",
+      "Ask what happened next only when the consequence changes how useful the note will be or which container fits.",
       "Decide whether this should stay a lightweight self-observation or become a trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, emotion_definition, or wiki page.",
       "Remember that self-observation is note-backed and should be written through an observed note with frontmatter.observedAt only when a lightweight observation is the right container.",
-      "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, flashcard for a rehearsable reminder during an urge or trigger, and wiki_page for durable memory."
+      "Do not promote self-observation over functional analysis: use behavior_pattern for recurring loops, trigger_report for one emotionally meaningful episode, mode_guide_session or mode_profile for a central part-state, belief_entry for a central sentence, flashcard for a rehearsable reminder during an urge or trigger, and wiki_page for durable memory, then let the user accept or correct the proposed fit."
     ]
   },
   {
@@ -5302,6 +5306,9 @@ function buildQuestionFlowReadinessCheck(
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
     return "Ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
+  if (guide.entityType === "self_observation") {
+    return "Ready to save a lightweight note-backed observation when the observed situation and timestamp or observedAt date are clear, at least one meaningful cue, emotion or body signal, thought or meaning, behavior or urge, or consequence is present, and any stronger Psyche container such as trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, or emotion_definition has been offered only when the material supports it and accepted or corrected by the user.";
+  }
   if (guide.entityType === "movement") {
     return "Ready when the Movement lane and the specific time window, place, stay, trip, movement box, settings change, correction, or preservation choice are clear enough to call the published route key without guessing.";
   }
@@ -5311,8 +5318,14 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "workbench") {
     return "Ready when the Workbench lane and the saved flow, input contract, run, node, latest output, published result, edit, execution, or preservation choice are clear enough to call the published route key without guessing.";
   }
+  if (guide.entityType === "weight_loss") {
+    return "Ready when the practical food-body question and answer-changing scope are clear enough to read before asking write-shaped follow-ups, or when the dedicated nutrition action path is clear: food log, body check-in, appearance check-in, subjective food effect, gut check-in, pattern read, or N-of-1 experiment.";
+  }
   if (guide.classification === "specialized_domain_surface") {
     return "Ready when the dedicated lane plus the surface-specific target, correction, effect, or preservation choice are clear enough to call the published route key without guessing.";
+  }
+  if (guide.entityType === "calendar_connection") {
+    return "Ready when the calendar provider or existing connection, intended workflow, lifecycle action, writable/read-only mode, selected-calendar change, sync, rediscovery, or removal target is clear enough to use the published calendar connection route instead of batch CRUD.";
   }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
@@ -5331,6 +5344,9 @@ function buildQuestionFlowStyle(
 ) {
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
     return "therapist_like_active_listening" as const;
+  }
+  if (guide.entityType === "self_observation") {
+    return "psyche_adjacent_active_listening" as const;
   }
   if (guide.classification === "specialized_domain_surface") {
     return "dedicated_route_active_listening" as const;

@@ -314,8 +314,16 @@ describe("forge onboarding contract", () => {
         expect(flow.readinessCheck).toMatch(/without guessing/i);
       }
       if (catalogEntry.classification === "action_workflow_entity") {
-        expect(flow.questionStyle).toBe("operational_fast_path");
-        expect(flow.readinessCheck).toMatch(/dedicated workflow route/i);
+        if (catalogEntry.entityType === "self_observation") {
+          expect(flow.questionStyle).toBe("psyche_adjacent_active_listening");
+          expect(flow.readinessCheck).toMatch(/note-backed observation/i);
+          expect(flow.readinessCheck).toMatch(/stronger Psyche container/i);
+          expect(flow.readinessCheck).toMatch(/at least one meaningful/i);
+          expect(flow.readinessCheck).toMatch(/accepted or corrected by the user/i);
+        } else {
+          expect(flow.questionStyle).toBe("operational_fast_path");
+          expect(flow.readinessCheck).toMatch(/dedicated workflow route/i);
+        }
       }
       if (catalogEntry.classification === "read_model_only_surface") {
         expect(flow.questionStyle).toBe("read_model_practical_scope");
@@ -348,6 +356,9 @@ describe("forge onboarding contract", () => {
     );
     expect(readinessByType.get("workbench")).not.toMatch(
       /\bmovement|weekday|fatigue|Life Event\b/i
+    );
+    expect(readinessByType.get("calendar_connection")).toMatch(
+      /calendar provider or existing connection[\s\S]*intended workflow[\s\S]*lifecycle action[\s\S]*writable\/read-only mode[\s\S]*selected-calendar change[\s\S]*sync[\s\S]*rediscovery[\s\S]*removal target[\s\S]*published calendar connection route[\s\S]*batch CRUD/i
     );
     const artifactHint = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "artifact"

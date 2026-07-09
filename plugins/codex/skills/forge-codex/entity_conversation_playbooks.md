@@ -1915,22 +1915,23 @@ Preferred opening question:
 
 ## Self Observation
 
-Aim: capture one observed episode in a structured chain without letting a loose note
-replace the stronger Psyche model. A self-observation should usually name the
-situation, cue, emotion/body, thought/meaning, behavior/urge, and consequence. If the
-material reveals a recurring loop, belief, mode, schema theme, or
-trigger chain, route toward the structured Psyche record instead of parking it as an
-unstructured observation.
+Aim: capture one observed episode with enough structure to be useful later without
+turning a lightweight note into a forced functional analysis. A self-observation can
+name whichever parts are actually present: situation, cue, emotion/body,
+thought/meaning, behavior/urge, or consequence. If the material reveals a recurring
+loop, belief, mode, schema theme, or trigger chain, offer the stronger Psyche record
+and let the user confirm or correct that fit.
 
 Arc:
 
 1. Ask what happened in the situation.
-2. Ask what cue, trigger, or shift made the episode noticeable.
-3. Ask what emotion, body signal, thought, or meaning showed up.
-4. Ask what behavior showed up: what the user did, wanted to do, avoided, or
-   repeated next.
-5. Ask what happened immediately after, including short-term relief or cost if it is
-   visible.
+2. Ask when it happened, or what observed date/time should anchor the note, if the
+   timing is not already clear.
+3. Reflect what seems most important in what the user already said.
+4. Ask one next question about the most meaningful missing cue, emotion/body signal,
+   thought/meaning, behavior/urge, or consequence. Do not require every link.
+5. Ask about what happened next only when it changes the usefulness or likely
+   container of the observation.
 6. Decide whether this should stay a lightweight self-observation or become a
    `trigger_report`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
    `mode_guide_session`, `flashcard`, `event_type`, `emotion_definition`, or wiki
@@ -1950,10 +1951,11 @@ Helpful follow-up lanes:
 
 Route note:
 
-- `self_observation` is note-backed. Read the calendar first, then create or update an
-  observed `note` with `frontmatter.observedAt` instead of inventing a standalone CRUD
-  write. The read path is `/api/v1/psyche/self-observation/calendar`; the stored
-  write is a linked `note` through the shared batch entity route.
+- `self_observation` is a Psyche-adjacent note-backed workflow, not generic quick
+  capture. Read the calendar first, then create or update an observed `note` with
+  `frontmatter.observedAt` instead of inventing a standalone CRUD write. The read
+  path is `/api/v1/psyche/self-observation/calendar`; the stored write is a linked
+  `note` through the shared batch entity route.
 - Do not promote self-observation over functional analysis. If the user is describing
   a loop, use `behavior_pattern`; if they are describing one emotionally meaningful
   episode, use `trigger_report`; if a part-state is central, use `mode_guide_session`
@@ -1962,15 +1964,16 @@ Route note:
 - If the user wants to remember a source, concept, book, article, or durable personal
   explanation, use `wiki_page` rather than self-observation.
 
-If the user already gave the event or timing, move straight to the missing part of the
-chain: cue, emotion, thought, behavior, consequence, or structured Psyche link.
+If the user already gave the event or timing, reflect what stands out and ask only for
+the one missing part that would make the note more useful or change its container.
 
 Ready to save when:
 
-- the situation/event is clear
-- at least one emotion/body signal, thought/meaning, or behavior/urge is clear
-- timing is clear enough
-- any better structured container has been chosen or linked
+- the situation/event and observed time are clear
+- at least one meaningful cue, emotion/body signal, thought/meaning, behavior/urge,
+  or consequence is clear enough to be useful later
+- any stronger Psyche container supported by the material has been accepted or
+  corrected by the user
 
 Preferred opening question:
 
@@ -2200,11 +2203,14 @@ Route note:
   database plus public nutrition catalogs. `forge_log_food` rejects custom items
   without calories, protein, carbohydrate, and fat.
 
-Ready to review when:
+Ready to review or act when:
 
 - the food, body, training-fuel, gut, craving, appearance, energy, or experiment
-  question is clear enough to choose the overview, log, check-in, or experiment
-  path
+  question is clear enough to choose the overview, food log, body check-in,
+  appearance check-in, subjective food effect, gut check-in, pattern read, or
+  N-of-1 experiment path
+- if logging food, the item can reuse a searched `foodId`, barcode match, or has
+  researched calories, protein, carbohydrate, and fat
 
 Preferred opening question:
 
@@ -2291,9 +2297,11 @@ Route note:
 Ready to act when:
 
 - the provider is clear
+- the existing connection is clear if this is rediscovery, selected-calendar update,
+  sync, or removal
 - the intended sync behavior is clear enough
 - the user-facing workflow that depends on the connection is clear enough
-- the next setup step is obvious
+- the next setup, auth, calendar-selection, sync, or removal step is obvious
 
 Preferred opening question:
 
