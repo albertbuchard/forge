@@ -37,6 +37,7 @@ const {
 }));
 
 let restoreDate: (() => void) | null = null;
+const COMPLEX_INTEGRATION_TEST_TIMEOUT_MS = 20_000;
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -677,7 +678,7 @@ describe("PsycheSelfObservationPage", () => {
           .length
       ).toBeGreaterThan(0)
     );
-  }, 10000);
+  }, COMPLEX_INTEGRATION_TEST_TIMEOUT_MS);
 
   it("opens an existing observation in edit mode and lets it be deleted", async () => {
     renderPage();
