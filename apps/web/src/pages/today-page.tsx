@@ -30,6 +30,7 @@ import { ProgressMeter } from "@/components/ui/progress-meter";
 import { getCalendarOverview } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { CalendarEvent } from "@/lib/types";
+import { normalizeTodayLayout } from "@/pages/today-layout";
 
 const MAX_VISIBLE_TODAY_EVENTS = 5;
 const todayEyebrowClass =
@@ -184,11 +185,11 @@ export function TodayPage() {
     },
     {
       id: "life-force",
-      title: "Life Force",
-      description: "Instant headroom, AP use today, and tiredness signals.",
-      defaultWidth: 12,
+      title: "Capacity",
+      description: "Available capacity, planned load, and fatigue today.",
+      defaultWidth: 4,
       defaultHeight: 3,
-      minWidth: 5,
+      minWidth: 4,
       render: () => (
         <LifeForceTodayCard
           selectedUserIds={shell.selectedUserIds}
@@ -200,9 +201,8 @@ export function TodayPage() {
     {
       id: "metrics",
       title: "Live metrics",
-      description:
-        "XP, level, and momentum stay visible but lighter than before.",
-      defaultWidth: 5,
+      description: "XP, level, momentum, and the next reward.",
+      defaultWidth: 6,
       defaultHeight: 4,
       minWidth: 4,
       render: ({ compact }) => (
@@ -269,12 +269,12 @@ export function TodayPage() {
     },
     {
       id: "runway",
-      title: "Runway",
-      description: "The execution lane itself can be widened or narrowed.",
-      defaultWidth: 7,
+      title: "Tasks",
+      description: "Choose, start, or update today's tasks.",
+      defaultWidth: 8,
       defaultHeight: 6,
       minWidth: 5,
-      render: () => (
+      render: ({ compact }) => (
         <TodayRunwayBox>
           <DailyRunway
             tasks={shell.snapshot.overview.topTasks}
@@ -290,6 +290,7 @@ export function TodayPage() {
             onMove={async (taskId, nextStatus) => {
               await shell.patchTaskStatus(taskId, nextStatus);
             }}
+            compact={compact}
           />
         </TodayRunwayBox>
       )
@@ -297,9 +298,8 @@ export function TodayPage() {
     {
       id: "calendar",
       title: "Calendar",
-      description:
-        "Today's events stay grouped with their results instead of splitting search from outcome.",
-      defaultWidth: 5,
+      description: "Review today's scheduled events.",
+      defaultWidth: 6,
       defaultHeight: 5,
       minWidth: 4,
       render: ({ compact }) => (
@@ -380,8 +380,7 @@ export function TodayPage() {
     {
       id: "focus",
       title: "Current focus",
-      description:
-        "Current task, comeback task, and due habits stay in one movable stack.",
+      description: "Current work, recovery work, and due habits.",
       defaultWidth: 12,
       defaultHeight: 4,
       minWidth: 6,
@@ -530,5 +529,11 @@ export function TodayPage() {
     }
   ];
 
-  return <AiSurfaceWorkspace surfaceId="today" baseWidgets={widgets} />;
+  return (
+    <AiSurfaceWorkspace
+      surfaceId="today"
+      baseWidgets={widgets}
+      normalizeLayout={normalizeTodayLayout}
+    />
+  );
 }

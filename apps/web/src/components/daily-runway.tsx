@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCheck, Crosshair, Play, ShieldAlert } from "lucide-react";
+import { ArrowRight, CheckCheck, Crosshair, Play } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { EntityNoteCountLink } from "@/components/notes/entity-note-count-link";
@@ -12,10 +12,6 @@ import { useI18n } from "@/lib/i18n";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import type { Goal, NotesSummaryByEntity, Tag, Task, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function getGoalTitle(task: Task, goals: Goal[], fallback: string) {
-  return goals.find((goal) => goal.id === task.goalId)?.title ?? fallback;
-}
 
 function getTaskGoal(task: Task, goals: Goal[]) {
   return goals.find((goal) => goal.id === task.goalId) ?? null;
@@ -56,7 +52,8 @@ export function DailyRunway({
   selectedTaskId,
   onSelectTask,
   onMove,
-  onStartTask
+  onStartTask,
+  compact = false
 }: {
   tasks: Task[];
   timeline: Array<{ id: string; label: string; tasks: Task[] }>;
@@ -67,6 +64,7 @@ export function DailyRunway({
   onSelectTask: (taskId: string) => void;
   onMove: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
   onStartTask: (taskId: string) => Promise<void>;
+  compact?: boolean;
 }) {
   const { t, formatDate } = useI18n();
   const nextActionLabels = {
@@ -75,6 +73,8 @@ export function DailyRunway({
     in_progress: t("common.dailyRunway.actionProgress"),
     blocked: t("common.dailyRunway.actionBlocked")
   } as const;
+  const visibleTasks = compact ? tasks.slice(0, 3) : tasks;
+  const hiddenTaskCount = Math.max(0, tasks.length - visibleTasks.length);
   return (
     <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.3fr)_minmax(17rem,0.9fr)]">
       <SurfacePanel className="min-w-0 rounded-[24px]">
@@ -90,7 +90,7 @@ export function DailyRunway({
         </div>
 
         <div className="mt-4 grid min-w-0 gap-3">
-          {tasks.map((task, index) => {
+          {visibleTasks.map((task, index) => {
             const nextAction = getNextAction(task, nextActionLabels);
             const taskTags = getTaskTags(task, tags).slice(0, 2);
             const goal = getTaskGoal(task, goals);
@@ -156,10 +156,11 @@ export function DailyRunway({
                           label={task.title}
                           variant="heading"
                           size="md"
+                          lines={2}
                         />
                       </Link>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">{task.description || t("common.dailyRunway.noNote")}</p>
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">{task.description || t("common.dailyRunway.noNote")}</p>
                   </div>
                   <Badge className="shrink-0 self-start">{task.status.replaceAll("_", " ")}</Badge>
                 </div>
@@ -167,14 +168,18 @@ export function DailyRunway({
                 <div className="flex flex-wrap gap-2">
                   <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">{task.points} xp</Badge>
                   <EntityNoteCountLink entityType="task" entityId={task.id} count={noteCount} />
-                  {task.time.totalCreditedSeconds > 0 ? <Badge tone="meta">{Math.floor(task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
-                  <Badge tone="meta">{task.effort}</Badge>
                   <Badge tone="meta">{formatDate(task.dueDate)}</Badge>
-                  {taskTags.map((tag) => (
-                    <Badge key={tag.id} className="bg-[var(--ui-surface-2)]" style={{ color: tag.color }}>
-                      {tag.name}
-                    </Badge>
-                  ))}
+                  {!compact ? (
+                    <>
+                      {task.time.totalCreditedSeconds > 0 ? <Badge tone="meta">{Math.floor(task.time.totalCreditedSeconds / 60)} min tracked</Badge> : null}
+                      <Badge tone="meta">{task.effort}</Badge>
+                      {taskTags.map((tag) => (
+                        <Badge key={tag.id} className="bg-[var(--ui-surface-2)]" style={{ color: tag.color }}>
+                          {tag.name}
+                        </Badge>
+                      ))}
+                    </>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -202,6 +207,20 @@ export function DailyRunway({
               </article>
             );
           })}
+          {hiddenTaskCount > 0 ? (
+            <Link
+              to="/kanban"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm font-medium text-[var(--ui-ink-medium)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+            >
+              {t(
+                hiddenTaskCount === 1
+                  ? "common.dailyRunway.viewMoreOne"
+                  : "common.dailyRunway.viewMoreOther",
+                { count: hiddenTaskCount }
+              )}
+              <ArrowRight className="size-4" />
+            </Link>
+          ) : null}
         </div>
       </SurfacePanel>
 
@@ -211,42 +230,63 @@ export function DailyRunway({
           <InfoTooltip content="This groups today's tasks by status, so you can see what is already moving, what is ready to start, what is blocked, and what is done." />
         </div>
         <h4 className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)]">{t("common.dailyRunway.timelineTitle")}</h4>
-        <div className="mt-4 grid min-w-0 gap-3">
-          {timeline.map((bucket) => (
-            <SurfacePanel key={bucket.id} muted className="min-w-0 overflow-hidden rounded-[20px]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium text-[var(--ui-ink-strong)]">{bucket.label}</div>
-                <Badge tone="meta">{bucket.tasks.length}</Badge>
+        {compact ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {timeline.map((bucket) => (
+              <div
+                key={bucket.id}
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3"
+              >
+                <div className="text-xs leading-5 text-[var(--ui-ink-soft)]">{bucket.label}</div>
+                <div className="mt-1 font-display text-2xl text-[var(--ui-ink-strong)]">{bucket.tasks.length}</div>
               </div>
-              <div className="mt-3 grid gap-2">
-                {bucket.tasks.slice(0, 3).map((task) => {
-                  const goal = getTaskGoal(task, goals);
-                  return (
-                    <Link
-                      key={task.id}
-                      to={`/tasks/${task.id}`}
-                      className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-[var(--ui-surface-1)] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
-                        <div className="mt-2">
-                          <EntityBadge
-                            kind="goal"
-                            label={goal?.title ?? t("common.dailyRunway.unassigned")}
-                            compact
-                            gradient={false}
-                          />
+            ))}
+            <Link
+              to="/kanban"
+              className="col-span-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+            >
+              {t("common.dailyRunway.openKanban")}
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-4 grid min-w-0 gap-3">
+            {timeline.map((bucket) => (
+              <SurfacePanel key={bucket.id} muted className="min-w-0 overflow-hidden rounded-[20px]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-medium text-[var(--ui-ink-strong)]">{bucket.label}</div>
+                  <Badge tone="meta">{bucket.tasks.length}</Badge>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {bucket.tasks.slice(0, 3).map((task) => {
+                    const goal = getTaskGoal(task, goals);
+                    return (
+                      <Link
+                        key={task.id}
+                        to={`/tasks/${task.id}`}
+                        className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-[16px] bg-[var(--ui-surface-1)] px-3 py-3 text-left transition hover:bg-[var(--ui-surface-hover)]"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <EntityName kind="task" label={task.title} className="max-w-full" labelClassName="[overflow-wrap:anywhere]" />
+                          <div className="mt-2">
+                            <EntityBadge
+                              kind="goal"
+                              label={goal?.title ?? t("common.dailyRunway.unassigned")}
+                              compact
+                              gradient={false}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <ArrowRight className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
-                    </Link>
-                  );
-                })}
-                {bucket.tasks.length === 0 ? <div className="text-sm text-[var(--ui-ink-faint)]">{t("common.dailyRunway.emptyBucket")}</div> : null}
-              </div>
-            </SurfacePanel>
-          ))}
-        </div>
+                        <ArrowRight className="size-4 shrink-0 text-[var(--ui-ink-faint)]" />
+                      </Link>
+                    );
+                  })}
+                  {bucket.tasks.length === 0 ? <div className="text-sm text-[var(--ui-ink-faint)]">{t("common.dailyRunway.emptyBucket")}</div> : null}
+                </div>
+              </SurfacePanel>
+            ))}
+          </div>
+        )}
       </SurfacePanel>
     </div>
   );

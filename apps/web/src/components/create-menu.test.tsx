@@ -167,4 +167,29 @@ describe("CreateMenu", () => {
 
     mobileTarget.remove();
   });
+
+  it("can place the desktop trigger in the shell header and opens the menu below it", () => {
+    const desktopTarget = document.createElement("div");
+    document.body.appendChild(desktopTarget);
+
+    render(
+      <MemoryRouter>
+        <CreateMenu actions={actions} desktopTriggerTarget={desktopTarget} />
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Create" });
+    expect(desktopTarget).toContainElement(trigger);
+
+    fireEvent.click(trigger);
+
+    const menu = screen.getByRole("dialog", { name: "Create in Forge" });
+    expect(menu).toHaveStyle({
+      transform: "none"
+    });
+    expect(menu.style.maxHeight).toContain("100vh");
+    expect(screen.getByText("New life goal")).toBeInTheDocument();
+
+    desktopTarget.remove();
+  });
 });

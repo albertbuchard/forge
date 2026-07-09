@@ -213,7 +213,7 @@ function ShellCommandButton({ onClick }: { onClick: () => void }) {
       <Badge
         size="sm"
         tone="meta"
-        className="ml-1 hidden bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] xl:inline-flex"
+        className="ml-1 hidden bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] 2xl:inline-flex"
       >
         Shift Shift
       </Badge>
@@ -290,6 +290,8 @@ function ShellFrame({
   const transitionKey = getRouteTransitionKey(routeLocation.pathname);
   const [actionBarOpen, setActionBarOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
+  const [desktopCreateTriggerTarget, setDesktopCreateTriggerTarget] =
+    useState<HTMLDivElement | null>(null);
   const [mobileCreateTriggerTarget, setMobileCreateTriggerTarget] =
     useState<HTMLDivElement | null>(null);
   const shellRootRef = useRef<HTMLDivElement | null>(null);
@@ -635,12 +637,18 @@ function ShellFrame({
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <GamificationMiniHud
                     metrics={shell.snapshot.metrics}
-                    className="hidden xl:inline-flex"
+                    className="hidden 2xl:inline-flex"
                   />
-                  <AmbientActivityPill
-                    active={activityCount > 0 || hasActiveIngestJobs}
-                    label={activityLabel}
-                    onClick={() => setBackgroundActivityOpen(true)}
+                  {activityCount > 0 || hasActiveIngestJobs ? (
+                    <AmbientActivityPill
+                      active
+                      label={activityLabel}
+                      onClick={() => setBackgroundActivityOpen(true)}
+                    />
+                  ) : null}
+                  <div
+                    ref={setDesktopCreateTriggerTarget}
+                    className="shrink-0"
                   />
                   <ShellCommandButton onClick={() => setActionBarOpen(true)} />
                   <Button
@@ -969,6 +977,7 @@ function ShellFrame({
           className="fixed z-40 lg:bottom-6 lg:right-6"
           actions={createActions.actions}
           mobileTriggerTarget={mobileCreateTriggerTarget}
+          desktopTriggerTarget={desktopCreateTriggerTarget}
         />
       ) : null}
     </div>

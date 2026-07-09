@@ -20,7 +20,6 @@ import { FacetedTokenSearch } from "@/components/search/faceted-token-search";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/page-state";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import {
@@ -36,11 +35,9 @@ import {
   patchMovementUserBox
 } from "@/lib/api";
 import type {
-  MovementBoxDetailData,
   MovementKnownPlace,
   MovementTimelineSegment,
-  MovementTimelineSleepOverlay,
-  MovementUserBoxPreflight
+  MovementTimelineSleepOverlay
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -48,8 +45,7 @@ import {
   type MovementPlaceDraftSeed
 } from "@/components/movement/movement-place-editor-dialog";
 import {
-  applySleepOverlayToMovementSegments,
-  isSleepOverlaySegment
+  applySleepOverlayToMovementSegments
 } from "@/components/movement/movement-sleep-overlay";
 import {
   MovementTimelineHistoryCap,
@@ -82,24 +78,18 @@ import {
   buildNewDraft,
   buildStayPlaceLabelOverridePayload,
   createMovementSegmentFilterOptions,
-  displaySegmentBadge,
   displaySegmentTitle,
   distanceBetweenCoordinates,
   distanceLabel,
-  formatDateTime,
   formatDateTimeInput,
   formatDurationLabel,
   formatSegmentTimestamp,
   hasRecordedStay,
   matchesMovementSegmentFilters,
   movementPlaceSeedFromSegment,
-  normalizeDetailMapPoints,
   normalizeSearchText,
   parseDateTimeInput,
   removeSegmentFromTimelinePages,
-  resolveSegmentPlaceLabel,
-  shortLatLngLabel,
-  type MovementTimelineLayoutModel,
   type TimelineDraft
 } from "@/components/movement/movement-life-timeline-model";
 
@@ -799,16 +789,6 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     setPlaceLabelDialogOpen(true);
   };
 
-  const openCanonicalPlaceDraft = (segment: MovementTimelineSegment) => {
-    const seed = movementPlaceSeedFromSegment(segment);
-    if (!seed) {
-      return;
-    }
-    setPlaceSeed(seed);
-    setPlaceSeedSegmentId(segment.id);
-    setPlaceEditorOpen(true);
-  };
-
   const openPlaceCreateFromLabelDialog = (
     segment: MovementTimelineSegment,
     labelHint: string
@@ -1149,7 +1129,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         }}
         eyebrow="Movement data"
         title="View data"
-        description=""
+        description="Search and inspect canonical stays, trips, and missing intervals without changing the raw movement evidence."
       >
         <div className="grid gap-4">
           <FacetedTokenSearch

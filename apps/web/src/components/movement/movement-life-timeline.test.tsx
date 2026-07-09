@@ -285,6 +285,11 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText("Canonical boxes")).toBeInTheDocument();
     expect(
       screen.getByText(
+        /Search and inspect canonical stays, trips, and missing intervals/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
         /Automatic boxes are derived from immutable raw phone measurements/i
       )
     ).toBeInTheDocument();

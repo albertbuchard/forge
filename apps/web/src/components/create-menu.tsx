@@ -422,20 +422,25 @@ export function useForgeCreateActions({
 export function CreateMenu({
   actions,
   className,
-  mobileTriggerTarget
+  mobileTriggerTarget,
+  desktopTriggerTarget
 }: {
   actions: ForgeCreateAction[];
   className?: string;
   mobileTriggerTarget?: HTMLElement | null;
+  desktopTriggerTarget?: HTMLElement | null;
 }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMenuPosition, setDesktopMenuPosition] = useState<{
     top: number;
     right: number;
+    placement: "above" | "below";
   } | null>(null);
   const isMobile = useIsMobileCreateSheet();
   const usesMobileTriggerTarget = isMobile && Boolean(mobileTriggerTarget);
+  const usesDesktopTriggerTarget = !isMobile && Boolean(desktopTriggerTarget);
+  const usesInlineTrigger = usesMobileTriggerTarget || usesDesktopTriggerTarget;
   const menuRef = useRef<HTMLDivElement | null>(null);
   const desktopMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -451,8 +456,11 @@ export function CreateMenu({
       }
 
       setDesktopMenuPosition({
-        top: Math.max(24, rect.top - 18),
-        right: Math.max(24, window.innerWidth - rect.right)
+        top: usesDesktopTriggerTarget
+          ? rect.bottom + 12
+          : Math.max(24, rect.top - 18),
+        right: Math.max(24, window.innerWidth - rect.right),
+        placement: usesDesktopTriggerTarget ? "below" : "above"
       });
     };
 
@@ -484,12 +492,12 @@ export function CreateMenu({
       window.removeEventListener("resize", syncDesktopMenuPosition);
       window.removeEventListener("scroll", syncDesktopMenuPosition, true);
     };
-  }, [isMobile, menuOpen]);
+  }, [isMobile, menuOpen, usesDesktopTriggerTarget]);
 
   const trigger = (
     <div
       ref={menuRef}
-      className={usesMobileTriggerTarget ? "shrink-0" : className}
+      className={usesInlineTrigger ? "shrink-0" : className}
       style={
         isMobile && !usesMobileTriggerTarget
           ? {
@@ -511,7 +519,7 @@ export function CreateMenu({
         title={
           usesMobileTriggerTarget ? t("common.navigation.create") : undefined
         }
-        className={`${usesMobileTriggerTarget ? "size-11 shrink-0 rounded-full p-0" : "min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px]"} shadow-[var(--ui-shadow-soft)] ${menuOpen ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft-hover)] text-[var(--ui-ink-strong)]" : ""}`}
+        className={`${usesMobileTriggerTarget ? "size-11 shrink-0 rounded-full p-0" : usesDesktopTriggerTarget ? "min-h-[2.125rem] min-w-max shrink-0 rounded-full px-3 py-[0.4375rem] text-[13px]" : "min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px]"} shadow-[var(--ui-shadow-soft)] ${menuOpen ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft-hover)] text-[var(--ui-ink-strong)]" : ""}`}
       >
         {usesMobileTriggerTarget ? (
           <Plus
@@ -519,9 +527,15 @@ export function CreateMenu({
           />
         ) : (
           <>
-            <Sparkles
-              className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
-            />
+            {usesDesktopTriggerTarget ? (
+              <Plus
+                className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
+              />
+            ) : (
+              <Sparkles
+                className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
+              />
+            )}
             {t("common.navigation.create")}
           </>
         )}
@@ -533,7 +547,9 @@ export function CreateMenu({
     <>
       {usesMobileTriggerTarget && mobileTriggerTarget
         ? createPortal(trigger, mobileTriggerTarget)
-        : trigger}
+        : usesDesktopTriggerTarget && desktopTriggerTarget
+          ? createPortal(trigger, desktopTriggerTarget)
+          : trigger}
 
       {menuOpen &&
       !isMobile &&
@@ -543,11 +559,20 @@ export function CreateMenu({
             <div
               ref={desktopMenuRef}
               data-testid="create-desktop-menu"
+              role="dialog"
+              aria-label={t("common.navigation.createTitle")}
               className="fixed z-50 max-h-[min(34rem,calc(100vh-4rem))] w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-[30px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-4 shadow-[var(--ui-shadow-floating)]"
               style={{
                 top: `${desktopMenuPosition.top}px`,
                 right: `${desktopMenuPosition.right}px`,
-                transform: "translateY(-100%)"
+                maxHeight:
+                  desktopMenuPosition.placement === "below"
+                    ? `calc(100vh - ${desktopMenuPosition.top + 24}px)`
+                    : undefined,
+                transform:
+                  desktopMenuPosition.placement === "above"
+                    ? "translateY(-100%)"
+                    : "none"
               }}
             >
               <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">

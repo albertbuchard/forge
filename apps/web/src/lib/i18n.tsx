@@ -353,7 +353,10 @@ function createEnglishDictionary() {
         actionBlocked: "Start",
         timelineEyebrow: "By status",
         timelineTitle: "Tasks by status",
-        emptyBucket: "Nothing here right now."
+        emptyBucket: "Nothing here right now.",
+        viewMoreOne: "View {count} more task",
+        viewMoreOther: "View {count} more tasks",
+        openKanban: "Open Kanban"
       },
       executionBoard: {
         laneBacklogTitle: "Backlog",
@@ -929,7 +932,10 @@ export const fr: typeof en = {
       actionBlocked: "Commencer",
       timelineEyebrow: "Par statut",
       timelineTitle: "Tâches par statut",
-      emptyBucket: "Rien ici pour le moment."
+      emptyBucket: "Rien ici pour le moment.",
+      viewMoreOne: "Voir {count} tâche supplémentaire",
+      viewMoreOther: "Voir {count} tâches supplémentaires",
+      openKanban: "Ouvrir le Kanban"
     },
     executionBoard: {
       laneBacklogTitle: "Backlog",

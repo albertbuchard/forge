@@ -268,7 +268,11 @@ function MetricTimeSeriesChart({
       )}
       style={{ height }}
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        initialDimension={{ width: 320, height }}
+      >
         <ComposedChart
           data={data}
           margin={{
@@ -815,7 +819,14 @@ export function DevrageRageFigure({
             className="overflow-hidden rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3"
             style={{ height: compact ? 280 : 340 }}
           >
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              initialDimension={{
+                width: 320,
+                height: compact ? 280 : 340
+              }}
+            >
               <ComposedChart
                 data={chartData}
                 margin={{ top: 18, right: 12, bottom: 0, left: 0 }}

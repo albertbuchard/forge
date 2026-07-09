@@ -76,11 +76,26 @@ export function scaleWidgetSpan(
       Math.min(widget.maxWidth ?? columns, columns)
     );
   }
-  const scaled = Math.round((widget.defaultWidth / SURFACE_COLUMNS.lg) * columns);
+
+  if (columns <= SURFACE_COLUMNS.xs && (widget.minWidth ?? 0) >= 4) {
+    return columns;
+  }
+
+  const scaleSpan = (span: number) =>
+    clamp(
+      Math.round((span / SURFACE_COLUMNS.lg) * columns),
+      1,
+      columns
+    );
+  const scaled = scaleSpan(widget.defaultWidth);
+  const scaledMinimum = widget.minWidth ? scaleSpan(widget.minWidth) : 1;
+  const scaledMaximum = widget.maxWidth
+    ? scaleSpan(widget.maxWidth)
+    : columns;
   return clamp(
-    Math.max(widget.minWidth ?? 1, scaled || (widget.minWidth ?? 1)),
-    widget.minWidth ?? 1,
-    Math.min(widget.maxWidth ?? columns, columns)
+    scaled,
+    scaledMinimum,
+    Math.max(scaledMinimum, scaledMaximum)
   );
 }
 
