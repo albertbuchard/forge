@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode
 } from "react";
-import { Sparkles, X } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -421,10 +421,12 @@ export function useForgeCreateActions({
 
 export function CreateMenu({
   actions,
-  className
+  className,
+  mobileTriggerTarget
 }: {
   actions: ForgeCreateAction[];
   className?: string;
+  mobileTriggerTarget?: HTMLElement | null;
 }) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -433,6 +435,7 @@ export function CreateMenu({
     right: number;
   } | null>(null);
   const isMobile = useIsMobileCreateSheet();
+  const usesMobileTriggerTarget = isMobile && Boolean(mobileTriggerTarget);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const desktopMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -483,34 +486,54 @@ export function CreateMenu({
     };
   }, [isMobile, menuOpen]);
 
-  return (
-    <>
-      <div
-        ref={menuRef}
-        className={className}
-        style={
-          isMobile
-            ? {
-                right: "max(1rem, calc(var(--forge-safe-area-right) + 1rem))",
-                bottom: "var(--forge-mobile-create-bottom)"
-              }
-            : undefined
+  const trigger = (
+    <div
+      ref={menuRef}
+      className={usesMobileTriggerTarget ? "shrink-0" : className}
+      style={
+        isMobile && !usesMobileTriggerTarget
+          ? {
+              right: "max(1rem, calc(var(--forge-safe-area-right) + 1rem))",
+              bottom: "var(--forge-mobile-create-bottom)"
+            }
+          : undefined
+      }
+    >
+      <Button
+        type="button"
+        data-testid="create-floating-trigger"
+        aria-expanded={menuOpen}
+        aria-haspopup="dialog"
+        onClick={() => setMenuOpen((current) => (isMobile ? true : !current))}
+        aria-label={
+          usesMobileTriggerTarget ? t("common.navigation.create") : undefined
         }
+        title={
+          usesMobileTriggerTarget ? t("common.navigation.create") : undefined
+        }
+        className={`${usesMobileTriggerTarget ? "size-11 shrink-0 rounded-full p-0" : "min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px]"} shadow-[var(--ui-shadow-soft)] ${menuOpen ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft-hover)] text-[var(--ui-ink-strong)]" : ""}`}
       >
-        <Button
-          type="button"
-          data-testid="create-floating-trigger"
-          aria-expanded={menuOpen}
-          aria-haspopup="dialog"
-          onClick={() => setMenuOpen((current) => (isMobile ? true : !current))}
-          className={`min-w-max max-w-[calc(100vw-2rem)] shrink-0 rounded-full px-3.5 py-2 text-[12px] shadow-[var(--ui-shadow-soft)] ${menuOpen ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft-hover)] text-[var(--ui-ink-strong)]" : ""}`}
-        >
-          <Sparkles
+        {usesMobileTriggerTarget ? (
+          <Plus
             className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
           />
-          {t("common.navigation.create")}
-        </Button>
-      </div>
+        ) : (
+          <>
+            <Sparkles
+              className={`size-4 transition ${menuOpen ? "text-[var(--ui-ink-strong)]" : "text-[var(--ui-ink-medium)]"}`}
+            />
+            {t("common.navigation.create")}
+          </>
+        )}
+      </Button>
+    </div>
+  );
+
+  return (
+    <>
+      {usesMobileTriggerTarget && mobileTriggerTarget
+        ? createPortal(trigger, mobileTriggerTarget)
+        : trigger}
 
       {menuOpen &&
       !isMobile &&

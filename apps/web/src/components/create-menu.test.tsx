@@ -32,7 +32,8 @@ const actions: ForgeCreateAction[] = [
     group: "Psyche",
     title: "Value",
     quickActionTitle: "Create value",
-    description: "Place one value into the goal, project, and task constellation.",
+    description:
+      "Place one value into the goal, project, and task constellation.",
     aliases: ["value"],
     filterIds: ["psyche_value"],
     onSelect: vi.fn()
@@ -107,9 +108,15 @@ describe("CreateMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /create/i }));
 
     expect(screen.getByTestId("create-desktop-menu")).toHaveClass("fixed");
-    expect(screen.getByTestId("create-desktop-menu")).toHaveStyle({ transform: "translateY(-100%)" });
-    expect(screen.getByRole("button", { name: /create/i })).toHaveClass("min-w-max");
-    expect(screen.getByRole("button", { name: /create/i })).toHaveClass("whitespace-nowrap");
+    expect(screen.getByTestId("create-desktop-menu")).toHaveStyle({
+      transform: "translateY(-100%)"
+    });
+    expect(screen.getByRole("button", { name: /create/i })).toHaveClass(
+      "min-w-max"
+    );
+    expect(screen.getByRole("button", { name: /create/i })).toHaveClass(
+      "whitespace-nowrap"
+    );
     expect(screen.getByText("New life goal")).toBeInTheDocument();
     expect(screen.getByText("New task")).toBeInTheDocument();
     expect(screen.getByText("Value")).toBeInTheDocument();
@@ -130,6 +137,34 @@ describe("CreateMenu", () => {
 
     expect(screen.queryByTestId("create-desktop-menu")).not.toBeInTheDocument();
     expect(screen.getByTestId("create-mobile-sheet")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Create in Forge" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Create in Forge" })
+    ).toBeInTheDocument();
+  });
+
+  it("can place the mobile trigger inside shell chrome without changing the guided modal", () => {
+    installMatchMedia(true);
+    const mobileTarget = document.createElement("div");
+    mobileTarget.dataset.testid = "mobile-create-target";
+    document.body.appendChild(mobileTarget);
+
+    render(
+      <MemoryRouter>
+        <CreateMenu actions={actions} mobileTriggerTarget={mobileTarget} />
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Create" });
+    expect(mobileTarget).toContainElement(trigger);
+    expect(trigger).toHaveClass("size-11");
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByTestId("create-mobile-sheet")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Create in Forge" })
+    ).toBeInTheDocument();
+
+    mobileTarget.remove();
   });
 });

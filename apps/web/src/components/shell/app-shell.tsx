@@ -21,8 +21,7 @@ import {
   ChevronsRight,
   GripVertical,
   RefreshCcw,
-  Search,
-  Zap
+  Search
 } from "lucide-react";
 import {
   Link,
@@ -48,7 +47,6 @@ import {
   buildRouteIntentLocation,
   buildRoutePathKey,
   buildStartTaskNowInput,
-  formatCompactNumber,
   getKnowledgeGraphNodeNotesHref,
   getRouteTransitionKey,
   sameSelectedUserIds,
@@ -68,7 +66,6 @@ import { ShellBackgroundActivityDialog } from "@/components/shell/shell-backgrou
 import {
   NAV_ROUTE_REGISTRY,
   PRIMARY_ROUTES,
-  getRouteDetail,
   getRouteLabel,
   isPsycheRoute,
   routeMatches
@@ -293,6 +290,8 @@ function ShellFrame({
   const transitionKey = getRouteTransitionKey(routeLocation.pathname);
   const [actionBarOpen, setActionBarOpen] = useState(false);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
+  const [mobileCreateTriggerTarget, setMobileCreateTriggerTarget] =
+    useState<HTMLDivElement | null>(null);
   const shellRootRef = useRef<HTMLDivElement | null>(null);
   const {
     navCollapsed,
@@ -682,9 +681,6 @@ function ShellFrame({
                 }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <div className="max-w-[34rem] text-[12px] leading-5 text-[var(--ui-ink-soft)]">
-                    {activeHelp.primaryAction}
-                  </div>
                   {railLinks.map((link) => (
                     <Link
                       key={link.to}
@@ -820,7 +816,7 @@ function ShellFrame({
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="min-h-[2.125rem] px-2.5"
+                      className="size-11 rounded-full p-0"
                       onClick={() => setActionBarOpen(true)}
                       aria-label={t("common.actionBar.title")}
                       title={t("common.actionBar.title")}
@@ -828,16 +824,9 @@ function ShellFrame({
                       <Search className="size-4" />
                     </Button>
                     <div
-                      className="inline-flex min-h-[2.125rem] max-w-[9.5rem] items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 text-[12px] font-medium text-[var(--primary)]"
-                      title={`Level ${shell.snapshot.metrics.level} · ${shell.snapshot.metrics.totalXp} XP · ${shell.snapshot.metrics.streakDays} day streak`}
-                    >
-                      <Zap className="size-3.5 shrink-0" />
-                      <span className="min-w-0 truncate">
-                        L{shell.snapshot.metrics.level} ·{" "}
-                        {formatCompactNumber(shell.snapshot.metrics.totalXp)} XP
-                        · {shell.snapshot.metrics.streakDays}d
-                      </span>
-                    </div>
+                      ref={setMobileCreateTriggerTarget}
+                      className="shrink-0"
+                    />
                   </div>
                 </div>
                 <div className="min-w-0">
@@ -867,35 +856,29 @@ function ShellFrame({
                 onComplete={onCompleteRun}
               />
 
-              <div
-                className="overflow-hidden"
-                style={{
-                  opacity: "var(--forge-shell-mobile-copy-opacity)",
-                  maxHeight: "var(--forge-shell-mobile-copy-max-height)",
-                  transform:
-                    "translateY(var(--forge-shell-mobile-copy-translate-y))",
-                  willChange: "opacity, max-height, transform"
-                }}
-              >
-                <div className="mt-2 text-[13px] leading-5 text-[var(--ui-ink-soft)]">
-                  {getRouteDetail(active, t)} {activeHelp.primaryAction}
+              {activityCount > 0 ||
+              hasActiveIngestJobs ||
+              shell.snapshot.users.length > 1 ? (
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                  {activityCount > 0 || hasActiveIngestJobs ? (
+                    <AmbientActivityPill
+                      active
+                      label={activityLabel}
+                      onClick={() => setBackgroundActivityOpen(true)}
+                    />
+                  ) : null}
+                  {shell.snapshot.users.length > 1 ? (
+                    <div className="min-w-0 overflow-x-auto">
+                      <UserScopeSelector
+                        users={shell.snapshot.users}
+                        selectedUserIds={shell.selectedUserIds}
+                        onChange={shell.setSelectedUserIds}
+                        compact
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-2">
-                  <AmbientActivityPill
-                    active={activityCount > 0 || hasActiveIngestJobs}
-                    label={activityLabel}
-                    onClick={() => setBackgroundActivityOpen(true)}
-                  />
-                </div>
-                <div className="mt-3 overflow-x-auto pb-1">
-                  <UserScopeSelector
-                    users={shell.snapshot.users}
-                    selectedUserIds={shell.selectedUserIds}
-                    onChange={shell.setSelectedUserIds}
-                    compact
-                  />
-                </div>
-              </div>
+              ) : null}
             </header>
           ) : null}
         </TaskTimerRailProvider>
@@ -985,6 +968,7 @@ function ShellFrame({
         <CreateMenu
           className="fixed z-40 lg:bottom-6 lg:right-6"
           actions={createActions.actions}
+          mobileTriggerTarget={mobileCreateTriggerTarget}
         />
       ) : null}
     </div>
