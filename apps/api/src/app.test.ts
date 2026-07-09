@@ -20789,7 +20789,14 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.ok(
       selfObservationConversationPlaybook.askSequence.some((step) =>
-        /cue, trigger, or body shift/i.test(step)
+        /observedAt date should anchor the note/i.test(step)
+      )
+    );
+    assert.ok(
+      selfObservationConversationPlaybook.askSequence.some((step) =>
+        /Ask only one next question[\s\S]*does not require every link in the chain/i.test(
+          step
+        )
       )
     );
     const sleepConversationPlaybook =
@@ -21402,6 +21409,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_operator_context",
         "forge_get_current_work",
         "forge_get_psyche_overview",
+        "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
         "forge_get_sports_overview",
         "forge_get_training_load_overview",
