@@ -1,4 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import {
+  createContext,
+  createElement,
+  useContext,
+  type ReactNode
+} from "react";
 import { getSettings } from "@/lib/api";
 import {
   defaultGamificationTheme,
@@ -6,7 +12,25 @@ import {
   type GamificationThemePreference
 } from "@/lib/gamification-assets";
 
+const GamificationThemeContext =
+  createContext<GamificationThemePreference | null>(null);
+
+export function GamificationThemeProvider({
+  initialTheme,
+  children
+}: {
+  initialTheme: string | null | undefined;
+  children: ReactNode;
+}) {
+  return createElement(
+    GamificationThemeContext.Provider,
+    { value: normalizeGamificationTheme(initialTheme) },
+    children
+  );
+}
+
 export function useGamificationTheme(): GamificationThemePreference {
+  const initialTheme = useContext(GamificationThemeContext);
   const settingsQuery = useQuery({
     queryKey: ["forge-settings"],
     queryFn: getSettings,
@@ -14,6 +38,8 @@ export function useGamificationTheme(): GamificationThemePreference {
   });
 
   return normalizeGamificationTheme(
-    settingsQuery?.data?.settings.gamificationTheme ?? defaultGamificationTheme
+    settingsQuery?.data?.settings.gamificationTheme ??
+      initialTheme ??
+      defaultGamificationTheme
   );
 }

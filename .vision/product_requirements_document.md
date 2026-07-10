@@ -403,7 +403,9 @@ The Forge Smith mascot is a dramatic blacksmith mentor with hard-pressure streak
 
 Forge must mount the active route exactly once. Desktop and mobile shells may have different navigation and controls, but a CSS-hidden breakpoint branch must not keep a second copy of the route tree, queries, images, effects, or form state mounted.
 
-Scrolling and route transitions must preserve complete painted content. The persistent shell and primary page content must not use scroll-linked size, opacity, or transform changes that make labels, cards, images, or descriptions disappear. Backdrop filters are reserved for short-lived overlays; static cards, sidebars, and sticky headers use stable opaque or near-opaque surfaces. Closed help tooltips must not leave fixed blurred portal nodes in the document.
+Scrolling and route transitions must preserve complete painted content. The persistent shell keeps the authored grow/close interaction on desktop and mobile: secondary shell controls may collapse through measured, monotonic scroll-linked size, opacity, and transform values, must become non-interactive only when fully closed, and must fully reopen at the top without scroll-position feedback. Primary page labels, cards, images, and descriptions do not disappear as part of that motion. Backdrop filters are reserved for short-lived overlays; static cards, sidebars, and sticky headers use stable opaque or near-opaque surfaces. Closed help tooltips must not leave fixed blurred portal nodes in the document.
+
+All normal interface color, border, text, status, input, and panel treatments must use Forge semantic theme tokens. Domain colors may remain distinct when they encode data, entity identity, chart series, map content, or safety state, but light and dark themes must provide readable semantic success, danger, warning, information, and on-accent colors. Route intent should prefetch the matching lazy module on pointer, keyboard focus, and touch intent. The shell must not add a fixed reveal delay or replace a ready route with a synthetic loading surface; the real Suspense fallback remains available for genuinely unresolved modules.
 
 Images must declare stable dimensions. Below-fold catalog images use lazy loading and asynchronous decoding, while first-viewport identity images such as the Forge Smith remain immediately available. Large catalogs use bounded responsive previews, pagination, or virtualization. Search and explicit filters still return the complete matching set, and users can expand a bounded group without losing access to any record.
 
@@ -413,4 +415,6 @@ The current 144-item gamification catalog has these regression budgets in the so
 - Trophy Hall defaults to no more than 1,200 DOM elements and 40 image nodes at 1280 x 720.
 - Trophy Hall defaults to no more than 500 DOM elements and 15 image nodes at 390 x 844.
 - Alternating Overview and Trophy Hall at least eight times, and jumping through at least twenty scroll positions, produces no blank, black, or background-flash frame after route readiness.
-- Desktop and mobile screenshots confirm that the Forge Smith and trophy art are visible, correctly framed, and do not create horizontal overflow.
+- Desktop and mobile screenshots confirm that the Forge Smith and real trophy art are visible in the first Overview viewport, correctly framed, and do not create horizontal overflow.
+- Continuous down/up phone scroll sampling confirms monotonic shell height and progress, a fully closed state, a fully reopened state at the top, and no blank or background-flash frame.
+- Every registered shell route resolves to a lazy-module prefetch target, and production TS/TSX contains no fixed Tailwind palette classes for normal interface surfaces.

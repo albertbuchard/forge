@@ -1,17 +1,21 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import {
-  formatZoneTrendTooltipValue,
-  SportsPage
-} from "@/pages/sports-page";
+import { formatZoneTrendTooltipValue, SportsPage } from "@/pages/sports-page";
 import type { FitnessViewData } from "@/lib/types";
 
 const {
   useForgeShellMock,
   getFitnessViewMock,
+  getWorkoutSessionMock,
   listPsycheValuesMock,
   listBehaviorPatternsMock,
   listBehaviorsMock,
@@ -21,6 +25,7 @@ const {
 } = vi.hoisted(() => ({
   useForgeShellMock: vi.fn(),
   getFitnessViewMock: vi.fn(),
+  getWorkoutSessionMock: vi.fn(),
   listPsycheValuesMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
   listBehaviorsMock: vi.fn(),
@@ -50,15 +55,18 @@ vi.mock("@/components/shell/app-shell", () => ({
 
 vi.mock("@/components/shell/page-hero", () => ({
   PageHero: ({
+    eyebrow,
     title,
     description,
     badge
   }: {
+    eyebrow?: ReactNode;
     title: string;
     description: string;
     badge?: string;
   }) => (
     <div>
+      {eyebrow ? <div>{eyebrow}</div> : null}
       <div>{title}</div>
       <div>{description}</div>
       {badge ? <div>{badge}</div> : null}
@@ -67,9 +75,15 @@ vi.mock("@/components/shell/page-hero", () => ({
 }));
 
 vi.mock("@/components/workbench-boxes/health/health-boxes", () => ({
-  SportsBrowserBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SportsCompositionBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SportsSummaryBox: ({ children }: { children: ReactNode }) => <div>{children}</div>
+  SportsBrowserBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SportsCompositionBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SportsSummaryBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  )
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -91,7 +105,9 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 vi.mock("@/components/ui/card", () => ({
-  Card: ({ children }: { children: ReactNode }) => <div>{children}</div>
+  Card: ({ children, ...props }: ComponentProps<"div">) => (
+    <div {...props}>{children}</div>
+  )
 }));
 
 vi.mock("@/components/experience/surface-skeleton", () => ({
@@ -114,7 +130,9 @@ vi.mock("@/components/ui/textarea", () => ({
   }) => (
     <textarea
       value={value}
-      onChange={(event) => onChange?.({ target: { value: event.target.value } })}
+      onChange={(event) =>
+        onChange?.({ target: { value: event.target.value } })
+      }
       placeholder={placeholder}
     />
   )
@@ -135,7 +153,9 @@ vi.mock("@/components/ui/input", () => ({
     <input
       value={value}
       type={type}
-      onChange={(event) => onChange?.({ target: { value: event.target.value } })}
+      onChange={(event) =>
+        onChange?.({ target: { value: event.target.value } })
+      }
       placeholder={placeholder}
     />
   )
@@ -154,7 +174,13 @@ vi.mock("@/components/experience/sheet-scaffold", () => ({
     open: boolean;
     title: string;
     children: ReactNode;
-  }) => (open ? <div><div>{title}</div>{children}</div> : null)
+  }) =>
+    open ? (
+      <div>
+        <div>{title}</div>
+        {children}
+      </div>
+    ) : null
 }));
 
 vi.mock("@/components/search/faceted-token-search", () => ({
@@ -178,8 +204,10 @@ vi.mock("@/components/psyche/entity-link-multiselect", () => ({
 
 vi.mock("@/lib/api", () => ({
   getFitnessView: (...args: unknown[]) => getFitnessViewMock(...args),
+  getWorkoutSession: (...args: unknown[]) => getWorkoutSessionMock(...args),
   listPsycheValues: (...args: unknown[]) => listPsycheValuesMock(...args),
-  listBehaviorPatterns: (...args: unknown[]) => listBehaviorPatternsMock(...args),
+  listBehaviorPatterns: (...args: unknown[]) =>
+    listBehaviorPatternsMock(...args),
   listBehaviors: (...args: unknown[]) => listBehaviorsMock(...args),
   listBeliefs: (...args: unknown[]) => listBeliefsMock(...args),
   listTriggerReports: (...args: unknown[]) => listTriggerReportsMock(...args),
@@ -204,6 +232,8 @@ function renderWithProviders() {
 }
 
 describe("SportsPage", () => {
+  let fitnessFixture: FitnessViewData;
+
   beforeEach(() => {
     const fitness: FitnessViewData = {
       summary: {
@@ -247,6 +277,106 @@ describe("SportsPage", () => {
           energyKcal: 230
         }
       ],
+      sportComparison: {
+        modelVersion: "forge-sport-comparison-v1",
+        generatedAt: "2026-04-07T08:05:00.000Z",
+        periods: [
+          {
+            key: "all",
+            label: "All time",
+            requestedDays: null,
+            startedAt: "2026-04-07T07:15:00.000Z",
+            endedAt: "2026-04-07T08:05:00.000Z",
+            totals: {
+              sessionCount: 1,
+              sportCount: 1,
+              activeDayCount: 1,
+              totalDurationSeconds: 45 * 60,
+              totalEnergyKcal: 230,
+              energyCoverage: 1,
+              totalDistanceMeters: 3800,
+              distanceCoverage: 1,
+              totalTrainingLoad: null,
+              trainingLoadCoverage: 0,
+              oldestStartedAt: "2026-04-07T07:15:00.000Z",
+              newestStartedAt: "2026-04-07T07:15:00.000Z"
+            },
+            sports: [
+              {
+                workoutType: "walking",
+                workoutTypeLabel: "Walking",
+                activityFamily: "cardio",
+                activityFamilyLabel: "Cardio",
+                sessionCount: 1,
+                sessionShare: 1,
+                activeDayCount: 1,
+                totalDurationSeconds: 45 * 60,
+                durationShare: 1,
+                averageSessionMinutes: 45,
+                totalEnergyKcal: 230,
+                energyShare: 1,
+                energyCoverage: 1,
+                energyKcalPerHour: 306.7,
+                distanceMeters: 3800,
+                distanceShare: 1,
+                distanceCoverage: 1,
+                averageSpeedKph: 5.1,
+                totalTrainingLoad: null,
+                trainingLoadShare: 0,
+                trainingLoadCoverage: 0,
+                trainingLoadPerHour: null,
+                averageHeartRateCoverage: null,
+                firstStartedAt: "2026-04-07T07:15:00.000Z",
+                lastStartedAt: "2026-04-07T07:15:00.000Z"
+              }
+            ]
+          },
+          {
+            key: "365d",
+            label: "12 months",
+            requestedDays: 365,
+            startedAt: "2025-04-07T08:05:00.000Z",
+            endedAt: "2026-04-07T08:05:00.000Z",
+            totals: {
+              sessionCount: 1,
+              sportCount: 1,
+              activeDayCount: 1,
+              totalDurationSeconds: 45 * 60,
+              totalEnergyKcal: 230,
+              energyCoverage: 1,
+              totalDistanceMeters: 3800,
+              distanceCoverage: 1,
+              totalTrainingLoad: null,
+              trainingLoadCoverage: 0,
+              oldestStartedAt: "2026-04-07T07:15:00.000Z",
+              newestStartedAt: "2026-04-07T07:15:00.000Z"
+            },
+            sports: []
+          },
+          {
+            key: "90d",
+            label: "90 days",
+            requestedDays: 90,
+            startedAt: "2026-01-07T08:05:00.000Z",
+            endedAt: "2026-04-07T08:05:00.000Z",
+            totals: {
+              sessionCount: 1,
+              sportCount: 1,
+              activeDayCount: 1,
+              totalDurationSeconds: 45 * 60,
+              totalEnergyKcal: 230,
+              energyCoverage: 1,
+              totalDistanceMeters: 3800,
+              distanceCoverage: 1,
+              totalTrainingLoad: null,
+              trainingLoadCoverage: 0,
+              oldestStartedAt: "2026-04-07T07:15:00.000Z",
+              newestStartedAt: "2026-04-07T07:15:00.000Z"
+            },
+            sports: []
+          }
+        ]
+      },
       vitalsTrend: [],
       analysisSessions: [],
       sessions: [
@@ -352,6 +482,7 @@ describe("SportsPage", () => {
         }
       ]
     };
+    fitnessFixture = fitness;
 
     useForgeShellMock.mockReturnValue({
       selectedUserIds: ["user_operator"],
@@ -365,6 +496,7 @@ describe("SportsPage", () => {
       }
     });
     getFitnessViewMock.mockResolvedValue({ fitness });
+    getWorkoutSessionMock.mockResolvedValue({ workout: fitness.sessions[0] });
     listPsycheValuesMock.mockResolvedValue({ values: [] });
     listBehaviorPatternsMock.mockResolvedValue({ patterns: [] });
     listBehaviorsMock.mockResolvedValue({ behaviors: [] });
@@ -381,12 +513,27 @@ describe("SportsPage", () => {
     renderWithProviders();
 
     expect(await screen.findAllByText("Walking")).not.toHaveLength(0);
+    expect(screen.getByText("Health")).toBeInTheDocument();
+    expect(screen.queryByText("Project")).not.toBeInTheDocument();
     expect(screen.getByText("HR zone analysis")).toBeInTheDocument();
     expect(screen.getByText("Average zones")).toBeInTheDocument();
     expect(screen.getByText("Zone drift")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stacked" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lines" })).toBeInTheDocument();
     expect(screen.getByText("Cardio")).toBeInTheDocument();
+    expect(screen.getByText("Sport comparison")).toBeInTheDocument();
+    expect(screen.getAllByText("Energy / h").length).toBeGreaterThan(0);
+
+    const comparison = within(screen.getByTestId("sport-comparison-panel"));
+    fireEvent.click(comparison.getByRole("button", { name: "90 days" }));
+    fireEvent.click(comparison.getByRole("button", { name: "Energy / h" }));
+    expect(comparison.getByRole("button", { name: "90 days" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(
+      comparison.getByRole("button", { name: "Energy / h" })
+    ).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Lines" }));
     expect(screen.getByText("Expanding zone lines")).toBeInTheDocument();
@@ -404,6 +551,62 @@ describe("SportsPage", () => {
     expect(screen.getByText("Apple Health")).toBeInTheDocument();
   });
 
+  it("shows the stored workout total instead of the bounded browser slice", async () => {
+    fitnessFixture.summary.storedWorkoutCount = 2_084;
+
+    renderWithProviders();
+
+    expect(await screen.findByText("2084 sessions")).toBeInTheDocument();
+  });
+
+  it("renders provider events with duplicate timestamps without React key collisions", async () => {
+    const session = fitnessFixture.sessions[0]!;
+    if (!("details" in session)) {
+      throw new Error("Expected a complete workout session fixture");
+    }
+    const details = session.details!;
+    const sharedStart = "2026-04-07T07:33:00.000Z";
+    details.events = [
+      {
+        type: "segment",
+        label: "First segment",
+        startedAt: sharedStart,
+        endedAt: "2026-04-07T07:35:00.000Z",
+        durationSeconds: 120,
+        metadata: {}
+      },
+      {
+        type: "segment",
+        label: "Second segment",
+        startedAt: sharedStart,
+        endedAt: "2026-04-07T07:37:00.000Z",
+        durationSeconds: 240,
+        metadata: {}
+      }
+    ];
+    getWorkoutSessionMock.mockResolvedValueOnce({ workout: session });
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    try {
+      renderWithProviders();
+      fireEvent.click(
+        (await screen.findAllByRole("button", { name: /walking/i }))[0]!
+      );
+
+      expect(await screen.findByText("First segment")).toBeInTheDocument();
+      expect(screen.getByText("Second segment")).toBeInTheDocument();
+      expect(
+        consoleErrorSpy.mock.calls.filter(([message]) =>
+          String(message).includes("children with the same key")
+        )
+      ).toHaveLength(0);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it("formats zone-trend tooltip units for zones and physiological overlays", () => {
     expect(
       formatZoneTrendTooltipValue(74, "Resting HR", {
@@ -416,5 +619,64 @@ describe("SportsPage", () => {
     expect(
       formatZoneTrendTooltipValue(59, "Zone 3", { dataKey: "zone_3" })
     ).toEqual(["59%", "Zone 3"]);
+  });
+
+  it("keeps the Sports page available during a rolling API upgrade", async () => {
+    const legacyFitness = { ...fitnessFixture };
+    delete legacyFitness.sportComparison;
+    getFitnessViewMock.mockResolvedValueOnce({ fitness: legacyFitness });
+
+    renderWithProviders();
+
+    expect(await screen.findByText("Weekly volume")).toBeInTheDocument();
+    expect(screen.queryByText("Sport comparison")).not.toBeInTheDocument();
+    expect(screen.getByText("Activity history")).toBeInTheDocument();
+  });
+
+  it("keeps the guided editor open and recoverable when detail loading fails", async () => {
+    getWorkoutSessionMock.mockRejectedValueOnce(
+      new Error("Workout detail unavailable")
+    );
+    renderWithProviders();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Edit Walking reflection"
+      })
+    );
+
+    expect(
+      await screen.findByText("Workout details could not be loaded")
+    ).toBeInTheDocument();
+    getWorkoutSessionMock.mockResolvedValueOnce({
+      workout: fitnessFixture.sessions[0]
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Captured data")).toBeInTheDocument();
+  });
+
+  it("does not plot missing energy-rate evidence as a zero value", async () => {
+    const allTime = fitnessFixture.sportComparison?.periods.find(
+      (period) => period.key === "all"
+    );
+    if (!allTime?.sports[0]) {
+      throw new Error("Expected an all-time sport comparison fixture");
+    }
+    allTime.sports[0].totalEnergyKcal = null;
+    allTime.sports[0].energyKcalPerHour = null;
+
+    renderWithProviders();
+
+    const comparison = within(
+      await screen.findByTestId("sport-comparison-panel")
+    );
+    fireEvent.click(comparison.getByRole("button", { name: "Energy / h" }));
+
+    expect(
+      comparison.getByText(
+        "No energy rate data is available for this period."
+      )
+    ).toBeInTheDocument();
   });
 });

@@ -129,38 +129,41 @@ function getAuxiliaryVisual(
       return {
         icon: Plus,
         tileClassName:
-          "border-emerald-300/18 bg-emerald-300/12 text-emerald-100 shadow-[0_18px_36px_rgba(52,211,153,0.12)]",
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-emerald-300/18 bg-emerald-300/10 text-emerald-100"
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "wiki":
       return {
         icon: BookCopy,
         tileClassName:
-          "border-blue-300/18 bg-blue-300/12 text-blue-100 shadow-[0_18px_36px_rgba(96,165,250,0.12)]",
-        badgeClassName: "border-blue-300/18 bg-blue-300/10 text-blue-100"
+          "border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
+        badgeClassName:
+          "border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "note":
       return {
         icon: NotebookPen,
         tileClassName:
-          "border-amber-300/18 bg-amber-300/12 text-amber-100 shadow-[0_18px_36px_rgba(251,191,36,0.12)]",
-        badgeClassName: "border-amber-300/18 bg-amber-300/10 text-amber-100"
+          "border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
+        badgeClassName:
+          "border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "insight":
       return {
         icon: Radar,
         tileClassName:
-          "border-emerald-300/18 bg-emerald-300/12 text-emerald-100 shadow-[0_18px_36px_rgba(52,211,153,0.12)]",
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-emerald-300/18 bg-emerald-300/10 text-emerald-100"
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "calendar":
       return {
         icon: CalendarDays,
         tileClassName:
-          "border-cyan-300/18 bg-cyan-300/12 text-cyan-100 shadow-[0_18px_36px_rgba(34,211,238,0.12)]",
-        badgeClassName: "border-cyan-300/18 bg-cyan-300/10 text-cyan-100"
+          "border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-accent-soft)] text-[var(--primary)] shadow-[var(--ui-shadow-soft)]",
+        badgeClassName:
+          "border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]"
       };
     case "route":
       return {
@@ -1104,7 +1107,7 @@ export function ActionBar({
           >
             {pinMutation.isError ? (
               <div
-                className="mb-2 text-[12px] text-rose-300"
+                className="mb-2 text-[12px] text-[var(--danger)]"
                 role="status"
                 aria-live="polite"
               >

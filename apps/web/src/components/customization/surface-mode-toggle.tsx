@@ -9,7 +9,7 @@ export function SurfaceModeToggle({
   onModeChange: (mode: SurfaceMode) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] p-1">
+    <div className="inline-flex items-center gap-1 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1">
       <Button
         type="button"
         size="sm"

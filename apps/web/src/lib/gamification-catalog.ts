@@ -1,5 +1,7 @@
 export type GamificationCatalogKind = "trophy" | "unlock";
 
+export const GAMIFICATION_ASSET_VERSION = "0.2.59";
+
 export type GamificationCatalogCategory =
   | "xp_levels"
   | "streaks"

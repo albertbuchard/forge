@@ -203,14 +203,14 @@ function computeHandleMaxRate(
 function toneClass(tone: LifeForceWarning["tone"]) {
   switch (tone) {
     case "danger":
-      return "bg-rose-400/12 text-rose-100";
+      return "bg-[var(--ui-danger-soft)] text-[var(--danger)]";
     case "warning":
-      return "bg-amber-400/12 text-amber-100";
+      return "bg-[var(--ui-warning-soft)] text-[var(--warning)]";
     case "success":
-      return "bg-emerald-400/12 text-emerald-100";
+      return "bg-[var(--ui-success-soft)] text-[var(--success)]";
     case "info":
     default:
-      return "bg-sky-400/12 text-sky-100";
+      return "bg-[var(--ui-info-soft)] text-[var(--info)]";
   }
 }
 
@@ -667,7 +667,7 @@ function LifeForceCurveEditor({
                   className={cn(
                     "rounded-full px-3 py-1.5 text-[11px] font-medium transition",
                     weekday === index
-                      ? "bg-[var(--primary)] text-slate-950"
+                      ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)]"
                       : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   )}
                   onClick={() => onWeekdayChange(index)}
@@ -933,7 +933,9 @@ function LifeForceCurveEditor({
                   <span
                     className={cn(
                       "pointer-events-none inline-flex rounded-full border border-[var(--ui-border-strong)] shadow-[var(--ui-shadow-soft)]",
-                      point.locked || isEndpoint ? "bg-[var(--ui-surface-2)]" : "bg-[var(--ui-surface-1)]"
+                      point.locked || isEndpoint
+                        ? "bg-[var(--ui-surface-2)]"
+                        : "bg-[var(--ui-surface-1)]"
                     )}
                     style={{
                       width: visibleSize,
@@ -1402,7 +1404,10 @@ export function LifeForceOverviewWorkspace({
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {payload.topTaskIdsNeedingSplit.map((taskId) => (
-              <Badge key={taskId} className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
+              <Badge
+                key={taskId}
+                className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]"
+              >
                 {taskId}
               </Badge>
             ))}

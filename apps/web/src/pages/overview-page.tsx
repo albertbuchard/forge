@@ -194,9 +194,7 @@ export function OverviewPage() {
       enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};
-  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
-    skip: !enableOverviewSideData
-  });
+  const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds);
   const nextMilestone =
     snapshot.dashboard.milestoneRewards.find((reward) => !reward.completed) ??
     snapshot.dashboard.milestoneRewards[0] ??

@@ -14,19 +14,31 @@ export function ReturnPathStrip({
   }>;
 }) {
   const toneClasses: Record<Behavior["kind"], string> = {
-    away: "border-rose-400/20 bg-[rgba(251,113,133,0.08)]",
-    committed: "border-emerald-400/20 bg-[rgba(110,231,183,0.08)]",
-    recovery: "border-amber-400/20 bg-[rgba(251,191,36,0.08)]"
+    away: "border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)]",
+    committed:
+      "border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)]",
+    recovery:
+      "border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)]"
   };
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       {entries.map((entry) => (
-        <Link key={entry.id} to={entry.href} className={`rounded-[22px] border px-4 py-4 transition hover:-translate-y-0.5 ${toneClasses[entry.tone]}`}>
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">{entry.tone}</div>
-          <div className="mt-2 font-medium text-white">{entry.title}</div>
-          <div className="mt-2 text-sm leading-6 text-white/58">{entry.summary}</div>
-          <div className="mt-4 inline-flex items-center gap-2 text-sm text-white/54">
+        <Link
+          key={entry.id}
+          to={entry.href}
+          className={`rounded-[22px] border px-4 py-4 transition hover:-translate-y-0.5 ${toneClasses[entry.tone]}`}
+        >
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+            {entry.tone}
+          </div>
+          <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
+            {entry.title}
+          </div>
+          <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            {entry.summary}
+          </div>
+          <div className="mt-4 inline-flex items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
             Open
             <ArrowRight className="size-3.5" />
           </div>

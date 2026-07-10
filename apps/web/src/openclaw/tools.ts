@@ -560,7 +560,9 @@ function withUserIds(path: string, userIds: string[] | undefined) {
       search.append("userIds", userId.trim());
     }
   }
-  return search.size > 0 ? `${path}?${search.toString()}` : path;
+  return search.size > 0
+    ? `${path}${path.includes("?") ? "&" : "?"}${search.toString()}`
+    : path;
 }
 
 function withQueryParams(
@@ -1216,11 +1218,11 @@ export function registerForgePluginTools(
     name: "forge_get_sports_overview",
     label: "Forge Sports Overview",
     description:
-      "Read the sports and workout surface with training volume, workout types, effort signals, and linked workout sessions.",
+      "Read the compact sports overview with training volume, workout-type comparisons, energy and load coverage, and effort signals. Use workout_session search or detail reads when individual sessions are needed.",
     parameters: scopedReadSchema,
     path: (params) =>
       withUserIds(
-        "/api/v1/health/fitness",
+        "/api/v1/health/fitness?compact=1",
         params.userIds as string[] | undefined
       )
   });

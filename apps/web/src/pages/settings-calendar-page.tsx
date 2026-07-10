@@ -398,7 +398,7 @@ export function SettingsCalendarPage() {
             !managedDiscoveryQuery.data?.discovery
           ) {
             return (
-              <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 px-4 py-6 text-sm leading-6 text-rose-100">
+              <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-6 text-sm leading-6 text-[var(--danger)]">
                 {managedDiscoveryQuery.error instanceof Error
                   ? managedDiscoveryQuery.error.message
                   : "Forge could not rediscover calendars for this connection."}
@@ -451,7 +451,7 @@ export function SettingsCalendarPage() {
                           </Badge>
                         ) : null}
                         {readOnlyConnection ? (
-                          <Badge className="bg-sky-400/12 text-sky-100">
+                          <Badge className="bg-[var(--ui-info-soft)] text-[var(--info)]">
                             Read only
                           </Badge>
                         ) : null}
@@ -833,7 +833,7 @@ export function SettingsCalendarPage() {
                           </div>
                         ) : null}
                         {connection.lastSyncError ? (
-                          <div className="mt-2 min-w-0 text-sm text-rose-200 [overflow-wrap:anywhere]">
+                          <div className="mt-2 min-w-0 text-sm text-[var(--danger)] [overflow-wrap:anywhere]">
                             {connection.lastSyncError}
                           </div>
                         ) : null}
@@ -1048,7 +1048,7 @@ export function SettingsCalendarPage() {
             description:
               "Use this when you want to disconnect the account entirely. You can reconnect later with the guided setup flow.",
             render: () => (
-              <div className="rounded-[24px] border border-rose-400/20 bg-rose-400/10 p-4 text-sm leading-6 text-rose-100">
+              <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] p-4 text-sm leading-6 text-[var(--danger)]">
                 {removableConnection ? (
                   <>
                     <div className={SETTINGS_STRONG_CLASS}>

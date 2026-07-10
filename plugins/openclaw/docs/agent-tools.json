@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-10T09:47:04.454Z",
+  "generatedAt": "2026-07-10T20:44:30.687Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -633,12 +633,13 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Sports Overview",
-      "summary": "Read the sports surface with workout volume, workout types, effort signals, and linked session context.",
+      "summary": "Read the sports surface with workout volume, sport comparisons, evidence coverage, effort signals, and linked session context.",
       "whenToUse": "Use when the operator wants training context, habit-generated workout visibility, or workout review before planning.",
       "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
       "notes": [
         "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
+        "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary for bounded list clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata.",
         "Habit-generated and imported workouts reconcile into the same workout record model."
       ],
       "example": "{\"userIds\":[\"user_operator\"]}",

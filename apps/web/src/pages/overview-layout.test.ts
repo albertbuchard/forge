@@ -16,7 +16,7 @@ function layout(
 }
 
 describe("normalizeOverviewLayout", () => {
-  it("puts current state and next actions before detailed summaries", () => {
+  it("keeps the Forge Smith and its trophy before the metric summary", () => {
     const normalized = normalizeOverviewLayout(
       layout([
         "hero",
@@ -33,8 +33,8 @@ describe("normalizeOverviewLayout", () => {
 
     expect(normalized.order).toEqual([
       "hero",
-      "summary",
       "gamification",
+      "summary",
       "signals",
       "pipeline",
       "body-signals",
@@ -85,8 +85,8 @@ describe("normalizeOverviewLayout", () => {
 
     expect(normalized.order).toEqual([
       "hero",
-      "summary",
       "gamification",
+      "summary",
       "signals",
       "pipeline",
       "body-signals",
@@ -134,8 +134,8 @@ describe("normalizeOverviewLayout", () => {
   it("is idempotent once the operational order is active", () => {
     const current = layout([
       "hero",
-      "summary",
       "gamification",
+      "summary",
       "signals",
       "pipeline",
       "body-signals",
@@ -144,6 +144,35 @@ describe("normalizeOverviewLayout", () => {
     ]);
 
     expect(normalizeOverviewLayout(current)).toBe(current);
+  });
+
+  it("repairs the regressed order that hid the Forge Smith below the fold", () => {
+    const regressed = layout(
+      [
+        "hero",
+        "summary",
+        "gamification",
+        "signals",
+        "pipeline",
+        "body-signals",
+        "goals",
+        "life-force",
+        "weather"
+      ],
+      "2026-07-10T08:00:00.000Z"
+    );
+
+    expect(normalizeOverviewLayout(regressed).order).toEqual([
+      "hero",
+      "gamification",
+      "summary",
+      "signals",
+      "pipeline",
+      "body-signals",
+      "goals",
+      "life-force",
+      "weather"
+    ]);
   });
 
   it("restores the required Forge Smith widget without disturbing custom order", () => {

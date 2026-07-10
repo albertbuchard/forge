@@ -18,9 +18,15 @@ export function LoadingState({
   const { t } = useI18n();
   return (
     <Card className="surface-pulse ambient-glow mx-auto grid max-w-2xl gap-4 text-center">
-      <div className="type-label text-[var(--ui-ink-faint)]">{eyebrow ?? t("common.labels.loading")}</div>
-      <div className="type-display-section text-[var(--ui-ink-strong)]">{title ?? t("common.pageState.loadingTitle")}</div>
-      <p className="type-body mx-auto max-w-xl text-[var(--ui-ink-soft)]">{description ?? t("common.pageState.loadingDescription")}</p>
+      <div className="type-label text-[var(--ui-ink-faint)]">
+        {eyebrow ?? t("common.labels.loading")}
+      </div>
+      <div className="type-display-section text-[var(--ui-ink-strong)]">
+        {title ?? t("common.pageState.loadingTitle")}
+      </div>
+      <p className="type-body mx-auto max-w-xl text-[var(--ui-ink-soft)]">
+        {description ?? t("common.pageState.loadingDescription")}
+      </p>
       <div className="mx-auto flex min-h-11 items-center gap-3 rounded-full bg-[var(--ui-surface-2)] px-4 py-3 text-[var(--ui-ink-soft)]">
         <Spinner tone="subtle" className="size-3.5" />
         <span className="type-meta">{t("common.labels.syncInProgress")}</span>
@@ -43,10 +49,16 @@ export function ErrorState({
 
   return (
     <Card className="mx-auto grid max-w-2xl gap-4">
-      <div className="type-label text-rose-200/72">{eyebrow ?? t("common.labels.connectionState")}</div>
-      <div className="type-display-section text-[var(--ui-ink-strong)]">{title}</div>
+      <div className="type-label text-[var(--danger)]">
+        {eyebrow ?? t("common.labels.connectionState")}
+      </div>
+      <div className="type-display-section text-[var(--ui-ink-strong)]">
+        {title}
+      </div>
       <p className="type-body text-[var(--ui-ink-soft)]">{description}</p>
-      <div className="type-meta text-[var(--ui-ink-faint)]">{t("common.labels.errorCode", { code })}</div>
+      <div className="type-meta text-[var(--ui-ink-faint)]">
+        {t("common.labels.errorCode", { code })}
+      </div>
       {onRetry ? (
         <div className="flex flex-wrap gap-3">
           <Button type="button" variant="secondary" onClick={onRetry}>
@@ -73,9 +85,15 @@ export function EmptyState({
   const { t } = useI18n();
   return (
     <Card className="mx-auto grid max-w-2xl gap-4 text-center">
-      <div className="type-label text-[var(--ui-ink-faint)]">{eyebrow ?? t("common.labels.loading")}</div>
-      <div className="type-display-section text-[var(--ui-ink-strong)]">{title}</div>
-      <p className="type-body mx-auto max-w-xl text-[var(--ui-ink-soft)]">{description}</p>
+      <div className="type-label text-[var(--ui-ink-faint)]">
+        {eyebrow ?? t("common.labels.loading")}
+      </div>
+      <div className="type-display-section text-[var(--ui-ink-strong)]">
+        {title}
+      </div>
+      <p className="type-body mx-auto max-w-xl text-[var(--ui-ink-soft)]">
+        {description}
+      </p>
       {action ? <div className="flex justify-center">{action}</div> : null}
     </Card>
   );

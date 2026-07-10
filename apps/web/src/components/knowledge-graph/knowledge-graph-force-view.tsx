@@ -15,6 +15,7 @@ import {
   buildKnowledgeGraphFocusRings,
   buildKnowledgeGraphHopLevels,
   buildKnowledgeGraphOverviewCameraTarget,
+  buildKnowledgeGraphSigmaOverviewRatio,
   reduceKnowledgeGraphSigmaEdgeAttributes,
   reduceKnowledgeGraphSigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
@@ -31,13 +32,12 @@ import {
 } from "@/components/knowledge-graph/knowledge-graph-diagnostics-publisher";
 import {
   buildFallbackSnapshot,
-  buildKnowledgeGraphEdgeStroke,
+  applyKnowledgeGraphThemeColors,
   buildPositionMapFromGraph,
   canUseWebGL,
   createGraphFromData,
-  fadeColor,
   findNearestViewportNode,
-  getFallbackCameraForSnapshot,
+  getFallbackOverviewCamera,
   isContainerReady,
   projectFallbackNode,
   recenterGraphAroundOrigin,
@@ -51,6 +51,12 @@ import {
   type SigmaEdgeAttributes,
   type SigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-renderer-model";
+import {
+  buildKnowledgeGraphEdgeStroke,
+  fadeKnowledgeGraphColor,
+  resolveKnowledgeGraphThemeColor
+} from "@/components/knowledge-graph/knowledge-graph-theme";
+import { useForgeThemeKey } from "@/hooks/use-forge-theme-key";
 import {
   buildKnowledgeGraphDatasetSignature,
   buildRenderedKnowledgeGraphEdges,
@@ -111,9 +117,15 @@ export const KnowledgeGraphForceView = forwardRef<
     (state) => state.knowledgeGraphDiagnostics.panelOpen
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const sigmaRef = useRef<Sigma<SigmaNodeAttributes, SigmaEdgeAttributes> | null>(null);
+  const sigmaRef = useRef<Sigma<
+    SigmaNodeAttributes,
+    SigmaEdgeAttributes
+  > | null>(null);
   const workerRef = useRef<Worker | null>(null);
-  const graphRef = useRef<Graph<SigmaNodeAttributes, SigmaEdgeAttributes> | null>(null);
+  const graphRef = useRef<Graph<
+    SigmaNodeAttributes,
+    SigmaEdgeAttributes
+  > | null>(null);
   const positionCacheRef = useRef<Map<string, PositionSnapshot>>(new Map());
   const cameraStateCacheRef = useRef<Map<string, CameraState>>(new Map());
   const nodeMapRef = useRef<Map<string, KnowledgeGraphNode>>(new Map());
@@ -129,12 +141,16 @@ export const KnowledgeGraphForceView = forwardRef<
   const simulationPhaseRef =
     useRef<KnowledgeGraphDiagnosticsPayload["simulationPhase"]>("global");
   const primaryFocusedNodeIdRef = useRef<string | null>(null);
-  const focusSourcesRef = useRef<KnowledgeGraphDiagnosticsPayload["focusSources"]>([]);
+  const focusSourcesRef = useRef<
+    KnowledgeGraphDiagnosticsPayload["focusSources"]
+  >([]);
   const focusPressureRef = useRef<Float32Array>(new Float32Array(0));
-  const centroidRef = useRef<KnowledgeGraphDiagnosticsPayload["graphCentroid"]>({
-    x: 0,
-    y: 0
-  });
+  const centroidRef = useRef<KnowledgeGraphDiagnosticsPayload["graphCentroid"]>(
+    {
+      x: 0,
+      y: 0
+    }
+  );
   const startupPhaseRef = useRef<KnowledgeGraphStartupPhase>("boot");
   const startupCorrectionAppliedRef = useRef(false);
   const startupFirstFrameHandledRef = useRef(false);
@@ -156,51 +172,72 @@ export const KnowledgeGraphForceView = forwardRef<
     angle: 0,
     ratio: 1
   });
-  const [fallbackSnapshot, setFallbackSnapshot] = useState<FallbackGraphSnapshot | null>(null);
+  const [fallbackSnapshot, setFallbackSnapshot] =
+    useState<FallbackGraphSnapshot | null>(null);
   const [containerSize, setContainerSize] = useState({
     width: 0,
     height: 0
   });
   const diagnosticsAvailable = isKnowledgeGraphDevDiagnosticsEnabled();
-  const diagnosticsEnabled =
-    diagnosticsAvailable && diagnosticsPanelOpen;
+  const themeKey = useForgeThemeKey();
+  const diagnosticsEnabled = diagnosticsAvailable && diagnosticsPanelOpen;
   const buildGraphOverviewRatio = (
-    currentGraph: Graph<SigmaNodeAttributes, SigmaEdgeAttributes> | null = graphRef.current
+    currentGraph: Graph<
+      SigmaNodeAttributes,
+      SigmaEdgeAttributes
+    > | null = graphRef.current
   ) => {
     const overview = buildKnowledgeGraphOverviewCameraTarget({
-      positions: currentGraph ? buildPositionMapFromGraph(currentGraph) : new Map(),
+      positions: currentGraph
+        ? buildPositionMapFromGraph(currentGraph)
+        : new Map(),
       currentRatio: 1
     });
     return overview.ratio;
   };
   const buildSigmaOverviewCameraState = (
-    currentGraph: Graph<SigmaNodeAttributes, SigmaEdgeAttributes> | null = graphRef.current
-  ) =>
-    ({
+    currentGraph: Graph<
+      SigmaNodeAttributes,
+      SigmaEdgeAttributes
+    > | null = graphRef.current
+  ) => {
+    const overviewRatio = buildGraphOverviewRatio(currentGraph);
+    return {
       x: 0.5,
       y: 0.5,
       angle: 0,
-      ratio: buildGraphOverviewRatio(currentGraph)
-    }) satisfies CameraState;
+      ratio: buildKnowledgeGraphSigmaOverviewRatio(overviewRatio)
+    } satisfies CameraState;
+  };
   const buildFallbackOverviewCameraState = (
-    currentGraph: Graph<SigmaNodeAttributes, SigmaEdgeAttributes> | null = graphRef.current
-  ) =>
-    ({
+    _currentGraph: Graph<
+      SigmaNodeAttributes,
+      SigmaEdgeAttributes
+    > | null = graphRef.current
+  ) => {
+    return {
       x: 0,
       y: 0,
       angle: 0,
-      ratio: buildGraphOverviewRatio(currentGraph)
-    }) satisfies CameraState;
+      ratio: 1
+    } satisfies CameraState;
+  };
   const getCurrentRendererMode = (): "sigma" | "fallback" =>
     sigmaRef.current ? "sigma" : "fallback";
 
-  const renderedEdges = useMemo(() => buildRenderedKnowledgeGraphEdges(edges), [edges]);
+  const renderedEdges = useMemo(
+    () => buildRenderedKnowledgeGraphEdges(edges),
+    [edges]
+  );
   const datasetSignature = useMemo(
     () => buildKnowledgeGraphDatasetSignature(nodes, edges),
     [edges, nodes]
   );
   const focusRings = useMemo(
-    () => (focusNodeId ? buildKnowledgeGraphFocusRings(renderedEdges, focusNodeId) : null),
+    () =>
+      focusNodeId
+        ? buildKnowledgeGraphFocusRings(renderedEdges, focusNodeId)
+        : null,
     [focusNodeId, renderedEdges]
   );
   const detailNodeIds = useMemo(() => {
@@ -384,7 +421,10 @@ export const KnowledgeGraphForceView = forwardRef<
     if (diagnosticsPanelOpen) {
       dispatch(setKnowledgeGraphDiagnosticsStatus(status));
     }
-    if (mirrorToConsole && Date.now() - lastStatusMirrorAtRef.current >= 1_000) {
+    if (
+      mirrorToConsole &&
+      Date.now() - lastStatusMirrorAtRef.current >= 1_000
+    ) {
       lastStatusMirrorAtRef.current = Date.now();
       mirrorKnowledgeGraphDiagnosticsStatusToConsole(status);
     }
@@ -451,12 +491,15 @@ export const KnowledgeGraphForceView = forwardRef<
       dispatch(recordKnowledgeGraphDiagnosticsSnapshot(snapshot));
     }
     mirrorKnowledgeGraphDiagnosticsSnapshotToConsole(snapshot);
-    publishStatusToStore({
-      ...buildCurrentStatus({ rendererMode })!,
-      latestSnapshotAt: snapshot.capturedAt
-    }, {
-      mirrorToConsole: true
-    });
+    publishStatusToStore(
+      {
+        ...buildCurrentStatus({ rendererMode })!,
+        latestSnapshotAt: snapshot.capturedAt
+      },
+      {
+        mirrorToConsole: true
+      }
+    );
 
     if (
       publishAnomaly &&
@@ -467,7 +510,8 @@ export const KnowledgeGraphForceView = forwardRef<
       recordDiagnosticsEvent({
         level: "warning",
         eventKey: "snapshot_drift_detected",
-        message: "Knowledge graph drift exceeded the startup tolerance during dev diagnostics sampling.",
+        message:
+          "Knowledge graph drift exceeded the startup tolerance during dev diagnostics sampling.",
         publishBackend: true,
         details: {
           datasetSignature: snapshot.datasetSignature,
@@ -519,7 +563,8 @@ export const KnowledgeGraphForceView = forwardRef<
     recordDiagnosticsEvent({
       level: "warning",
       eventKey: "startup_corrected",
-      message: "Corrected the knowledge graph startup bias back to graph-space origin.",
+      message:
+        "Corrected the knowledge graph startup bias back to graph-space origin.",
       publishBackend: true,
       details: {
         reason,
@@ -554,12 +599,15 @@ export const KnowledgeGraphForceView = forwardRef<
     });
     if (status.startupInvariantSatisfied) {
       startupPhaseRef.current = "startup_verified";
-      publishStatusToStore({
-        ...status,
-        startupPhase: "startup_verified"
-      }, {
-        mirrorToConsole: true
-      });
+      publishStatusToStore(
+        {
+          ...status,
+          startupPhase: "startup_verified"
+        },
+        {
+          mirrorToConsole: true
+        }
+      );
       recordDiagnosticsEvent({
         level: "info",
         eventKey: "startup_verified",
@@ -607,12 +655,15 @@ export const KnowledgeGraphForceView = forwardRef<
     });
     if (correctedStatus.startupInvariantSatisfied) {
       startupPhaseRef.current = "startup_verified";
-      publishStatusToStore({
-        ...correctedStatus,
-        startupPhase: "startup_verified"
-      }, {
-        mirrorToConsole: true
-      });
+      publishStatusToStore(
+        {
+          ...correctedStatus,
+          startupPhase: "startup_verified"
+        },
+        {
+          mirrorToConsole: true
+        }
+      );
       recordDiagnosticsEvent({
         level: "info",
         eventKey: "startup_verified_after_correction",
@@ -627,7 +678,8 @@ export const KnowledgeGraphForceView = forwardRef<
     recordDiagnosticsEvent({
       level: "error",
       eventKey: "startup_correction_failed",
-      message: "Knowledge graph startup correction did not restore the origin invariant.",
+      message:
+        "Knowledge graph startup correction did not restore the origin invariant.",
       publishBackend: true,
       details: {
         datasetSignature: correctedStatus.datasetSignature,
@@ -659,8 +711,8 @@ export const KnowledgeGraphForceView = forwardRef<
         sigma: sigmaRef.current,
         startupPhase: startupPhaseRef.current,
         startupInvariantSatisfied:
-          buildCurrentStatus({ rendererMode: "sigma" })?.startupInvariantSatisfied ??
-          false,
+          buildCurrentStatus({ rendererMode: "sigma" })
+            ?.startupInvariantSatisfied ?? false,
         simulationPhase: simulationPhaseRef.current,
         focusSources: focusSourcesRef.current,
         focusPressure: focusPressureRef.current,
@@ -692,8 +744,8 @@ export const KnowledgeGraphForceView = forwardRef<
       height: containerSize.height,
       startupPhase: startupPhaseRef.current,
       startupInvariantSatisfied:
-        buildCurrentStatus({ rendererMode: "fallback" })?.startupInvariantSatisfied ??
-        false,
+        buildCurrentStatus({ rendererMode: "fallback" })
+          ?.startupInvariantSatisfied ?? false,
       simulationPhase: simulationPhaseRef.current,
       focusSources: focusSourcesRef.current,
       focusPressure: focusPressureRef.current,
@@ -721,7 +773,10 @@ export const KnowledgeGraphForceView = forwardRef<
       return;
     }
     const positions = buildPositionMapFromGraph(currentGraph);
-    const rings = buildKnowledgeGraphFocusRings(renderedEdges, focusNodeIdRef.current);
+    const rings = buildKnowledgeGraphFocusRings(
+      renderedEdges,
+      focusNodeIdRef.current
+    );
     const currentRatio = sigmaRef.current
       ? sigmaRef.current.getCamera().getState().ratio
       : fallbackCamera.ratio;
@@ -761,7 +816,8 @@ export const KnowledgeGraphForceView = forwardRef<
     if (sigmaRef.current) {
       const camera = sigmaRef.current.getCamera();
       const current = camera.getState();
-      const shouldRespectManualRatio = Date.now() < manualRatioHoldUntilRef.current;
+      const shouldRespectManualRatio =
+        Date.now() < manualRatioHoldUntilRef.current;
       void camera.animate(
         {
           x: target.x,
@@ -778,7 +834,9 @@ export const KnowledgeGraphForceView = forwardRef<
       x: target.x,
       y: target.y,
       ratio:
-        Date.now() < manualRatioHoldUntilRef.current ? current.ratio : target.ratio
+        Date.now() < manualRatioHoldUntilRef.current
+          ? current.ratio
+          : target.ratio
     }));
   };
 
@@ -825,21 +883,22 @@ export const KnowledgeGraphForceView = forwardRef<
   }, [diagnosticsEnabled]);
 
   useEffect(() => {
-    if (!shouldPublishKnowledgeGraphDiagnostics() || typeof window === "undefined") {
+    if (
+      !shouldPublishKnowledgeGraphDiagnostics() ||
+      typeof window === "undefined"
+    ) {
       return;
     }
     window.__FORGE_KNOWLEDGE_GRAPH_TEST_API__ = {
       selectNode: (nodeId) => {
-        const nextNode =
-          nodeId
-            ? nodeMapRef.current.get(nodeId) ??
-              (graphRef.current?.hasNode(nodeId)
-                ? ((graphRef.current.getNodeAttribute(
-                    nodeId,
-                    "data"
-                  ) as KnowledgeGraphNode | undefined) ?? null)
-                : null)
-            : null;
+        const nextNode = nodeId
+          ? (nodeMapRef.current.get(nodeId) ??
+            (graphRef.current?.hasNode(nodeId)
+              ? ((graphRef.current.getNodeAttribute(nodeId, "data") as
+                  | KnowledgeGraphNode
+                  | undefined) ?? null)
+              : null))
+          : null;
         onSelectNodeRef.current(nextNode);
       },
       moveNodeBy: (nodeId, deltaX, deltaY) => {
@@ -865,7 +924,9 @@ export const KnowledgeGraphForceView = forwardRef<
         } satisfies KnowledgeGraphLayoutWorkerMessage);
         lifecycleCallbacksRef.current.safeRefreshSigma();
         if (!sigmaRef.current && graphRef.current) {
-          setFallbackSnapshot(buildFallbackSnapshot(graphRef.current, renderedEdges));
+          setFallbackSnapshot(
+            buildFallbackSnapshot(graphRef.current, renderedEdges)
+          );
         }
       },
       nudgeCameraBy: (deltaX, deltaY) => {
@@ -961,7 +1022,7 @@ export const KnowledgeGraphForceView = forwardRef<
           return;
         }
         if (fallbackSnapshot) {
-          setFallbackCamera(getFallbackCameraForSnapshot(fallbackSnapshot));
+          setFallbackCamera(getFallbackOverviewCamera());
         }
       },
       recenterOnFocus: () => {
@@ -988,7 +1049,9 @@ export const KnowledgeGraphForceView = forwardRef<
           sigmaRef.current.getCamera().getState()
         );
       }
-      workerRef.current?.postMessage({ type: "dispose" } satisfies KnowledgeGraphLayoutWorkerMessage);
+      workerRef.current?.postMessage({
+        type: "dispose"
+      } satisfies KnowledgeGraphLayoutWorkerMessage);
       workerRef.current?.terminate();
       workerRef.current = null;
       if (diagnosticsEnabled) {
@@ -1015,12 +1078,16 @@ export const KnowledgeGraphForceView = forwardRef<
       safeRefreshSigma,
       verifyStartupInvariant
     } = lifecycleCallbacksRef.current;
-    if (!containerRef.current || !isContainerReady(containerRef.current, containerSize)) {
+    if (
+      !containerRef.current ||
+      !isContainerReady(containerRef.current, containerSize)
+    ) {
       return;
     }
 
     const sameDataset =
-      datasetSignatureRef.current === datasetSignature && graphRef.current !== null;
+      datasetSignatureRef.current === datasetSignature &&
+      graphRef.current !== null;
 
     if (sameDataset) {
       safeRefreshSigma({ resize: true });
@@ -1028,7 +1095,8 @@ export const KnowledgeGraphForceView = forwardRef<
         recordDiagnosticsEvent({
           level: "debug",
           eventKey: "graph_refresh",
-          message: "Reused the current graph dataset and refreshed the renderer.",
+          message:
+            "Reused the current graph dataset and refreshed the renderer.",
           details: {
             datasetSignature,
             width: containerSize.width,
@@ -1072,7 +1140,11 @@ export const KnowledgeGraphForceView = forwardRef<
       );
     }
 
-    const nextGraph = createGraphFromData(nodes, renderedEdges, positionCacheRef.current);
+    const nextGraph = createGraphFromData(
+      nodes,
+      renderedEdges,
+      positionCacheRef.current
+    );
     recenterGraphAroundOrigin(nextGraph);
     rememberGraphPositions(nextGraph, positionCacheRef.current);
     graphRef.current = nextGraph;
@@ -1111,8 +1183,11 @@ export const KnowledgeGraphForceView = forwardRef<
             labelRenderedSizeThreshold: 20,
             labelDensity: 0.04,
             labelGridCellSize: 120,
-            defaultNodeColor: "#c0c1ff",
-            defaultEdgeColor: "rgba(125, 211, 252, 0.1)",
+            defaultNodeColor: resolveKnowledgeGraphThemeColor("--primary"),
+            defaultEdgeColor: fadeKnowledgeGraphColor(
+              resolveKnowledgeGraphThemeColor("--info", "rgb(125, 211, 252)"),
+              0.1
+            ),
             minCameraRatio: 0.08,
             maxCameraRatio: 4,
             autoRescale: false,
@@ -1152,51 +1227,60 @@ export const KnowledgeGraphForceView = forwardRef<
               viewportY: event.y
             });
             if (nearestNodeId) {
-              onSelectNodeRef.current(nodeMapRef.current.get(nearestNodeId) ?? null);
+              onSelectNodeRef.current(
+                nodeMapRef.current.get(nearestNodeId) ?? null
+              );
               return;
             }
             onSelectNodeRef.current(null);
           });
-          sigmaRef.current.on("downNode", ({ node, event, preventSigmaDefault }) => {
-            if (!sigmaRef.current || !graphRef.current?.hasNode(node)) {
-              return;
-            }
-            preventSigmaDefault();
-            const graphPosition = sigmaRef.current.viewportToGraph({
-              x: event.x,
-              y: event.y
-            });
-            const current = graphRef.current.getNodeAttributes(node);
-            dragStateRef.current = {
-              nodeId: node,
-              offsetX: current.x - graphPosition.x,
-              offsetY: current.y - graphPosition.y,
-              startViewportX: event.x,
-              startViewportY: event.y,
-              currentX: current.x,
-              currentY: current.y,
-              moved: false
-            };
-            previousPanningEnabledRef.current =
-              sigmaRef.current.getSetting("enableCameraPanning") ?? true;
-            sigmaRef.current.setSetting("enableCameraPanning", false);
-            setDraggedNodeId(node);
-            setHoveredNodeId(node);
-            recordDiagnosticsEvent({
-              level: "debug",
-              eventKey: "drag_start",
-              message: "Started dragging a knowledge graph node.",
-              details: {
-                nodeId: node
+          sigmaRef.current.on(
+            "downNode",
+            ({ node, event, preventSigmaDefault }) => {
+              if (!sigmaRef.current || !graphRef.current?.hasNode(node)) {
+                return;
               }
-            });
-            workerRef.current?.postMessage({
-              type: "drag-start",
-              nodeId: node
-            } satisfies KnowledgeGraphLayoutWorkerMessage);
-          });
+              preventSigmaDefault();
+              const graphPosition = sigmaRef.current.viewportToGraph({
+                x: event.x,
+                y: event.y
+              });
+              const current = graphRef.current.getNodeAttributes(node);
+              dragStateRef.current = {
+                nodeId: node,
+                offsetX: current.x - graphPosition.x,
+                offsetY: current.y - graphPosition.y,
+                startViewportX: event.x,
+                startViewportY: event.y,
+                currentX: current.x,
+                currentY: current.y,
+                moved: false
+              };
+              previousPanningEnabledRef.current =
+                sigmaRef.current.getSetting("enableCameraPanning") ?? true;
+              sigmaRef.current.setSetting("enableCameraPanning", false);
+              setDraggedNodeId(node);
+              setHoveredNodeId(node);
+              recordDiagnosticsEvent({
+                level: "debug",
+                eventKey: "drag_start",
+                message: "Started dragging a knowledge graph node.",
+                details: {
+                  nodeId: node
+                }
+              });
+              workerRef.current?.postMessage({
+                type: "drag-start",
+                nodeId: node
+              } satisfies KnowledgeGraphLayoutWorkerMessage);
+            }
+          );
           sigmaRef.current.on("moveBody", ({ event, preventSigmaDefault }) => {
-            if (!sigmaRef.current || !graphRef.current || !dragStateRef.current) {
+            if (
+              !sigmaRef.current ||
+              !graphRef.current ||
+              !dragStateRef.current
+            ) {
               return;
             }
             preventSigmaDefault();
@@ -1311,7 +1395,9 @@ export const KnowledgeGraphForceView = forwardRef<
 
         setFallbackReason(null);
         setFallbackSnapshot(buildFallbackSnapshot(nextGraph, renderedEdges));
-        sigmaRef.current.getCamera().setState(buildSigmaOverviewCameraState(nextGraph));
+        sigmaRef.current
+          .getCamera()
+          .setState(buildSigmaOverviewCameraState(nextGraph));
       } catch (error) {
         sigmaRef.current?.kill();
         sigmaRef.current = null;
@@ -1362,7 +1448,8 @@ export const KnowledgeGraphForceView = forwardRef<
             recordDiagnosticsEvent({
               level: "info",
               eventKey: "worker_started",
-              message: "Knowledge graph worker reported its first simulation stats.",
+              message:
+                "Knowledge graph worker reported its first simulation stats.",
               details: {
                 datasetSignature: datasetSignatureRef.current,
                 phase: message.phase
@@ -1418,7 +1505,10 @@ export const KnowledgeGraphForceView = forwardRef<
             attributes: ["x", "y"]
           }
         );
-        if (dragStateRef.current && currentGraph.hasNode(dragStateRef.current.nodeId)) {
+        if (
+          dragStateRef.current &&
+          currentGraph.hasNode(dragStateRef.current.nodeId)
+        ) {
           const draggedNodeId = dragStateRef.current.nodeId;
           currentGraph.mergeNodeAttributes(draggedNodeId, {
             x: dragStateRef.current.currentX,
@@ -1429,14 +1519,22 @@ export const KnowledgeGraphForceView = forwardRef<
         if (sigmaRef.current) {
           safeRefreshSigma();
         } else {
-          setFallbackSnapshot(buildFallbackSnapshot(currentGraph, renderedEdges));
+          setFallbackSnapshot(
+            buildFallbackSnapshot(currentGraph, renderedEdges)
+          );
         }
       };
     }
 
     const nodeOrder = nextGraph.nodes();
-    const nodeIndexById = new Map(nodeOrder.map((nodeId, index) => [nodeId, index]));
-    const hopLevels = buildKnowledgeGraphHopLevels(nodeOrder, renderedEdges, focusNodeId);
+    const nodeIndexById = new Map(
+      nodeOrder.map((nodeId, index) => [nodeId, index])
+    );
+    const hopLevels = buildKnowledgeGraphHopLevels(
+      nodeOrder,
+      renderedEdges,
+      focusNodeId
+    );
     workerRef.current.postMessage({
       type: "init-graph",
       nodes: nodeOrder.map((nodeId) => {
@@ -1451,7 +1549,10 @@ export const KnowledgeGraphForceView = forwardRef<
         };
       }),
       edges: renderedEdges
-        .filter((edge) => nodeIndexById.has(edge.source) && nodeIndexById.has(edge.target))
+        .filter(
+          (edge) =>
+            nodeIndexById.has(edge.source) && nodeIndexById.has(edge.target)
+        )
         .map((edge) => ({
           source: nodeIndexById.get(edge.source)!,
           target: nodeIndexById.get(edge.target)!,
@@ -1480,6 +1581,27 @@ export const KnowledgeGraphForceView = forwardRef<
     physicsSettings,
     renderedEdges
   ]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    applyKnowledgeGraphThemeColors(graph);
+    sigmaRef.current?.setSetting(
+      "defaultNodeColor",
+      resolveKnowledgeGraphThemeColor("--primary")
+    );
+    sigmaRef.current?.setSetting(
+      "defaultEdgeColor",
+      fadeKnowledgeGraphColor(
+        resolveKnowledgeGraphThemeColor("--info", "rgb(125, 211, 252)"),
+        0.1
+      )
+    );
+    setFallbackSnapshot(buildFallbackSnapshot(graph, renderedEdges));
+    lifecycleCallbacksRef.current.safeRefreshSigma();
+  }, [renderedEdges, themeKey]);
 
   useEffect(() => {
     const { recordDiagnosticsEvent } = lifecycleCallbacksRef.current;
@@ -1523,7 +1645,11 @@ export const KnowledgeGraphForceView = forwardRef<
   useEffect(() => {
     const { publishCurrentDiagnostics, recordSnapshot } =
       lifecycleCallbacksRef.current;
-    if (!diagnosticsEnabled || !graphRef.current || !datasetSignatureRef.current) {
+    if (
+      !diagnosticsEnabled ||
+      !graphRef.current ||
+      !datasetSignatureRef.current
+    ) {
       return;
     }
     const interval = window.setInterval(() => {
@@ -1544,7 +1670,10 @@ export const KnowledgeGraphForceView = forwardRef<
     }
 
     sigmaRef.current.setSetting("nodeReducer", (nodeId, attributes) => {
-      const node = graphRef.current?.getNodeAttribute(nodeId, "data") as KnowledgeGraphNode;
+      const node = graphRef.current?.getNodeAttribute(
+        nodeId,
+        "data"
+      ) as KnowledgeGraphNode;
       return reduceKnowledgeGraphSigmaNodeAttributes({
         nodeId,
         attributes: attributes as SigmaNodeAttributes,
@@ -1571,7 +1700,13 @@ export const KnowledgeGraphForceView = forwardRef<
       });
     });
     safeRefreshSigma();
-  }, [detailNodeIds, draggedNodeId, focusNodeId, hoveredNodeId, relatedNodeIds]);
+  }, [
+    detailNodeIds,
+    draggedNodeId,
+    focusNodeId,
+    hoveredNodeId,
+    relatedNodeIds
+  ]);
 
   useEffect(() => {
     const {
@@ -1625,8 +1760,8 @@ export const KnowledgeGraphForceView = forwardRef<
       height: containerSize.height,
       startupPhase: startupPhaseRef.current,
       startupInvariantSatisfied:
-        buildCurrentStatus({ rendererMode: "fallback" })?.startupInvariantSatisfied ??
-        false,
+        buildCurrentStatus({ rendererMode: "fallback" })
+          ?.startupInvariantSatisfied ?? false,
       simulationPhase: simulationPhaseRef.current,
       focusSources: focusSourcesRef.current,
       focusPressure: focusPressureRef.current,
@@ -1651,7 +1786,11 @@ export const KnowledgeGraphForceView = forwardRef<
   ]);
 
   const fallbackProjectedNodes = useMemo(() => {
-    if (!fallbackSnapshot || containerSize.width <= 0 || containerSize.height <= 0) {
+    if (
+      !fallbackSnapshot ||
+      containerSize.width <= 0 ||
+      containerSize.height <= 0
+    ) {
       return [] as Array<
         FallbackGraphNode & {
           viewportX: number;
@@ -1676,7 +1815,12 @@ export const KnowledgeGraphForceView = forwardRef<
         viewportSize: projected.size
       };
     });
-  }, [containerSize.height, containerSize.width, fallbackCamera, fallbackSnapshot]);
+  }, [
+    containerSize.height,
+    containerSize.width,
+    fallbackCamera,
+    fallbackSnapshot
+  ]);
 
   const fallbackNodeMap = useMemo(
     () => new Map(fallbackProjectedNodes.map((node) => [node.id, node])),
@@ -1716,27 +1860,26 @@ export const KnowledgeGraphForceView = forwardRef<
                 (edge.source === focusNodeId || edge.target === focusNodeId);
               const touchesHover =
                 !!hoveredNodeId &&
-                (edge.source === hoveredNodeId || edge.target === hoveredNodeId);
-              const sourceDistance =
-                !focusNodeId
+                (edge.source === hoveredNodeId ||
+                  edge.target === hoveredNodeId);
+              const sourceDistance = !focusNodeId
+                ? 0
+                : edge.source === focusNodeId
                   ? 0
-                  : edge.source === focusNodeId
-                    ? 0
-                    : detailNodeIds.has(edge.source)
-                      ? 1
-                      : relatedNodeIds.has(edge.source)
-                        ? 2
-                        : 3;
-              const targetDistance =
-                !focusNodeId
+                  : detailNodeIds.has(edge.source)
+                    ? 1
+                    : relatedNodeIds.has(edge.source)
+                      ? 2
+                      : 3;
+              const targetDistance = !focusNodeId
+                ? 0
+                : edge.target === focusNodeId
                   ? 0
-                  : edge.target === focusNodeId
-                    ? 0
-                    : detailNodeIds.has(edge.target)
-                      ? 1
-                      : relatedNodeIds.has(edge.target)
-                        ? 2
-                        : 3;
+                  : detailNodeIds.has(edge.target)
+                    ? 1
+                    : relatedNodeIds.has(edge.target)
+                      ? 2
+                      : 3;
               const edgeDistance = focusNodeId
                 ? Math.max(sourceDistance, targetDistance)
                 : 0;
@@ -1795,7 +1938,11 @@ export const KnowledgeGraphForceView = forwardRef<
                               ? node.viewportSize * 1.05
                               : node.viewportSize
                     }
-                    fill={inNeighborhood ? node.color : fadeColor(node.color, 0.3)}
+                    fill={
+                      inNeighborhood
+                        ? node.color
+                        : fadeKnowledgeGraphColor(node.color, 0.3)
+                    }
                     stroke={
                       focused
                         ? "var(--ui-border-strong)"

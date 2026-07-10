@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { getWorkoutDetail, patchWorkoutSession } from "@/lib/api";
+import { resolveForgeThemeToken } from "@/lib/theme-system";
+import { useForgeThemeKey } from "@/hooks/use-forge-theme-key";
 import type {
   WorkoutRoutePointRecord,
   WorkoutSessionDetailPayload,
@@ -30,12 +32,12 @@ import type {
 } from "@/lib/types";
 
 const ZONE_COLORS: Record<string, string> = {
-  below_z1: "#94a3b8",
-  zone_1: "#38bdf8",
-  zone_2: "#22c55e",
-  zone_3: "#eab308",
-  zone_4: "#f97316",
-  zone_5: "#ef4444"
+  below_z1: "var(--chart-zone-below)",
+  zone_1: "var(--chart-zone-1)",
+  zone_2: "var(--chart-zone-2)",
+  zone_3: "var(--chart-zone-3)",
+  zone_4: "var(--chart-zone-4)",
+  zone_5: "var(--chart-zone-5)"
 };
 
 function formatMinutes(seconds: number | null | undefined) {
@@ -60,7 +62,9 @@ function formatWindow(startedAt: string, endedAt: string) {
 
 function formatChartTime(value: unknown) {
   const timestamp =
-    typeof value === "number" ? Math.floor(value) : Number.parseFloat(String(value ?? ""));
+    typeof value === "number"
+      ? Math.floor(value)
+      : Number.parseFloat(String(value ?? ""));
   if (!Number.isFinite(timestamp)) {
     return "";
   }
@@ -72,7 +76,9 @@ function formatChartTime(value: unknown) {
 
 function formatMetricValue(value: unknown, unit: string) {
   if (typeof value === "number") {
-    const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1);
+    const formatted = Number.isInteger(value)
+      ? String(value)
+      : value.toFixed(1);
     return unit && unit !== "count" ? `${formatted} ${unit}` : formatted;
   }
   if (typeof value === "boolean") {
@@ -95,10 +101,11 @@ function routeBounds(points: WorkoutRoutePointRecord[]) {
 
 function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const themeKey = useForgeThemeKey();
   const [mapReady, setMapReady] = useState(false);
   const tileUrl =
     typeof window !== "undefined"
-      ? window.localStorage.getItem("forge.map.tile-url")?.trim() ?? ""
+      ? (window.localStorage.getItem("forge.map.tile-url")?.trim() ?? "")
       : "";
 
   useEffect(() => {
@@ -108,10 +115,12 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
       setMapReady(false);
       return undefined;
     }
+    setMapReady(false);
     void import("maplibre-gl").then((maplibre) => {
       if (cancelled || !containerRef.current) {
         return;
       }
+      const routeColor = resolveForgeThemeToken("--chart-zone-4", "#f97316");
       map = new maplibre.Map({
         container: containerRef.current,
         style: {
@@ -153,12 +162,13 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
           type: "line",
           source: "route",
           paint: {
-            "line-color": "#f97316",
+            "line-color": routeColor,
             "line-width": 4
           }
         });
         const bounds = coordinates.reduce(
-          (current, coordinate) => current.extend(coordinate as [number, number]),
+          (current, coordinate) =>
+            current.extend(coordinate as [number, number]),
           new maplibre.LngLatBounds(
             coordinates[0] as [number, number],
             coordinates[0] as [number, number]
@@ -172,7 +182,7 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
       cancelled = true;
       map?.remove();
     };
-  }, [points, tileUrl]);
+  }, [points, tileUrl, themeKey]);
 
   const bounds = routeBounds(points);
   const polyline = useMemo(() => {
@@ -186,7 +196,8 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
     return points
       .map((point) => {
         const x = ((point.longitude - bounds.minLon) / lonSpan) * width;
-        const y = height - ((point.latitude - bounds.minLat) / latSpan) * height;
+        const y =
+          height - ((point.latitude - bounds.minLat) / latSpan) * height;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(" ");
@@ -202,7 +213,7 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
             <polyline
               points={polyline}
               fill="none"
-              stroke="#f97316"
+              stroke="var(--chart-zone-4)"
               strokeWidth="5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -229,7 +240,8 @@ function ZoneBars({ zones }: { zones: WorkoutZoneDuration[] }) {
               {zone.label}
             </span>
             <span className="shrink-0 text-[var(--ui-ink-strong)]">
-              {(zone.percentage * 100).toFixed(1)}% · {formatMinutes(zone.seconds)}
+              {(zone.percentage * 100).toFixed(1)}% ·{" "}
+              {formatMinutes(zone.seconds)}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
@@ -237,7 +249,7 @@ function ZoneBars({ zones }: { zones: WorkoutZoneDuration[] }) {
               className="h-full rounded-full"
               style={{
                 width: `${Math.max(1, zone.percentage * 100)}%`,
-                background: ZONE_COLORS[zone.key] ?? "#f8fafc"
+                background: ZONE_COLORS[zone.key] ?? "var(--ui-ink-strong)"
               }}
             />
           </div>
@@ -277,7 +289,9 @@ export function WorkoutDetailPage() {
           .filter(Boolean)
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["workout-detail", workoutId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["workout-detail", workoutId]
+      });
       await queryClient.invalidateQueries({ queryKey: ["forge-fitness"] });
     }
   });
@@ -289,7 +303,10 @@ export function WorkoutDetailPage() {
     return (
       <ErrorState
         eyebrow="Workout detail"
-        error={detailQuery.error ?? new Error("Forge could not load this workout detail.")}
+        error={
+          detailQuery.error ??
+          new Error("Forge could not load this workout detail.")
+        }
         onRetry={() => void detailQuery.refetch()}
       />
     );
@@ -307,7 +324,7 @@ export function WorkoutDetailPage() {
   const zoneChartData = analytics.zoneDurations.map((zone) => ({
     zone: zone.label,
     minutes: Math.round(zone.seconds / 60),
-    fill: ZONE_COLORS[zone.key] ?? "#f8fafc"
+    fill: ZONE_COLORS[zone.key] ?? "var(--ui-ink-strong)"
   }));
 
   return (
@@ -329,7 +346,9 @@ export function WorkoutDetailPage() {
             <Badge>{formatMinutes(workout.durationSeconds)}</Badge>
             <Badge tone="meta">{analytics.confidence} HR zones</Badge>
             {analytics.routeSummary?.hasRoute ? (
-              <Badge tone="meta">{analytics.routeSummary.pointCount} route points</Badge>
+              <Badge tone="meta">
+                {analytics.routeSummary.pointCount} route points
+              </Badge>
             ) : null}
           </div>
         }
@@ -355,7 +374,9 @@ export function WorkoutDetailPage() {
           <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
             {analytics.load.trimp ?? "n/a"}
           </div>
-          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">Forge TRIMP</div>
+          <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">
+            Forge TRIMP
+          </div>
         </Card>
         <Card>
           <div className="text-sm text-[var(--ui-ink-soft)]">HR coverage</div>
@@ -380,11 +401,22 @@ export function WorkoutDetailPage() {
                 <AreaChart data={heartRateSeries}>
                   <defs>
                     <linearGradient id="hrFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.38} />
-                      <stop offset="100%" stopColor="#ef4444" stopOpacity={0.04} />
+                      <stop
+                        offset="0%"
+                        stopColor="var(--chart-zone-5)"
+                        stopOpacity={0.38}
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="var(--chart-zone-5)"
+                        stopOpacity={0.04}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="var(--ui-border-subtle)" vertical={false} />
+                  <CartesianGrid
+                    stroke="var(--ui-border-subtle)"
+                    vertical={false}
+                  />
                   <XAxis
                     dataKey="time"
                     interval="preserveStartEnd"
@@ -393,7 +425,10 @@ export function WorkoutDetailPage() {
                     type="number"
                     domain={["dataMin", "dataMax"]}
                   />
-                  <YAxis tick={{ fill: "var(--ui-ink-soft)", fontSize: 11 }} width={42} />
+                  <YAxis
+                    tick={{ fill: "var(--ui-ink-soft)", fontSize: 11 }}
+                    width={42}
+                  />
                   <Tooltip
                     labelFormatter={formatChartTime}
                     contentStyle={{
@@ -406,7 +441,7 @@ export function WorkoutDetailPage() {
                   <Area
                     type="monotone"
                     dataKey="bpm"
-                    stroke="#ef4444"
+                    stroke="var(--chart-zone-5)"
                     fill="url(#hrFill)"
                     strokeWidth={2}
                     dot={false}
@@ -432,8 +467,14 @@ export function WorkoutDetailPage() {
           <div className="mt-5 h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={zoneChartData}>
-                <XAxis dataKey="zone" tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }} />
-                <YAxis tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }} width={34} />
+                <XAxis
+                  dataKey="zone"
+                  tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
+                />
+                <YAxis
+                  tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
+                  width={34}
+                />
                 <Tooltip
                   contentStyle={{
                     background: "var(--surface-glass)",
@@ -490,7 +531,10 @@ export function WorkoutDetailPage() {
         <Card className="min-w-0 overflow-hidden">
           <div className="text-[var(--ui-ink-strong)]">Events and phases</div>
           <div className="mt-4 grid gap-3">
-            {[...(workout.details?.events ?? []), ...(workout.details?.components ?? [])]
+            {[
+              ...(workout.details?.events ?? []),
+              ...(workout.details?.components ?? [])
+            ]
               .slice(0, 18)
               .map((entry, entryIndex) => (
                 <div
@@ -499,12 +543,19 @@ export function WorkoutDetailPage() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0 break-words text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]">
-                      {"label" in entry ? entry.label : entry.activity.canonicalLabel}
+                      {"label" in entry
+                        ? entry.label
+                        : entry.activity.canonicalLabel}
                     </div>
-                    <Badge tone="meta">{formatMinutes(entry.durationSeconds)}</Badge>
+                    <Badge tone="meta">
+                      {formatMinutes(entry.durationSeconds)}
+                    </Badge>
                   </div>
                   <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                    {formatWindow(entry.startedAt, entry.endedAt ?? entry.startedAt)}
+                    {formatWindow(
+                      entry.startedAt,
+                      entry.endedAt ?? entry.startedAt
+                    )}
                   </div>
                 </div>
               ))}
@@ -522,7 +573,9 @@ export function WorkoutDetailPage() {
           <div className="text-[var(--ui-ink-strong)]">Reflection</div>
           <div className="mt-4 grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm text-[var(--ui-ink-soft)]">Meaning and impact</span>
+              <span className="text-sm text-[var(--ui-ink-soft)]">
+                Meaning and impact
+              </span>
               <Textarea
                 className="min-h-[160px]"
                 value={meaningText}

@@ -62,7 +62,7 @@ function SegmentedPicker<T extends string>({
   return (
     <div className="grid gap-2.5">
       <div className="flex items-center gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/48">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
           {label}
         </div>
         <InfoTooltip content={tooltip} />
@@ -77,8 +77,8 @@ function SegmentedPicker<T extends string>({
               className={cn(
                 "rounded-full border px-3 py-2 text-left transition",
                 active
-                  ? "border-[rgba(192,193,255,0.35)] bg-[rgba(192,193,255,0.16)] text-white"
-                  : "border-white/10 bg-white/[0.03] text-white/62 hover:border-white/18 hover:text-white"
+                  ? "border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-subtle)_65%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                  : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:border-[var(--ui-border-strong)] hover:text-[var(--ui-ink-strong)]"
               )}
               onClick={() => onChange(option.value)}
             >
@@ -277,16 +277,16 @@ export function WikiLlmSetupModal({
                 className={cn(
                   "rounded-[24px] border p-4 text-left transition",
                   active
-                    ? "border-[rgba(192,193,255,0.38)] bg-[rgba(192,193,255,0.13)]"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/18 hover:bg-white/[0.05]"
+                    ? "border-[color-mix(in_srgb,var(--primary)_38%,var(--ui-border-subtle)_62%)] bg-[var(--ui-accent-soft)]"
+                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
                 )}
                 onClick={() => setValue({ model: model.value })}
               >
-                <div className="flex items-center gap-2 text-white">
+                <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                   <Cpu className="size-4 text-[var(--primary)]" />
                   <span className="font-semibold">{model.label}</span>
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/56">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   {model.description}
                 </div>
               </button>
@@ -361,12 +361,12 @@ export function WikiLlmSetupModal({
             ]}
           />
 
-          <div className="grid gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+          <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/48">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Advanced
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/56">
+              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 Leave these at the defaults unless you are intentionally routing
                 through another compatible endpoint or customizing the drafting
                 behavior.
@@ -410,46 +410,50 @@ export function WikiLlmSetupModal({
       render: (value) => (
         <>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="flex items-center gap-2 text-white">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+              <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                 <Sparkles className="size-4 text-[var(--primary)]" />
                 <div className="text-sm font-semibold">Profile summary</div>
               </div>
               <div className="mt-4 grid gap-3 text-sm">
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Label
                   </div>
-                  <div className="mt-2 text-white">
+                  <div className="mt-2 text-[var(--ui-ink-strong)]">
                     {value.label || "Untitled profile"}
                   </div>
                 </div>
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Provider
                   </div>
-                  <div className="mt-2 text-white">OpenAI Responses API</div>
+                  <div className="mt-2 text-[var(--ui-ink-strong)]">
+                    OpenAI Responses API
+                  </div>
                 </div>
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Model
                   </div>
-                  <div className="mt-2 text-white">{value.model}</div>
+                  <div className="mt-2 text-[var(--ui-ink-strong)]">
+                    {value.model}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-              <div className="flex items-center gap-2 text-white">
+            <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+              <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
                 <KeyRound className="size-4 text-[var(--primary)]" />
                 <div className="text-sm font-semibold">Runtime controls</div>
               </div>
               <div className="mt-4 grid gap-3 text-sm">
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Key status
                   </div>
-                  <div className="mt-2 text-white">
+                  <div className="mt-2 text-[var(--ui-ink-strong)]">
                     {value.apiKey.trim()
                       ? "New key ready to test"
                       : profile?.secretId
@@ -457,24 +461,24 @@ export function WikiLlmSetupModal({
                         : "No key saved yet"}
                   </div>
                 </div>
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Controls
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-white/78">
+                    <span className="rounded-full bg-[var(--ui-surface-3)] px-3 py-1.5 text-[var(--ui-ink-medium)]">
                       thinking {value.reasoningEffort}
                     </span>
-                    <span className="rounded-full bg-white/[0.06] px-3 py-1.5 text-white/78">
+                    <span className="rounded-full bg-[var(--ui-surface-3)] px-3 py-1.5 text-[var(--ui-ink-medium)]">
                       verbosity {value.verbosity}
                     </span>
                   </div>
                 </div>
-                <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                     Base URL
                   </div>
-                  <div className="mt-2 break-all text-white/72">
+                  <div className="mt-2 break-all text-[var(--ui-ink-medium)]">
                     {value.baseUrl}
                   </div>
                 </div>
@@ -482,13 +486,13 @@ export function WikiLlmSetupModal({
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+          <div className="grid gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-white">
+                <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
                   Connection check
                 </div>
-                <div className="mt-1 text-sm leading-6 text-white/58">
+                <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   Test the exact model and control settings before you save
                   them.
                 </div>
@@ -509,8 +513,8 @@ export function WikiLlmSetupModal({
                 className={cn(
                   "rounded-[20px] border px-4 py-3 text-sm leading-6",
                   feedback.tone === "success"
-                    ? "border-emerald-400/18 bg-emerald-400/[0.08] text-emerald-100"
-                    : "border-rose-400/18 bg-rose-400/[0.08] text-rose-100"
+                    ? "border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)] text-[var(--success)]"
+                    : "border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
                 )}
               >
                 {feedback.message}
@@ -518,12 +522,12 @@ export function WikiLlmSetupModal({
             ) : null}
 
             {connectionResult ? (
-              <div className="rounded-[20px] border border-emerald-400/18 bg-emerald-400/[0.08] px-4 py-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-100">
+              <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)] px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--success)]">
                   <CircleCheckBig className="size-4" />
                   OpenAI accepted this configuration
                 </div>
-                <div className="mt-2 text-sm leading-6 text-emerald-100/86">
+                <div className="mt-2 text-sm leading-6 text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]">
                   Preview: {connectionResult.outputPreview}
                 </div>
               </div>

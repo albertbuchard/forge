@@ -371,7 +371,7 @@ export function WikiIngestHistoryPage() {
                     </div>
 
                     {entry.job.errorMessage ? (
-                      <div className="rounded-[18px] border border-rose-400/18 bg-rose-500/[0.08] px-4 py-3 text-sm text-rose-100/86">
+                      <div className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
                         {entry.job.errorMessage}
                       </div>
                     ) : null}

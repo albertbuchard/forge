@@ -17,8 +17,15 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <style>
       :root {
+        --forge-boot-canvas: #0b1326;
+        --forge-boot-panel: #171f33;
+        --forge-boot-panel-high: #222a3d;
+        --forge-boot-panel-low: #131b2e;
+        --forge-boot-ink: #eef2ff;
+        --forge-boot-primary: #c0c1ff;
+        --forge-boot-secondary: #4edea3;
         color-scheme: dark;
-        background: #0b1326;
+        background: var(--forge-boot-canvas);
       }
 
       body {
@@ -27,15 +34,25 @@
         background:
           radial-gradient(
             circle at top left,
-            rgba(192, 193, 255, 0.18),
+            color-mix(in srgb, var(--forge-boot-primary) 18%, transparent),
             transparent 28%
           ),
           radial-gradient(
             circle at 82% 16%,
-            rgba(78, 222, 163, 0.12),
+            color-mix(in srgb, var(--forge-boot-secondary) 12%, transparent),
             transparent 24%
           ),
-          linear-gradient(180deg, #111a31 0%, #0b1326 52%, #09101f 100%);
+          linear-gradient(
+            180deg,
+            color-mix(
+                in srgb,
+                var(--forge-boot-panel) 92%,
+                var(--forge-boot-primary) 8%
+              )
+              0%,
+            var(--forge-boot-canvas) 52%,
+            var(--forge-boot-panel-low) 100%
+          );
       }
 
       #root {
@@ -48,7 +65,7 @@
         min-height: 100vh;
         place-items: center;
         padding: 2rem;
-        color: rgba(238, 242, 255, 0.92);
+        color: color-mix(in srgb, var(--forge-boot-ink) 92%, transparent);
         font-family:
           "Plus Jakarta Sans Variable", "Plus Jakarta Sans", Inter, system-ui,
           sans-serif;
@@ -56,16 +73,26 @@
 
       .forge-boot-panel {
         width: min(100%, 31rem);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid
+          color-mix(in srgb, var(--forge-boot-ink) 12%, transparent);
         border-radius: 1.25rem;
-        background: rgba(13, 20, 35, 0.82);
-        box-shadow: 0 32px 90px rgba(3, 8, 18, 0.38);
+        background: color-mix(
+          in srgb,
+          var(--forge-boot-panel) 88%,
+          transparent
+        );
+        box-shadow: 0 32px 90px
+          color-mix(in srgb, var(--forge-boot-canvas) 38%, transparent);
         padding: 1.5rem;
       }
 
       .forge-boot-kicker {
         margin: 0 0 0.75rem;
-        color: rgba(192, 193, 255, 0.82);
+        color: color-mix(
+          in srgb,
+          var(--forge-boot-primary) 82%,
+          var(--forge-boot-ink) 18%
+        );
         font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -82,7 +109,7 @@
 
       .forge-boot-copy {
         margin: 0.75rem 0 0;
-        color: rgba(238, 242, 255, 0.68);
+        color: color-mix(in srgb, var(--forge-boot-ink) 68%, transparent);
         font-size: 0.92rem;
         line-height: 1.55;
       }
@@ -93,7 +120,7 @@
         margin-top: 1.25rem;
         overflow: hidden;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
+        background: color-mix(in srgb, var(--forge-boot-ink) 8%, transparent);
       }
 
       .forge-boot-bar::after {
@@ -101,14 +128,18 @@
         inset: 0;
         width: 42%;
         border-radius: inherit;
-        background: linear-gradient(90deg, #c0c1ff, #4edea3);
+        background: linear-gradient(
+          90deg,
+          var(--forge-boot-primary),
+          var(--forge-boot-secondary)
+        );
         content: "";
         animation: forge-boot-scan 1.35s ease-in-out infinite;
       }
 
       .forge-boot-note {
         margin: 1rem 0 0;
-        color: rgba(238, 242, 255, 0.48);
+        color: color-mix(in srgb, var(--forge-boot-ink) 48%, transparent);
         font-size: 0.75rem;
         line-height: 1.45;
       }
@@ -132,6 +163,60 @@
     </style>
   </head>
   <body class="bg-canvas text-ink antialiased">
+    <script>
+      (function applyForgeBootTheme() {
+        try {
+          var raw = window.localStorage.getItem("forge:theme-bootstrap:v1");
+          if (!raw) return;
+          var saved = JSON.parse(raw);
+          var theme = saved && saved.theme;
+          if (
+            !theme ||
+            typeof theme.canvas !== "string" ||
+            typeof theme.panel !== "string" ||
+            typeof theme.panelHigh !== "string" ||
+            typeof theme.panelLow !== "string" ||
+            typeof theme.ink !== "string" ||
+            typeof theme.primary !== "string" ||
+            typeof theme.secondary !== "string"
+          ) {
+            return;
+          }
+
+          var root = document.documentElement;
+          root.style.colorScheme = saved.mode === "light" ? "light" : "dark";
+          root.style.setProperty("--forge-boot-canvas", theme.canvas);
+          root.style.setProperty("--forge-boot-panel", theme.panel);
+          root.style.setProperty("--forge-boot-panel-high", theme.panelHigh);
+          root.style.setProperty("--forge-boot-panel-low", theme.panelLow);
+          root.style.setProperty("--forge-boot-ink", theme.ink);
+          root.style.setProperty("--forge-boot-primary", theme.primary);
+          root.style.setProperty("--forge-boot-secondary", theme.secondary);
+          root.dataset.forgeBootTheme = String(saved.resolved || "stored");
+
+          document.body.classList.remove(
+            "theme-forge-dark",
+            "theme-forge-light",
+            "theme-forge-obsidian",
+            "theme-forge-solar",
+            "theme-forge-aurora",
+            "theme-forge-ember",
+            "theme-forge-paper",
+            "theme-forge-dawn",
+            "theme-forge-atelier",
+            "theme-forge-custom"
+          );
+          document.body.classList.add(
+            saved.mode === "light" ? "theme-forge-light" : "theme-forge-dark"
+          );
+          document.body.classList.add(
+            "theme-forge-" + String(saved.resolved || "obsidian")
+          );
+        } catch {
+          // The default Obsidian boot palette remains available.
+        }
+      })();
+    </script>
     <div id="root">
       <main class="forge-boot-shell" aria-live="polite" aria-busy="true">
         <section

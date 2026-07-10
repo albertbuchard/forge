@@ -284,11 +284,7 @@ function MetricTimeSeriesChart({
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop
-                offset="0%"
-                stopColor="var(--primary)"
-                stopOpacity={0.55}
-              />
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.55} />
               <stop
                 offset="56%"
                 stopColor="var(--warning)"
@@ -777,7 +773,8 @@ export function DevrageRageFigure({
           Waiting for devrage history
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
-          Forge will draw the rage profile after the local scanner stores daily conversation-tone rows.
+          Forge will draw the rage profile after the local scanner stores daily
+          conversation-tone rows.
         </p>
       </Card>
     );
@@ -785,7 +782,7 @@ export function DevrageRageFigure({
 
   return (
     <Card className="relative overflow-hidden rounded-[30px] border border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ui-warning-soft)_30%,var(--ui-surface-section)_70%),var(--ui-surface-section)_48%,color-mix(in_srgb,var(--ui-info-soft)_18%,var(--ui-surface-section)_82%))] p-0 shadow-[var(--card-shadow)]">
-      <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:32px_32px]" />
+      <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:linear-gradient(var(--chart-grid-line)_1px,transparent_1px),linear-gradient(90deg,var(--chart-grid-line)_1px,transparent_1px)] [background-size:32px_32px]" />
       <div className="relative grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.75fr)]">
         <div className="grid min-w-0 gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -797,7 +794,8 @@ export function DevrageRageFigure({
                 Cumulative rage profile
               </div>
               <div className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
-                Swear volume, swearing-message rate, average thread peak, and maximum thread peak on one daily surface.
+                Swear volume, swearing-message rate, average thread peak, and
+                maximum thread peak on one daily surface.
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap gap-2">
@@ -832,22 +830,76 @@ export function DevrageRageFigure({
                 margin={{ top: 18, right: 12, bottom: 0, left: 0 }}
               >
                 <defs>
-                  <linearGradient id={panelGradientId} x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.36} />
-                    <stop offset="52%" stopColor="var(--primary)" stopOpacity={0.12} />
-                    <stop offset="100%" stopColor="var(--info)" stopOpacity={0.18} />
+                  <linearGradient
+                    id={panelGradientId}
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="var(--warning)"
+                      stopOpacity={0.36}
+                    />
+                    <stop
+                      offset="52%"
+                      stopColor="var(--primary)"
+                      stopOpacity={0.12}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--info)"
+                      stopOpacity={0.18}
+                    />
                   </linearGradient>
-                  <linearGradient id={rageGradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--warning)" stopOpacity={0.62} />
-                    <stop offset="58%" stopColor="var(--danger)" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="var(--danger)" stopOpacity={0.02} />
+                  <linearGradient
+                    id={rageGradientId}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="var(--warning)"
+                      stopOpacity={0.62}
+                    />
+                    <stop
+                      offset="58%"
+                      stopColor="var(--danger)"
+                      stopOpacity={0.2}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--danger)"
+                      stopOpacity={0.02}
+                    />
                   </linearGradient>
-                  <linearGradient id={swearGradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--ui-ink-strong)" stopOpacity={0.34} />
-                    <stop offset="100%" stopColor="var(--ui-ink-faint)" stopOpacity={0.06} />
+                  <linearGradient
+                    id={swearGradientId}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="var(--ui-ink-strong)"
+                      stopOpacity={0.34}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--ui-ink-faint)"
+                      stopOpacity={0.06}
+                    />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke={chartGridStroke} strokeDasharray="4 10" vertical={false} />
+                <CartesianGrid
+                  stroke={chartGridStroke}
+                  strokeDasharray="4 10"
+                  vertical={false}
+                />
                 <XAxis
                   dataKey="dateKey"
                   tickFormatter={formatAxisDate}
@@ -928,8 +980,14 @@ export function DevrageRageFigure({
 
           <div className="flex min-w-0 flex-wrap gap-2 text-xs text-[var(--ui-ink-soft)]">
             {[
-              ["Swears", "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"],
-              ["Average peak", "bg-[var(--ui-warning-soft)] text-[var(--warning)]"],
+              [
+                "Swears",
+                "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+              ],
+              [
+                "Average peak",
+                "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
+              ],
               ["Max peak", "bg-[var(--ui-danger-soft)] text-[var(--danger)]"],
               ["Swearing rate", "bg-[var(--ui-info-soft)] text-[var(--info)]"]
             ].map(([label, className]) => (
@@ -952,11 +1010,15 @@ export function DevrageRageFigure({
               )}
             </div>
             <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              Peak score is the highest cumulative swear streak pressure reached inside any scanned thread for the day.
+              Peak score is the highest cumulative swear streak pressure reached
+              inside any scanned thread for the day.
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-            <DevrageStatTile label="Average thread peak" metric={averageRageMetric} />
+            <DevrageStatTile
+              label="Average thread peak"
+              metric={averageRageMetric}
+            />
             <DevrageStatTile label="Swearing rate" metric={percentMetric} />
             <DevrageStatTile label="Swears" metric={swearMetric} />
             <DevrageStatTile label="Max thread peak" metric={maxRageMetric} />

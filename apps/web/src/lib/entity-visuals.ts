@@ -308,13 +308,13 @@ function createEntityVisual(seed: EntityVisualSeed): EntityVisualDefinition {
     nameClassName: `text-[${toRgbaVar(seed.kind, seed.accentRgb, 0.96)}]`,
     badgeClassName:
       `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.24)}] ` +
-      `bg-[linear-gradient(135deg,${toRgbaVar(seed.kind, seed.accentRgb, 0.24)},${toRgbaVar(seed.kind, seed.accentRgb, 0.08)})] text-white`,
+      `bg-[linear-gradient(135deg,${toRgbaVar(seed.kind, seed.accentRgb, 0.24)},${toRgbaVar(seed.kind, seed.accentRgb, 0.08)})] text-[var(--ui-ink-strong)]`,
     subtleBadgeClassName:
       `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.18)}] ` +
       `bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.08)}] text-[${toRgbaVar(seed.kind, seed.accentRgb, 0.92)}]`,
     buttonClassName:
       `border-[${toRgbaVar(seed.kind, seed.accentRgb, 0.2)}] ` +
-      `bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.12)}] text-white hover:bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.18)}]`
+      `bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.12)}] text-[var(--ui-ink-strong)] hover:bg-[${toRgbaVar(seed.kind, seed.accentRgb, 0.18)}]`
   };
 }
 
@@ -383,5 +383,5 @@ export function getEntityButtonClassName(
   const visual = getEntityVisual(kind);
   return selected
     ? `border ${visual.buttonClassName}`
-    : "border border-white/8 bg-white/[0.05] text-white/62 hover:bg-white/[0.08] hover:text-white";
+    : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
 }

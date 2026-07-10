@@ -14,6 +14,7 @@ from forge_hermes.catalog import (
     WORKBENCH_ROUTE_SPECS,
     release_task_run_body,
     release_task_run_path,
+    sports_overview_path,
     specialized_route_path,
     start_task_run_body,
     start_task_run_path,
@@ -71,6 +72,16 @@ def test_release_task_run_body_omits_empty_optionals():
         "actor": "Albert",
         "note": "stop now",
     }
+
+
+def test_sports_overview_path_uses_compact_aggregates():
+    assert sports_overview_path({}) == "/api/v1/health/fitness?compact=1"
+    assert sports_overview_path(
+        {"userIds": ["user_operator", "user_coach"]}
+    ) == (
+        "/api/v1/health/fitness?userIds=user_operator"
+        "&userIds=user_coach&compact=1"
+    )
 
 
 def test_start_task_run_handler_uses_operator_session_and_task_run_route(

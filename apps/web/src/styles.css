@@ -7,14 +7,14 @@
   --font-display: "Sora Variable", "Sora", sans-serif;
   --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
   --font-label: "Space Grotesk", sans-serif;
-  --color-canvas: #0b1326;
-  --color-panel: #171f33;
-  --color-panel-high: #222a3d;
-  --color-panel-low: #131b2e;
-  --color-ink: #eef2ff;
-  --color-primary: #c0c1ff;
-  --color-secondary: #4edea3;
-  --color-tertiary: #ffb95f;
+  --color-canvas: var(--surface);
+  --color-panel: var(--surface-panel);
+  --color-panel-high: var(--surface-high);
+  --color-panel-low: var(--surface-low);
+  --color-ink: var(--forge-body-text);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
 }
 
 :root {
@@ -37,6 +37,14 @@
   --danger: #fb7185;
   --warning: #ffb95f;
   --info: #7dd3fc;
+  --chart-zone-below: #94a3b8;
+  --chart-zone-1: #38bdf8;
+  --chart-zone-2: #22c55e;
+  --chart-zone-3: #eab308;
+  --chart-zone-4: #f97316;
+  --chart-zone-5: #ef4444;
+  --chart-series-alt: #a78bfa;
+  --chart-grid-line: rgba(255, 255, 255, 0.055);
   --forge-entity-goal-rgb: 251, 191, 36;
   --forge-entity-project-rgb: 56, 189, 248;
   --forge-entity-task-rgb: 129, 140, 248;
@@ -170,6 +178,41 @@ body,
 
 body {
   --canvas: var(--surface);
+  --color-canvas: var(--surface);
+  --color-panel: var(--surface-panel);
+  --color-panel-high: var(--surface-high);
+  --color-panel-low: var(--surface-low);
+  --color-ink: var(--forge-body-text);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
+  --ui-bg: var(--surface);
+  --ui-surface-0: color-mix(in srgb, var(--surface) 94%, black 6%);
+  --ui-surface-popover: color-mix(
+    in srgb,
+    var(--surface-high) 96%,
+    var(--surface-panel) 4%
+  );
+  --ui-surface-code: color-mix(
+    in srgb,
+    var(--surface-low) 90%,
+    var(--surface) 10%
+  );
+  --ui-surface-glass: var(--surface-glass);
+  --ui-code-bg: var(--ui-surface-code);
+  --ui-code-text: var(--ui-ink-medium);
+  --ui-overlay: var(--ui-overlay-backdrop);
+  --ui-scrim: var(--forge-body-text);
+  --ui-ring: color-mix(in srgb, var(--primary) 46%, transparent);
+  --ui-shadow-card: var(--ui-shadow-soft);
+  --ui-shadow-strong: var(--ui-shadow-floating);
+  --ui-shadow-color: var(--surface);
+  --ui-success-border: color-mix(
+    in srgb,
+    var(--success) 34%,
+    var(--ui-border-subtle) 66%
+  );
+  --ui-tertiary-soft: color-mix(in srgb, var(--tertiary) 14%, transparent);
   --ui-surface-shell: linear-gradient(
     180deg,
     color-mix(in srgb, var(--surface-panel) 94%, transparent),
@@ -234,7 +277,23 @@ body {
   box-shadow: var(--ui-shadow-floating);
 }
 
+.connector-graph-flow .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 16px;
+  background: var(--surface-glass);
+  box-shadow: var(--ui-shadow-floating);
+}
+
 .user-relationship-flow .react-flow__controls-button {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-bottom: 1px solid var(--ui-border-subtle);
+  background: var(--ui-surface-1);
+  color: var(--ui-ink-medium);
+}
+
+.connector-graph-flow .react-flow__controls-button {
   width: 2.35rem;
   height: 2.35rem;
   border-bottom: 1px solid var(--ui-border-subtle);
@@ -247,7 +306,16 @@ body {
   color: var(--ui-ink-strong);
 }
 
+.connector-graph-flow .react-flow__controls-button:hover {
+  background: var(--ui-surface-active);
+  color: var(--ui-ink-strong);
+}
+
 .user-relationship-flow .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.connector-graph-flow .react-flow__controls-button svg {
   fill: currentColor;
 }
 
@@ -268,6 +336,18 @@ body.theme-forge-dark {
 
 body.theme-forge-light {
   color-scheme: light;
+  --success: #147a5a;
+  --danger: #b83252;
+  --warning: #98540c;
+  --info: #176b8f;
+  --chart-zone-below: #5b6472;
+  --chart-zone-1: #0369a1;
+  --chart-zone-2: #15803d;
+  --chart-zone-3: #a16207;
+  --chart-zone-4: #c2410c;
+  --chart-zone-5: #b91c1c;
+  --chart-series-alt: #6d28d9;
+  --chart-grid-line: rgba(24, 34, 53, 0.075);
   --outline-ghost: rgba(24, 34, 53, 0.08);
   --ui-ink-strong: color-mix(in srgb, var(--forge-body-text) 92%, black 8%);
   --ui-ink-medium: color-mix(in srgb, var(--forge-body-text) 74%, transparent);
@@ -275,7 +355,7 @@ body.theme-forge-light {
   --ui-ink-faint: color-mix(in srgb, var(--forge-body-text) 42%, transparent);
   --ui-ink: var(--ui-ink-strong);
   --ui-ink-muted: var(--ui-ink-soft);
-  --ui-ink-on-accent: var(--ui-ink-strong);
+  --ui-ink-on-accent: #ffffff;
   --ui-border-subtle: rgba(24, 34, 53, 0.1);
   --ui-border-strong: rgba(24, 34, 53, 0.16);
   --ui-surface-1: color-mix(
@@ -343,6 +423,35 @@ body.theme-forge-light {
   --ui-info-soft: color-mix(in srgb, var(--info) 16%, var(--surface-high) 84%);
   --ui-shadow-soft: 0 16px 38px rgba(24, 34, 53, 0.09);
   --ui-shadow-floating: 0 28px 88px rgba(24, 34, 53, 0.16);
+  --ui-surface-0: color-mix(in srgb, var(--surface) 92%, var(--surface-low) 8%);
+  --ui-surface-code: color-mix(
+    in srgb,
+    var(--surface-low) 54%,
+    var(--surface-high) 46%
+  );
+  --ui-shadow-color: var(--forge-body-text);
+  --ui-tertiary-soft: color-mix(
+    in srgb,
+    var(--tertiary) 13%,
+    var(--surface-high) 87%
+  );
+  --knowledge-graph-ambient: color-mix(in srgb, var(--info) 14%, transparent);
+  --knowledge-graph-ambient-secondary: color-mix(
+    in srgb,
+    var(--primary) 12%,
+    transparent
+  );
+  --knowledge-graph-panel: color-mix(
+    in srgb,
+    var(--surface-panel) 94%,
+    transparent
+  );
+  --knowledge-graph-constellation: rgba(24, 34, 53, 0.08);
+  --knowledge-graph-focus-ring: color-mix(
+    in srgb,
+    var(--primary) 26%,
+    transparent
+  );
 }
 
 body.theme-forge-obsidian {
@@ -527,10 +636,6 @@ body.theme-forge-atelier {
   );
   --card-shadow: 0 24px 60px rgba(22, 35, 52, 0.11);
   --card-shadow-hover: 0 32px 80px rgba(22, 35, 52, 0.16);
-}
-
-body.theme-forge-custom {
-  color-scheme: dark;
 }
 
 .surface-shell-panel {
@@ -749,7 +854,7 @@ body.theme-forge-light [class*="border-white/25"] {
   background:
     radial-gradient(
       circle at top right,
-      rgba(192, 193, 255, 0.2),
+      color-mix(in srgb, var(--primary) 20%, transparent),
       transparent 46%
     ),
     linear-gradient(
@@ -770,7 +875,7 @@ body.theme-forge-light [class*="border-white/25"] {
 }
 
 .route-view-loading--core {
-  --route-loading-accent: rgba(192, 193, 255, 0.2);
+  --route-loading-accent: color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .route-view-loading--execution {
@@ -897,11 +1002,11 @@ select {
   background:
     linear-gradient(
       180deg,
-      rgba(192, 193, 255, 0.18),
-      rgba(78, 222, 163, 0.12)
+      color-mix(in srgb, var(--primary) 18%, transparent),
+      color-mix(in srgb, var(--secondary) 12%, transparent)
     ),
-    rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(192, 193, 255, 0.3);
+    var(--ui-surface-1);
+  border: 1px dashed color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .surface-grid-card {
@@ -933,7 +1038,7 @@ select {
 }
 
 .surface-grid-layout--editing .react-resizable-handle::after {
-  border-color: rgba(192, 193, 255, 0.58);
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
 }
 
 select {
@@ -943,6 +1048,11 @@ select {
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--primary);
+}
+
+[data-shell-collapse-state="collapsed"] [data-shell-collapsible] {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .knowledge-graph-surface {

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Provider } from "react-redux";
@@ -757,6 +757,22 @@ describe("OverviewPage", () => {
       "data-default-hidden",
       "false"
     );
+  });
+
+  it("loads trophy metrics immediately while heavier overview feeds stay deferred", async () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: [],
+      refresh: vi.fn()
+    });
+
+    renderOverviewPage();
+
+    await waitFor(() => expect(getXpMetricsMock).toHaveBeenCalledTimes(1));
+    expect(getSleepViewMock).not.toHaveBeenCalled();
+    expect(getFitnessViewMock).not.toHaveBeenCalled();
+    expect(getMovementDayMock).not.toHaveBeenCalled();
+    expect(getVitalsViewMock).not.toHaveBeenCalled();
   });
 
   it("shows live health and movement metrics when those feeds are available", async () => {

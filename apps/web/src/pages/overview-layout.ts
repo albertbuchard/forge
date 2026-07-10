@@ -21,6 +21,17 @@ const GENERATED_OVERVIEW_CORE_ORDER = [
 
 const OPERATIONAL_OVERVIEW_CORE_ORDER = [
   "hero",
+  "gamification",
+  "summary",
+  "signals",
+  "pipeline",
+  "body-signals",
+  "goals",
+  "life-force"
+] as const;
+
+const REGRESSED_OPERATIONAL_OVERVIEW_CORE_ORDER = [
+  "hero",
   "summary",
   "gamification",
   "signals",
@@ -74,11 +85,16 @@ export function normalizeOverviewLayout(
     layout.order,
     PREVIOUS_OPERATIONAL_OVERVIEW_CORE_ORDER
   );
+  const usesRegressedOperationalCoreOrder = startsWithOrder(
+    layout.order,
+    REGRESSED_OPERATIONAL_OVERVIEW_CORE_ORDER
+  );
 
   const shouldMigrateOrder =
     isGeneratedDefault ||
     usesLegacyCoreOrder ||
-    usesPreviousOperationalCoreOrder;
+    usesPreviousOperationalCoreOrder ||
+    usesRegressedOperationalCoreOrder;
   const availableIds = new Set(layout.order);
   const coreIds = new Set<string>(OPERATIONAL_OVERVIEW_CORE_ORDER);
   const nextOrder = shouldMigrateOrder

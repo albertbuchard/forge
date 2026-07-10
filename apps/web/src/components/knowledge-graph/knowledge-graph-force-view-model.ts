@@ -1,8 +1,15 @@
 import type { RenderedKnowledgeGraphEdge } from "@/lib/knowledge-graph";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
+import {
+  buildKnowledgeGraphEdgeStroke,
+  fadeKnowledgeGraphColor
+} from "@/components/knowledge-graph/knowledge-graph-theme";
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const PHYLLOTAXIS_STEP = 0.48;
+const SIGMA_OVERVIEW_RATIO_SCALE = 0.24;
+const SIGMA_OVERVIEW_RATIO_MIN = 0.58;
+const SIGMA_OVERVIEW_RATIO_MAX = 0.78;
 
 export type SigmaNodeDisplayAttributesLike = {
   x: number;
@@ -153,44 +160,6 @@ export function buildKnowledgeGraphSeedPositions({
   return positions;
 }
 
-function fadeColor(color: string, alpha: number) {
-  if (color.startsWith("rgb(") && color.endsWith(")")) {
-    return color.replace("rgb(", "rgba(").replace(")", `, ${alpha})`);
-  }
-  if (color.startsWith("#")) {
-    const hex = color.slice(1);
-    const normalized =
-      hex.length === 3
-        ? hex
-            .split("")
-            .map((part) => `${part}${part}`)
-            .join("")
-        : hex;
-    const red = parseInt(normalized.slice(0, 2), 16);
-    const green = parseInt(normalized.slice(2, 4), 16);
-    const blue = parseInt(normalized.slice(4, 6), 16);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-  }
-  return color;
-}
-
-function buildKnowledgeGraphEdgeColor(
-  family: RenderedKnowledgeGraphEdge["family"],
-  alpha: number
-) {
-  const rgb =
-    family === "structural"
-      ? "125, 211, 252"
-      : family === "contextual"
-        ? "45, 212, 191"
-        : family === "taxonomy"
-          ? "192, 132, 252"
-          : family === "workspace"
-            ? "251, 191, 36"
-            : "148, 163, 184";
-  return `rgba(${rgb}, ${alpha})`;
-}
-
 function getKnowledgeGraphNodeFocusDistance(
   nodeId: string,
   context: KnowledgeGraphNodeFocusDistanceContext
@@ -242,7 +211,9 @@ export function reduceKnowledgeGraphSigmaNodeAttributes({
     label: focused || hovered || dragged || detailed ? node.title : "",
     forceLabel: focused || hovered || dragged || detailed,
     highlighted: focused || hovered || dragged || detailed,
-    color: inNeighborhood ? baseColor : fadeColor(baseColor, 0.34),
+    color: inNeighborhood
+      ? baseColor
+      : fadeKnowledgeGraphColor(baseColor, 0.34),
     size: dragged
       ? attributes.size * 2
       : focused
@@ -291,16 +262,16 @@ export function reduceKnowledgeGraphSigmaEdgeAttributes({
       )
     : 0;
   const color = touchesFocus
-    ? buildKnowledgeGraphEdgeColor(edge.family, 0.24)
+    ? buildKnowledgeGraphEdgeStroke(edge, 0.24)
     : touchesHover
-      ? buildKnowledgeGraphEdgeColor(edge.family, 0.14)
+      ? buildKnowledgeGraphEdgeStroke(edge, 0.14)
       : !focusNodeId
-        ? buildKnowledgeGraphEdgeColor(edge.family, 0.055)
+        ? buildKnowledgeGraphEdgeStroke(edge, 0.055)
         : edgeDistance <= 1
-          ? buildKnowledgeGraphEdgeColor(edge.family, 0.09)
+          ? buildKnowledgeGraphEdgeStroke(edge, 0.09)
           : edgeDistance === 2
-            ? buildKnowledgeGraphEdgeColor(edge.family, 0.05)
-            : buildKnowledgeGraphEdgeColor(edge.family, 0.016);
+            ? buildKnowledgeGraphEdgeStroke(edge, 0.05)
+            : buildKnowledgeGraphEdgeStroke(edge, 0.016);
 
   return {
     ...attributes,
@@ -500,4 +471,14 @@ export function buildKnowledgeGraphOverviewCameraTarget({
     y: 0,
     ratio: Math.max(currentRatio, overviewRatio)
   };
+}
+
+export function buildKnowledgeGraphSigmaOverviewRatio(
+  fittedOverviewRatio: number
+) {
+  return clamp(
+    fittedOverviewRatio * SIGMA_OVERVIEW_RATIO_SCALE,
+    SIGMA_OVERVIEW_RATIO_MIN,
+    SIGMA_OVERVIEW_RATIO_MAX
+  );
 }

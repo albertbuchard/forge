@@ -1,3 +1,5 @@
+import { GAMIFICATION_ASSET_VERSION } from "@/lib/gamification-catalog";
+
 export const gamificationThemeOptions = [
   {
     value: "dramatic-smithie",
@@ -31,6 +33,10 @@ export const gamificationPreviewItemKeys = [
   "item-unlock-streaks-molten-crown-fire"
 ] as const;
 
+function withGamificationAssetVersion(url: string) {
+  return `${url}?v=${encodeURIComponent(GAMIFICATION_ASSET_VERSION)}`;
+}
+
 export function normalizeGamificationTheme(
   value: string | null | undefined
 ): GamificationThemePreference {
@@ -53,7 +59,9 @@ export function getGamificationSpriteUrl(
       : assetKey.startsWith("mascot-")
         ? "mascots"
         : "";
-  return `${normalizedBase}gamification/sprites/themes/${normalizedTheme}/${folder ? `${folder}/` : ""}${assetKey}-${size}.webp`;
+  return withGamificationAssetVersion(
+    `${normalizedBase}gamification/sprites/themes/${normalizedTheme}/${folder ? `${folder}/` : ""}${assetKey}-${size}.webp`
+  );
 }
 
 export function getGamificationThemePreviewUrl(
@@ -62,7 +70,9 @@ export function getGamificationThemePreviewUrl(
   const base = import.meta.env.BASE_URL || "/";
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
   const normalizedTheme = normalizeGamificationTheme(theme);
-  return `${normalizedBase}gamification-previews/${normalizedTheme}-mascot.webp`;
+  return withGamificationAssetVersion(
+    `${normalizedBase}gamification-previews/${normalizedTheme}-mascot.webp`
+  );
 }
 
 export function getGamificationThemePreviewItemUrl(
@@ -72,7 +82,9 @@ export function getGamificationThemePreviewItemUrl(
   const base = import.meta.env.BASE_URL || "/";
   const normalizedBase = base.endsWith("/") ? base : `${base}/`;
   const normalizedTheme = normalizeGamificationTheme(theme);
-  return `${normalizedBase}gamification-previews/${normalizedTheme}-${assetKey}.webp`;
+  return withGamificationAssetVersion(
+    `${normalizedBase}gamification-previews/${normalizedTheme}-${assetKey}.webp`
+  );
 }
 
 export function getGamificationPngUrl(
@@ -89,5 +101,7 @@ export function getGamificationPngUrl(
       : assetKey.startsWith("mascot-")
         ? "mascots"
         : "";
-  return `${normalizedBase}gamification/sprites/themes/${normalizedTheme}/${folder ? `${folder}/` : ""}${assetKey}-${size}.png`;
+  return withGamificationAssetVersion(
+    `${normalizedBase}gamification/sprites/themes/${normalizedTheme}/${folder ? `${folder}/` : ""}${assetKey}-${size}.png`
+  );
 }

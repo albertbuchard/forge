@@ -34,6 +34,7 @@ import {
 } from "./repositories/wiki-memory.js";
 import { getCrudEntityCapabilityMatrix } from "./services/entity-crud.js";
 import type { StartupTaskRunRecoverySummary } from "./services/run-recovery.js";
+import { resolveWebAssetLocation } from "./web.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -3029,6 +3030,16 @@ test("mobile health sync exposes structured apple health workout descriptors and
             },
             links: [],
             annotations: {}
+          },
+          {
+            externalUid: "hk-workout-cycling-no-energy",
+            workoutType: "cycling",
+            startedAt: "2026-04-07T06:45:00.000Z",
+            endedAt: "2026-04-07T07:00:00.000Z",
+            distanceMeters: 4200,
+            sourceDevice: "iPhone",
+            links: [],
+            annotations: {}
           }
         ],
         vitals: {
@@ -3126,6 +3137,127 @@ test("mobile health sync exposes structured apple health workout descriptors and
     assert.equal(session.analytics?.routeSummary.pointCount, 2);
     assert.ok(
       (session.analytics?.zoneDurations ?? []).some((zone) => zone.seconds > 0)
+    );
+
+    const futureWorkoutResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/workouts",
+      headers: { cookie: operatorCookie },
+      payload: {
+        workoutType: "cycling",
+        startedAt: "2099-01-01T08:00:00.000Z",
+        endedAt: "2099-01-01T09:00:00.000Z"
+      }
+    });
+    assert.equal(futureWorkoutResponse.statusCode, 201);
+
+    const zeroDurationWorkoutResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/health/workouts",
+      headers: { cookie: operatorCookie },
+      payload: {
+        workoutType: "walking",
+        startedAt: "2026-04-07T06:30:00.000Z",
+        endedAt: "2026-04-07T06:30:00.000Z",
+        totalEnergyKcal: 100
+      }
+    });
+    assert.equal(zeroDurationWorkoutResponse.statusCode, 201);
+
+    const summaryFitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness?sessionDetail=summary"
+    });
+    assert.equal(summaryFitnessResponse.statusCode, 200);
+    assert.ok(summaryFitnessResponse.body.length < fitnessResponse.body.length);
+    const summaryFitness = (
+      summaryFitnessResponse.json() as {
+        fitness: {
+          summary: {
+            storedWorkoutCount: number;
+            topWorkoutType: string | null;
+            averageSessionMinutes: number;
+          };
+          analysisSessions: Array<{ id: string }>;
+          sessions: Array<{
+            id: string;
+            detailLevel: string;
+            details?: unknown;
+            provenance?: unknown;
+          }>;
+          sportComparison: {
+            modelVersion: string;
+            periods: Array<{
+              key: string;
+              totals: {
+                sessionCount: number;
+                totalDurationSeconds: number;
+                energyCoverage: number;
+              };
+              sports: Array<{
+                workoutType: string;
+                sessionShare: number;
+                durationShare: number;
+                energyKcalPerHour: number | null;
+                energyCoverage: number;
+              }>;
+            }>;
+          };
+        };
+      }
+    ).fitness;
+    assert.equal(summaryFitness.summary.storedWorkoutCount, 4);
+    assert.equal(summaryFitness.summary.topWorkoutType, "walking");
+    assert.equal(summaryFitness.summary.averageSessionMinutes, 20);
+    const summarySession = summaryFitness.sessions.find(
+      (candidate) => candidate.id === session.id
+    );
+    assert.equal(summarySession?.detailLevel, "summary");
+    assert.equal(summarySession?.details, undefined);
+    assert.equal(summarySession?.provenance, undefined);
+    assert.equal(
+      summaryFitness.sportComparison.modelVersion,
+      "forge-sport-comparison-v1"
+    );
+    const allTimeComparison = summaryFitness.sportComparison.periods.find(
+      (period) => period.key === "all"
+    );
+    assert.ok(
+      summaryFitness.sessions.some(
+        (candidate) => candidate.id === futureWorkoutResponse.json().workout.id
+      )
+    );
+    assert.ok(
+      !summaryFitness.analysisSessions.some(
+        (candidate) => candidate.id === futureWorkoutResponse.json().workout.id
+      )
+    );
+    assert.equal(allTimeComparison?.totals.sessionCount, 3);
+    assert.equal(allTimeComparison?.totals.totalDurationSeconds, 60 * 60);
+    assert.equal(allTimeComparison?.totals.energyCoverage, 0.667);
+    assert.equal(allTimeComparison?.sports[0]?.workoutType, "walking");
+    assert.equal(allTimeComparison?.sports[0]?.sessionShare, 0.6667);
+    assert.equal(allTimeComparison?.sports[0]?.durationShare, 0.75);
+    assert.equal(allTimeComparison?.sports[0]?.energyCoverage, 1);
+    assert.equal(allTimeComparison?.sports[0]?.energyKcalPerHour, 306.7);
+    assert.equal(allTimeComparison?.sports[1]?.workoutType, "cycling");
+    assert.equal(allTimeComparison?.sports[1]?.energyCoverage, 0);
+    assert.equal(allTimeComparison?.sports[1]?.energyKcalPerHour, null);
+
+    const trainingLoadResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/training-load"
+    });
+    assert.equal(trainingLoadResponse.statusCode, 200);
+    const trainingLoad = trainingLoadResponse.json().trainingLoad as {
+      summary: { sessionCount: number };
+      sessionSignals: Array<{ id: string }>;
+    };
+    assert.equal(trainingLoad.summary.sessionCount, 3);
+    assert.ok(
+      !trainingLoad.sessionSignals.some(
+        (candidate) => candidate.id === futureWorkoutResponse.json().workout.id
+      )
     );
 
     const detailResponse = await app.inject({
@@ -11722,6 +11854,10 @@ test("built frontend assets are served correctly from the /forge base path", asy
     });
     assert.equal(indexResponse.statusCode, 200);
     assert.match(indexResponse.headers["content-type"] ?? "", /text\/html/);
+    assert.equal(
+      indexResponse.headers["cache-control"],
+      "no-store, max-age=0, must-revalidate"
+    );
     assert.match(indexResponse.body, /\/forge\/assets\//);
 
     const assetMatch = indexResponse.body.match(
@@ -11738,6 +11874,10 @@ test("built frontend assets are served correctly from the /forge base path", asy
       assetResponse.headers["content-type"] ?? "",
       /application\/javascript/
     );
+    assert.equal(
+      assetResponse.headers["cache-control"],
+      "public, max-age=31536000, immutable"
+    );
 
     const spaRouteResponse = await app.inject({
       method: "GET",
@@ -11752,6 +11892,28 @@ test("built frontend assets are served correctly from the /forge base path", asy
     closeDatabase();
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test("gamification sprites bypass frontend build discovery", async () => {
+  let clientDirLookupCount = 0;
+  const location = await resolveWebAssetLocation(
+    "/gamification/sprites/themes/mind-locksmith/mascots/mascot-state-020-512.webp",
+    {
+      getClientDir: async () => {
+        clientDirLookupCount += 1;
+        throw new Error("Frontend build should not be needed for a sprite");
+      },
+      resolveGamificationSpriteAssetPath: async (relativePath) =>
+        `/runtime-assets/${relativePath}`
+    }
+  );
+
+  assert.equal(clientDirLookupCount, 0);
+  assert.equal(location.clientDir, null);
+  assert.equal(
+    location.assetPath,
+    "/runtime-assets/themes/mind-locksmith/mascots/mascot-state-020-512.webp"
+  );
 });
 
 test("dev web origin proxies /forge routes through the backend", async () => {
@@ -12809,6 +12971,22 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(body.components?.schemas?.ApprovalRequest);
     assert.ok(body.components?.schemas?.RewardLedgerEvent);
     assert.ok(body.components?.schemas?.XpMetricsPayload);
+    const workoutSession = body.components?.schemas?.WorkoutSession as {
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(workoutSession.properties?.analytics);
+    const workoutSessionSummary = body.components?.schemas
+      ?.WorkoutSessionSummary as {
+      required?: string[];
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(workoutSessionSummary.required?.includes("detailLevel"));
+    assert.ok(workoutSessionSummary.properties?.analytics);
+    assert.equal(workoutSessionSummary.properties?.details, undefined);
+    assert.equal(workoutSessionSummary.properties?.provenance, undefined);
+    assert.ok(body.components?.schemas?.SportComparison);
+    assert.ok(body.components?.schemas?.SportComparisonPeriod);
+    assert.ok(body.components?.schemas?.SportComparisonEntry);
     assert.ok(body.paths?.["/api/v1/context"]);
     assert.ok(body.paths?.["/api/v1/operator/context"]);
     assert.ok(body.paths?.["/api/v1/operator/overview"]);

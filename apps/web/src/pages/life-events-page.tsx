@@ -55,6 +55,8 @@ import {
   uploadArtifact
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { resolveForgeThemeToken } from "@/lib/theme-system";
+import { useForgeThemeKey } from "@/hooks/use-forge-theme-key";
 import type {
   ArtifactUploadInput,
   LifeEvent,
@@ -158,36 +160,60 @@ const ROUTE_POINT_ALIASES: Record<string, string> = {
   "BLACK ROCK CITY": "BRC"
 };
 
-const DEFAULT_GLOBE_STYLE = {
-  version: 8,
-  projection: { type: "globe" },
-  sources: {
-    osm: {
-      type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      attribution: "OpenStreetMap contributors"
-    }
-  },
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#dbeafe" }
-    },
-    {
-      id: "osm",
-      type: "raster",
-      source: "osm",
-      paint: {
-        "raster-saturation": -0.25,
-        "raster-contrast": 0.08,
-        "raster-brightness-min": 0.08,
-        "raster-brightness-max": 0.92
+type LifeEventMapPalette = {
+  primary: string;
+  secondary: string;
+  surfaceLow: string;
+  surfaceHigh: string;
+  ink: string;
+  dark: boolean;
+};
+
+function getLifeEventMapPalette(): LifeEventMapPalette {
+  return {
+    primary: resolveForgeThemeToken("--primary", "#2563eb"),
+    secondary: resolveForgeThemeToken("--secondary", "#0f8b6d"),
+    surfaceLow: resolveForgeThemeToken("--surface-low", "#dbe5ec"),
+    surfaceHigh: resolveForgeThemeToken("--surface-high", "#ffffff"),
+    ink: resolveForgeThemeToken("--forge-body-text", "#162334"),
+    dark:
+      typeof document !== "undefined" &&
+      document.body.classList.contains("theme-forge-dark")
+  };
+}
+
+function createDefaultGlobeStyle(palette: LifeEventMapPalette) {
+  return {
+    version: 8,
+    projection: { type: "globe" },
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        attribution: "OpenStreetMap contributors"
       }
-    }
-  ]
-} as const;
+    },
+    layers: [
+      {
+        id: "background",
+        type: "background",
+        paint: { "background-color": palette.surfaceLow }
+      },
+      {
+        id: "osm",
+        type: "raster",
+        source: "osm",
+        paint: {
+          "raster-saturation": palette.dark ? -0.55 : -0.25,
+          "raster-contrast": palette.dark ? 0.18 : 0.08,
+          "raster-brightness-min": palette.dark ? 0.02 : 0.08,
+          "raster-brightness-max": palette.dark ? 0.58 : 0.92
+        }
+      }
+    ]
+  } as const;
+}
 
 type LifeEventTypeOption = {
   value: LifeEventType;
@@ -971,7 +997,7 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
   const first = stops[0]!;
   const last = stops.at(-1)!;
   return (
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.95),rgba(219,234,254,0.84)_34%,rgba(20,184,166,0.13)_100%)]">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_30%,color-mix(in_srgb,var(--surface-high)_96%,transparent),color-mix(in_srgb,var(--surface-panel)_88%,transparent)_34%,color-mix(in_srgb,var(--secondary)_15%,var(--surface-low)_85%)_100%)]">
       <svg
         className="h-full w-full"
         viewBox="0 0 640 300"
@@ -985,9 +1011,21 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
             cy="26%"
             r="72%"
           >
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-            <stop offset="55%" stopColor="#dbeafe" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#bfdbfe" stopOpacity="0.7" />
+            <stop
+              offset="0%"
+              stopColor="var(--surface-high)"
+              stopOpacity="0.95"
+            />
+            <stop
+              offset="55%"
+              stopColor="var(--surface-panel)"
+              stopOpacity="0.95"
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--surface-low)"
+              stopOpacity="0.78"
+            />
           </radialGradient>
         </defs>
         <ellipse
@@ -996,7 +1034,7 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
           rx="248"
           ry="118"
           fill="url(#life-event-globe-fallback-fill)"
-          stroke="#93c5fd"
+          stroke="var(--ui-border-strong)"
           strokeWidth="1.5"
         />
         {[0, 1, 2, 3].map((line) => (
@@ -1007,7 +1045,7 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
             rx={44 + line * 48}
             ry="118"
             fill="none"
-            stroke="#60a5fa"
+            stroke="var(--primary)"
             strokeDasharray="4 6"
             strokeOpacity="0.22"
           />
@@ -1017,7 +1055,7 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
             key={`latitude-${y}`}
             d={`M 92 ${y} Q 320 ${y - 24} 548 ${y}`}
             fill="none"
-            stroke="#60a5fa"
+            stroke="var(--primary)"
             strokeDasharray="4 6"
             strokeOpacity="0.22"
           />
@@ -1029,7 +1067,7 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
               key={`${from.label}-${stop.label}`}
               d={fallbackArcPath(from, stop)}
               fill="none"
-              stroke="#2563eb"
+              stroke="var(--primary)"
               strokeLinecap="round"
               strokeWidth="3.5"
             />
@@ -1043,15 +1081,19 @@ function LifeEventGlobeFallback({ stops }: { stops: RoutePoint[] }) {
                 cx={point.x}
                 cy={point.y}
                 r="6.5"
-                fill={index === stops.length - 1 ? "#99f6e4" : "#eff6ff"}
-                stroke="#2563eb"
+                fill={
+                  index === stops.length - 1
+                    ? "var(--secondary)"
+                    : "var(--surface-high)"
+                }
+                stroke="var(--primary)"
                 strokeWidth="2"
               />
               <text
                 x={point.x}
                 y={point.y + 22}
                 textAnchor="middle"
-                fill="#334155"
+                fill="var(--ui-ink-strong)"
                 fontSize="12"
                 fontWeight="600"
               >
@@ -1083,10 +1125,12 @@ function canCreateWebGlContext() {
 
 function LifeEventRoutePreview({
   event,
-  expanded
+  expanded,
+  themeKey
 }: {
   event: LifeEvent;
   expanded: boolean;
+  themeKey: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mapStatus, setMapStatus] = useState<"fallback" | "loading" | "ready">(
@@ -1141,6 +1185,7 @@ function LifeEventRoutePreview({
         }
         const rasterStyle =
           styleUrl.includes("{x}") || styleUrl.includes("{z}");
+        const palette = getLifeEventMapPalette();
         const mapStyle = rasterStyle
           ? {
               version: 8,
@@ -1150,7 +1195,7 @@ function LifeEventRoutePreview({
               },
               layers: [{ id: "tiles", type: "raster", source: "tiles" }]
             }
-          : styleUrl || DEFAULT_GLOBE_STYLE;
+          : styleUrl || createDefaultGlobeStyle(palette);
         const first = stops[0]!;
         try {
           map = new maplibre.Map({
@@ -1189,7 +1234,7 @@ function LifeEventRoutePreview({
               type: "line",
               source: "life-event-route",
               paint: {
-                "line-color": "#2563eb",
+                "line-color": palette.primary,
                 "line-opacity": 0.22,
                 "line-width": 11
               }
@@ -1199,7 +1244,7 @@ function LifeEventRoutePreview({
               type: "line",
               source: "life-event-route",
               paint: {
-                "line-color": "#2563eb",
+                "line-color": palette.primary,
                 "line-opacity": 0.96,
                 "line-width": 4,
                 "line-dasharray": [1.6, 0.7]
@@ -1215,8 +1260,8 @@ function LifeEventRoutePreview({
               source: "life-event-stops",
               paint: {
                 "circle-radius": 6,
-                "circle-color": "#eff6ff",
-                "circle-stroke-color": "#2563eb",
+                "circle-color": palette.surfaceHigh,
+                "circle-stroke-color": palette.primary,
                 "circle-stroke-width": 2
               }
             });
@@ -1232,8 +1277,8 @@ function LifeEventRoutePreview({
                 "text-anchor": "top"
               },
               paint: {
-                "text-color": "#0f172a",
-                "text-halo-color": "#ffffff",
+                "text-color": palette.ink,
+                "text-halo-color": palette.surfaceHigh,
                 "text-halo-width": 1.5
               }
             });
@@ -1264,7 +1309,7 @@ function LifeEventRoutePreview({
       cancelled = true;
       map?.remove();
     };
-  }, [expanded, routeData, stopData, stops, styleUrl]);
+  }, [expanded, routeData, stopData, stops, styleUrl, themeKey]);
 
   if (!stops) {
     return null;
@@ -1283,7 +1328,7 @@ function LifeEventRoutePreview({
         )}
       />
       {mapStatus !== "ready" ? (
-        <div className="absolute right-3 top-3 rounded-full border border-[var(--ui-border-subtle)] bg-white/85 px-3 py-1 text-xs font-medium text-[var(--ui-ink-medium)] shadow-sm">
+        <div className="absolute right-3 top-3 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-1 text-xs font-medium text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)] backdrop-blur">
           {mapStatus === "loading" ? "Loading globe" : "Route preview"}
         </div>
       ) : null}
@@ -1345,6 +1390,7 @@ function LifeEventCard({
   event,
   next,
   expanded,
+  themeKey,
   travelStatus,
   travelStatusLoading,
   onToggle,
@@ -1354,6 +1400,7 @@ function LifeEventCard({
   event: LifeEvent;
   next: boolean;
   expanded: boolean;
+  themeKey: string;
   travelStatus?: LifeEventTravelStatusPayload | null;
   travelStatusLoading?: boolean;
   onToggle: () => void;
@@ -1485,7 +1532,11 @@ function LifeEventCard({
             </div>
           </div>
           {hasRoutePreview ? (
-            <LifeEventRoutePreview event={event} expanded={expanded} />
+            <LifeEventRoutePreview
+              event={event}
+              expanded={expanded}
+              themeKey={themeKey}
+            />
           ) : null}
           {isTravelStatusEvent ? (
             <LifeEventTravelStatusPanel
@@ -1605,6 +1656,7 @@ function FileDropZone({
 
 export function LifeEventsPage() {
   const queryClient = useQueryClient();
+  const themeKey = useForgeThemeKey();
   const [searchParams, setSearchParams] = useSearchParams();
   const focusedEventId = searchParams.get("focus")?.trim() || null;
   const [query, setQuery] = useState("");
@@ -2217,6 +2269,7 @@ export function LifeEventsPage() {
                   event={event}
                   next={isNext}
                   expanded={isExpanded}
+                  themeKey={themeKey}
                   travelStatus={isExpanded ? statusQuery.data : null}
                   travelStatusLoading={
                     isExpanded ? statusQuery.isFetching : false

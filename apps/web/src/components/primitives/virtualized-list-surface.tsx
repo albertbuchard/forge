@@ -22,17 +22,19 @@ export function VirtualizedListSurface({
     <Card className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             {title}
           </div>
-          <div className="mt-2 text-lg text-white">{description}</div>
+          <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+            {description}
+          </div>
         </div>
         {summary ? <div className="shrink-0">{summary}</div> : null}
       </div>
 
       <div
         ref={listRef}
-        className={`${heightClassName} overflow-y-auto rounded-[24px] border border-white/8 bg-white/[0.03]`}
+        className={`${heightClassName} overflow-y-auto rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]`}
       >
         {emptyState ? emptyState : children}
       </div>

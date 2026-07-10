@@ -23,7 +23,11 @@ import { ErrorState } from "@/components/ui/page-state";
 import { getGamificationCatalog, updateGamificationEquipment } from "@/lib/api";
 import { forgeApi, useGetXpMetricsQuery } from "@/store/api/forge-api";
 import { useAppDispatch } from "@/store/typed-hooks";
-import { getGamificationSpriteUrl } from "@/lib/gamification-assets";
+import {
+  getGamificationSpriteUrl,
+  getGamificationThemePreviewItemUrl,
+  getGamificationThemePreviewUrl
+} from "@/lib/gamification-assets";
 import type { GamificationThemePreference } from "@/lib/gamification-assets";
 import {
   GAMIFICATION_CATEGORIES,
@@ -39,8 +43,40 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function hideMissingGamificationImage(event: SyntheticEvent<HTMLImageElement>) {
-  event.currentTarget.hidden = true;
+function getGamificationFallbackUrl(
+  theme: GamificationThemePreference,
+  assetKey: string
+) {
+  if (assetKey.startsWith("mascot-")) {
+    return getGamificationThemePreviewUrl(theme);
+  }
+  return getGamificationThemePreviewItemUrl(
+    theme,
+    assetKey.includes("unlock-")
+      ? "item-unlock-streaks-molten-crown-fire"
+      : "item-trophy-xp-levels-the-first-heat"
+  );
+}
+
+function recoverMissingGamificationImage(
+  event: SyntheticEvent<HTMLImageElement>,
+  theme: GamificationThemePreference,
+  assetKey: string
+) {
+  const image = event.currentTarget;
+  const fallbackUrl = getGamificationFallbackUrl(theme, assetKey);
+  if (image.getAttribute("src") === fallbackUrl) {
+    image.hidden = true;
+    return;
+  }
+  image.hidden = false;
+  image.src = fallbackUrl;
+}
+
+function revealLoadedGamificationImage(
+  event: SyntheticEvent<HTMLImageElement>
+) {
+  event.currentTarget.hidden = false;
 }
 
 type RewardsTab = "trophies" | "unlocks" | "armory" | "streak";
@@ -137,6 +173,21 @@ export function selectRewardGroupItems<T>(
     : items.slice(0, previewCount);
 }
 
+export function selectFeaturedTrophies<
+  T extends { id: string; kind: string; unlocked: boolean }
+>(items: T[], recentlyUnlocked: T[], limit = 3) {
+  const seen = new Set<string>();
+  return [...recentlyUnlocked, ...items]
+    .filter((item) => item.kind === "trophy")
+    .sort((left, right) => Number(right.unlocked) - Number(left.unlocked))
+    .filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    })
+    .slice(0, limit);
+}
+
 function useRewardGroupPreviewCount() {
   const [previewCount, setPreviewCount] = useState(() =>
     rewardGroupPreviewCountForWidth(
@@ -193,7 +244,14 @@ function RewardTile({
           decoding="async"
           width={144}
           height={144}
-          onError={hideMissingGamificationImage}
+          onLoad={revealLoadedGamificationImage}
+          onError={(event) =>
+            recoverMissingGamificationImage(
+              event,
+              gamificationTheme,
+              item.assetKey
+            )
+          }
           className={cn(
             "size-36 object-contain drop-shadow-[var(--ui-shadow-soft)] transition group-hover:scale-[1.03]",
             !item.unlocked && "grayscale"
@@ -295,6 +353,9 @@ export function RewardsPage() {
     (item) =>
       item.kind === "unlock" && item.unlockType && equipConfig[item.unlockType]
   );
+  const featuredTrophies = useMemo(() => {
+    return selectFeaturedTrophies(items, catalog?.recentlyUnlocked ?? [], 3);
+  }, [catalog?.recentlyUnlocked, items]);
 
   if (catalogQuery.isError) {
     return (
@@ -324,7 +385,7 @@ export function RewardsPage() {
       />
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.42fr)]">
-        <div className={rewardCardClass}>
+        <div className={`${rewardCardClass} order-2 lg:order-1`}>
           <div className="flex flex-wrap gap-2">
             {tabs.map((entry) => (
               <Button
@@ -405,9 +466,62 @@ export function RewardsPage() {
           </div>
         </div>
 
-        <div className={rewardCardClass}>
+        <div className={`${rewardCardClass} order-1 lg:order-2`}>
           <div
             className={`flex items-center gap-2 text-sm font-semibold ${rewardTitleClass}`}
+          >
+            <Trophy className="size-4 text-[var(--primary)]" />
+            Featured trophies
+          </div>
+          <div
+            data-testid="featured-trophy-shelf"
+            className="mt-2 grid grid-cols-3 gap-2"
+          >
+            {featuredTrophies.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedItem(item)}
+                className={cn(
+                  "grid min-w-0 place-items-center rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2 text-center transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]",
+                  !item.unlocked && "opacity-70"
+                )}
+                title={item.title}
+              >
+                <img
+                  src={getGamificationSpriteUrl(
+                    item.assetKey,
+                    256,
+                    gamificationTheme
+                  )}
+                  alt=""
+                  decoding="async"
+                  width={64}
+                  height={64}
+                  onLoad={revealLoadedGamificationImage}
+                  onError={(event) =>
+                    recoverMissingGamificationImage(
+                      event,
+                      gamificationTheme,
+                      item.assetKey
+                    )
+                  }
+                  className={cn(
+                    "size-16 object-contain",
+                    !item.unlocked && "grayscale"
+                  )}
+                />
+                <span className="mt-1 max-w-full truncate text-[11px] text-[var(--ui-ink-medium)]">
+                  {item.title}
+                </span>
+                <span className="text-[9px] uppercase tracking-[0.12em] text-[var(--ui-ink-faint)]">
+                  {item.unlocked ? "earned" : "next"}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div
+            className={`mt-4 flex items-center gap-2 border-t border-[var(--ui-border-subtle)] pt-3 text-sm font-semibold ${rewardTitleClass}`}
           >
             <Sparkles className="size-4 text-[var(--tertiary)]" />
             Near completion
@@ -429,7 +543,14 @@ export function RewardsPage() {
                 decoding="async"
                 width={44}
                 height={44}
-                onError={hideMissingGamificationImage}
+                onLoad={revealLoadedGamificationImage}
+                onError={(event) =>
+                  recoverMissingGamificationImage(
+                    event,
+                    gamificationTheme,
+                    target.assetKey
+                  )
+                }
                 className="size-11 object-contain"
               />
               <span className="min-w-0">
@@ -463,7 +584,14 @@ export function RewardsPage() {
               decoding="async"
               width={512}
               height={512}
-              onError={hideMissingGamificationImage}
+              onLoad={revealLoadedGamificationImage}
+              onError={(event) =>
+                recoverMissingGamificationImage(
+                  event,
+                  gamificationTheme,
+                  xpQuery.data?.metrics.mascot.spriteKey ?? "mascot-state-014"
+                )
+              }
               className="absolute inset-x-0 bottom-0 mx-auto h-[23rem] object-contain"
             />
             <div className="relative z-10">
@@ -515,7 +643,14 @@ export function RewardsPage() {
                     decoding="async"
                     width={112}
                     height={112}
-                    onError={hideMissingGamificationImage}
+                    onLoad={revealLoadedGamificationImage}
+                    onError={(event) =>
+                      recoverMissingGamificationImage(
+                        event,
+                        gamificationTheme,
+                        item.assetKey
+                      )
+                    }
                     className={cn(
                       "mx-auto mt-3 size-28 object-contain",
                       !item.unlocked && "grayscale"
@@ -575,7 +710,14 @@ export function RewardsPage() {
                     decoding="async"
                     width={112}
                     height={112}
-                    onError={hideMissingGamificationImage}
+                    onLoad={revealLoadedGamificationImage}
+                    onError={(event) =>
+                      recoverMissingGamificationImage(
+                        event,
+                        gamificationTheme,
+                        key
+                      )
+                    }
                     className="mx-auto size-28 object-contain"
                   />
                   <div
@@ -604,7 +746,14 @@ export function RewardsPage() {
                     decoding="async"
                     width={112}
                     height={112}
-                    onError={hideMissingGamificationImage}
+                    onLoad={revealLoadedGamificationImage}
+                    onError={(event) =>
+                      recoverMissingGamificationImage(
+                        event,
+                        gamificationTheme,
+                        key
+                      )
+                    }
                     className="mx-auto size-28 object-contain"
                   />
                   <div
@@ -709,7 +858,14 @@ export function RewardsPage() {
                 decoding="async"
                 width={128}
                 height={128}
-                onError={hideMissingGamificationImage}
+                onLoad={revealLoadedGamificationImage}
+                onError={(event) =>
+                  recoverMissingGamificationImage(
+                    event,
+                    gamificationTheme,
+                    selectedItem.assetKey
+                  )
+                }
                 className="size-32 shrink-0 object-contain"
               />
               <div className="min-w-0 flex-1">

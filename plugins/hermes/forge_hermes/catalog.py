@@ -265,7 +265,8 @@ def sleep_overview_path(args: Dict[str, Any]) -> str:
 
 
 def sports_overview_path(args: Dict[str, Any]) -> str:
-    return with_query("/api/v1/health/fitness", args, ["userIds"])
+    path = with_query("/api/v1/health/fitness", args, ["userIds"])
+    return f"{path}{'&' if '?' in path else '?'}compact=1"
 
 
 def training_load_overview_path(args: Dict[str, Any]) -> str:
@@ -939,7 +940,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_get_sports_overview",
-        "description": "Read the sports surface with workout volume, workout types, effort signals, and linked workout sessions.",
+        "description": "Read the compact sports overview with workout volume, sport comparisons, energy and load coverage, and effort signals. Search workout_session records when individual sessions are needed.",
         "parameters": scoped_read_schema(),
         "method": "GET",
         "path_builder": sports_overview_path,

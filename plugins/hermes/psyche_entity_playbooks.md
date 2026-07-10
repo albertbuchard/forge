@@ -463,6 +463,11 @@ Use this before asking another deepening question. Psyche work should feel caref
 but not endless. Once the user recognizes the working formulation, protect momentum and
 save the record instead of reopening the whole story.
 
+The minima below govern guided formulation, not an explicit direct save or update. If
+the user already supplies clear entity-specific wording and asks to save it, reflect
+that wording and ask at most one accuracy or consent question; do not require a new
+example or hypothesis. For an update, also identify the exact existing record.
+
 - For `belief_entry`, the minimum is the accepted sentence or prediction plus whether
   it is mainly about self, others, world/safety, or outcome when that distinction is
   visible.

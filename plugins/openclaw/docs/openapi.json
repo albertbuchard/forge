@@ -10564,7 +10564,7 @@
           "exerciseMinutes": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "null"
@@ -10628,6 +10628,10 @@
               "type": "string"
             }
           },
+          "analytics": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "annotations": {
             "type": "object",
             "additionalProperties": true
@@ -10670,6 +10674,650 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "WorkoutSessionSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "externalUid",
+          "pairingSessionId",
+          "userId",
+          "source",
+          "sourceType",
+          "sourceSystem",
+          "workoutTypeLabel",
+          "activityFamily",
+          "activityFamilyLabel",
+          "workoutType",
+          "sourceDevice",
+          "startedAt",
+          "endedAt",
+          "durationSeconds",
+          "activeEnergyKcal",
+          "totalEnergyKcal",
+          "distanceMeters",
+          "stepCount",
+          "exerciseMinutes",
+          "averageHeartRate",
+          "maxHeartRate",
+          "subjectiveEffort",
+          "moodBefore",
+          "moodAfter",
+          "meaningText",
+          "plannedContext",
+          "socialContext",
+          "links",
+          "tags",
+          "generatedFromHabitId",
+          "generatedFromCheckInId",
+          "reconciliationStatus",
+          "createdAt",
+          "updatedAt",
+          "detailLevel"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "externalUid": {
+            "type": "string"
+          },
+          "pairingSessionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceType": {
+            "type": "string"
+          },
+          "sourceSystem": {
+            "type": "string"
+          },
+          "sourceBundleIdentifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceProductType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workoutType": {
+            "type": "string"
+          },
+          "workoutTypeLabel": {
+            "type": "string"
+          },
+          "activityFamily": {
+            "type": "string"
+          },
+          "activityFamilyLabel": {
+            "type": "string"
+          },
+          "sourceDevice": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationSeconds": {
+            "type": "integer"
+          },
+          "activeEnergyKcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "totalEnergyKcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distanceMeters": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stepCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exerciseMinutes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "averageHeartRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxHeartRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subjectiveEffort": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "moodBefore": {
+            "type": "string"
+          },
+          "moodAfter": {
+            "type": "string"
+          },
+          "meaningText": {
+            "type": "string"
+          },
+          "plannedContext": {
+            "type": "string"
+          },
+          "socialContext": {
+            "type": "string"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthLink"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "analytics": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "generatedFromHabitId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generatedFromCheckInId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reconciliationStatus": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detailLevel": {
+            "type": "string",
+            "enum": [
+              "summary"
+            ]
+          }
+        }
+      },
+      "SportComparisonEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workoutType",
+          "workoutTypeLabel",
+          "activityFamily",
+          "activityFamilyLabel",
+          "sessionCount",
+          "sessionShare",
+          "activeDayCount",
+          "totalDurationSeconds",
+          "durationShare",
+          "averageSessionMinutes",
+          "totalEnergyKcal",
+          "energyShare",
+          "energyCoverage",
+          "energyKcalPerHour",
+          "distanceMeters",
+          "distanceShare",
+          "distanceCoverage",
+          "averageSpeedKph",
+          "totalTrainingLoad",
+          "trainingLoadShare",
+          "trainingLoadCoverage",
+          "trainingLoadPerHour",
+          "averageHeartRateCoverage",
+          "firstStartedAt",
+          "lastStartedAt"
+        ],
+        "properties": {
+          "workoutType": {
+            "type": "string"
+          },
+          "workoutTypeLabel": {
+            "type": "string"
+          },
+          "activityFamily": {
+            "type": "string"
+          },
+          "activityFamilyLabel": {
+            "type": "string"
+          },
+          "sessionCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sessionShare": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "activeDayCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalDurationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "durationShare": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "averageSessionMinutes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "totalEnergyKcal": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "energyShare": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "energyCoverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "energyKcalPerHour": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distanceMeters": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distanceShare": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "distanceCoverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "averageSpeedKph": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "totalTrainingLoad": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trainingLoadShare": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "trainingLoadCoverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "trainingLoadPerHour": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "averageHeartRateCoverage": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "firstStartedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastStartedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SportComparisonPeriod": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "requestedDays",
+          "startedAt",
+          "endedAt",
+          "totals",
+          "sports"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "all",
+              "365d",
+              "90d"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "requestedDays": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totals": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sessionCount",
+              "sportCount",
+              "activeDayCount",
+              "totalDurationSeconds",
+              "totalEnergyKcal",
+              "energyCoverage",
+              "totalDistanceMeters",
+              "distanceCoverage",
+              "totalTrainingLoad",
+              "trainingLoadCoverage",
+              "oldestStartedAt",
+              "newestStartedAt"
+            ],
+            "properties": {
+              "sessionCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sportCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "activeDayCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "totalDurationSeconds": {
+                "type": "number",
+                "minimum": 0
+              },
+              "totalEnergyKcal": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "energyCoverage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "totalDistanceMeters": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "distanceCoverage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "totalTrainingLoad": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "trainingLoadCoverage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "oldestStartedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "newestStartedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "sports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SportComparisonEntry"
+            }
+          }
+        }
+      },
+      "SportComparison": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "modelVersion",
+          "generatedAt",
+          "periods"
+        ],
+        "properties": {
+          "modelVersion": {
+            "type": "string",
+            "enum": [
+              "forge-sport-comparison-v1"
+            ]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SportComparisonPeriod"
+            }
           }
         }
       },
@@ -10801,6 +11449,9 @@
           "summary",
           "weeklyTrend",
           "typeBreakdown",
+          "sportComparison",
+          "vitalsTrend",
+          "analysisSessions",
           "sessions"
         ],
         "properties": {
@@ -10822,10 +11473,40 @@
               "additionalProperties": true
             }
           },
+          "sportComparison": {
+            "$ref": "#/components/schemas/SportComparison"
+          },
+          "vitalsTrend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "analysisSessions": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WorkoutSession"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutSessionSummary"
+                }
+              ]
+            }
+          },
           "sessions": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/WorkoutSession"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WorkoutSession"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutSessionSummary"
+                }
+              ]
             }
           }
         }
@@ -16397,6 +17078,43 @@
     "/api/v1/health/fitness": {
       "get": {
         "summary": "Read the Forge sports and workout overview surface",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Optional repeated user scope."
+          },
+          {
+            "name": "compact",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Omit workout session arrays for compact agent and overview reads."
+          },
+          {
+            "name": "sessionDetail",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "full",
+                "summary"
+              ],
+              "default": "full"
+            },
+            "description": "Use summary for list rendering; read /api/v1/health/workouts/{id} for complete metadata before editing one workout."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Fitness overview",

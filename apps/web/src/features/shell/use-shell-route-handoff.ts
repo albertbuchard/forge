@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ContextType,
-  type ReactNode
-} from "react";
+import { useEffect, useRef, type ContextType, type ReactNode } from "react";
 import {
   UNSAFE_LocationContext,
   type Location as RouterLocation
@@ -29,44 +23,22 @@ export function useShellRouteHandoff({
   routerLocation,
   outlet,
   routerLocationContext,
-  optimisticLocation,
-  optimisticRoutePathKey,
-  destinationLoadingNode
+  optimisticLocation
 }: {
   routePathKey: string;
   routerLocation: RouterLocation;
   outlet: ReactNode;
   routerLocationContext: RouterLocationContext;
-  externalFetching: number;
-  routeReady: boolean;
-  destinationLoadingNode: ReactNode;
   optimisticLocation: RouterLocation | null;
-  optimisticRoutePathKey: string | null;
 }) {
   const dispatch = useAppDispatch();
   const previousRoutePathKeyRef = useRef(routePathKey);
-  const [outletRevealKey, setOutletRevealKey] = useState(routePathKey);
-  const visibleRoutePathKey = optimisticRoutePathKey ?? routePathKey;
   const visibleRouterLocation = optimisticLocation ?? routerLocation;
-  const routeAwaitingReveal =
-    optimisticRoutePathKey !== null || outletRevealKey !== routePathKey;
-
-  useEffect(() => {
-    if (optimisticRoutePathKey !== null || outletRevealKey === routePathKey) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setOutletRevealKey(routePathKey);
-    }, 120);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [optimisticRoutePathKey, outletRevealKey, routePathKey]);
 
   const displayedRoute: RouteRenderState = {
-    key: visibleRoutePathKey,
-    node: routeAwaitingReveal ? destinationLoadingNode : outlet,
-    location: visibleRouterLocation
+    key: routePathKey,
+    node: outlet,
+    location: routerLocation
   };
 
   useEffect(() => {

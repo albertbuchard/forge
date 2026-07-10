@@ -277,7 +277,9 @@ export function FlowField({
       ) : null}
       {children}
       {hint ? <FieldHint>{hint}</FieldHint> : null}
-      {error ? <span className="text-sm text-rose-300">{error}</span> : null}
+      {error ? (
+        <span className="text-sm text-[var(--danger)]">{error}</span>
+      ) : null}
     </label>
   );
 }

@@ -1361,11 +1361,11 @@ export function WikiIngestModal({
                   {!selectedLlmProfile ? (
                     <div className="rounded-[30px] border border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--ui-warning-soft)] p-5 shadow-[var(--ui-shadow-card)]">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-amber-200/20 bg-amber-300/12 text-amber-100">
+                        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] text-[var(--warning)]">
                           <AlertTriangle className="size-4.5" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[11px] uppercase tracking-[0.18em] text-amber-100/62">
+                          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--warning)]">
                             OpenAI setup required for smart ingest
                           </div>
                           <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
@@ -1538,7 +1538,7 @@ export function WikiIngestModal({
                   </div>
 
                   {formError ? (
-                    <div className="rounded-[20px] border border-rose-300/22 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                    <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
                       {formError}
                     </div>
                   ) : null}
@@ -1600,7 +1600,7 @@ export function WikiIngestModal({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="border border-rose-300/18 bg-rose-400/10 text-rose-100 hover:bg-rose-400/16"
+                              className="border border-[color-mix(in_srgb,var(--danger)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-danger-soft)] text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_20%,var(--ui-surface-1)_80%)]"
                               pending={deleteMutation.isPending}
                               pendingLabel="Deleting"
                               onClick={() => {
@@ -1666,7 +1666,7 @@ export function WikiIngestModal({
                     </div>
 
                     {formError ? (
-                      <div className="mt-4 rounded-[20px] border border-rose-300/22 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                      <div className="mt-4 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
                         {formError}
                       </div>
                     ) : null}
@@ -1854,7 +1854,7 @@ export function WikiIngestModal({
                     </div>
 
                     {reviewError ? (
-                      <div className="mt-4 rounded-[20px] border border-rose-300/22 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                      <div className="mt-4 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
                         {reviewError}
                       </div>
                     ) : null}

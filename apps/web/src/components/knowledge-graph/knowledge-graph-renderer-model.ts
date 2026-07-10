@@ -3,13 +3,16 @@ import type { Attributes } from "graphology-types";
 import type Sigma from "sigma";
 import type { CameraState } from "sigma/types";
 import {
-  buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSeedPositions,
   type KnowledgeGraphSeedPosition
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
 import { recenterKnowledgeGraphPointsAroundOrigin } from "@/lib/knowledge-graph-dev-diagnostics";
 import type { RenderedKnowledgeGraphEdge } from "@/lib/knowledge-graph";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
+import {
+  buildKnowledgeGraphEdgeStroke,
+  resolveKnowledgeGraphThemeColor
+} from "@/components/knowledge-graph/knowledge-graph-theme";
 
 export type SigmaNodeAttributes = Attributes & {
   x: number;
@@ -76,48 +79,10 @@ export function canUseWebGL() {
   const canvas = document.createElement("canvas");
   WEBGL_SUPPORT_CACHE = Boolean(
     canvas.getContext("webgl2") ||
-      canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl")
+    canvas.getContext("webgl") ||
+    canvas.getContext("experimental-webgl")
   );
   return WEBGL_SUPPORT_CACHE;
-}
-
-function resolveGraphColor(token: string | null | undefined) {
-  if (!token || typeof window === "undefined") {
-    return "#c0c1ff";
-  }
-  const bodyValue = document.body
-    ? getComputedStyle(document.body).getPropertyValue(token).trim()
-    : "";
-  const rootValue = getComputedStyle(document.documentElement)
-    .getPropertyValue(token)
-    .trim();
-  const value = bodyValue || rootValue;
-  if (!value) {
-    return "#c0c1ff";
-  }
-  return `rgb(${value})`;
-}
-
-export function fadeColor(color: string, alpha: number) {
-  if (color.startsWith("rgb(") && color.endsWith(")")) {
-    return color.replace("rgb(", "rgba(").replace(")", `, ${alpha})`);
-  }
-  if (color.startsWith("#")) {
-    const hex = color.slice(1);
-    const normalized =
-      hex.length === 3
-        ? hex
-            .split("")
-            .map((part) => `${part}${part}`)
-            .join("")
-        : hex;
-    const red = parseInt(normalized.slice(0, 2), 16);
-    const green = parseInt(normalized.slice(2, 4), 16);
-    const blue = parseInt(normalized.slice(4, 6), 16);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-  }
-  return color;
 }
 
 export function rememberGraphPositions(
@@ -158,7 +123,7 @@ export function createGraphFromData(
       x: seeded?.x ?? 0,
       y: seeded?.y ?? 0,
       size: Math.max(2.5, node.size / 14),
-      color: resolveGraphColor(node.accentToken),
+      color: resolveKnowledgeGraphThemeColor(node.accentToken),
       label: node.title,
       hidden: false,
       forceLabel: false,
@@ -174,16 +139,7 @@ export function createGraphFromData(
     }
     graph.addEdgeWithKey(edge.id, edge.source, edge.target, {
       size: Math.max(0.8, edge.strength * 1.6),
-      color:
-        edge.family === "structural"
-          ? "rgba(125, 211, 252, 0.055)"
-          : edge.family === "contextual"
-            ? "rgba(45, 212, 191, 0.055)"
-            : edge.family === "taxonomy"
-              ? "rgba(192, 132, 252, 0.055)"
-              : edge.family === "workspace"
-                ? "rgba(251, 191, 36, 0.055)"
-                : "rgba(148, 163, 184, 0.055)",
+      color: buildKnowledgeGraphEdgeStroke(edge, 0.055),
       label: edge.label,
       hidden: false,
       forceLabel: false,
@@ -193,6 +149,25 @@ export function createGraphFromData(
   });
 
   return graph;
+}
+
+export function applyKnowledgeGraphThemeColors(
+  graph: Graph<SigmaNodeAttributes, SigmaEdgeAttributes>
+) {
+  graph.updateEachNodeAttributes(
+    (_nodeId, attributes) => ({
+      ...attributes,
+      color: resolveKnowledgeGraphThemeColor(attributes.data.accentToken)
+    }),
+    { attributes: ["color"] }
+  );
+  graph.updateEachEdgeAttributes(
+    (_edgeId, attributes) => ({
+      ...attributes,
+      color: buildKnowledgeGraphEdgeStroke(attributes.data, 0.055)
+    }),
+    { attributes: ["color"] }
+  );
 }
 
 export function recenterGraphAroundOrigin(
@@ -291,26 +266,12 @@ function getGraphBoundsFromSnapshot(snapshot: FallbackGraphSnapshot) {
   };
 }
 
-export function getFallbackCameraForSnapshot(
-  snapshot: FallbackGraphSnapshot
-): CameraState {
-  const overview = buildKnowledgeGraphOverviewCameraTarget({
-    positions: new Map(
-      snapshot.nodes.map((node) => [
-        node.id,
-        {
-          x: node.x,
-          y: node.y
-        }
-      ])
-    ),
-    currentRatio: 1
-  });
+export function getFallbackOverviewCamera(): CameraState {
   return {
-    x: overview.x,
-    y: overview.y,
+    x: 0,
+    y: 0,
     angle: 0,
-    ratio: overview.ratio
+    ratio: 1
   };
 }
 
@@ -431,21 +392,4 @@ export function findNearestViewportNode({
   });
 
   return nearestNodeId;
-}
-
-export function buildKnowledgeGraphEdgeStroke(
-  edge: RenderedKnowledgeGraphEdge,
-  alpha: number
-) {
-  const rgb =
-    edge.family === "structural"
-      ? "125, 211, 252"
-      : edge.family === "contextual"
-        ? "45, 212, 191"
-        : edge.family === "taxonomy"
-          ? "192, 132, 252"
-          : edge.family === "workspace"
-            ? "251, 191, 36"
-            : "148, 163, 184";
-  return `rgba(${rgb}, ${alpha})`;
 }

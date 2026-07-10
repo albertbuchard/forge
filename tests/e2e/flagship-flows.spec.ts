@@ -5,15 +5,25 @@ test.beforeEach(async ({ page }) => {
   await installE2eStorageGuards(page);
 });
 
-test("overview exposes the premium XP command deck", async ({ page }) => {
+test("overview exposes momentum, rewards, and next actions", async ({ page }) => {
   await page.goto("");
   await waitForForge(page);
   await expect(page).toHaveURL(/\/forge\/overview$/);
   await expect(page.locator("body")).toContainText("Momentum summary");
-  await expect(page.locator("body")).toContainText("Core live metrics");
-  await expect(page.locator("body")).toContainText("Action signals");
+  await expect(page.getByRole("heading", { name: "Next actions" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open rewards/ })).toBeVisible();
   await expect(page.locator("body")).toContainText("Projects, habits, tasks");
   await expect(page.locator("body")).toContainText("Life Force");
+
+  const rewardPreview = page.getByRole("img", { name: "Fantasy preview" });
+  await expect(rewardPreview).toBeVisible();
+  await expect
+    .poll(() =>
+      rewardPreview.evaluate(
+        (element) => (element as HTMLImageElement).naturalWidth
+      )
+    )
+    .toBeGreaterThan(0);
 });
 
 test("today feels like a directive-driven operating surface", async ({ page }) => {

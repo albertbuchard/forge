@@ -301,18 +301,21 @@ export function ProjectDetailPage() {
               label={payload.project.title}
               description={payload.project.description}
             />
-            <OpenInGraphButton entityType="project" entityId={payload.project.id} />
+            <OpenInGraphButton
+              entityType="project"
+              entityId={payload.project.id}
+            />
           </div>
         }
       />
 
       {payload.project.user ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-white/62">
-          <span className="text-white/42">Owned by</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
+          <span className="text-[var(--ui-ink-faint)]">Owned by</span>
           <UserBadge user={payload.project.user} />
           {payload.project.assignees && payload.project.assignees.length > 0 ? (
             <>
-              <span className="text-white/35">Assigned with</span>
+              <span className="text-[var(--ui-ink-faint)]">Assigned with</span>
               <div className="flex flex-wrap items-center gap-2">
                 {payload.project.assignees.map((user) => (
                   <UserBadge key={user.id} user={user} compact />
@@ -325,7 +328,7 @@ export function ProjectDetailPage() {
 
       {payload.project.productRequirementsDocument ? (
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Product requirements document
           </div>
           <div className="mt-3">
@@ -339,16 +342,16 @@ export function ProjectDetailPage() {
 
       {goalStrategies.length > 0 || projectStrategies.length > 0 ? (
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Strategy stack
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             <div className="grid gap-2">
-              <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+              <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Goal-level strategies
               </div>
               {goalStrategies.length === 0 ? (
-                <div className="text-sm text-white/48">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
                   No goal-level strategies linked yet.
                 </div>
               ) : (
@@ -356,12 +359,12 @@ export function ProjectDetailPage() {
                   <Link
                     key={strategy.id}
                     to={`/strategies/${strategy.id}`}
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.07]"
+                    className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                   >
-                    <div className="text-sm font-medium text-white">
+                    <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                       {strategy.title}
                     </div>
-                    <div className="mt-1 text-xs text-white/48">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
                       {strategy.overview || strategy.endStateDescription}
                     </div>
                   </Link>
@@ -369,11 +372,11 @@ export function ProjectDetailPage() {
               )}
             </div>
             <div className="grid gap-2">
-              <div className="text-xs uppercase tracking-[0.16em] text-white/42">
+              <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Project-level strategies
               </div>
               {projectStrategies.length === 0 ? (
-                <div className="text-sm text-white/48">
+                <div className="text-sm text-[var(--ui-ink-soft)]">
                   No lower-level strategies linked yet.
                 </div>
               ) : (
@@ -381,12 +384,12 @@ export function ProjectDetailPage() {
                   <Link
                     key={strategy.id}
                     to={`/strategies/${strategy.id}`}
-                    className="rounded-[18px] border border-white/8 bg-white/[0.04] px-4 py-3 transition hover:bg-white/[0.07]"
+                    className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-hover)]"
                   >
-                    <div className="text-sm font-medium text-white">
+                    <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                       {strategy.title}
                     </div>
-                    <div className="mt-1 text-xs text-white/48">
+                    <div className="mt-1 text-xs text-[var(--ui-ink-soft)]">
                       {strategy.overview || strategy.endStateDescription}
                     </div>
                   </Link>
@@ -399,10 +402,10 @@ export function ProjectDetailPage() {
 
       {isLegacyProject ? (
         <Card>
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             {t("common.projectDetail.compatibility")}
           </div>
-          <p className="mt-3 text-sm leading-7 text-white/60">
+          <p className="mt-3 text-sm leading-7 text-[var(--ui-ink-soft)]">
             {t("common.projectDetail.compatibilityDescription")}
           </p>
         </Card>
@@ -482,13 +485,13 @@ export function ProjectDetailPage() {
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+              <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 {t("common.projectDetail.commandEyebrow")}
               </div>
-              <h2 className="mt-2 font-display text-[clamp(1.35rem,2vw,1.9rem)] text-white">
+              <h2 className="mt-2 font-display text-[clamp(1.35rem,2vw,1.9rem)] text-[var(--ui-ink-strong)]">
                 {t("common.projectDetail.commandTitle")}
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
                 {t("common.projectDetail.commandDescription")}
               </p>
             </div>
@@ -509,20 +512,20 @@ export function ProjectDetailPage() {
                   ? `/tasks/${nextTask.id}`
                   : `/projects/${payload.project.id}`
               }
-              className="rounded-[20px] bg-white/[0.04] p-4 transition hover:bg-white/[0.08]"
+              className="rounded-[20px] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   {t("common.projectDetail.signalNext")}
                 </div>
                 {nextTask ? (
                   <EntityBadge kind="task" compact gradient={false} />
                 ) : null}
               </div>
-              <div className="mt-2 font-medium text-white">
+              <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
                 {nextTask?.title ?? t("common.projectDetail.noNextTask")}
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
+              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 {nextTask?.description ||
                   t("common.projectDetail.noNextTaskDetail")}
               </div>
@@ -533,20 +536,20 @@ export function ProjectDetailPage() {
                   ? `/tasks/${driftTask.id}`
                   : `/projects/${payload.project.id}`
               }
-              className="rounded-[20px] bg-white/[0.04] p-4 transition hover:bg-white/[0.08]"
+              className="rounded-[20px] bg-[var(--ui-surface-1)] p-4 transition hover:bg-[var(--ui-surface-hover)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/42">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   {t("common.projectDetail.signalRisk")}
                 </div>
                 {driftTask ? (
                   <EntityBadge kind="task" compact gradient={false} />
                 ) : null}
               </div>
-              <div className="mt-2 font-medium text-white">
+              <div className="mt-2 font-medium text-[var(--ui-ink-strong)]">
                 {driftTask?.title ?? t("common.projectDetail.noRisk")}
               </div>
-              <div className="mt-2 text-sm leading-6 text-white/58">
+              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                 {driftTask?.description ||
                   t("common.projectDetail.noRiskDetail")}
               </div>
@@ -555,51 +558,51 @@ export function ProjectDetailPage() {
         </Card>
 
         <Card className="h-fit min-w-0">
-          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+          <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             {t("common.projectDetail.sectionHealth")}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {t(`common.enums.projectStatus.${payload.project.status}`)}
             </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {payload.project.momentumLabel}
             </Badge>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               {Math.floor(payload.project.time.totalCreditedSeconds / 60)} min
               tracked
             </Badge>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {t("common.projectDetail.fieldProgress")}
               </div>
-              <div className="mt-2 font-display text-xl text-white">
+              <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                 {payload.project.progress}%
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {t("common.projectDetail.fieldMomentum")}
               </div>
-              <div className="mt-2 font-display text-xl text-white">
+              <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                 {payload.project.momentumLabel}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {t("common.projectDetail.fieldStatus")}
               </div>
-              <div className="mt-2 font-display text-xl text-white">
+              <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                 {t(`common.enums.projectStatus.${payload.project.status}`)}
               </div>
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-3">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-white/42">
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Live tasks
               </div>
-              <div className="mt-2 font-display text-xl text-white">
+              <div className="mt-2 font-display text-xl text-[var(--ui-ink-strong)]">
                 {
                   payload.tasks.filter(
                     (task) =>
@@ -631,39 +634,39 @@ export function ProjectDetailPage() {
           />
 
           <Card className="h-fit min-w-0">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Calendar status
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Badge
                 className={
                   schedulingState.tone === "blocked"
-                    ? "bg-rose-500/14 text-rose-100"
+                    ? "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
                     : schedulingState.tone === "waiting"
-                      ? "bg-amber-500/14 text-amber-100"
-                      : "bg-emerald-500/14 text-emerald-100"
+                      ? "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
+                      : "bg-[var(--ui-success-soft)] text-[var(--success)]"
                 }
               >
                 {schedulingState.label}
               </Badge>
-              <Badge className="bg-white/[0.08] text-white/72">
+              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                 Project defaults
               </Badge>
             </div>
-            <p className="mt-3 text-sm leading-6 text-white/58">
+            <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               These rules act as the default calendar gate for every task in the
               project unless a task sets its own override.
             </p>
             {schedulingState.context.length > 0 ? (
               <div className="mt-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Current context
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {schedulingState.context.map((entry) => (
                     <Badge
                       key={entry}
-                      className="bg-white/[0.08] text-white/72"
+                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
                     >
                       {entry}
                     </Badge>
@@ -676,7 +679,7 @@ export function ProjectDetailPage() {
                 {schedulingState.conflicts.map((entry) => (
                   <div
                     key={entry}
-                    className="rounded-[16px] bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+                    className="rounded-[16px] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
                   >
                     {entry}
                   </div>

@@ -878,6 +878,37 @@ describe("forge openclaw plugin", () => {
     });
   });
 
+  it("uses the compact comparison payload for sports overview tools", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ fitness: { sportComparison: {} } }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tools = collectRegisteredTools({
+      origin: "http://127.0.0.1",
+      port: 4318
+    });
+    const sportsOverview = tools.find(
+      (tool) => tool.name === "forge_get_sports_overview"
+    );
+
+    await expect(
+      sportsOverview?.execute?.("call_sports", {
+        userIds: ["user_operator", "user_coach"]
+      })
+    ).resolves.toBeDefined();
+
+    const calledUrls = fetchMock.mock.calls.map(([url]) =>
+      (url as URL).toString()
+    );
+    expect(calledUrls[0]).toBe(
+      "http://127.0.0.1:4318/api/v1/health/fitness?compact=1&userIds=user_operator&userIds=user_coach"
+    );
+  });
+
   it("rejects planned task runs without a duration before making a network call", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

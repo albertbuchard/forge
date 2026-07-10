@@ -21,9 +21,15 @@ export function UserScopeSelector({
   onChange: (userIds: string[]) => void;
   className?: string;
 }) {
-  const selectedUsers = users.filter((user) => selectedUserIds.includes(user.id));
-  const humanIds = users.filter((user) => user.kind === "human").map((user) => user.id);
-  const botIds = users.filter((user) => user.kind === "bot").map((user) => user.id);
+  const selectedUsers = users.filter((user) =>
+    selectedUserIds.includes(user.id)
+  );
+  const humanIds = users
+    .filter((user) => user.kind === "human")
+    .map((user) => user.id);
+  const botIds = users
+    .filter((user) => user.kind === "bot")
+    .map((user) => user.id);
 
   return (
     <div className={cn("grid gap-3", className)}>
@@ -33,8 +39,8 @@ export function UserScopeSelector({
           className={cn(
             "inline-flex min-h-10 items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
             selectedUserIds.length === 0
-              ? "border-[rgba(192,193,255,0.28)] bg-[rgba(192,193,255,0.14)] text-white"
-              : "border-white/8 bg-white/[0.04] text-white/62 hover:bg-white/[0.08] hover:text-white"
+              ? "border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+              : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           )}
           onClick={() => onChange([])}
         >
@@ -43,7 +49,7 @@ export function UserScopeSelector({
         </button>
         <button
           type="button"
-          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-white/62 transition hover:bg-white/[0.08] hover:text-white"
+          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           onClick={() => onChange(humanIds)}
         >
           <UserRound className="size-4" />
@@ -51,7 +57,7 @@ export function UserScopeSelector({
         </button>
         <button
           type="button"
-          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-2 text-sm text-white/62 transition hover:bg-white/[0.08] hover:text-white"
+          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           onClick={() => onChange(botIds)}
         >
           <Bot className="size-4" />
@@ -81,7 +87,9 @@ export function UserScopeSelector({
               <UserBadge
                 user={user}
                 compact
-                className={selected ? "ring-1 ring-white/18" : ""}
+                className={
+                  selected ? "ring-1 ring-[var(--ui-border-strong)]" : ""
+                }
               />
             </button>
           );
@@ -89,11 +97,12 @@ export function UserScopeSelector({
       </div>
 
       {selectedUsers.length > 0 ? (
-        <div className="text-sm text-white/52">
-          Showing records for {selectedUsers.map((user) => user.displayName).join(", ")}.
+        <div className="text-sm text-[var(--ui-ink-soft)]">
+          Showing records for{" "}
+          {selectedUsers.map((user) => user.displayName).join(", ")}.
         </div>
       ) : (
-        <div className="text-sm text-white/52">
+        <div className="text-sm text-[var(--ui-ink-soft)]">
           Showing all visible human and bot records.
         </div>
       )}

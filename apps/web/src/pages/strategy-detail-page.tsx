@@ -272,19 +272,19 @@ export function StrategyDetailPage() {
         <Badge
           className={
             strategy.isLocked
-              ? "bg-amber-500/12 text-amber-200"
-              : "bg-emerald-500/12 text-emerald-200"
+              ? "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
+              : "bg-[var(--ui-success-soft)] text-[var(--success)]"
           }
         >
           {strategy.isLocked ? "Contract locked" : "Editable draft"}
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/76">
+        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
           {strategy.status}
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/76">
+        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
           {strategy.graph.nodes.length} nodes
         </Badge>
-        <Badge className="bg-white/[0.08] text-white/76">
+        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
           {strategy.graph.edges.length} edges
         </Badge>
       </div>
@@ -292,10 +292,10 @@ export function StrategyDetailPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
         <div className="grid gap-5">
           <Card className="grid gap-4">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               End state
             </div>
-            <div className="text-sm leading-7 text-white/64">
+            <div className="text-sm leading-7 text-[var(--ui-ink-medium)]">
               {strategy.endStateDescription || "No end-state description yet."}
             </div>
           </Card>
@@ -303,10 +303,10 @@ export function StrategyDetailPage() {
           <Card className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+                <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   Directed execution graph
                 </div>
-                <div className="mt-2 text-sm leading-6 text-white/58">
+                <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
                   The graph is the contract surface for this strategy. It shows
                   which branches are available now, where work is blocked, and
                   whether any node is moving out of sequence.
@@ -348,17 +348,17 @@ export function StrategyDetailPage() {
 
         <div className="grid gap-5">
           <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Contract state
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-              <div className="text-sm text-white/58">
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-4">
+              <div className="text-sm text-[var(--ui-ink-soft)]">
                 {strategy.isLocked
                   ? "This strategy is currently locked as a contract. The graph, targets, and descriptive plan stay frozen until you explicitly unlock it."
                   : "This strategy is still a draft. Agents and users can keep refining the plan until you lock it."}
               </div>
               {strategy.isLocked ? (
-                <div className="mt-3 flex flex-wrap gap-2 text-sm text-white/60">
+                <div className="mt-3 flex flex-wrap gap-2 text-sm text-[var(--ui-ink-soft)]">
                   <span>
                     Locked by{" "}
                     {strategy.lockedByUser?.displayName ?? "Unknown user"}
@@ -375,14 +375,16 @@ export function StrategyDetailPage() {
                   {contractChecks.map((check) => (
                     <div
                       key={check.id}
-                      className="flex items-center justify-between gap-3 rounded-[14px] bg-white/[0.03] px-3 py-2"
+                      className="flex items-center justify-between gap-3 rounded-[14px] bg-[var(--ui-surface-1)] px-3 py-2"
                     >
-                      <div className="text-sm text-white/64">{check.label}</div>
+                      <div className="text-sm text-[var(--ui-ink-medium)]">
+                        {check.label}
+                      </div>
                       <Badge
                         className={
                           check.satisfied
-                            ? "bg-emerald-500/12 text-emerald-200"
-                            : "bg-amber-500/12 text-amber-200"
+                            ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
+                            : "bg-[var(--ui-warning-soft)] text-[var(--warning)]"
                         }
                       >
                         {check.satisfied ? "Ready" : "Missing"}
@@ -393,13 +395,13 @@ export function StrategyDetailPage() {
               ) : null}
             </div>
             {!strategy.isLocked && !canLockStrategy ? (
-              <div className="rounded-[18px] border border-amber-400/18 bg-amber-500/[0.08] px-4 py-3 text-sm leading-6 text-amber-100/86">
+              <div className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                 Add a target goal or project plus an overview or end state
                 before locking this draft as the execution contract.
               </div>
             ) : null}
             {!strategy.isLocked ? (
-              <div className="mt-4 text-xs leading-5 text-white/46">
+              <div className="mt-4 text-xs leading-5 text-[var(--ui-ink-faint)]">
                 Drafts may stay incomplete while humans and agents negotiate the
                 plan. Only the lock action requires the contract checks to pass.
               </div>
@@ -407,15 +409,17 @@ export function StrategyDetailPage() {
           </Card>
 
           <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Alignment metrics
             </div>
-            <div className="rounded-[18px] bg-white/[0.04] px-4 py-4">
-              <div className="text-sm text-white/56">Alignment score</div>
+            <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-4">
+              <div className="text-sm text-[var(--ui-ink-soft)]">
+                Alignment score
+              </div>
               <div className="mt-2 font-display text-3xl text-[var(--primary)]">
                 {strategy.metrics.alignmentScore}%
               </div>
-              <div className="mt-3 text-xs leading-5 text-white/48">
+              <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-soft)]">
                 {strategy.metrics.startedNodeCount}/
                 {strategy.metrics.totalNodeCount} planned nodes started,{" "}
                 {strategy.metrics.completedNodeCount} completed,{" "}
@@ -425,16 +429,18 @@ export function StrategyDetailPage() {
             {alignmentBreakdown.map((metric) => (
               <div
                 key={metric.id}
-                className="rounded-[18px] bg-white/[0.04] px-4 py-4"
+                className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-4"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-white/56">{metric.label}</div>
-                  <div className="text-sm font-medium text-white">
+                  <div className="text-sm text-[var(--ui-ink-soft)]">
+                    {metric.label}
+                  </div>
+                  <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
                     {metric.value}%
                   </div>
                 </div>
                 <ProgressMeter value={metric.value} className="mt-3" />
-                <div className="mt-3 text-xs leading-5 text-white/48">
+                <div className="mt-3 text-xs leading-5 text-[var(--ui-ink-soft)]">
                   {metric.detail}
                 </div>
               </div>
@@ -442,7 +448,7 @@ export function StrategyDetailPage() {
           </Card>
 
           <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               End targets
             </div>
             {strategy.targetGoalIds.map((goalId) => {
@@ -451,7 +457,7 @@ export function StrategyDetailPage() {
                 <Link
                   key={goal.id}
                   to={`/goals/${goal.id}`}
-                  className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/78 transition hover:bg-white/[0.08]"
+                  className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)]"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Goal: {goal.title}</span>
@@ -466,7 +472,7 @@ export function StrategyDetailPage() {
                 <Link
                   key={project.id}
                   to={`/projects/${project.id}`}
-                  className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/78 transition hover:bg-white/[0.08]"
+                  className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)]"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Project: {project.title}</span>
@@ -477,18 +483,18 @@ export function StrategyDetailPage() {
             })}
             {strategy.targetGoalIds.length === 0 &&
             strategy.targetProjectIds.length === 0 ? (
-              <div className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/52">
+              <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                 No end targets linked yet.
               </div>
             ) : null}
           </Card>
 
           <Card className="grid gap-3">
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-white/45">
+            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Linked entities
             </div>
             {strategy.linkedEntities.length === 0 ? (
-              <div className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/52">
+              <div className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
                 No additional linked entities.
               </div>
             ) : (
@@ -506,7 +512,7 @@ export function StrategyDetailPage() {
                   <Link
                     key={`${entity.entityType}:${entity.entityId}`}
                     to={href}
-                    className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/78 transition hover:bg-white/[0.08]"
+                    className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)]"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>{label}</span>
@@ -531,7 +537,7 @@ export function StrategyDetailPage() {
                 ) : (
                   <div
                     key={`${entity.entityType}:${entity.entityId}`}
-                    className="rounded-[16px] bg-white/[0.04] px-4 py-3 text-sm text-white/52"
+                    className="rounded-[16px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]"
                   >
                     {label}
                   </div>

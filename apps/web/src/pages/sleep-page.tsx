@@ -674,14 +674,14 @@ function LastNightHero({
                   {latestNight.qualitySummary}
                 </div>
               ) : freshnessStatus === "stale" ? (
-                <div className="mt-4 max-w-2xl rounded-[16px] border border-amber-300/60 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100">
+                <div className="mt-4 max-w-2xl rounded-[16px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                   Expected wake-date {expectedDateKey} in{" "}
                   {latestNight.sourceTimezone}, but Forge has {actualDateKey}.
                   Refresh the iPhone sync after unlock; this page checks again
                   automatically.
                 </div>
               ) : freshnessStatus === "future" ? (
-                <div className="mt-4 max-w-2xl rounded-[16px] border border-sky-300/60 bg-sky-100/70 px-4 py-3 text-sm leading-6 text-sky-950 dark:border-sky-400/30 dark:bg-sky-500/15 dark:text-sky-100">
+                <div className="mt-4 max-w-2xl rounded-[16px] border border-[color-mix(in_srgb,var(--info)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-info-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                   This sleep is dated after today in{" "}
                   {latestNight.sourceTimezone}. Check the phone clock, timezone,
                   and HealthKit sample dates.

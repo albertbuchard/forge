@@ -11,7 +11,8 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { resolveGamificationSpriteAssetPath } from "./services/gamification-assets.js";
+import { GAMIFICATION_ASSET_VERSION } from "@/lib/gamification-catalog.js";
+import { resolveGamificationSpriteAssetPath as resolveGamificationSpriteAssetPathFromStore } from "./services/gamification-assets.js";
 
 const distDir = path.join(process.cwd(), "dist");
 const packagedRuntimeDistDir = path.join(
@@ -35,6 +36,36 @@ const contentTypes: Record<string, string> = {
 };
 
 const gamificationSpriteRoutePrefix = "/gamification/sprites/";
+const gamificationPreviewRoutePrefix = "/gamification-previews/";
+const noStoreCacheControl = "no-store, max-age=0, must-revalidate";
+const immutableCacheControl = "public, max-age=31536000, immutable";
+const revalidatedAssetCacheControl =
+  "public, max-age=300, stale-while-revalidate=60";
+const viteHashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/;
+
+export function resolveBuiltAssetCacheControl(input: {
+  pathname: string;
+  search: string;
+  extension: string;
+}) {
+  if (input.extension === ".html") {
+    return noStoreCacheControl;
+  }
+
+  const hasCurrentAssetVersion =
+    new URLSearchParams(input.search).get("v") === GAMIFICATION_ASSET_VERSION;
+  const isVersionedGamificationAsset =
+    hasCurrentAssetVersion &&
+    (input.pathname.startsWith(gamificationSpriteRoutePrefix) ||
+      input.pathname.startsWith(gamificationPreviewRoutePrefix));
+  const isHashedViteAsset =
+    input.pathname.startsWith("/assets/") &&
+    viteHashedAssetPattern.test(input.pathname);
+
+  return isVersionedGamificationAsset || isHashedViteAsset
+    ? immutableCacheControl
+    : revalidatedAssetCacheControl;
+}
 
 function normalizeBasePath(value: string) {
   if (!value || value === "/") {
@@ -155,17 +186,39 @@ function resolveAsset(clientDir: string, requestPath: string): string {
   return path.join(clientDir, safePath);
 }
 
-async function resolveBuiltAsset(
-  clientDir: string,
-  requestPath: string
-): Promise<string> {
+type WebAssetLocation = {
+  assetPath: string;
+  clientDir: string | null;
+};
+
+type WebAssetLocationResolvers = {
+  getClientDir?: () => Promise<string>;
+  resolveGamificationSpriteAssetPath?: (
+    relativePath: string
+  ) => Promise<string>;
+};
+
+export async function resolveWebAssetLocation(
+  requestPath: string,
+  resolvers: WebAssetLocationResolvers = {}
+): Promise<WebAssetLocation> {
   if (requestPath.startsWith(gamificationSpriteRoutePrefix)) {
     const relativeSpritePath = requestPath.slice(
       gamificationSpriteRoutePrefix.length
     );
-    return resolveGamificationSpriteAssetPath(relativeSpritePath);
+    return {
+      assetPath: await (
+        resolvers.resolveGamificationSpriteAssetPath ??
+        resolveGamificationSpriteAssetPathFromStore
+      )(relativeSpritePath),
+      clientDir: null
+    };
   }
-  return resolveAsset(clientDir, requestPath);
+  const clientDir = await (resolvers.getClientDir ?? getClientDir)();
+  return {
+    assetPath: resolveAsset(clientDir, requestPath),
+    clientDir
+  };
 }
 
 async function getClientDir() {
@@ -212,13 +265,14 @@ function copyProxyHeaders(response: Response, reply: FastifyReply) {
 
 function isHtmlResponse(contentType: string | string[] | undefined) {
   const values = Array.isArray(contentType) ? contentType : [contentType];
-  return values.some((value) =>
-    typeof value === "string" && value.toLowerCase().includes("text/html")
+  return values.some(
+    (value) =>
+      typeof value === "string" && value.toLowerCase().includes("text/html")
   );
 }
 
 function forceUncachedHtml(reply: FastifyReply) {
-  reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+  reply.header("Cache-Control", noStoreCacheControl);
   reply.header("Pragma", "no-cache");
 }
 
@@ -257,7 +311,7 @@ async function proxyDevAsset(input: {
   if (isHtmlResponse(response.headers.get("content-type") ?? undefined)) {
     forceUncachedHtml(input.reply);
   } else if (!response.headers.has("cache-control")) {
-    input.reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+    input.reply.header("Cache-Control", noStoreCacheControl);
   }
   if (!response.body) {
     return "";
@@ -322,7 +376,7 @@ export function createKeepAliveDevAssetProxy(): DevAssetProxy {
             } else if (!response.headers["cache-control"]) {
               input.reply.header(
                 "Cache-Control",
-                "no-store, max-age=0, must-revalidate"
+                noStoreCacheControl
               );
             }
 
@@ -600,20 +654,28 @@ async function serveAsset(
     }
   }
 
-  const clientDir = await getClientDir();
-  const assetPath = await resolveBuiltAsset(clientDir, normalizedRequestPath);
+  const { assetPath, clientDir } = await resolveWebAssetLocation(
+    normalizedRequestPath
+  );
   const ext = path.extname(assetPath);
 
   try {
     const payload = await readFile(assetPath);
     reply.type(contentTypes[ext] ?? "application/octet-stream");
-    reply.header("Cache-Control", "no-store, max-age=0, must-revalidate");
+    reply.header(
+      "Cache-Control",
+      resolveBuiltAssetCacheControl({
+        pathname: normalizedRequestPath,
+        search: requestTarget.search,
+        extension: ext
+      })
+    );
     if (ext === ".html") {
       forceUncachedHtml(reply);
     }
     return payload;
   } catch {
-    if (!path.extname(normalizedRequestPath)) {
+    if (clientDir && !path.extname(normalizedRequestPath)) {
       try {
         const payload = await readFile(path.join(clientDir, "index.html"));
         reply.type(contentTypes[".html"]);

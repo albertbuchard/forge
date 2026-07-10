@@ -5733,7 +5733,7 @@ export function buildOpenApiDocument() {
       totalEnergyKcal: nullable({ type: "number" }),
       distanceMeters: nullable({ type: "number" }),
       stepCount: nullable({ type: "integer" }),
-      exerciseMinutes: nullable({ type: "integer" }),
+      exerciseMinutes: nullable({ type: "number" }),
       averageHeartRate: nullable({ type: "number" }),
       maxHeartRate: nullable({ type: "number" }),
       subjectiveEffort: nullable({ type: "integer" }),
@@ -5744,6 +5744,7 @@ export function buildOpenApiDocument() {
       socialContext: { type: "string" },
       links: arrayOf({ $ref: "#/components/schemas/HealthLink" }),
       tags: arrayOf({ type: "string" }),
+      analytics: { type: "object", additionalProperties: true },
       annotations: { type: "object", additionalProperties: true },
       provenance: { type: "object", additionalProperties: true },
       derived: { type: "object", additionalProperties: true },
@@ -5752,6 +5753,166 @@ export function buildOpenApiDocument() {
       reconciliationStatus: { type: "string" },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workoutSessionSummaryOmittedProperties = new Set([
+    "activity",
+    "details",
+    "annotations",
+    "provenance",
+    "derived"
+  ]);
+  const workoutSessionSummary = {
+    ...workoutSession,
+    required: [
+      ...workoutSession.required.filter(
+        (property) => !workoutSessionSummaryOmittedProperties.has(property)
+      ),
+      "detailLevel"
+    ],
+    properties: {
+      ...Object.fromEntries(
+        Object.entries(workoutSession.properties).filter(
+          ([property]) => !workoutSessionSummaryOmittedProperties.has(property)
+        )
+      ),
+      detailLevel: { type: "string", enum: ["summary"] }
+    }
+  };
+
+  const sportComparisonEntry = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "workoutType",
+      "workoutTypeLabel",
+      "activityFamily",
+      "activityFamilyLabel",
+      "sessionCount",
+      "sessionShare",
+      "activeDayCount",
+      "totalDurationSeconds",
+      "durationShare",
+      "averageSessionMinutes",
+      "totalEnergyKcal",
+      "energyShare",
+      "energyCoverage",
+      "energyKcalPerHour",
+      "distanceMeters",
+      "distanceShare",
+      "distanceCoverage",
+      "averageSpeedKph",
+      "totalTrainingLoad",
+      "trainingLoadShare",
+      "trainingLoadCoverage",
+      "trainingLoadPerHour",
+      "averageHeartRateCoverage",
+      "firstStartedAt",
+      "lastStartedAt"
+    ],
+    properties: {
+      workoutType: { type: "string" },
+      workoutTypeLabel: { type: "string" },
+      activityFamily: { type: "string" },
+      activityFamilyLabel: { type: "string" },
+      sessionCount: { type: "integer", minimum: 0 },
+      sessionShare: { type: "number", minimum: 0, maximum: 1 },
+      activeDayCount: { type: "integer", minimum: 0 },
+      totalDurationSeconds: { type: "number", minimum: 0 },
+      durationShare: { type: "number", minimum: 0, maximum: 1 },
+      averageSessionMinutes: { type: "number", minimum: 0 },
+      totalEnergyKcal: nullable({ type: "number", minimum: 0 }),
+      energyShare: { type: "number", minimum: 0, maximum: 1 },
+      energyCoverage: { type: "number", minimum: 0, maximum: 1 },
+      energyKcalPerHour: nullable({ type: "number", minimum: 0 }),
+      distanceMeters: nullable({ type: "number", minimum: 0 }),
+      distanceShare: { type: "number", minimum: 0, maximum: 1 },
+      distanceCoverage: { type: "number", minimum: 0, maximum: 1 },
+      averageSpeedKph: nullable({ type: "number", minimum: 0 }),
+      totalTrainingLoad: nullable({ type: "number", minimum: 0 }),
+      trainingLoadShare: { type: "number", minimum: 0, maximum: 1 },
+      trainingLoadCoverage: { type: "number", minimum: 0, maximum: 1 },
+      trainingLoadPerHour: nullable({ type: "number", minimum: 0 }),
+      averageHeartRateCoverage: nullable({
+        type: "number",
+        minimum: 0,
+        maximum: 1
+      }),
+      firstStartedAt: { type: "string", format: "date-time" },
+      lastStartedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const sportComparisonPeriod = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "key",
+      "label",
+      "requestedDays",
+      "startedAt",
+      "endedAt",
+      "totals",
+      "sports"
+    ],
+    properties: {
+      key: { type: "string", enum: ["all", "365d", "90d"] },
+      label: { type: "string" },
+      requestedDays: nullable({ type: "integer", minimum: 1 }),
+      startedAt: nullable({ type: "string", format: "date-time" }),
+      endedAt: { type: "string", format: "date-time" },
+      totals: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "sessionCount",
+          "sportCount",
+          "activeDayCount",
+          "totalDurationSeconds",
+          "totalEnergyKcal",
+          "energyCoverage",
+          "totalDistanceMeters",
+          "distanceCoverage",
+          "totalTrainingLoad",
+          "trainingLoadCoverage",
+          "oldestStartedAt",
+          "newestStartedAt"
+        ],
+        properties: {
+          sessionCount: { type: "integer", minimum: 0 },
+          sportCount: { type: "integer", minimum: 0 },
+          activeDayCount: { type: "integer", minimum: 0 },
+          totalDurationSeconds: { type: "number", minimum: 0 },
+          totalEnergyKcal: nullable({ type: "number", minimum: 0 }),
+          energyCoverage: { type: "number", minimum: 0, maximum: 1 },
+          totalDistanceMeters: nullable({ type: "number", minimum: 0 }),
+          distanceCoverage: { type: "number", minimum: 0, maximum: 1 },
+          totalTrainingLoad: nullable({ type: "number", minimum: 0 }),
+          trainingLoadCoverage: {
+            type: "number",
+            minimum: 0,
+            maximum: 1
+          },
+          oldestStartedAt: nullable({ type: "string", format: "date-time" }),
+          newestStartedAt: nullable({ type: "string", format: "date-time" })
+        }
+      },
+      sports: arrayOf({ $ref: "#/components/schemas/SportComparisonEntry" })
+    }
+  };
+
+  const sportComparison = {
+    type: "object",
+    additionalProperties: false,
+    required: ["modelVersion", "generatedAt", "periods"],
+    properties: {
+      modelVersion: {
+        type: "string",
+        enum: ["forge-sport-comparison-v1"]
+      },
+      generatedAt: { type: "string", format: "date-time" },
+      periods: arrayOf({ $ref: "#/components/schemas/SportComparisonPeriod" })
     }
   };
 
@@ -5810,12 +5971,33 @@ export function buildOpenApiDocument() {
   const fitnessViewData = {
     type: "object",
     additionalProperties: false,
-    required: ["summary", "weeklyTrend", "typeBreakdown", "sessions"],
+    required: [
+      "summary",
+      "weeklyTrend",
+      "typeBreakdown",
+      "sportComparison",
+      "vitalsTrend",
+      "analysisSessions",
+      "sessions"
+    ],
     properties: {
       summary: { type: "object", additionalProperties: true },
       weeklyTrend: arrayOf({ type: "object", additionalProperties: true }),
       typeBreakdown: arrayOf({ type: "object", additionalProperties: true }),
-      sessions: arrayOf({ $ref: "#/components/schemas/WorkoutSession" })
+      sportComparison: { $ref: "#/components/schemas/SportComparison" },
+      vitalsTrend: arrayOf({ type: "object", additionalProperties: true }),
+      analysisSessions: arrayOf({
+        oneOf: [
+          { $ref: "#/components/schemas/WorkoutSession" },
+          { $ref: "#/components/schemas/WorkoutSessionSummary" }
+        ]
+      }),
+      sessions: arrayOf({
+        oneOf: [
+          { $ref: "#/components/schemas/WorkoutSession" },
+          { $ref: "#/components/schemas/WorkoutSessionSummary" }
+        ]
+      })
     }
   };
 
@@ -6913,6 +7095,10 @@ export function buildOpenApiDocument() {
         HealthLink: healthLink,
         SleepSession: sleepSession,
         WorkoutSession: workoutSession,
+        WorkoutSessionSummary: workoutSessionSummary,
+        SportComparisonEntry: sportComparisonEntry,
+        SportComparisonPeriod: sportComparisonPeriod,
+        SportComparison: sportComparison,
         SleepViewData: sleepViewData,
         FitnessViewData: fitnessViewData,
         TrainingLoadViewData: trainingLoadViewData,
@@ -7918,6 +8104,34 @@ export function buildOpenApiDocument() {
       "/api/v1/health/fitness": {
         get: {
           summary: "Read the Forge sports and workout overview surface",
+          parameters: [
+            {
+              name: "userIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true,
+              description: "Optional repeated user scope."
+            },
+            {
+              name: "compact",
+              in: "query",
+              schema: { type: "boolean", default: false },
+              description:
+                "Omit workout session arrays for compact agent and overview reads."
+            },
+            {
+              name: "sessionDetail",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["full", "summary"],
+                default: "full"
+              },
+              description:
+                "Use summary for list rendering; read /api/v1/health/workouts/{id} for complete metadata before editing one workout."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {

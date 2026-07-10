@@ -3620,16 +3620,28 @@ export function getSleepSessionRawDetail(sleepId: string) {
 
 export function getFitnessView(
   userIds?: string[] | unknown,
-  options: { compact?: boolean } = {}
+  options: {
+    compact?: boolean;
+    sessionDetail?: "full" | "summary";
+  } = {}
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   if (options.compact) {
     search.set("compact", "1");
   }
+  if (options.sessionDetail) {
+    search.set("sessionDetail", options.sessionDetail);
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(
     `/api/v1/health/fitness${suffix}`
+  );
+}
+
+export function getWorkoutSession(workoutId: string) {
+  return request<{ workout: import("./types").WorkoutSessionRecord }>(
+    `/api/v1/health/workouts/${encodeURIComponent(workoutId)}`
   );
 }
 

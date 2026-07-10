@@ -13,8 +13,10 @@ import {
 } from "@/lib/api";
 import {
   getGamificationSpriteUrl,
+  getGamificationThemePreviewItemUrl,
   getGamificationThemePreviewUrl
 } from "@/lib/gamification-assets";
+import type { GamificationThemePreference } from "@/lib/gamification-assets";
 import type { GamificationCelebration, XpMetricsPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +49,38 @@ const DEFAULT_PROFILE: GamificationProfile = {
   topGoalTitle: null
 };
 
-function hideMissingGamificationImage(event: SyntheticEvent<HTMLImageElement>) {
-  event.currentTarget.hidden = true;
+function getGamificationFallbackUrl(
+  theme: GamificationThemePreference,
+  assetKey: string
+) {
+  if (assetKey.startsWith("mascot-")) {
+    return getGamificationThemePreviewUrl(theme);
+  }
+  return getGamificationThemePreviewItemUrl(
+    theme,
+    assetKey.includes("unlock-")
+      ? "item-unlock-streaks-molten-crown-fire"
+      : "item-trophy-xp-levels-the-first-heat"
+  );
+}
+
+function recoverMissingGamificationImage(
+  event: SyntheticEvent<HTMLImageElement>,
+  fallbackUrl: string
+) {
+  const image = event.currentTarget;
+  if (image.getAttribute("src") === fallbackUrl) {
+    image.hidden = true;
+    return;
+  }
+  image.hidden = false;
+  image.src = fallbackUrl;
+}
+
+function revealLoadedGamificationImage(
+  event: SyntheticEvent<HTMLImageElement>
+) {
+  event.currentTarget.hidden = false;
 }
 
 function normalizeProfile(
@@ -188,6 +220,11 @@ export function GamificationOverviewWidget({
     ...(newest ? [newest] : []),
     ...catalogPreview.filter((item) => item.unlocked && item.id !== newest?.id)
   ].slice(0, 5);
+  const compactTrophy =
+    latestShelf.find((item) => item.kind === "trophy") ??
+    catalogPreview.find((item) => item.kind === "trophy") ??
+    nextTargets.find((item) => item.kind === "trophy") ??
+    null;
   const equippedSkin = metrics.equipment?.selectedMascotSkin ?? "default smith";
   const selectedAssetStatus = assetStatusQuery.data?.assets.styles.find(
     (style) => style.id === gamificationTheme
@@ -294,7 +331,13 @@ export function GamificationOverviewWidget({
               decoding="async"
               width={512}
               height={512}
-              onError={hideMissingGamificationImage}
+              onLoad={revealLoadedGamificationImage}
+              onError={(event) =>
+                recoverMissingGamificationImage(
+                  event,
+                  getGamificationThemePreviewUrl(gamificationTheme)
+                )
+              }
               className="absolute inset-0 size-full object-contain object-center p-1 drop-shadow-[var(--ui-shadow-soft)]"
             />
             <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_94%,transparent),transparent)] p-2.5">
@@ -317,7 +360,7 @@ export function GamificationOverviewWidget({
                   {profile.streakDays} days
                 </Badge>
               </div>
-              <div className="mt-2 flex min-w-0 items-start justify-between gap-2">
+              <div className="mt-2 min-w-0">
                 <div className="min-w-0">
                   <div className="font-display text-lg leading-6 text-[var(--ui-ink-strong)]">
                     Forge level {profile.level}
@@ -326,18 +369,58 @@ export function GamificationOverviewWidget({
                     {metrics.mascot.line}
                   </p>
                 </div>
-                <Link
-                  to="/rewards"
-                  aria-label="Open Trophy Hall"
-                  title="Open Trophy Hall"
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
-                >
-                  <Trophy className="size-4" />
-                </Link>
               </div>
+
+              <Link
+                to="/rewards"
+                aria-label={
+                  compactTrophy
+                    ? `Open Trophy Hall: ${compactTrophy.title}`
+                    : "Open Trophy Hall"
+                }
+                className="mt-2 grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-2 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1.5 transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+              >
+                <span className="grid size-14 place-items-center overflow-hidden rounded-[10px] bg-[var(--ui-surface-1)]">
+                  {compactTrophy ? (
+                    <img
+                      data-testid="forge-smith-featured-trophy"
+                      src={getGamificationSpriteUrl(
+                        compactTrophy.assetKey,
+                        256,
+                        gamificationTheme
+                      )}
+                      alt={`${compactTrophy.title} trophy`}
+                      decoding="async"
+                      width={56}
+                      height={56}
+                      onLoad={revealLoadedGamificationImage}
+                      onError={(event) =>
+                        recoverMissingGamificationImage(
+                          event,
+                          getGamificationFallbackUrl(
+                            gamificationTheme,
+                            compactTrophy.assetKey
+                          )
+                        )
+                      }
+                      className="size-14 object-contain"
+                    />
+                  ) : (
+                    <Trophy className="size-5 text-[var(--primary)]" />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                    {compactTrophy?.unlocked ? "Latest trophy" : "Next trophy"}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs font-semibold text-[var(--ui-ink-strong)]">
+                    {compactTrophy?.title ?? "Open Trophy Hall"}
+                  </span>
+                </span>
+              </Link>
             </div>
 
-            <div className="mt-2 min-w-0">
+            <div className="mt-2.5 min-w-0">
               <ProgressMeter value={progress} />
               <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--ui-ink-faint)]">
                 <span className="truncate">
@@ -383,7 +466,13 @@ export function GamificationOverviewWidget({
             decoding="async"
             width={512}
             height={512}
-            onError={hideMissingGamificationImage}
+            onLoad={revealLoadedGamificationImage}
+            onError={(event) =>
+              recoverMissingGamificationImage(
+                event,
+                getGamificationThemePreviewUrl(gamificationTheme)
+              )
+            }
             className={cn(
               "absolute inset-x-0 mx-auto max-w-none object-contain drop-shadow-[var(--ui-shadow-soft)]",
               compact ? "bottom-1 h-[10.5rem]" : "bottom-3 h-[15.5rem]"
@@ -482,7 +571,16 @@ export function GamificationOverviewWidget({
                           decoding="async"
                           width={32}
                           height={32}
-                          onError={hideMissingGamificationImage}
+                          onLoad={revealLoadedGamificationImage}
+                          onError={(event) =>
+                            recoverMissingGamificationImage(
+                              event,
+                              getGamificationFallbackUrl(
+                                gamificationTheme,
+                                target.assetKey
+                              )
+                            )
+                          }
                           className="size-8 object-contain opacity-90"
                         />
                         <div className="min-w-0">
@@ -526,7 +624,16 @@ export function GamificationOverviewWidget({
                         decoding="async"
                         width={44}
                         height={44}
-                        onError={hideMissingGamificationImage}
+                        onLoad={revealLoadedGamificationImage}
+                        onError={(event) =>
+                          recoverMissingGamificationImage(
+                            event,
+                            getGamificationFallbackUrl(
+                              gamificationTheme,
+                              item.assetKey
+                            )
+                          )
+                        }
                         className="size-11 rounded-2xl bg-[var(--ui-surface-2)] object-contain p-1"
                       />
                     ))
@@ -608,7 +715,16 @@ export function GamificationCelebrationLayer({
                   gamificationTheme
                 )}
                 alt=""
-                onError={hideMissingGamificationImage}
+                onLoad={revealLoadedGamificationImage}
+                onError={(event) =>
+                  recoverMissingGamificationImage(
+                    event,
+                    getGamificationFallbackUrl(
+                      gamificationTheme,
+                      celebration.assetKey || "mascot-state-020"
+                    )
+                  )
+                }
                 className={cn(
                   "shrink-0 object-contain",
                   isMajor ? "size-24" : "size-14"

@@ -6,6 +6,7 @@ import path from "node:path";
 import AdmZip from "adm-zip";
 import { getEffectiveDataRoot } from "../db.js";
 import {
+  GAMIFICATION_ASSET_VERSION,
   GAMIFICATION_CATALOG,
   GAMIFICATION_MASCOT_KEYS
 } from "@/lib/gamification-catalog.js";
@@ -29,9 +30,8 @@ export type GamificationAssetStyleStatus = {
   installedAt: string | null;
 };
 
-const assetVersion = "0.2.59";
-const defaultReleaseBaseUrl =
-  "https://github.com/albertbuchard/forge/releases/download/forge-gamification-assets-v0.2.59";
+const assetVersion = GAMIFICATION_ASSET_VERSION;
+const defaultReleaseBaseUrl = `https://github.com/albertbuchard/forge/releases/download/forge-gamification-assets-v${assetVersion}`;
 const styleDefinitions: Array<
   Omit<
     GamificationAssetStyleStatus,
@@ -43,7 +43,7 @@ const styleDefinitions: Array<
     label: "Fantasy",
     description:
       "Warm, lighthearted 3D forge art with expressive mascot reactions and playful trophies.",
-    previewUrl: "/gamification-previews/dramatic-smithie-mascot.webp",
+    previewUrl: `/gamification-previews/dramatic-smithie-mascot.webp?v=${assetVersion}`,
     fileName: `forge-gamification-dramatic-smithie-${assetVersion}.zip`,
     sha256: "407c98a89626d723f9f92e79411df7c999458459c96e0e09e73020b3d3ce14c0"
   },
@@ -52,7 +52,7 @@ const styleDefinitions: Array<
     label: "Dark Fantasy",
     description:
       "Obsidian iron, ember gold, high-pressure streak energy, and mythic trophy silhouettes.",
-    previewUrl: "/gamification-previews/dark-fantasy-mascot.webp",
+    previewUrl: `/gamification-previews/dark-fantasy-mascot.webp?v=${assetVersion}`,
     fileName: `forge-gamification-dark-fantasy-${assetVersion}.zip`,
     sha256: "9545900906784a23d15f4536eb8c32683ffff0ef42006d06c70cea101c1db570"
   },
@@ -61,7 +61,7 @@ const styleDefinitions: Array<
     label: "Mind Locksmith",
     description:
       "Modern locksmith-of-the-mind art for planning, memory, Psyche, health, and agent work.",
-    previewUrl: "/gamification-previews/mind-locksmith-mascot.webp",
+    previewUrl: `/gamification-previews/mind-locksmith-mascot.webp?v=${assetVersion}`,
     fileName: `forge-gamification-mind-locksmith-${assetVersion}.zip`,
     sha256: "cfdfd4259145e589e6e0fba8e1deb69d30931cfabbe6d626c0053e4f4cfe5f10"
   }

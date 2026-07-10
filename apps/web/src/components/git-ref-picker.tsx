@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, Search, X } from "lucide-react";
+import {
+  ExternalLink,
+  GitBranch,
+  GitCommitHorizontal,
+  GitPullRequest,
+  Loader2,
+  Search,
+  X
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  getGitHelperOverview,
-  searchGitHelperRefs
-} from "@/lib/api";
+import { getGitHelperOverview, searchGitHelperRefs } from "@/lib/api";
 import type {
   GitHelperOverview,
   GitHelperRef,
@@ -196,12 +201,13 @@ export function GitRefPicker({
   };
 
   return (
-    <div className="grid gap-3 rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+    <div className="grid gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="type-label text-white/45">Git links</div>
-          <div className="mt-2 text-sm leading-6 text-white/58">
-            Pick the live branch, commits, or pull requests from the local repo instead of typing raw hashes.
+          <div className="type-label text-[var(--ui-ink-faint)]">Git links</div>
+          <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            Pick the live branch, commits, or pull requests from the local repo
+            instead of typing raw hashes.
           </div>
         </div>
         {quickCurrentBranch ? (
@@ -219,11 +225,13 @@ export function GitRefPicker({
 
       <div className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
         <label className="grid gap-2">
-          <span className="type-label text-white/45">Type</span>
+          <span className="type-label text-[var(--ui-ink-faint)]">Type</span>
           <select
             value={kind}
-            onChange={(event) => setKind(event.target.value as GitHelperSearchKind)}
-            className="min-h-10 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+            onChange={(event) =>
+              setKind(event.target.value as GitHelperSearchKind)
+            }
+            className="min-h-10 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-strong)_70%)]"
           >
             <option value="branch">Branch</option>
             <option value="commit">Commit</option>
@@ -231,7 +239,9 @@ export function GitRefPicker({
           </select>
         </label>
         <label className="grid gap-2">
-          <span className="type-label text-white/45">Repository</span>
+          <span className="type-label text-[var(--ui-ink-faint)]">
+            Repository
+          </span>
           <Input
             value={repository}
             onChange={(event) => setRepository(event.target.value)}
@@ -241,9 +251,9 @@ export function GitRefPicker({
       </div>
 
       <label className="grid gap-2">
-        <span className="type-label text-white/45">Search</span>
+        <span className="type-label text-[var(--ui-ink-faint)]">Search</span>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/32" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--ui-ink-faint)]" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -261,23 +271,25 @@ export function GitRefPicker({
 
       {selectedRefs.length > 0 ? (
         <div className="grid gap-2">
-          <div className="type-label text-white/45">Selected links</div>
+          <div className="type-label text-[var(--ui-ink-faint)]">
+            Selected links
+          </div>
           <div className="grid gap-2">
             {selectedRefs.map((ref) => (
               <div
                 key={ref.id}
-                className="flex items-start justify-between gap-3 rounded-[16px] border border-white/8 bg-white/[0.04] px-3 py-3"
+                className="flex items-start justify-between gap-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-white/[0.08] text-white/72">
+                    <Badge className="bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]">
                       {ref.refType.replaceAll("_", " ")}
                     </Badge>
-                    <div className="truncate text-sm text-white/84">
+                    <div className="truncate text-sm text-[var(--ui-ink-strong)]">
                       {ref.displayTitle || ref.refValue}
                     </div>
                   </div>
-                  <div className="mt-1 text-xs text-white/46">
+                  <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                     {[ref.repository, ref.refValue].filter(Boolean).join(" · ")}
                   </div>
                 </div>
@@ -287,14 +299,14 @@ export function GitRefPicker({
                       href={ref.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.08] hover:text-white"
+                      className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     >
                       <ExternalLink className="size-4" />
                     </a>
                   ) : null}
                   <button
                     type="button"
-                    className="inline-flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.08] hover:text-white"
+                    className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     onClick={() => removeRef(ref)}
                   >
                     <X className="size-4" />
@@ -306,20 +318,20 @@ export function GitRefPicker({
         </div>
       ) : null}
 
-      <div className="grid gap-2 rounded-[16px] border border-white/8 bg-white/[0.02] p-2">
+      <div className="grid gap-2 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-2">
         {loadingOverview || loadingSearch ? (
-          <div className="flex items-center gap-2 px-2 py-4 text-sm text-white/52">
+          <div className="flex items-center gap-2 px-2 py-4 text-sm text-[var(--ui-ink-soft)]">
             <Loader2 className="size-4 animate-spin" />
             Loading git suggestions…
           </div>
         ) : null}
         {overviewError ? (
-          <div className="rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <div className="rounded-[14px] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
             {overviewError}
           </div>
         ) : null}
         {searchError ? (
-          <div className="rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <div className="rounded-[14px] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
             {searchError}
           </div>
         ) : null}
@@ -329,13 +341,13 @@ export function GitRefPicker({
           .map((warning) => (
             <div
               key={warning}
-              className="rounded-[14px] bg-amber-400/10 px-3 py-2 text-sm text-amber-100"
+              className="rounded-[14px] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]"
             >
               {warning}
             </div>
           ))}
         {!loadingSearch && !searchError && searchResults.length === 0 ? (
-          <div className="px-2 py-4 text-sm text-white/45">
+          <div className="px-2 py-4 text-sm text-[var(--ui-ink-faint)]">
             No matching git refs found.
           </div>
         ) : null}
@@ -350,14 +362,16 @@ export function GitRefPicker({
           return (
             <div
               key={ref.key}
-              className="flex items-start justify-between gap-3 rounded-[14px] px-2 py-2 transition hover:bg-white/[0.04]"
+              className="flex items-start justify-between gap-3 rounded-[14px] px-2 py-2 transition hover:bg-[var(--ui-surface-hover)]"
             >
               <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm text-white/82">
+                <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-strong)]">
                   <Icon className="size-4 shrink-0 text-[var(--primary)]" />
-                  <span className="truncate">{ref.displayTitle || ref.refValue}</span>
+                  <span className="truncate">
+                    {ref.displayTitle || ref.refValue}
+                  </span>
                 </div>
-                <div className="mt-1 text-xs text-white/46">
+                <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
                   {[ref.repository, ref.subtitle].filter(Boolean).join(" · ")}
                 </div>
               </div>
@@ -367,7 +381,7 @@ export function GitRefPicker({
                     href={ref.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.08] hover:text-white"
+                    className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   >
                     <ExternalLink className="size-4" />
                   </a>

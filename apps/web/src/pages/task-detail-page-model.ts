@@ -66,15 +66,15 @@ export const WORK_ITEM_LEVEL_META = {
 export const GIT_REF_META = {
   commit: {
     label: "Commit",
-    className: "bg-emerald-500/12 text-emerald-100"
+    className: "bg-[var(--ui-success-soft)] text-[var(--success)]"
   },
   branch: {
     label: "Branch",
-    className: "bg-sky-500/12 text-sky-100"
+    className: "bg-[var(--ui-info-soft)] text-[var(--info)]"
   },
   pull_request: {
     label: "Pull request",
-    className: "bg-fuchsia-500/12 text-fuchsia-100"
+    className: "bg-[var(--ui-accent-soft)] text-[var(--primary)]"
   }
 } as const;
 

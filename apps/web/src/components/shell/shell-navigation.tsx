@@ -40,6 +40,7 @@ import {
   shellLabelMutedClassName
 } from "@/components/shell/shell-style-tokens";
 import { cn } from "@/lib/utils";
+import { prefetchRouteModule } from "@/routes/route-prefetch";
 import { useI18n } from "@/lib/i18n";
 
 export type DesktopSidebarMetricsPosition = "above" | "below";
@@ -340,6 +341,9 @@ export function NavItem({
           onRouteIntent?.(route.to);
         }
       }}
+      onPointerEnter={() => void prefetchRouteModule(route.to)}
+      onFocus={() => void prefetchRouteModule(route.to)}
+      onTouchStart={() => void prefetchRouteModule(route.to)}
       className={({ isActive }) =>
         cn(
           "interactive-tap flex items-center rounded-[18px] text-sm transition",
@@ -413,7 +417,10 @@ export function MobileBottomNav({
             <NavLink
               key={route.id}
               to={route.to}
-              onPointerDown={startHold}
+              onPointerDown={() => {
+                void prefetchRouteModule(route.to);
+                startHold();
+              }}
               onPointerUp={endHold}
               onPointerLeave={endHold}
               onClick={(event) => {
@@ -426,6 +433,9 @@ export function MobileBottomNav({
                   onRouteIntent?.(route.to);
                 }
               }}
+              onPointerEnter={() => void prefetchRouteModule(route.to)}
+              onFocus={() => void prefetchRouteModule(route.to)}
+              onTouchStart={() => void prefetchRouteModule(route.to)}
               className={({ isActive }) =>
                 cn(
                   "flex min-h-11 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[12px]",
@@ -493,6 +503,9 @@ export function MobileBottomNav({
                 }
                 setMoreOpen(false);
               }}
+              onPointerEnter={() => void prefetchRouteModule(route.to)}
+              onFocus={() => void prefetchRouteModule(route.to)}
+              onTouchStart={() => void prefetchRouteModule(route.to)}
               className={({ isActive }) =>
                 cn(
                   "interactive-tap flex items-center justify-between rounded-[24px] px-4 py-4",

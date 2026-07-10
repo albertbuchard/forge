@@ -41,7 +41,7 @@ class RootErrorBoundary extends React.Component<
 
     return (
       <main className="grid min-h-dvh place-items-center bg-canvas px-5 py-10 text-ink">
-        <section className="w-full max-w-xl rounded-[1.25rem] border border-white/12 bg-panel/90 p-6 shadow-2xl shadow-black/30">
+        <section className="w-full max-w-xl rounded-[1.25rem] border border-[var(--ui-border-strong)] bg-[var(--surface-panel)] p-6 shadow-[var(--ui-shadow-floating)]">
           <p className="font-label text-xs font-bold uppercase tracking-[0.08em] text-primary/80">
             Forge runtime
           </p>
@@ -54,11 +54,11 @@ class RootErrorBoundary extends React.Component<
             page first; if this remains visible, check the browser console and
             the local Forge runtime logs.
           </p>
-          <pre className="mt-4 max-h-44 overflow-auto rounded-2xl border border-white/10 bg-black/30 p-4 text-xs leading-5 text-ink/70">
+          <pre className="mt-4 max-h-44 overflow-auto rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-xs leading-5 text-ink/70">
             {this.state.error.message}
           </pre>
           <button
-            className="mt-5 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-white/15"
+            className="mt-5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--ui-surface-hover)]"
             type="button"
             onClick={() => window.location.reload()}
           >

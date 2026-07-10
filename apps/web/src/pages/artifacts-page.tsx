@@ -99,15 +99,15 @@ function titleCase(value: string) {
 
 function dangerClass(level: ArtifactDangerLevel) {
   if (level === "blocked") {
-    return "border-red-400/40 bg-red-500/12 text-red-100";
+    return "border-[color-mix(in_srgb,var(--danger)_38%,var(--ui-border-subtle)_62%)] bg-[var(--ui-danger-soft)] text-[var(--danger)]";
   }
   if (level === "high") {
-    return "border-orange-400/40 bg-orange-500/12 text-orange-100";
+    return "border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[var(--danger)]";
   }
   if (level === "moderate") {
-    return "border-yellow-300/35 bg-yellow-300/10 text-yellow-100";
+    return "border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[var(--warning)]";
   }
-  return "border-emerald-300/35 bg-emerald-400/10 text-emerald-100";
+  return "border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] text-[var(--success)]";
 }
 
 function isScanResult(
@@ -422,14 +422,17 @@ function UploadResultBadge({
     return (
       <Badge
         size="xs"
-        className="border-emerald-300/35 bg-emerald-400/10 text-emerald-100"
+        className="border-[color-mix(in_srgb,var(--success)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-success-soft)] text-[var(--success)]"
       >
         Uploaded
       </Badge>
     );
   }
   return (
-    <Badge size="xs" className="border-red-400/40 bg-red-500/12 text-red-100">
+    <Badge
+      size="xs"
+      className="border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+    >
       Failed
     </Badge>
   );
@@ -1206,7 +1209,7 @@ export function ArtifactsPage() {
                         <UploadResultBadge result={result} />
                       </div>
                       {result?.status === "error" ? (
-                        <p className="mt-3 rounded-[18px] border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+                        <p className="mt-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
                           {result.error}
                         </p>
                       ) : null}
@@ -1233,7 +1236,7 @@ export function ArtifactsPage() {
         description:
           "Forge will move the artifact metadata to the shared bin. The stored file bytes are preserved, and the record can be restored through Forge's normal restore flow.",
         render: () => (
-          <div className="rounded-[24px] border border-red-400/30 bg-red-500/10 p-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+          <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] p-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
             <div className="font-medium text-[var(--ui-ink-strong)]">
               {selectedArtifact?.title ?? "Selected artifact"}
             </div>
@@ -1337,7 +1340,9 @@ export function ArtifactsPage() {
     }
     if (uploadFlowValue.encryptContent) {
       if (!uploadFlowValue.contentPassword) {
-        setUploadDialogError("Password is required when encryption is enabled.");
+        setUploadDialogError(
+          "Password is required when encryption is enabled."
+        );
         return;
       }
       if (
@@ -1367,7 +1372,9 @@ export function ArtifactsPage() {
     }
     setDownloadPasswordError(null);
     try {
-      await passwordDownloadMutation.mutateAsync(downloadPasswordValue.password);
+      await passwordDownloadMutation.mutateAsync(
+        downloadPasswordValue.password
+      );
     } catch {
       // The mutation onError handler renders the password-specific message inline.
     }
@@ -1606,7 +1613,7 @@ export function ArtifactsPage() {
                     <Button
                       variant="secondary"
                       type="button"
-                      className="border-red-400/30 bg-red-500/10 text-red-100 hover:border-red-300/50 hover:bg-red-500/15"
+                      className="border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[var(--danger)] hover:border-[color-mix(in_srgb,var(--danger)_46%,var(--ui-border-subtle)_54%)] hover:bg-[color-mix(in_srgb,var(--danger)_20%,var(--ui-surface-1)_80%)]"
                       onClick={() => setArchiveDialogOpen(true)}
                       pending={archiveMutation.isPending}
                     >
@@ -1649,7 +1656,7 @@ export function ArtifactsPage() {
                   </p>
                 ) : null}
                 {scanMutation.error instanceof Error ? (
-                  <p className="rounded-[18px] border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-sm text-yellow-100">
+                  <p className="rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]">
                     {scanMutation.error.message}
                   </p>
                 ) : null}

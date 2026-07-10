@@ -350,8 +350,34 @@ describe("question flow simulation cycles", () => {
     Habit: ["add", "update", "review", "check-in"],
     Tag: ["add", "update", "review", "link"],
     Note: ["add", "update", "review", "link"],
-    "Wiki Page": ["create", "read", "update", "browse"],
-    Artifact: ["trusted-upload", "metadata-update", "enrich", "link"],
+    "Wiki Page": [
+      "browse",
+      "search",
+      "read",
+      "create",
+      "update",
+      "delete",
+      "ingest",
+      "health",
+      "sync",
+      "reindex"
+    ],
+    Artifact: [
+      "list",
+      "read-metadata",
+      "trusted-upload",
+      "metadata-update",
+      "rescan",
+      "enrich",
+      "trust-state",
+      "versions",
+      "audit",
+      "replace-links",
+      "metadata-delete",
+      "metadata-restore",
+      "human-download-handoff",
+      "human-encryption-handoff"
+    ],
     Attention: ["list", "snooze", "dismiss", "restore"],
     "Entity Navigation": ["list", "reopen", "touch", "human-pin-handoff"],
     Insight: ["add", "review", "link", "preserve"],
@@ -1013,7 +1039,10 @@ describe("question flow simulation cycles", () => {
         /accuracy or consent/i
       );
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
-        /concrete example[\s\S]*tentative hypothesis[\s\S]*fit-or-correction[\s\S]*saveable record shape[\s\S]*shared batch CRUD/i
+        /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*exact existing target[\s\S]*do not require a new concrete example or hypothesis[\s\S]*shared batch CRUD/i
+      );
+      expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
+        /Guided formulation[\s\S]*concrete example[\s\S]*tentative hypothesis[\s\S]*fit-or-correction[\s\S]*accuracy or consent[\s\S]*saveable record shape[\s\S]*shared batch CRUD/i
       );
     }
 
@@ -1156,6 +1185,32 @@ describe("question flow simulation cycles", () => {
     );
     expect(calendarConnectionFlow?.readinessCheck).toMatch(
       /provider or existing connection[\s\S]*selected-calendar change[\s\S]*sync[\s\S]*rediscovery[\s\S]*removal target[\s\S]*published calendar connection route/i
+    );
+
+    const wikiFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "wiki_page"
+    )?.questionFlow;
+    expect(wikiFlow?.openingQuestion).toMatch(
+      /find, preserve, or improve in the wiki/i
+    );
+    expect(wikiFlow?.askSequence.join("\n")).toMatch(
+      /browse, search, read, create, update, delete, ingest, inspect wiki health, sync, or reindex[\s\S]*list, search, or read the existing page before asking authoring questions[\s\S]*near-duplicate topic[\s\S]*smallest change that is newly true[\s\S]*partial-failure[\s\S]*read current wiki health first[\s\S]*backlinks, citations, related pages, or history/i
+    );
+    expect(wikiFlow?.readinessCheck).toMatch(
+      /Ready to list, search, or inspect wiki health[\s\S]*published specialized route[\s\S]*Ready to read, update, or delete[\s\S]*exact page id or slug[\s\S]*Ready to create after a duplicate check[\s\S]*meaningful Markdown body[\s\S]*Ready to ingest, sync, or reindex[\s\S]*without route guessing/i
+    );
+
+    const artifactFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "artifact"
+    )?.questionFlow;
+    expect(artifactFlow?.openingQuestion).toMatch(
+      /find, verify, preserve, or change about this file/i
+    );
+    expect(artifactFlow?.askSequence.join("\n")).toMatch(
+      /list, read metadata, upload, update metadata, rescan, enrich, change trust state[\s\S]*list or read current metadata first[\s\S]*answer it before proposing a write[\s\S]*verify upload authority without requesting a password[\s\S]*never let LLM enrichment lower the deterministic danger score[\s\S]*complete desired general entity_links set[\s\S]*replaces the set rather than appending[\s\S]*batch metadata routes[\s\S]*human\/operator-only[\s\S]*read the relevant metadata, scan, trust, version, audit, or link state back/i
+    );
+    expect(artifactFlow?.readinessCheck).toMatch(
+      /Ready to list, read metadata, inspect versions, or read audit history[\s\S]*Ready for trusted upload[\s\S]*without collecting a password[\s\S]*Ready to update metadata, rescan, enrich with an LLM, or change trust state[\s\S]*current metadata read[\s\S]*Ready to replace links[\s\S]*replacement is not append[\s\S]*Ready to delete or restore metadata through batch metadata routes[\s\S]*hard deletion[\s\S]*never ready for an agent call/i
     );
 
     const specializedCapsules = [
@@ -1359,7 +1414,19 @@ describe("question flow simulation cycles", () => {
     }
 
     expect(specializedCrud.wiki_page.routeKeys).toEqual(
-      expect.arrayContaining(["list", "search", "create", "read", "update"])
+      expect.arrayContaining([
+        "list",
+        "search",
+        "create",
+        "read",
+        "readBySlug",
+        "update",
+        "delete",
+        "health",
+        "sync",
+        "reindex",
+        "ingest"
+      ])
     );
     expect(specializedCrud.calendar_connection.routeKeys).toEqual(
       expect.arrayContaining([

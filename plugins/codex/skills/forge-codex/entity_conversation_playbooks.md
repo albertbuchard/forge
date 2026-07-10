@@ -1585,30 +1585,37 @@ Preferred opening question:
 
 ## Wiki Page
 
-Aim: create durable memory when the user wants to remember, study, cite, explain, or
-return to something later. Wiki pages are the right default for books, articles,
-sources, concepts, people, conversations, reusable instructions, and personal manuals.
+Aim: help the user find, preserve, improve, ingest, or repair durable wiki knowledge
+without turning every request into a new-page form. A wiki page is the right default for a book, article, source, concept, person, conversation, project reference, or personal manual.
 
 Arc:
 
-1. Ask what this page should help the user remember, understand, or reuse later.
-2. Ask whether the material is a book, article, source, concept, person, conversation,
-   project reference, or personal manual.
-3. Ask what the page should contain now: summary, key claims, quotes to verify,
-   personal interpretation, action implications, or links.
-4. Ask whether it should be the durable wiki page itself or supporting evidence linked
-   to another page.
-5. Ask about linked entities, aliases, or tags only if they will make the page more
-   navigable later.
+1. Identify whether the user wants to browse, search, read, create, update, delete,
+   ingest, inspect wiki health, sync, or reindex. Skip this lane question when their
+   verb already makes it clear.
+2. For browse, review, update, or delete work, list, search, or read the existing page
+   before asking authoring questions.
+3. For a new page, ask what it should help the user remember, understand, or reuse,
+   then search for a near-duplicate topic before creating it.
+4. For an update, ask for the smallest change that is newly true and what meaning,
+   provenance, backlinks, or reusable instructions must stay intact.
+5. For source ingest, ask what source is being added, how it should map into durable
+   pages, and whether duplicate, partial-failure, or retry behavior changes the plan.
+6. For health, sync, or reindex work, read current wiki health first and ask only what
+   recovery result the user is trying to achieve.
+7. Before deletion, confirm the exact page and what backlinks, citations, related
+   pages, or history must remain understandable.
+8. Ask about linked entities, aliases, tags, or supporting evidence only when they
+   change retrieval, provenance, or navigation.
 
 Helpful follow-up lanes:
 
-- what the user wants to remember or reuse
-- whether this is a book, article, source, concept, person, conversation, project
-  reference, or personal manual
-- what belongs on the durable page versus a supporting evidence note
-- what Forge entities, Psyche records, goals, projects, or tasks this memory should
-  link to
+- the practical knowledge or maintenance job
+- the existing page, slug, source, or health state when one is involved
+- the durable purpose and findable title for a genuinely new page
+- the smallest intended change and what must remain true
+- source mapping, duplicate handling, partial failures, retries, or recovery outcome
+- links, aliases, tags, backlinks, or evidence only when they change later use
 
 Routing rule:
 
@@ -1616,55 +1623,73 @@ Routing rule:
   book or article, keep a concept, or build a reusable explanation, consider
   `wiki_page` before `note`. Use `note` for temporary evidence, work logs, or linked
   detail; use `wiki_page` for durable memory.
-- Use the wiki tools and `/api/v1/wiki/pages` family for page reads and writes. Do
-  not route `wiki_page` through batch entity CRUD.
+- Use the wiki tools and the `/api/v1/wiki/pages` route family for list, search,
+  create, read, read-by-slug, update, delete, health, sync, reindex, and ingest. Do
+  not route `wiki_page` through batch entity CRUD or guess a nearby route.
+- Read before update, delete, health recovery, sync, or reindex when current state
+  changes the safe next action.
 
-Ready to save when:
+Ready to act when:
 
-- the page scope is clear
-- the page kind is clear enough
-- the title is stable enough to find later
+- browse, search, or health has a practical question and answer-changing scope
+- read, update, or delete has the exact page plus the intended lifecycle action and
+  preservation need
+- create has passed a duplicate check and has a durable purpose, findable title, and
+  meaningful Markdown body
+- ingest, sync, or reindex has a source or maintenance target plus the expected result
 
 Preferred opening question:
 
-- "What do you want this wiki page to help you remember or reuse later?"
+- "What are you trying to find, preserve, or improve in the wiki so it helps you remember or reuse later?"
 
 ## Artifact
 
-Aim: store a trusted file so a human can find it, understand what it is, trace where
-it came from, optionally password-encrypt it, and download it later without letting
-agents run, decrypt, or inspect the file bytes.
+Aim: guide the trusted-file lifecycle so a human can find, verify, preserve, or change
+an artifact while agents stay inside authorized upload and metadata workflows and
+download, password, and encryption actions remain human-only.
 
 Arc:
 
-1. Ask what the file or file set should help the human retrieve, prove, review, or preserve later.
-2. If there are several files, treat them as a queue: get a quick short description per file,
-   then open per-file details only where title, provenance, links, metadata JSON, or LLM enrichment
-   choices need more care.
-3. Ask for the human-readable title, short description, provenance, and source path
-   only when the user has not already supplied them.
-4. Ask which Forge record the artifact should be linked to only when that link will
-   improve retrieval or context. Use Forge's general entity-to-entity link model.
-5. Ask whether optional LLM enrichment should fill missing description/provenance
-   fields and produce a danger summary when an LLM connection exists.
-6. Keep trust explicit: only a trusted human/operator or trusted agent may add file
-   bytes, encrypted upload passwords are human/operator-only, and the agent must not
-   download, decrypt, open, execute, preview, transform, or submit passwords for the
-   stored file.
-7. After upload, summarize the stored artifact metadata, scan result, danger score,
-   and linked Forge records in product language.
+1. Identify whether the user wants to list, read metadata, upload, update metadata,
+   rescan, enrich, change trust state, inspect versions or audit history, replace
+   links, delete metadata, restore metadata, or hand off a human-only action. Skip
+   this lane question when the verb is already clear.
+2. For an existing artifact, list or read current metadata first so the user does not
+   have to reconstruct provenance, scan, trust, version, or link state from memory.
+3. For list, metadata review, versions, or audit work, ask what practical retrieval,
+   verification, or provenance question the read should answer, then answer it before
+   proposing a write.
+4. For trusted upload, ask what the file should help someone retrieve, prove, review,
+   or preserve, then ask only for missing filename, purpose, provenance, or source
+   path. Verify upload authority without requesting a password.
+5. For a metadata update, ask for the smallest newly true change and what provenance,
+   trust state, scan interpretation, or retrieval wording must remain intact.
+6. For rescan, LLM enrichment, or trust-state work, read current metadata and scan
+   state, clarify the intended result or authorization, and never let enrichment lower
+   the deterministic danger score.
+7. For link replacement, confirm the complete desired general `entity_links` set,
+   including existing links that must remain, because replacement is not append.
+8. For metadata delete or restore, confirm the exact artifact and lifecycle action;
+   require explicit preservation intent before hard deletion.
+9. Keep the boundary explicit: agents may perform authorized trusted uploads and
+   metadata workflows, but download, password submission, and existing-artifact
+   encryption are human/operator-only.
+10. After an agent-authorized mutation, read the relevant state back and summarize
+    what changed in product language.
 
 Helpful follow-up lanes:
 
-- what the file should help someone retrieve, prove, review, or preserve
-- missing title, short description, provenance, source path, or owner
+- the practical retrieval, verification, provenance, or lifecycle question
+- the exact artifact and its current metadata, scan, trust, version, audit, or link state
+- missing original filename, purpose, provenance, source path, or upload authority
+- the smallest metadata change and what must remain intact
+- the intended rescan, enrichment, or trust result and any required authorization
 - whether the artifact belongs with a project, task, wiki page, note, Psyche record,
   or other Forge entity through a general `entity_links` relationship
-- whether to request LLM metadata enrichment when descriptions are missing
-- whether the static scan or danger score requires quarantine, rejection, or a human
-  trust decision
-- whether the human wants password encryption, handled through the Forge web app or
-  human-only API request body, not through agent password collection
+- the complete desired link set when links are being replaced
+- the exact metadata delete or restore action and explicit intent before hard deletion
+- a human handoff for download, password, decryption, preview, execution,
+  transformation, or existing-artifact encryption
 
 Routing rule:
 
@@ -1672,6 +1697,10 @@ Routing rule:
   trusted file upload, metadata reads and updates, static scan, LLM enrichment,
   trust-state changes, versions, audit reads, and replacement of general
   `entity_links`.
+- Read current artifact metadata before update, rescan, enrichment, trust, link,
+  version, or audit work when current state changes the safe next action. Use batch
+  metadata routes only for metadata search, update, delete, or restore; never use
+  batch CRUD to create an artifact or transfer bytes.
 - Do not create or use artifact-specific links. Artifact relationships are normal
   Forge entity-to-entity links with `sourceEntityType`, `sourceEntityId`,
   `targetEntityType`, `targetEntityId`, optional `relationship`, and optional
@@ -1684,16 +1713,23 @@ Routing rule:
   surface, but those paths are intentionally absent from `forge_call_artifact_route`
   and must not be called by agents.
 
-Ready to save when:
+Ready to act when:
 
-- the file is present and the actor is trusted to upload it
-- title or filename, provenance or source path, and basic purpose are clear enough
-- the desired generic Forge entity links are known or intentionally absent
-- the user has chosen whether missing metadata should be filled by LLM enrichment
+- list, metadata read, versions, or audit has a practical question plus any required
+  filter or exact artifact id
+- trusted upload has upload authority, file bytes, original filename, purpose, and
+  provenance or source path without a password
+- metadata update, rescan, enrichment, or trust change has a current read, exact
+  artifact, intended change, preservation need, and enrichment authorization when used
+- link replacement has the complete desired general `entity_links` set
+- metadata delete or restore has the exact artifact and lifecycle action, with
+  explicit confirmation before hard deletion
+- download, password, decryption, preview, execution, transformation, and
+  existing-artifact encryption are handed to the human operator, never an agent call
 
 Preferred opening question:
 
-- "What should this file help you find, prove, review, or preserve later?"
+- "What are you trying to find, verify, preserve, or change about this file?"
 
 ## Insight
 

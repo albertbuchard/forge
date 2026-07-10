@@ -80,13 +80,7 @@ function isSearchablePowerBarEntityType(
 }
 
 function getAuxiliaryVisual(
-  category:
-    | "route"
-    | "note"
-    | "wiki"
-    | "insight"
-    | "calendar"
-    | "search",
+  category: "route" | "note" | "wiki" | "insight" | "calendar" | "search",
   icon?: LucideIcon
 ) {
   const resolvedIcon = icon ?? Search;
@@ -96,33 +90,33 @@ function getAuxiliaryVisual(
       return {
         icon: BookCopy,
         tileClassName:
-          "border-blue-300/18 bg-blue-300/12 text-blue-100 shadow-[0_18px_36px_rgba(96,165,250,0.12)]",
+          "border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-blue-300/18 bg-blue-300/10 text-blue-100"
+          "border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "note":
       return {
         icon: NotebookPen,
         tileClassName:
-          "border-amber-300/18 bg-amber-300/12 text-amber-100 shadow-[0_18px_36px_rgba(251,191,36,0.12)]",
+          "border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-amber-300/18 bg-amber-300/10 text-amber-100"
+          "border-[color-mix(in_srgb,var(--warning)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "insight":
       return {
         icon: Radar,
         tileClassName:
-          "border-emerald-300/18 bg-emerald-300/12 text-emerald-100 shadow-[0_18px_36px_rgba(52,211,153,0.12)]",
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-emerald-300/18 bg-emerald-300/10 text-emerald-100"
+          "border-[color-mix(in_srgb,var(--success)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]"
       };
     case "calendar":
       return {
         icon: CalendarDays,
         tileClassName:
-          "border-cyan-300/18 bg-cyan-300/12 text-cyan-100 shadow-[0_18px_36px_rgba(34,211,238,0.12)]",
+          "border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-accent-soft)] text-[var(--primary)] shadow-[var(--ui-shadow-soft)]",
         badgeClassName:
-          "border-cyan-300/18 bg-cyan-300/10 text-cyan-100"
+          "border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]"
       };
     case "route":
       return {
@@ -200,7 +194,11 @@ function PowerBarCategoryBadge({ item }: { item: PowerBarItem }) {
   );
 }
 
-function buildRouteItemSearchText(title: string, detail: string, category: string) {
+function buildRouteItemSearchText(
+  title: string,
+  detail: string,
+  category: string
+) {
   return `${title} ${detail} ${category}`.trim().toLowerCase();
 }
 
@@ -452,7 +450,8 @@ export function CommandPalette({
         href: `/tasks/${task.id}`,
         category: t("common.commandPalette.categoryTask"),
         section: "Recent" as const,
-        searchText: `${task.title} ${formatUserSummaryLine(task.user)}`.toLowerCase(),
+        searchText:
+          `${task.title} ${formatUserSummaryLine(task.user)}`.toLowerCase(),
         score: 0,
         kind: "task" as const
       })),
@@ -465,7 +464,8 @@ export function CommandPalette({
         href: `/projects/${project.id}`,
         category: t("common.commandPalette.categoryProject"),
         section: "Recent" as const,
-        searchText: `${project.title} ${project.goalTitle ?? ""} ${formatUserSummaryLine(project.user)}`.toLowerCase(),
+        searchText:
+          `${project.title} ${project.goalTitle ?? ""} ${formatUserSummaryLine(project.user)}`.toLowerCase(),
         score: 0,
         kind: "project" as const
       })),
@@ -478,7 +478,8 @@ export function CommandPalette({
         href: `/goals/${goal.id}`,
         category: t("common.commandPalette.categoryGoal"),
         section: "Recent" as const,
-        searchText: `${goal.title} ${formatUserSummaryLine(goal.user)}`.toLowerCase(),
+        searchText:
+          `${goal.title} ${formatUserSummaryLine(goal.user)}`.toLowerCase(),
         score: 0,
         kind: "goal" as const
       })),
@@ -494,7 +495,8 @@ export function CommandPalette({
         href: `/habits?focus=${habit.id}`,
         category: t("common.routeLabels.habits"),
         section: "Recent" as const,
-        searchText: `${habit.title} ${habit.frequency} ${formatUserSummaryLine(habit.user)}`.toLowerCase(),
+        searchText:
+          `${habit.title} ${habit.frequency} ${formatUserSummaryLine(habit.user)}`.toLowerCase(),
         score: 0,
         kind: "habit" as const
       }))
@@ -551,15 +553,25 @@ export function CommandPalette({
           }
 
           const entity = candidate.entity as Record<string, unknown>;
-          const href = buildPowerBarHref(candidate.entityType, candidate.id, entity);
+          const href = buildPowerBarHref(
+            candidate.entityType,
+            candidate.id,
+            entity
+          );
           if (!href) {
             continue;
           }
 
           const title = inferPowerBarTitle(candidate.entityType, entity);
           const detail = inferPowerBarDetail(candidate.entityType, entity);
-          const category = powerBarEntityTypeLabel(candidate.entityType, entity);
-          const searchText = buildPowerBarSearchText(candidate.entityType, entity);
+          const category = powerBarEntityTypeLabel(
+            candidate.entityType,
+            entity
+          );
+          const searchText = buildPowerBarSearchText(
+            candidate.entityType,
+            entity
+          );
           const kind =
             powerBarEntityTypeToKind(candidate.entityType, entity) ?? undefined;
           const score = scorePowerBarMatch(deferredQuery, title, searchText);
@@ -673,9 +685,10 @@ export function CommandPalette({
     selectedUserIds.length === 0
       ? "All humans and bots"
       : selectedUsers.length === 1
-        ? selectedUsers[0]?.displayName ?? "1 selected owner"
+        ? (selectedUsers[0]?.displayName ?? "1 selected owner")
         : `${selectedUsers.length || selectedUserIds.length} selected owners`;
-  const isSearching = normalizedQuery.length > 0 && entitySearchQuery.isFetching;
+  const isSearching =
+    normalizedQuery.length > 0 && entitySearchQuery.isFetching;
 
   const handleSelect = (item: PowerBarItem) => {
     onOpenChange(false);
@@ -770,7 +783,8 @@ export function CommandPalette({
             ) : (
               <div className="grid gap-2">
                 {visibleItems.map((item, index) => {
-                  const previousSection = visibleItems[index - 1]?.section ?? null;
+                  const previousSection =
+                    visibleItems[index - 1]?.section ?? null;
                   const showSectionLabel = previousSection !== item.section;
 
                   return (

@@ -6,10 +6,14 @@ import {
   buildKnowledgeGraphHopLevels,
   buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSeedPositions,
+  buildKnowledgeGraphSigmaOverviewRatio,
   reduceKnowledgeGraphSigmaEdgeAttributes,
   reduceKnowledgeGraphSigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
-import { createGraphFromData } from "@/components/knowledge-graph/knowledge-graph-renderer-model";
+import {
+  createGraphFromData,
+  getFallbackOverviewCamera
+} from "@/components/knowledge-graph/knowledge-graph-renderer-model";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
 
 const baseNode: KnowledgeGraphNode = {
@@ -162,6 +166,7 @@ describe("KnowledgeGraphForceView reducers", () => {
   });
 
   it("preserves sigma edge metadata while styling focused relationships", () => {
+    document.body.style.setProperty("--info", "#0369a1");
     const reduced = reduceKnowledgeGraphSigmaEdgeAttributes({
       focusNodeId: baseNode.id,
       detailNodeIds: new Set([baseNode.id, "project:project-1"]),
@@ -204,12 +209,14 @@ describe("KnowledgeGraphForceView reducers", () => {
 
     expect(reduced.label).toBe("Supports goal");
     expect(reduced.hidden).toBe(false);
-    expect(reduced.color).toBe("rgba(125, 211, 252, 0.24)");
+    expect(reduced.color).toBe("rgba(3, 105, 161, 0.24)");
     expect(reduced.size).toBeCloseTo(2.36);
     expect(reduced.zIndex).toBe(2);
+    document.body.style.removeProperty("--info");
   });
 
   it("uses softer family-colored edges and light hover emphasis outside direct focus", () => {
+    document.body.style.setProperty("--info", "#0369a1");
     const reduced = reduceKnowledgeGraphSigmaEdgeAttributes({
       focusNodeId: null,
       detailNodeIds: new Set(),
@@ -251,9 +258,10 @@ describe("KnowledgeGraphForceView reducers", () => {
       }
     });
 
-    expect(reduced.color).toBe("rgba(125, 211, 252, 0.14)");
+    expect(reduced.color).toBe("rgba(3, 105, 161, 0.14)");
     expect(reduced.size).toBeCloseTo(2.16);
     expect(reduced.zIndex).toBe(1);
+    document.body.style.removeProperty("--info");
   });
 
   it("starts the initial overview camera at the graph origin", () => {
@@ -268,6 +276,19 @@ describe("KnowledgeGraphForceView reducers", () => {
     expect(overview.x).toBe(0);
     expect(overview.y).toBe(0);
     expect(overview.ratio).toBeGreaterThan(1);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(overview.ratio)).toBe(0.58);
+  });
+
+  it("bounds Sigma overview framing so the graph is visible without clipping extremes", () => {
+    expect(buildKnowledgeGraphSigmaOverviewRatio(0.72)).toBe(0.58);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(2.8)).toBeCloseTo(0.672);
+    expect(buildKnowledgeGraphSigmaOverviewRatio(8)).toBe(0.78);
+  });
+
+  it("fits the fallback renderer to the available viewport", () => {
+    const camera = getFallbackOverviewCamera();
+
+    expect(camera).toMatchObject({ x: 0, y: 0, ratio: 1 });
   });
 
   it("maps graph positions into sigma framedGraph coordinates instead of raw graph coordinates", () => {
@@ -284,6 +305,8 @@ describe("KnowledgeGraphForceView reducers", () => {
   });
 
   it("dims focused-network edges as they get farther from the focused node", () => {
+    document.body.style.setProperty("--info", "#0369a1");
+    document.body.style.setProperty("--secondary", "#0f8b6d");
     const firstRingEdge = reduceKnowledgeGraphSigmaEdgeAttributes({
       focusNodeId: baseNode.id,
       detailNodeIds: new Set([baseNode.id, "project:project-1"]),
@@ -372,8 +395,10 @@ describe("KnowledgeGraphForceView reducers", () => {
       }
     });
 
-    expect(firstRingEdge.color).toBe("rgba(125, 211, 252, 0.05)");
-    expect(farEdge.color).toBe("rgba(45, 212, 191, 0.016)");
+    expect(firstRingEdge.color).toBe("rgba(3, 105, 161, 0.05)");
+    expect(farEdge.color).toBe("rgba(15, 139, 109, 0.016)");
+    document.body.style.removeProperty("--info");
+    document.body.style.removeProperty("--secondary");
   });
 
   it("builds deterministic first-ring and second-ring neighborhoods for focus mode", () => {

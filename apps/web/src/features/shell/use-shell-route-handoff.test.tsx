@@ -1,7 +1,7 @@
-import { act, renderHook } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { Provider } from "react-redux";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { NavigationType, type Location } from "react-router-dom";
 import { createAppStore } from "@/store/store";
 import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
@@ -25,29 +25,19 @@ function createWrapper() {
 }
 
 describe("useShellRouteHandoff", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("shows the clicked route loading surface before a lazy outlet resolves", () => {
-    vi.useFakeTimers();
+  it("shows the router outlet immediately without an artificial reveal delay", () => {
     const firstLocation = buildLocation("/overview");
     const secondLocation = buildLocation("/sports");
     const wrapper = createWrapper();
     const overviewOutlet = <div>Overview route</div>;
     const sportsOutlet = <div>Sports route</div>;
-    const sportsLoading = <div>Opening Sports</div>;
 
     const { result, rerender } = renderHook(
       (props: {
         routePathKey: string;
         routerLocation: Location;
         outlet: ReactNode;
-        externalFetching: number;
-        routeReady: boolean;
-        destinationLoadingNode: ReactNode;
         optimisticLocation: Location | null;
-        optimisticRoutePathKey: string | null;
       }) =>
         useShellRouteHandoff({
           ...props,
@@ -61,11 +51,7 @@ describe("useShellRouteHandoff", () => {
           routePathKey: "/overview",
           routerLocation: firstLocation,
           outlet: overviewOutlet,
-          externalFetching: 0,
-          routeReady: true,
-          destinationLoadingNode: <div>Opening Overview</div>,
-          optimisticLocation: null,
-          optimisticRoutePathKey: null
+          optimisticLocation: null
         },
         wrapper
       }
@@ -74,43 +60,21 @@ describe("useShellRouteHandoff", () => {
     rerender({
       routePathKey: "/sports",
       routerLocation: secondLocation,
-      outlet: overviewOutlet,
-      externalFetching: 1,
-      routeReady: false,
-      destinationLoadingNode: sportsLoading,
-      optimisticLocation: null,
-      optimisticRoutePathKey: null
+      outlet: sportsOutlet,
+      optimisticLocation: null
     });
 
     expect(result.current.displayedRoute.key).toBe("/sports");
-    expect(result.current.displayedRoute.node).toBe(sportsLoading);
+    expect(result.current.displayedRoute.node).toBe(sportsOutlet);
     expect(result.current.pendingRoute).toBeNull();
     expect(result.current.visibleLocation.pathname).toBe("/sports");
-
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-
-    rerender({
-      routePathKey: "/sports",
-      routerLocation: secondLocation,
-      outlet: sportsOutlet,
-      externalFetching: 0,
-      routeReady: true,
-      destinationLoadingNode: sportsLoading,
-      optimisticLocation: null,
-      optimisticRoutePathKey: null
-    });
-
-    expect(result.current.displayedRoute.node).toBe(sportsOutlet);
   });
 
-  it("uses an optimistic nav destination before router state catches up", () => {
+  it("updates shell navigation optimistically without replacing visible content", () => {
     const overviewLocation = buildLocation("/overview");
     const sportsLocation = buildLocation("/sports");
     const wrapper = createWrapper();
     const overviewOutlet = <div>Overview route</div>;
-    const sportsLoading = <div>Opening Sports</div>;
 
     const { result } = renderHook(
       () =>
@@ -122,17 +86,16 @@ describe("useShellRouteHandoff", () => {
             location: overviewLocation,
             navigationType: NavigationType.Push
           },
-          externalFetching: 0,
-          routeReady: true,
-          destinationLoadingNode: sportsLoading,
-          optimisticLocation: sportsLocation,
-          optimisticRoutePathKey: "/sports"
+          optimisticLocation: sportsLocation
         }),
       { wrapper }
     );
 
-    expect(result.current.displayedRoute.key).toBe("/sports");
-    expect(result.current.displayedRoute.node).toBe(sportsLoading);
+    expect(result.current.displayedRoute.key).toBe("/overview");
+    expect(result.current.displayedRoute.node).toBe(overviewOutlet);
+    expect(result.current.displayedLocationContext?.location.pathname).toBe(
+      "/overview"
+    );
     expect(result.current.visibleLocation.pathname).toBe("/sports");
   });
 });

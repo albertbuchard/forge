@@ -140,7 +140,7 @@ export function DailyRunway({
                         />
                       )}
                       {task.time.activeRunCount > 0 ? (
-                        <Badge className="border-[color-mix(in_srgb,#10b981_24%,transparent)] bg-[color-mix(in_srgb,#10b981_16%,var(--ui-surface-1))] text-[color-mix(in_srgb,#10b981_80%,var(--ui-ink-strong)_20%)]">
+                        <Badge className="border-[color-mix(in_srgb,var(--success)_24%,transparent)] bg-[color-mix(in_srgb,var(--success)_16%,var(--ui-surface-1))] text-[color-mix(in_srgb,var(--success)_80%,var(--ui-ink-strong)_20%)]">
                           Live
                         </Badge>
                       ) : null}

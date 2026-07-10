@@ -17,14 +17,18 @@ export function UserSelectField({
 }) {
   return (
     <label className="grid gap-2">
-      <span className="text-sm font-medium text-white">{label}</span>
+      <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+        {label}
+      </span>
       {help ? (
-        <span className="text-xs leading-5 text-white/52">{help}</span>
+        <span className="text-xs leading-5 text-[var(--ui-ink-soft)]">
+          {help}
+        </span>
       ) : null}
       <select
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || null)}
-        className="min-h-10 rounded-[var(--radius-control)] border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.3)]"
+        className="min-h-10 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-strong)_70%)]"
       >
         <option value="">{defaultLabel}</option>
         {users.map((user) => (

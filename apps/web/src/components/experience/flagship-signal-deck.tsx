@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -31,6 +32,8 @@ export function FlagshipSignalDeck({
   className?: string;
   compact?: boolean;
 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
     <section className={cn("min-w-0", className)}>
       <div className="min-w-0">
@@ -55,7 +58,7 @@ export function FlagshipSignalDeck({
       </div>
 
       <div className="mt-4 flex min-w-0 flex-col divide-y divide-[var(--ui-border-subtle)] border-y border-[var(--ui-border-subtle)] lg:flex-row lg:divide-x lg:divide-y-0">
-        {items.map((item) => {
+        {items.map((item, index) => {
           const cardClassName = cn(
             "group flex min-w-0 flex-1 flex-col px-3 transition",
             compact ? "py-3" : "py-4",
@@ -103,14 +106,26 @@ export function FlagshipSignalDeck({
             </>
           );
 
-          return item.href ? (
-            <Link key={item.id} to={item.href} className={cardClassName}>
-              {body}
-            </Link>
-          ) : (
-            <div key={item.id} className={cardClassName}>
-              {body}
-            </div>
+          return (
+            <motion.div
+              key={item.id}
+              className="min-w-0 flex-1"
+              initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: reduceMotion ? 0 : 0.22,
+                delay: reduceMotion ? 0 : 0.04 * index,
+                ease: "easeOut"
+              }}
+            >
+              {item.href ? (
+                <Link to={item.href} className={`${cardClassName} h-full`}>
+                  {body}
+                </Link>
+              ) : (
+                <div className={`${cardClassName} h-full`}>{body}</div>
+              )}
+            </motion.div>
           );
         })}
       </div>

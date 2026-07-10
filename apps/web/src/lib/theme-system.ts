@@ -34,6 +34,9 @@ export const forgeCustomThemeSchema = z.object({
 export type ForgeThemePreference = z.infer<typeof forgeThemePreferenceSchema>;
 export type ForgeCustomTheme = z.infer<typeof forgeCustomThemeSchema>;
 
+export const FORGE_THEME_BOOTSTRAP_STORAGE_KEY = "forge:theme-bootstrap:v1";
+export const FORGE_THEME_CHANGE_EVENT = "forge:theme-change";
+
 type ThemeSpec = {
   label: string;
   description: string;
@@ -85,7 +88,8 @@ export const forgeThemeCatalog: Record<
 > = {
   obsidian: {
     label: "Obsidian",
-    description: "Deep indigo with cool neon edges. This is the current default.",
+    description:
+      "Deep indigo with cool neon edges. This is the current default.",
     mode: "dark",
     preview: {
       label: "Obsidian",
@@ -266,15 +270,55 @@ function hexToRgb(value: string) {
   };
 }
 
-function rgbToHex({
-  r,
-  g,
-  b
-}: {
-  r: number;
-  g: number;
-  b: number;
-}) {
+function relativeLuminance(value: string) {
+  const { r, g, b } = hexToRgb(value);
+  const channels = [r, g, b].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+
+export function getForgeCustomThemeMode(
+  theme: ForgeCustomTheme
+): "dark" | "light" {
+  const surfaceLuminance =
+    relativeLuminance(theme.canvas) * 0.55 +
+    relativeLuminance(theme.panel) * 0.3 +
+    relativeLuminance(theme.panelHigh) * 0.15;
+  return surfaceLuminance >= 0.48 ? "light" : "dark";
+}
+
+export function resolveForgeThemeToken(token: string, fallback: string) {
+  if (typeof document === "undefined") {
+    return fallback;
+  }
+  const bodyValue = getComputedStyle(document.body)
+    .getPropertyValue(token)
+    .trim();
+  if (bodyValue) {
+    return bodyValue;
+  }
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(token).trim() ||
+    fallback
+  );
+}
+
+export function getForgeThemeDocumentKey() {
+  if (typeof document === "undefined") {
+    return "server";
+  }
+  return [
+    document.body.className,
+    document.documentElement.dataset.forgeTheme ?? "",
+    document.documentElement.getAttribute("style") ?? ""
+  ].join("|");
+}
+
+function rgbToHex({ r, g, b }: { r: number; g: number; b: number }) {
   return `#${[r, g, b]
     .map((channel) =>
       Math.max(0, Math.min(255, Math.round(channel)))
@@ -336,7 +380,10 @@ export function buildForgeThemeVariables(theme: ForgeCustomTheme) {
     "--surface-panel": theme.panel,
     "--surface-high": theme.panelHigh,
     "--surface-glass": alpha(theme.canvas, 0.82),
-    "--surface-psyche": alpha(mixHex(theme.canvas, theme.secondary, 0.12), 0.94),
+    "--surface-psyche": alpha(
+      mixHex(theme.canvas, theme.secondary, 0.12),
+      0.94
+    ),
     "--surface-psyche-high": alpha(
       mixHex(theme.panelHigh, theme.secondary, 0.1),
       0.96
@@ -377,6 +424,41 @@ export function applyForgeThemeToDocument(
   const resolved = resolveForgeThemePreference(preference, prefersDark);
   const body = document.body;
   const root = document.documentElement;
+  const resolvedTheme =
+    resolved === "custom"
+      ? (customTheme ?? defaultCustomTheme)
+      : forgeThemeCatalog[resolved].preview;
+  const resolvedMode =
+    resolved === "custom"
+      ? getForgeCustomThemeMode(resolvedTheme)
+      : forgeThemeCatalog[resolved].mode;
+
+  root.style.colorScheme = resolvedMode;
+  root.style.setProperty("--forge-boot-canvas", resolvedTheme.canvas);
+  root.style.setProperty("--forge-boot-panel", resolvedTheme.panel);
+  root.style.setProperty("--forge-boot-panel-high", resolvedTheme.panelHigh);
+  root.style.setProperty("--forge-boot-panel-low", resolvedTheme.panelLow);
+  root.style.setProperty("--forge-boot-ink", resolvedTheme.ink);
+  root.style.setProperty("--forge-boot-primary", resolvedTheme.primary);
+  root.style.setProperty("--forge-boot-secondary", resolvedTheme.secondary);
+  root.dataset.forgeBootTheme = resolved;
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        FORGE_THEME_BOOTSTRAP_STORAGE_KEY,
+        JSON.stringify({
+          version: 1,
+          preference,
+          resolved,
+          mode: resolvedMode,
+          theme: resolvedTheme
+        })
+      );
+    } catch {
+      // Theme persistence is a paint optimization; runtime theming still works.
+    }
+  }
 
   body.classList.remove(
     "theme-forge-dark",
@@ -392,23 +474,27 @@ export function applyForgeThemeToDocument(
   );
 
   if (resolved === "custom") {
-    const theme = customTheme ?? defaultCustomTheme;
-    const variables = buildForgeThemeVariables(theme);
+    const variables = buildForgeThemeVariables(resolvedTheme);
     body.classList.add("theme-forge-custom");
-    body.classList.add("theme-forge-dark");
+    body.classList.add(
+      resolvedMode === "light" ? "theme-forge-light" : "theme-forge-dark"
+    );
     for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
     }
-    root.dataset.forgeTheme = theme.label;
-    return;
+    root.dataset.forgeTheme = resolvedTheme.label;
+  } else {
+    for (const name of CUSTOM_THEME_STORAGE_KEYS) {
+      root.style.removeProperty(name);
+    }
+    delete root.dataset.forgeTheme;
+    body.classList.add(
+      forgeThemeCatalog[resolved].mode === "light"
+        ? "theme-forge-light"
+        : "theme-forge-dark"
+    );
+    body.classList.add(`theme-forge-${resolved}`);
   }
 
-  for (const name of CUSTOM_THEME_STORAGE_KEYS) {
-    root.style.removeProperty(name);
-  }
-  delete root.dataset.forgeTheme;
-  body.classList.add(
-    forgeThemeCatalog[resolved].mode === "light" ? "theme-forge-light" : "theme-forge-dark"
-  );
-  body.classList.add(`theme-forge-${resolved}`);
+  window.dispatchEvent(new Event(FORGE_THEME_CHANGE_EVENT));
 }

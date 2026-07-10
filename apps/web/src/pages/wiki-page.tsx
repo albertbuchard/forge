@@ -259,7 +259,7 @@ function WikiSpacePickerDialog({
                       {space.description || `/${space.slug}`}
                     </span>
                     {shared ? (
-                      <span className="mt-2 inline-flex rounded-full bg-amber-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-950">
+                      <span className="mt-2 inline-flex rounded-full bg-[var(--ui-warning-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--warning)]">
                         Recovered pages
                       </span>
                     ) : null}
@@ -737,7 +737,7 @@ export function WikiPage() {
                   variant="secondary"
                   size="sm"
                   className={cn(
-                    "min-h-[2.9rem] border border-rose-400/18 bg-rose-500/10 text-rose-100 hover:bg-rose-500/18",
+                    "min-h-[2.9rem] border border-[color-mix(in_srgb,var(--danger)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-danger-soft)] text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_20%,var(--ui-surface-1)_80%)]",
                     !canDeletePage && "opacity-60"
                   )}
                   onClick={handleDeletePage}
@@ -769,7 +769,7 @@ export function WikiPage() {
             </div>
 
             {showSharedSpaceRecoveryHint && sharedSpace ? (
-              <div className="mt-3 flex flex-col gap-3 rounded-[22px] border border-amber-300/20 bg-amber-300/[0.08] px-4 py-3 text-[13px] leading-6 text-amber-50 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-3 flex flex-col gap-3 rounded-[22px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-[13px] leading-6 text-[var(--ui-ink-medium)] sm:flex-row sm:items-center sm:justify-between">
                 <span>
                   You are viewing the personal starter wiki. The recovered
                   people, story, and conversation pages are in{" "}
@@ -777,7 +777,7 @@ export function WikiPage() {
                 </span>
                 <button
                   type="button"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-2xl bg-amber-200 px-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-stone-950 transition hover:bg-amber-100"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--warning)] transition hover:bg-[color-mix(in_srgb,var(--warning)_20%,var(--ui-surface-1)_80%)]"
                   onClick={() => {
                     navigate({
                       pathname: "/wiki",
@@ -815,7 +815,7 @@ export function WikiPage() {
               ) : null}
               <div className="wiki-reading-copy wiki-reading-flow mx-auto max-w-[76rem]">
                 {deletePageMutation.isError ? (
-                  <div className="mb-4 rounded-[18px] border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                  <div className="mb-4 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
                     {deletePageMutation.error instanceof Error
                       ? deletePageMutation.error.message
                       : "Forge could not delete this KarpaWiki page."}

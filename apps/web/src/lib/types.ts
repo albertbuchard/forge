@@ -2117,6 +2117,70 @@ export interface WorkoutSessionRecord {
   updatedAt: string;
 }
 
+export type WorkoutSessionSummaryRecord = Omit<
+  WorkoutSessionRecord,
+  "activity" | "details" | "annotations" | "provenance" | "derived"
+> & {
+  detailLevel?: "summary";
+};
+
+export interface SportComparisonEntry {
+  workoutType: string;
+  workoutTypeLabel: string;
+  activityFamily: string;
+  activityFamilyLabel: string;
+  sessionCount: number;
+  sessionShare: number;
+  activeDayCount: number;
+  totalDurationSeconds: number;
+  durationShare: number;
+  averageSessionMinutes: number;
+  totalEnergyKcal: number | null;
+  energyShare: number;
+  energyCoverage: number;
+  energyKcalPerHour: number | null;
+  distanceMeters: number | null;
+  distanceShare: number;
+  distanceCoverage: number;
+  averageSpeedKph: number | null;
+  totalTrainingLoad: number | null;
+  trainingLoadShare: number;
+  trainingLoadCoverage: number;
+  trainingLoadPerHour: number | null;
+  averageHeartRateCoverage: number | null;
+  firstStartedAt: string;
+  lastStartedAt: string;
+}
+
+export interface SportComparisonPeriod {
+  key: "all" | "365d" | "90d";
+  label: string;
+  requestedDays: number | null;
+  startedAt: string | null;
+  endedAt: string;
+  totals: {
+    sessionCount: number;
+    sportCount: number;
+    activeDayCount: number;
+    totalDurationSeconds: number;
+    totalEnergyKcal: number | null;
+    energyCoverage: number;
+    totalDistanceMeters: number | null;
+    distanceCoverage: number;
+    totalTrainingLoad: number | null;
+    trainingLoadCoverage: number;
+    oldestStartedAt: string | null;
+    newestStartedAt: string | null;
+  };
+  sports: SportComparisonEntry[];
+}
+
+export interface SportComparisonData {
+  modelVersion: "forge-sport-comparison-v1";
+  generatedAt: string;
+  periods: SportComparisonPeriod[];
+}
+
 export interface SleepViewData {
   summary: {
     totalSleepSeconds: number;
@@ -2164,6 +2228,7 @@ export interface SleepViewData {
 export interface FitnessViewData {
   summary: {
     workoutCount: number;
+    storedWorkoutCount?: number;
     weeklyVolumeSeconds: number;
     exerciseMinutes: number;
     energyBurnedKcal: number;
@@ -2206,13 +2271,14 @@ export interface FitnessViewData {
     totalMinutes: number;
     energyKcal: number;
   }>;
+  sportComparison?: SportComparisonData;
   vitalsTrend: Array<{
     dateKey: string;
     restingHeartRate: number | null;
     vo2Max: number | null;
   }>;
-  analysisSessions: WorkoutSessionRecord[];
-  sessions: WorkoutSessionRecord[];
+  analysisSessions: Array<WorkoutSessionRecord | WorkoutSessionSummaryRecord>;
+  sessions: Array<WorkoutSessionRecord | WorkoutSessionSummaryRecord>;
 }
 
 export type TrainingLoadZoneKey =

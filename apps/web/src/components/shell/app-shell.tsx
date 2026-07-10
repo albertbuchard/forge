@@ -37,6 +37,7 @@ import {
   GamificationCelebrationLayer,
   GamificationMiniHud
 } from "@/components/gamification/gamification-widgets";
+import { GamificationThemeProvider } from "@/components/gamification/use-gamification-theme";
 import { GamificationAssetSetupDialog } from "@/components/gamification/gamification-asset-setup-dialog";
 import { RouteTransitionFrame } from "@/components/experience/route-transition-frame";
 import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledge-graph-focus-drawer";
@@ -98,12 +99,13 @@ import { I18nProvider, useI18n } from "@/lib/i18n";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
 import { getSurfaceHelp } from "@/lib/surface-help";
 import { cn } from "@/lib/utils";
-import { isShellRouteReady } from "@/features/shell/route-readiness";
+import { prefetchRouteModule } from "@/routes/route-prefetch";
 import {
   selectPendingRtkRequestCount,
   selectSelectedUserIds
 } from "@/features/shell/selectors";
 import { useShellBackgroundActivity } from "@/features/shell/use-shell-background-activity";
+import { useShellCollapseController } from "@/features/shell/use-shell-collapse-controller";
 import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
 import { useShellSessionTelemetry } from "@/features/shell/use-shell-session-telemetry";
 import { useShellTaskHeartbeat } from "@/features/shell/use-shell-task-heartbeat";
@@ -143,11 +145,6 @@ import {
   setSelectedUserIds as setSelectedUserIdsAction
 } from "@/store/slices/shell-slice";
 import { useAppDispatch, useAppSelector } from "@/store/typed-hooks";
-import { RouteViewLoadingSurface } from "@/routes/route-view";
-import {
-  ROUTE_VIEW_CATALOG,
-  resolveRouteViewIdFromPathname
-} from "@/routes/route-view-catalog";
 
 const LazyActionBar = lazy(() =>
   import("@/components/experience/action-bar").then((module) => ({
@@ -454,16 +451,47 @@ function ShellFrame({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useShellCollapseController(shellRootRef);
   const shellRootStyle = useMemo(
     () =>
       ({
-        "--forge-shell-desktop-header-padding-top": "10px"
+        "--forge-shell-collapse": "0",
+        "--forge-shell-desktop-header-padding-top": "18px",
+        "--forge-shell-desktop-header-padding-bottom": "15px",
+        "--forge-shell-desktop-title-size": "1.42rem",
+        "--forge-shell-desktop-primary-translate-y": "0px",
+        "--forge-shell-desktop-primary-scale": "1",
+        "--forge-shell-desktop-secondary-opacity": "1",
+        "--forge-shell-desktop-secondary-max-height": "176px",
+        "--forge-shell-desktop-secondary-spacing": "14px",
+        "--forge-shell-desktop-secondary-translate-y": "0px",
+        "--forge-shell-mobile-header-padding-top": "14px",
+        "--forge-shell-mobile-header-padding-bottom": "12px",
+        "--forge-shell-mobile-expanded-header-height": "150px",
+        "--forge-shell-mobile-title-size": "1.2rem",
+        "--forge-shell-mobile-primary-translate-y": "0px",
+        "--forge-shell-mobile-primary-scale": "1",
+        "--forge-shell-mobile-copy-opacity": "1",
+        "--forge-shell-mobile-copy-max-height": "320px",
+        "--forge-shell-mobile-copy-spacing": "8px",
+        "--forge-shell-mobile-copy-translate-y": "0px",
+        "--forge-shell-hero-padding-top": "20px",
+        "--forge-shell-hero-padding-bottom": "20px",
+        "--forge-shell-hero-title-translate-y": "0px",
+        "--forge-shell-hero-title-scale": "1",
+        "--forge-shell-hero-description-opacity": "1",
+        "--forge-shell-hero-description-translate-y": "0px"
       }) as CSSProperties,
     []
   );
   const desktopLayout = useDesktopShellLayout();
   return (
-    <div ref={shellRootRef} className="min-h-screen" style={shellRootStyle}>
+    <div
+      ref={shellRootRef}
+      className="min-h-screen"
+      data-shell-collapse-state="expanded"
+      style={shellRootStyle}
+    >
       <Suspense fallback={null}>
         {actionBarOpen ? (
           <LazyActionBar
@@ -590,17 +618,35 @@ function ShellFrame({
           <div className="min-h-screen">
             <TaskTimerRailProvider>
               <header
-                className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-6 py-2.5"
+                data-shell-collapse-header="desktop"
+                className="sticky top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-6"
                 style={{
                   background:
-                    "linear-gradient(180deg, var(--surface-panel), var(--surface-low))"
+                    "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 98%, var(--primary) 2%), var(--surface-low))",
+                  paddingTop: "var(--forge-shell-desktop-header-padding-top)",
+                  paddingBottom:
+                    "var(--forge-shell-desktop-header-padding-bottom)"
                 }}
               >
                 {/* ── Title row: page title + work bar + action buttons — all same height ── */}
-                <div className="flex items-center justify-between gap-4">
+                <div
+                  className="flex items-center justify-between gap-4"
+                  style={{
+                    transform:
+                      "translateY(var(--forge-shell-desktop-primary-translate-y)) scale(var(--forge-shell-desktop-primary-scale))",
+                    transformOrigin: "top center"
+                  }}
+                >
                   <div className="flex min-w-0 flex-1 items-center gap-5">
-                    <div className="flex shrink-0 items-center gap-2 font-display text-[1.2rem] leading-none text-[var(--ui-ink-strong)]">
-                      <span>{getRouteLabel(active, t)}</span>
+                    <div
+                      className="flex shrink-0 items-center gap-2 font-display leading-none text-[var(--ui-ink-strong)]"
+                      style={{
+                        fontSize: "var(--forge-shell-desktop-title-size)"
+                      }}
+                    >
+                      <span data-shell-route-title>
+                        {getRouteLabel(active, t)}
+                      </span>
                       <InfoTooltip
                         className="font-sans"
                         label={`Explain ${getRouteLabel(active, t)}`}
@@ -677,7 +723,20 @@ function ShellFrame({
                   onComplete={onCompleteRun}
                 />
 
-                <div className="mt-2 flex items-center justify-between gap-4 border-t border-[var(--ui-border-subtle)] pt-2">
+                <div
+                  data-shell-collapsible
+                  data-shell-desktop-secondary
+                  className="flex items-center justify-between gap-4 overflow-hidden border-t border-[var(--ui-border-subtle)]"
+                  style={{
+                    opacity: "var(--forge-shell-desktop-secondary-opacity)",
+                    maxHeight:
+                      "var(--forge-shell-desktop-secondary-max-height)",
+                    marginTop: "var(--forge-shell-desktop-secondary-spacing)",
+                    paddingTop: "var(--forge-shell-desktop-secondary-spacing)",
+                    transform:
+                      "translateY(var(--forge-shell-desktop-secondary-translate-y))"
+                  }}
+                >
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     {railLinks.map((link) => (
                       <Link
@@ -762,104 +821,143 @@ function ShellFrame({
         <div className="min-h-[100dvh] overflow-x-clip">
           <TaskTimerRailProvider>
             {!immersiveMobileSurface ? (
-              <header
-                className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-4 py-2"
-                style={{
-                  background:
-                    "linear-gradient(180deg, var(--surface-panel), var(--surface-low))"
-                }}
-              >
-                <div className="grid gap-2">
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                      <div className="min-w-0 truncate font-display text-[1.05rem] text-[var(--ui-ink-strong)]">
-                        {getRouteLabel(active, t)}
+              <>
+                <header
+                  data-shell-collapse-header="mobile"
+                  className="fixed inset-x-0 top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-4"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 98%, var(--primary) 2%), var(--surface-low))",
+                    paddingTop: "var(--forge-shell-mobile-header-padding-top)",
+                    paddingBottom:
+                      "var(--forge-shell-mobile-header-padding-bottom)"
+                  }}
+                >
+                  <div
+                    style={{
+                      transform:
+                        "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
+                      transformOrigin: "top center"
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <div
+                          data-shell-route-title
+                          className="min-w-0 truncate font-display text-[var(--ui-ink-strong)]"
+                          style={{
+                            fontSize: "var(--forge-shell-mobile-title-size)"
+                          }}
+                        >
+                          {getRouteLabel(active, t)}
+                        </div>
+                        <InfoTooltip
+                          className="shrink-0"
+                          label={`Explain ${getRouteLabel(active, t)}`}
+                          title={activeHelp.title}
+                          content={
+                            <span className="grid gap-2">
+                              <span>{activeHelp.purpose}</span>
+                              <span>{activeHelp.primaryAction}</span>
+                              {activeHelp.metricNote ? (
+                                <span className="text-[var(--ui-ink-soft)]">
+                                  {activeHelp.metricNote}
+                                </span>
+                              ) : null}
+                            </span>
+                          }
+                        />
                       </div>
-                      <InfoTooltip
-                        className="shrink-0"
-                        label={`Explain ${getRouteLabel(active, t)}`}
-                        title={activeHelp.title}
-                        content={
-                          <span className="grid gap-2">
-                            <span>{activeHelp.purpose}</span>
-                            <span>{activeHelp.primaryAction}</span>
-                            {activeHelp.metricNote ? (
-                              <span className="text-[var(--ui-ink-soft)]">
-                                {activeHelp.metricNote}
-                              </span>
-                            ) : null}
-                          </span>
-                        }
-                      />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="size-11 rounded-full p-0"
-                        onClick={() => setActionBarOpen(true)}
-                        aria-label={t("common.actionBar.title")}
-                        title={t("common.actionBar.title")}
-                      >
-                        <Search className="size-4" />
-                      </Button>
-                      <div
-                        ref={setMobileCreateTriggerTarget}
-                        className="shrink-0"
-                      />
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="size-11 rounded-full p-0"
+                          onClick={() => setActionBarOpen(true)}
+                          aria-label={t("common.actionBar.title")}
+                          title={t("common.actionBar.title")}
+                        >
+                          <Search className="size-4" />
+                        </Button>
+                        <div
+                          ref={setMobileCreateTriggerTarget}
+                          className="shrink-0"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="min-w-0">
-                    <TaskTimerRailBar
-                      runs={shell.snapshot.activeTaskRuns}
-                      tasks={shell.snapshot.tasks}
-                      generatedAt={shell.snapshot.meta.generatedAt}
-                      timeAccountingMode={settings.execution.timeAccountingMode}
-                      pending={timerPending}
-                      onOpenStartWork={() => onOpenStartWork()}
-                      onPause={onPauseRun}
-                      onFocus={onFocusRun}
-                    />
-                  </div>
-                </div>
 
-                {/* ── Expanded work detail — full width below the title row ── */}
-                <TaskTimerRailPanel
-                  runs={shell.snapshot.activeTaskRuns}
-                  tasks={shell.snapshot.tasks}
-                  generatedAt={shell.snapshot.meta.generatedAt}
-                  timeAccountingMode={settings.execution.timeAccountingMode}
-                  pending={timerPending}
-                  onOpenStartWork={() => onOpenStartWork()}
-                  onFocus={onFocusRun}
-                  onPause={onPauseRun}
-                  onComplete={onCompleteRun}
-                />
-
-                {activityCount > 0 ||
-                hasActiveIngestJobs ||
-                shell.snapshot.users.length > 1 ? (
-                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                    {activityCount > 0 || hasActiveIngestJobs ? (
-                      <AmbientActivityPill
-                        active
-                        label={activityLabel}
-                        onClick={() => setBackgroundActivityOpen(true)}
+                  <div
+                    data-shell-collapsible
+                    data-shell-mobile-copy
+                    className="min-w-0 overflow-hidden"
+                    style={{
+                      opacity: "var(--forge-shell-mobile-copy-opacity)",
+                      maxHeight: "var(--forge-shell-mobile-copy-max-height)",
+                      marginTop: "var(--forge-shell-mobile-copy-spacing)",
+                      transform:
+                        "translateY(var(--forge-shell-mobile-copy-translate-y))"
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5">
+                      <div className="min-w-44 flex-1">
+                        <TaskTimerRailBar
+                          runs={shell.snapshot.activeTaskRuns}
+                          tasks={shell.snapshot.tasks}
+                          generatedAt={shell.snapshot.meta.generatedAt}
+                          timeAccountingMode={
+                            settings.execution.timeAccountingMode
+                          }
+                          pending={timerPending}
+                          onOpenStartWork={() => onOpenStartWork()}
+                          onPause={onPauseRun}
+                          onFocus={onFocusRun}
+                        />
+                      </div>
+                      <GamificationMiniHud
+                        metrics={shell.snapshot.metrics}
+                        className="min-h-[2.125rem] shrink-0 px-1.5 py-0.5 [&>span:last-child]:hidden min-[430px]:[&>span:last-child]:block"
                       />
-                    ) : null}
-                    {shell.snapshot.users.length > 1 ? (
-                      <div className="min-w-0 overflow-x-auto">
+                      {activityCount > 0 || hasActiveIngestJobs ? (
+                        <AmbientActivityPill
+                          active
+                          label={activityLabel}
+                          onClick={() => setBackgroundActivityOpen(true)}
+                        />
+                      ) : null}
+                      {shell.snapshot.users.length > 1 ? (
                         <UserScopeSelector
                           users={shell.snapshot.users}
                           selectedUserIds={shell.selectedUserIds}
                           onChange={shell.setSelectedUserIds}
                           compact
                         />
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
-              </header>
+
+                  {/* ── Expanded work detail — full width below the title row ── */}
+                  <TaskTimerRailPanel
+                    runs={shell.snapshot.activeTaskRuns}
+                    tasks={shell.snapshot.tasks}
+                    generatedAt={shell.snapshot.meta.generatedAt}
+                    timeAccountingMode={settings.execution.timeAccountingMode}
+                    pending={timerPending}
+                    onOpenStartWork={() => onOpenStartWork()}
+                    onFocus={onFocusRun}
+                    onPause={onPauseRun}
+                    onComplete={onCompleteRun}
+                  />
+                </header>
+                <div
+                  aria-hidden="true"
+                  data-shell-mobile-header-spacer
+                  className="shrink-0"
+                  style={{
+                    height: "var(--forge-shell-mobile-expanded-header-height)"
+                  }}
+                />
+              </>
             ) : null}
           </TaskTimerRailProvider>
 
@@ -968,8 +1066,6 @@ export function AppShell() {
   const routerLocation = useLocation();
   const routerLocationContext = useContext(UNSAFE_LocationContext);
   const outlet = useOutlet();
-  const tanstackFetching = useIsFetching();
-  const pendingRtkRequests = useAppSelector(selectPendingRtkRequestCount);
   const selectedUserIds = useAppSelector(selectSelectedUserIds);
   const knowledgeGraphOverlayFocus = useAppSelector(
     (state) => state.shell.knowledgeGraphOverlayFocus
@@ -997,6 +1093,7 @@ export function AppShell() {
     ? buildRoutePathKey(optimisticRouteLocation)
     : null;
   const handleRouteIntent = (to: string) => {
+    void prefetchRouteModule(to);
     const nextLocation = buildRouteIntentLocation(routerLocation, to);
     if (buildRoutePathKey(nextLocation) === routePathKey) {
       setOptimisticRouteLocation(null);
@@ -1027,33 +1124,13 @@ export function AppShell() {
       ),
     [locallySeenCelebrationIds, xpMetricsQuery.data?.metrics.celebrations]
   );
-  const routeReady = isShellRouteReady(routerLocation.pathname, {
-    bootstrapReady: shellBootstrapReady,
-    sleepReady: true
-  });
-  const destinationRouteViewId = resolveRouteViewIdFromPathname(
-    optimisticRouteLocation?.pathname ?? routerLocation.pathname
-  );
-  const destinationLoadingNode = useMemo(
-    () => (
-      <RouteViewLoadingSurface
-        key={optimisticRoutePathKey ?? routePathKey}
-        meta={ROUTE_VIEW_CATALOG[destinationRouteViewId]}
-      />
-    ),
-    [destinationRouteViewId, optimisticRoutePathKey, routePathKey]
-  );
   const { displayedRoute, displayedLocationContext, visibleLocation } =
     useShellRouteHandoff({
       routePathKey,
       routerLocation,
       outlet,
       routerLocationContext,
-      optimisticLocation: optimisticRouteLocation,
-      optimisticRoutePathKey,
-      externalFetching: tanstackFetching + pendingRtkRequests,
-      routeReady,
-      destinationLoadingNode
+      optimisticLocation: optimisticRouteLocation
     });
   const setSelectedUserIds = (userIds: string[]) => {
     dispatch(setSelectedUserIdsAction(userIds));
@@ -1515,175 +1592,179 @@ export function AppShell() {
 
   return (
     <I18nProvider locale={settingsQuery.data.settings.localePreference}>
-      <ShellContext.Provider value={contextValue}>
-        <>
-          <GamificationAssetSetupDialog />
-          <ShellFrame
-            routeLocation={visibleLocation}
-            onRouteIntent={handleRouteIntent}
-            settings={settingsQuery.data.settings}
-            timerPending={
-              focusTaskRunMutationState.isLoading ||
-              releaseTaskRunMutationState.isLoading ||
-              completeTaskRunMutationState.isLoading
-            }
-            startWorkOpen={startWorkOpen}
-            startWorkPending={
-              claimTaskRunMutationState.isLoading ||
-              createAndStartTaskMutation.isPending
-            }
-            startWorkError={startWorkError}
-            startWorkDefaults={startWorkDefaults}
-            onOpenStartWork={(defaults) => {
-              setStartWorkDefaults(defaults ?? {});
-              setStartWorkError(null);
-              setStartWorkOpen(true);
-            }}
-            onCloseStartWork={() => {
-              setStartWorkOpen(false);
-              setStartWorkError(null);
-            }}
-            onStartExistingTask={async (taskId, input) => {
-              try {
-                const operatorName =
-                  settingsQuery.data.settings.profile.operatorName;
-                const started = await startTaskRunWithOverride(taskId, {
-                  actor: operatorName,
-                  timerMode: input.timerMode,
-                  plannedDurationSeconds: input.plannedDurationSeconds,
-                  isCurrent: true,
-                  leaseTtlSeconds: 1800,
-                  note: "",
-                  gitContext: input.gitContext
-                });
-                if (started) {
-                  setStartWorkOpen(false);
-                  setStartWorkError(null);
-                }
-              } catch (error) {
-                setStartWorkError(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not start work."
-                );
+      <GamificationThemeProvider
+        initialTheme={settingsQuery.data.settings.gamificationTheme}
+      >
+        <ShellContext.Provider value={contextValue}>
+          <>
+            <GamificationAssetSetupDialog />
+            <ShellFrame
+              routeLocation={visibleLocation}
+              onRouteIntent={handleRouteIntent}
+              settings={settingsQuery.data.settings}
+              timerPending={
+                focusTaskRunMutationState.isLoading ||
+                releaseTaskRunMutationState.isLoading ||
+                completeTaskRunMutationState.isLoading
               }
-            }}
-            onCreateAndStartTask={async (input) => {
-              try {
-                await createAndStartTaskMutation.mutateAsync(input);
+              startWorkOpen={startWorkOpen}
+              startWorkPending={
+                claimTaskRunMutationState.isLoading ||
+                createAndStartTaskMutation.isPending
+              }
+              startWorkError={startWorkError}
+              startWorkDefaults={startWorkDefaults}
+              onOpenStartWork={(defaults) => {
+                setStartWorkDefaults(defaults ?? {});
+                setStartWorkError(null);
+                setStartWorkOpen(true);
+              }}
+              onCloseStartWork={() => {
                 setStartWorkOpen(false);
                 setStartWorkError(null);
-              } catch (error) {
-                setStartWorkError(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not create and start the task."
+              }}
+              onStartExistingTask={async (taskId, input) => {
+                try {
+                  const operatorName =
+                    settingsQuery.data.settings.profile.operatorName;
+                  const started = await startTaskRunWithOverride(taskId, {
+                    actor: operatorName,
+                    timerMode: input.timerMode,
+                    plannedDurationSeconds: input.plannedDurationSeconds,
+                    isCurrent: true,
+                    leaseTtlSeconds: 1800,
+                    note: "",
+                    gitContext: input.gitContext
+                  });
+                  if (started) {
+                    setStartWorkOpen(false);
+                    setStartWorkError(null);
+                  }
+                } catch (error) {
+                  setStartWorkError(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not start work."
+                  );
+                }
+              }}
+              onCreateAndStartTask={async (input) => {
+                try {
+                  await createAndStartTaskMutation.mutateAsync(input);
+                  setStartWorkOpen(false);
+                  setStartWorkError(null);
+                } catch (error) {
+                  setStartWorkError(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not create and start the task."
+                  );
+                }
+              }}
+              onFocusRun={async (runId) => {
+                await focusTaskRunMutation(runId).unwrap();
+                await refreshLegacySnapshotQueries();
+              }}
+              onPauseRun={async (runId) => {
+                const run = snapshotQuery.data.activeTaskRuns.find(
+                  (entry) => entry.id === runId
                 );
-              }
-            }}
-            onFocusRun={async (runId) => {
-              await focusTaskRunMutation(runId).unwrap();
-              await refreshLegacySnapshotQueries();
-            }}
-            onPauseRun={async (runId) => {
-              const run = snapshotQuery.data.activeTaskRuns.find(
-                (entry) => entry.id === runId
-              );
-              await releaseTaskRunMutation({
-                runId,
-                input: {
-                  actor: run?.actor,
-                  note: run?.note ?? ""
-                }
-              }).unwrap();
-              await refreshLegacySnapshotQueries();
-            }}
-            onCompleteRun={async (runId) => {
-              const run = snapshotQuery.data.activeTaskRuns.find(
-                (entry) => entry.id === runId
-              );
-              await completeTaskRunMutation({
-                runId,
-                input: {
-                  actor: run?.actor,
-                  note: run?.note ?? ""
-                }
-              }).unwrap();
-              await refreshLegacySnapshotQueries();
-            }}
-          >
-            <div className="relative min-w-0">
-              {displayedLocationContext ? (
-                <UNSAFE_LocationContext.Provider
-                  value={displayedLocationContext}
-                >
-                  {displayedRoute.node}
-                </UNSAFE_LocationContext.Provider>
-              ) : (
-                displayedRoute.node
-              )}
-            </div>
-          </ShellFrame>
-          <TaskCompletionWorkLogDialog
-            prompt={taskCompletionPrompt}
-            setPrompt={setTaskCompletionPrompt}
-            onSubmit={(completedTodayWorkSeconds) => {
-              void submitCompletionPrompt(completedTodayWorkSeconds);
-            }}
-          />
-          {knowledgeGraphOverlayFocus?.focusNode ? (
-            <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
-              <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
-                <div className="h-full min-h-0 overflow-hidden">
-                  <KnowledgeGraphFocusDrawer
-                    focus={knowledgeGraphOverlayFocus}
-                    onOpenPage={(node) => {
-                      if (node.href) {
-                        navigate(node.href);
-                      }
-                    }}
-                    onOpenNotes={(node) => {
-                      const href = getKnowledgeGraphNodeNotesHref(node);
-                      if (href) {
-                        navigate(href);
-                      }
-                    }}
-                    onOpenHierarchy={openKnowledgeGraphHierarchy}
-                    onSelectNode={setKnowledgeGraphRouteFocus}
-                    onClose={() => setKnowledgeGraphRouteFocus(null)}
-                  />
+                await releaseTaskRunMutation({
+                  runId,
+                  input: {
+                    actor: run?.actor,
+                    note: run?.note ?? ""
+                  }
+                }).unwrap();
+                await refreshLegacySnapshotQueries();
+              }}
+              onCompleteRun={async (runId) => {
+                const run = snapshotQuery.data.activeTaskRuns.find(
+                  (entry) => entry.id === runId
+                );
+                await completeTaskRunMutation({
+                  runId,
+                  input: {
+                    actor: run?.actor,
+                    note: run?.note ?? ""
+                  }
+                }).unwrap();
+                await refreshLegacySnapshotQueries();
+              }}
+            >
+              <div className="relative min-w-0">
+                {displayedLocationContext ? (
+                  <UNSAFE_LocationContext.Provider
+                    value={displayedLocationContext}
+                  >
+                    {displayedRoute.node}
+                  </UNSAFE_LocationContext.Provider>
+                ) : (
+                  displayedRoute.node
+                )}
+              </div>
+            </ShellFrame>
+            <TaskCompletionWorkLogDialog
+              prompt={taskCompletionPrompt}
+              setPrompt={setTaskCompletionPrompt}
+              onSubmit={(completedTodayWorkSeconds) => {
+                void submitCompletionPrompt(completedTodayWorkSeconds);
+              }}
+            />
+            {knowledgeGraphOverlayFocus?.focusNode ? (
+              <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
+                <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
+                  <div className="h-full min-h-0 overflow-hidden">
+                    <KnowledgeGraphFocusDrawer
+                      focus={knowledgeGraphOverlayFocus}
+                      onOpenPage={(node) => {
+                        if (node.href) {
+                          navigate(node.href);
+                        }
+                      }}
+                      onOpenNotes={(node) => {
+                        const href = getKnowledgeGraphNodeNotesHref(node);
+                        if (href) {
+                          navigate(href);
+                        }
+                      }}
+                      onOpenHierarchy={openKnowledgeGraphHierarchy}
+                      onSelectNode={setKnowledgeGraphRouteFocus}
+                      onClose={() => setKnowledgeGraphRouteFocus(null)}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-          <GamificationCelebrationLayer
-            xpNotice={xpNotice}
-            celebrations={visibleCelebrations}
-            onSeen={(celebrationId) => {
-              if (
-                celebrationSeenMutation.isLoading ||
-                locallySeenCelebrationIds.has(celebrationId)
-              ) {
-                return;
-              }
-              setLocallySeenCelebrationIds((current) => {
-                const next = new Set(current);
-                next.add(celebrationId);
-                return next;
-              });
-              void markCelebrationSeen(celebrationId)
-                .unwrap()
-                .catch(() => {
-                  setLocallySeenCelebrationIds((current) => {
-                    const next = new Set(current);
-                    next.delete(celebrationId);
-                    return next;
-                  });
+            ) : null}
+            <GamificationCelebrationLayer
+              xpNotice={xpNotice}
+              celebrations={visibleCelebrations}
+              onSeen={(celebrationId) => {
+                if (
+                  celebrationSeenMutation.isLoading ||
+                  locallySeenCelebrationIds.has(celebrationId)
+                ) {
+                  return;
+                }
+                setLocallySeenCelebrationIds((current) => {
+                  const next = new Set(current);
+                  next.add(celebrationId);
+                  return next;
                 });
-            }}
-          />
-        </>
-      </ShellContext.Provider>
+                void markCelebrationSeen(celebrationId)
+                  .unwrap()
+                  .catch(() => {
+                    setLocallySeenCelebrationIds((current) => {
+                      const next = new Set(current);
+                      next.delete(celebrationId);
+                      return next;
+                    });
+                  });
+              }}
+            />
+          </>
+        </ShellContext.Provider>
+      </GamificationThemeProvider>
     </I18nProvider>
   );
 }

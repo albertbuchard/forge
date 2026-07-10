@@ -443,7 +443,7 @@ function TaskCardShell({
           {executionSummary.actor ? (
             <Badge
               size="xs"
-              className="shrink-0 bg-cyan-400/12 text-[var(--info)]"
+              className="shrink-0 bg-[var(--ui-info-soft)] text-[var(--info)]"
             >
               <Bot className="mr-1 size-3" />
               {executionSummary.actor}
@@ -502,7 +502,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Stop work on ${task.title}`}
-              className="inline-flex size-8 items-center justify-center rounded-full bg-rose-500/16 text-[var(--danger)] transition hover:bg-rose-500/24"
+              className="inline-flex size-8 items-center justify-center rounded-full bg-[var(--ui-danger-soft)] text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-1)_78%)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -529,7 +529,7 @@ function TaskCardShell({
             <button
               type="button"
               aria-label={`Split ${task.title}`}
-              className="inline-flex items-center gap-1 rounded-full bg-amber-400/12 px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[var(--warning)] transition hover:bg-amber-400/18"
+              className="inline-flex items-center gap-1 rounded-full bg-[var(--ui-warning-soft)] px-2.5 py-1 text-[10px] font-medium tracking-[0.14em] text-[var(--warning)] transition hover:bg-[color-mix(in_srgb,var(--warning)_20%,var(--ui-surface-1)_80%)]"
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -568,7 +568,7 @@ function TaskCardShell({
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--ui-surface-2)]">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(56,189,248,0.96),rgba(125,211,252,0.62))]"
+              className="h-full rounded-full bg-[linear-gradient(90deg,var(--info),color-mix(in_srgb,var(--info)_58%,transparent))]"
               style={{ width: `${stepProgress ?? 0}%` }}
             />
           </div>
@@ -591,7 +591,7 @@ function TaskCardShell({
               href={branchUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-sky-300/18 bg-sky-400/12 px-2.5 py-1 text-[11px] text-[var(--info)] transition hover:bg-sky-400/18"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--info)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-info-soft)] px-2.5 py-1 text-[11px] text-[var(--info)] transition hover:bg-[color-mix(in_srgb,var(--info)_20%,var(--ui-surface-1)_80%)]"
               onClick={stopCardNavigation}
             >
               <GitBranch className="size-3.5 shrink-0" />
@@ -600,7 +600,7 @@ function TaskCardShell({
           ) : (
             <Badge
               size="xs"
-              className="min-w-0 max-w-full bg-sky-400/12 text-[var(--info)]"
+              className="min-w-0 max-w-full bg-[var(--ui-info-soft)] text-[var(--info)]"
             >
               <GitBranch className="mr-1 size-3" />
               <span className="truncate">{branchLabel}</span>
@@ -613,7 +613,7 @@ function TaskCardShell({
               href={pullRequestUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-fuchsia-300/18 bg-fuchsia-400/12 px-2.5 py-1 text-[11px] text-[var(--primary)] transition hover:bg-fuchsia-400/18"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--primary)_22%,var(--ui-border-subtle)_78%)] bg-[var(--ui-accent-soft)] px-2.5 py-1 text-[11px] text-[var(--primary)] transition hover:bg-[var(--ui-accent-soft-hover)]"
               onClick={stopCardNavigation}
             >
               <GitPullRequest className="size-3.5 shrink-0" />
@@ -622,7 +622,7 @@ function TaskCardShell({
           ) : (
             <Badge
               size="xs"
-              className="bg-fuchsia-400/12 text-[var(--primary)]"
+              className="bg-[var(--ui-accent-soft)] text-[var(--primary)]"
             >
               <GitPullRequest className="mr-1 size-3" />
               {pullRequestLabel}
@@ -630,7 +630,10 @@ function TaskCardShell({
           )
         ) : null}
         {executionSummary.changedFileCount > 0 ? (
-          <Badge size="xs" className="bg-amber-400/12 text-[var(--warning)]">
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-warning-soft)] text-[var(--warning)]"
+          >
             <Files className="mr-1 size-3" />
             {executionSummary.changedFileCount} file
             {executionSummary.changedFileCount === 1 ? "" : "s"}
@@ -711,7 +714,10 @@ function TaskCardShell({
           </Badge>
         ) : null}
         {task.time.activeRunCount > 0 ? (
-          <Badge size="xs" className="bg-emerald-500/12 text-[var(--success)]">
+          <Badge
+            size="xs"
+            className="bg-[var(--ui-success-soft)] text-[var(--success)]"
+          >
             {task.time.activeRunCount} live
           </Badge>
         ) : null}

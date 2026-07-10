@@ -778,6 +778,9 @@ export function KnowledgeGraphPage() {
   const summaryBadgeTitle = graph.counts.limited
     ? `${graph.counts.nodeCount} visible nodes from ${graph.counts.filteredNodeCount} filtered matches`
     : `${graph.counts.nodeCount} nodes and ${graph.counts.edgeCount} edges`;
+  const mobileSummaryBadge = graph.counts.limited
+    ? `${graph.counts.nodeCount}/${graph.counts.filteredNodeCount}`
+    : `${graph.counts.nodeCount}n · ${graph.counts.edgeCount}e`;
   const filtersActive =
     queryText.trim().length > 0 ||
     selectedKinds.length > 0 ||
@@ -871,11 +874,14 @@ export function KnowledgeGraphPage() {
 
         {isMobile ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pt-2 lg:hidden">
-            <div className="pointer-events-auto flex items-center gap-1.5">
-              <div title={summaryBadgeTitle} className={graphFloatingChipClass}>
-                {summaryBadge}
+            <div className="pointer-events-auto flex min-w-0 items-center gap-1.5">
+              <div
+                title={summaryBadgeTitle}
+                className={`${graphFloatingChipClass} max-w-[5.5rem] truncate tracking-[0.08em]`}
+              >
+                {mobileSummaryBadge}
               </div>
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 <div className={graphSegmentedControlClass}>
                   <button
                     type="button"
@@ -921,15 +927,15 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
+                  className={`size-7 p-0 ${graphFloatingButtonClass}`}
                   onClick={() => {
                     setMobilePanelOpen(false);
                     setMobileFiltersOpen(true);
                   }}
                   aria-label="Open graph filters"
+                  title="Search and filters"
                 >
                   <SlidersHorizontal className="size-3" />
-                  Search
                 </Button>
               </div>
             </div>

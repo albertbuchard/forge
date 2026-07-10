@@ -186,5 +186,10 @@ try {
     });
     if (child.exitCode === null) child.kill("SIGKILL");
   }
-  rmSync(tempRoot, { recursive: true, force: true });
+  rmSync(tempRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 8,
+    retryDelay: 250
+  });
 }

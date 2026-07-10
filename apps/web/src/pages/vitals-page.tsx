@@ -29,7 +29,10 @@ const spotlightMetricKeys = [
   "stepCount"
 ] as const;
 
-function groupDailyMetrics(metrics: DailyMetricRecord[], categoryBreakdown: VitalsViewData["summary"]["categoryBreakdown"]): DailyMetricCategoryGroup[] {
+function groupDailyMetrics(
+  metrics: DailyMetricRecord[],
+  categoryBreakdown: VitalsViewData["summary"]["categoryBreakdown"]
+): DailyMetricCategoryGroup[] {
   return categoryBreakdown.map((category) => ({
     ...category,
     metrics: metrics.filter((metric) => metric.category === category.category)
@@ -40,29 +43,47 @@ function asDailyMetric(metric: VitalsMetric): DailyMetricRecord {
   return metric;
 }
 
-function PsycheMetricsVitalsSection({ metrics }: { metrics: PsycheMetricsViewData }) {
+function PsycheMetricsVitalsSection({
+  metrics
+}: {
+  metrics: PsycheMetricsViewData;
+}) {
   if (!metrics.summary.hasData || metrics.metrics.length === 0) {
     return null;
   }
 
-  const groups = groupDailyMetrics(metrics.metrics, metrics.summary.categoryBreakdown);
-  const swearMetric = metrics.metrics.find((metric) => metric.metric === "devrageSwearCount") ?? null;
-  const percentMetric = metrics.metrics.find((metric) => metric.metric === "swearingMessagePercent") ?? null;
-  const averageRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageAverageMaxCumulativeRage") ?? null;
-  const maxRageMetric = metrics.metrics.find((metric) => metric.metric === "devrageMaxCumulativeRage") ?? null;
+  const groups = groupDailyMetrics(
+    metrics.metrics,
+    metrics.summary.categoryBreakdown
+  );
+  const swearMetric =
+    metrics.metrics.find((metric) => metric.metric === "devrageSwearCount") ??
+    null;
+  const percentMetric =
+    metrics.metrics.find(
+      (metric) => metric.metric === "swearingMessagePercent"
+    ) ?? null;
+  const averageRageMetric =
+    metrics.metrics.find(
+      (metric) => metric.metric === "devrageAverageMaxCumulativeRage"
+    ) ?? null;
+  const maxRageMetric =
+    metrics.metrics.find(
+      (metric) => metric.metric === "devrageMaxCumulativeRage"
+    ) ?? null;
 
   return (
     <section className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/38">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
             Psyche metrics
           </div>
-          <div className="mt-1 text-2xl font-semibold text-white">
+          <div className="mt-1 text-2xl font-semibold text-[var(--ui-ink-strong)]">
             Conversation tone alongside body signals
           </div>
         </div>
-        <Badge className="bg-amber-200/10 text-amber-50">
+        <Badge className="bg-[var(--ui-warning-soft)] text-[var(--warning)]">
           {metrics.summary.trackedDays} tracked days
         </Badge>
       </div>
@@ -135,7 +156,8 @@ export function VitalsPage() {
   const vitals = vitalsQuery.data;
   const dailyMetrics = vitals.metrics.map(asDailyMetric);
   const spotlightMetrics = spotlightMetricKeys.map(
-    (metricKey) => dailyMetrics.find((metric) => metric.metric === metricKey) ?? null
+    (metricKey) =>
+      dailyMetrics.find((metric) => metric.metric === metricKey) ?? null
   );
   const categoryBreakdown = vitals.summary.categoryBreakdown;
   const metricsByCategory = groupDailyMetrics(dailyMetrics, categoryBreakdown);
@@ -176,20 +198,24 @@ export function VitalsPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
-        <Card className="overflow-hidden rounded-[30px] border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(108,99,255,0.16),transparent_36%),linear-gradient(180deg,rgba(15,19,38,0.98),rgba(9,13,28,0.98))] p-6">
+        <Card className="overflow-hidden rounded-[30px] border-[var(--ui-border-subtle)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ui-info-soft)_34%,var(--ui-surface-section)_66%),var(--ui-surface-section))] p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                 Coverage
               </div>
-              <div className="text-2xl font-semibold text-white">
-                {vitals.summary.trackedDays} tracked days across {vitals.summary.metricCount} metrics
+              <div className="text-2xl font-semibold text-[var(--ui-ink-strong)]">
+                {vitals.summary.trackedDays} tracked days across{" "}
+                {vitals.summary.metricCount} metrics
               </div>
-              <div className="max-w-3xl text-sm leading-6 text-white/58">
-                The companion is compressing HealthKit into daily signal bands, so what you see here is designed for decisions: how your recovery is trending, where your physiology is changing, and which body systems are actually being observed consistently.
+              <div className="max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+                The companion is compressing HealthKit into daily signal bands,
+                so what you see here is designed for decisions: how your
+                recovery is trending, where your physiology is changing, and
+                which body systems are actually being observed consistently.
               </div>
             </div>
-            <Badge className="bg-white/[0.08] text-white/72">
+            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
               Latest snapshot {formatDateKey(vitals.summary.latestDateKey)}
             </Badge>
           </div>
@@ -201,20 +227,20 @@ export function VitalsPage() {
                 <div
                   key={category.category}
                   className={cn(
-                    "rounded-[22px] border bg-white/[0.03] p-4",
+                    "rounded-[22px] border bg-[var(--ui-surface-1)] p-4",
                     tone.ring
                   )}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <Badge className={tone.badge}>{category.category}</Badge>
-                    <div className="text-xs text-white/44">
+                    <div className="text-xs text-[var(--ui-ink-faint)]">
                       {category.coverageDays} days
                     </div>
                   </div>
-                  <div className="mt-3 text-2xl font-semibold text-white">
+                  <div className="mt-3 text-2xl font-semibold text-[var(--ui-ink-strong)]">
                     {category.metricCount}
                   </div>
-                  <div className="mt-1 text-sm text-white/58">
+                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                     active metric{category.metricCount === 1 ? "" : "s"}
                   </div>
                 </div>
@@ -223,27 +249,33 @@ export function VitalsPage() {
           </div>
         </Card>
 
-        <Card className="rounded-[30px] border-white/8 bg-[linear-gradient(180deg,rgba(13,19,37,0.96),rgba(10,14,30,0.96))] p-6">
+        <Card className="rounded-[30px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-6">
           <div className="grid gap-3">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               Daily interpretation
             </div>
-            <div className="text-lg font-semibold text-white">
+            <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
               Body signals should feel operational, not medical-chart dead.
             </div>
-            <div className="grid gap-3 text-sm leading-6 text-white/58">
+            <div className="grid gap-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
               <div>
-                Lower resting heart rate paired with stable or rising HRV usually means recovery is holding.
+                Lower resting heart rate paired with stable or rising HRV
+                usually means recovery is holding.
               </div>
               <div>
-                Rising walking heart rate, falling HRV, or a jump in respiratory rate usually means you are carrying more load than the calendar admits.
+                Rising walking heart rate, falling HRV, or a jump in respiratory
+                rate usually means you are carrying more load than the calendar
+                admits.
               </div>
               <div>
-                Composition and temperature metrics move slower, but they make the fast signals easier to trust because you can see the surrounding body context.
+                Composition and temperature metrics move slower, but they make
+                the fast signals easier to trust because you can see the
+                surrounding body context.
               </div>
             </div>
-            <div className="mt-2 rounded-[22px] border border-white/8 bg-white/[0.035] p-4 text-sm text-white/70">
-              {vitals.summary.latestMetricCount} metrics updated on the latest tracked day.
+            <div className="mt-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-medium)]">
+              {vitals.summary.latestMetricCount} metrics updated on the latest
+              tracked day.
             </div>
           </div>
         </Card>
@@ -251,7 +283,9 @@ export function VitalsPage() {
 
       <MetricDetailSections groups={metricsByCategory} />
 
-      {psycheMetrics ? <PsycheMetricsVitalsSection metrics={psycheMetrics} /> : null}
+      {psycheMetrics ? (
+        <PsycheMetricsVitalsSection metrics={psycheMetrics} />
+      ) : null}
     </div>
   );
 }

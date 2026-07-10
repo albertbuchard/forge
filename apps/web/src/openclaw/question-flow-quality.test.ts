@@ -38,8 +38,8 @@ describe("question flow quality coverage", () => {
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
-      ["Wiki Page", /remember or reuse later/i, /durable memory/i],
-      ["Artifact", /find, prove, review, or preserve later/i, /trusted file/i],
+      ["Wiki Page", /find, preserve, or improve in the wiki/i, /durable wiki knowledge/i],
+      ["Artifact", /find, verify, preserve, or change about this file/i, /trusted-file lifecycle/i],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
       ["Calendar Event", /what time should Forge hold/i, /timezone/i],
       ["Work Block Template", /when should this recurring block repeat/i, /allows or blocks work/i],
@@ -79,8 +79,18 @@ describe("question flow quality coverage", () => {
         purpose
       );
     }
-    expect(getSectionSlice(entityPlaybook, "Artifact")).toMatch(
+    const artifactSection = getSectionSlice(entityPlaybook, "Artifact");
+    expect(artifactSection).toMatch(
       /OpenAPI documents human-only download and encryption paths[\s\S]*intentionally absent from `forge_call_artifact_route`[\s\S]*must not be called by agents/i
+    );
+    expect(artifactSection).toMatch(
+      /list, read metadata, upload, update metadata,[\s\S]*rescan, enrich, change trust state,[\s\S]*versions or audit history,[\s\S]*replace\s+links, delete metadata, restore metadata/i
+    );
+    expect(artifactSection).toMatch(
+      /read current metadata first[\s\S]*complete desired general `entity_links` set[\s\S]*replacement is not append/i
+    );
+    expect(artifactSection).toMatch(
+      /batch\s+metadata routes only for metadata search, update, delete, or restore[\s\S]*never use[\s\S]*batch CRUD to create an artifact or transfer bytes/i
     );
     const selfObservationSection = getSectionSlice(
       entityPlaybook,
@@ -550,7 +560,7 @@ describe("question flow quality coverage", () => {
       /Do not promote self-observation over functional analysis/i
     );
     expect(entityPlaybook).toMatch(
-      /book, article, source, concept, person, conversation, project\s+reference, or personal manual/i
+      /book, article, source, concept, person, conversation, project\s+reference, or\s+personal manual/i
     );
     expect(psychePlaybook).toMatch(/## Schema Theme Routing/i);
     expect(psychePlaybook).toMatch(/## Psyche API Posture/i);

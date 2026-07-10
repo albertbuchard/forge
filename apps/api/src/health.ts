@@ -988,6 +988,21 @@ function dayKey(value: string) {
   return value.slice(0, 10);
 }
 
+const FITNESS_WEEK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isTimestampInTrailingWindow(
+  value: string,
+  nowMs: number,
+  windowMs: number
+) {
+  const timestampMs = Date.parse(value);
+  return (
+    Number.isFinite(timestampMs) &&
+    timestampMs <= nowMs &&
+    nowMs - timestampMs <= windowMs
+  );
+}
+
 function average(values: number[]) {
   return values.length > 0
     ? values.reduce((sum, value) => sum + value, 0) / values.length
@@ -1548,6 +1563,72 @@ function mapWorkoutSession(
     reconciliationStatus: row.reconciliation_status,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapWorkoutSessionSummary(
+  row: WorkoutSessionRow,
+  options: { includeAnalytics?: boolean } = {}
+) {
+  const provenance = safeJsonParse<Record<string, unknown>>(
+    row.provenance_json,
+    {}
+  );
+  const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
+  const presentation = buildWorkoutSessionPresentation({
+    source: row.source,
+    sourceType: row.source_type,
+    workoutType: row.workout_type,
+    provenance,
+    derived
+  });
+  const analytics = options.includeAnalytics
+    ? getStoredWorkoutAnalytics(row)
+    : undefined;
+
+  return {
+    id: row.id,
+    externalUid: row.external_uid,
+    pairingSessionId: row.pairing_session_id,
+    userId: row.user_id,
+    source: row.source,
+    sourceType: row.source_type,
+    sourceSystem: presentation.sourceSystem,
+    sourceBundleIdentifier: presentation.sourceBundleIdentifier,
+    sourceProductType: presentation.sourceProductType,
+    workoutType: presentation.workoutType,
+    workoutTypeLabel: presentation.workoutTypeLabel,
+    activityFamily: presentation.activityFamily,
+    activityFamilyLabel: presentation.activityFamilyLabel,
+    sourceDevice: row.source_device,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    durationSeconds: row.duration_seconds,
+    activeEnergyKcal: row.active_energy_kcal,
+    totalEnergyKcal: row.total_energy_kcal,
+    distanceMeters: row.distance_meters,
+    stepCount: row.step_count,
+    exerciseMinutes: row.exercise_minutes,
+    averageHeartRate: row.average_heart_rate,
+    maxHeartRate: row.max_heart_rate,
+    subjectiveEffort: row.subjective_effort,
+    moodBefore: row.mood_before,
+    moodAfter: row.mood_after,
+    meaningText: row.meaning_text,
+    plannedContext: row.planned_context,
+    socialContext: row.social_context,
+    links: safeJsonParse<Array<z.infer<typeof healthLinkSchema>>>(
+      row.links_json,
+      []
+    ),
+    tags: safeJsonParse<string[]>(row.tags_json, []),
+    ...(analytics ? { analytics } : {}),
+    generatedFromHabitId: row.generated_from_habit_id,
+    generatedFromCheckInId: row.generated_from_check_in_id,
+    reconciliationStatus: row.reconciliation_status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    detailLevel: "summary" as const
   };
 }
 
@@ -3234,11 +3315,7 @@ function workoutDaySummaryMetrics(userId: string, dateKeyValue: string) {
          AND started_at >= ?
          AND started_at < ?`
     )
-    .get(
-      userId,
-      `${dateKeyValue}T00:00:00`,
-      `${nextDateKey}T00:00:00`
-    ) as {
+    .get(userId, `${dateKeyValue}T00:00:00`, `${nextDateKey}T00:00:00`) as {
     totalWorkoutSeconds: number;
     totalExerciseMinutes: number;
     totalEnergyKcal: number;
@@ -4625,7 +4702,9 @@ function expectedWorkoutEvidenceCounts(derived: Record<string, unknown>) {
   const syncCursor = nestedRecord(derived.syncCursor);
   const captureQuality = nestedRecord(derived.captureQuality);
   const captureQualityFlags = Array.isArray(captureQuality.flags)
-    ? captureQuality.flags.filter((flag): flag is string => typeof flag === "string")
+    ? captureQuality.flags.filter(
+        (flag): flag is string => typeof flag === "string"
+      )
     : [];
   const summaryOnlyExport =
     captureQuality.status === "summary_exported" ||
@@ -4785,8 +4864,7 @@ function mobileHealthWorkoutImportState(
   return {
     alreadyUploadedWorkoutExternalUids,
     incompleteWorkoutExternalUids,
-    alreadyUploadedWorkoutCount:
-      rows.length - incompleteWorkoutCount,
+    alreadyUploadedWorkoutCount: rows.length - incompleteWorkoutCount,
     existingWorkoutCount: rows.length,
     incompleteWorkoutCount,
     staleEvidenceVersionWorkoutCount,
@@ -4823,13 +4901,10 @@ function mobileSyncSessionUploadPayload(
     ...(options.includeWorkoutImportState === false
       ? {}
       : {
-          workoutImportState: mobileHealthWorkoutImportState(
-            session.user_id,
-            {
-              ...mobileSyncSessionWorkoutImportOptions(session),
-              includeExternalUids: options.includeWorkoutImportExternalUids
-            }
-          )
+          workoutImportState: mobileHealthWorkoutImportState(session.user_id, {
+            ...mobileSyncSessionWorkoutImportOptions(session),
+            includeExternalUids: options.includeWorkoutImportExternalUids
+          })
         }),
     progress: mobileSyncSessionProgressFromStoredSession(session)
   };
@@ -4868,8 +4943,7 @@ export function getMobileHealthSyncSessionStatus(
           .map((row) => (row as { chunk_id: string }).chunk_id);
   return mobileSyncSessionUploadPayload(session, receivedChunkIds, {
     includeWorkoutImportState: payload.includeWorkoutImportState,
-    includeWorkoutImportExternalUids:
-      payload.includeWorkoutImportExternalUids
+    includeWorkoutImportExternalUids: payload.includeWorkoutImportExternalUids
   });
 }
 
@@ -5808,7 +5882,8 @@ function mergeMobileHealthSyncChunks(
     (left, right) => left.sequence - right.sequence
   )) {
     const keepWorkoutSummaryForDeferredEvidence =
-      chunk.family === "workout_summaries" || chunk.family === "workout_archive";
+      chunk.family === "workout_summaries" ||
+      chunk.family === "workout_archive";
     const skipRecords =
       options.skipImmediatelyApplied === true &&
       mobileHealthSyncChunkWasImmediatelyApplied(chunk) &&
@@ -6948,7 +7023,9 @@ function isoWeekKey(value: string) {
   const day = date.getUTCDay() || 7;
   date.setUTCDate(date.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  const week = Math.ceil(
+    ((date.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7
+  );
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
@@ -6977,8 +7054,11 @@ function zoneSeconds(
   keys: readonly string[]
 ) {
   const zones =
-    (session.analytics as { zoneDurations?: Array<{ key: string; seconds: number }> } | undefined)
-      ?.zoneDurations ?? [];
+    (
+      session.analytics as
+        | { zoneDurations?: Array<{ key: string; seconds: number }> }
+        | undefined
+    )?.zoneDurations ?? [];
   return zones
     .filter((zone) => keys.includes(zone.key))
     .reduce((sum, zone) => sum + zone.seconds, 0);
@@ -7002,12 +7082,22 @@ function createZoneRecord(): ZoneSecondsRecord {
   ) as ZoneSecondsRecord;
 }
 
-function addSessionZones(target: ZoneSecondsRecord, session: TrainingLoadSession) {
+function addSessionZones(
+  target: ZoneSecondsRecord,
+  session: TrainingLoadSession
+) {
   const zones =
-    (session.analytics as { zoneDurations?: Array<{ key: string; seconds: number }> } | undefined)
-      ?.zoneDurations ?? [];
+    (
+      session.analytics as
+        | { zoneDurations?: Array<{ key: string; seconds: number }> }
+        | undefined
+    )?.zoneDurations ?? [];
   for (const zone of zones) {
-    if (WORKOUT_ZONE_ORDER.includes(zone.key as (typeof WORKOUT_ZONE_ORDER)[number])) {
+    if (
+      WORKOUT_ZONE_ORDER.includes(
+        zone.key as (typeof WORKOUT_ZONE_ORDER)[number]
+      )
+    ) {
       target[zone.key as (typeof WORKOUT_ZONE_ORDER)[number]] += zone.seconds;
     }
   }
@@ -7025,7 +7115,10 @@ function domainSecondsFromZones(zones: ZoneSecondsRecord): DomainSecondsRecord {
   };
 }
 
-function percentageRecord<T extends string>(record: Record<T, number>, total: number) {
+function percentageRecord<T extends string>(
+  record: Record<T, number>,
+  total: number
+) {
   return Object.fromEntries(
     Object.entries(record).map(([key, value]) => [
       key,
@@ -7036,7 +7129,10 @@ function percentageRecord<T extends string>(record: Record<T, number>, total: nu
 
 function minuteRecord<T extends string>(record: Record<T, number>) {
   return Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [key, round((value as number) / 60, 1)])
+    Object.entries(record).map(([key, value]) => [
+      key,
+      round((value as number) / 60, 1)
+    ])
   ) as Record<T, number>;
 }
 
@@ -7153,12 +7249,17 @@ function buildZoneTimeBuckets(
       const domains = domainSecondsFromZones(bucket.zoneSeconds);
       const durationMinutes = bucket.durationSeconds / 60;
       const loadPerMinute =
-        durationMinutes > 0 ? round(bucket.trainingLoad / durationMinutes, 2) : 0;
+        durationMinutes > 0
+          ? round(bucket.trainingLoad / durationMinutes, 2)
+          : 0;
       const loadPerHour =
         bucket.durationSeconds > 0
           ? round(bucket.trainingLoad / (bucket.durationSeconds / 3600), 1)
           : 0;
-      const averageHrCoverage = round(average(bucket.heartRateCoverageValues), 3);
+      const averageHrCoverage = round(
+        average(bucket.heartRateCoverageValues),
+        3
+      );
       return {
         bucketKey: bucket.bucketKey,
         startDate: bucket.startDate,
@@ -7173,7 +7274,10 @@ function buildZoneTimeBuckets(
         baselineLoadRatio: null as number | null,
         baselineIntensityRatio: null as number | null,
         zoneSeconds: Object.fromEntries(
-          WORKOUT_ZONE_ORDER.map((key) => [key, Math.round(bucket.zoneSeconds[key])])
+          WORKOUT_ZONE_ORDER.map((key) => [
+            key,
+            Math.round(bucket.zoneSeconds[key])
+          ])
         ) as ZoneSecondsRecord,
         zoneMinutes: minuteRecord(bucket.zoneSeconds),
         zonePercentages: percentageRecord(bucket.zoneSeconds, hrCoveredSeconds),
@@ -7203,17 +7307,23 @@ function buildZoneTimeBuckets(
           ? rows.slice(Math.max(0, index - 4), index)
           : rows.slice(Math.max(0, index - 3), index);
     const baselineLoad = average(
-      baselineWindow.map((bucket) => bucket.trainingLoad).filter((value) => value > 0)
+      baselineWindow
+        .map((bucket) => bucket.trainingLoad)
+        .filter((value) => value > 0)
     );
     const baselineIntensity = average(
-      baselineWindow.map((bucket) => bucket.loadPerMinute).filter((value) => value > 0)
+      baselineWindow
+        .map((bucket) => bucket.loadPerMinute)
+        .filter((value) => value > 0)
     );
     return {
       ...row,
       baselineLoadRatio:
         baselineLoad > 0 ? round(row.trainingLoad / baselineLoad, 2) : null,
       baselineIntensityRatio:
-        baselineIntensity > 0 ? round(row.loadPerMinute / baselineIntensity, 2) : null
+        baselineIntensity > 0
+          ? round(row.loadPerMinute / baselineIntensity, 2)
+          : null
     };
   });
 }
@@ -7228,8 +7338,8 @@ function buildZoneTimeSeries(sessions: TrainingLoadSession[]) {
 
 function workoutLoad(session: ReturnType<typeof mapWorkoutSession>) {
   return (
-    (session.analytics as { load?: { trimp?: number | null } } | undefined)?.load
-      ?.trimp ?? 0
+    (session.analytics as { load?: { trimp?: number | null } } | undefined)
+      ?.load?.trimp ?? 0
   );
 }
 
@@ -7244,7 +7354,12 @@ function workoutHrCoverage(session: ReturnType<typeof mapWorkoutSession>) {
   return (
     (
       session.analytics as
-        | { dataQuality?: { sampleCoverage?: number; heartRateSampleCount?: number } }
+        | {
+            dataQuality?: {
+              sampleCoverage?: number;
+              heartRateSampleCount?: number;
+            };
+          }
         | undefined
     )?.dataQuality?.sampleCoverage ?? 0
   );
@@ -7254,7 +7369,12 @@ function workoutHrSampleCount(session: ReturnType<typeof mapWorkoutSession>) {
   return (
     (
       session.analytics as
-        | { dataQuality?: { sampleCoverage?: number; heartRateSampleCount?: number } }
+        | {
+            dataQuality?: {
+              sampleCoverage?: number;
+              heartRateSampleCount?: number;
+            };
+          }
         | undefined
     )?.dataQuality?.heartRateSampleCount ?? 0
   );
@@ -7262,8 +7382,11 @@ function workoutHrSampleCount(session: ReturnType<typeof mapWorkoutSession>) {
 
 function workoutAverageHr(session: ReturnType<typeof mapWorkoutSession>) {
   return (
-    (session.analytics as { hrSummary?: { averageHr?: number | null } } | undefined)
-      ?.hrSummary?.averageHr ?? session.averageHeartRate
+    (
+      session.analytics as
+        | { hrSummary?: { averageHr?: number | null } }
+        | undefined
+    )?.hrSummary?.averageHr ?? session.averageHeartRate
   );
 }
 
@@ -7274,14 +7397,24 @@ function workoutMaxHr(session: ReturnType<typeof mapWorkoutSession>) {
   );
 }
 
-function summarizeZoneDistribution(sessions: Array<ReturnType<typeof mapWorkoutSession>>) {
+function summarizeZoneDistribution(
+  sessions: Array<ReturnType<typeof mapWorkoutSession>>
+) {
   const totals = new Map<string, { label: string; seconds: number }>();
   let totalSeconds = 0;
   for (const session of sessions) {
     const zones =
-      (session.analytics as
-        | { zoneDurations?: Array<{ key: string; label: string; seconds: number }> }
-        | undefined)?.zoneDurations ?? [];
+      (
+        session.analytics as
+          | {
+              zoneDurations?: Array<{
+                key: string;
+                label: string;
+                seconds: number;
+              }>;
+            }
+          | undefined
+      )?.zoneDurations ?? [];
     for (const zone of zones) {
       const current = totals.get(zone.key) ?? { label: zone.label, seconds: 0 };
       current.seconds += zone.seconds;
@@ -7290,7 +7423,10 @@ function summarizeZoneDistribution(sessions: Array<ReturnType<typeof mapWorkoutS
     }
   }
   return WORKOUT_ZONE_ORDER.map((key) => {
-    const value = totals.get(key) ?? { label: key.replaceAll("_", " "), seconds: 0 };
+    const value = totals.get(key) ?? {
+      label: key.replaceAll("_", " "),
+      seconds: 0
+    };
     return {
       key,
       label: value.label,
@@ -7351,7 +7487,10 @@ function latestVitalValue(
   vitalsTrend: ReturnType<typeof buildFitnessVitalsTrend>,
   key: "restingHeartRate" | "vo2Max"
 ) {
-  return [...vitalsTrend].reverse().find((entry) => entry[key] != null)?.[key] ?? null;
+  return (
+    [...vitalsTrend].reverse().find((entry) => entry[key] != null)?.[key] ??
+    null
+  );
 }
 
 type TrainingLoadSummary = {
@@ -7451,7 +7590,8 @@ function scoreConfidence(
   summary: TrainingLoadSummary,
   latestBucket: ReturnType<typeof buildZoneTimeBuckets>[number] | undefined
 ) {
-  const coverage = latestBucket?.averageHrCoverage ?? summary.averageHeartRateCoverage;
+  const coverage =
+    latestBucket?.averageHrCoverage ?? summary.averageHeartRateCoverage;
   if (coverage >= 0.85 && (latestBucket?.heartRateSampleCount ?? 0) >= 300) {
     return "high";
   }
@@ -7465,10 +7605,10 @@ function scoreConfidence(
 }
 
 function targetMinutes(totalMinutes: number, range: [number, number]) {
-  return [Math.round(totalMinutes * range[0]), Math.round(totalMinutes * range[1])] as [
-    number,
-    number
-  ];
+  return [
+    Math.round(totalMinutes * range[0]),
+    Math.round(totalMinutes * range[1])
+  ] as [number, number];
 }
 
 function buildZoneMinuteTargets(
@@ -7490,13 +7630,19 @@ function buildZoneMinuteTargets(
 
 function buildTrainingIntelligence(input: {
   summary: TrainingLoadSummary;
-  recentIntensityDistribution: ReturnType<typeof summarizeIntensityDistribution>;
+  recentIntensityDistribution: ReturnType<
+    typeof summarizeIntensityDistribution
+  >;
   zoneTimeSeries: ReturnType<typeof buildZoneTimeSeries>;
 }) {
   const latestWeek = input.zoneTimeSeries.weekly.at(-1);
   const priorWeeks = input.zoneTimeSeries.weekly.slice(-5, -1);
   const baselineMinutes =
-    average(priorWeeks.map((week) => week.durationMinutes).filter((value) => value > 0)) ||
+    average(
+      priorWeeks
+        .map((week) => week.durationMinutes)
+        .filter((value) => value > 0)
+    ) ||
     latestWeek?.durationMinutes ||
     180;
   const balance = loadBalanceStatus(input.summary);
@@ -7525,165 +7671,186 @@ function buildTrainingIntelligence(input: {
 
   return {
     defaultMode: "combat_readiness" as const,
-    modes: (Object.keys(MODE_DOMAIN_TARGETS) as TrainingModeKey[]).map((mode) => {
-      const target = MODE_DOMAIN_TARGETS[mode];
-      const lowScore = rangeScore(lowPct, target.low);
-      const moderateScore = rangeScore(moderatePct, target.moderate);
-      const highScore = rangeScore(highPct, target.high);
-      const loadScore =
-        balance === "recover"
-          ? 45
-          : clampNumber(100 - Math.abs(currentLoadRatio - 1) * 90, 0, 100);
-      const hardDayScore = clampNumber(
-        100 - Math.max(0, input.summary.hardDayCount7d - target.maxHardSessions) * 28,
-        0,
-        100
-      );
-      const qualityScore = clampNumber(input.summary.averageHeartRateCoverage * 100, 0, 100);
-      const score = Math.round(
-        lowScore * 0.22 +
-          moderateScore * 0.14 +
-          highScore * 0.2 +
-          loadScore * 0.24 +
-          hardDayScore * 0.12 +
-          qualityScore * 0.08
-      );
-      const nextWeekScale =
-        balance === "recover" ? 0.75 : balance === "build" ? 1.12 : 1;
-      const nextWeekMinutes = Math.round(baselineMinutes * nextWeekScale);
-      const shouldAllowFourByFour =
-        balance !== "recover" &&
-        highPct <= target.high[1] &&
-        input.summary.hardDayCount7d < target.maxHardSessions &&
-        scoreConfidence(input.summary, latestWeek) !== "low" &&
-        scoreConfidence(input.summary, latestWeek) !== "unavailable";
-
-      const drivers = [
-        lowPct >= target.low[0]
-          ? `Low/base work is ${Math.round(lowPct * 100)}% of recent HR-zone time.`
-          : null,
-        highPct <= target.high[1]
-          ? `High-domain exposure is controlled at ${Math.round(highPct * 100)}%.`
-          : null,
-        currentLoadRatio >= 0.8 && currentLoadRatio <= 1.25
-          ? `Acute load is close to chronic base at ${round(currentLoadRatio, 2)}x.`
-          : null,
-        latestWeek?.baselineLoadRatio != null
-          ? `Latest week is ${latestWeek.baselineLoadRatio}x your recent weekly load baseline.`
-          : null
-      ].filter((entry): entry is string => Boolean(entry));
-
-      const limitingFactors = [
-        lowPct < target.low[0]
-          ? `Low/base work is below the ${Math.round(target.low[0] * 100)}-${Math.round(
-              target.low[1] * 100
-            )}% target band.`
-          : null,
-        highPct > target.high[1]
-          ? `High-domain work is above the ${Math.round(target.high[1] * 100)}% ceiling for this mode.`
-          : null,
-        balance === "recover"
-          ? "Recent load balance points to recovery before another hard stimulus."
-          : null,
-        input.summary.hardDayCount7d > target.maxHardSessions
-          ? `${input.summary.hardDayCount7d} hard days in 7 days exceeds this mode's target.`
-          : null,
-        input.summary.averageHeartRateCoverage < 0.5
-          ? "Heart-rate evidence is thin, so zone decisions need caution."
-          : null
-      ].filter((entry): entry is string => Boolean(entry));
-
-      return {
-        key: mode,
-        label: target.label,
-        score,
-        status: scoreStatus(score, balance),
-        confidence: scoreConfidence(input.summary, latestWeek),
-        summary:
+    modes: (Object.keys(MODE_DOMAIN_TARGETS) as TrainingModeKey[]).map(
+      (mode) => {
+        const target = MODE_DOMAIN_TARGETS[mode];
+        const lowScore = rangeScore(lowPct, target.low);
+        const moderateScore = rangeScore(moderatePct, target.moderate);
+        const highScore = rangeScore(highPct, target.high);
+        const loadScore =
           balance === "recover"
-            ? `${target.label}: recover first, then rebuild the next hard stimulus.`
-            : `${target.label}: ${target.statusLabel} is ${score >= 75 ? "mostly aligned" : "not yet aligned"}.`,
-        drivers,
-        limitingFactors,
-        loadBalance,
-        nextWeekTargets: {
-          totalMinutesRange:
+            ? 45
+            : clampNumber(100 - Math.abs(currentLoadRatio - 1) * 90, 0, 100);
+        const hardDayScore = clampNumber(
+          100 -
+            Math.max(0, input.summary.hardDayCount7d - target.maxHardSessions) *
+              28,
+          0,
+          100
+        );
+        const qualityScore = clampNumber(
+          input.summary.averageHeartRateCoverage * 100,
+          0,
+          100
+        );
+        const score = Math.round(
+          lowScore * 0.22 +
+            moderateScore * 0.14 +
+            highScore * 0.2 +
+            loadScore * 0.24 +
+            hardDayScore * 0.12 +
+            qualityScore * 0.08
+        );
+        const nextWeekScale =
+          balance === "recover" ? 0.75 : balance === "build" ? 1.12 : 1;
+        const nextWeekMinutes = Math.round(baselineMinutes * nextWeekScale);
+        const shouldAllowFourByFour =
+          balance !== "recover" &&
+          highPct <= target.high[1] &&
+          input.summary.hardDayCount7d < target.maxHardSessions &&
+          scoreConfidence(input.summary, latestWeek) !== "low" &&
+          scoreConfidence(input.summary, latestWeek) !== "unavailable";
+
+        const drivers = [
+          lowPct >= target.low[0]
+            ? `Low/base work is ${Math.round(lowPct * 100)}% of recent HR-zone time.`
+            : null,
+          highPct <= target.high[1]
+            ? `High-domain exposure is controlled at ${Math.round(highPct * 100)}%.`
+            : null,
+          currentLoadRatio >= 0.8 && currentLoadRatio <= 1.25
+            ? `Acute load is close to chronic base at ${round(currentLoadRatio, 2)}x.`
+            : null,
+          latestWeek?.baselineLoadRatio != null
+            ? `Latest week is ${latestWeek.baselineLoadRatio}x your recent weekly load baseline.`
+            : null
+        ].filter((entry): entry is string => Boolean(entry));
+
+        const limitingFactors = [
+          lowPct < target.low[0]
+            ? `Low/base work is below the ${Math.round(target.low[0] * 100)}-${Math.round(
+                target.low[1] * 100
+              )}% target band.`
+            : null,
+          highPct > target.high[1]
+            ? `High-domain work is above the ${Math.round(target.high[1] * 100)}% ceiling for this mode.`
+            : null,
+          balance === "recover"
+            ? "Recent load balance points to recovery before another hard stimulus."
+            : null,
+          input.summary.hardDayCount7d > target.maxHardSessions
+            ? `${input.summary.hardDayCount7d} hard days in 7 days exceeds this mode's target.`
+            : null,
+          input.summary.averageHeartRateCoverage < 0.5
+            ? "Heart-rate evidence is thin, so zone decisions need caution."
+            : null
+        ].filter((entry): entry is string => Boolean(entry));
+
+        return {
+          key: mode,
+          label: target.label,
+          score,
+          status: scoreStatus(score, balance),
+          confidence: scoreConfidence(input.summary, latestWeek),
+          summary:
             balance === "recover"
-              ? targetMinutes(baselineMinutes, [0.65, 0.85])
-              : targetMinutes(nextWeekMinutes, [0.95, 1.08]),
-          zoneMinuteTargets: buildZoneMinuteTargets(nextWeekMinutes, target),
-          domainMinuteTargets: {
-            low: targetMinutes(nextWeekMinutes, target.low),
-            moderate: targetMinutes(nextWeekMinutes, target.moderate),
-            high: targetMinutes(nextWeekMinutes, target.high)
-          },
-          maxHardSessions:
-            balance === "recover" ? Math.max(0, target.maxHardSessions - 1) : target.maxHardSessions,
-          minimumEasyMinutes: Math.round(nextWeekMinutes * target.low[0]),
-          warning:
-            balance === "recover"
-              ? "Keep next week below baseline and avoid stacking hard sessions until load balance normalizes."
-              : highPct > target.high[1]
-                ? "Do not add another high-intensity session until the high-domain share drops."
-                : null
-        },
-        nextWorkout: {
-          recommendedType:
-            balance === "recover"
-              ? "recovery"
-              : lowPct < target.low[0]
-                ? "zone_2_base"
-                : shouldAllowFourByFour
-                  ? "vo2max_4x4"
-                  : mode === "combat_readiness"
-                    ? "technical_kickboxing"
-                    : "easy_aerobic",
-          intensityCeiling:
-            balance === "recover"
-              ? "Z1"
-              : shouldAllowFourByFour
-                ? "Z5 intervals with full recovery"
+              ? `${target.label}: recover first, then rebuild the next hard stimulus.`
+              : `${target.label}: ${target.statusLabel} is ${score >= 75 ? "mostly aligned" : "not yet aligned"}.`,
+          drivers,
+          limitingFactors,
+          loadBalance,
+          nextWeekTargets: {
+            totalMinutesRange:
+              balance === "recover"
+                ? targetMinutes(baselineMinutes, [0.65, 0.85])
+                : targetMinutes(nextWeekMinutes, [0.95, 1.08]),
+            zoneMinuteTargets: buildZoneMinuteTargets(nextWeekMinutes, target),
+            domainMinuteTargets: {
+              low: targetMinutes(nextWeekMinutes, target.low),
+              moderate: targetMinutes(nextWeekMinutes, target.moderate),
+              high: targetMinutes(nextWeekMinutes, target.high)
+            },
+            maxHardSessions:
+              balance === "recover"
+                ? Math.max(0, target.maxHardSessions - 1)
+                : target.maxHardSessions,
+            minimumEasyMinutes: Math.round(nextWeekMinutes * target.low[0]),
+            warning:
+              balance === "recover"
+                ? "Keep next week below baseline and avoid stacking hard sessions until load balance normalizes."
                 : highPct > target.high[1]
-                  ? "Z2"
-                  : "Z3",
-          durationMinutesRange:
-            balance === "recover"
-              ? [20, 40]
-              : lowPct < target.low[0]
-                ? [45, 75]
+                  ? "Do not add another high-intensity session until the high-domain share drops."
+                  : null
+          },
+          nextWorkout: {
+            recommendedType:
+              balance === "recover"
+                ? "recovery"
+                : lowPct < target.low[0]
+                  ? "zone_2_base"
+                  : shouldAllowFourByFour
+                    ? "vo2max_4x4"
+                    : mode === "combat_readiness"
+                      ? "technical_kickboxing"
+                      : "easy_aerobic",
+            intensityCeiling:
+              balance === "recover"
+                ? "Z1"
                 : shouldAllowFourByFour
-                  ? [32, 48]
-                  : [35, 60],
-          fourByFourAppropriate: shouldAllowFourByFour,
-          reason: shouldAllowFourByFour
-            ? "Load balance, hard-day count, high-domain share, and HR confidence can support one controlled VO2max stimulus."
-            : balance === "recover"
-              ? "Current load balance makes recovery more useful than another hard interval day."
-              : highPct > target.high[1]
-                ? "Recent high-domain exposure is already above this mode's target."
-                : "A base or technical session fits the current distribution better than 4x4 work."
-        },
-        methodologyNotes: [
-          "Scores are deterministic summaries of Forge HRR zones, TRIMP load, hard-day spacing, and evidence quality.",
-          "ACWR, monotony, and strain are monitoring flags, not injury predictions.",
-          "4x4 guidance is gated by freshness, recent high-intensity share, hard-day count, and HR confidence."
-        ]
-      };
-    })
+                  ? "Z5 intervals with full recovery"
+                  : highPct > target.high[1]
+                    ? "Z2"
+                    : "Z3",
+            durationMinutesRange:
+              balance === "recover"
+                ? [20, 40]
+                : lowPct < target.low[0]
+                  ? [45, 75]
+                  : shouldAllowFourByFour
+                    ? [32, 48]
+                    : [35, 60],
+            fourByFourAppropriate: shouldAllowFourByFour,
+            reason: shouldAllowFourByFour
+              ? "Load balance, hard-day count, high-domain share, and HR confidence can support one controlled VO2max stimulus."
+              : balance === "recover"
+                ? "Current load balance makes recovery more useful than another hard interval day."
+                : highPct > target.high[1]
+                  ? "Recent high-domain exposure is already above this mode's target."
+                  : "A base or technical session fits the current distribution better than 4x4 work."
+          },
+          methodologyNotes: [
+            "Scores are deterministic summaries of Forge HRR zones, TRIMP load, hard-day spacing, and evidence quality.",
+            "ACWR, monotony, and strain are monitoring flags, not injury predictions.",
+            "4x4 guidance is gated by freshness, recent high-intensity share, hard-day count, and HR confidence."
+          ]
+        };
+      }
+    )
   };
 }
 
 export function getTrainingLoadViewData(userIds?: string[]) {
   const workoutRows = listWorkoutRows(userIds);
+  const now = new Date();
+  const nowMs = now.getTime();
   const sessions = workoutRows
+    .filter((row) => {
+      const startedAtMs = Date.parse(row.started_at);
+      return Number.isFinite(startedAtMs) && startedAtMs <= nowMs;
+    })
     .slice(0, 2000)
     .map((row) => mapWorkoutSession(row, { includeAnalytics: true }))
-    .sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt));
-  const now = new Date();
+    .sort(
+      (left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt)
+    );
   const start7 = addDays(now, -6);
   const start28 = addDays(now, -27);
-  const recent7 = sessions.filter((session) => Date.parse(session.startedAt) >= start7.getTime());
-  const recent28 = sessions.filter((session) => Date.parse(session.startedAt) >= start28.getTime());
+  const recent7 = sessions.filter(
+    (session) => Date.parse(session.startedAt) >= start7.getTime()
+  );
+  const recent28 = sessions.filter(
+    (session) => Date.parse(session.startedAt) >= start28.getTime()
+  );
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)
   );
@@ -7714,7 +7881,10 @@ export function getTrainingLoadViewData(userIds?: string[]) {
     current.durationSeconds += session.durationSeconds;
     current.trainingLoad += workoutLoad(session);
     current.highIntensitySeconds += zoneSeconds(session, ["zone_4", "zone_5"]);
-    current.moderateIntensitySeconds += zoneSeconds(session, ["zone_2", "zone_3"]);
+    current.moderateIntensitySeconds += zoneSeconds(session, [
+      "zone_2",
+      "zone_3"
+    ]);
     current.lowIntensitySeconds += zoneSeconds(session, ["below_z1", "zone_1"]);
     dailyMap.set(key, current);
   }
@@ -7763,7 +7933,10 @@ export function getTrainingLoadViewData(userIds?: string[]) {
     current.durationSeconds += session.durationSeconds;
     current.trainingLoad += workoutLoad(session);
     current.highIntensitySeconds += zoneSeconds(session, ["zone_4", "zone_5"]);
-    current.moderateIntensitySeconds += zoneSeconds(session, ["zone_2", "zone_3"]);
+    current.moderateIntensitySeconds += zoneSeconds(session, [
+      "zone_2",
+      "zone_3"
+    ]);
     current.lowIntensitySeconds += zoneSeconds(session, ["below_z1", "zone_1"]);
     weekMap.set(weekKey, current);
   }
@@ -7782,21 +7955,35 @@ export function getTrainingLoadViewData(userIds?: string[]) {
         trainingLoad: round(week.trainingLoad, 1),
         loadPerHour: hours > 0 ? round(week.trainingLoad / hours, 1) : 0,
         lowPercentage:
-          totalZoneSeconds > 0 ? round(week.lowIntensitySeconds / totalZoneSeconds, 3) : 0,
+          totalZoneSeconds > 0
+            ? round(week.lowIntensitySeconds / totalZoneSeconds, 3)
+            : 0,
         moderatePercentage:
           totalZoneSeconds > 0
             ? round(week.moderateIntensitySeconds / totalZoneSeconds, 3)
             : 0,
         highPercentage:
-          totalZoneSeconds > 0 ? round(week.highIntensitySeconds / totalZoneSeconds, 3) : 0,
+          totalZoneSeconds > 0
+            ? round(week.highIntensitySeconds / totalZoneSeconds, 3)
+            : 0,
         highIntensityMinutes: round(week.highIntensitySeconds / 60, 1)
       };
     });
-  const activityBreakdown = [...new Set(sessions.map((session) => session.workoutType))]
+  const activityBreakdown = [
+    ...new Set(sessions.map((session) => session.workoutType))
+  ]
     .map((workoutType) => {
-      const group = sessions.filter((session) => session.workoutType === workoutType);
-      const durationSeconds = group.reduce((sum, session) => sum + session.durationSeconds, 0);
-      const trainingLoad = group.reduce((sum, session) => sum + workoutLoad(session), 0);
+      const group = sessions.filter(
+        (session) => session.workoutType === workoutType
+      );
+      const durationSeconds = group.reduce(
+        (sum, session) => sum + session.durationSeconds,
+        0
+      );
+      const trainingLoad = group.reduce(
+        (sum, session) => sum + workoutLoad(session),
+        0
+      );
       const highSeconds = group.reduce(
         (sum, session) => sum + zoneSeconds(session, ["zone_4", "zone_5"]),
         0
@@ -7823,7 +8010,9 @@ export function getTrainingLoadViewData(userIds?: string[]) {
         durationHours: round(durationSeconds / 3600, 2),
         trainingLoad: round(trainingLoad, 1),
         loadPerHour:
-          durationSeconds > 0 ? round(trainingLoad / (durationSeconds / 3600), 1) : 0,
+          durationSeconds > 0
+            ? round(trainingLoad / (durationSeconds / 3600), 1)
+            : 0,
         highPercentage:
           totalZoneSeconds > 0 ? round(highSeconds / totalZoneSeconds, 3) : 0,
         averageHrCoverage: round(
@@ -7839,12 +8028,19 @@ export function getTrainingLoadViewData(userIds?: string[]) {
   const last7Loads = last7Keys.map(
     (key) => dailyMap.get(key)?.trainingLoad ?? 0
   );
-  const acuteLoad7d = recent7.reduce((sum, session) => sum + workoutLoad(session), 0);
+  const acuteLoad7d = recent7.reduce(
+    (sum, session) => sum + workoutLoad(session),
+    0
+  );
   const chronicWeeklyLoad28d =
     recent28.reduce((sum, session) => sum + workoutLoad(session), 0) / 4;
   const loadSd7d = standardDeviation(last7Loads);
   const monotony7d =
-    loadSd7d > 0 ? average(last7Loads) / loadSd7d : recent7.length > 0 ? null : 0;
+    loadSd7d > 0
+      ? average(last7Loads) / loadSd7d
+      : recent7.length > 0
+        ? null
+        : 0;
   const strain7d = monotony7d != null ? acuteLoad7d * monotony7d : null;
   const highSeconds7d = recent7.reduce(
     (sum, session) => sum + zoneSeconds(session, ["zone_4", "zone_5"]),
@@ -7859,7 +8055,8 @@ export function getTrainingLoadViewData(userIds?: string[]) {
     0
   );
   const reliableSessions = sessions.filter(
-    (session) => workoutHrSampleCount(session) >= 100 && workoutHrCoverage(session) >= 0.8
+    (session) =>
+      workoutHrSampleCount(session) >= 100 && workoutHrCoverage(session) >= 0.8
   );
   const vo2Points = vitalsTrend.filter((entry) => entry.vo2Max != null);
   const vo2MaxLatest = latestVitalValue(vitalsTrend, "vo2Max");
@@ -7868,7 +8065,9 @@ export function getTrainingLoadViewData(userIds?: string[]) {
       ? round((vo2Points.at(-1)?.vo2Max ?? 0) - (vo2Points[0]?.vo2Max ?? 0), 2)
       : null;
   const acwr =
-    chronicWeeklyLoad28d > 0 ? round(acuteLoad7d / chronicWeeklyLoad28d, 2) : null;
+    chronicWeeklyLoad28d > 0
+      ? round(acuteLoad7d / chronicWeeklyLoad28d, 2)
+      : null;
   const readiness =
     acwr == null
       ? "insufficient_data"
@@ -7881,7 +8080,8 @@ export function getTrainingLoadViewData(userIds?: string[]) {
     sessionCount: sessions.length,
     reliableSessionCount: reliableSessions.length,
     totalHours: round(
-      sessions.reduce((sum, session) => sum + session.durationSeconds, 0) / 3600,
+      sessions.reduce((sum, session) => sum + session.durationSeconds, 0) /
+        3600,
       1
     ),
     totalTrainingLoad: round(
@@ -7949,8 +8149,8 @@ export function getTrainingLoadViewData(userIds?: string[]) {
           heartRateCoverage: workoutHrCoverage(session),
           heartRateSampleCount: workoutHrSampleCount(session),
           confidence:
-            (session.analytics as { confidence?: string } | undefined)?.confidence ??
-            "unavailable",
+            (session.analytics as { confidence?: string } | undefined)
+              ?.confidence ?? "unavailable",
           detailRoute: `/api/v1/health/workouts/${session.id}/detail`
         };
       }),
@@ -7969,33 +8169,411 @@ export function getTrainingLoadViewData(userIds?: string[]) {
   };
 }
 
+type WorkoutComparisonAnalyticsRow = {
+  workout_id: string;
+  load_json: string;
+  data_quality_json: string;
+};
+
+function listWorkoutComparisonAnalytics(userIds?: string[]) {
+  const params: string[] = [];
+  const userFilter =
+    userIds && userIds.length > 0
+      ? `AND workout.user_id IN (${userIds.map(() => "?").join(",")})`
+      : "";
+  if (userIds) {
+    params.push(...userIds);
+  }
+  const rows = getDatabase()
+    .prepare(
+      `SELECT analytics.workout_id, analytics.load_json, analytics.data_quality_json
+       FROM health_workout_analytics AS analytics
+       INNER JOIN health_workout_sessions AS workout
+         ON workout.id = analytics.workout_id
+       WHERE analytics.model_version = 'forge-hrr-v1'
+       ${userFilter}`
+    )
+    .all(...params) as WorkoutComparisonAnalyticsRow[];
+
+  return new Map(
+    rows.map((row) => {
+      const load = safeJsonParse<{ trimp?: number | null }>(row.load_json, {});
+      const dataQuality = safeJsonParse<{ sampleCoverage?: number }>(
+        row.data_quality_json,
+        {}
+      );
+      return [
+        row.workout_id,
+        {
+          trainingLoad:
+            typeof load.trimp === "number" && Number.isFinite(load.trimp)
+              ? load.trimp
+              : null,
+          heartRateCoverage:
+            typeof dataQuality.sampleCoverage === "number" &&
+            Number.isFinite(dataQuality.sampleCoverage)
+              ? dataQuality.sampleCoverage
+              : null
+        }
+      ] as const;
+    })
+  );
+}
+
+function buildSportComparison(
+  workoutRows: WorkoutSessionRow[],
+  userIds?: string[]
+) {
+  const analyticsByWorkout = listWorkoutComparisonAnalytics(userIds);
+  const nowMs = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const periods = [
+    { key: "all", label: "All time", days: null },
+    { key: "365d", label: "12 months", days: 365 },
+    { key: "90d", label: "90 days", days: 90 }
+  ] as const;
+
+  return {
+    modelVersion: "forge-sport-comparison-v1",
+    generatedAt: new Date(nowMs).toISOString(),
+    periods: periods.map((period) => {
+      const thresholdMs =
+        period.days === null ? null : nowMs - period.days * dayMs;
+      const rows = workoutRows.filter((row) => {
+        const startedAtMs = Date.parse(row.started_at);
+        if (!Number.isFinite(startedAtMs) || startedAtMs > nowMs) {
+          return false;
+        }
+        return thresholdMs === null || startedAtMs >= thresholdMs;
+      });
+      const groups = new Map<
+        string,
+        {
+          workoutType: string;
+          workoutTypeLabel: string;
+          activityFamily: string;
+          activityFamilyLabel: string;
+          sessionCount: number;
+          totalDurationSeconds: number;
+          totalEnergyKcal: number;
+          energySessionCount: number;
+          energyRateKcal: number;
+          energyDurationSeconds: number;
+          distanceMeters: number;
+          distanceSessionCount: number;
+          distanceRateMeters: number;
+          distanceDurationSeconds: number;
+          totalTrainingLoad: number;
+          trainingLoadSessionCount: number;
+          trainingLoadRate: number;
+          trainingLoadDurationSeconds: number;
+          heartRateCoverageSum: number;
+          heartRateCoverageCount: number;
+          activeDays: Set<string>;
+          firstStartedAt: string;
+          lastStartedAt: string;
+        }
+      >();
+
+      for (const row of rows) {
+        const provenance = safeJsonParse<Record<string, unknown>>(
+          row.provenance_json,
+          {}
+        );
+        const derived = safeJsonParse<Record<string, unknown>>(
+          row.derived_json,
+          {}
+        );
+        const presentation = buildWorkoutSessionPresentation({
+          source: row.source,
+          sourceType: row.source_type,
+          workoutType: row.workout_type,
+          provenance,
+          derived
+        });
+        const current = groups.get(presentation.workoutType) ?? {
+          workoutType: presentation.workoutType,
+          workoutTypeLabel: presentation.workoutTypeLabel,
+          activityFamily: presentation.activityFamily,
+          activityFamilyLabel: presentation.activityFamilyLabel,
+          sessionCount: 0,
+          totalDurationSeconds: 0,
+          totalEnergyKcal: 0,
+          energySessionCount: 0,
+          energyRateKcal: 0,
+          energyDurationSeconds: 0,
+          distanceMeters: 0,
+          distanceSessionCount: 0,
+          distanceRateMeters: 0,
+          distanceDurationSeconds: 0,
+          totalTrainingLoad: 0,
+          trainingLoadSessionCount: 0,
+          trainingLoadRate: 0,
+          trainingLoadDurationSeconds: 0,
+          heartRateCoverageSum: 0,
+          heartRateCoverageCount: 0,
+          activeDays: new Set<string>(),
+          firstStartedAt: row.started_at,
+          lastStartedAt: row.started_at
+        };
+        const durationSeconds = Math.max(0, row.duration_seconds);
+        const energyKcal = row.total_energy_kcal ?? row.active_energy_kcal;
+        const analytics = analyticsByWorkout.get(row.id);
+
+        current.sessionCount += 1;
+        current.totalDurationSeconds += durationSeconds;
+        current.activeDays.add(dayKey(row.started_at));
+        if (row.started_at < current.firstStartedAt) {
+          current.firstStartedAt = row.started_at;
+        }
+        if (row.started_at > current.lastStartedAt) {
+          current.lastStartedAt = row.started_at;
+        }
+        if (typeof energyKcal === "number" && Number.isFinite(energyKcal)) {
+          current.totalEnergyKcal += Math.max(0, energyKcal);
+          current.energySessionCount += 1;
+          if (durationSeconds > 0) {
+            current.energyRateKcal += Math.max(0, energyKcal);
+            current.energyDurationSeconds += durationSeconds;
+          }
+        }
+        if (
+          typeof row.distance_meters === "number" &&
+          Number.isFinite(row.distance_meters)
+        ) {
+          current.distanceMeters += Math.max(0, row.distance_meters);
+          current.distanceSessionCount += 1;
+          if (durationSeconds > 0) {
+            current.distanceRateMeters += Math.max(0, row.distance_meters);
+            current.distanceDurationSeconds += durationSeconds;
+          }
+        }
+        if (typeof analytics?.trainingLoad === "number") {
+          current.totalTrainingLoad += Math.max(0, analytics.trainingLoad);
+          current.trainingLoadSessionCount += 1;
+          if (durationSeconds > 0) {
+            current.trainingLoadRate += Math.max(0, analytics.trainingLoad);
+            current.trainingLoadDurationSeconds += durationSeconds;
+          }
+        }
+        if (typeof analytics?.heartRateCoverage === "number") {
+          current.heartRateCoverageSum += analytics.heartRateCoverage;
+          current.heartRateCoverageCount += 1;
+        }
+        groups.set(presentation.workoutType, current);
+      }
+
+      const grouped = [...groups.values()];
+      const totalDurationSeconds = grouped.reduce(
+        (sum, entry) => sum + entry.totalDurationSeconds,
+        0
+      );
+      const totalEnergyKcal = grouped.reduce(
+        (sum, entry) => sum + entry.totalEnergyKcal,
+        0
+      );
+      const energySessionCount = grouped.reduce(
+        (sum, entry) => sum + entry.energySessionCount,
+        0
+      );
+      const totalDistanceMeters = grouped.reduce(
+        (sum, entry) => sum + entry.distanceMeters,
+        0
+      );
+      const distanceSessionCount = grouped.reduce(
+        (sum, entry) => sum + entry.distanceSessionCount,
+        0
+      );
+      const totalTrainingLoad = grouped.reduce(
+        (sum, entry) => sum + entry.totalTrainingLoad,
+        0
+      );
+      const trainingLoadSessionCount = grouped.reduce(
+        (sum, entry) => sum + entry.trainingLoadSessionCount,
+        0
+      );
+      const activeDays = new Set(rows.map((row) => dayKey(row.started_at)));
+      const oldestStartedAt = rows.reduce<string | null>(
+        (oldest, row) =>
+          oldest === null || row.started_at < oldest ? row.started_at : oldest,
+        null
+      );
+      const newestStartedAt = rows.reduce<string | null>(
+        (newest, row) =>
+          newest === null || row.started_at > newest ? row.started_at : newest,
+        null
+      );
+
+      return {
+        key: period.key,
+        label: period.label,
+        requestedDays: period.days,
+        startedAt:
+          thresholdMs === null
+            ? oldestStartedAt
+            : new Date(thresholdMs).toISOString(),
+        endedAt: new Date(nowMs).toISOString(),
+        totals: {
+          sessionCount: rows.length,
+          sportCount: grouped.length,
+          activeDayCount: activeDays.size,
+          totalDurationSeconds,
+          totalEnergyKcal:
+            energySessionCount > 0 ? round(totalEnergyKcal, 1) : null,
+          energyCoverage:
+            rows.length > 0 ? round(energySessionCount / rows.length, 3) : 0,
+          totalDistanceMeters:
+            distanceSessionCount > 0 ? round(totalDistanceMeters, 1) : null,
+          distanceCoverage:
+            rows.length > 0 ? round(distanceSessionCount / rows.length, 3) : 0,
+          totalTrainingLoad:
+            trainingLoadSessionCount > 0 ? round(totalTrainingLoad, 1) : null,
+          trainingLoadCoverage:
+            rows.length > 0
+              ? round(trainingLoadSessionCount / rows.length, 3)
+              : 0,
+          oldestStartedAt,
+          newestStartedAt
+        },
+        sports: grouped
+          .map((entry) => ({
+            workoutType: entry.workoutType,
+            workoutTypeLabel: entry.workoutTypeLabel,
+            activityFamily: entry.activityFamily,
+            activityFamilyLabel: entry.activityFamilyLabel,
+            sessionCount: entry.sessionCount,
+            sessionShare:
+              rows.length > 0 ? round(entry.sessionCount / rows.length, 4) : 0,
+            activeDayCount: entry.activeDays.size,
+            totalDurationSeconds: entry.totalDurationSeconds,
+            durationShare:
+              totalDurationSeconds > 0
+                ? round(entry.totalDurationSeconds / totalDurationSeconds, 4)
+                : 0,
+            averageSessionMinutes:
+              entry.sessionCount > 0
+                ? round(entry.totalDurationSeconds / entry.sessionCount / 60, 1)
+                : 0,
+            totalEnergyKcal:
+              entry.energySessionCount > 0
+                ? round(entry.totalEnergyKcal, 1)
+                : null,
+            energyShare:
+              totalEnergyKcal > 0
+                ? round(entry.totalEnergyKcal / totalEnergyKcal, 4)
+                : 0,
+            energyCoverage: round(
+              entry.energySessionCount / entry.sessionCount,
+              3
+            ),
+            energyKcalPerHour:
+              entry.energyDurationSeconds > 0
+                ? round(
+                    entry.energyRateKcal / (entry.energyDurationSeconds / 3600),
+                    1
+                  )
+                : null,
+            distanceMeters:
+              entry.distanceSessionCount > 0
+                ? round(entry.distanceMeters, 1)
+                : null,
+            distanceShare:
+              totalDistanceMeters > 0
+                ? round(entry.distanceMeters / totalDistanceMeters, 4)
+                : 0,
+            distanceCoverage: round(
+              entry.distanceSessionCount / entry.sessionCount,
+              3
+            ),
+            averageSpeedKph:
+              entry.distanceDurationSeconds > 0
+                ? round(
+                    (entry.distanceRateMeters / entry.distanceDurationSeconds) *
+                      3.6,
+                    1
+                  )
+                : null,
+            totalTrainingLoad:
+              entry.trainingLoadSessionCount > 0
+                ? round(entry.totalTrainingLoad, 1)
+                : null,
+            trainingLoadShare:
+              totalTrainingLoad > 0
+                ? round(entry.totalTrainingLoad / totalTrainingLoad, 4)
+                : 0,
+            trainingLoadCoverage: round(
+              entry.trainingLoadSessionCount / entry.sessionCount,
+              3
+            ),
+            trainingLoadPerHour:
+              entry.trainingLoadDurationSeconds > 0
+                ? round(
+                    entry.trainingLoadRate /
+                      (entry.trainingLoadDurationSeconds / 3600),
+                    1
+                  )
+                : null,
+            averageHeartRateCoverage:
+              entry.heartRateCoverageCount > 0
+                ? round(
+                    entry.heartRateCoverageSum / entry.heartRateCoverageCount,
+                    3
+                  )
+                : null,
+            firstStartedAt: entry.firstStartedAt,
+            lastStartedAt: entry.lastStartedAt
+          }))
+          .sort(
+            (left, right) =>
+              right.totalDurationSeconds - left.totalDurationSeconds ||
+              right.sessionCount - left.sessionCount ||
+              left.workoutTypeLabel.localeCompare(right.workoutTypeLabel)
+          )
+      };
+    })
+  };
+}
+
 export function getFitnessViewData(
   userIds?: string[],
-  options: { compact?: boolean } = {}
+  options: { compact?: boolean; sessionDetail?: "full" | "summary" } = {}
 ) {
   const workoutRows = listWorkoutRows(userIds);
-  const recent = workoutRows
+  const nowMs = Date.now();
+  const historicalWorkoutRows = workoutRows.filter((row) => {
+    const startedAtMs = Date.parse(row.started_at);
+    return Number.isFinite(startedAtMs) && startedAtMs <= nowMs;
+  });
+  const mapSession =
+    options.sessionDetail === "summary"
+      ? mapWorkoutSessionSummary
+      : mapWorkoutSession;
+  const recent = historicalWorkoutRows
     .slice(0, 40)
     .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
   const browserSessions = options.compact
     ? []
     : workoutRows
         .slice(0, 2000)
-        .map((row, index) =>
-          mapWorkoutSession(row, { includeAnalytics: index < 40 })
-        );
+        .map((row, index) => mapSession(row, { includeAnalytics: index < 40 }));
   const analysisSessions = options.compact
     ? []
-    : workoutRows
+    : historicalWorkoutRows
         .slice(0, 500)
-        .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+        .map((row) => mapSession(row, { includeAnalytics: true }));
+  const sportComparison = buildSportComparison(workoutRows, userIds);
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)
   );
-  const weekly = recent.filter(
-    (session) =>
-      Date.now() - Date.parse(session.startedAt) <= 7 * 24 * 60 * 60 * 1000
+  const weeklyRows = workoutRows.filter((row) =>
+    isTimestampInTrailingWindow(row.started_at, nowMs, FITNESS_WEEK_WINDOW_MS)
   );
+  const weekly = weeklyRows.map((row) =>
+    mapWorkoutSession(row, { includeAnalytics: false })
+  );
+  const weeklyTrendSessions = weeklyRows
+    .slice(0, 40)
+    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
   const weeklyVolumeSeconds = weekly.reduce(
     (sum, session) => sum + session.durationSeconds,
     0
@@ -8088,6 +8666,7 @@ export function getFitnessViewData(
   return {
     summary: {
       workoutCount: weekly.length,
+      storedWorkoutCount: workoutRows.length,
       weeklyVolumeSeconds,
       exerciseMinutes: Math.round(exerciseMinutes),
       energyBurnedKcal: Math.round(energyBurned),
@@ -8134,7 +8713,7 @@ export function getFitnessViewData(
       routeWorkoutCount,
       zoneMix
     },
-    weeklyTrend: weekly
+    weeklyTrend: weeklyTrendSessions
       .map((session) => ({
         id: session.id,
         dateKey: dayKey(session.startedAt),
@@ -8178,6 +8757,7 @@ export function getFitnessViewData(
       totalMinutes: metrics.totalMinutes,
       energyKcal: metrics.energyKcal
     })),
+    sportComparison,
     vitalsTrend,
     analysisSessions,
     sessions: browserSessions

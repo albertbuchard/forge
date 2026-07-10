@@ -17,17 +17,31 @@ export function MutationInlineState({
 }) {
   const tone =
     state === "success"
-      ? "text-emerald-200"
+      ? "text-[var(--success)]"
       : state === "pending"
-        ? "text-white/78"
-        : "text-white/48";
+        ? "text-[var(--ui-ink-medium)]"
+        : "text-[var(--ui-ink-soft)]";
 
   return (
-    <div className={cn("inline-flex min-h-10 items-center gap-2 rounded-full bg-white/[0.04] px-3 py-2", tone, className)}>
-      {state === "pending" ? <Spinner className="size-3.5" tone="subtle" /> : null}
+    <div
+      className={cn(
+        "inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--ui-surface-1)] px-3 py-2",
+        tone,
+        className
+      )}
+    >
+      {state === "pending" ? (
+        <Spinner className="size-3.5" tone="subtle" />
+      ) : null}
       {state === "success" ? <Check className="size-3.5" /> : null}
       {state === "idle" ? <Sparkles className="size-3.5 opacity-70" /> : null}
-      <span className="type-meta">{state === "pending" ? pendingLabel : state === "success" ? successLabel : idleLabel}</span>
+      <span className="type-meta">
+        {state === "pending"
+          ? pendingLabel
+          : state === "success"
+            ? successLabel
+            : idleLabel}
+      </span>
     </div>
   );
 }

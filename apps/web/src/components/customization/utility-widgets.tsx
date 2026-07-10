@@ -10,9 +10,7 @@ import {
   TimerReset
 } from "lucide-react";
 import { createNote, createWikiPage } from "../../lib/api.js";
-import {
-  buildStaticWorkbenchExecution
-} from "../../lib/workbench/runtime.js";
+import { buildStaticWorkbenchExecution } from "../../lib/workbench/runtime.js";
 import {
   createContextOutput,
   createNoteTool,
@@ -68,8 +66,8 @@ export function TimeWidget({ compact }: { compact: boolean }) {
   }, []);
 
   return (
-    <div className="flex h-full flex-col justify-between gap-4 rounded-[20px] bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-white/45">
+    <div className="flex h-full flex-col justify-between gap-4 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+      <div className="flex items-center gap-2 text-[var(--ui-ink-faint)]">
         <TimerReset className="size-4" />
         <span className="text-[12px] uppercase tracking-[0.16em]">
           Local time
@@ -77,7 +75,7 @@ export function TimeWidget({ compact }: { compact: boolean }) {
       </div>
       <div
         className={cn(
-          "font-display text-white",
+          "font-display text-[var(--ui-ink-strong)]",
           compact ? "text-3xl" : "text-5xl"
         )}
       >
@@ -86,7 +84,7 @@ export function TimeWidget({ compact }: { compact: boolean }) {
           minute: "2-digit"
         }).format(now)}
       </div>
-      <div className="text-sm text-white/58">
+      <div className="text-sm text-[var(--ui-ink-soft)]">
         {new Intl.DateTimeFormat(undefined, {
           weekday: "long",
           month: "long",
@@ -123,16 +121,16 @@ export function MiniCalendarWidget({ compact }: { compact: boolean }) {
   }, []);
 
   return (
-    <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">
+    <div className="grid gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-white">
+        <div className="flex items-center gap-2 text-sm text-[var(--ui-ink-strong)]">
           <CalendarDays className="size-4 text-[var(--primary)]" />
           {new Intl.DateTimeFormat(undefined, {
             month: "long",
             year: "numeric"
           }).format(today)}
         </div>
-        <div className="text-[12px] text-white/45">
+        <div className="text-[12px] text-[var(--ui-ink-faint)]">
           {compact ? "Mini" : "Month view"}
         </div>
       </div>
@@ -140,7 +138,7 @@ export function MiniCalendarWidget({ compact }: { compact: boolean }) {
         {weekdayLabels.map((label) => (
           <div
             key={label}
-            className="text-center text-[11px] uppercase tracking-[0.14em] text-white/35"
+            className="text-center text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]"
           >
             {label}
           </div>
@@ -154,10 +152,10 @@ export function MiniCalendarWidget({ compact }: { compact: boolean }) {
               className={cn(
                 "flex min-h-9 items-center justify-center rounded-xl text-sm",
                 isToday
-                  ? "bg-[var(--primary)] text-slate-950"
+                  ? "bg-[var(--primary)] text-[var(--ui-ink-on-accent)]"
                   : isCurrentMonth
-                    ? "bg-white/[0.04] text-white/78"
-                    : "bg-transparent text-white/24"
+                    ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                    : "bg-transparent text-[var(--ui-ink-faint)]"
               )}
             >
               {day.getDate()}
@@ -180,22 +178,22 @@ export function SpotifyWidget({ surfaceId }: { surfaceId: string }) {
   }, [storageKey, url]);
 
   return (
-    <div className="grid h-full gap-3 rounded-[20px] bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-white">
+    <div className="grid h-full gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+      <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
         <Music4 className="size-4 text-[var(--secondary)]" />
         <span className="text-sm font-semibold">Spotify link</span>
       </div>
       <input
         value={url}
         onChange={(event) => setUrl(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.35)]"
+        className="w-full rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2.5 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-strong)_65%)]"
         placeholder="Paste a playlist, album, or artist URL"
       />
       <a
         href={url}
         target="_blank"
         rel="noreferrer"
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[rgba(78,222,163,0.14)] px-3 py-2 text-sm font-medium text-[var(--secondary)] transition hover:bg-[rgba(78,222,163,0.22)]"
+        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--secondary)_14%,var(--ui-surface-1)_86%)] px-3 py-2 text-sm font-medium text-[var(--secondary)] transition hover:bg-[color-mix(in_srgb,var(--secondary)_22%,var(--ui-surface-1)_78%)]"
       >
         Open Spotify
         <ExternalLink className="size-4" />
@@ -252,8 +250,8 @@ export function WeatherWidget({ compact }: { compact: boolean }) {
   }, []);
 
   return (
-    <div className="flex h-full flex-col justify-between gap-4 rounded-[20px] bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-white">
+    <div className="flex h-full flex-col justify-between gap-4 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+      <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
         <CloudSun className="size-4 text-[var(--tertiary)]" />
         <span className="text-sm font-semibold">Weather</span>
       </div>
@@ -261,18 +259,18 @@ export function WeatherWidget({ compact }: { compact: boolean }) {
         <>
           <div
             className={cn(
-              "font-display text-white",
+              "font-display text-[var(--ui-ink-strong)]",
               compact ? "text-3xl" : "text-5xl"
             )}
           >
             {Math.round(weather.temperature)}°
           </div>
-          <div className="text-sm text-white/58">
+          <div className="text-sm text-[var(--ui-ink-soft)]">
             Code {weather.weatherCode} · {status}
           </div>
         </>
       ) : (
-        <div className="text-sm text-white/58">{status}</div>
+        <div className="text-sm text-[var(--ui-ink-soft)]">{status}</div>
       )}
     </div>
   );
@@ -339,8 +337,8 @@ export function QuickCaptureWidget({
   }
 
   return (
-    <div className="grid h-full min-h-0 gap-3 rounded-[20px] bg-white/[0.03] p-4">
-      <div className="flex items-center gap-2 text-white">
+    <div className="grid h-full min-h-0 gap-3 rounded-[20px] bg-[var(--ui-surface-1)] p-4">
+      <div className="flex items-center gap-2 text-[var(--ui-ink-strong)]">
         <NotebookPen className="size-4 text-[var(--primary)]" />
         <span className="text-sm font-semibold">Quick capture</span>
       </div>
@@ -348,7 +346,7 @@ export function QuickCaptureWidget({
         ref={titleRef}
         value={title}
         onChange={(event) => setTitle(event.target.value)}
-        className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.35)]"
+        className="w-full rounded-2xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2.5 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-strong)_65%)]"
         placeholder="Title"
       />
       <div className="flex flex-wrap gap-2">
@@ -361,7 +359,7 @@ export function QuickCaptureWidget({
           <button
             key={tool.label}
             type="button"
-            className="inline-flex min-h-8 items-center justify-center rounded-xl bg-white/[0.05] px-2.5 text-[12px] font-semibold text-white/72 transition hover:bg-white/[0.08] hover:text-white"
+            className="inline-flex min-h-8 items-center justify-center rounded-xl bg-[var(--ui-surface-2)] px-2.5 text-[12px] font-semibold text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             onClick={tool.action}
           >
             {tool.label}
@@ -373,7 +371,7 @@ export function QuickCaptureWidget({
         value={content}
         onChange={(event) => setContent(event.target.value)}
         className={cn(
-          "min-h-0 w-full rounded-[20px] border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white outline-none transition focus:border-[rgba(192,193,255,0.35)]",
+          "min-h-0 w-full rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-strong)_65%)]",
           compact ? "h-28" : "h-40"
         )}
         placeholder="Write a quick note or rough wiki draft"
@@ -381,7 +379,7 @@ export function QuickCaptureWidget({
       <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="button"
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[rgba(192,193,255,0.16)] px-3 py-2 text-sm font-medium text-[var(--primary)] transition hover:bg-[rgba(192,193,255,0.24)] disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[var(--ui-accent-soft)] px-3 py-2 text-sm font-medium text-[var(--primary)] transition hover:bg-[var(--ui-accent-soft-hover)] disabled:opacity-50"
           disabled={!content.trim() || noteMutation.isPending}
           onClick={() => noteMutation.mutate()}
         >
@@ -390,7 +388,7 @@ export function QuickCaptureWidget({
         </button>
         <button
           type="button"
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[rgba(255,185,95,0.16)] px-3 py-2 text-sm font-medium text-[var(--tertiary)] transition hover:bg-[rgba(255,185,95,0.24)] disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--tertiary)_16%,var(--ui-surface-1)_84%)] px-3 py-2 text-sm font-medium text-[var(--tertiary)] transition hover:bg-[color-mix(in_srgb,var(--tertiary)_24%,var(--ui-surface-1)_76%)] disabled:opacity-50"
           disabled={!content.trim() || wikiMutation.isPending}
           onClick={() => wikiMutation.mutate()}
         >
@@ -421,7 +419,8 @@ const timeWidgetDefinition = {
     createContextOutput({
       key: "clock",
       label: "Clock state",
-      description: "Structured clock state including the current ISO timestamp.",
+      description:
+        "Structured clock state including the current ISO timestamp.",
       modelName: "ForgeClockState"
     })
   ],
@@ -434,12 +433,14 @@ const timeWidgetDefinition = {
     output: [
       createSummaryOutput({
         label: "Current time",
-        description: "Formatted local time string published by the clock widget."
+        description:
+          "Formatted local time string published by the clock widget."
       }),
       createContextOutput({
         key: "clock",
         label: "Clock state",
-        description: "Structured clock state including the current ISO timestamp.",
+        description:
+          "Structured clock state including the current ISO timestamp.",
         modelName: "ForgeClockState"
       })
     ],
@@ -447,19 +448,22 @@ const timeWidgetDefinition = {
   }),
   WebView: TimeWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
-    buildStaticWorkbenchExecution(input, {
-      clock: {
-        now: input.context.now
-      }
-    }, new Intl.DateTimeFormat(undefined, {
-      hour: "2-digit",
-      minute: "2-digit"
-    }).format(new Date(input.context.now)))
+    buildStaticWorkbenchExecution(
+      input,
+      {
+        clock: {
+          now: input.context.now
+        }
+      },
+      new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(input.context.now))
+    )
 };
 
-(
-  TimeWidget as WorkbenchRegisteredComponent<{ compact: boolean }>
-).workbench = timeWidgetDefinition;
+(TimeWidget as WorkbenchRegisteredComponent<{ compact: boolean }>).workbench =
+  timeWidgetDefinition;
 
 const calendarWidgetDefinition = {
   id: "surface:utility:mini-calendar",
@@ -480,7 +484,8 @@ const calendarWidgetDefinition = {
     createContextOutput({
       key: "calendarView",
       label: "Calendar view",
-      description: "Structured mini-calendar state including the current month anchor.",
+      description:
+        "Structured mini-calendar state including the current month anchor.",
       modelName: "ForgeMiniCalendarView"
     })
   ],
@@ -498,7 +503,8 @@ const calendarWidgetDefinition = {
       createContextOutput({
         key: "calendarView",
         label: "Calendar view",
-        description: "Structured mini-calendar state including the current month anchor.",
+        description:
+          "Structured mini-calendar state including the current month anchor.",
         modelName: "ForgeMiniCalendarView"
       })
     ],
@@ -506,11 +512,15 @@ const calendarWidgetDefinition = {
   }),
   WebView: MiniCalendarWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
-    buildStaticWorkbenchExecution(input, {
-      calendarView: {
-        now: input.context.now
-      }
-    }, "Compact month calendar")
+    buildStaticWorkbenchExecution(
+      input,
+      {
+        calendarView: {
+          now: input.context.now
+        }
+      },
+      "Compact month calendar"
+    )
 };
 
 (
@@ -543,7 +553,8 @@ const spotifyWidgetDefinition = {
     createContextOutput({
       key: "spotifyLink",
       label: "Spotify state",
-      description: "Structured Spotify widget state and pinned surface context.",
+      description:
+        "Structured Spotify widget state and pinned surface context.",
       modelName: "ForgeSpotifyWidgetState"
     })
   ],
@@ -561,7 +572,8 @@ const spotifyWidgetDefinition = {
       createContextOutput({
         key: "spotifyLink",
         label: "Spotify state",
-        description: "Structured Spotify widget state and pinned surface context.",
+        description:
+          "Structured Spotify widget state and pinned surface context.",
         modelName: "ForgeSpotifyWidgetState"
       })
     ],
@@ -569,11 +581,15 @@ const spotifyWidgetDefinition = {
   }),
   WebView: SpotifyWidget as never,
   execute: (input: Parameters<typeof buildStaticWorkbenchExecution>[0]) =>
-    buildStaticWorkbenchExecution(input, {
-      spotifyLink: {
-        surfaceId: input.inputs.surfaceId ?? null
-      }
-    }, "Pinned Spotify link")
+    buildStaticWorkbenchExecution(
+      input,
+      {
+        spotifyLink: {
+          surfaceId: input.inputs.surfaceId ?? null
+        }
+      },
+      "Pinned Spotify link"
+    )
 };
 
 (

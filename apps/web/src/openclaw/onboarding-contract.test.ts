@@ -308,6 +308,12 @@ describe("forge onboarding contract", () => {
         expect(flow.openingQuestion).toBe(psychePlaybook.openingQuestion);
         expect(flow.readinessCheck).toMatch(/accuracy or consent/i);
         expect(flow.readinessCheck).toMatch(/shared batch CRUD/i);
+        expect(flow.readinessCheck).toMatch(
+          /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*do not require a new concrete example or hypothesis/i
+        );
+        expect(flow.readinessCheck).toMatch(
+          /Guided formulation[\s\S]*concrete example[\s\S]*tentative hypothesis[\s\S]*fit-or-correction/i
+        );
       } else {
         expect(
           entityPlaybook,
@@ -375,6 +381,12 @@ describe("forge onboarding contract", () => {
     );
     expect(readinessByType.get("calendar_connection")).toMatch(
       /calendar provider or existing connection[\s\S]*intended workflow[\s\S]*lifecycle action[\s\S]*writable\/read-only mode[\s\S]*selected-calendar change[\s\S]*sync[\s\S]*rediscovery[\s\S]*removal target[\s\S]*published calendar connection route[\s\S]*batch CRUD/i
+    );
+    expect(readinessByType.get("wiki_page")).toMatch(
+      /Ready to list, search, or inspect wiki health[\s\S]*published specialized route[\s\S]*Ready to read, update, or delete[\s\S]*exact page id or slug[\s\S]*Ready to create after a duplicate check[\s\S]*meaningful Markdown body[\s\S]*Ready to ingest, sync, or reindex[\s\S]*without route guessing/i
+    );
+    expect(readinessByType.get("artifact")).toMatch(
+      /Ready to list, read metadata, inspect versions, or read audit history[\s\S]*Ready for trusted upload[\s\S]*without collecting a password[\s\S]*Ready to update metadata, rescan, enrich with an LLM, or change trust state[\s\S]*current metadata read[\s\S]*Ready to replace links[\s\S]*replacement is not append[\s\S]*Ready to delete or restore metadata through batch metadata routes[\s\S]*hard deletion[\s\S]*never ready for an agent call/i
     );
     const artifactHint = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "artifact"
@@ -1583,10 +1595,10 @@ describe("forge onboarding contract", () => {
     );
 
     expect(playbookByFocus.get("wiki_page")?.openingQuestion).toMatch(
-      /remember or reuse later/i
+      /find, preserve, or improve in the wiki/i
     );
     expect(playbookByFocus.get("wiki_page")?.askSequence.join(" ")).toMatch(
-      /book, article, source, concept, person, conversation, project reference, or personal manual/i
+      /browse, search, read, create, update, delete, ingest, inspect wiki health, sync, or reindex[\s\S]*list, search, or read the existing page before asking authoring questions[\s\S]*near-duplicate topic[\s\S]*smallest change that is newly true[\s\S]*partial-failure[\s\S]*read current wiki health first[\s\S]*backlinks, citations, related pages, or history/i
     );
     expect(playbookByFocus.get("self_observation")?.openingQuestion).toMatch(
       /what happened in the situation/i

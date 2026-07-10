@@ -64,29 +64,61 @@ const ENTITY_CREATION_REWARD_SOURCES: EntityCreationRewardSource[] = [
   { entityType: "habit", tableName: "habits", titleColumn: "title" },
   { entityType: "note", tableName: "notes", titleColumn: "content_plain" },
   { entityType: "tag", tableName: "tags", titleColumn: "name" },
-  { entityType: "calendar_event", tableName: "calendar_events", titleColumn: "title" },
+  {
+    entityType: "calendar_event",
+    tableName: "calendar_events",
+    titleColumn: "title"
+  },
   {
     entityType: "work_block_template",
     tableName: "work_block_templates",
     titleColumn: "title"
   },
-  { entityType: "task_timebox", tableName: "task_timeboxes", titleColumn: "title" },
+  {
+    entityType: "task_timebox",
+    tableName: "task_timeboxes",
+    titleColumn: "title"
+  },
   {
     entityType: "questionnaire_instrument",
     tableName: "questionnaire_instruments",
     titleColumn: "title"
   },
-  { entityType: "psyche_value", tableName: "psyche_values", titleColumn: "title" },
+  {
+    entityType: "psyche_value",
+    tableName: "psyche_values",
+    titleColumn: "title"
+  },
   {
     entityType: "behavior_pattern",
     tableName: "behavior_patterns",
     titleColumn: "title"
   },
-  { entityType: "behavior", tableName: "psyche_behaviors", titleColumn: "title" },
-  { entityType: "belief_entry", tableName: "belief_entries", titleColumn: "statement" },
-  { entityType: "mode_profile", tableName: "mode_profiles", titleColumn: "title" },
-  { entityType: "flashcard", tableName: "psyche_flashcards", titleColumn: "title" },
-  { entityType: "trigger_report", tableName: "trigger_reports", titleColumn: "title" }
+  {
+    entityType: "behavior",
+    tableName: "psyche_behaviors",
+    titleColumn: "title"
+  },
+  {
+    entityType: "belief_entry",
+    tableName: "belief_entries",
+    titleColumn: "statement"
+  },
+  {
+    entityType: "mode_profile",
+    tableName: "mode_profiles",
+    titleColumn: "title"
+  },
+  {
+    entityType: "flashcard",
+    tableName: "psyche_flashcards",
+    titleColumn: "title"
+  },
+  {
+    entityType: "trigger_report",
+    tableName: "trigger_reports",
+    titleColumn: "title"
+  }
 ];
 
 type MetadataValue = string | number | boolean | null;
@@ -208,9 +240,7 @@ export function calculateLevel(totalXp: number): {
 function latestCompletionForTasks(tasks: Task[]): string | null {
   return (
     tasks
-      .flatMap((task) =>
-        task.completedAt ? [task.completedAt] : []
-      )
+      .flatMap((task) => (task.completedAt ? [task.completedAt] : []))
       .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null
   );
 }
@@ -229,9 +259,7 @@ function latestAlignedHabitAt(habits: Habit[]): string | null {
 
 function resolveTimezone(): string {
   return (
-    process.env.TZ ||
-    Intl.DateTimeFormat().resolvedOptions().timeZone ||
-    "UTC"
+    process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   );
 }
 
@@ -264,9 +292,7 @@ function dateKeyInTimezone(value: string | Date, timezone: string): string {
 function daysBetweenDateKeys(left: string, right: string): number {
   const leftDate = new Date(`${left}T12:00:00.000Z`);
   const rightDate = new Date(`${right}T12:00:00.000Z`);
-  return Math.round(
-    (rightDate.getTime() - leftDate.getTime()) / 86_400_000
-  );
+  return Math.round((rightDate.getTime() - leftDate.getTime()) / 86_400_000);
 }
 
 function subtractDaysFromDateKey(dateKeyValue: string, days: number): string {
@@ -366,7 +392,9 @@ function buildOwnerResolver(defaultUserId: string | null) {
       const actorUserId = usersByLabel.get(row.actor.trim().toLowerCase());
       if (actorUserId) return actorUserId;
     }
-    return ownerByEntityKey.get(`${row.entityType}:${row.entityId}`) ?? defaultUserId;
+    return (
+      ownerByEntityKey.get(`${row.entityType}:${row.entityId}`) ?? defaultUserId
+    );
   };
 }
 
@@ -525,15 +553,13 @@ function deriveDailyActivityRows(
   >();
   for (const event of scopedRewards.filter(isQualifyingStreakReward)) {
     const dateKeyValue = dateKeyInTimezone(event.createdAt, timezone);
-    const current =
-      byDate.get(dateKeyValue) ??
-      {
-        dateKey: dateKeyValue,
-        qualifyingXp: 0,
-        eventCount: 0,
-        firstRewardEventId: null,
-        lastRewardEventId: null
-      };
+    const current = byDate.get(dateKeyValue) ?? {
+      dateKey: dateKeyValue,
+      qualifyingXp: 0,
+      eventCount: 0,
+      firstRewardEventId: null,
+      lastRewardEventId: null
+    };
     current.qualifyingXp += event.deltaXp;
     current.eventCount += 1;
     current.firstRewardEventId ??= event.id;
@@ -557,10 +583,7 @@ function syncDailyActivity(
   timezone: string
 ) {
   const rows = deriveDailyActivityRows(userId, scopedRewards, timezone);
-  replaceGamificationDailyActivity(
-    userId,
-    rows
-  );
+  replaceGamificationDailyActivity(userId, rows);
   return listGamificationDailyActivity(userId);
 }
 
@@ -639,9 +662,9 @@ function calculateMissedDays(
 }
 
 function scalarNumber(sql: string, params: unknown[] = []): number {
-  const row = getDatabase().prepare(sql).get(...(params as never[])) as
-    | { value: number | null }
-    | undefined;
+  const row = getDatabase()
+    .prepare(sql)
+    .get(...(params as never[])) as { value: number | null } | undefined;
   return Math.max(0, Number(row?.value ?? 0));
 }
 
@@ -652,7 +675,12 @@ function ownerScopeClause(
   scope: GamificationScope
 ) {
   if (scope.userIds.length === 0) {
-    return { join: "", where: "", joinParams: [] as unknown[], whereParams: [] as unknown[] };
+    return {
+      join: "",
+      where: "",
+      joinParams: [] as unknown[],
+      whereParams: [] as unknown[]
+    };
   }
   const placeholders = scope.userIds.map(() => "?").join(", ");
   return {
@@ -764,7 +792,8 @@ function buildMetricValues(input: {
 }): CatalogMetricValues {
   const positiveRewards = input.scopedRewards.filter(isQualifyingStreakReward);
   const doneTasks = input.tasks.filter((task) => task.status === "done");
-  const completedRunWhere = "r.status IN ('completed', 'released', 'timed_out')";
+  const completedRunWhere =
+    "r.status IN ('completed', 'released', 'timed_out')";
   const nonManualXp = positiveRewards.reduce(
     (sum, reward) => sum + reward.deltaXp,
     0
@@ -791,13 +820,21 @@ function buildMetricValues(input: {
     "COUNT(DISTINCT COALESCE(e.target_note_id, e.target_entity_type || ':' || e.target_entity_id, NULLIF(e.raw_target, '')))",
     "e.target_note_id IS NOT NULL OR e.target_entity_id IS NOT NULL OR TRIM(e.raw_target) <> ''"
   );
-  const modeProfileCount = countOwnedRows("mode_profiles", "mode_profile", input.scope);
+  const modeProfileCount = countOwnedRows(
+    "mode_profiles",
+    "mode_profile",
+    input.scope
+  );
   const behaviorPatternCount = countOwnedRows(
     "behavior_patterns",
     "behavior_pattern",
     input.scope
   );
-  const beliefEntryCount = countOwnedRows("belief_entries", "belief_entry", input.scope);
+  const beliefEntryCount = countOwnedRows(
+    "belief_entries",
+    "belief_entry",
+    input.scope
+  );
   const triggerReportCount = countOwnedRows(
     "trigger_reports",
     "trigger_report",
@@ -868,7 +905,10 @@ function buildMetricValues(input: {
         ).length,
       0
     ),
-    habitStreakMax: Math.max(0, ...input.habits.map((habit) => habit.streakCount)),
+    habitStreakMax: Math.max(
+      0,
+      ...input.habits.map((habit) => habit.streakCount)
+    ),
     distinctHabitCount: input.habits.filter((habit) =>
       habit.checkIns.some((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
     ).length,
@@ -892,7 +932,11 @@ function buildMetricValues(input: {
       "t.destroy_at IS NULL OR t.destroy_at = '' OR t.destroy_at > CURRENT_TIMESTAMP"
     ),
     knowledgeGraphNodeCount: wikiPageCount + knowledgeGraphTargetCount,
-    psycheValueCount: countOwnedRows("psyche_values", "psyche_value", input.scope),
+    psycheValueCount: countOwnedRows(
+      "psyche_values",
+      "psyche_value",
+      input.scope
+    ),
     modeProfileCount,
     linkedModeProfileCount: countOwnedRows(
       "mode_profiles",
@@ -959,7 +1003,8 @@ function buildMetricValues(input: {
     base.nonManualXp > 0,
     base.longestStreakDays > 0,
     base.taskCompletionCount > 0,
-    base.goalLinkedTaskCompletionCount > 0 || base.projectLinkedTaskCompletionCount > 0,
+    base.goalLinkedTaskCompletionCount > 0 ||
+      base.projectLinkedTaskCompletionCount > 0,
     base.habitAlignedCount > 0,
     base.psycheValueCount > 0 ||
       base.modeProfileCount > 0 ||
@@ -979,10 +1024,7 @@ function buildMetricValues(input: {
   };
 }
 
-function assetKeyForMascot(
-  streakDays: number,
-  missedDays: number
-): string {
+function assetKeyForMascot(streakDays: number, missedDays: number): string {
   if (missedDays > 0) {
     return (
       [...GAMIFICATION_STREAK_AWAY_DAY_KEYS]
@@ -1017,7 +1059,10 @@ function buildMascotState(input: {
     return {
       mood: "absent",
       spriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
-      streakSpriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
+      streakSpriteKey: assetKeyForMascot(
+        input.profile.streakDays,
+        input.missedDays
+      ),
       headline: "The forge is cooling.",
       line:
         input.missedDays >= 14
@@ -1032,7 +1077,10 @@ function buildMascotState(input: {
     return {
       mood: "pressure",
       spriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
-      streakSpriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
+      streakSpriteKey: assetKeyForMascot(
+        input.profile.streakDays,
+        input.missedDays
+      ),
       headline: "The anvil is going quiet.",
       line: "This is the dangerous middle: not gone, not back. Make one real mark today.",
       pressureLevel: 3,
@@ -1044,7 +1092,10 @@ function buildMascotState(input: {
     return {
       mood: "comeback",
       spriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
-      streakSpriteKey: assetKeyForMascot(input.profile.streakDays, input.missedDays),
+      streakSpriteKey: assetKeyForMascot(
+        input.profile.streakDays,
+        input.missedDays
+      ),
       headline: "Repair window open.",
       line: "The streak cracked. Pick up the hammer before the crack becomes the story.",
       pressureLevel: 2,
@@ -1191,7 +1242,8 @@ function syncCatalog(input: {
   );
   const evaluationsByItemId = new Map(
     GAMIFICATION_CATALOG.map(
-      (item) => [item.id, evaluateCatalogItem(item, input.metricValues)] as const
+      (item) =>
+        [item.id, evaluateCatalogItem(item, input.metricValues)] as const
     )
   );
   for (const item of GAMIFICATION_CATALOG) {
@@ -1268,20 +1320,25 @@ function syncCatalog(input: {
     });
   }
 
-  const entries: GamificationCatalogEntry[] = GAMIFICATION_CATALOG.map((item) => {
-    const evaluation = evaluationsByItemId.get(item.id)!;
-    const unlock = unlocksByItemId.get(item.id);
-    const readOnlyAggregateUnlock = !userId && evaluation.met;
-    return {
-      ...item,
-      unlocked: Boolean(unlock) || readOnlyAggregateUnlock,
-      unlockedAt: unlock?.unlockedAt ?? null,
-      progressCurrent: Math.max(0, Math.min(evaluation.current, evaluation.target)),
-      progressTarget: evaluation.target,
-      progressPercent: evaluation.percent,
-      celebrationSeenAt: unlock?.celebrationSeenAt ?? null
-    };
-  });
+  const entries: GamificationCatalogEntry[] = GAMIFICATION_CATALOG.map(
+    (item) => {
+      const evaluation = evaluationsByItemId.get(item.id)!;
+      const unlock = unlocksByItemId.get(item.id);
+      const readOnlyAggregateUnlock = !userId && evaluation.met;
+      return {
+        ...item,
+        unlocked: Boolean(unlock) || readOnlyAggregateUnlock,
+        unlockedAt: unlock?.unlockedAt ?? null,
+        progressCurrent: Math.max(
+          0,
+          Math.min(evaluation.current, evaluation.target)
+        ),
+        progressTarget: evaluation.target,
+        progressPercent: evaluation.percent,
+        celebrationSeenAt: unlock?.celebrationSeenAt ?? null
+      };
+    }
+  );
   const newestUnlock =
     entries
       .filter((entry) => entry.unlocked && entry.unlockedAt)
@@ -1524,12 +1581,14 @@ function buildAchievementSignalsFromProfile(input: {
   const alignedHabitCount = habits.reduce(
     (sum, habit) =>
       sum +
-      habit.checkIns.filter((checkIn) =>
-        isAlignedHabitCheckIn(habit, checkIn)
-      ).length,
+      habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
+        .length,
     0
   );
-  const topHabitStreak = Math.max(0, ...habits.map((habit) => habit.streakCount));
+  const topHabitStreak = Math.max(
+    0,
+    ...habits.map((habit) => habit.streakCount)
+  );
   const latestHabitWin = latestAlignedHabitAt(habits);
 
   return [
@@ -1546,7 +1605,8 @@ function buildAchievementSignalsFromProfile(input: {
     {
       id: "aligned-maker",
       title: "Aligned Maker",
-      summary: "Complete work that is explicitly tied to a goal and tagged context.",
+      summary:
+        "Complete work that is explicitly tied to a goal and tagged context.",
       tier: alignedDoneTasks.length >= 5 ? "gold" : "bronze",
       progressLabel: `${Math.min(alignedDoneTasks.length, 5)}/5 aligned completions`,
       unlocked: alignedDoneTasks.length >= 5,
@@ -1583,7 +1643,8 @@ function buildAchievementSignalsFromProfile(input: {
     {
       id: "focus-lane",
       title: "Focus Lane Live",
-      summary: "Sustain a protected execution lane instead of browsing a backlog.",
+      summary:
+        "Sustain a protected execution lane instead of browsing a backlog.",
       tier: focusTasks.length > 0 ? "silver" : "bronze",
       progressLabel: `${Math.min(focusTasks.length, 1)}/1 live directives`,
       unlocked: focusTasks.length > 0,
@@ -1606,7 +1667,8 @@ function buildAchievementSignalsFromProfile(input: {
     {
       id: "ritual-pressure",
       title: "Ritual Pressure",
-      summary: "Keep one habit alive long enough that it changes the texture of the week.",
+      summary:
+        "Keep one habit alive long enough that it changes the texture of the week.",
       tier: topHabitStreak >= 10 ? "gold" : "silver",
       progressLabel: `${Math.min(topHabitStreak, 10)}/10 habit streak`,
       unlocked: topHabitStreak >= 10,
@@ -1645,7 +1707,7 @@ function buildMilestoneRewardsFromProfile(input: {
   const { goals, tasks, habits, now, profile } = input;
   const doneTasks = tasks.filter((task) => task.status === "done");
   const topGoal = profile.topGoalId
-    ? goals.find((goal) => goal.id === profile.topGoalId) ?? null
+    ? (goals.find((goal) => goal.id === profile.topGoalId) ?? null)
     : null;
   const topGoalXp = topGoal
     ? doneTasks
@@ -1658,9 +1720,8 @@ function buildMilestoneRewardsFromProfile(input: {
   const alignedHabitCount = habits.reduce(
     (sum, habit) =>
       sum +
-      habit.checkIns.filter((checkIn) =>
-        isAlignedHabitCheckIn(habit, checkIn)
-      ).length,
+      habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
+        .length,
     0
   );
 
@@ -1668,7 +1729,8 @@ function buildMilestoneRewardsFromProfile(input: {
     {
       id: "next-level",
       title: "Next level threshold",
-      summary: "Keep pushing until the next level unlocks a stronger sense of ascent.",
+      summary:
+        "Keep pushing until the next level unlocks a stronger sense of ascent.",
       rewardLabel: `Level ${profile.level + 1}`,
       progressLabel: `${profile.currentLevelXp}/${profile.nextLevelXp} xp`,
       current: profile.currentLevelXp,
@@ -1701,7 +1763,9 @@ function buildMilestoneRewardsFromProfile(input: {
       summary: topGoal
         ? `Keep advancing the leading life goal through a concrete project path.`
         : "No leading life goal is established yet.",
-      rewardLabel: topGoal ? `${topGoal.title} milestone` : "Establish a lead goal",
+      rewardLabel: topGoal
+        ? `${topGoal.title} milestone`
+        : "Establish a lead goal",
       progressLabel: topGoal
         ? `${Math.min(topGoalXp, topGoal.targetPoints)}/${topGoal.targetPoints} goal xp`
         : "0/1 lead arcs",
@@ -1712,7 +1776,8 @@ function buildMilestoneRewardsFromProfile(input: {
     {
       id: "habit-mass",
       title: "Habit mass threshold",
-      summary: "Make recurring behavior part of the same reward engine as tasks and projects.",
+      summary:
+        "Make recurring behavior part of the same reward engine as tasks and projects.",
       rewardLabel: "Consistency cache +75 xp",
       progressLabel: `${Math.min(alignedHabitCount, 14)}/14 aligned habit check-ins`,
       current: alignedHabitCount,
@@ -1730,7 +1795,13 @@ export function buildMilestoneRewards(
   options: { userIds?: string[] } = {}
 ): MilestoneReward[] {
   const profile = buildGamificationProfile(goals, tasks, habits, now, options);
-  return buildMilestoneRewardsFromProfile({ goals, tasks, habits, now, profile });
+  return buildMilestoneRewardsFromProfile({
+    goals,
+    tasks,
+    habits,
+    now,
+    profile
+  });
 }
 
 export function buildGamificationDashboardSignals(
@@ -1998,18 +2069,26 @@ export function buildXpMetricsPayloadModel(input: {
     achievements,
     milestoneRewards
   });
+  const unlockedCatalog = state.catalog.items
+    .filter((item) => item.unlocked)
+    .sort(
+      (left, right) =>
+        Date.parse(right.unlockedAt ?? "") - Date.parse(left.unlockedAt ?? "")
+    );
+  const featuredTrophy =
+    unlockedCatalog.find((item) => item.kind === "trophy") ??
+    state.catalog.nextTargets.find((item) => item.kind === "trophy") ??
+    state.catalog.items.find((item) => item.kind === "trophy") ??
+    null;
   const visibleCatalog = [
     ...(state.catalog.newestUnlock ? [state.catalog.newestUnlock] : []),
     ...(state.catalog.nextUnlock ? [state.catalog.nextUnlock] : []),
-    ...state.catalog.items
-      .filter((item) => item.unlocked)
-      .sort(
-        (left, right) =>
-          Date.parse(right.unlockedAt ?? "") - Date.parse(left.unlockedAt ?? "")
-      )
-      .slice(0, 4)
+    ...(featuredTrophy ? [featuredTrophy] : []),
+    ...unlockedCatalog.slice(0, 4)
   ];
-  const uniquePreview = [...new Map(visibleCatalog.map((item) => [item.id, item])).values()].slice(0, 6);
+  const uniquePreview = [
+    ...new Map(visibleCatalog.map((item) => [item.id, item])).values()
+  ].slice(0, 6);
   return {
     scope: state.scope,
     profile: state.profile,
@@ -2030,7 +2109,14 @@ export function buildXpMetricsPayloadModel(input: {
     recentLedger: state.scopedRewards
       .slice(-25)
       .reverse()
-      .map(({ ownerUserId: _ownerUserId, ruleCode: _ruleCode, ruleFamily: _ruleFamily, ...event }) => event),
+      .map(
+        ({
+          ownerUserId: _ownerUserId,
+          ruleCode: _ruleCode,
+          ruleFamily: _ruleFamily,
+          ...event
+        }) => event
+      ),
     rules,
     dailyAmbientXp: getDailyAmbientXp(new Date().toISOString().slice(0, 10)),
     dailyAmbientCap

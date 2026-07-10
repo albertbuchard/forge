@@ -4361,33 +4361,37 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "wiki_page",
     openingQuestion:
-      "What do you want this wiki page to help you remember or reuse later?",
+      "What are you trying to find, preserve, or improve in the wiki so it helps you remember or reuse later?",
     coachingGoal:
-      "Create durable memory for books, articles, sources, concepts, people, conversations, project references, reusable instructions, or personal manuals.",
+      "Choose the correct wiki lifecycle action, find existing knowledge before creating duplicates, and preserve durable meaning, provenance, and links without turning every request into page authoring.",
     askSequence: [
-      "Ask what this page should help the user remember, understand, or reuse later.",
-      "Ask whether the material is a book, article, source, concept, person, conversation, project reference, or personal manual.",
-      "Ask what the page should contain now: summary, key claims, quotes to verify, personal interpretation, action implications, or links.",
-      "Ask whether it should be the durable wiki page itself or supporting evidence linked to another page.",
-      "Ask about linked entities, aliases, or tags only if they will make the page more navigable later."
+      "Identify whether the user wants to browse, search, read, create, update, delete, ingest, inspect wiki health, sync, or reindex; skip this lane question when their verb already makes it clear.",
+      "For browse, review, update, or delete work, list, search, or read the existing page before asking authoring questions.",
+      "For a new page, ask what it should help the user remember, understand, or reuse, then search for a near-duplicate topic before creating it.",
+      "For an update, ask for the smallest change that is newly true and what meaning, provenance, backlinks, or reusable instructions must stay intact.",
+      "For source ingest, ask what source is being added, how it should map into durable pages, and whether duplicate, partial-failure, or retry behavior changes the plan.",
+      "For health, sync, or reindex work, read current wiki health first and ask only what recovery result the user is trying to achieve.",
+      "Before deletion, confirm the exact page and what backlinks, citations, related pages, or history must remain understandable.",
+      "Ask about linked entities, aliases, tags, or supporting evidence only when they change retrieval, provenance, or navigation."
     ]
   },
   {
     focus: "artifact",
     openingQuestion:
-      "What should this file help you find, prove, review, or preserve later?",
+      "What are you trying to find, verify, preserve, or change about this file?",
     coachingGoal:
-      "Store a trusted file as precise metadata, provenance, scan state, danger score, and general Forge links while keeping file bytes human-download-only.",
+      "Guide the trusted Artifact Store lifecycle through precise metadata, provenance, scan state, danger score, history, and general Forge links while keeping download, password, and encryption operations human-only.",
     askSequence: [
-      "Ask what the file or file set should help the human retrieve, prove, review, or preserve later.",
-      "If there are several files, treat them as a queue: get a quick short description per file, then open per-file details only where title, provenance, links, metadata JSON, or LLM enrichment choices need more care.",
-      "Ask for the human-readable title, short description, provenance, and source path only when the user has not already supplied them.",
-      "Ask which Forge record the artifact should be linked to only when that link will improve retrieval or context, and use the general entity_links model.",
-      "Ask whether optional LLM enrichment should fill missing description or provenance fields and produce a danger summary when an LLM connection exists.",
-      "Keep trust explicit: only a trusted human, operator, or trusted agent may add file bytes; encrypted upload passwords are human/operator-only.",
-      "Do not download, decrypt, open, execute, preview, transform, submit passwords for, or autonomously process stored file bytes.",
-      "Use the Artifact Store route family for trusted file upload, metadata reads and updates, static scan, LLM enrichment, trust-state changes, versions, audit reads, and replacement of general entity_links.",
-      "After upload, summarize the stored artifact metadata, scan result, danger score, and linked Forge records in product language."
+      "Identify whether the user wants to list, read metadata, upload, update metadata, rescan, enrich, change trust state, inspect versions or audit history, replace links, delete metadata, restore metadata, or hand off a human-only download or encryption action; skip this lane question when the verb is already clear.",
+      "For any existing artifact action, list or read current metadata first so the user does not have to reconstruct provenance, scan, trust, version, or link state from memory.",
+      "For list, metadata review, versions, or audit work, ask only what practical retrieval, verification, or provenance question the read should answer, then answer it before proposing a write.",
+      "For trusted upload, ask what the file should help someone retrieve, prove, review, or preserve, then ask only for missing original filename, purpose, provenance, or source path; verify upload authority without requesting a password.",
+      "For metadata updates, ask for the smallest newly true change and what provenance, trust state, scan interpretation, or retrieval wording must remain intact.",
+      "For rescan, LLM enrichment, or trust-state changes, use the current metadata and scan result, clarify the intended outcome or authorization, and never let LLM enrichment lower the deterministic danger score.",
+      "For link replacement, confirm the complete desired general entity_links set, including which existing links must remain, because the route replaces the set rather than appending one link.",
+      "For metadata delete or restore, confirm the exact artifact and lifecycle action; require explicit preservation intent before hard deletion, and use batch metadata routes rather than a guessed Artifact Store route.",
+      "Keep the boundary explicit: agents may perform authorized trusted uploads and metadata workflows, but download, password submission, and existing-artifact encryption are human/operator-only; never download, decrypt, open, execute, preview, transform, or autonomously process stored bytes.",
+      "After an agent-authorized mutation, read the relevant metadata, scan, trust, version, audit, or link state back and summarize what changed in product language."
     ]
   },
   {
@@ -5410,7 +5414,7 @@ function buildQuestionFlowReadinessCheck(
     return "Ready when the Life Event's working title or significance, start/end span or event target, place when it changes matching, and selected lane are clear: shared batch CRUD for ordinary saves and links, or the published Life Events route key for timeline, detail, calendar match, ticket import, or travel-status work.";
   }
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
-    return "Ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
+    return "Ready on one of two paths. Direct save or update: when the user supplies clear entity-specific wording and explicit save or update intent, plus the exact existing target for an update, reflect it and ask at most one accuracy or consent question; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis used has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
   if (guide.entityType === "self_observation") {
     return "Ready to save a lightweight note-backed observation when the observed situation and timestamp or observedAt date are clear, at least one meaningful cue, emotion or body signal, thought or meaning, behavior or urge, or consequence is present, and any stronger Psyche container such as trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, or emotion_definition has been offered only when the material supports it and accepted or corrected by the user.";
@@ -5438,6 +5442,12 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "calendar_connection") {
     return "Ready when the calendar provider or existing connection, intended workflow, lifecycle action, writable/read-only mode, selected-calendar change, sync, rediscovery, or removal target is clear enough to use the published calendar connection route instead of batch CRUD.";
+  }
+  if (guide.entityType === "wiki_page") {
+    return "Ready to list, search, or inspect wiki health through the published specialized route when the practical question and scope are clear. Ready to read, update, or delete when the exact page id or slug, intended lifecycle action, and preservation need are clear. Ready to create after a duplicate check when the durable purpose, findable title, and meaningful Markdown body are clear. Ready to ingest, sync, or reindex when the source or maintenance target and expected recovery result are clear enough to act without route guessing.";
+  }
+  if (guide.entityType === "artifact") {
+    return "Ready to list, read metadata, inspect versions, or read audit history when the practical question and any required filter or exact artifact id are clear. Ready for trusted upload when upload authority, file bytes, original filename, purpose, and provenance or source path are clear without collecting a password. Ready to update metadata, rescan, enrich with an LLM, or change trust state only after a current metadata read identifies the exact artifact, intended change, preservation need, and enrichment authorization when relevant. Ready to replace links only when the complete desired general entity_links set is explicit because replacement is not append. Ready to delete or restore metadata through batch metadata routes when the exact artifact and lifecycle action are clear, with explicit confirmation before hard deletion. Download, password submission, decryption, preview, execution, transformation, and existing-artifact encryption are never ready for an agent call; hand them to the human operator.";
   }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
@@ -5907,13 +5917,14 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
     toolName: "forge_get_sports_overview",
     summary:
-      "Read the sports surface with workout volume, workout types, effort signals, and linked session context.",
+      "Read the sports surface with workout volume, sport comparisons, evidence coverage, effort signals, and linked session context.",
     whenToUse:
       "Use when the operator wants training context, habit-generated workout visibility, or workout review before planning.",
     inputShape: "{ userIds?: string[] }",
     requiredFields: [],
     notes: [
       "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
+      "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary for bounded list clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata.",
       "Habit-generated and imported workouts reconcile into the same workout record model."
     ],
     example: '{"userIds":["user_operator"]}'
@@ -10833,7 +10844,11 @@ export async function buildServer(
       {
         compact:
           (request.query as Record<string, unknown>).compact === "1" ||
-          (request.query as Record<string, unknown>).compact === "true"
+          (request.query as Record<string, unknown>).compact === "true",
+        sessionDetail:
+          (request.query as Record<string, unknown>).sessionDetail === "summary"
+            ? "summary"
+            : "full"
       }
     )
   }));

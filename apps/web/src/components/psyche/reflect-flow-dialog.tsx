@@ -124,7 +124,7 @@ export function ReflectFlowDialog({
                 />
               </div>
               <select
-                className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
                 value={value.linkedGoalId}
                 onChange={(event) =>
                   setValue({ linkedGoalId: event.target.value })
@@ -138,7 +138,7 @@ export function ReflectFlowDialog({
                 ))}
               </select>
               <select
-                className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
                 value={value.linkedProjectId}
                 onChange={(event) =>
                   setValue({ linkedProjectId: event.target.value })
@@ -152,7 +152,7 @@ export function ReflectFlowDialog({
                 ))}
               </select>
               <select
-                className="rounded-[18px] border border-white/8 bg-white/6 px-4 py-3 text-sm text-white"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
                 value={value.linkedTaskId}
                 onChange={(event) =>
                   setValue({ linkedTaskId: event.target.value })

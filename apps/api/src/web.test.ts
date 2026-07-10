@@ -7,7 +7,47 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import fastify from "fastify";
-import { createManagedDevWebRuntime, registerWebRoutes } from "./web.js";
+import {
+  createManagedDevWebRuntime,
+  registerWebRoutes,
+  resolveBuiltAssetCacheControl
+} from "./web.js";
+
+test("built asset cache policy keeps HTML fresh and immutable assets stable", () => {
+  assert.equal(
+    resolveBuiltAssetCacheControl({
+      pathname: "/index.html",
+      search: "",
+      extension: ".html"
+    }),
+    "no-store, max-age=0, must-revalidate"
+  );
+  assert.equal(
+    resolveBuiltAssetCacheControl({
+      pathname: "/assets/sports-page-DAVMqTqP.js",
+      search: "",
+      extension: ".js"
+    }),
+    "public, max-age=31536000, immutable"
+  );
+  assert.equal(
+    resolveBuiltAssetCacheControl({
+      pathname:
+        "/gamification/sprites/themes/mind-locksmith/mascots/mascot-state-020-512.webp",
+      search: "?v=0.2.59",
+      extension: ".webp"
+    }),
+    "public, max-age=31536000, immutable"
+  );
+  assert.equal(
+    resolveBuiltAssetCacheControl({
+      pathname: "/gamification-previews/mind-locksmith-mascot.webp",
+      search: "",
+      extension: ".webp"
+    }),
+    "public, max-age=300, stale-while-revalidate=60"
+  );
+});
 
 test("managed dev web runtime starts Vite when the dev origin is down", async () => {
   const spawnCalls: string[] = [];

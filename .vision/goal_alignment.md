@@ -74,7 +74,7 @@ Forge already has strong foundations:
 - an actor-scoped Attention queue with bounded pagination, reversible snooze/dismiss/restore state, source-change reactivation, a responsive web view, agent route contracts, and compact iPhone/watch Inbox summaries
 - canonical shared or user-owned entity pins plus actor-scoped recent-view history, exposed through the existing Action Bar, a compact iPhone/watch snapshot, and agent-safe list/touch routes while human operators alone control pin state
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
-- one active responsive web route tree at a time, stable non-collapsing shell geometry while scrolling, a compact visible Forge Smith on Overview, and bounded responsive Trophy Hall previews with complete search results
+- one active responsive web route tree at a time, a measured monotonic shell grow/close animation that fully reopens at the top on desktop and mobile, semantic theme tokens across shared and domain surfaces, prefetched route handoffs without an artificial loading delay, a compact visible Forge Smith and real trophy art on Overview, and bounded responsive Trophy Hall previews with complete search results
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`
 - local-first SQLite persistence, including SQLite-backed wiki and evidence memory

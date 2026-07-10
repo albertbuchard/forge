@@ -89,6 +89,10 @@ describe("gamification scope and persistence", () => {
     assert.equal(payload.scope.mode, "aggregate_fallback");
     assert.equal(payload.equipment.updatedAt, null);
     assert.deepEqual(payload.celebrations, []);
+    assert.ok(
+      payload.catalogPreview.some((item) => item.kind === "trophy"),
+      "XP metrics should always include a real trophy for the compact shelf"
+    );
     assert.deepEqual(
       {
         rewardRows: countRows("reward_ledger"),

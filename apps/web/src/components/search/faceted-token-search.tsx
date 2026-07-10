@@ -1,5 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Search, X } from "lucide-react";
+import { useAnchoredOverlayPosition } from "@/components/ui/use-anchored-overlay-position";
 import { cn } from "@/lib/utils";
 
 export type FacetedTokenOption = {
@@ -51,6 +53,13 @@ export function FacetedTokenSearch({
 }) {
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const listboxId = useId();
+  const searchAnchorRef = useRef<HTMLDivElement | null>(null);
+  const menuStyle = useAnchoredOverlayPosition(searchAnchorRef, open, {
+    offset: 6,
+    preferredMaxHeight: 320,
+    minHeight: 120
+  });
 
   const selectedOptions = useMemo(
     () =>
@@ -62,7 +71,9 @@ export function FacetedTokenSearch({
 
   const filteredOptions = useMemo(() => {
     const normalizedQuery = normalize(query);
-    const pool = options.filter((option) => !selectedOptionIds.includes(option.id));
+    const pool = options.filter(
+      (option) => !selectedOptionIds.includes(option.id)
+    );
     if (!normalizedQuery) {
       return pool.slice(0, 12);
     }
@@ -86,7 +97,9 @@ export function FacetedTokenSearch({
   };
 
   const removeOption = (optionId: string) => {
-    onSelectedOptionIdsChange(selectedOptionIds.filter((id) => id !== optionId));
+    onSelectedOptionIdsChange(
+      selectedOptionIds.filter((id) => id !== optionId)
+    );
   };
 
   const clearFilters = () => {
@@ -99,15 +112,21 @@ export function FacetedTokenSearch({
   return (
     <div
       className={cn(
-        "rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] shadow-[var(--card-shadow)]",
+        "relative rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] shadow-[var(--card-shadow)]",
+        open && "z-50",
         minimal
-          ? "overflow-hidden rounded-full border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_88%,transparent)] px-3 py-1.5 shadow-[var(--ui-shadow-soft)] backdrop-blur"
+          ? "rounded-full border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_88%,transparent)] px-3 py-1.5 shadow-[var(--ui-shadow-soft)] backdrop-blur"
           : compact
             ? "rounded-[24px] p-2.5"
             : "p-4 sm:p-5"
       )}
     >
-      <div className={cn("flex flex-wrap items-start justify-between gap-3", minimal && "hidden")}>
+      <div
+        className={cn(
+          "flex flex-wrap items-start justify-between gap-3",
+          minimal && "hidden"
+        )}
+      >
         <div className="min-w-0">
           {title.trim().length > 0 ? (
             <div className="break-words font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]">
@@ -145,17 +164,32 @@ export function FacetedTokenSearch({
         )}
       >
         {selectedOptions.length > 0 ? (
-          <div className={cn("flex flex-wrap gap-2", minimal ? "mb-0 mr-2 inline-flex max-w-[38%] flex-nowrap items-center gap-1 overflow-hidden" : compact ? "mb-2" : "mb-3")}>
+          <div
+            className={cn(
+              "flex flex-wrap gap-2",
+              minimal
+                ? "mb-0 mr-2 inline-flex max-w-[38%] flex-nowrap items-center gap-1 overflow-hidden"
+                : compact
+                  ? "mb-2"
+                  : "mb-3"
+            )}
+          >
             {selectedOptions.map((option) => (
               <span
                 key={option.id}
                 className={cn(
                   "inline-flex min-w-0 items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]",
-                  minimal ? "max-w-full shrink-0 px-2 py-0.5" : compact ? "px-2 py-0.5" : "px-2.5 py-1.5"
+                  minimal
+                    ? "max-w-full shrink-0 px-2 py-0.5"
+                    : compact
+                      ? "px-2 py-0.5"
+                      : "px-2.5 py-1.5"
                 )}
               >
                 {option.badge ?? (
-                  <span className="min-w-0 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">{option.label}</span>
+                  <span className="min-w-0 break-words text-sm text-[var(--ui-ink-medium)] [overflow-wrap:anywhere]">
+                    {option.label}
+                  </span>
                 )}
                 <button
                   type="button"
@@ -170,10 +204,20 @@ export function FacetedTokenSearch({
           </div>
         ) : null}
 
-        <div className="relative">
-              <div className={cn("flex items-center", minimal ? "gap-2 whitespace-nowrap" : compact ? "gap-2" : "gap-3")}>
-                <Search className={cn("text-[var(--ui-ink-faint)]", compact ? "size-3.5" : "size-4")} />
-                <input
+        <div ref={searchAnchorRef} className="relative">
+          <div
+            className={cn(
+              "flex items-center",
+              minimal ? "gap-2 whitespace-nowrap" : compact ? "gap-2" : "gap-3"
+            )}
+          >
+            <Search
+              className={cn(
+                "text-[var(--ui-ink-faint)]",
+                compact ? "size-3.5" : "size-4"
+              )}
+            />
+            <input
               value={query}
               onChange={(event) => {
                 onQueryChange(event.target.value);
@@ -183,8 +227,14 @@ export function FacetedTokenSearch({
               onFocus={() => setOpen(true)}
               onBlur={() => window.setTimeout(() => setOpen(false), 120)}
               onKeyDown={(event) => {
-                if (event.key === "Backspace" && !query && selectedOptionIds.length > 0) {
-                  removeOption(selectedOptionIds[selectedOptionIds.length - 1]!);
+                if (
+                  event.key === "Backspace" &&
+                  !query &&
+                  selectedOptionIds.length > 0
+                ) {
+                  removeOption(
+                    selectedOptionIds[selectedOptionIds.length - 1]!
+                  );
                   return;
                 }
                 if (event.key === "ArrowDown") {
@@ -212,92 +262,143 @@ export function FacetedTokenSearch({
                   setOpen(false);
                   return;
                 }
-                if (event.key === "Enter" && filteredOptions[highlightedIndex]) {
+                if (
+                  event.key === "Enter" &&
+                  filteredOptions[highlightedIndex]
+                ) {
                   event.preventDefault();
                   addOption(filteredOptions[highlightedIndex]!.id);
                 }
               }}
               placeholder={placeholder}
-                  className={cn(
-                    "min-w-0 flex-1 bg-transparent text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none",
-                    minimal ? "text-[12px]" : compact ? "text-[12px]" : "text-sm"
-                  )}
-                />
-                {minimal && (selectedOptionIds.length > 0 || query.trim().length > 0) ? (
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex size-6 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
-                    aria-label={clearLabel}
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                ) : null}
-                {onQuerySubmit ? (
-                  <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      onQuerySubmit(query);
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
-                      minimal ? "size-6" : compact ? "size-7" : "size-8"
-                    )}
-                    aria-label={submitLabel}
-                    title={submitLabel}
-                  >
-                    <Search className={cn(compact ? "size-3.5" : "size-4")} />
-                  </button>
-                ) : null}
-              </div>
-
-          {open ? (
-            <div className={cn(
-              "absolute top-full z-20 w-full border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_96%,transparent)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
-              compact ? "mt-1.5 rounded-[18px] p-1.5" : "mt-2 rounded-[22px] p-2"
-            )}>
-              {filteredOptions.length > 0 ? (
-                filteredOptions.map((option, index) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-start justify-between gap-3 text-left transition",
-                      compact ? "rounded-[14px] px-2.5 py-2" : "rounded-[18px] px-3 py-2.5",
-                      index === highlightedIndex
-                        ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
-                        : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                    )}
-                    onMouseEnter={() => setHighlightedIndex(index)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => addOption(option.id)}
-                  >
-                    <div className="min-w-0">
-                      <div className={cn("break-words font-medium [overflow-wrap:anywhere]", compact ? "text-[12px]" : "text-sm")}>
-                        {option.badge ?? option.label}
-                      </div>
-                      {option.description ? (
-                        <div className={cn("mt-1 break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]", compact ? "text-[11px] leading-[1.125rem]" : "text-xs leading-5")}>
-                          {option.description}
-                        </div>
-                      ) : null}
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className={cn("break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]", compact ? "px-2.5 py-2 text-[12px]" : "px-3 py-2.5 text-sm")}>
-                  {emptyStateMessage}
-                </div>
+              aria-label={placeholder}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-activedescendant={
+                open && filteredOptions[highlightedIndex]
+                  ? `${listboxId}-${filteredOptions[highlightedIndex]!.id}`
+                  : undefined
+              }
+              className={cn(
+                "min-w-0 flex-1 bg-transparent text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)] focus:outline-none",
+                minimal ? "text-[12px]" : compact ? "text-[12px]" : "text-sm"
               )}
-            </div>
-          ) : null}
+            />
+            {minimal &&
+            (selectedOptionIds.length > 0 || query.trim().length > 0) ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex size-6 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:text-[var(--ui-ink-strong)]"
+                aria-label={clearLabel}
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+            {onQuerySubmit ? (
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onQuerySubmit(query);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "inline-flex items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]",
+                  minimal ? "size-6" : compact ? "size-7" : "size-8"
+                )}
+                aria-label={submitLabel}
+                title={submitLabel}
+              >
+                <Search className={cn(compact ? "size-3.5" : "size-4")} />
+              </button>
+            ) : null}
+          </div>
+
+          {open && menuStyle && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  id={listboxId}
+                  role="listbox"
+                  className={cn(
+                    "z-[80] overflow-y-auto overscroll-contain border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--ui-surface-1)_96%,transparent)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl [webkit-overflow-scrolling:touch]",
+                    compact ? "rounded-[18px] p-1.5" : "rounded-[22px] p-2"
+                  )}
+                  style={menuStyle}
+                >
+                  {filteredOptions.length > 0 ? (
+                    filteredOptions.map((option, index) => (
+                      <button
+                        key={option.id}
+                        id={`${listboxId}-${option.id}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === highlightedIndex}
+                        className={cn(
+                          "flex w-full items-start justify-between gap-3 text-left transition",
+                          compact
+                            ? "rounded-[14px] px-2.5 py-2"
+                            : "rounded-[18px] px-3 py-2.5",
+                          index === highlightedIndex
+                            ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                            : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                        )}
+                        onMouseEnter={() => setHighlightedIndex(index)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => addOption(option.id)}
+                      >
+                        <div className="min-w-0">
+                          <div
+                            className={cn(
+                              "break-words font-medium [overflow-wrap:anywhere]",
+                              compact ? "text-[12px]" : "text-sm"
+                            )}
+                          >
+                            {option.badge ?? option.label}
+                          </div>
+                          {option.description ? (
+                            <div
+                              className={cn(
+                                "mt-1 break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]",
+                                compact
+                                  ? "text-[11px] leading-[1.125rem]"
+                                  : "text-xs leading-5"
+                              )}
+                            >
+                              {option.description}
+                            </div>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div
+                      className={cn(
+                        "break-words text-[var(--ui-ink-faint)] [overflow-wrap:anywhere]",
+                        compact
+                          ? "px-2.5 py-2 text-[12px]"
+                          : "px-3 py-2.5 text-sm"
+                      )}
+                    >
+                      {emptyStateMessage}
+                    </div>
+                  )}
+                </div>,
+                document.body
+              )
+            : null}
         </div>
       </div>
 
       {!hideSummary ? (
-        <div className={cn("break-words text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]", compact ? "mt-2 text-xs" : "mt-3 text-sm")}>
+        <div
+          className={cn(
+            "break-words text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]",
+            compact ? "mt-2 text-xs" : "mt-3 text-sm"
+          )}
+        >
           {resultSummary}
         </div>
       ) : null}
