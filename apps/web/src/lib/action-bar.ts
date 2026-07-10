@@ -25,6 +25,13 @@ export const ACTION_BAR_SEARCH_ENTITY_TYPES: CrudEntityType[] = [
   "trigger_report"
 ];
 
+const KNOWLEDGE_GRAPH_NAVIGATION_ENTITY_TYPES = new Set<CrudEntityType>([
+  "tag",
+  "insight",
+  "event_type",
+  "emotion_definition"
+]);
+
 export type ActionBarFilterFamily = "entity-type";
 
 export type ActionBarFilterId =
@@ -318,16 +325,16 @@ export function inferActionBarTitle(
       ? [entity.statement, entity.title, entity.name]
       : entityType === "flashcard"
         ? [entity.title, entity.message, entity.triggerSentence]
-      : entityType === "note"
-        ? [entity.title, entity.slug]
-        : [
-            entity.title,
-            entity.displayName,
-            entity.statement,
-            entity.name,
-            entity.label,
-            entity.slug
-          ];
+        : entityType === "note"
+          ? [entity.title, entity.slug]
+          : [
+              entity.title,
+              entity.displayName,
+              entity.statement,
+              entity.name,
+              entity.label,
+              entity.slug
+            ];
 
   return (
     candidates.map(readString).find(Boolean) ??
@@ -355,7 +362,12 @@ export function inferActionBarDetail(
     .map(readString)
     .find(Boolean);
 
-  const context = [entity.goalTitle, entity.projectTitle, entity.status, entity.kind]
+  const context = [
+    entity.goalTitle,
+    entity.projectTitle,
+    entity.status,
+    entity.kind
+  ]
     .map(readString)
     .find(Boolean);
 
@@ -365,7 +377,9 @@ export function inferActionBarDetail(
     ownerLine || null
   ]).join(" · ");
 
-  return compactParts([summary, context, ownerLine || null]).join(" · ") || fallback;
+  return (
+    compactParts([summary, context, ownerLine || null]).join(" · ") || fallback
+  );
 }
 
 export function buildActionBarSearchText(
@@ -404,19 +418,17 @@ export function buildActionBarHref(
       const slug = readString(entity.slug);
       const spaceId = readString(entity.spaceId);
       if (noteKind === "wiki" && slug) {
-        const suffix = spaceId
-          ? `?spaceId=${encodeURIComponent(spaceId)}`
-          : "";
+        const suffix = spaceId ? `?spaceId=${encodeURIComponent(spaceId)}` : "";
         return `/wiki/page/${encodeURIComponent(slug)}${suffix}`;
       }
-      return "/notes";
+      return `/notes?focus=${encodeURIComponent(id)}`;
     }
     case "insight":
-      return "/insights";
+      return `/knowledge-graph?focus=${encodeURIComponent(`insight:${id}`)}`;
     case "calendar_event":
     case "work_block_template":
     case "task_timebox":
-      return "/calendar";
+      return `/calendar?focus=${encodeURIComponent(id)}&focusType=${entityType}`;
     case "psyche_value":
       return `/psyche/values?focus=${encodeURIComponent(id)}`;
     case "behavior_pattern":
@@ -434,6 +446,133 @@ export function buildActionBarHref(
     default:
       return null;
   }
+}
+
+export function resolveEntityNavigationTargetFromLocation(
+  pathname: string,
+  search: string
+): { entityType: CrudEntityType; entityId: string } | null {
+  const detailRoutes: Array<{
+    pattern: RegExp;
+    entityType: CrudEntityType;
+  }> = [
+    { pattern: /^\/goals\/([^/]+)\/?$/, entityType: "goal" },
+    { pattern: /^\/projects\/([^/]+)\/?$/, entityType: "project" },
+    { pattern: /^\/tasks\/([^/]+)\/?$/, entityType: "task" },
+    { pattern: /^\/strategies\/([^/]+)\/?$/, entityType: "strategy" },
+    { pattern: /^\/artifacts\/([^/]+)\/?$/, entityType: "artifact" },
+    {
+      pattern: /^\/psyche\/questionnaires\/(?!new\/?$)([^/]+)\/?$/,
+      entityType: "questionnaire_instrument"
+    },
+    {
+      pattern: /^\/psyche\/reports\/([^/]+)\/?$/,
+      entityType: "trigger_report"
+    },
+    {
+      pattern: /^\/sports\/workouts\/([^/]+)\/?$/,
+      entityType: "workout_session"
+    }
+  ];
+  for (const route of detailRoutes) {
+    const match = pathname.match(route.pattern);
+    if (match?.[1]) {
+      let entityId: string;
+      try {
+        entityId = decodeURIComponent(match[1]);
+      } catch {
+        return null;
+      }
+      return {
+        entityType: route.entityType,
+        entityId
+      };
+    }
+  }
+
+  const query = new URLSearchParams(search);
+  if (pathname === "/knowledge-graph") {
+    const graphFocus = query.get("focus")?.trim();
+    const separatorIndex = graphFocus?.indexOf(":") ?? -1;
+    if (graphFocus && separatorIndex > 0) {
+      const entityType = graphFocus.slice(0, separatorIndex);
+      const entityId = graphFocus.slice(separatorIndex + 1).trim();
+      if (
+        KNOWLEDGE_GRAPH_NAVIGATION_ENTITY_TYPES.has(
+          entityType as CrudEntityType
+        ) &&
+        entityId.length > 0
+      ) {
+        return { entityType: entityType as CrudEntityType, entityId };
+      }
+    }
+    return null;
+  }
+  if (pathname === "/preferences") {
+    const preferenceTargets: Array<{
+      key: string;
+      entityType: CrudEntityType;
+    }> = [
+      { key: "focusItem", entityType: "preference_item" },
+      { key: "focusCatalog", entityType: "preference_catalog" },
+      {
+        key: "focusCatalogItem",
+        entityType: "preference_catalog_item"
+      },
+      { key: "focusContext", entityType: "preference_context" }
+    ];
+    for (const target of preferenceTargets) {
+      const entityId = query.get(target.key)?.trim();
+      if (entityId) {
+        return { entityType: target.entityType, entityId };
+      }
+    }
+    return null;
+  }
+  const focus = query.get("focus")?.trim();
+  if (!focus) {
+    return null;
+  }
+  if (pathname === "/calendar") {
+    const calendarEntityTypes = new Set<CrudEntityType>([
+      "calendar_event",
+      "work_block_template",
+      "task_timebox"
+    ]);
+    const focusType = query.get("focusType")?.trim() as
+      | CrudEntityType
+      | undefined;
+    return {
+      entityType:
+        focusType && calendarEntityTypes.has(focusType)
+          ? focusType
+          : "calendar_event",
+      entityId: focus
+    };
+  }
+  const focusedRoutes: Array<{
+    pathname: string;
+    entityType: CrudEntityType;
+  }> = [
+    { pathname: "/habits", entityType: "habit" },
+    { pathname: "/notes", entityType: "note" },
+    { pathname: "/life-events", entityType: "life_event" },
+    { pathname: "/psyche/values", entityType: "psyche_value" },
+    { pathname: "/psyche/patterns", entityType: "behavior_pattern" },
+    { pathname: "/psyche/behaviors", entityType: "behavior" },
+    { pathname: "/psyche/schemas-beliefs", entityType: "belief_entry" },
+    { pathname: "/psyche/modes", entityType: "mode_profile" },
+    {
+      pathname: "/psyche/modes/guide",
+      entityType: "mode_guide_session"
+    },
+    { pathname: "/psyche/flashcards", entityType: "flashcard" },
+    { pathname: "/sleep", entityType: "sleep_session" }
+  ];
+  const route = focusedRoutes.find(
+    (candidate) => candidate.pathname === pathname
+  );
+  return route ? { entityType: route.entityType, entityId: focus } : null;
 }
 
 export function scoreActionBarMatch(
@@ -528,7 +667,10 @@ export function entityMatchesActionBarFilters(
     return true;
   }
 
-  const filtersByFamily = new Map<ActionBarFilterFamily, ActionBarFilterToken[]>();
+  const filtersByFamily = new Map<
+    ActionBarFilterFamily,
+    ActionBarFilterToken[]
+  >();
   selectedFilters.forEach((filter) => {
     const current = filtersByFamily.get(filter.family) ?? [];
     current.push(filter);
@@ -565,7 +707,9 @@ export function createActionMatchesActionBarFilters(
     return true;
   }
 
-  return action.filterIds.some((filterId) => selectedTypeFilterIds.has(filterId));
+  return action.filterIds.some((filterId) =>
+    selectedTypeFilterIds.has(filterId)
+  );
 }
 
 export function buildActionBarCreateActionMatches<
@@ -594,7 +738,11 @@ export function buildActionBarCreateActionMatches<
       const score =
         targetQuery.length === 0
           ? 1
-          : scoreActionBarMatch(targetQuery, action.quickActionTitle, searchText);
+          : scoreActionBarMatch(
+              targetQuery,
+              action.quickActionTitle,
+              searchText
+            );
       return {
         ...action,
         score

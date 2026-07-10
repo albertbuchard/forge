@@ -7742,6 +7742,45 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testCompanionForgeTargetURLResolverKeepsPinnedPathsInsideForge() throws {
+        let httpsURL = CompanionForgeTargetURLResolver.resolve(
+            baseURL: URL(string: "https://forge.example/forge"),
+            targetPath: "/calendar?focus=timebox-1&focusType=task_timebox"
+        )
+        XCTAssertEqual(
+            httpsURL?.absoluteString,
+            "https://forge.example/forge/calendar?focus=timebox-1&focusType=task_timebox"
+        )
+
+        let irohURL = CompanionForgeTargetURLResolver.resolve(
+            baseURL: URL(string: "forge-iroh://node-id/forge/"),
+            targetPath: "/tasks/task-1"
+        )
+        XCTAssertEqual(
+            irohURL?.absoluteString,
+            "forge-iroh://node-id/forge/tasks/task-1"
+        )
+
+        XCTAssertNil(
+            CompanionForgeTargetURLResolver.resolve(
+                baseURL: nil,
+                targetPath: "/tasks/task-1"
+            )
+        )
+        XCTAssertNil(
+            CompanionForgeTargetURLResolver.resolve(
+                baseURL: URL(string: "https://forge.example/forge/"),
+                targetPath: "https://untrusted.example/file"
+            )
+        )
+        XCTAssertNil(
+            CompanionForgeTargetURLResolver.resolve(
+                baseURL: URL(string: "https://forge.example/forge/"),
+                targetPath: "//untrusted.example/file"
+            )
+        )
+    }
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }

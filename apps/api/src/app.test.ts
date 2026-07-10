@@ -21,6 +21,7 @@ import { BackgroundJobManager } from "./managers/platform/background-job-manager
 import { recordActivityEvent } from "./repositories/activity-events.js";
 import { createCalendarEvent } from "./repositories/calendar.js";
 import { upsertDeletedEntityRecord } from "./repositories/deleted-entities.js";
+import { setEntityOwner } from "./repositories/entity-ownership.js";
 import {
   DIAGNOSTIC_LOG_RETENTION_DAYS,
   enforceDiagnosticLogRetention,
@@ -9555,6 +9556,19 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       }
     ).qrPayload;
 
+    setEntityOwner("task", "task_flagship_review", "user_operator");
+    const watchPinResponse = await app.inject({
+      method: "PUT",
+      url: "/api/v1/entity-navigation/pins",
+      headers: { cookie: operatorCookie },
+      payload: {
+        entityType: "task",
+        entityId: "task_flagship_review",
+        ownerUserId: "user_operator"
+      }
+    });
+    assert.equal(watchPinResponse.statusCode, 201, watchPinResponse.body);
+
     const bootstrapResponse = await app.inject({
       method: "POST",
       url: "/api/v1/mobile/watch/bootstrap",
@@ -9576,6 +9590,17 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       };
       watch: {
         inbox: {
+          pins: {
+            total: number;
+            items: Array<{
+              id: string;
+              entityType: string;
+              entityId: string;
+              title: string;
+              targetPath: string;
+              availability: string;
+            }>;
+          };
           attention: {
             activeCount: number;
             blockingCount: number;
@@ -9622,6 +9647,16 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       assert.ok(item.title.length > 0);
       assert.match(item.targetPath, /^\/forge\//);
     }
+    assert.ok(initialBootstrap.inbox.pins.total >= 1);
+    assert.ok(initialBootstrap.inbox.pins.items.length <= 3);
+    assert.equal(
+      initialBootstrap.inbox.pins.items[0]?.entityId,
+      "task_flagship_review"
+    );
+    assert.equal(
+      initialBootstrap.inbox.pins.items[0]?.availability,
+      "available"
+    );
     assert.ok(initialBootstrap.habits.length >= 2);
     assert.equal(initialBootstrap.habits[0]?.dueToday, true);
     assert.equal(

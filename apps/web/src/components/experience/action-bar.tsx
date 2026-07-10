@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRight,
@@ -15,6 +15,8 @@ import {
   LoaderCircle,
   Network,
   NotebookPen,
+  Pin,
+  PinOff,
   Plus,
   Radar,
   Repeat,
@@ -33,7 +35,13 @@ import type { ForgeCreateAction } from "@/components/create-menu";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
-import { searchEntities } from "@/lib/api";
+import {
+  getEntityNavigation,
+  pinEntityNavigation,
+  searchEntities,
+  touchEntityNavigation,
+  unpinEntityNavigation
+} from "@/lib/api";
 import {
   ACTION_BAR_FILTER_TOKENS,
   actionBarEntityTypeLabel,
@@ -47,12 +55,12 @@ import {
   inferActionBarDetail,
   inferActionBarTitle,
   normalizeActionBarQuery,
+  resolveEntityNavigationTargetFromLocation,
   scoreActionBarMatch
 } from "@/lib/action-bar";
 import { getEntityVisual, type EntityKind } from "@/lib/entity-visuals";
 import { useI18n } from "@/lib/i18n";
 import type { CrudEntityType, ForgeSnapshot } from "@/lib/types";
-import { formatUserSummaryLine } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 
 type ActionBarProps = {
@@ -63,7 +71,12 @@ type ActionBarProps = {
   createActions: ForgeCreateAction[];
 };
 
-type ActionBarSection = "routes" | "recent" | "quick-actions" | "results";
+type ActionBarSection =
+  | "routes"
+  | "pinned"
+  | "recent"
+  | "quick-actions"
+  | "results";
 
 type ActionBarItem = {
   id: string;
@@ -79,6 +92,10 @@ type ActionBarItem = {
   icon?: LucideIcon;
   tileClassName?: string;
   badgeClassName?: string;
+  entityType?: CrudEntityType;
+  entityId?: string;
+  pinId?: string | null;
+  availability?: "available" | "deleted" | "missing";
 };
 
 const SEARCHABLE_ACTION_BAR_ENTITY_TYPES = new Set<CrudEntityType>(
@@ -121,16 +138,14 @@ function getAuxiliaryVisual(
         icon: BookCopy,
         tileClassName:
           "border-blue-300/18 bg-blue-300/12 text-blue-100 shadow-[0_18px_36px_rgba(96,165,250,0.12)]",
-        badgeClassName:
-          "border-blue-300/18 bg-blue-300/10 text-blue-100"
+        badgeClassName: "border-blue-300/18 bg-blue-300/10 text-blue-100"
       };
     case "note":
       return {
         icon: NotebookPen,
         tileClassName:
           "border-amber-300/18 bg-amber-300/12 text-amber-100 shadow-[0_18px_36px_rgba(251,191,36,0.12)]",
-        badgeClassName:
-          "border-amber-300/18 bg-amber-300/10 text-amber-100"
+        badgeClassName: "border-amber-300/18 bg-amber-300/10 text-amber-100"
       };
     case "insight":
       return {
@@ -145,8 +160,7 @@ function getAuxiliaryVisual(
         icon: CalendarDays,
         tileClassName:
           "border-cyan-300/18 bg-cyan-300/12 text-cyan-100 shadow-[0_18px_36px_rgba(34,211,238,0.12)]",
-        badgeClassName:
-          "border-cyan-300/18 bg-cyan-300/10 text-cyan-100"
+        badgeClassName: "border-cyan-300/18 bg-cyan-300/10 text-cyan-100"
       };
     case "route":
       return {
@@ -227,7 +241,11 @@ function ActionBarCategoryBadge({ item }: { item: ActionBarItem }) {
   );
 }
 
-function buildRouteItemSearchText(title: string, detail: string, category: string) {
+function buildRouteItemSearchText(
+  title: string,
+  detail: string,
+  category: string
+) {
   return `${title} ${detail} ${category}`.trim().toLowerCase();
 }
 
@@ -239,6 +257,7 @@ export function ActionBar({
   createActions
 }: ActionBarProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { t } = useI18n();
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [query, setQuery] = useState("");
@@ -246,6 +265,7 @@ export function ActionBar({
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
   const deferredQuery = useDeferredValue(query);
   const normalizedQuery = normalizeActionBarQuery(deferredQuery);
+  const selectedFilterKey = selectedFilterIds.join("|");
 
   const selectedFilters = useMemo(
     () =>
@@ -283,6 +303,7 @@ export function ActionBar({
   const sectionLabels = useMemo<Record<ActionBarSection, string>>(
     () => ({
       routes: t("common.actionBar.sections.routes"),
+      pinned: t("common.actionBar.sections.pinned"),
       recent: t("common.actionBar.sections.recent"),
       "quick-actions": t("common.actionBar.sections.quickActions"),
       results: t("common.actionBar.sections.results")
@@ -506,74 +527,75 @@ export function ActionBar({
     [t]
   );
 
-  const defaultItems = useMemo<ActionBarItem[]>(() => {
-    const recentItems: ActionBarItem[] = [
-      ...snapshot.overview.topTasks.slice(0, 4).map((task) => ({
-        id: `task-${task.id}`,
-        title: task.title,
-        detail:
-          formatUserSummaryLine(task.user) ||
-          t("common.commandPalette.openFocusTask"),
-        href: `/tasks/${task.id}`,
-        category: t("common.commandPalette.categoryTask"),
-        section: "recent" as const,
-        searchText: `${task.title} ${formatUserSummaryLine(task.user)}`.toLowerCase(),
-        score: 0,
-        kind: "task" as const
-      })),
-      ...snapshot.dashboard.projects.slice(0, 3).map((project) => ({
-        id: `project-${project.id}`,
-        title: project.title,
-        detail: [project.goalTitle, formatUserSummaryLine(project.user)]
-          .filter(Boolean)
-          .join(" · "),
-        href: `/projects/${project.id}`,
-        category: t("common.commandPalette.categoryProject"),
-        section: "recent" as const,
-        searchText: `${project.title} ${project.goalTitle ?? ""} ${formatUserSummaryLine(project.user)}`.toLowerCase(),
-        score: 0,
-        kind: "project" as const
-      })),
-      ...snapshot.overview.activeGoals.slice(0, 2).map((goal) => ({
-        id: `goal-${goal.id}`,
-        title: goal.title,
-        detail:
-          formatUserSummaryLine(goal.user) ||
-          t("common.commandPalette.openLifeGoal"),
-        href: `/goals/${goal.id}`,
-        category: t("common.commandPalette.categoryGoal"),
-        section: "recent" as const,
-        searchText: `${goal.title} ${formatUserSummaryLine(goal.user)}`.toLowerCase(),
-        score: 0,
-        kind: "goal" as const
-      })),
-      ...snapshot.dashboard.habits.slice(0, 2).map((habit) => ({
-        id: `habit-${habit.id}`,
-        title: habit.title,
-        detail: [
-          habit.frequency === "daily" ? "Daily habit" : "Weekly habit",
-          formatUserSummaryLine(habit.user)
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        href: `/habits?focus=${habit.id}`,
-        category: t("common.routeLabels.habits"),
-        section: "recent" as const,
-        searchText: `${habit.title} ${habit.frequency} ${formatUserSummaryLine(habit.user)}`.toLowerCase(),
-        score: 0,
-        kind: "habit" as const
-      }))
-    ].slice(0, 8);
+  const entityNavigationQuery = useQuery({
+    queryKey: [
+      "forge-entity-navigation",
+      [...selectedUserIds].sort().join("|")
+    ],
+    enabled: open,
+    queryFn: () =>
+      getEntityNavigation({
+        pinnedLimit: 6,
+        recentLimit: 6,
+        userIds: selectedUserIds
+      })
+  });
 
-    return [...routeItems.slice(0, 6), ...recentItems];
-  }, [routeItems, snapshot, t]);
+  const navigationItems = useMemo<ActionBarItem[]>(
+    () => [
+      ...(entityNavigationQuery.data?.pinned ?? []).map((item) => ({
+        id: `pin-${item.pinId ?? `${item.entityType}-${item.entityId}`}`,
+        title: item.title,
+        detail: item.detail,
+        href: item.targetPath,
+        category: item.category,
+        section: "pinned" as const,
+        searchText:
+          `${item.title} ${item.detail} ${item.category}`.toLowerCase(),
+        score: 0,
+        kind: actionBarEntityTypeToKind(item.entityType) ?? undefined,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        pinId: item.pinId,
+        availability: item.availability
+      })),
+      ...(entityNavigationQuery.data?.recent ?? []).map((item) => ({
+        id: `recent-${item.entityType}-${item.entityId}`,
+        title: item.title,
+        detail: item.detail,
+        href: item.targetPath,
+        category: item.category,
+        section: "recent" as const,
+        searchText:
+          `${item.title} ${item.detail} ${item.category}`.toLowerCase(),
+        score: 0,
+        kind: actionBarEntityTypeToKind(item.entityType) ?? undefined,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        pinId: null,
+        availability: item.availability
+      }))
+    ],
+    [entityNavigationQuery.data]
+  );
+
+  const defaultItems = useMemo<ActionBarItem[]>(
+    () =>
+      [
+        ...navigationItems.filter((item) => item.section === "pinned"),
+        ...navigationItems.filter((item) => item.section === "recent"),
+        ...routeItems.slice(0, 5)
+      ].slice(0, 16),
+    [navigationItems, routeItems]
+  );
 
   const entitySearchQuery = useQuery({
     queryKey: [
       "forge-action-bar-search",
       normalizedQuery,
       [...selectedFilterIds].sort().join("|"),
-      [...selectedUserIds].sort().join("|")
+      [...selectedUserIds].sort().join("|"),
+      entityNavigationQuery.data?.generatedAt ?? ""
     ],
     enabled: open && (normalizedQuery.length > 0 || selectedFilters.length > 0),
     queryFn: async () => {
@@ -628,17 +650,28 @@ export function ActionBar({
             continue;
           }
 
-          const href = buildActionBarHref(candidate.entityType, candidate.id, entity);
+          const href = buildActionBarHref(
+            candidate.entityType,
+            candidate.id,
+            entity
+          );
           if (!href) {
             continue;
           }
 
           const title = inferActionBarTitle(candidate.entityType, entity);
           const detail = inferActionBarDetail(candidate.entityType, entity);
-          const category = actionBarEntityTypeLabel(candidate.entityType, entity);
-          const searchText = buildActionBarSearchText(candidate.entityType, entity);
+          const category = actionBarEntityTypeLabel(
+            candidate.entityType,
+            entity
+          );
+          const searchText = buildActionBarSearchText(
+            candidate.entityType,
+            entity
+          );
           const kind =
-            actionBarEntityTypeToKind(candidate.entityType, entity) ?? undefined;
+            actionBarEntityTypeToKind(candidate.entityType, entity) ??
+            undefined;
           const score =
             normalizedQuery.length > 0
               ? scoreActionBarMatch(deferredQuery, title, searchText)
@@ -671,7 +704,16 @@ export function ActionBar({
             kind,
             icon: auxiliaryVisual.icon,
             tileClassName: auxiliaryVisual.tileClassName,
-            badgeClassName: auxiliaryVisual.badgeClassName
+            badgeClassName: auxiliaryVisual.badgeClassName,
+            entityType: candidate.entityType,
+            entityId: candidate.id,
+            pinId:
+              entityNavigationQuery.data?.pinned.find(
+                (pin) =>
+                  pin.entityType === candidate.entityType &&
+                  pin.entityId === candidate.id
+              )?.pinId ?? null,
+            availability: "available"
           };
 
           const previous = deduped.get(item.id);
@@ -693,6 +735,27 @@ export function ActionBar({
           return left.title.localeCompare(right.title);
         })
         .slice(0, 12);
+    }
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: async (item: ActionBarItem) => {
+      if (item.pinId) {
+        return unpinEntityNavigation(item.pinId);
+      }
+      if (!item.entityType || !item.entityId) {
+        return null;
+      }
+      return pinEntityNavigation({
+        entityType: item.entityType,
+        entityId: item.entityId,
+        ownerUserId: selectedUserIds.length === 1 ? selectedUserIds[0] : null
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-entity-navigation"]
+      });
     }
   });
 
@@ -726,7 +789,8 @@ export function ActionBar({
         detail: action.description,
         category: "Quick action",
         section: "quick-actions" as const,
-        searchText: `${action.quickActionTitle} ${action.description} ${action.aliases.join(" ")}`.toLowerCase(),
+        searchText:
+          `${action.quickActionTitle} ${action.description} ${action.aliases.join(" ")}`.toLowerCase(),
         score: action.score,
         onSelect: action.onSelect,
         ...getAuxiliaryVisual("action", Plus)
@@ -760,7 +824,7 @@ export function ActionBar({
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [normalizedQuery, open, selectedFilterIds.join("|")]);
+  }, [normalizedQuery, open, selectedFilterKey]);
 
   useEffect(() => {
     if (visibleItems.length === 0) {
@@ -785,7 +849,7 @@ export function ActionBar({
     selectedUserIds.length === 0
       ? "All humans and bots"
       : selectedUsers.length === 1
-        ? selectedUsers[0]?.displayName ?? "1 selected owner"
+        ? (selectedUsers[0]?.displayName ?? "1 selected owner")
         : `${selectedUsers.length || selectedUserIds.length} selected owners`;
   const isSearching =
     (normalizedQuery.length > 0 || selectedFilters.length > 0) &&
@@ -798,6 +862,32 @@ export function ActionBar({
       return;
     }
     if (item.href) {
+      const hrefUrl = new URL(item.href, "http://forge.local");
+      const routeTrackedTarget = resolveEntityNavigationTargetFromLocation(
+        hrefUrl.pathname,
+        hrefUrl.search
+      );
+      const routeWillTrackThisItem =
+        routeTrackedTarget !== null &&
+        routeTrackedTarget.entityType === item.entityType &&
+        routeTrackedTarget.entityId === item.entityId;
+      if (
+        item.entityType &&
+        item.entityId &&
+        item.availability === "available" &&
+        !routeWillTrackThisItem
+      ) {
+        void touchEntityNavigation({
+          entityType: item.entityType,
+          entityId: item.entityId
+        })
+          .then(() =>
+            queryClient.invalidateQueries({
+              queryKey: ["forge-entity-navigation"]
+            })
+          )
+          .catch(() => undefined);
+      }
       navigate(item.href);
     }
   };
@@ -814,7 +904,7 @@ export function ActionBar({
             {t("common.actionBar.description")}
           </Dialog.Description>
 
-          <div className="border-b border-[var(--ui-border-subtle)] px-4 py-4 sm:px-5">
+          <div className="border-b border-[var(--ui-border-subtle)] px-3 py-3 sm:px-5 sm:py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="inline-flex items-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)]">
@@ -833,7 +923,7 @@ export function ActionBar({
                   </div>
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+              <div className="hidden flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] sm:flex">
                 <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                   Shift Shift
                 </span>
@@ -843,7 +933,7 @@ export function ActionBar({
               </div>
             </div>
 
-            <div className="mt-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 shadow-[inset_0_1px_0_var(--ui-border-subtle)]">
+            <div className="mt-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-3 shadow-[inset_0_1px_0_var(--ui-border-subtle)] sm:mt-4 sm:rounded-[24px] sm:px-4 sm:py-4">
               <div className="flex items-center gap-3">
                 <Search className="size-5 text-[var(--ui-ink-faint)]" />
                 <Input
@@ -879,19 +969,19 @@ export function ActionBar({
                     }
                   }}
                   placeholder={t("common.actionBar.searchPlaceholder")}
-                  className="border-0 bg-transparent px-0 py-0 text-[1rem] focus:border-0"
+                  className="min-w-0 border-0 bg-transparent px-0 py-0 text-[0.9rem] focus:border-0 sm:text-[1rem]"
                 />
                 {isSearching ? (
                   <LoaderCircle className="size-4 shrink-0 animate-spin text-[var(--ui-ink-faint)]" />
                 ) : null}
               </div>
-              <div className="mt-2 pl-8 text-[13px] leading-6 text-[var(--ui-ink-soft)]">
+              <div className="mt-2 hidden pl-8 text-[13px] leading-6 text-[var(--ui-ink-soft)] sm:block">
                 {normalizedQuery
                   ? t("common.actionBar.activeHint")
                   : t("common.actionBar.idleHint")}
               </div>
 
-              <div className="mt-4 border-t border-[var(--ui-border-subtle)] pt-4">
+              <div className="mt-3 border-t border-[var(--ui-border-subtle)] pt-3 sm:mt-4 sm:pt-4">
                 <div className="mb-2 pl-1 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
                   {t("common.actionBar.filtersLabel")}
                 </div>
@@ -919,7 +1009,8 @@ export function ActionBar({
             ) : (
               <div className="grid gap-2">
                 {visibleItems.map((item, index) => {
-                  const previousSection = visibleItems[index - 1]?.section ?? null;
+                  const previousSection =
+                    visibleItems[index - 1]?.section ?? null;
                   const showSectionLabel = previousSection !== item.section;
 
                   return (
@@ -930,50 +1021,74 @@ export function ActionBar({
                         </div>
                       ) : null}
 
-                      <button
-                        ref={(node) => {
-                          itemRefs.current[index] = node;
-                        }}
-                        type="button"
+                      <div
                         className={cn(
-                          "group flex w-full items-start gap-3 rounded-[24px] border px-4 py-3.5 text-left transition",
+                          "group flex w-full items-stretch rounded-[24px] border text-left transition",
                           index === activeIndex
                             ? "border-[var(--ui-border-strong)] bg-[var(--ui-surface-3)] shadow-[var(--ui-shadow-soft)]"
                             : "border-transparent bg-[var(--ui-surface-1)] hover:border-[var(--ui-border-subtle)] hover:bg-[var(--ui-surface-hover)]"
                         )}
                         onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => handleSelect(item)}
                       >
-                        <ActionBarLeadingTile item={item} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <ActionBarCategoryBadge item={item} />
+                        <button
+                          ref={(node) => {
+                            itemRefs.current[index] = node;
+                          }}
+                          type="button"
+                          className="flex min-w-0 flex-1 items-start gap-2 rounded-[24px] px-3 py-3 text-left sm:gap-3 sm:px-4 sm:py-3.5"
+                          onClick={() => handleSelect(item)}
+                        >
+                          <ActionBarLeadingTile item={item} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <ActionBarCategoryBadge item={item} />
+                            </div>
+                            <div className="mt-2 line-clamp-2 text-[15px] font-medium text-[var(--ui-ink-strong)]">
+                              {item.kind && item.section === "results" ? (
+                                <EntityName
+                                  kind={item.kind}
+                                  label={item.title}
+                                  showIcon={false}
+                                  labelClassName="text-[var(--ui-ink-strong)]"
+                                />
+                              ) : (
+                                item.title
+                              )}
+                            </div>
+                            <div className="mt-1 line-clamp-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                              {item.detail}
+                            </div>
                           </div>
-                          <div className="mt-2 text-[15px] font-medium text-[var(--ui-ink-strong)]">
-                            {item.kind && item.section === "results" ? (
-                              <EntityName
-                                kind={item.kind}
-                                label={item.title}
-                                showIcon={false}
-                                labelClassName="text-[var(--ui-ink-strong)]"
-                              />
-                            ) : (
-                              item.title
+                          <ArrowRight
+                            className={cn(
+                              "mt-1 size-4 shrink-0 transition",
+                              index === activeIndex
+                                ? "text-[var(--ui-ink-medium)]"
+                                : "text-[var(--ui-ink-faint)] group-hover:text-[var(--ui-ink-soft)]"
                             )}
-                          </div>
-                          <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                            {item.detail}
-                          </div>
-                        </div>
-                        <ArrowRight
-                          className={cn(
-                            "mt-1 size-4 shrink-0 transition",
-                            index === activeIndex
-                              ? "text-[var(--ui-ink-medium)]"
-                              : "text-[var(--ui-ink-faint)] group-hover:text-[var(--ui-ink-soft)]"
-                          )}
-                        />
-                      </button>
+                          />
+                        </button>
+                        {item.entityType && item.entityId ? (
+                          <button
+                            type="button"
+                            className="m-2 inline-flex size-11 shrink-0 items-center justify-center self-start rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] disabled:opacity-50"
+                            aria-label={
+                              item.pinId
+                                ? `Unpin ${item.title}`
+                                : `Pin ${item.title}`
+                            }
+                            title={item.pinId ? "Unpin" : "Pin"}
+                            disabled={pinMutation.isPending}
+                            onClick={() => pinMutation.mutate(item)}
+                          >
+                            {item.pinId ? (
+                              <PinOff className="size-4" />
+                            ) : (
+                              <Pin className="size-4" />
+                            )}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })}
@@ -981,8 +1096,22 @@ export function ActionBar({
             )}
           </div>
 
-          <div className="border-t border-[var(--ui-border-subtle)] px-4 py-3 sm:px-5">
-            <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ui-ink-faint)]">
+          <div
+            className={cn(
+              "border-t border-[var(--ui-border-subtle)] sm:px-5 sm:py-3",
+              pinMutation.isError ? "px-4 py-3" : "px-0 py-0"
+            )}
+          >
+            {pinMutation.isError ? (
+              <div
+                className="mb-2 text-[12px] text-rose-300"
+                role="status"
+                aria-live="polite"
+              >
+                Forge could not update that pin. Try again.
+              </div>
+            ) : null}
+            <div className="hidden flex-wrap items-center gap-2 text-[12px] text-[var(--ui-ink-faint)] sm:flex">
               <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
                 Up/Down navigate
               </span>

@@ -208,6 +208,7 @@ private struct WatchSurfacePager: View {
                 InboxSurface(
                     prompts: bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts,
                     attention: bootstrap.inbox?.attention,
+                    pins: bootstrap.inbox?.pins,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCapture: onCapture
                 )
@@ -258,7 +259,8 @@ private struct WatchSurfacePager: View {
         case .inbox:
             let prompts = bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts
             let attentionCards = bootstrap.inbox?.attention.map { 1 + $0.items.count } ?? 0
-            return max(1, attentionCards + prompts.count)
+            let pinCards = bootstrap.inbox?.pins.map { 1 + $0.items.count } ?? 0
+            return max(1, attentionCards + pinCards + prompts.count)
         case .sync:
             return 1
         }
@@ -1104,11 +1106,12 @@ private struct PsycheRecentReportCard: View {
 private struct InboxSurface: View {
     let prompts: [ForgeWatchPrompt]
     let attention: ForgeWatchAttentionSnapshot?
+    let pins: ForgeWatchPinsSnapshot?
     @Binding var selection: Int
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
-        if prompts.isEmpty, attention == nil {
+        if prompts.isEmpty, attention == nil, pins == nil {
             EmptySurfaceCard(title: "Inbox clear", message: "No watch-sized prompts are waiting.")
         } else {
             SurfaceCarousel(selection: $selection, count: cardCount) {
@@ -1168,6 +1171,53 @@ private struct InboxSurface: View {
                     }
                 }
 
+                if let pins {
+                    WatchCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 7) {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(WatchTheme.accent)
+                                Text("Pinned")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                            }
+
+                            DenseMetric(
+                                title: "Records",
+                                value: "\(pins.total)",
+                                tint: WatchTheme.accent
+                            )
+
+                            Text(pins.items.first?.title ?? "No pinned records.")
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(WatchTheme.textMuted)
+                                .lineLimit(2)
+                        }
+                    }
+                    .tag(attentionCardCount)
+
+                    ForEach(Array(pins.items.enumerated()), id: \.element.id) { index, item in
+                        WatchCard {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(item.category)
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.accent)
+                                    .lineLimit(1)
+                                Text(item.title)
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                                    .lineLimit(2)
+                                Text(item.availability == "available" ? item.detail : "Unavailable in Forge")
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textMuted)
+                                    .lineLimit(3)
+                            }
+                        }
+                        .tag(attentionCardCount + index + 1)
+                    }
+                }
+
                 ForEach(Array(prompts.enumerated()), id: \.element.id) { index, prompt in
                     WatchCard {
                         VStack(alignment: .leading, spacing: 7) {
@@ -1187,7 +1237,7 @@ private struct InboxSurface: View {
                             }
                         }
                     }
-                    .tag(attentionCardCount + index)
+                    .tag(attentionCardCount + pinCardCount + index)
                 }
             }
         }
@@ -1197,8 +1247,12 @@ private struct InboxSurface: View {
         attention.map { 1 + $0.items.count } ?? 0
     }
 
+    private var pinCardCount: Int {
+        pins.map { 1 + $0.items.count } ?? 0
+    }
+
     private var cardCount: Int {
-        max(1, attentionCardCount + prompts.count)
+        max(1, attentionCardCount + pinCardCount + prompts.count)
     }
 
     private func severityColor(_ severity: String) -> Color {

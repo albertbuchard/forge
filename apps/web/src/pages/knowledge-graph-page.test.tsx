@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -462,18 +468,19 @@ describe("KnowledgeGraphPage", () => {
     forceViewModeMock.current = "render";
     dispatchMock.mockReset();
     useAppDispatchMock.mockReturnValue(dispatchMock);
-    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({
-        shell: {
-          knowledgeGraphOverlayFocus: null
-        },
-        knowledgeGraphDiagnostics: {
-          panelOpen: false,
-          latestStatus: null,
-          recentEvents: [],
-          recentSnapshots: []
-        }
-      })
+    useAppSelectorMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({
+          shell: {
+            knowledgeGraphOverlayFocus: null
+          },
+          knowledgeGraphDiagnostics: {
+            panelOpen: false,
+            latestStatus: null,
+            recentEvents: [],
+            recentSnapshots: []
+          }
+        })
     );
     getKnowledgeGraphMock.mockResolvedValue(graphFixture);
     useForgeShellMock.mockReturnValue({
@@ -505,7 +512,7 @@ describe("KnowledgeGraphPage", () => {
         updatedFrom: "2026-04-01",
         updatedTo: "2026-04-12",
         limit: 120,
-        focusNodeId: null
+        focusNodeId: "goal:goal-1"
       })
     );
     await waitFor(() =>
@@ -521,18 +528,19 @@ describe("KnowledgeGraphPage", () => {
   });
 
   it("records the resolved graph diagnostics event only once per stable query result", async () => {
-    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({
-        shell: {
-          knowledgeGraphOverlayFocus: null
-        },
-        knowledgeGraphDiagnostics: {
-          panelOpen: true,
-          latestStatus: null,
-          recentEvents: [],
-          recentSnapshots: []
-        }
-      })
+    useAppSelectorMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({
+          shell: {
+            knowledgeGraphOverlayFocus: null
+          },
+          knowledgeGraphDiagnostics: {
+            panelOpen: true,
+            latestStatus: null,
+            recentEvents: [],
+            recentSnapshots: []
+          }
+        })
     );
     const groupSpy = vi
       .spyOn(console, "groupCollapsed")
@@ -569,22 +577,29 @@ describe("KnowledgeGraphPage", () => {
       "Type a graph search, then press Enter or the search button"
     );
     fireEvent.click(screen.getByRole("button", { name: /Advanced/i }));
-    const entityFilterInput = screen.getByPlaceholderText("Filter by entity type");
+    const entityFilterInput = screen.getByPlaceholderText(
+      "Filter by entity type"
+    );
     fireEvent.focus(entityFilterInput);
-    expect(screen.getByRole("button", { name: /^Wiki Page$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Wiki Page$/i })
+    ).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /^Goal$/i }));
     await waitFor(() =>
-      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(["user_operator"], {
-        q: null,
-        entityKinds: ["goal"],
-        relationKinds: [],
-        tags: [],
-        owners: [],
-        updatedFrom: null,
-        updatedTo: null,
-        limit: 2000,
-        focusNodeId: null
-      })
+      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+        ["user_operator"],
+        {
+          q: null,
+          entityKinds: ["goal"],
+          relationKinds: [],
+          tags: [],
+          owners: [],
+          updatedFrom: null,
+          updatedTo: null,
+          limit: 2000,
+          focusNodeId: null
+        }
+      )
     );
 
     const callsBeforeTyping = getKnowledgeGraphMock.mock.calls.length;
@@ -593,33 +608,39 @@ describe("KnowledgeGraphPage", () => {
     fireEvent.keyDown(searchInput, { key: "Enter" });
 
     await waitFor(() =>
-      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(["user_operator"], {
-        q: "North Star",
-        entityKinds: ["goal"],
-        relationKinds: [],
-        tags: [],
-        owners: [],
-        updatedFrom: null,
-        updatedTo: null,
-        limit: 2000,
-        focusNodeId: null
-      })
+      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+        ["user_operator"],
+        {
+          q: "North Star",
+          entityKinds: ["goal"],
+          relationKinds: [],
+          tags: [],
+          owners: [],
+          updatedFrom: null,
+          updatedTo: null,
+          limit: 2000,
+          focusNodeId: null
+        }
+      )
     );
 
     fireEvent.change(screen.getByRole("slider"), { target: { value: "80" } });
 
     await waitFor(() =>
-      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(["user_operator"], {
-        q: "North Star",
-        entityKinds: ["goal"],
-        relationKinds: [],
-        tags: [],
-        owners: [],
-        updatedFrom: null,
-        updatedTo: null,
-        limit: 80,
-        focusNodeId: null
-      })
+      expect(getKnowledgeGraphMock).toHaveBeenLastCalledWith(
+        ["user_operator"],
+        {
+          q: "North Star",
+          entityKinds: ["goal"],
+          relationKinds: [],
+          tags: [],
+          owners: [],
+          updatedFrom: null,
+          updatedTo: null,
+          limit: 80,
+          focusNodeId: null
+        }
+      )
     );
   });
 
@@ -639,9 +660,7 @@ describe("KnowledgeGraphPage", () => {
       })
     );
 
-    expect(
-      await screen.findByText("Tune the focus field")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Tune the focus field")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Focused repulsion"), {
       target: { value: "3.10" }
@@ -656,55 +675,21 @@ describe("KnowledgeGraphPage", () => {
   });
 
   it("opens the dev diagnostics panel from Redux-backed state in dev mode", async () => {
-    useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({
-        shell: {
-          knowledgeGraphOverlayFocus: null
-        },
-        knowledgeGraphDiagnostics: {
-          panelOpen: true,
-          latestStatus: {
-            datasetSignature: "graph-a",
-            route: "/knowledge-graph",
-            rendererMode: "sigma",
-            startupPhase: "startup_verified",
-            startupInvariantSatisfied: true,
-            visibleNodeCount: 2,
-            focusedNodeId: null,
-            primaryFocusedNodeId: null,
-            graphCentroid: { x: 0, y: 0 },
-            boundsCenter: { x: 0, y: 0 },
-            camera: { x: 0, y: 0, ratio: 1, angle: 0 },
-            cameraTarget: null,
-            driftMetrics: {
-              centroidDistanceFromOrigin: 0,
-              boundsCenterDistanceFromOrigin: 0,
-              cameraDistanceFromOrigin: 0,
-              cameraToCentroidDistance: 0
-            },
-            latestSnapshotAt: "2026-04-12T14:00:05.000Z",
-            lastVerifiedAt: "2026-04-12T14:00:06.000Z"
+    useAppSelectorMock.mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({
+          shell: {
+            knowledgeGraphOverlayFocus: null
           },
-          recentEvents: [
-            {
-              id: "event-1",
-              createdAt: "2026-04-12T14:00:01.000Z",
-              level: "info",
-              eventKey: "startup_verified",
-              message: "Startup verified",
-              route: "/knowledge-graph",
-              details: {}
-            }
-          ],
-          recentSnapshots: [
-            {
-              id: "snapshot-1",
-              capturedAt: "2026-04-12T14:00:05.000Z",
+          knowledgeGraphDiagnostics: {
+            panelOpen: true,
+            latestStatus: {
               datasetSignature: "graph-a",
               route: "/knowledge-graph",
               rendererMode: "sigma",
               startupPhase: "startup_verified",
               startupInvariantSatisfied: true,
+              visibleNodeCount: 2,
               focusedNodeId: null,
               primaryFocusedNodeId: null,
               graphCentroid: { x: 0, y: 0 },
@@ -717,19 +702,54 @@ describe("KnowledgeGraphPage", () => {
                 cameraDistanceFromOrigin: 0,
                 cameraToCentroidDistance: 0
               },
-              nodeCount: 2,
-              viewportSize: {
-                width: 1280,
-                height: 720
-              },
-              nodePositions: [
-                { id: "goal:goal-1", x: -1, y: 0.5 },
-                { id: "project:project-1", x: 1, y: -0.5 }
-              ]
-            }
-          ]
-        }
-      })
+              latestSnapshotAt: "2026-04-12T14:00:05.000Z",
+              lastVerifiedAt: "2026-04-12T14:00:06.000Z"
+            },
+            recentEvents: [
+              {
+                id: "event-1",
+                createdAt: "2026-04-12T14:00:01.000Z",
+                level: "info",
+                eventKey: "startup_verified",
+                message: "Startup verified",
+                route: "/knowledge-graph",
+                details: {}
+              }
+            ],
+            recentSnapshots: [
+              {
+                id: "snapshot-1",
+                capturedAt: "2026-04-12T14:00:05.000Z",
+                datasetSignature: "graph-a",
+                route: "/knowledge-graph",
+                rendererMode: "sigma",
+                startupPhase: "startup_verified",
+                startupInvariantSatisfied: true,
+                focusedNodeId: null,
+                primaryFocusedNodeId: null,
+                graphCentroid: { x: 0, y: 0 },
+                boundsCenter: { x: 0, y: 0 },
+                camera: { x: 0, y: 0, ratio: 1, angle: 0 },
+                cameraTarget: null,
+                driftMetrics: {
+                  centroidDistanceFromOrigin: 0,
+                  boundsCenterDistanceFromOrigin: 0,
+                  cameraDistanceFromOrigin: 0,
+                  cameraToCentroidDistance: 0
+                },
+                nodeCount: 2,
+                viewportSize: {
+                  width: 1280,
+                  height: 720
+                },
+                nodePositions: [
+                  { id: "goal:goal-1", x: -1, y: 0.5 },
+                  { id: "project:project-1", x: 1, y: -0.5 }
+                ]
+              }
+            ]
+          }
+        })
     );
 
     renderPage();
@@ -902,6 +922,8 @@ describe("KnowledgeGraphPage", () => {
       await screen.findByText("The graph renderer hit a display error.")
     ).toBeInTheDocument();
     expect(screen.getByText("Renderer exploded")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open hierarchy/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Open hierarchy/i })
+    ).toBeInTheDocument();
   });
 });

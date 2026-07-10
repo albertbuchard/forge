@@ -7,7 +7,9 @@ import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 
 test("knowledge graph route applies filters before limiting and returns matching facets", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-knowledge-graph-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-knowledge-graph-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -20,7 +22,11 @@ test("knowledge graph route applies filters before limiting and returns matching
     const payload = response.json() as {
       graph: {
         nodes: Array<{ entityKind: string }>;
-        counts: { limited: boolean; filteredNodeCount: number; nodeCount: number };
+        counts: {
+          limited: boolean;
+          filteredNodeCount: number;
+          nodeCount: number;
+        };
         facets: { entityKinds: Array<{ value: string; count: number }> };
       };
     };
@@ -28,7 +34,10 @@ test("knowledge graph route applies filters before limiting and returns matching
     assert.ok(payload.graph.nodes.length > 0);
     assert.ok(payload.graph.nodes.every((node) => node.entityKind === "goal"));
     assert.equal(payload.graph.counts.limited, false);
-    assert.equal(payload.graph.counts.filteredNodeCount, payload.graph.counts.nodeCount);
+    assert.equal(
+      payload.graph.counts.filteredNodeCount,
+      payload.graph.counts.nodeCount
+    );
     assert.deepEqual(payload.graph.facets.entityKinds, [
       { value: "goal", label: "Goal", count: payload.graph.counts.nodeCount }
     ]);
@@ -73,13 +82,21 @@ test("knowledge graph route keeps deterministic visible-node ordering across rep
 
     assert.equal(firstPayload.graph.counts.limited, true);
     assert.equal(secondPayload.graph.counts.limited, true);
-    assert.equal(firstPayload.graph.counts.nodeCount, firstPayload.graph.nodes.length);
+    assert.equal(
+      firstPayload.graph.counts.nodeCount,
+      firstPayload.graph.nodes.length
+    );
     assert.equal(
       secondPayload.graph.counts.nodeCount,
       secondPayload.graph.nodes.length
     );
     assert.ok(firstPayload.graph.counts.nodeCount > 0);
     assert.ok(firstPayload.graph.counts.nodeCount <= 8);
+    assert.ok(
+      firstPayload.graph.nodes.some(
+        (node) => node.id === "goal:goal_build_forge"
+      )
+    );
     assert.equal(
       secondPayload.graph.counts.nodeCount,
       firstPayload.graph.counts.nodeCount
@@ -148,7 +165,8 @@ test("knowledge graph includes shared wiki pages when scoped to the operator use
           node.entityType === "note" &&
           node.entityKind === "wiki_page" &&
           node.title === "Shared Memory Page" &&
-          node.href === "/wiki/page/shared-memory-page?spaceId=wiki_space_shared"
+          node.href ===
+            "/wiki/page/shared-memory-page?spaceId=wiki_space_shared"
       )
     );
     assert.ok(

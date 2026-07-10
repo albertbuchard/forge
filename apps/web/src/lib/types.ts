@@ -4056,6 +4056,32 @@ export interface AttentionInboxStateRecord {
   updatedAt: string;
 }
 
+export type EntityNavigationAvailability = "available" | "deleted" | "missing";
+
+export interface EntityNavigationItem {
+  pinId: string | null;
+  entityType: CrudEntityType;
+  entityId: string;
+  title: string;
+  detail: string;
+  category: string;
+  targetPath: string;
+  ownerUserId: string | null;
+  availability: EntityNavigationAvailability;
+  pinnedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+}
+
+export interface EntityNavigationPayload {
+  generatedAt: string;
+  pinnedTotal: number;
+  recentTotal: number;
+  hiddenRecentCount: number;
+  pinned: EntityNavigationItem[];
+  recent: EntityNavigationItem[];
+}
+
 export interface StrategyLinkedEntity {
   entityType: CrudEntityType;
   entityId: string;

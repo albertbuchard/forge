@@ -22,6 +22,8 @@ contract without requiring a Settings click.
 - start from the operator overview
 - search before creating duplicates
 - use batch entity tools for normal multi-entity work
+- use `forge_call_entity_navigation_route` for bounded pin reads and the current
+  Codex actor's recent history; pin and unpin remain human-operator-only
 - post structured insights
 - hand off to the Forge UI when Kanban, review, or Psyche exploration is easier visually
 

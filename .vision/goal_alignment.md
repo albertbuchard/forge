@@ -72,6 +72,7 @@ Forge already has strong foundations:
 - an Artifact Store for trusted human-download-only files with precise metadata, provenance, static scans, danger scoring, versions, audit history, optional LLM metadata enrichment, a dedicated web view, and relationships stored through general entity links
 - Life Events for chronological personal event memory, including short events and longer stays or periods, with calendar reconciliation, ticket artifact import, travel segments, status reads, a virtualized web timeline, guided modal creation/import flows, and relationships stored through general entity links
 - an actor-scoped Attention queue with bounded pagination, reversible snooze/dismiss/restore state, source-change reactivation, a responsive web view, agent route contracts, and compact iPhone/watch Inbox summaries
+- canonical shared or user-owned entity pins plus actor-scoped recent-view history, exposed through the existing Action Bar, a compact iPhone/watch snapshot, and agent-safe list/touch routes while human operators alone control pin state
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`

@@ -204,6 +204,7 @@ describe("question flow simulation cycles", () => {
     "Wiki Page",
     "Artifact",
     "Attention",
+    "Entity Navigation",
     "Insight",
     "Calendar Event",
     "Work Block Template",
@@ -268,6 +269,8 @@ describe("question flow simulation cycles", () => {
       "Store this spreadsheet so I can retrieve it later with its provenance and project context.",
     Attention:
       "Review what needs a next move and defer one valid review until tomorrow.",
+    "Entity Navigation":
+      "Reopen something important I pinned or was working on recently.",
     Insight:
       "Save the pattern I noticed from the last three blocked work sessions.",
     "Calendar Event": "Schedule a focused review call in local time.",
@@ -350,6 +353,7 @@ describe("question flow simulation cycles", () => {
     "Wiki Page": ["create", "read", "update", "browse"],
     Artifact: ["trusted-upload", "metadata-update", "enrich", "link"],
     Attention: ["list", "snooze", "dismiss", "restore"],
+    "Entity Navigation": ["list", "reopen", "touch", "human-pin-handoff"],
     Insight: ["add", "review", "link", "preserve"],
     "Calendar Event": ["add", "update", "review", "delete"],
     "Work Block Template": ["add", "update", "review", "delete"],
@@ -440,6 +444,7 @@ describe("question flow simulation cycles", () => {
     "Wiki Page": "specializedCrud",
     Artifact: "specializedCrud",
     Attention: "specializedDomain",
+    "Entity Navigation": "specializedDomain",
     Insight: "batch",
     "Calendar Event": "batch",
     "Work Block Template": "batch",
@@ -533,6 +538,8 @@ describe("question flow simulation cycles", () => {
   const readModelAliasFlowSectionByKey = {
     attentionInbox: "Attention",
     attention_inbox: "Attention",
+    entityNavigation: "Entity Navigation",
+    entity_navigation: "Entity Navigation",
     operatorOverview: "Operator Overview",
     operator_overview: "Operator Overview",
     operatorContext: "Operator Context",
@@ -584,6 +591,7 @@ describe("question flow simulation cycles", () => {
     "calendar_connection",
     "artifact",
     "attention_inbox",
+    "entity_navigation",
     "operator_overview",
     "operator_context",
     "calendar_overview",
@@ -609,6 +617,10 @@ describe("question flow simulation cycles", () => {
       snooze: "Defer an eligible item until a specific future time.",
       dismiss: "Dismiss a non-blocking item only when the queue permits it.",
       restore: "Return a snoozed or dismissed item to the active queue."
+    },
+    "Entity Navigation": {
+      list: "List bounded pins and this actor's recent records.",
+      touch: "Record one exact in-scope record after actually viewing it."
     },
     Movement: {
       day: "Review one day of movement before interpreting time in place.",
@@ -910,6 +922,7 @@ describe("question flow simulation cycles", () => {
 
     const surfaceToScenarioName = {
       attention: "Attention",
+      entityNavigation: "Entity Navigation",
       movement: "Movement",
       lifeEvents: "Life Events",
       lifeForce: "Life Force",

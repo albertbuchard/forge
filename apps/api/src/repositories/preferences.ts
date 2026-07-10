@@ -599,7 +599,9 @@ function readProfileByUserAndDomain(
   return row ? mapProfile(row) : null;
 }
 
-function readProfileById(profileId: string): PreferenceProfile | null {
+export function getPreferenceProfileById(
+  profileId: string
+): PreferenceProfile | null {
   const row = getDatabase()
     .prepare(
       `SELECT id, user_id, domain, default_context_id, model_version, created_at, updated_at
@@ -797,60 +799,74 @@ function listStoredScores(contextId: string): ScoreRow[] {
 }
 
 export function listPreferenceContexts(): PreferenceContext[] {
-  return (getDatabase()
-    .prepare(
-      `SELECT id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at
        FROM preference_contexts
        ORDER BY created_at ASC`
-    )
-    .all() as ContextRow[]).map(mapContext);
+      )
+      .all() as ContextRow[]
+  ).map(mapContext);
 }
 
-export function getPreferenceContextById(contextId: string): PreferenceContext | undefined {
+export function getPreferenceContextById(
+  contextId: string
+): PreferenceContext | undefined {
   return readContext(contextId) ?? undefined;
 }
 
 export function listPreferenceItems(): PreferenceItem[] {
-  return (getDatabase()
-    .prepare(
-      `SELECT id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at
        FROM preference_items
        ORDER BY created_at ASC`
-    )
-    .all() as ItemRow[]).map(mapItem);
+      )
+      .all() as ItemRow[]
+  ).map(mapItem);
 }
 
-export function getPreferenceItemById(itemId: string): PreferenceItem | undefined {
+export function getPreferenceItemById(
+  itemId: string
+): PreferenceItem | undefined {
   return getItemById(itemId) ?? undefined;
 }
 
 export function listPreferenceCatalogs(): PreferenceCatalog[] {
-  return (getDatabase()
-    .prepare(
-      `SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
        FROM preference_catalogs
        WHERE archived = 0
        ORDER BY created_at ASC`
-    )
-    .all() as CatalogRow[])
+      )
+      .all() as CatalogRow[]
+  )
     .filter((row) => row.archived === 0)
     .map((row) => readCatalog(row.id))
     .filter((catalog): catalog is PreferenceCatalog => catalog !== null);
 }
 
-export function getPreferenceCatalogById(catalogId: string): PreferenceCatalog | undefined {
+export function getPreferenceCatalogById(
+  catalogId: string
+): PreferenceCatalog | undefined {
   return readCatalog(catalogId) ?? undefined;
 }
 
 export function listPreferenceCatalogItems(): PreferenceCatalogItem[] {
-  return (getDatabase()
-    .prepare(
-      `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
        FROM preference_catalog_items
        WHERE archived = 0
        ORDER BY catalog_id ASC, position ASC, created_at ASC`
-    )
-    .all() as CatalogItemRow[])
+      )
+      .all() as CatalogItemRow[]
+  )
     .filter((row) => row.archived === 0)
     .map(mapCatalogItem);
 }
@@ -923,7 +939,9 @@ function resolveSourceEntity(
     }
     case "habit": {
       const habit = getHabitById(entityId);
-      return habit ? { label: habit.title, description: habit.description } : null;
+      return habit
+        ? { label: habit.title, description: habit.description }
+        : null;
     }
     case "note": {
       const note = getNoteById(entityId);
@@ -942,7 +960,9 @@ function resolveSourceEntity(
     }
     case "calendar_event": {
       const event = getCalendarEventById(entityId);
-      return event ? { label: event.title, description: event.description } : null;
+      return event
+        ? { label: event.title, description: event.description }
+        : null;
     }
     case "work_block_template": {
       const template = getWorkBlockTemplateById(entityId);
@@ -1025,7 +1045,7 @@ function ensureProfile(
       createDefaultContexts(existing.id);
     }
     ensureCatalogs(existing.id, domain);
-    return readProfileById(existing.id) ?? existing;
+    return getPreferenceProfileById(existing.id) ?? existing;
   }
   const now = nowIso();
   const profileId = `pref_profile_${randomUUID().slice(0, 10)}`;
@@ -1039,7 +1059,7 @@ function ensureProfile(
     createDefaultContexts(profileId);
     ensureCatalogs(profileId, domain);
   });
-  const created = readProfileById(profileId);
+  const created = getPreferenceProfileById(profileId);
   if (!created) {
     throw new HttpError(
       500,
@@ -1285,11 +1305,7 @@ function computeDimensionSummaries(options: {
     contextId: selectedContext.id,
     dimensionId,
     leaning: clamp(tanhScale(leaning.get(dimensionId) ?? 0, 3), -1, 1),
-    confidence: clamp(
-      1 - Math.exp(-(counts.get(dimensionId) ?? 0) / 3),
-      0,
-      1
-    ),
+    confidence: clamp(1 - Math.exp(-(counts.get(dimensionId) ?? 0) / 3), 0, 1),
     movement: clamp(tanhScale(recent.get(dimensionId) ?? 0, 2), -1, 1),
     contextSensitivity: 0,
     evidenceCount: counts.get(dimensionId) ?? 0,
@@ -1359,7 +1375,10 @@ function computeScores(options: {
       }
     ])
   );
-  const pairDirections = new Map<string, { leftWins: number; rightWins: number }>();
+  const pairDirections = new Map<
+    string,
+    { leftWins: number; rightWins: number }
+  >();
 
   for (const signal of signals) {
     const itemStats = perItem.get(signal.itemId);
@@ -1398,8 +1417,13 @@ function computeScores(options: {
       judgment.strength *
       factor *
       timeDecay(ageInDays(judgment.createdAt), selectedContext.decayDays);
-    const pairKey = [judgment.leftItemId, judgment.rightItemId].sort().join("::");
-    const pairState = pairDirections.get(pairKey) ?? { leftWins: 0, rightWins: 0 };
+    const pairKey = [judgment.leftItemId, judgment.rightItemId]
+      .sort()
+      .join("::");
+    const pairState = pairDirections.get(pairKey) ?? {
+      leftWins: 0,
+      rightWins: 0
+    };
     if (judgment.outcome === "left") {
       leftStats.raw += weight;
       rightStats.raw -= weight;
@@ -1424,7 +1448,8 @@ function computeScores(options: {
         ? judgment.createdAt
         : leftStats.lastJudgmentAt;
     rightStats.lastJudgmentAt =
-      !rightStats.lastJudgmentAt || judgment.createdAt > rightStats.lastJudgmentAt
+      !rightStats.lastJudgmentAt ||
+      judgment.createdAt > rightStats.lastJudgmentAt
         ? judgment.createdAt
         : rightStats.lastJudgmentAt;
     leftStats.lastEvidenceAt =
@@ -1432,7 +1457,8 @@ function computeScores(options: {
         ? judgment.createdAt
         : leftStats.lastEvidenceAt;
     rightStats.lastEvidenceAt =
-      !rightStats.lastEvidenceAt || judgment.createdAt > rightStats.lastEvidenceAt
+      !rightStats.lastEvidenceAt ||
+      judgment.createdAt > rightStats.lastEvidenceAt
         ? judgment.createdAt
         : rightStats.lastEvidenceAt;
   }
@@ -1473,8 +1499,10 @@ function computeScores(options: {
       1
     );
     const freshness = Math.exp(
-      -Math.max(0, ageInDays(stats.lastEvidenceAt) - selectedContext.decayDays) /
-        Math.max(14, selectedContext.decayDays)
+      -Math.max(
+        0,
+        ageInDays(stats.lastEvidenceAt) - selectedContext.decayDays
+      ) / Math.max(14, selectedContext.decayDays)
     );
     const conflictPenalty =
       1 -
@@ -1493,8 +1521,7 @@ function computeScores(options: {
         1
       );
     const bookmarked =
-      (existing?.bookmarked ?? 0) === 1 ||
-      stats.signals.includes("bookmark");
+      (existing?.bookmarked ?? 0) === 1 || stats.signals.includes("bookmark");
     const compareLater =
       (existing?.compare_later ?? 0) === 1 ||
       stats.signals.includes("compare_later");
@@ -1507,8 +1534,12 @@ function computeScores(options: {
       signals: stats.signals
     });
     const explanation = [
-      stats.wins > 0 ? `Preferred over peers ${stats.wins} time${stats.wins === 1 ? "" : "s"}.` : null,
-      stats.losses > 0 ? `Lost against peers ${stats.losses} time${stats.losses === 1 ? "" : "s"}.` : null,
+      stats.wins > 0
+        ? `Preferred over peers ${stats.wins} time${stats.wins === 1 ? "" : "s"}.`
+        : null,
+      stats.losses > 0
+        ? `Lost against peers ${stats.losses} time${stats.losses === 1 ? "" : "s"}.`
+        : null,
       stats.signalCount > 0
         ? `Direct signals recorded: ${stats.signals.join(", ")}.`
         : null,
@@ -1570,7 +1601,10 @@ function computeScores(options: {
     contextOnlyDimensionsByContext.set(
       context.id,
       new Map(
-        isolatedDimensions.map((summary) => [summary.dimensionId, summary.leaning])
+        isolatedDimensions.map((summary) => [
+          summary.dimensionId,
+          summary.leaning
+        ])
       )
     );
   }
@@ -1580,7 +1614,8 @@ function computeScores(options: {
     const otherLeanings = [...contextOnlyDimensionsByContext.entries()]
       .filter(([contextId]) => contextId !== selectedContext.id)
       .map(
-        ([, leaningByDimension]) => leaningByDimension.get(summary.dimensionId) ?? 0
+        ([, leaningByDimension]) =>
+          leaningByDimension.get(summary.dimensionId) ?? 0
       );
     const averageOther =
       otherLeanings.length === 0
@@ -1590,7 +1625,9 @@ function computeScores(options: {
     averageSensitivityByDimension.set(
       summary.dimensionId,
       clamp(
-        Math.abs((selectedIsolated.get(summary.dimensionId) ?? 0) - averageOther),
+        Math.abs(
+          (selectedIsolated.get(summary.dimensionId) ?? 0) - averageOther
+        ),
         0,
         1
       )
@@ -1622,8 +1659,13 @@ function buildNextPair(options: {
   for (const judgment of judgments.filter(
     (entry) => entry.contextId === selectedContext.id
   )) {
-    const pairKey = [judgment.leftItemId, judgment.rightItemId].sort().join("::");
-    const current = pairHistory.get(pairKey) ?? { count: 0, lastCreatedAt: null };
+    const pairKey = [judgment.leftItemId, judgment.rightItemId]
+      .sort()
+      .join("::");
+    const current = pairHistory.get(pairKey) ?? {
+      count: 0,
+      lastCreatedAt: null
+    };
     pairHistory.set(pairKey, {
       count: current.count + 1,
       lastCreatedAt:
@@ -1632,16 +1674,18 @@ function buildNextPair(options: {
           : current.lastCreatedAt
     });
   }
-  let best:
-    | {
-        left: PreferenceItem;
-        right: PreferenceItem;
-        score: number;
-        rationale: string[];
-      }
-    | null = null;
+  let best: {
+    left: PreferenceItem;
+    right: PreferenceItem;
+    score: number;
+    rationale: string[];
+  } | null = null;
   for (let index = 0; index < items.length; index += 1) {
-    for (let innerIndex = index + 1; innerIndex < items.length; innerIndex += 1) {
+    for (
+      let innerIndex = index + 1;
+      innerIndex < items.length;
+      innerIndex += 1
+    ) {
       const left = items[index]!;
       const right = items[innerIndex]!;
       const leftScore = scoreByItemId.get(left.id);
@@ -1654,23 +1698,27 @@ function buildNextPair(options: {
       }
       const pairKey = [left.id, right.id].sort().join("::");
       const history = pairHistory.get(pairKey);
-      const uncertaintyGain = (leftScore.uncertainty + rightScore.uncertainty) / 2;
-      const boundaryValue = 1 - Math.min(1, Math.abs(leftScore.latentScore - rightScore.latentScore));
+      const uncertaintyGain =
+        (leftScore.uncertainty + rightScore.uncertainty) / 2;
+      const boundaryValue =
+        1 -
+        Math.min(1, Math.abs(leftScore.latentScore - rightScore.latentScore));
       const diversityBonus = clamp(
         vectorDistance(left.featureWeights, right.featureWeights),
         0,
         1
       );
       const contextNeed =
-        (leftScore.evidenceCount + rightScore.evidenceCount) < 6 ? 0.35 : 0.1;
+        leftScore.evidenceCount + rightScore.evidenceCount < 6 ? 0.35 : 0.1;
       const driftProbe =
-        !history?.lastCreatedAt || ageInDays(history.lastCreatedAt) > 45 ? 0.25 : 0;
-      const repetitionPenalty =
-        !history
-          ? 0
-          : ageInDays(history.lastCreatedAt) < 7
-            ? 0.7 + history.count * 0.08
-            : history.count * 0.08;
+        !history?.lastCreatedAt || ageInDays(history.lastCreatedAt) > 45
+          ? 0.25
+          : 0;
+      const repetitionPenalty = !history
+        ? 0
+        : ageInDays(history.lastCreatedAt) < 7
+          ? 0.7 + history.count * 0.08
+          : history.count * 0.08;
       const queueBias =
         (leftScore.compareLater || leftScore.bookmarked ? 0.15 : 0) +
         (rightScore.compareLater || rightScore.bookmarked ? 0.15 : 0);
@@ -1868,7 +1916,9 @@ function recomputeContext(
 ) {
   const contexts = listContexts(profile.id);
   const items = listItems(profile.id);
-  const judgments = listJudgmentsForContexts(contexts.map((context) => context.id));
+  const judgments = listJudgmentsForContexts(
+    contexts.map((context) => context.id)
+  );
   const signals = listSignalsForContexts(contexts.map((context) => context.id));
   const existingScores = listStoredScores(selectedContext.id);
   const { scores, dimensions } = computeScores({
@@ -1892,12 +1942,22 @@ function recomputeContext(
           : scores.reduce((sum, score) => sum + score.confidence, 0) /
             scores.length,
       likedCount: scores.filter((score) => score.status === "liked").length,
-      dislikedCount: scores.filter((score) => score.status === "disliked").length,
-      uncertainCount: scores.filter((score) => score.status === "uncertain").length,
+      dislikedCount: scores.filter((score) => score.status === "disliked")
+        .length,
+      uncertainCount: scores.filter((score) => score.status === "uncertain")
+        .length,
       totalItems: scores.length
     }
   });
-  return { items, judgments, signals, contexts, selectedContext, scores, dimensions };
+  return {
+    items,
+    judgments,
+    signals,
+    contexts,
+    selectedContext,
+    scores,
+    dimensions
+  };
 }
 
 function buildWorkspace(
@@ -1978,7 +2038,9 @@ function buildWorkspace(
       judgments: judgments.filter(
         (judgment) => judgment.contextId === selectedContext.id
       ),
-      signals: signals.filter((signal) => signal.contextId === selectedContext.id),
+      signals: signals.filter(
+        (signal) => signal.contextId === selectedContext.id
+      ),
       snapshots,
       staleItemIds,
       flippedItemIds
@@ -1992,13 +2054,16 @@ function buildWorkspace(
     },
     summary: {
       totalItems: mappedScores.length,
-      likedCount: mappedScores.filter((score) => score.status === "liked").length,
+      likedCount: mappedScores.filter((score) => score.status === "liked")
+        .length,
       dislikedCount: mappedScores.filter((score) => score.status === "disliked")
         .length,
-      uncertainCount: mappedScores.filter((score) => score.status === "uncertain")
-        .length,
+      uncertainCount: mappedScores.filter(
+        (score) => score.status === "uncertain"
+      ).length,
       bookmarkedCount: mappedScores.filter((score) => score.bookmarked).length,
-      vetoedCount: mappedScores.filter((score) => score.status === "vetoed").length,
+      vetoedCount: mappedScores.filter((score) => score.status === "vetoed")
+        .length,
       averageConfidence:
         mappedScores.length === 0
           ? 0
@@ -2014,10 +2079,12 @@ function buildWorkspace(
         (sum, catalog) => sum + catalog.items.length,
         0
       ),
-      seededCatalogCount: catalogs.filter((catalog) => catalog.source === "seeded")
-        .length,
-      customCatalogCount: catalogs.filter((catalog) => catalog.source === "custom")
-        .length
+      seededCatalogCount: catalogs.filter(
+        (catalog) => catalog.source === "seeded"
+      ).length,
+      customCatalogCount: catalogs.filter(
+        (catalog) => catalog.source === "custom"
+      ).length
     }
   });
   return workspace;
@@ -2055,7 +2122,9 @@ export function createPreferenceCatalog(
   const profile = ensureProfile(parsed.userId, parsed.domain);
   const timestamp = nowIso();
   const baseSlug = slugify(parsed.slug || parsed.title) || "concept-list";
-  const existingSlugs = new Set(listCatalogs(profile.id).map((catalog) => catalog.slug));
+  const existingSlugs = new Set(
+    listCatalogs(profile.id).map((catalog) => catalog.slug)
+  );
   let slug = baseSlug;
   let index = 2;
   while (existingSlugs.has(slug)) {
@@ -2170,7 +2239,7 @@ export function createPreferenceCatalogItem(
   const timestamp = nowIso();
   const position =
     parsed.position ??
-    (catalog.items.reduce((max, item) => Math.max(max, item.position), -1) + 1);
+    catalog.items.reduce((max, item) => Math.max(max, item.position), -1) + 1;
   const itemId = `pref_catalog_item_${randomUUID().slice(0, 10)}`;
   getDatabase()
     .prepare(
@@ -2430,7 +2499,7 @@ export function updatePreferenceContext(
         contextId
       );
   });
-  const profile = readProfileById(current.profileId);
+  const profile = getPreferenceProfileById(current.profileId);
   const updated = readContext(contextId)!;
   if (profile) {
     recomputeContext(profile, updated);
@@ -2471,7 +2540,9 @@ export function deletePreferenceContext(contextId: string): PreferenceContext {
       .prepare(`DELETE FROM preference_item_scores WHERE context_id = ?`)
       .run(contextId);
     getDatabase()
-      .prepare(`DELETE FROM preference_dimension_summaries WHERE context_id = ?`)
+      .prepare(
+        `DELETE FROM preference_dimension_summaries WHERE context_id = ?`
+      )
       .run(contextId);
     getDatabase()
       .prepare(`DELETE FROM preference_snapshots WHERE context_id = ?`)
@@ -2496,7 +2567,7 @@ export function deletePreferenceContext(contextId: string): PreferenceContext {
         .run(replacementDefault.id, timestamp, current.profileId);
     }
   });
-  const profile = readProfileById(current.profileId);
+  const profile = getPreferenceProfileById(current.profileId);
   if (profile) {
     recomputeContext(profile, replacementDefault);
   }
@@ -2550,7 +2621,7 @@ export function mergePreferenceContexts(input: MergePreferenceContextsInput) {
       )
       .run(timestamp, source.id);
   });
-  const profile = readProfileById(source.profileId);
+  const profile = getPreferenceProfileById(source.profileId);
   if (profile) {
     recomputeContext(profile, target);
   }
@@ -2617,7 +2688,7 @@ function upsertPreferenceScoreState(
       `Preference item ${itemId} was not found.`
     );
   }
-  const profile = readProfileById(item.profileId);
+  const profile = getPreferenceProfileById(item.profileId);
   const context = readContext(contextId);
   if (!profile || !context || context.profileId !== profile.id) {
     throw new HttpError(
@@ -2626,7 +2697,9 @@ function upsertPreferenceScoreState(
       "Preference score context is invalid for this item."
     );
   }
-  const existing = listStoredScores(contextId).find((score) => score.item_id === itemId);
+  const existing = listStoredScores(contextId).find(
+    (score) => score.item_id === itemId
+  );
   const timestamp = nowIso();
   if (!existing) {
     getDatabase()
@@ -2661,9 +2734,9 @@ function upsertPreferenceScoreState(
       patch.manualStatus ?? existing.manual_status,
       patch.manualScore ?? existing.manual_score,
       patch.confidenceLock ?? existing.confidence_lock,
-      (patch.bookmarked ?? (existing.bookmarked === 1)) ? 1 : 0,
-      (patch.compareLater ?? (existing.compare_later === 1)) ? 1 : 0,
-      (patch.frozen ?? (existing.frozen === 1)) ? 1 : 0,
+      (patch.bookmarked ?? existing.bookmarked === 1) ? 1 : 0,
+      (patch.compareLater ?? existing.compare_later === 1) ? 1 : 0,
+      (patch.frozen ?? existing.frozen === 1) ? 1 : 0,
       timestamp,
       contextId,
       itemId
@@ -2694,11 +2767,11 @@ export function updatePreferenceItem(
     sourceEntityType:
       parsed.sourceEntityType !== undefined
         ? parsed.sourceEntityType
-        : item.sourceEntityType ?? null,
+        : (item.sourceEntityType ?? null),
     sourceEntityId:
       parsed.sourceEntityId !== undefined
         ? parsed.sourceEntityId
-        : item.sourceEntityId ?? null,
+        : (item.sourceEntityId ?? null),
     metadata:
       parsed.metadata !== undefined
         ? (parsed.metadata as Record<string, unknown>)
@@ -2723,9 +2796,11 @@ export function updatePreferenceItem(
       itemId
     );
   const updated = getItemById(itemId)!;
-  const profile = readProfileById(item.profileId);
+  const profile = getPreferenceProfileById(item.profileId);
   if (profile) {
-    for (const context of listContexts(profile.id).filter((entry) => entry.active)) {
+    for (const context of listContexts(profile.id).filter(
+      (entry) => entry.active
+    )) {
       recomputeContext(profile, context);
     }
   }
@@ -2758,9 +2833,11 @@ export function deletePreferenceItem(itemId: string): PreferenceItem {
       .prepare(`DELETE FROM preference_items WHERE id = ?`)
       .run(itemId);
   });
-  const profile = readProfileById(current.profileId);
+  const profile = getPreferenceProfileById(current.profileId);
   if (profile) {
-    for (const context of listContexts(profile.id).filter((entry) => entry.active)) {
+    for (const context of listContexts(profile.id).filter(
+      (entry) => entry.active
+    )) {
       recomputeContext(profile, context);
     }
   }
@@ -2932,12 +3009,16 @@ export function updatePreferenceScore(
   }
   upsertPreferenceScoreState(itemId, context.id, {
     manualStatus:
-      parsed.manualStatus !== undefined ? parsed.manualStatus ?? null : undefined,
+      parsed.manualStatus !== undefined
+        ? (parsed.manualStatus ?? null)
+        : undefined,
     manualScore:
-      parsed.manualScore !== undefined ? parsed.manualScore ?? null : undefined,
+      parsed.manualScore !== undefined
+        ? (parsed.manualScore ?? null)
+        : undefined,
     confidenceLock:
       parsed.confidenceLock !== undefined
-        ? parsed.confidenceLock ?? null
+        ? (parsed.confidenceLock ?? null)
         : undefined,
     bookmarked: parsed.bookmarked,
     compareLater: parsed.compareLater,

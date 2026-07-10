@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 import {
   createNote,
+  getNote,
   getLifeForce,
   listBehaviors,
   listBehaviorPatterns,
@@ -66,7 +67,7 @@ import {
   getEntityRoute,
   getPrimaryNavigableLink
 } from "@/lib/note-helpers";
-import type { CrudEntityType, Note, NoteLink } from "@/lib/types";
+import type { CrudEntityType, Note } from "@/lib/types";
 import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription
@@ -197,6 +198,7 @@ export function NotesPage() {
   const queryClient = useQueryClient();
   const shell = useForgeShell();
   const [searchParams, setSearchParams] = useSearchParams();
+  const focusedNoteId = searchParams.get("focus")?.trim() || null;
   const [selectedEntityValues, setSelectedEntityValues] = useState<string[]>(
     () => parseLinkedValues(searchParams)
   );
@@ -282,9 +284,13 @@ export function NotesPage() {
     if (updatedTo) {
       next.set("updatedTo", updatedTo);
     }
+    if (focusedNoteId) {
+      next.set("focus", focusedNoteId);
+    }
     setSearchParams(next, { replace: true });
   }, [
     author,
+    focusedNoteId,
     selectedEntityValues,
     selectedTagValues,
     selectedTextTerms,
@@ -551,6 +557,17 @@ export function NotesPage() {
         limit: 200
       })
   });
+  const focusedNoteInList = focusedNoteId
+    ? notesQuery.data?.notes.find((note) => note.id === focusedNoteId)
+    : undefined;
+  const focusedNoteQuery = useQuery({
+    queryKey: ["notes-focus", focusedNoteId],
+    enabled: Boolean(
+      focusedNoteId && notesQuery.isSuccess && !focusedNoteInList
+    ),
+    queryFn: async () => (await getNote(focusedNoteId!)).note,
+    retry: false
+  });
 
   const invalidateNotes = async () => {
     await Promise.all([
@@ -614,7 +631,26 @@ export function NotesPage() {
     onSuccess: invalidateNotes
   });
 
-  const visibleNotes = notesQuery.data?.notes ?? [];
+  const visibleNotes = useMemo(() => {
+    const notes = notesQuery.data?.notes ?? [];
+    const focusedNote = focusedNoteQuery.data;
+    if (!focusedNote || notes.some((note) => note.id === focusedNote.id)) {
+      return notes;
+    }
+    return [focusedNote, ...notes];
+  }, [focusedNoteQuery.data, notesQuery.data?.notes]);
+  useEffect(() => {
+    if (!focusedNoteId) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`forge-note-${focusedNoteId}`);
+      if (typeof target?.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedNoteId, visibleNotes]);
   const todayKey = new Date().toISOString().slice(0, 10);
   const notesCreatedToday = visibleNotes.filter(
     (note) => note.createdAt.slice(0, 10) === todayKey
@@ -981,7 +1017,16 @@ export function NotesPage() {
               const isEditing =
                 editingNoteId === note.id && editingDraft !== null;
               return (
-                <Card key={note.id} className="min-w-0 overflow-hidden p-5">
+                <Card
+                  key={note.id}
+                  id={`forge-note-${note.id}`}
+                  aria-current={focusedNoteId === note.id ? "true" : undefined}
+                  className={`min-w-0 overflow-hidden p-5 ${
+                    focusedNoteId === note.id
+                      ? "border-[color-mix(in_srgb,var(--info)_34%,var(--ui-border-subtle)_66%)] bg-[color-mix(in_srgb,var(--info)_10%,var(--ui-surface-1)_90%)] shadow-[var(--ui-shadow-soft)]"
+                      : ""
+                  }`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xs uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">

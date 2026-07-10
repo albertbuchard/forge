@@ -7,6 +7,7 @@ import pytest
 from forge_hermes import tools
 from forge_hermes.catalog import (
     ATTENTION_ROUTE_SPECS,
+    ENTITY_NAVIGATION_ROUTE_SPECS,
     LIFE_FORCE_ROUTE_SPECS,
     MOVEMENT_ROUTE_SPECS,
     TOOL_CATALOG,
@@ -172,6 +173,9 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     assert specs["forge_call_attention_route"]["parameters"]["properties"]["routeKey"][
         "enum"
     ] == ["dismiss", "list", "restore", "snooze"]
+    assert specs["forge_call_entity_navigation_route"]["parameters"]["properties"][
+        "routeKey"
+    ]["enum"] == ["list", "touch"]
     assert set(
         specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
     ) >= {
@@ -226,6 +230,9 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     attention_route_description = specs["forge_call_attention_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
+    entity_navigation_route_description = specs[
+        "forge_call_entity_navigation_route"
+    ]["parameters"]["properties"]["routeKey"]["description"]
     movement_route_description = specs["forge_call_movement_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
@@ -236,6 +243,14 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "properties"
     ]["routeKey"]["description"]
     assert "list: GET /api/v1/attention-inbox" in attention_route_description
+    assert (
+        "list: GET /api/v1/entity-navigation"
+        in entity_navigation_route_description
+    )
+    assert (
+        "touch: POST /api/v1/entity-navigation/touch"
+        in entity_navigation_route_description
+    )
     assert (
         "snooze: POST /api/v1/attention-inbox/:id/snooze"
         in attention_route_description
@@ -259,6 +274,7 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     )
     for tool_name in [
         "forge_call_attention_route",
+        "forge_call_entity_navigation_route",
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route",
@@ -281,6 +297,10 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         ATTENTION_ROUTE_SPECS,
         {"routeKey": "restore", "pathParams": {"id": "attn:task/task 1"}},
     ) == "/api/v1/attention-inbox/attn%3Atask%2Ftask%201/restore"
+    assert specialized_route_path(
+        ENTITY_NAVIGATION_ROUTE_SPECS,
+        {"routeKey": "touch"},
+    ) == "/api/v1/entity-navigation/touch"
     assert specialized_route_path(
         LIFE_FORCE_ROUTE_SPECS,
         {"routeKey": "weekdayTemplate", "pathParams": {"weekday": "monday"}},

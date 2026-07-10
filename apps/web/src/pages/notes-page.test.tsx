@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -9,6 +9,7 @@ import { NotesPage } from "@/pages/notes-page";
 const {
   createNoteMock,
   deleteNoteMock,
+  getNoteMock,
   getLifeForceMock,
   listBehaviorsMock,
   listBehaviorPatternsMock,
@@ -23,6 +24,7 @@ const {
 } = vi.hoisted(() => ({
   createNoteMock: vi.fn(),
   deleteNoteMock: vi.fn(),
+  getNoteMock: vi.fn(),
   getLifeForceMock: vi.fn(),
   listBehaviorsMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
@@ -39,6 +41,7 @@ const {
 vi.mock("@/lib/api", () => ({
   createNote: createNoteMock,
   deleteNote: deleteNoteMock,
+  getNote: getNoteMock,
   getLifeForce: getLifeForceMock,
   listBehaviors: listBehaviorsMock,
   listBehaviorPatterns: listBehaviorPatternsMock,
@@ -93,16 +96,22 @@ vi.mock("@/components/shell/page-hero", () => ({
 }));
 
 vi.mock("@/components/workbench-boxes/notes/notes-boxes", () => ({
-  NoteComposerBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  NoteFiltersBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  NotesLibraryBox: ({ children }: { children: ReactNode }) => <div>{children}</div>
+  NoteComposerBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  NoteFiltersBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  NotesLibraryBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  )
 }));
 
 vi.mock("@/components/ui/floating-action-menu", () => ({
   FloatingActionMenu: () => null
 }));
 
-function renderWithProviders() {
+function renderWithProviders(initialEntry = "/notes") {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -112,7 +121,7 @@ function renderWithProviders() {
 
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/notes"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route path="/notes" element={<NotesPage />} />
         </Routes>
@@ -172,6 +181,33 @@ describe("NotesPage", () => {
         }
       ]
     });
+    getNoteMock.mockResolvedValue({
+      note: {
+        id: "note_outside_window",
+        kind: "evidence",
+        title: "Older durable note",
+        slug: "older-durable-note",
+        spaceId: "space_1",
+        parentSlug: null,
+        indexOrder: 0,
+        showInIndex: true,
+        aliases: [],
+        summary: "",
+        contentMarkdown: "This note is older than the bounded library window.",
+        contentPlain: "This note is older than the bounded library window.",
+        author: "Albert",
+        source: "ui",
+        sourcePath: "",
+        frontmatter: {},
+        revisionHash: "older-hash",
+        lastSyncedAt: null,
+        createdAt: "2025-01-01T00:00:00.000Z",
+        updatedAt: "2025-01-01T00:00:00.000Z",
+        links: [],
+        tags: ["durable"],
+        destroyAt: null
+      }
+    });
     getLifeForceMock.mockResolvedValue({
       lifeForce: {
         userId: "user_operator",
@@ -206,6 +242,7 @@ describe("NotesPage", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.clearAllMocks();
   });
 
@@ -226,5 +263,33 @@ describe("NotesPage", () => {
       (await screen.findAllByText("88 AP / 210 AP")).length
     ).toBeGreaterThan(0);
     expect((await screen.findAllByText("4.1 AP/h")).length).toBeGreaterThan(0);
+  });
+
+  it("preserves and highlights an exact note navigation focus", async () => {
+    renderWithProviders("/notes?focus=note_1");
+
+    expect(
+      await screen.findByText("Capture the blocker and keep moving.")
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.getElementById("forge-note-note_1")).toHaveAttribute(
+        "aria-current",
+        "true"
+      );
+    });
+  });
+
+  it("loads and highlights a focused note outside the bounded library window", async () => {
+    renderWithProviders("/notes?focus=note_outside_window");
+
+    expect(
+      await screen.findByText(
+        "This note is older than the bounded library window."
+      )
+    ).toBeInTheDocument();
+    expect(getNoteMock).toHaveBeenCalledWith("note_outside_window");
+    expect(
+      document.getElementById("forge-note-note_outside_window")
+    ).toHaveAttribute("aria-current", "true");
   });
 });

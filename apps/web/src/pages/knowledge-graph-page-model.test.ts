@@ -185,7 +185,7 @@ describe("knowledge graph URL and query model", () => {
 
   it("builds a stable API query from parsed page state", () => {
     const state = parseKnowledgeGraphPageState(
-      "q=  graph  &entityKind=task&entityKind=goal&tag=b&tag=a&owner=user-2&relationKind=task_note"
+      "q=  graph  &focus=tag%3Atag-vitality&entityKind=task&entityKind=goal&tag=b&tag=a&owner=user-2&relationKind=task_note"
     );
 
     expect(buildKnowledgeGraphQueryFromPageState(state)).toEqual({
@@ -197,7 +197,7 @@ describe("knowledge graph URL and query model", () => {
       updatedFrom: null,
       updatedTo: null,
       limit: 2000,
-      focusNodeId: null
+      focusNodeId: "tag:tag-vitality"
     });
   });
 

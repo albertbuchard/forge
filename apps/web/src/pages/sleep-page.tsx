@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, MoonStar, Save } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { EntityLinkMultiSelect } from "@/components/psyche/entity-link-multiselect";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
@@ -19,6 +20,7 @@ import {
 } from "@/components/workbench-boxes/health/health-boxes";
 import {
   getSleepSessionRawDetail,
+  getSleepSession,
   getSleepView,
   listBehaviors,
   listBehaviorPatterns,
@@ -147,7 +149,11 @@ function formatDateLabel(value: string, timeZone: string) {
   }).format(new Date(value));
 }
 
-function formatSleepWindow(startedAt: string, endedAt: string, timeZone: string) {
+function formatSleepWindow(
+  startedAt: string,
+  endedAt: string,
+  timeZone: string
+) {
   return `${formatClockInZone(startedAt, timeZone)} - ${formatClockInZone(endedAt, timeZone)}`;
 }
 
@@ -307,7 +313,9 @@ function inferHistoricalRawStage(
       typeof firstStage === "object" &&
       typeof (firstStage as { stage?: unknown }).stage === "string"
     ) {
-      return ((firstStage as { stage: string }).stage || "asleep_unspecified").trim();
+      return (
+        (firstStage as { stage: string }).stage || "asleep_unspecified"
+      ).trim();
     }
   }
   return logType.includes("awake") ? "awake" : "asleep_unspecified";
@@ -322,8 +330,14 @@ function normalizeRawDetail(detail: SleepSessionDetailPayload | null) {
       ? legacyDetail.sourceRecords
       : auditLogs
           .filter(
-            (entry): entry is SleepRawLogRecord & { startedAt: string; endedAt: string } =>
-              typeof entry.startedAt === "string" && typeof entry.endedAt === "string"
+            (
+              entry
+            ): entry is SleepRawLogRecord & {
+              startedAt: string;
+              endedAt: string;
+            } =>
+              typeof entry.startedAt === "string" &&
+              typeof entry.endedAt === "string"
           )
           .map(
             (entry): SleepSourceRecord => ({
@@ -362,7 +376,9 @@ function normalizeRawDetail(detail: SleepSessionDetailPayload | null) {
 function StageDistributionBar({
   stages
 }: {
-  stages: SleepSurfaceNight["stageBreakdown"] | SleepSessionRecord["stageBreakdown"];
+  stages:
+    | SleepSurfaceNight["stageBreakdown"]
+    | SleepSessionRecord["stageBreakdown"];
 }) {
   const totalSeconds = stages.reduce((sum, stage) => sum + stage.seconds, 0);
   if (stages.length === 0 || totalSeconds === 0) {
@@ -405,11 +421,15 @@ function StageDistributionBar({
               className="rounded-[16px] border border-[var(--ui-border-subtle)] px-3 py-3"
               style={{ background: meta.soft }}
             >
-              <div className={cn("text-sm font-medium", meta.text)}>{meta.label}</div>
+              <div className={cn("text-sm font-medium", meta.text)}>
+                {meta.label}
+              </div>
               <div className="mt-1 text-lg text-[var(--ui-ink-strong)]">
                 {formatDurationCompact(stage.seconds)}
               </div>
-              <div className="text-xs text-[var(--ui-ink-muted)]">{formatPercent(ratio)}</div>
+              <div className="text-xs text-[var(--ui-ink-muted)]">
+                {formatPercent(ratio)}
+              </div>
             </div>
           );
         })}
@@ -470,9 +490,12 @@ function SleepPhaseTimeline({
   timeline: SleepPhaseTimeline;
   timeZone: string;
 }) {
-  const inBedBlocks = timeline.blocks.filter((block) => block.lane === "in_bed");
+  const inBedBlocks = timeline.blocks.filter(
+    (block) => block.lane === "in_bed"
+  );
   const sleepBlocks = timeline.blocks.filter((block) => block.lane === "sleep");
-  const firstSelectableBlockId = sleepBlocks[0]?.id ?? inBedBlocks[0]?.id ?? null;
+  const firstSelectableBlockId =
+    sleepBlocks[0]?.id ?? inBedBlocks[0]?.id ?? null;
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(
     firstSelectableBlockId
   );
@@ -492,7 +515,9 @@ function SleepPhaseTimeline({
   if (!timeline.hasRawSegments) {
     return (
       <div className="rounded-[18px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-5 text-sm text-[var(--ui-ink-muted)]">
-        Phase timing is unavailable for this night. Forge still keeps the canonical overnight summary, but the companion did not store segment-level timing.
+        Phase timing is unavailable for this night. Forge still keeps the
+        canonical overnight summary, but the companion did not store
+        segment-level timing.
       </div>
     );
   }
@@ -514,7 +539,9 @@ function SleepPhaseTimeline({
         ) : null}
         <div className="grid gap-2">
           <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
-            {timeline.hasSleepStageData ? "Sleep phases" : "Recorded sleep coverage"}
+            {timeline.hasSleepStageData
+              ? "Sleep phases"
+              : "Recorded sleep coverage"}
           </div>
           <TimelineRail
             blocks={sleepBlocks.length > 0 ? sleepBlocks : inBedBlocks}
@@ -534,7 +561,12 @@ function SleepPhaseTimeline({
         <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className={cn("text-sm font-medium", stageMeta(selectedBlock.stage).text)}>
+              <div
+                className={cn(
+                  "text-sm font-medium",
+                  stageMeta(selectedBlock.stage).text
+                )}
+              >
                 {selectedBlock.label}
               </div>
               <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
@@ -542,7 +574,9 @@ function SleepPhaseTimeline({
                 {formatClockInZone(selectedBlock.endedAt, timeZone)}
               </div>
             </div>
-            <Badge tone="meta">{formatDurationCompact(selectedBlock.durationSeconds)}</Badge>
+            <Badge tone="meta">
+              {formatDurationCompact(selectedBlock.durationSeconds)}
+            </Badge>
           </div>
         </div>
       ) : null}
@@ -560,17 +594,23 @@ function LastNightHero({
   if (!latestNight) {
     return (
       <Card className="overflow-hidden p-6">
-        <div className="text-sm uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Sleep</div>
-        <div className="mt-4 text-2xl text-[var(--ui-ink-strong)]">No overnight sleep yet</div>
+        <div className="text-sm uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          Sleep
+        </div>
+        <div className="mt-4 text-2xl text-[var(--ui-ink-strong)]">
+          No overnight sleep yet
+        </div>
         <div className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
-          The sleep page will switch to a night-first summary once the companion syncs a canonical overnight session.
+          The sleep page will switch to a night-first summary once the companion
+          syncs a canonical overnight session.
         </div>
       </Card>
     );
   }
 
   const freshnessStatus = freshness?.status ?? latestNight.freshnessStatus;
-  const expectedDateKey = freshness?.expectedDateKey ?? latestNight.expectedDateKey;
+  const expectedDateKey =
+    freshness?.expectedDateKey ?? latestNight.expectedDateKey;
   const actualDateKey = freshness?.actualDateKey ?? latestNight.dateKey;
   const isCurrent = freshness?.isCurrent ?? latestNight.isExpectedLastNight;
   const heroLabel =
@@ -587,7 +627,12 @@ function LastNightHero({
         <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <div className="grid gap-5">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge className={cn("border-transparent", summaryBadgeTone(latestNight.recoveryState))}>
+              <Badge
+                className={cn(
+                  "border-transparent",
+                  summaryBadgeTone(latestNight.recoveryState)
+                )}
+              >
                 {latestNight.qualitativeState}
               </Badge>
               <Badge tone="meta">{latestNight.sourceTimezone}</Badge>
@@ -595,7 +640,9 @@ function LastNightHero({
                 <Badge tone="meta">Has reflection</Badge>
               ) : null}
               {latestNight.hasRawSegments ? (
-                <Badge tone="meta">{latestNight.rawSegmentCount} raw segments</Badge>
+                <Badge tone="meta">
+                  {latestNight.rawSegmentCount} raw segments
+                </Badge>
               ) : null}
             </div>
 
@@ -608,11 +655,19 @@ function LastNightHero({
                   {formatDurationCompact(latestNight.asleepSeconds)}
                 </div>
                 <div className="pb-2 text-sm text-[var(--ui-ink-muted)]">
-                  asleep across {formatSleepWindow(latestNight.startedAt, latestNight.endedAt, latestNight.sourceTimezone)}
+                  asleep across{" "}
+                  {formatSleepWindow(
+                    latestNight.startedAt,
+                    latestNight.endedAt,
+                    latestNight.sourceTimezone
+                  )}
                 </div>
               </div>
               <div className="mt-3 text-sm text-[var(--ui-ink-medium)]">
-                {formatDateLabel(latestNight.endedAt, latestNight.sourceTimezone)}
+                {formatDateLabel(
+                  latestNight.endedAt,
+                  latestNight.sourceTimezone
+                )}
               </div>
               {latestNight.qualitySummary ? (
                 <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-medium)]">
@@ -620,37 +675,57 @@ function LastNightHero({
                 </div>
               ) : freshnessStatus === "stale" ? (
                 <div className="mt-4 max-w-2xl rounded-[16px] border border-amber-300/60 bg-amber-100/70 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100">
-                  Expected wake-date {expectedDateKey} in {latestNight.sourceTimezone}, but Forge has {actualDateKey}. Refresh the iPhone sync after unlock; this page checks again automatically.
+                  Expected wake-date {expectedDateKey} in{" "}
+                  {latestNight.sourceTimezone}, but Forge has {actualDateKey}.
+                  Refresh the iPhone sync after unlock; this page checks again
+                  automatically.
                 </div>
               ) : freshnessStatus === "future" ? (
                 <div className="mt-4 max-w-2xl rounded-[16px] border border-sky-300/60 bg-sky-100/70 px-4 py-3 text-sm leading-6 text-sky-950 dark:border-sky-400/30 dark:bg-sky-500/15 dark:text-sky-100">
-                  This sleep is dated after today in {latestNight.sourceTimezone}. Check the phone clock, timezone, and HealthKit sample dates.
+                  This sleep is dated after today in{" "}
+                  {latestNight.sourceTimezone}. Check the phone clock, timezone,
+                  and HealthKit sample dates.
                 </div>
               ) : (
                 <div className="mt-4 max-w-2xl text-sm leading-6 text-[var(--ui-ink-muted)]">
-                  Canonical overnight summary computed from synced sleep segments, with raw evidence still available underneath.
+                  Canonical overnight summary computed from synced sleep
+                  segments, with raw evidence still available underneath.
                 </div>
               )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">In bed</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                  In bed
+                </div>
                 <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
                   {formatDurationCompact(latestNight.timeInBedSeconds)}
                 </div>
               </div>
               <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Score</div>
-                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{latestNight.score ?? "n/a"}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                  Score
+                </div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+                  {latestNight.score ?? "n/a"}
+                </div>
               </div>
               <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Regularity</div>
-                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{latestNight.regularity ?? "n/a"}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                  Regularity
+                </div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+                  {latestNight.regularity ?? "n/a"}
+                </div>
               </div>
               <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Efficiency</div>
-                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(latestNight.efficiency)}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                  Efficiency
+                </div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+                  {formatPercent(latestNight.efficiency)}
+                </div>
               </div>
             </div>
           </div>
@@ -662,37 +737,60 @@ function LastNightHero({
                   <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                     Baseline
                   </div>
-                  <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">Compared with recent nights</div>
+                  <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+                    Compared with recent nights
+                  </div>
                 </div>
                 <MoonStar className="size-5 text-[var(--primary)]" />
               </div>
               <div className="mt-4 grid gap-3">
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--ui-ink-medium)]">7-night average</span>
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    7-night average
+                  </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
-                    {formatDurationCompact(latestNight.weeklyAverageSleepSeconds)}
+                    {formatDurationCompact(
+                      latestNight.weeklyAverageSleepSeconds
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--ui-ink-medium)]">Versus baseline</span>
-                  <span className={cn("text-sm", percentChangeTone(latestNight.deltaFromWeeklyAverageSeconds))}>
-                    {formatSignedMinutesFromSeconds(latestNight.deltaFromWeeklyAverageSeconds)}
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    Versus baseline
+                  </span>
+                  <span
+                    className={cn(
+                      "text-sm",
+                      percentChangeTone(
+                        latestNight.deltaFromWeeklyAverageSeconds
+                      )
+                    )}
+                  >
+                    {formatSignedMinutesFromSeconds(
+                      latestNight.deltaFromWeeklyAverageSeconds
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--ui-ink-medium)]">Bedtime drift</span>
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    Bedtime drift
+                  </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
                     {latestNight.bedtimeDriftMinutes ?? 0}m
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--ui-ink-medium)]">Wake drift</span>
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    Wake drift
+                  </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
                     {latestNight.wakeDriftMinutes ?? 0}m
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--ui-ink-medium)]">Restorative share</span>
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    Restorative share
+                  </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
                     {formatPercent(latestNight.restorativeShare)}
                   </span>
@@ -726,9 +824,13 @@ function WeekBaselineCard({
 }) {
   return (
     <Card className="h-full border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">{title}</div>
+      <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+        {title}
+      </div>
       <div className="mt-3 text-3xl text-[var(--ui-ink-strong)]">{value}</div>
-      <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-muted)]">{description}</div>
+      <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-muted)]">
+        {description}
+      </div>
     </Card>
   );
 }
@@ -749,7 +851,9 @@ function SleepCalendar({
       ),
     [days]
   );
-  const [monthKey, setMonthKey] = useState<string>(monthKeys[monthKeys.length - 1] ?? "");
+  const [monthKey, setMonthKey] = useState<string>(
+    monthKeys[monthKeys.length - 1] ?? ""
+  );
 
   useEffect(() => {
     if (monthKeys.length === 0) {
@@ -780,7 +884,9 @@ function SleepCalendar({
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Sleep calendar
             </div>
-            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatMonthLabel(monthKey)}</div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+              {formatMonthLabel(monthKey)}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -788,7 +894,9 @@ function SleepCalendar({
               variant="secondary"
               className="h-9 rounded-full"
               disabled={monthIndex <= 0}
-              onClick={() => setMonthKey(monthKeys[Math.max(0, monthIndex - 1)] ?? monthKey)}
+              onClick={() =>
+                setMonthKey(monthKeys[Math.max(0, monthIndex - 1)] ?? monthKey)
+              }
             >
               Previous
             </Button>
@@ -799,7 +907,8 @@ function SleepCalendar({
               disabled={monthIndex === -1 || monthIndex >= monthKeys.length - 1}
               onClick={() =>
                 setMonthKey(
-                  monthKeys[Math.min(monthKeys.length - 1, monthIndex + 1)] ?? monthKey
+                  monthKeys[Math.min(monthKeys.length - 1, monthIndex + 1)] ??
+                    monthKey
                 )
               }
             >
@@ -845,16 +954,26 @@ function SleepCalendar({
                   sleep
                     ? "border-[var(--ui-border-subtle)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-3)]"
                     : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]",
-                  isSelected && "border-[var(--primary)] bg-[var(--primary)]/12",
+                  isSelected &&
+                    "border-[var(--primary)] bg-[var(--primary)]/12",
                   cell.outsideMonth && !sleep && "opacity-35"
                 )}
                 style={sleep ? { background: scoreTone } : undefined}
               >
                 <div className="flex min-w-0 items-start justify-between gap-1">
-                  <span className={cn("text-xs sm:text-sm", cell.outsideMonth ? "text-[var(--ui-ink-muted)]" : "text-[var(--ui-ink-medium)]")}>
+                  <span
+                    className={cn(
+                      "text-xs sm:text-sm",
+                      cell.outsideMonth
+                        ? "text-[var(--ui-ink-muted)]"
+                        : "text-[var(--ui-ink-medium)]"
+                    )}
+                  >
                     {cell.dayNumber}
                   </span>
-                  {sleep?.hasReflection ? <span className="size-2 rounded-full bg-[var(--success)]" /> : null}
+                  {sleep?.hasReflection ? (
+                    <span className="size-2 rounded-full bg-[var(--success)]" />
+                  ) : null}
                 </div>
                 {sleep ? (
                   <div className="mt-2 grid min-w-0 gap-1 sm:mt-4">
@@ -865,7 +984,9 @@ function SleepCalendar({
                       {sleep.score ?? "n/a"} score
                     </div>
                     <div className="min-w-0 truncate text-[10px] text-[var(--ui-ink-muted)] sm:text-xs">
-                      {sleep.hasRawSegments ? "phases available" : "summary only"}
+                      {sleep.hasRawSegments
+                        ? "phases available"
+                        : "summary only"}
                     </div>
                   </div>
                 ) : null}
@@ -927,7 +1048,10 @@ function SleepDetailPanel({
   onSave: () => void;
 }) {
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
-  const normalizedRawDetail = useMemo(() => normalizeRawDetail(rawDetail), [rawDetail]);
+  const normalizedRawDetail = useMemo(
+    () => normalizeRawDetail(rawDetail),
+    [rawDetail]
+  );
   const efficiency =
     typeof session.derived.efficiency === "number"
       ? session.derived.efficiency
@@ -949,8 +1073,15 @@ function SleepDetailPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className={cn("border-transparent", summaryBadgeTone(recoveryState))}>
-                {recoveryState ? recoveryState.replaceAll("_", " ") : "Canonical night"}
+              <Badge
+                className={cn(
+                  "border-transparent",
+                  summaryBadgeTone(recoveryState)
+                )}
+              >
+                {recoveryState
+                  ? recoveryState.replaceAll("_", " ")
+                  : "Canonical night"}
               </Badge>
               <Badge tone="meta">{session.rawSegmentCount} raw segments</Badge>
               <Badge tone="meta">{session.sourceTimezone}</Badge>
@@ -962,43 +1093,64 @@ function SleepDetailPanel({
               {formatDateLabel(session.endedAt, session.sourceTimezone)}
             </div>
             <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
-              {formatSleepWindow(session.startedAt, session.endedAt, session.sourceTimezone)}
+              {formatSleepWindow(
+                session.startedAt,
+                session.endedAt,
+                session.sourceTimezone
+              )}
             </div>
           </div>
           <div className="grid gap-2 text-right">
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
               Summary
             </div>
-            <div className="text-3xl text-[var(--ui-ink-strong)]">{formatDurationCompact(session.asleepSeconds)}</div>
+            <div className="text-3xl text-[var(--ui-ink-strong)]">
+              {formatDurationCompact(session.asleepSeconds)}
+            </div>
             <div className="text-sm text-[var(--ui-ink-muted)]">asleep</div>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">In bed</div>
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+              In bed
+            </div>
             <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
               {formatDurationCompact(session.timeInBedSeconds)}
             </div>
           </div>
           <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Awake</div>
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+              Awake
+            </div>
             <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
               {formatDurationCompact(session.awakeSeconds)}
             </div>
           </div>
           <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Efficiency</div>
-            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(efficiency)}</div>
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+              Efficiency
+            </div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+              {formatPercent(efficiency)}
+            </div>
           </div>
           <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">Restorative</div>
-            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">{formatPercent(restorativeShare)}</div>
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+              Restorative
+            </div>
+            <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+              {formatPercent(restorativeShare)}
+            </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <DetailTabButton active={tab === "summary"} onClick={() => onTabChange("summary")}>
+          <DetailTabButton
+            active={tab === "summary"}
+            onClick={() => onTabChange("summary")}
+          >
             Summary
           </DetailTabButton>
           <DetailTabButton
@@ -1007,7 +1159,10 @@ function SleepDetailPanel({
           >
             Reflection
           </DetailTabButton>
-          <DetailTabButton active={tab === "raw"} onClick={() => onTabChange("raw")}>
+          <DetailTabButton
+            active={tab === "raw"}
+            onClick={() => onTabChange("raw")}
+          >
             Show raw data
           </DetailTabButton>
         </div>
@@ -1062,7 +1217,9 @@ function SleepDetailPanel({
         {tab === "reflection" ? (
           <div className="grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm text-[var(--ui-ink-muted)]">Quality summary</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">
+                Quality summary
+              </span>
               <Input
                 value={draft.qualitySummary}
                 onChange={(event) =>
@@ -1072,11 +1229,15 @@ function SleepDetailPanel({
               />
             </label>
             <label className="grid gap-2">
-              <span className="text-sm text-[var(--ui-ink-muted)]">Night notes</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">
+                Night notes
+              </span>
               <Textarea
                 className="min-h-[200px]"
                 value={draft.notes}
-                onChange={(event) => onDraftChange({ notes: event.target.value })}
+                onChange={(event) =>
+                  onDraftChange({ notes: event.target.value })
+                }
                 placeholder="What shaped this night, and what should we remember about it?"
               />
             </label>
@@ -1084,12 +1245,16 @@ function SleepDetailPanel({
               <span className="text-sm text-[var(--ui-ink-muted)]">Tags</span>
               <Input
                 value={draft.tagsText}
-                onChange={(event) => onDraftChange({ tagsText: event.target.value })}
+                onChange={(event) =>
+                  onDraftChange({ tagsText: event.target.value })
+                }
                 placeholder="travel, stress, good-routine, late-caffeine"
               />
             </label>
             <div className="grid gap-2">
-              <span className="text-sm text-[var(--ui-ink-muted)]">Linked context</span>
+              <span className="text-sm text-[var(--ui-ink-muted)]">
+                Linked context
+              </span>
               <EntityLinkMultiSelect
                 options={linkOptions}
                 selectedValues={draft.linkValues}
@@ -1098,7 +1263,12 @@ function SleepDetailPanel({
               />
             </div>
             <div className="flex justify-end">
-              <Button type="button" pending={pending} pendingLabel="Saving" onClick={onSave}>
+              <Button
+                type="button"
+                pending={pending}
+                pendingLabel="Saving"
+                onClick={onSave}
+              >
                 <Save className="size-4" />
                 Save reflection
               </Button>
@@ -1109,17 +1279,27 @@ function SleepDetailPanel({
         {tab === "raw" ? (
           <div className="grid gap-5">
             <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-muted)]">
-              Forge shows the canonical overnight session by default. This view reveals the evidence stack underneath it: raw provider or historical imported records first, then Forge-normalized sleep segments.
+              Forge shows the canonical overnight session by default. This view
+              reveals the evidence stack underneath it: raw provider or
+              historical imported records first, then Forge-normalized sleep
+              segments.
             </div>
 
             {rawDetailLoading ? (
-              <div className="text-sm text-[var(--ui-ink-muted)]">Loading raw sleep evidence…</div>
+              <div className="text-sm text-[var(--ui-ink-muted)]">
+                Loading raw sleep evidence…
+              </div>
             ) : null}
 
             {!rawDetailLoading ? (
               <div className="grid gap-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={cn("border-transparent", rawStatusTone(normalizedRawDetail.rawDataStatus))}>
+                  <Badge
+                    className={cn(
+                      "border-transparent",
+                      rawStatusTone(normalizedRawDetail.rawDataStatus)
+                    )}
+                  >
                     {rawStatusLabel(normalizedRawDetail.rawDataStatus)}
                   </Badge>
                   {normalizedRawDetail.rawDataStatus === "historical_raw" ? (
@@ -1139,7 +1319,12 @@ function SleepDetailPanel({
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={cn("border-transparent", sourceRecordTone(record))}>
+                            <Badge
+                              className={cn(
+                                "border-transparent",
+                                sourceRecordTone(record)
+                              )}
+                            >
                               {record.qualityKind === "provider_native"
                                 ? "Provider raw"
                                 : "Historical raw"}
@@ -1169,7 +1354,9 @@ function SleepDetailPanel({
                                 )
                               }
                             >
-                              {expandedRecordId === record.id ? "Hide JSON" : "See JSON"}
+                              {expandedRecordId === record.id
+                                ? "Hide JSON"
+                                : "See JSON"}
                             </Button>
                           </div>
                         </div>
@@ -1267,8 +1454,12 @@ function SleepDetailPanel({
 export function SleepPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusedSleepId = searchParams.get("focus")?.trim() || null;
   const [drafts, setDrafts] = useState<Record<string, SleepDraft>>({});
-  const [selectedSleepId, setSelectedSleepId] = useState<string | null>(null);
+  const [selectedSleepId, setSelectedSleepId] = useState<string | null>(
+    focusedSleepId
+  );
   const [detailTab, setDetailTab] = useState<"summary" | "reflection" | "raw">(
     "summary"
   );
@@ -1284,6 +1475,28 @@ export function SleepPage() {
     refetchOnWindowFocus: true,
     staleTime: 15_000
   });
+  const focusedSleepInView = focusedSleepId
+    ? sleepQuery.data?.sessions.find((session) => session.id === focusedSleepId)
+    : undefined;
+  const focusedSleepQuery = useQuery({
+    queryKey: ["forge-sleep-focus", focusedSleepId],
+    enabled: Boolean(
+      focusedSleepId && sleepQuery.isSuccess && !focusedSleepInView
+    ),
+    queryFn: async () => (await getSleepSession(focusedSleepId!)).sleep,
+    retry: false
+  });
+  const sessions = useMemo(() => {
+    const visibleSessions = sleepQuery.data?.sessions ?? [];
+    const focusedSession = focusedSleepQuery.data;
+    if (
+      !focusedSession ||
+      visibleSessions.some((session) => session.id === focusedSession.id)
+    ) {
+      return visibleSessions;
+    }
+    return [focusedSession, ...visibleSessions];
+  }, [focusedSleepQuery.data, sleepQuery.data?.sessions]);
   const rawDetailQuery = useQuery({
     queryKey: ["forge-sleep-raw", selectedSleepId],
     enabled: Boolean(selectedSleepId),
@@ -1316,26 +1529,42 @@ export function SleepPage() {
     }
     setDrafts(
       Object.fromEntries(
-        sleepQuery.data.sessions.map((session) => [session.id, buildSleepDraft(session)])
+        sessions.map((session) => [session.id, buildSleepDraft(session)])
       )
     );
-  }, [sleepQuery.data]);
+  }, [sessions, sleepQuery.data]);
 
   useEffect(() => {
-    if (!sleepQuery.data?.sessions.length) {
+    if (!sleepQuery.data || !sessions.length) {
       setSelectedSleepId(null);
       return;
     }
-    const hasSelection = sleepQuery.data.sessions.some(
+    const hasFocusedSession = focusedSleepId
+      ? sessions.some((session) => session.id === focusedSleepId)
+      : false;
+    if (hasFocusedSession) {
+      setSelectedSleepId(focusedSleepId);
+      return;
+    }
+    if (focusedSleepId && focusedSleepQuery.isFetching) {
+      return;
+    }
+    const hasSelection = sessions.some(
       (session) => session.id === selectedSleepId
     );
     if (hasSelection) {
       return;
     }
     setSelectedSleepId(
-      sleepQuery.data.latestNight?.sleepId ?? sleepQuery.data.sessions[0]?.id ?? null
+      sleepQuery.data.latestNight?.sleepId ?? sessions[0]?.id ?? null
     );
-  }, [selectedSleepId, sleepQuery.data]);
+  }, [
+    focusedSleepId,
+    focusedSleepQuery.isFetching,
+    selectedSleepId,
+    sessions,
+    sleepQuery.data
+  ]);
 
   useEffect(() => {
     setDetailTab("summary");
@@ -1387,7 +1616,6 @@ export function SleepPage() {
   }
 
   const sleep = sleepQuery.data;
-  const sessions = sleep.sessions;
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
   const activeSession =
     (selectedSleepId ? sessionById.get(selectedSleepId) : null) ??
@@ -1395,7 +1623,7 @@ export function SleepPage() {
     sessions[0] ??
     null;
   const activeDraft = activeSession
-    ? drafts[activeSession.id] ?? buildSleepDraft(activeSession)
+    ? (drafts[activeSession.id] ?? buildSleepDraft(activeSession))
     : null;
 
   const linkOptions = buildHealthEntityLinkOptions({
@@ -1448,6 +1676,13 @@ export function SleepPage() {
     });
   }
 
+  function selectSleep(sleepId: string) {
+    setSelectedSleepId(sleepId);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("focus", sleepId);
+    setSearchParams(nextSearchParams, { replace: true });
+  }
+
   return (
     <div className="grid gap-5">
       <PageHero
@@ -1489,7 +1724,9 @@ export function SleepPage() {
                 <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                   Recent stage mix
                 </div>
-                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">Average nightly phases</div>
+                <div className="mt-2 text-xl text-[var(--ui-ink-strong)]">
+                  Average nightly phases
+                </div>
               </div>
               <CalendarDays className="size-5 text-[var(--primary)]" />
             </div>
@@ -1497,7 +1734,8 @@ export function SleepPage() {
               {sleep.stageAverages.length > 0 ? (
                 sleep.stageAverages.slice(0, 5).map((stage) => (
                   <Badge key={stage.stage} tone="meta">
-                    {stageMeta(stage.stage).label} {formatDurationCompact(stage.averageSeconds)}
+                    {stageMeta(stage.stage).label}{" "}
+                    {formatDurationCompact(stage.averageSeconds)}
                   </Badge>
                 ))
               ) : (
@@ -1515,7 +1753,7 @@ export function SleepPage() {
           <SleepCalendar
             days={sleep.calendarDays}
             selectedSleepId={activeSession?.id ?? null}
-            onSelect={(sleepId) => setSelectedSleepId(sleepId)}
+            onSelect={selectSleep}
           />
 
           {activeSession && activeDraft ? (
@@ -1536,7 +1774,8 @@ export function SleepPage() {
             />
           ) : (
             <Card className="border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-6 py-8 text-sm leading-6 text-[var(--ui-ink-muted)]">
-              Pick a night from the calendar to inspect its phase timing, stage summary, and reflection context.
+              Pick a night from the calendar to inspect its phase timing, stage
+              summary, and reflection context.
             </Card>
           )}
         </section>

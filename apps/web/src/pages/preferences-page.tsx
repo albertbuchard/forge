@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  GitCompareArrows,
-  Plus,
-  Search,
-  Trash2
-} from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import {
+  psycheFocusClass,
+  usePsycheFocusTarget
+} from "@/components/psyche/use-psyche-focus-target";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -41,17 +40,13 @@ import {
   submitPreferenceSignal
 } from "@/lib/api";
 import type {
-  PreferenceCatalog,
-  PreferenceCatalogItem,
   PreferenceContext,
   PreferenceDimensionId,
   PreferenceDomain,
   PreferenceItemStatus,
   PreferenceSignalType
 } from "@/lib/types";
-import {
-  getSingleSelectedUserId
-} from "@/lib/user-ownership";
+import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_DIMENSIONS,
@@ -168,6 +163,15 @@ export function PreferencesPage() {
   const selectedTab = resolveSelectedTab(searchParams.get("tab"));
   const selectedContextId = searchParams.get("contextId");
   const focusedItemIdFromQuery = searchParams.get("focusItem");
+  const focusedCatalogId = searchParams.get("focusCatalog");
+  const focusedCatalogItemId = searchParams.get("focusCatalogItem");
+  const focusedContextId = searchParams.get("focusContext");
+  const focusedPreferenceRecordId =
+    focusedItemIdFromQuery ??
+    focusedCatalogId ??
+    focusedCatalogItemId ??
+    focusedContextId;
+  usePsycheFocusTarget(focusedPreferenceRecordId);
 
   const user = useMemo(
     () =>
@@ -1066,7 +1070,7 @@ export function PreferencesPage() {
                   Click a point to inspect why Forge believes it belongs there.
                 </div>
               </div>
-            <div className="text-sm text-[var(--ui-ink-soft)]">
+              <div className="text-sm text-[var(--ui-ink-soft)]">
                 {workspace.map.length} plotted items
               </div>
             </div>
@@ -1128,10 +1132,19 @@ export function PreferencesPage() {
                     {filteredScores.map((score) => (
                       <tr
                         key={score.itemId}
+                        data-psyche-focus-id={score.itemId}
+                        aria-current={
+                          focusedItemIdFromQuery === score.itemId
+                            ? "true"
+                            : undefined
+                        }
                         className={cn(
                           "cursor-pointer border-t border-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-2)]",
                           score.itemId === selectedScore?.itemId
                             ? "bg-[var(--ui-surface-2)]"
+                            : "",
+                          focusedItemIdFromQuery === score.itemId
+                            ? "bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)]"
                             : ""
                         )}
                         onClick={() => {
@@ -1461,7 +1474,17 @@ export function PreferencesPage() {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
             <div className="grid gap-4">
               {workspace.contexts.map((context) => (
-                <Card key={context.id} className="grid gap-3">
+                <Card
+                  key={context.id}
+                  data-psyche-focus-id={context.id}
+                  aria-current={
+                    focusedContextId === context.id ? "true" : undefined
+                  }
+                  className={cn(
+                    "grid gap-3",
+                    psycheFocusClass(focusedContextId === context.id)
+                  )}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
@@ -1808,7 +1831,17 @@ export function PreferencesPage() {
                     : true
                 );
                 return (
-                  <Card key={catalog.id} className="grid gap-4">
+                  <Card
+                    key={catalog.id}
+                    data-psyche-focus-id={catalog.id}
+                    aria-current={
+                      focusedCatalogId === catalog.id ? "true" : undefined
+                    }
+                    className={cn(
+                      "grid gap-4",
+                      psycheFocusClass(focusedCatalogId === catalog.id)
+                    )}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         {editingCatalogId === catalog.id ? (
@@ -1921,7 +1954,16 @@ export function PreferencesPage() {
                       {visibleItems.map((item) => (
                         <div
                           key={item.id}
-                          className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
+                          data-psyche-focus-id={item.id}
+                          aria-current={
+                            focusedCatalogItemId === item.id
+                              ? "true"
+                              : undefined
+                          }
+                          className={cn(
+                            "rounded-[18px] border border-transparent bg-[var(--ui-surface-2)] px-4 py-3",
+                            psycheFocusClass(focusedCatalogItemId === item.id)
+                          )}
                         >
                           {editingCatalogItemId === item.id ? (
                             <div className="grid gap-3">

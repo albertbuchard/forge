@@ -12,11 +12,13 @@ import type {
   SleepViewData
 } from "@/lib/types";
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
   getSleepViewMock,
+  getSleepSessionMock,
   getSleepSessionRawDetailMock,
   listPsycheValuesMock,
   listBehaviorPatternsMock,
@@ -26,6 +28,7 @@ const {
   patchSleepSessionMock
 } = vi.hoisted(() => ({
   getSleepViewMock: vi.fn(),
+  getSleepSessionMock: vi.fn(),
   getSleepSessionRawDetailMock: vi.fn(),
   listPsycheValuesMock: vi.fn(),
   listBehaviorPatternsMock: vi.fn(),
@@ -72,9 +75,15 @@ vi.mock("@/components/psyche/psyche-section-nav", () => ({
 }));
 
 vi.mock("@/components/workbench-boxes/health/health-boxes", () => ({
-  SleepSummaryBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SleepPatternsBox: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SleepBrowserBox: ({ children }: { children: ReactNode }) => <div>{children}</div>
+  SleepSummaryBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SleepPatternsBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SleepBrowserBox: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  )
 }));
 
 vi.mock("@/components/experience/surface-skeleton", () => ({
@@ -91,6 +100,7 @@ vi.mock("@/components/psyche/entity-link-multiselect", () => ({
 
 vi.mock("@/lib/api", () => ({
   getSleepView: (...args: unknown[]) => getSleepViewMock(...args),
+  getSleepSession: (...args: unknown[]) => getSleepSessionMock(...args),
   getSleepSessionRawDetail: (...args: unknown[]) =>
     getSleepSessionRawDetailMock(...args),
   listPsycheValues: (...args: unknown[]) => listPsycheValuesMock(...args),
@@ -170,10 +180,7 @@ async function flushUi() {
   });
 }
 
-async function waitForCondition(
-  condition: () => void,
-  timeoutMs = 2500
-) {
+async function waitForCondition(condition: () => void, timeoutMs = 2500) {
   const startedAt = Date.now();
   let lastError: unknown;
   while (Date.now() - startedAt < timeoutMs) {
@@ -232,6 +239,14 @@ describe("SleepPage", () => {
       restorativeShare: 0.27,
       recoveryState: "fragile"
     }
+  });
+  const outsideWindowSession = createSleepSession({
+    ...olderSession,
+    id: "sleep_outside_window",
+    externalUid: "night_outside_window",
+    localDateKey: "2025-01-03",
+    startedAt: "2025-01-02T22:20:00.000Z",
+    endedAt: "2025-01-03T04:55:00.000Z"
   });
 
   const sleepView: SleepViewData = {
@@ -453,6 +468,12 @@ describe("SleepPage", () => {
 
   beforeEach(() => {
     getSleepViewMock.mockResolvedValue({ sleep: sleepView });
+    getSleepSessionMock.mockImplementation(async (sleepId: string) => ({
+      sleep:
+        sleepId === outsideWindowSession.id
+          ? outsideWindowSession
+          : olderSession
+    }));
     getSleepSessionRawDetailMock.mockImplementation(async (sleepId: string) => {
       return rawDetails.get(sleepId) ?? rawDetails.get(latestSession.id)!;
     });
@@ -477,7 +498,7 @@ describe("SleepPage", () => {
     vi.clearAllMocks();
   });
 
-  async function renderPage() {
+  async function renderPage(initialEntry = "/sleep") {
     const client = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -487,7 +508,7 @@ describe("SleepPage", () => {
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <MemoryRouter>
+          <MemoryRouter initialEntries={[initialEntry]}>
             <SleepPage />
           </MemoryRouter>
         </QueryClientProvider>
@@ -497,17 +518,19 @@ describe("SleepPage", () => {
   }
 
   function requireButton(label: string) {
-    const button = Array.from(container.querySelectorAll("button")).find((candidate) => {
-      const aria = candidate.getAttribute("aria-label");
-      return aria === label || candidate.textContent?.includes(label);
-    }) as HTMLButtonElement | undefined;
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => {
+        const aria = candidate.getAttribute("aria-label");
+        return aria === label || candidate.textContent?.includes(label);
+      }
+    ) as HTMLButtonElement | undefined;
     expect(button).toBeTruthy();
     return button!;
   }
 
   function requireLabelControl(label: string) {
-    const field = Array.from(container.querySelectorAll("label")).find((candidate) =>
-      candidate.textContent?.includes(label)
+    const field = Array.from(container.querySelectorAll("label")).find(
+      (candidate) => candidate.textContent?.includes(label)
     );
     expect(field).toBeTruthy();
     const control = field!.querySelector("input, textarea") as
@@ -517,6 +540,38 @@ describe("SleepPage", () => {
     expect(control).toBeTruthy();
     return control!;
   }
+
+  it("opens the exact canonical night from a navigation focus link", async () => {
+    await renderPage("/sleep?focus=sleep_older");
+
+    await waitForCondition(() => {
+      expect(getSleepSessionRawDetailMock).toHaveBeenCalledWith("sleep_older");
+      expect(
+        requireButton("Select sleep for 2026-04-13").getAttribute(
+          "aria-pressed"
+        )
+      ).toBe("true");
+    });
+  });
+
+  it("loads a focused night outside the bounded sleep window", async () => {
+    await renderPage("/sleep?focus=sleep_outside_window");
+
+    await waitForCondition(() => {
+      expect(getSleepSessionMock).toHaveBeenCalledWith("sleep_outside_window");
+      expect(getSleepSessionRawDetailMock).toHaveBeenCalledWith(
+        "sleep_outside_window"
+      );
+      expect(container.textContent).toContain(
+        new Intl.DateTimeFormat(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          timeZone: outsideWindowSession.sourceTimezone
+        }).format(new Date(outsideWindowSession.endedAt))
+      );
+    });
+  });
 
   it("renders a night-first summary, switches calendar selection, and keeps raw data hidden until requested", async () => {
     await renderPage();
@@ -539,7 +594,9 @@ describe("SleepPage", () => {
     await flushUi();
 
     await waitForCondition(() => {
-      expect(getSleepSessionRawDetailMock).toHaveBeenLastCalledWith("sleep_older");
+      expect(getSleepSessionRawDetailMock).toHaveBeenLastCalledWith(
+        "sleep_older"
+      );
       expect(container.textContent).toContain("Historical raw data");
       expect(container.textContent).toContain("Sleep segments");
       expect(container.textContent).toContain("See JSON");

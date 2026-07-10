@@ -364,6 +364,15 @@ const attentionRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const entityNavigationRouteSpecs = {
+  list: { method: "GET", path: "/api/v1/entity-navigation" },
+  touch: {
+    method: "POST",
+    path: "/api/v1/entity-navigation/touch",
+    requiresToken: true
+  }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
@@ -832,6 +841,14 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Attention route to list the current actor's bounded queue or snooze, dismiss, and restore an eligible item. Use the stable item id returned by list through pathParams.id. Do not invent attention records or use batch CRUD for this derived queue.",
     routeSpecs: attentionRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_entity_navigation_route",
+    label: "Forge Entity Navigation Route",
+    description:
+      "Call the dedicated Entity Navigation list or touch route. List returns bounded canonical pins and this agent's own recent records. Touch records that this agent viewed an existing in-scope record. Human pin and unpin operations are intentionally unavailable to agents.",
+    routeSpecs: entityNavigationRouteSpecs
   });
 
   registerSpecializedRouteTool(api, config, {

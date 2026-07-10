@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import {
+  psycheFocusClass,
+  usePsycheFocusTarget
+} from "@/components/psyche/use-psyche-focus-target";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,6 +63,9 @@ const OPTIONS = {
 
 export function PsycheModeGuidePage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const focusedSessionId = searchParams.get("focus")?.trim() || null;
+  usePsycheFocusTarget(focusedSessionId);
   const sessionsQuery = useQuery({
     queryKey: ["forge-psyche-mode-guide-sessions"],
     queryFn: listModeGuideSessions
@@ -96,7 +103,13 @@ export function PsycheModeGuidePage() {
   const routeQueries = [sessionsQuery] as const;
   const routeState = collectQueryCollectionState(routeQueries);
   const latestSession =
-    guideMutation.data?.session ?? sessionsQuery.data?.sessions?.[0];
+    (focusedSessionId
+      ? sessionsQuery.data?.sessions?.find(
+          (session) => session.id === focusedSessionId
+        )
+      : null) ??
+    guideMutation.data?.session ??
+    sessionsQuery.data?.sessions?.[0];
 
   if (routeState.isLoading) {
     return (
@@ -308,7 +321,13 @@ export function PsycheModeGuidePage() {
                 (sessionsQuery.data?.sessions ?? []).map((session) => (
                   <div
                     key={session.id}
-                    className="rounded-[20px] bg-[var(--ui-surface-1)] p-4"
+                    data-psyche-focus-id={session.id}
+                    aria-current={
+                      focusedSessionId === session.id ? "true" : undefined
+                    }
+                    className={`rounded-[20px] border border-transparent bg-[var(--ui-surface-1)] p-4 ${psycheFocusClass(
+                      focusedSessionId === session.id
+                    )}`}
                   >
                     <div className="font-medium text-[var(--ui-ink-strong)]">
                       {session.summary}

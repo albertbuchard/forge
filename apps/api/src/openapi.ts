@@ -138,6 +138,11 @@ const API_TAGS = [
       "A bounded, deduplicated queue of existing Forge records that need review or a decision."
   },
   {
+    name: "Navigation",
+    description:
+      "Canonical cross-surface pins and actor-scoped recently viewed Forge records."
+  },
+  {
     name: "Entity Batch",
     description:
       "Batch create, update, delete, restore, and search operations across entity types."
@@ -260,6 +265,7 @@ const API_TAG_GROUPS = [
       "Reviews",
       "Insights",
       "Attention",
+      "Navigation",
       "Workbench"
     ]
   },
@@ -318,6 +324,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/attention-inbox")) {
     return ["Attention"];
+  }
+  if (path.startsWith("/api/v1/entity-navigation")) {
+    return ["Navigation"];
   }
   if (
     path.startsWith("/api/v1/agents") ||
@@ -2978,6 +2987,93 @@ export function buildOpenApiDocument() {
       sourceUpdatedAt: { type: "string", format: "date-time" },
       note: { type: "string" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const entityNavigationItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "pinId",
+      "entityType",
+      "entityId",
+      "title",
+      "detail",
+      "category",
+      "targetPath",
+      "ownerUserId",
+      "availability",
+      "pinnedAt",
+      "lastViewedAt",
+      "viewCount"
+    ],
+    properties: {
+      pinId: nullable({ type: "string" }),
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      entityId: { type: "string" },
+      title: { type: "string" },
+      detail: { type: "string" },
+      category: { type: "string" },
+      targetPath: {
+        type: "string",
+        description:
+          "Relative Forge web path. Deleted or missing pins point to the settings bin."
+      },
+      ownerUserId: nullable({ type: "string" }),
+      availability: {
+        type: "string",
+        enum: ["available", "deleted", "missing"]
+      },
+      pinnedAt: nullable({ type: "string", format: "date-time" }),
+      lastViewedAt: nullable({ type: "string", format: "date-time" }),
+      viewCount: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const entityNavigationPayload = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "generatedAt",
+      "pinnedTotal",
+      "recentTotal",
+      "hiddenRecentCount",
+      "pinned",
+      "recent"
+    ],
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      pinnedTotal: { type: "integer", minimum: 0 },
+      recentTotal: { type: "integer", minimum: 0 },
+      hiddenRecentCount: {
+        type: "integer",
+        minimum: 0,
+        description:
+          "Recently viewed references hidden because the target is pinned, unavailable, or outside the caller's scope."
+      },
+      pinned: arrayOf({ $ref: "#/components/schemas/EntityNavigationItem" }),
+      recent: arrayOf({ $ref: "#/components/schemas/EntityNavigationItem" })
+    }
+  };
+
+  const entityNavigationPinInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      entityId: { type: "string", minLength: 1 },
+      ownerUserId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const entityNavigationTouchInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      entityId: { type: "string", minLength: 1 }
     }
   };
 
@@ -6835,6 +6931,10 @@ export function buildOpenApiDocument() {
         AttentionInboxSummary: attentionInboxSummary,
         AttentionInboxPayload: attentionInboxPayload,
         AttentionInboxStateRecord: attentionInboxStateRecord,
+        EntityNavigationItem: entityNavigationItem,
+        EntityNavigationPayload: entityNavigationPayload,
+        EntityNavigationPinInput: entityNavigationPinInput,
+        EntityNavigationTouchInput: entityNavigationTouchInput,
         AgentAction: agentAction,
         RewardRule: rewardRule,
         RewardLedgerEvent: rewardLedgerEvent,
@@ -13355,6 +13455,153 @@ export function buildOpenApiDocument() {
                 }
               },
               "Restored attention state"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/entity-navigation": {
+        get: {
+          summary: "List canonical pins and the caller's recent records",
+          description:
+            "Requires read scope. Pins are shared or user-owned canonical references. Recents are isolated to the authenticated operator or token actor. Scoped tokens receive only targets allowed by their user, project, and tag policy. Pinned deleted or missing targets remain visible as unavailable; unavailable recents are hidden.",
+          parameters: [
+            {
+              name: "pinnedLimit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 0,
+                maximum: 25,
+                default: 6
+              }
+            },
+            {
+              name: "recentLimit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 0,
+                maximum: 25,
+                default: 6
+              }
+            },
+            {
+              name: "userId",
+              in: "query",
+              schema: { type: "string" },
+              description:
+                "Optional operator user filter. A scoped token can only narrow, never widen, its configured user policy."
+            },
+            {
+              name: "userIds",
+              in: "query",
+              schema: arrayOf({ type: "string" }),
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated user filter. A scoped token can only narrow, never widen, its configured user policy."
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/EntityNavigationPayload" },
+              "Canonical navigation payload"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/entity-navigation/pins": {
+        put: {
+          summary: "Pin a Forge record",
+          description:
+            "Requires an authenticated human operator session. Agent tokens cannot create pins. The operation is idempotent for the same owner and entity reference, and every newly created pin is audited.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/EntityNavigationPinInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["pin"],
+                properties: {
+                  pin: { $ref: "#/components/schemas/EntityNavigationItem" }
+                }
+              },
+              "Pinned record"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/entity-navigation/pins/{id}": {
+        delete: {
+          summary: "Unpin a Forge record",
+          description:
+            "Requires an authenticated human operator session. Agent tokens cannot remove pins. Unpinning removes the active pin while preserving an append-only audit event.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "EntityNavigationItem.pinId."
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["unpinned", "pinId"],
+                properties: {
+                  unpinned: { type: "boolean", enum: [true] },
+                  pinId: { type: "string" }
+                }
+              },
+              "Unpinned record"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/entity-navigation/touch": {
+        post: {
+          summary: "Record that the current actor viewed a Forge record",
+          description:
+            "Requires write scope. The target must exist and be inside the caller's effective user, project, and tag scope. This route updates only the calling operator or token actor's recent history; it does not change pins or the target entity.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/EntityNavigationTouchInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["recent"],
+                properties: {
+                  recent: {
+                    $ref: "#/components/schemas/EntityNavigationItem"
+                  }
+                }
+              },
+              "Updated actor recent record"
             ),
             default: { $ref: "#/components/responses/Error" }
           }

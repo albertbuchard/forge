@@ -6,6 +6,10 @@ import {
   createProject,
   createTask,
   getCalendarOverview,
+  getLifeEvent,
+  getNote,
+  getSleepSession,
+  getSleepSessionRawDetail,
   listWikiPages,
   patchTask
 } from "./api";
@@ -376,5 +380,23 @@ describe("create entity payload normalization", () => {
       )
     ).toHaveLength(1);
     expect(requestedPaths).toHaveLength(5);
+  });
+
+  it("encodes exact-record IDs used by bounded-view focus links", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reservedId = "record/with spaces?and=reserved";
+    await getNote(reservedId);
+    await getSleepSession(reservedId);
+    await getSleepSessionRawDetail(reservedId);
+    await getLifeEvent(reservedId);
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      "/api/v1/notes/record%2Fwith%20spaces%3Fand%3Dreserved",
+      "/api/v1/health/sleep/record%2Fwith%20spaces%3Fand%3Dreserved",
+      "/api/v1/health/sleep/record%2Fwith%20spaces%3Fand%3Dreserved/raw",
+      "/api/v1/life-events/record%2Fwith%20spaces%3Fand%3Dreserved"
+    ]);
   });
 });

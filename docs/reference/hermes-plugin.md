@@ -57,6 +57,8 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 - explicit work adjustments, retroactive work logging, and task-run controls
 - calendar overview, work-block creation, and task timeboxing helpers
 - Life Events chronology, calendar reconciliation, ticket artifact import, and travel-status routes
+- bounded canonical pin reads and actor-scoped recent history through
+  `forge_call_entity_navigation_route`; pin and unpin remain human-operator-only
 - wiki memory reads, search, ingest, health checks, and page upserts
 - sleep and sports overview reads plus reflective metadata updates on individual sessions
 - visual handoff to the Forge UI when the UI is genuinely the better surface

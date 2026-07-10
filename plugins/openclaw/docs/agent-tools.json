@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-10T00:18:24.905Z",
+  "generatedAt": "2026-07-10T03:53:30.844Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -120,6 +120,25 @@
         "Attention state is actor-scoped and source changes reactivate previously snoozed or dismissed evidence."
       ],
       "example": "{\"routeKey\":\"snooze\",\"pathParams\":{\"id\":\"attn:insight:ins_123\"},\"body\":{\"until\":\"2026-07-11T09:00:00.000Z\",\"note\":\"Review after the morning planning block.\"}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_entity_navigation_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Entity Navigation Route",
+      "summary": "List canonical pins and this agent's recent records, or record one in-scope view.",
+      "whenToUse": "Use when the user asks what is pinned or recently opened, or when the agent has just read a specific Forge record and should place that record in its own recent history.",
+      "inputShape": "{ routeKey: \"list\"|\"touch\", query?: { pinnedLimit?: number, recentLimit?: number, userIds?: string[] }, body?: { entityType: CrudEntityType, entityId: string } }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "List is bounded to at most 25 pins and 25 recent records and remains inside effective user, project, and tag scope.",
+        "Touch requires body.entityType and body.entityId and updates only the calling agent actor's recent history.",
+        "Agents cannot pin or unpin. Those actions require an authenticated human operator session and are intentionally absent from this tool."
+      ],
+      "example": "{\"routeKey\":\"touch\",\"body\":{\"entityType\":\"project\",\"entityId\":\"project_123\"}}",
       "catalogDocumented": true
     },
     {

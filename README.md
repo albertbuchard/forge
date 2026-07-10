@@ -84,6 +84,8 @@ In Forge, you can:
   audit events, links, and human downloads
 - coordinate human users, bot users, agent runtime sessions, owners, assignees,
   approvals, and audited agent actions
+- pin important Forge records and resume true recently viewed records from the Action
+  Bar, iPhone companion, watch Inbox, and trusted agent read paths
 
 The work hierarchy is explicit:
 

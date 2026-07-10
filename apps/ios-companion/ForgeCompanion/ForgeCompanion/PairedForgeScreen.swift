@@ -16,6 +16,7 @@ struct PairedForgeScreen: View {
     @State private var lifeTimelineVisible = false
     @State private var screenshotScenarioApplied = false
     @State private var menuAttentionPulse = false
+    @State private var targetedForgeURL: URL?
 
     var body: some View {
         GeometryReader { proxy in
@@ -29,7 +30,7 @@ struct PairedForgeScreen: View {
                 if appModel.screenshotScenario?.usesForgeCanvasPlaceholder == true {
                     CompanionScreenshotForgeCanvas()
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                } else if let url = appModel.forgeWebURL {
+                } else if let url = targetedForgeURL ?? appModel.forgeWebURL {
                     ForgeWebView(
                         url: url,
                         transport: appModel.pairing?.transport,
@@ -130,6 +131,12 @@ struct PairedForgeScreen: View {
                     CompanionMenuSheet(
                         openSettings: { settingsVisible = true },
                         openLifeTimeline: { lifeTimelineVisible = true },
+                        openPinnedRecord: { targetPath in
+                            targetedForgeURL = CompanionForgeTargetURLResolver.resolve(
+                                baseURL: appModel.forgeWebURL,
+                                targetPath: targetPath
+                            )
+                        },
                         closeMenu: { menuVisible = false }
                     )
                     .environmentObject(appModel)
@@ -222,6 +229,37 @@ struct PairedForgeScreen: View {
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.88), value: menuVisible)
         .animation(.spring(response: 0.32, dampingFraction: 0.9), value: appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel)
+    }
+
+}
+
+enum CompanionForgeTargetURLResolver {
+    static func resolve(baseURL: URL?, targetPath: String) -> URL? {
+        guard let baseURL,
+              targetPath.hasPrefix("/"),
+              targetPath.hasPrefix("//") == false,
+              targetPath.contains("\\") == false
+        else {
+            return nil
+        }
+        guard var baseComponents = URLComponents(
+            url: baseURL,
+            resolvingAgainstBaseURL: false
+        ),
+            let targetComponents = URLComponents(
+                string: "https://forge.local\(targetPath)"
+            )
+        else {
+            return nil
+        }
+        let basePath = baseComponents.percentEncodedPath.hasSuffix("/")
+            ? String(baseComponents.percentEncodedPath.dropLast())
+            : baseComponents.percentEncodedPath
+        baseComponents.percentEncodedPath =
+            basePath + targetComponents.percentEncodedPath
+        baseComponents.percentEncodedQuery = targetComponents.percentEncodedQuery
+        baseComponents.percentEncodedFragment = targetComponents.percentEncodedFragment
+        return baseComponents.url
     }
 }
 

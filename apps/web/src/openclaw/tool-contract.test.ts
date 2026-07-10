@@ -76,6 +76,7 @@ async function loadOnboardingRouteContracts() {
   );
   return {
     attention: surfaces.attention,
+    entityNavigation: surfaces.entityNavigation,
     movement: surfaces.movement,
     lifeForce: surfaces.lifeForce,
     workbench: surfaces.workbench,
@@ -304,6 +305,10 @@ describe("openclaw tool contracts", () => {
   it("publishes dedicated route-key tools for specialized domain surfaces", async () => {
     const tools = collectRegisteredTools();
     const attention = requireTool(tools, "forge_call_attention_route");
+    const entityNavigation = requireTool(
+      tools,
+      "forge_call_entity_navigation_route"
+    );
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
@@ -312,6 +317,10 @@ describe("openclaw tool contracts", () => {
     const onboardingSurfaces = await loadOnboardingRouteContracts();
     const attentionRouteKeys = readTypeBoxUnionValues(
       attention.parameters ?? {},
+      "routeKey"
+    );
+    const entityNavigationRouteKeys = readTypeBoxUnionValues(
+      entityNavigation.parameters ?? {},
       "routeKey"
     );
     const movementRouteKeys = readTypeBoxUnionValues(
@@ -338,6 +347,9 @@ describe("openclaw tool contracts", () => {
     expect(attentionRouteKeys).toEqual(
       [...onboardingSurfaces.attention.routeKeys].sort()
     );
+    expect(entityNavigationRouteKeys).toEqual(
+      [...onboardingSurfaces.entityNavigation.routeKeys].sort()
+    );
     expect(movementRouteKeys).toEqual(
       [...onboardingSurfaces.movement.routeKeys].sort()
     );
@@ -358,6 +370,11 @@ describe("openclaw tool contracts", () => {
         readPropertyDescription(attention.parameters ?? {}, "routeKey")
       )
     ).toEqual(onboardingSurfaces.attention.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(entityNavigation.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.entityNavigation.methodRoutes);
     expect(
       readRouteGuideFromDescription(
         readPropertyDescription(movement.parameters ?? {}, "routeKey")
@@ -390,6 +407,7 @@ describe("openclaw tool contracts", () => {
       "restore",
       "snooze"
     ]);
+    expect(entityNavigationRouteKeys).toEqual(["list", "touch"]);
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
         "day",
@@ -469,6 +487,7 @@ describe("openclaw tool contracts", () => {
 
     for (const tool of [
       attention,
+      entityNavigation,
       movement,
       lifeForce,
       workbench,
@@ -491,11 +510,17 @@ describe("openclaw tool contracts", () => {
     expect(lifeEvents.description ?? "").toMatch(/generic entity_links/i);
     expect(attention.description ?? "").toMatch(/stable item id/i);
     expect(attention.description ?? "").toMatch(/derived queue/i);
+    expect(entityNavigation.description ?? "").toMatch(/Human pin and unpin/i);
 
     expect(
       readPropertyDescription(attention.parameters ?? {}, "routeKey")
     ).toMatch(
       /list: GET \/api\/v1\/attention-inbox[\s\S]*snooze: POST \/api\/v1\/attention-inbox\/:id\/snooze[\s\S]*restore: POST \/api\/v1\/attention-inbox\/:id\/restore/
+    );
+    expect(
+      readPropertyDescription(entityNavigation.parameters ?? {}, "routeKey")
+    ).toMatch(
+      /list: GET \/api\/v1\/entity-navigation[\s\S]*touch: POST \/api\/v1\/entity-navigation\/touch/
     );
     expect(
       readPropertyDescription(movement.parameters ?? {}, "routeKey")
@@ -528,6 +553,7 @@ describe("openclaw tool contracts", () => {
 
     for (const tool of [
       attention,
+      entityNavigation,
       movement,
       lifeForce,
       workbench,

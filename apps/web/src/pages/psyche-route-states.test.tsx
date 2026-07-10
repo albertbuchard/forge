@@ -20,7 +20,9 @@ vi.mock("@/components/shell/app-shell", () => ({
 }));
 
 vi.mock("@tanstack/react-query", async () => {
-  const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query"
+  );
   return {
     ...actual,
     useQuery: useQueryMock
@@ -28,7 +30,15 @@ vi.mock("@tanstack/react-query", async () => {
 });
 
 vi.mock("@/components/shell/page-hero", () => ({
-  PageHero: ({ title, description, badge }: { title: string; description: string; badge?: string }) => (
+  PageHero: ({
+    title,
+    description,
+    badge
+  }: {
+    title: string;
+    description: string;
+    badge?: string;
+  }) => (
     <div>
       <div>{title}</div>
       <div>{description}</div>
@@ -217,7 +227,10 @@ const emptyDevrageMetric = {
   }
 };
 
-function renderWithProviders(element: React.ReactNode, initialEntries: string[] = ["/"]) {
+function renderWithProviders(
+  element: React.ReactNode,
+  initialEntries: string[] = ["/"]
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -263,17 +276,23 @@ describe("psyche route states", () => {
     expect(screen.getByText("Psyche section nav")).toBeInTheDocument();
     expect(screen.queryByText("Psyche side surface")).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/Taste modeling, comparison flows, and concept libraries/i)
+      screen.queryByText(
+        /Taste modeling, comparison flows, and concept libraries/i
+      )
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/Sleep review now lives alongside the reflective module/i)
+      screen.queryByText(
+        /Sleep review now lives alongside the reflective module/i
+      )
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Devrage metric")).not.toBeInTheDocument();
   });
 
   it("shows a loading state for the values route", () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
-    useQueryMock.mockReturnValue(createQueryResult({ isLoading: true, isPending: true }));
+    useQueryMock.mockReturnValue(
+      createQueryResult({ isLoading: true, isPending: true })
+    );
 
     renderWithProviders(<PsycheValuesPage />);
 
@@ -284,7 +303,10 @@ describe("psyche route states", () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
     useQueryMock.mockImplementation((options: { queryKey?: unknown[] }) =>
       options.queryKey?.[0] === "forge-psyche-reports"
-        ? createQueryResult({ isError: true, error: new Error("reports failed") })
+        ? createQueryResult({
+            isError: true,
+            error: new Error("reports failed")
+          })
         : createQueryResult({ data: {} })
     );
 
@@ -301,7 +323,9 @@ describe("psyche route states", () => {
 
     renderWithProviders(<PsycheValuesPage />);
 
-    expect(screen.getAllByRole("button", { name: "Add value" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: "Add value" }).length
+    ).toBeGreaterThan(0);
   });
 
   it("shows the shared empty state for the mode guide route", () => {
@@ -311,6 +335,51 @@ describe("psyche route states", () => {
 
     expect(screen.getByText("No guided sessions yet")).toBeInTheDocument();
     expect(screen.getByText("No stored guide history")).toBeInTheDocument();
+  });
+
+  it("opens and highlights an exact mode guide session from navigation", () => {
+    useQueryMock.mockReturnValue(
+      createQueryResult({
+        data: {
+          sessions: [
+            {
+              id: "guide-latest",
+              summary: "Latest session",
+              results: [
+                {
+                  family: "coping_response",
+                  label: "Detached protector",
+                  confidence: 0.7,
+                  reasoning: "Latest reasoning"
+                }
+              ]
+            },
+            {
+              id: "guide-focused",
+              summary: "Focused session",
+              results: [
+                {
+                  family: "healthy_contact",
+                  label: "Healthy adult",
+                  confidence: 0.9,
+                  reasoning: "Focused reasoning"
+                }
+              ]
+            }
+          ]
+        }
+      })
+    );
+
+    renderWithProviders(<PsycheModeGuidePage />, [
+      "/psyche/modes/guide?focus=guide-focused"
+    ]);
+
+    expect(screen.getByText("Focused reasoning")).toBeInTheDocument();
+    expect(screen.getByText("Focused session").parentElement).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
   });
 
   it("teaches the mode flow with placeholders and inline help", async () => {
@@ -332,13 +401,23 @@ describe("psyche route states", () => {
 
     renderWithProviders(<PsycheModesPage />, ["/psyche/modes?create=1"]);
 
-    expect(screen.getByPlaceholderText("The Friday Vigil, The Scanner, The Good Son")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Detached protector, vulnerable child, demanding critic")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("The Friday Vigil, The Scanner, The Good Son")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(
+        "Detached protector, vulnerable child, demanding critic"
+      )
+    ).toBeInTheDocument();
 
-    const familyHelp = screen.getByRole("button", { name: "Explain Mode family" });
+    const familyHelp = screen.getByRole("button", {
+      name: "Explain Mode family"
+    });
     familyHelp.click();
 
-    expect(screen.getByText(/bigger cluster this state belongs to/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/bigger cluster this state belongs to/i)
+    ).toBeInTheDocument();
     expect(screen.getByTestId("question-flow-canvas")).toBeInTheDocument();
   });
 
@@ -356,7 +435,8 @@ describe("psyche route states", () => {
                   title: "Abandonment",
                   family: "disconnection_rejection",
                   schemaType: "maladaptive",
-                  description: "Expectation that close connection will not stay available.",
+                  description:
+                    "Expectation that close connection will not stay available.",
                   createdAt: "2026-03-24T08:00:00.000Z",
                   updatedAt: "2026-03-24T08:00:00.000Z"
                 },
@@ -366,7 +446,8 @@ describe("psyche route states", () => {
                   title: "Stable Attachment",
                   family: "disconnection_rejection",
                   schemaType: "adaptive",
-                  description: "The belief that close relationships are stable and enduring.",
+                  description:
+                    "The belief that close relationships are stable and enduring.",
                   createdAt: "2026-03-24T08:00:00.000Z",
                   updatedAt: "2026-03-24T08:00:00.000Z"
                 }

@@ -89,10 +89,12 @@ function createEnglishDictionary() {
         command: "Action bar",
         moreRoutesEyebrow: "More routes",
         moreRoutesTitle: "Move through Forge",
-        moreRoutesDescription: "Use this sheet for secondary destinations so the bottom bar stays clean and easy to use.",
+        moreRoutesDescription:
+          "Use this sheet for secondary destinations so the bottom bar stays clean and easy to use.",
         loadingEyebrow: "Forge shell",
         loadingTitle: "Loading Forge",
-        loadingDescription: "Checking your operator session and loading your latest snapshot.",
+        loadingDescription:
+          "Checking your operator session and loading your latest snapshot.",
         sessionEyebrow: "Forge operator session",
         stateEyebrow: "Forge state",
         settled: "Up to date",
@@ -148,31 +150,49 @@ function createEnglishDictionary() {
         settings: "Settings"
       },
       routeDetails: {
-        overview: "Review today’s priorities, active work, recent evidence, and overall Forge momentum.",
-        goals: "Define long-term directions and connect them to strategies, projects, and daily execution.",
-        habits: "Track recurring commitments, negative habits, streaks, missed days, and habit-linked evidence.",
-        projects: "Manage PRD-backed initiatives and the work items that move them forward.",
-        strategies: "Build strategy graphs that turn goals and projects into ordered execution paths.",
-        preferences: "Compare preferences, record tradeoffs, and inspect the evidence behind taste models.",
-        calendar: "Plan timeboxes, manage calendar events, and sync provider calendars into Forge.",
-        movement: "Review stays, trips, known places, gaps, and movement evidence captured from the phone.",
-        sleep: "Inspect overnight sleep sessions, stages, recovery context, and trends by wake date.",
-        sports: "Review workouts, routes, preserved HealthKit evidence, sport trends, and reflections.",
-        kanban: "Move projects, issues, tasks, and subtasks through execution lanes without losing hierarchy.",
-        today: "Choose today’s next work, inspect time pressure, and keep active execution visible.",
-        notes: "Create and search Markdown notes linked to Forge entities, dates, tags, and evidence.",
+        overview:
+          "Review today’s priorities, active work, recent evidence, and overall Forge momentum.",
+        goals:
+          "Define long-term directions and connect them to strategies, projects, and daily execution.",
+        habits:
+          "Track recurring commitments, negative habits, streaks, missed days, and habit-linked evidence.",
+        projects:
+          "Manage PRD-backed initiatives and the work items that move them forward.",
+        strategies:
+          "Build strategy graphs that turn goals and projects into ordered execution paths.",
+        preferences:
+          "Compare preferences, record tradeoffs, and inspect the evidence behind taste models.",
+        calendar:
+          "Plan timeboxes, manage calendar events, and sync provider calendars into Forge.",
+        movement:
+          "Review stays, trips, known places, gaps, and movement evidence captured from the phone.",
+        sleep:
+          "Inspect overnight sleep sessions, stages, recovery context, and trends by wake date.",
+        sports:
+          "Review workouts, routes, preserved HealthKit evidence, sport trends, and reflections.",
+        kanban:
+          "Move projects, issues, tasks, and subtasks through execution lanes without losing hierarchy.",
+        today:
+          "Choose today’s next work, inspect time pressure, and keep active execution visible.",
+        notes:
+          "Create and search Markdown notes linked to Forge entities, dates, tags, and evidence.",
         wiki: "Search KarpaWiki pages, backlinks, entity links, and the SQLite-backed memory graph.",
-        psyche: "Navigate Psyche records for values, modes, beliefs, reports, patterns, and self-observation.",
-        activity: "Review the audit trail of entity changes, sync events, task work, and system activity.",
-        insights: "Store analyses, coaching notes, recommendations, and decisions that should remain visible.",
-        review: "Close out the week, review evidence, and decide the next execution push.",
-        settings: "Manage Forge runtime preferences, users, integrations, data, models, and companion setup."
+        psyche:
+          "Navigate Psyche records for values, modes, beliefs, reports, patterns, and self-observation.",
+        activity:
+          "Review the audit trail of entity changes, sync events, task work, and system activity.",
+        insights:
+          "Store analyses, coaching notes, recommendations, and decisions that should remain visible.",
+        review:
+          "Close out the week, review evidence, and decide the next execution push.",
+        settings:
+          "Manage Forge runtime preferences, users, integrations, data, models, and companion setup."
       },
-    navigation: {
-      openRoute: "Open {label}",
-      create: "Create",
-      createTitle: "Create in Forge",
-      createDescription: "Choose what you want to add next.",
+      navigation: {
+        openRoute: "Open {label}",
+        create: "Create",
+        createTitle: "Create in Forge",
+        createDescription: "Choose what you want to add next.",
         closeCreateMenu: "Close create menu",
         newGoal: "New life goal",
         newGoalDescription: "Define a long-term direction.",
@@ -182,54 +202,56 @@ function createEnglishDictionary() {
         newTaskDescription: "Capture the next actionable step in a project.",
         newStrategy: "New strategy",
         newStrategyDescription: "Add a directed plan across projects and tasks."
-    },
-    commandPalette: {
-      searchPlaceholder: "Search Forge routes, records, KarpaWiki pages, notes, and active work",
-      noResults: "No Forge result matches this search yet.",
-      categoryRoute: "Route",
-      categoryGoal: "Goal",
-      categoryProject: "Project",
-      categoryTask: "Task",
-      routeOverview: "Open the overview.",
-      routeToday: "Open today.",
-      routeKanban: "Open the board.",
-      routeNotes: "Search notes.",
-      routeWiki: "Open KarpaWiki.",
-      routePsyche: "Open Psyche.",
-      routeGoals: "Open your life goals.",
-      routeHabits: "Open your habits.",
-      routeProjects: "Open your projects.",
-      routeStrategies: "Open your strategies.",
-      routePreferences: "Open the preferences workspace.",
-      routeCalendar: "Open the calendar workspace.",
-      routeReview: "Open weekly review.",
-      routeSettings: "Open settings.",
-      openLifeGoal: "Open life goal",
-      openFocusTask: "Open focus task"
-    },
-    actionBar: {
-      title: "Forge Action bar",
-      description:
-        "Search routes and Forge records, apply structured filters, or launch create actions from one command surface.",
-      searchPlaceholder: "Search anything in Forge or type create habit…",
-      idleHint:
-        "Search Forge records, routes, and recent work. Add entity-type badges when you want structured narrowing without losing free text.",
-      activeHint:
-        "Free text stays live while selected badges narrow the entity results. Type create plus an entity to jump into the right creation flow.",
-      filtersLabel: "Filter results",
-      filtersPlaceholder: "Add entity type filters…",
-      filtersEmpty: "No filter matches yet.",
-      searching: "Searching Forge...",
-      noResults: "No Forge result matches this search yet.",
-      noResultsWithFilters:
-        "No Forge record matches this query and filter combination yet.",
-      sections: {
-        routes: "Routes",
-        recent: "Recent",
-        quickActions: "Quick actions",
-        results: "Results"
-      }
-    },
+      },
+      commandPalette: {
+        searchPlaceholder:
+          "Search Forge routes, records, KarpaWiki pages, notes, and active work",
+        noResults: "No Forge result matches this search yet.",
+        categoryRoute: "Route",
+        categoryGoal: "Goal",
+        categoryProject: "Project",
+        categoryTask: "Task",
+        routeOverview: "Open the overview.",
+        routeToday: "Open today.",
+        routeKanban: "Open the board.",
+        routeNotes: "Search notes.",
+        routeWiki: "Open KarpaWiki.",
+        routePsyche: "Open Psyche.",
+        routeGoals: "Open your life goals.",
+        routeHabits: "Open your habits.",
+        routeProjects: "Open your projects.",
+        routeStrategies: "Open your strategies.",
+        routePreferences: "Open the preferences workspace.",
+        routeCalendar: "Open the calendar workspace.",
+        routeReview: "Open weekly review.",
+        routeSettings: "Open settings.",
+        openLifeGoal: "Open life goal",
+        openFocusTask: "Open focus task"
+      },
+      actionBar: {
+        title: "Forge Action bar",
+        description:
+          "Search routes and Forge records, apply structured filters, or launch create actions from one command surface.",
+        searchPlaceholder: "Search anything in Forge or type create habit…",
+        idleHint:
+          "Search Forge records, routes, and recent work. Add entity-type badges when you want structured narrowing without losing free text.",
+        activeHint:
+          "Free text stays live while selected badges narrow the entity results. Type create plus an entity to jump into the right creation flow.",
+        filtersLabel: "Filter results",
+        filtersPlaceholder: "Add entity type filters…",
+        filtersEmpty: "No filter matches yet.",
+        searching: "Searching Forge...",
+        noResults: "No Forge result matches this search yet.",
+        noResultsWithFilters:
+          "No Forge record matches this query and filter combination yet.",
+        sections: {
+          routes: "Routes",
+          pinned: "Pinned",
+          recent: "Recent",
+          quickActions: "Quick actions",
+          results: "Results"
+        }
+      },
       pageState: {
         loadingTitle: "Getting things ready",
         loadingDescription: "Loading the latest Forge data for this view."
@@ -244,25 +266,33 @@ function createEnglishDictionary() {
       overview: {
         heroEyebrow: "Strategic overview",
         heroEmptyTitle: "Ready to get started",
-        heroDescription: "See your goals, active projects, current tasks, and recent evidence in one place.",
+        heroDescription:
+          "See your goals, active projects, current tasks, and recent evidence in one place.",
         emptyTitle: "No overview yet",
-        emptyDescription: "Create a life goal, project, or task to give Forge something real to organize.",
+        emptyDescription:
+          "Create a life goal, project, or task to give Forge something real to organize.",
         emptyAction: "Open life goals",
         commandEyebrow: "Command surface",
         commandTitle: "Now, next, risks, and recent proof",
-        commandDescription: "See what needs attention now, what comes next, where drift is appearing, and what progress is already visible.",
+        commandDescription:
+          "See what needs attention now, what comes next, where drift is appearing, and what progress is already visible.",
         sectionGoals: "Active life goals",
         sectionProjects: "Active projects",
         sectionFocus: "Today's focus",
         sectionEvidence: "Recent evidence",
         sectionMomentum: "Momentum core",
         sectionAttention: "Needs attention",
-        noGoals: "No life goals are active yet. Start by defining the direction you want Forge to support.",
-        noProjects: "No active projects yet. Add a project to turn a goal into practical work.",
-        noFocus: "No focus tasks yet. Promote a task when you know what deserves attention next.",
-        noEvidence: "No evidence has been recorded yet. Completed work and logged activity will appear here.",
+        noGoals:
+          "No life goals are active yet. Start by defining the direction you want Forge to support.",
+        noProjects:
+          "No active projects yet. Add a project to turn a goal into practical work.",
+        noFocus:
+          "No focus tasks yet. Promote a task when you know what deserves attention next.",
+        noEvidence:
+          "No evidence has been recorded yet. Completed work and logged activity will appear here.",
         noProjectYet: "No project yet",
-        noAttention: "No major drift signal right now. Forge will raise neglected goals here when they start slipping.",
+        noAttention:
+          "No major drift signal right now. Forge will raise neglected goals here when they start slipping.",
         metricsLevel: "Level",
         metricsWeeklyXp: "Weekly XP",
         metricsFocusTasks: "Focus tasks",
@@ -273,47 +303,61 @@ function createEnglishDictionary() {
         heroEmptyTitle: "No daily direction yet",
         heroDescription: "Start a task, earn XP, and keep today's work clear.",
         emptyTitle: "No daily runway yet",
-        emptyDescription: "Add goals, tasks, or reward targets so Forge can shape a useful day plan.",
+        emptyDescription:
+          "Add goals, tasks, or reward targets so Forge can shape a useful day plan.",
         emptyAction: "Open life goals",
         commandEyebrow: "Today command",
         commandTitle: "Directive, daily quests, recovery, and finish line",
-        commandDescription: "See the next useful move clearly and keep the day grounded in real work.",
+        commandDescription:
+          "See the next useful move clearly and keep the day grounded in real work.",
         questsTitle: "Daily quests",
-        questsEmpty: "No daily quests yet. They will appear once Forge has enough live work and reward context.",
+        questsEmpty:
+          "No daily quests yet. They will appear once Forge has enough live work and reward context.",
         rewardsTitle: "Milestone rewards",
-        rewardsEmpty: "No milestone rewards are active yet. Long-term rewards will appear here as progress structure grows.",
+        rewardsEmpty:
+          "No milestone rewards are active yet. Long-term rewards will appear here as progress structure grows.",
         signalDirective: "Directive",
         signalQuest: "Quest chain",
         signalComeback: "Recovery",
         signalFinish: "Finish line",
         noDirective: "Choose one clear task to anchor the day.",
         noQuest: "No active daily quest chain",
-        noQuestDetail: "Daily quests should reinforce real work, not distract from it.",
+        noQuestDetail:
+          "Daily quests should reinforce real work, not distract from it.",
         noComeback: "Recovery window is clear",
         noFinish: "Keep the day clean",
-        noDirectiveDetail: "Promote a real task and Today will become sharper immediately.",
-        noFinishDetail: "A good finish today should make tomorrow lighter, not noisier."
+        noDirectiveDetail:
+          "Promote a real task and Today will become sharper immediately.",
+        noFinishDetail:
+          "A good finish today should make tomorrow lighter, not noisier."
       },
       kanban: {
         heroEyebrow: "Task board",
         heroTitle: "Task board",
-        heroDescription: "Use the board to move active work, review blocked items, and open task details when you need more context.",
+        heroDescription:
+          "Use the board to move active work, review blocked items, and open task details when you need more context.",
         emptyTitle: "No board yet",
-        emptyDescription: "Create your first task inside a project to start using the board.",
+        emptyDescription:
+          "Create your first task inside a project to start using the board.",
         emptyAction: "Open life goals",
         healthEyebrow: "Board status",
         healthTitle: "Visible work, focus, blockers, and completed work",
-        healthDescription: "See what is active, what needs attention, and what has already been completed.",
+        healthDescription:
+          "See what is active, what needs attention, and what has already been completed.",
         visibleWork: "Visible work",
         focusWork: "Current focus",
         blockedWork: "Blocked work",
         completedWork: "Completed work",
         visibleDetail: "{hidden} tasks are outside the current filters.",
-        focusDetailReady: "These are the tasks most ready to be picked up next.",
-        focusDetailEmpty: "Move one backlog task into focus to make the board more useful.",
-        blockedDetail: "These tasks need a decision, an unblock, or a reset before they can move again.",
+        focusDetailReady:
+          "These are the tasks most ready to be picked up next.",
+        focusDetailEmpty:
+          "Move one backlog task into focus to make the board more useful.",
+        blockedDetail:
+          "These tasks need a decision, an unblock, or a reset before they can move again.",
         blockedDetailEmpty: "No blocked tasks right now.",
-        doneDetail: "Completed work stays here until you review it or reopen it.",
+        doneDetail:
+          "Completed work stays here until you review it or reopen it.",
         doneDetailEmpty: "Nothing has been completed on this board yet.",
         boardFilters: "Board filters",
         filterGoal: "Goal",
@@ -321,7 +365,8 @@ function createEnglishDictionary() {
         allGoals: "All goals",
         allOwners: "All owners",
         noTasksMatch: "No tasks match these filters",
-        noTasksMatchDescription: "These filters hide every task. Reset them to see the full board again.",
+        noTasksMatchDescription:
+          "These filters hide every task. Reset them to see the full board again.",
         taskContext: "Task details",
         evidence: "Recent activity",
         runHistory: "Run history",
@@ -384,10 +429,12 @@ function createEnglishDictionary() {
       },
       weeklyReview: {
         heroEyebrow: "Weekly review",
-        heroDescription: "Review the week, note what moved, and decide what needs attention next.",
+        heroDescription:
+          "Review the week, note what moved, and decide what needs attention next.",
         summaryEyebrow: "Weekly summary",
         summaryTitle: "This week, wins, recovery, and next steps",
-        summaryDescription: "Use this review to understand what happened this week and choose the most useful next move.",
+        summaryDescription:
+          "Use this review to understand what happened this week and choose the most useful next move.",
         sectionMomentum: "Momentum summary",
         sectionGoals: "Goal check-in",
         sectionWins: "Wins",
@@ -397,9 +444,11 @@ function createEnglishDictionary() {
         finalizedDetail: "This cycle is already locked into evidence.",
         finalizePending: "Finalizing review",
         noWin: "No win recorded yet",
-        noWinDetail: "If this week was quiet, use the review to capture one useful takeaway anyway.",
+        noWinDetail:
+          "If this week was quiet, use the review to capture one useful takeaway anyway.",
         noRecovery: "No recovery suggestion yet",
-        noRecoveryDetail: "If the week felt steady, keep a light recovery option available for next week."
+        noRecoveryDetail:
+          "If the week felt steady, keep a light recovery option available for next week."
       },
       dialogs: {
         closeDialog: "Close dialog",
@@ -407,7 +456,8 @@ function createEnglishDictionary() {
           eyebrow: "Task",
           createTitle: "Create task",
           editTitle: "Edit task",
-          description: "Use tasks for the next concrete step inside a project. Pick the project first so Forge can keep the larger context aligned.",
+          description:
+            "Use tasks for the next concrete step inside a project. Pick the project first so Forge can keep the larger context aligned.",
           project: "Project",
           selectProject: "Select a project",
           goal: "Life goal",
@@ -428,7 +478,8 @@ function createEnglishDictionary() {
           eyebrow: "Project",
           createTitle: "Create project",
           editTitle: "Edit project",
-          description: "Use projects to turn a life goal into a concrete stream of work with tasks, evidence, and momentum.",
+          description:
+            "Use projects to turn a life goal into a concrete stream of work with tasks, evidence, and momentum.",
           goal: "Life goal",
           selectGoal: "Select a life goal",
           title: "Title",
@@ -444,7 +495,8 @@ function createEnglishDictionary() {
           eyebrow: "Life goal",
           createTitle: "Create life goal",
           editTitle: "Edit life goal",
-          description: "Use life goals to define what matters over the coming months or years before you break the path into projects.",
+          description:
+            "Use life goals to define what matters over the coming months or years before you break the path into projects.",
           title: "Title",
           descriptionLabel: "Description",
           horizon: "Horizon",
@@ -461,20 +513,25 @@ function createEnglishDictionary() {
         eyebrow: "Task",
         errorEyebrow: "Task",
         emptyPayload: "Forge returned an empty task payload.",
-        heroFallback: "Use this task page to update the work, move it forward, and keep its context clear.",
+        heroFallback:
+          "Use this task page to update the work, move it forward, and keep its context clear.",
         commandEyebrow: "Task overview",
         commandTitle: "What this task is, what to do next, and where it fits",
-        commandDescription: "Use this page to update the task itself and understand its surrounding context clearly.",
+        commandDescription:
+          "Use this page to update the task itself and understand its surrounding context clearly.",
         signalState: "State",
         signalNext: "Next move",
         signalEvidence: "Recent activity",
         signalAnchor: "Connected project",
         noStateChange: "No state change needed",
-        terminalStateDetail: "This task is already in a completed state unless you decide to reopen it.",
+        terminalStateDetail:
+          "This task is already in a completed state unless you decide to reopen it.",
         noEvidence: "No recent activity yet",
-        noEvidenceDetail: "Completed work, corrections, and logged sessions will appear here as the task moves.",
+        noEvidenceDetail:
+          "Completed work, corrections, and logged sessions will appear here as the task moves.",
         noAnchor: "No connected project yet",
-        linkAnchorDetail: "Connect this task to a project or life goal so Forge can show why it matters.",
+        linkAnchorDetail:
+          "Connect this task to a project or life goal so Forge can show why it matters.",
         edit: "Edit task",
         deleteTask: "Delete",
         deleting: "Deleting…",
@@ -513,7 +570,8 @@ function createEnglishDictionary() {
         heroEyebrow: "Project",
         commandEyebrow: "Project status",
         commandTitle: "Momentum, next task, risk, and evidence",
-        commandDescription: "Use this page to see what is moving, what needs attention next, and what evidence already supports the project.",
+        commandDescription:
+          "Use this page to see what is moving, what needs attention next, and what evidence already supports the project.",
         signalMomentum: "Momentum",
         signalNext: "Next task",
         signalRisk: "Risk",
@@ -521,14 +579,18 @@ function createEnglishDictionary() {
         trackedTasksOne: "{count} tracked task",
         trackedTasksOther: "{count} tracked tasks",
         noNextTask: "No next task selected yet",
-        noNextTaskDetail: "Pick or create a task so the project has a clear next move.",
+        noNextTaskDetail:
+          "Pick or create a task so the project has a clear next move.",
         needsFocus: "Needs focus",
         noRisk: "No immediate risk signal",
-        noRiskDetail: "Blocked or neglected work will appear here when the project starts drifting.",
+        noRiskDetail:
+          "Blocked or neglected work will appear here when the project starts drifting.",
         noEvidence: "No recent evidence yet",
-        noEvidenceDetail: "Completed work and logged activity will appear here as the project moves.",
+        noEvidenceDetail:
+          "Completed work and logged activity will appear here as the project moves.",
         compatibility: "Compatibility mode",
-        compatibilityDescription: "This project comes from an older snapshot format. You can review it here, but editing the project itself needs the updated backend.",
+        compatibilityDescription:
+          "This project comes from an older snapshot format. You can review it here, but editing the project itself needs the updated backend.",
         addTask: "Add task",
         editProject: "Edit project",
         suspendProject: "Suspend",
@@ -539,7 +601,8 @@ function createEnglishDictionary() {
         restarting: "Restarting…",
         deleteProject: "Delete",
         deleting: "Deleting…",
-        deleteProjectConfirm: 'Move "{title}" to the Bin? You can restore it later unless you permanently delete it from Settings.',
+        deleteProjectConfirm:
+          'Move "{title}" to the Bin? You can restore it later unless you permanently delete it from Settings.',
         openGoal: "Open life goal",
         sectionHealth: "Project health",
         fieldStatus: "Status",
@@ -550,13 +613,15 @@ function createEnglishDictionary() {
       goalDetail: {
         eyebrow: "Life goal",
         missingTitle: "This life goal is not available",
-        missingDescription: "Forge cannot find this life goal in the current snapshot. Return to the goals view and choose an active one.",
+        missingDescription:
+          "Forge cannot find this life goal in the current snapshot. Return to the goals view and choose an active one.",
         backToGoals: "Back to goals",
         heroBadgeOne: "{count} project",
         heroBadgeOther: "{count} projects",
         commandEyebrow: "Goal status",
         commandTitle: "Progress, next push, risk, and evidence",
-        commandDescription: "Use this page to see what is advancing the goal, what should move next, and where support is needed.",
+        commandDescription:
+          "Use this page to see what is advancing the goal, what should move next, and where support is needed.",
         signalProgress: "Progress",
         signalNext: "Next push",
         signalRisk: "Risk",
@@ -564,13 +629,16 @@ function createEnglishDictionary() {
         progressTitle: "{progress}% with {count} completed tasks",
         progressDetail: "{xp} XP is already banked on this goal.",
         noProject: "No active project yet",
-        noProjectDetail: "Add a project so this goal has a concrete execution path.",
+        noProjectDetail:
+          "Add a project so this goal has a concrete execution path.",
         needsProject: "Needs project",
         nextMove: "Next move: {value}",
         noRisk: "No drift signal right now",
-        noRiskDetail: "If this goal starts slipping, Forge will surface that pressure here.",
+        noRiskDetail:
+          "If this goal starts slipping, Forge will surface that pressure here.",
         noEvidence: "No recent evidence yet",
-        noEvidenceDetail: "Completed tasks, project motion, and agent actions will appear here as proof of progress.",
+        noEvidenceDetail:
+          "Completed tasks, project motion, and agent actions will appear here as proof of progress.",
         edit: "Edit life goal",
         addProject: "Add project",
         deleteGoal: "Delete",
@@ -578,14 +646,16 @@ function createEnglishDictionary() {
         deleteGoalConfirm:
           'Move "{title}" to the Bin? You can restore it later unless you permanently delete it from Settings.',
         sectionProjects: "Projects advancing this goal",
-        noProjects: "This goal does not have an active project yet. Add one to turn the goal into practical motion.",
+        noProjects:
+          "This goal does not have an active project yet. Add one to turn the goal into practical motion.",
         addNextTask: "Add the next task",
         sectionHealth: "Goal health",
         fieldProgress: "Progress",
         fieldCompletedTasks: "Completed tasks",
         fieldXpBanked: "XP banked",
         sectionEvidence: "Recent evidence",
-        noEvidenceLogged: "No evidence has been logged for this goal yet. Task completions, project updates, and agent actions will appear here."
+        noEvidenceLogged:
+          "No evidence has been logged for this goal yet. Task completions, project updates, and agent actions will appear here."
       }
     }
   };
@@ -595,13 +665,13 @@ export const en = createEnglishDictionary();
 
 export const fr: typeof en = {
   common: {
-      actions: {
-        cancel: "Annuler",
-        close: "Fermer",
-        create: "Créer",
-        edit: "Modifier",
-        inspect: "Inspecter",
-        open: "Ouvrir",
+    actions: {
+      cancel: "Annuler",
+      close: "Fermer",
+      create: "Créer",
+      edit: "Modifier",
+      inspect: "Inspecter",
+      open: "Ouvrir",
       refresh: "Actualiser",
       retry: "Réessayer",
       save: "Enregistrer",
@@ -667,10 +737,12 @@ export const fr: typeof en = {
       command: "Barre d'action",
       moreRoutesEyebrow: "Autres vues",
       moreRoutesTitle: "Parcourir Forge",
-      moreRoutesDescription: "Utilisez ce panneau pour accéder aux vues secondaires sans surcharger la barre inférieure.",
+      moreRoutesDescription:
+        "Utilisez ce panneau pour accéder aux vues secondaires sans surcharger la barre inférieure.",
       loadingEyebrow: "Forge",
       loadingTitle: "Chargement de Forge",
-      loadingDescription: "Vérification de votre session opérateur et chargement du dernier instantané.",
+      loadingDescription:
+        "Vérification de votre session opérateur et chargement du dernier instantané.",
       sessionEyebrow: "Session opérateur Forge",
       stateEyebrow: "État de Forge",
       settled: "À jour",
@@ -726,25 +798,43 @@ export const fr: typeof en = {
       settings: "Réglages"
     },
     routeDetails: {
-      overview: "Relisez les priorités du jour, le travail actif, les preuves récentes et le momentum Forge.",
-      goals: "Définissez les directions longues et reliez-les aux stratégies, projets et actions quotidiennes.",
-      habits: "Suivez les engagements, habitudes négatives, séries, jours manqués et preuves liées.",
-      projects: "Gérez les initiatives avec PRD et les éléments de travail qui les font avancer.",
-      strategies: "Construisez les graphes qui transforment objectifs et projets en chemins d'exécution.",
-      preferences: "Comparez les préférences, notez les arbitrages et inspectez les preuves de goût.",
-      calendar: "Planifiez des timeboxes, gérez les événements et synchronisez les calendriers externes.",
-      movement: "Relisez séjours, trajets, lieux connus, trous et preuves de mouvement du téléphone.",
-      sleep: "Inspectez les nuits, phases, contexte de récupération et tendances par date de réveil.",
-      sports: "Relisez entraînements, trajets, preuves HealthKit préservées, tendances sportives et réflexions.",
-      kanban: "Déplacez projets, issues, tâches et sous-tâches sans perdre la hiérarchie.",
-      today: "Choisissez le prochain travail du jour, voyez la pression temporelle et gardez l'exécution visible.",
-      notes: "Créez et recherchez des notes Markdown liées aux entités, dates, tags et preuves.",
+      overview:
+        "Relisez les priorités du jour, le travail actif, les preuves récentes et le momentum Forge.",
+      goals:
+        "Définissez les directions longues et reliez-les aux stratégies, projets et actions quotidiennes.",
+      habits:
+        "Suivez les engagements, habitudes négatives, séries, jours manqués et preuves liées.",
+      projects:
+        "Gérez les initiatives avec PRD et les éléments de travail qui les font avancer.",
+      strategies:
+        "Construisez les graphes qui transforment objectifs et projets en chemins d'exécution.",
+      preferences:
+        "Comparez les préférences, notez les arbitrages et inspectez les preuves de goût.",
+      calendar:
+        "Planifiez des timeboxes, gérez les événements et synchronisez les calendriers externes.",
+      movement:
+        "Relisez séjours, trajets, lieux connus, trous et preuves de mouvement du téléphone.",
+      sleep:
+        "Inspectez les nuits, phases, contexte de récupération et tendances par date de réveil.",
+      sports:
+        "Relisez entraînements, trajets, preuves HealthKit préservées, tendances sportives et réflexions.",
+      kanban:
+        "Déplacez projets, issues, tâches et sous-tâches sans perdre la hiérarchie.",
+      today:
+        "Choisissez le prochain travail du jour, voyez la pression temporelle et gardez l'exécution visible.",
+      notes:
+        "Créez et recherchez des notes Markdown liées aux entités, dates, tags et preuves.",
       wiki: "Recherchez pages KarpaWiki, backlinks, liens d'entités et graphe mémoire SQLite.",
-      psyche: "Naviguez dans valeurs, modes, croyances, rapports, patterns et observations Psyche.",
-      activity: "Relisez la piste d'audit des changements, synchronisations, tâches et événements système.",
-      insights: "Conservez analyses, notes de coaching, recommandations et décisions importantes.",
-      review: "Clôturez la semaine, relisez les preuves et choisissez la prochaine poussée.",
-      settings: "Gérez préférences, utilisateurs, intégrations, données, modèles et compagnon mobile."
+      psyche:
+        "Naviguez dans valeurs, modes, croyances, rapports, patterns et observations Psyche.",
+      activity:
+        "Relisez la piste d'audit des changements, synchronisations, tâches et événements système.",
+      insights:
+        "Conservez analyses, notes de coaching, recommandations et décisions importantes.",
+      review:
+        "Clôturez la semaine, relisez les preuves et choisissez la prochaine poussée.",
+      settings:
+        "Gérez préférences, utilisateurs, intégrations, données, modèles et compagnon mobile."
     },
     navigation: {
       openRoute: "Ouvrir {label}",
@@ -755,14 +845,18 @@ export const fr: typeof en = {
       newGoal: "Nouvel objectif de vie",
       newGoalDescription: "Définir une direction à long terme.",
       newProject: "Nouveau projet",
-      newProjectDescription: "Ajouter une initiative concrète sous un objectif de vie.",
+      newProjectDescription:
+        "Ajouter une initiative concrète sous un objectif de vie.",
       newTask: "Nouvelle tâche",
-      newTaskDescription: "Capturer la prochaine étape actionnable dans un projet.",
+      newTaskDescription:
+        "Capturer la prochaine étape actionnable dans un projet.",
       newStrategy: "Nouvelle stratégie",
-      newStrategyDescription: "Ajouter un plan dirigé à travers projets et tâches."
+      newStrategyDescription:
+        "Ajouter un plan dirigé à travers projets et tâches."
     },
     commandPalette: {
-      searchPlaceholder: "Rechercher les vues Forge, les fiches, les pages wiki, les notes et le travail actif",
+      searchPlaceholder:
+        "Rechercher les vues Forge, les fiches, les pages wiki, les notes et le travail actif",
       noResults: "Aucun résultat Forge ne correspond à cette recherche.",
       categoryRoute: "Vue",
       categoryGoal: "Objectif",
@@ -789,8 +883,7 @@ export const fr: typeof en = {
       title: "Barre d'action Forge",
       description:
         "Recherchez des vues et des fiches Forge, ajoutez des filtres structurés ou lancez des actions de création depuis une seule surface.",
-      searchPlaceholder:
-        "Rechercher dans Forge ou taper créer habitude…",
+      searchPlaceholder: "Rechercher dans Forge ou taper créer habitude…",
       idleHint:
         "Recherchez les fiches, vues et éléments récents de Forge. Ajoutez des badges de type d'entité pour affiner la recherche sans perdre le texte libre.",
       activeHint:
@@ -804,6 +897,7 @@ export const fr: typeof en = {
         "Aucune fiche Forge ne correspond encore à cette combinaison de requête et de filtres.",
       sections: {
         routes: "Vues",
+        pinned: "Épinglé",
         recent: "Récent",
         quickActions: "Actions rapides",
         results: "Résultats"
@@ -811,7 +905,8 @@ export const fr: typeof en = {
     },
     pageState: {
       loadingTitle: "Préparation en cours",
-      loadingDescription: "Chargement des dernières données Forge pour cette vue."
+      loadingDescription:
+        "Chargement des dernières données Forge pour cette vue."
     },
     settings: {
       localeLabel: "Langue",
@@ -823,25 +918,33 @@ export const fr: typeof en = {
     overview: {
       heroEyebrow: "Vue stratégique",
       heroEmptyTitle: "Prêt à démarrer",
-      heroDescription: "Voyez vos objectifs, projets actifs, tâches en cours et preuves récentes au même endroit.",
+      heroDescription:
+        "Voyez vos objectifs, projets actifs, tâches en cours et preuves récentes au même endroit.",
       emptyTitle: "Pas encore de vue d'ensemble",
-      emptyDescription: "Créez un objectif de vie, un projet ou une tâche pour donner à Forge une base réelle.",
+      emptyDescription:
+        "Créez un objectif de vie, un projet ou une tâche pour donner à Forge une base réelle.",
       emptyAction: "Ouvrir les objectifs de vie",
       commandEyebrow: "Vue de commande",
       commandTitle: "Maintenant, ensuite, risques et preuves récentes",
-      commandDescription: "Cette vue doit montrer ce qui mérite votre attention maintenant, ce qui vient ensuite, où la dérive apparaît et les progrès déjà visibles.",
+      commandDescription:
+        "Cette vue doit montrer ce qui mérite votre attention maintenant, ce qui vient ensuite, où la dérive apparaît et les progrès déjà visibles.",
       sectionGoals: "Objectifs de vie actifs",
       sectionProjects: "Projets actifs",
       sectionFocus: "Priorité du jour",
       sectionEvidence: "Preuves récentes",
       sectionMomentum: "Noyau de momentum",
       sectionAttention: "À surveiller",
-      noGoals: "Aucun objectif de vie actif pour le moment. Commencez par définir la direction que Forge doit soutenir.",
-      noProjects: "Aucun projet actif. Ajoutez un projet pour transformer un objectif en travail concret.",
-      noFocus: "Aucune tâche prioritaire pour le moment. Faites passer une tâche en priorité quand vous savez quoi faire ensuite.",
-      noEvidence: "Aucune preuve enregistrée pour le moment. Le travail accompli et l'activité journalisée apparaîtront ici.",
+      noGoals:
+        "Aucun objectif de vie actif pour le moment. Commencez par définir la direction que Forge doit soutenir.",
+      noProjects:
+        "Aucun projet actif. Ajoutez un projet pour transformer un objectif en travail concret.",
+      noFocus:
+        "Aucune tâche prioritaire pour le moment. Faites passer une tâche en priorité quand vous savez quoi faire ensuite.",
+      noEvidence:
+        "Aucune preuve enregistrée pour le moment. Le travail accompli et l'activité journalisée apparaîtront ici.",
       noProjectYet: "Pas encore de projet",
-      noAttention: "Aucun signal majeur de dérive pour le moment. Forge affichera ici les objectifs négligés.",
+      noAttention:
+        "Aucun signal majeur de dérive pour le moment. Forge affichera ici les objectifs négligés.",
       metricsLevel: "Niveau",
       metricsWeeklyXp: "XP hebdo",
       metricsFocusTasks: "Tâches prioritaires",
@@ -850,49 +953,64 @@ export const fr: typeof en = {
     todayPage: {
       heroEyebrow: "Aujourd'hui",
       heroEmptyTitle: "Pas encore de direction du jour",
-      heroDescription: "Commencez une tâche, gagnez de l'XP et gardez la journée claire.",
+      heroDescription:
+        "Commencez une tâche, gagnez de l'XP et gardez la journée claire.",
       emptyTitle: "Pas encore de piste du jour",
-      emptyDescription: "Ajoutez des objectifs, des tâches ou des cibles de récompense pour que Forge puisse construire une journée utile.",
+      emptyDescription:
+        "Ajoutez des objectifs, des tâches ou des cibles de récompense pour que Forge puisse construire une journée utile.",
       emptyAction: "Ouvrir les objectifs de vie",
       commandEyebrow: "Commande du jour",
       commandTitle: "Directive, quêtes du jour, reprise et ligne d'arrivée",
-      commandDescription: "Aujourd'hui doit rendre le prochain mouvement utile évident et garder la journée ancrée dans un vrai travail.",
+      commandDescription:
+        "Aujourd'hui doit rendre le prochain mouvement utile évident et garder la journée ancrée dans un vrai travail.",
       questsTitle: "Quêtes du jour",
-      questsEmpty: "Pas encore de quêtes du jour. Elles apparaîtront quand Forge aura assez de travail réel et de contexte de récompense.",
+      questsEmpty:
+        "Pas encore de quêtes du jour. Elles apparaîtront quand Forge aura assez de travail réel et de contexte de récompense.",
       rewardsTitle: "Récompenses jalons",
-      rewardsEmpty: "Aucune récompense jalon active pour le moment. Elles apparaîtront à mesure que la structure de progression se précise.",
+      rewardsEmpty:
+        "Aucune récompense jalon active pour le moment. Elles apparaîtront à mesure que la structure de progression se précise.",
       signalDirective: "Directive",
       signalQuest: "Chaîne de quêtes",
       signalComeback: "Reprise",
       signalFinish: "Ligne d'arrivée",
       noDirective: "Choisissez une tâche claire pour ancrer la journée.",
       noQuest: "Aucune chaîne de quêtes active",
-      noQuestDetail: "Les quêtes du jour doivent renforcer le vrai travail, pas le détourner.",
+      noQuestDetail:
+        "Les quêtes du jour doivent renforcer le vrai travail, pas le détourner.",
       noComeback: "La fenêtre de reprise est claire",
       noFinish: "Gardez la journée nette",
-      noDirectiveDetail: "Faites passer une vraie tâche en priorité et la vue Aujourd'hui deviendra plus nette.",
-      noFinishDetail: "Une bonne fin de journée doit alléger demain, pas l'encombrer."
+      noDirectiveDetail:
+        "Faites passer une vraie tâche en priorité et la vue Aujourd'hui deviendra plus nette.",
+      noFinishDetail:
+        "Une bonne fin de journée doit alléger demain, pas l'encombrer."
     },
     kanban: {
       heroEyebrow: "Tableau des tâches",
       heroTitle: "Tableau des tâches",
-      heroDescription: "Utilisez le tableau pour faire avancer le travail actif, revoir les blocages et ouvrir les détails quand nécessaire.",
+      heroDescription:
+        "Utilisez le tableau pour faire avancer le travail actif, revoir les blocages et ouvrir les détails quand nécessaire.",
       emptyTitle: "Pas encore de tableau",
-      emptyDescription: "Créez votre première tâche dans un projet pour commencer à utiliser le tableau.",
+      emptyDescription:
+        "Créez votre première tâche dans un projet pour commencer à utiliser le tableau.",
       emptyAction: "Ouvrir les objectifs de vie",
       healthEyebrow: "État du tableau",
       healthTitle: "Travail visible, priorité, blocages et travail terminé",
-      healthDescription: "Le tableau doit montrer ce qui est actif, ce qui demande de l'attention et ce qui est déjà terminé.",
+      healthDescription:
+        "Le tableau doit montrer ce qui est actif, ce qui demande de l'attention et ce qui est déjà terminé.",
       visibleWork: "Travail visible",
       focusWork: "Priorité actuelle",
       blockedWork: "Travail bloqué",
       completedWork: "Travail terminé",
       visibleDetail: "{hidden} tâches sont hors des filtres actuels.",
-      focusDetailReady: "Ce sont les tâches les plus prêtes à être reprises maintenant.",
-      focusDetailEmpty: "Faites passer une tâche du backlog en priorité pour rendre le tableau plus utile.",
-      blockedDetail: "Ces tâches ont besoin d'une décision, d'un déblocage ou d'une remise à plat avant d'avancer.",
+      focusDetailReady:
+        "Ce sont les tâches les plus prêtes à être reprises maintenant.",
+      focusDetailEmpty:
+        "Faites passer une tâche du backlog en priorité pour rendre le tableau plus utile.",
+      blockedDetail:
+        "Ces tâches ont besoin d'une décision, d'un déblocage ou d'une remise à plat avant d'avancer.",
       blockedDetailEmpty: "Aucune tâche bloquée pour le moment.",
-      doneDetail: "Le travail terminé reste ici jusqu'à sa revue ou sa réouverture.",
+      doneDetail:
+        "Le travail terminé reste ici jusqu'à sa revue ou sa réouverture.",
       doneDetailEmpty: "Rien n'a encore été terminé sur ce tableau.",
       boardFilters: "Filtres du tableau",
       filterGoal: "Objectif",
@@ -900,12 +1018,15 @@ export const fr: typeof en = {
       allGoals: "Tous les objectifs",
       allOwners: "Tous les responsables",
       noTasksMatch: "Aucune tâche ne correspond à ces filtres",
-      noTasksMatchDescription: "Ces filtres masquent toutes les tâches. Réinitialisez-les pour revoir l'ensemble du tableau.",
+      noTasksMatchDescription:
+        "Ces filtres masquent toutes les tâches. Réinitialisez-les pour revoir l'ensemble du tableau.",
       taskContext: "Détails de la tâche",
       evidence: "Activité récente",
       runHistory: "Historique d'exécution",
-      noTaskEvidence: "Aucune activité n'a encore été enregistrée pour cette tâche.",
-      noRunHistory: "Aucune exécution n'a encore été enregistrée pour cette tâche.",
+      noTaskEvidence:
+        "Aucune activité n'a encore été enregistrée pour cette tâche.",
+      noRunHistory:
+        "Aucune exécution n'a encore été enregistrée pour cette tâche.",
       taskPlacement: "Placement de la tâche",
       projectLabel: "Projet : {value}",
       goalLabel: "Objectif de vie : {value}",
@@ -963,10 +1084,12 @@ export const fr: typeof en = {
     },
     weeklyReview: {
       heroEyebrow: "Revue hebdomadaire",
-      heroDescription: "Relisez la semaine, notez ce qui a avancé et décidez de ce qui demande de l'attention ensuite.",
+      heroDescription:
+        "Relisez la semaine, notez ce qui a avancé et décidez de ce qui demande de l'attention ensuite.",
       summaryEyebrow: "Résumé hebdomadaire",
       summaryTitle: "Cette semaine, les progrès, la récupération et la suite",
-      summaryDescription: "Utilisez cette revue pour comprendre la semaine et choisir le prochain mouvement utile.",
+      summaryDescription:
+        "Utilisez cette revue pour comprendre la semaine et choisir le prochain mouvement utile.",
       sectionMomentum: "Résumé du momentum",
       sectionGoals: "Point sur les objectifs",
       sectionWins: "Progrès",
@@ -976,9 +1099,11 @@ export const fr: typeof en = {
       finalizedDetail: "Ce cycle est déjà consigné comme preuve.",
       finalizePending: "Finalisation de la revue",
       noWin: "Aucun progrès enregistré",
-      noWinDetail: "Même si la semaine a été calme, notez au moins un apprentissage utile.",
+      noWinDetail:
+        "Même si la semaine a été calme, notez au moins un apprentissage utile.",
       noRecovery: "Aucune suggestion de récupération",
-      noRecoveryDetail: "Si la semaine a été stable, gardez malgré tout une option légère de récupération."
+      noRecoveryDetail:
+        "Si la semaine a été stable, gardez malgré tout une option légère de récupération."
     },
     dialogs: {
       closeDialog: "Fermer la fenêtre",
@@ -986,7 +1111,8 @@ export const fr: typeof en = {
         eyebrow: "Tâche",
         createTitle: "Créer une tâche",
         editTitle: "Modifier la tâche",
-        description: "Utilisez les tâches pour représenter la prochaine étape concrète dans un projet. Choisissez d'abord le projet pour garder le bon contexte.",
+        description:
+          "Utilisez les tâches pour représenter la prochaine étape concrète dans un projet. Choisissez d'abord le projet pour garder le bon contexte.",
         project: "Projet",
         selectProject: "Sélectionner un projet",
         goal: "Objectif de vie",
@@ -1007,7 +1133,8 @@ export const fr: typeof en = {
         eyebrow: "Projet",
         createTitle: "Créer un projet",
         editTitle: "Modifier le projet",
-        description: "Utilisez les projets pour transformer un objectif de vie en flux de travail concret avec tâches, preuves et momentum.",
+        description:
+          "Utilisez les projets pour transformer un objectif de vie en flux de travail concret avec tâches, preuves et momentum.",
         goal: "Objectif de vie",
         selectGoal: "Sélectionner un objectif de vie",
         title: "Titre",
@@ -1023,7 +1150,8 @@ export const fr: typeof en = {
         eyebrow: "Objectif de vie",
         createTitle: "Créer un objectif de vie",
         editTitle: "Modifier l'objectif de vie",
-        description: "Utilisez les objectifs de vie pour définir ce qui compte sur les mois ou les années à venir avant de le décliner en projets.",
+        description:
+          "Utilisez les objectifs de vie pour définir ce qui compte sur les mois ou les années à venir avant de le décliner en projets.",
         title: "Titre",
         descriptionLabel: "Description",
         horizon: "Horizon",
@@ -1040,25 +1168,30 @@ export const fr: typeof en = {
       eyebrow: "Tâche",
       errorEyebrow: "Tâche",
       emptyPayload: "Forge a renvoyé une charge utile de tâche vide.",
-      heroFallback: "Utilisez cette page pour mettre à jour la tâche, la faire avancer et garder son contexte clair.",
+      heroFallback:
+        "Utilisez cette page pour mettre à jour la tâche, la faire avancer et garder son contexte clair.",
       commandEyebrow: "Commande de tâche",
       commandTitle: "Statut, prochaine action, preuves et contexte",
-      commandDescription: "Cette page doit aider à modifier directement la tâche et à comprendre clairement son contexte.",
+      commandDescription:
+        "Cette page doit aider à modifier directement la tâche et à comprendre clairement son contexte.",
       signalState: "Statut",
       signalNext: "Prochaine action",
       signalEvidence: "Activité récente",
       signalAnchor: "Projet lié",
       noStateChange: "Aucun changement d'état nécessaire",
-      terminalStateDetail: "Cette tâche est déjà dans un état terminé, sauf si vous décidez de la rouvrir.",
+      terminalStateDetail:
+        "Cette tâche est déjà dans un état terminé, sauf si vous décidez de la rouvrir.",
       noEvidence: "Aucune activité récente pour le moment",
-      noEvidenceDetail: "Le travail terminé, les corrections et les sessions apparaîtront ici à mesure que la tâche avance.",
+      noEvidenceDetail:
+        "Le travail terminé, les corrections et les sessions apparaîtront ici à mesure que la tâche avance.",
       noAnchor: "Aucun projet lié",
-      linkAnchorDetail: "Reliez cette tâche à un projet ou à un objectif de vie pour que Forge puisse montrer pourquoi elle compte.",
+      linkAnchorDetail:
+        "Reliez cette tâche à un projet ou à un objectif de vie pour que Forge puisse montrer pourquoi elle compte.",
       edit: "Modifier la tâche",
       deleteTask: "Supprimer",
       deleting: "Suppression…",
       deleteTaskConfirm:
-        'Déplacer "{title}" vers la corbeille ? Vous pourrez la restaurer plus tard tant qu\'elle n\'est pas supprimée définitivement dans Réglages.',
+        "Déplacer \"{title}\" vers la corbeille ? Vous pourrez la restaurer plus tard tant qu'elle n'est pas supprimée définitivement dans Réglages.",
       openProject: "Ouvrir le projet",
       openGoal: "Ouvrir l'objectif de vie",
       markNotCompleted: "Marquer comme non terminée",
@@ -1073,11 +1206,13 @@ export const fr: typeof en = {
       actionBlocked: "Marquer bloquée",
       actionDone: "Marquer terminée",
       sectionEvidence: "Activité récente",
-      noVisibleEvidence: "Aucune activité n'a encore été enregistrée pour cette tâche.",
+      noVisibleEvidence:
+        "Aucune activité n'a encore été enregistrée pour cette tâche.",
       removeLog: "Supprimer l'entrée",
       openRelatedItem: "Ouvrir l'élément lié",
       sectionRuns: "Sessions de travail",
-      noRuns: "Aucune session de travail n'a encore été enregistrée pour cette tâche.",
+      noRuns:
+        "Aucune session de travail n'a encore été enregistrée pour cette tâche.",
       sectionMetadata: "Autres détails de la tâche",
       metaOwner: "Responsable : {value}",
       metaEffort: "Effort : {value}",
@@ -1092,7 +1227,8 @@ export const fr: typeof en = {
       heroEyebrow: "Projet",
       commandEyebrow: "État du projet",
       commandTitle: "Momentum, prochaine tâche, risque et preuves",
-      commandDescription: "Utilisez cette page pour voir ce qui avance, ce qui demande votre attention ensuite, et quelles preuves soutiennent déjà le projet.",
+      commandDescription:
+        "Utilisez cette page pour voir ce qui avance, ce qui demande votre attention ensuite, et quelles preuves soutiennent déjà le projet.",
       signalMomentum: "Momentum",
       signalNext: "Prochaine tâche",
       signalRisk: "Risque",
@@ -1100,14 +1236,18 @@ export const fr: typeof en = {
       trackedTasksOne: "{count} tâche suivie",
       trackedTasksOther: "{count} tâches suivies",
       noNextTask: "Aucune prochaine tâche choisie",
-      noNextTaskDetail: "Choisissez ou créez une tâche pour donner au projet un prochain mouvement clair.",
+      noNextTaskDetail:
+        "Choisissez ou créez une tâche pour donner au projet un prochain mouvement clair.",
       needsFocus: "Besoin de priorité",
       noRisk: "Aucun risque immédiat",
-      noRiskDetail: "Le travail bloqué ou négligé apparaîtra ici si le projet commence à dériver.",
+      noRiskDetail:
+        "Le travail bloqué ou négligé apparaîtra ici si le projet commence à dériver.",
       noEvidence: "Aucune preuve récente",
-      noEvidenceDetail: "Le travail terminé et l'activité enregistrée apparaîtront ici à mesure que le projet avance.",
+      noEvidenceDetail:
+        "Le travail terminé et l'activité enregistrée apparaîtront ici à mesure que le projet avance.",
       compatibility: "Mode de compatibilité",
-      compatibilityDescription: "Ce projet provient d'un ancien format d'instantané. Vous pouvez le consulter ici, mais sa modification demande le backend mis à jour.",
+      compatibilityDescription:
+        "Ce projet provient d'un ancien format d'instantané. Vous pouvez le consulter ici, mais sa modification demande le backend mis à jour.",
       addTask: "Ajouter une tâche",
       editProject: "Modifier le projet",
       suspendProject: "Suspendre",
@@ -1118,7 +1258,8 @@ export const fr: typeof en = {
       restarting: "Relance…",
       deleteProject: "Supprimer",
       deleting: "Suppression…",
-      deleteProjectConfirm: 'Déplacer "{title}" vers la corbeille ? Vous pourrez le restaurer plus tard tant qu\'il n\'est pas supprimé définitivement dans Réglages.',
+      deleteProjectConfirm:
+        "Déplacer \"{title}\" vers la corbeille ? Vous pourrez le restaurer plus tard tant qu'il n'est pas supprimé définitivement dans Réglages.",
       openGoal: "Ouvrir l'objectif de vie",
       sectionHealth: "Santé du projet",
       fieldStatus: "Statut",
@@ -1129,13 +1270,15 @@ export const fr: typeof en = {
     goalDetail: {
       eyebrow: "Objectif de vie",
       missingTitle: "Cet objectif de vie n'est pas disponible",
-      missingDescription: "Forge ne trouve pas cet objectif de vie dans l'instantané actuel. Revenez à la vue des objectifs et choisissez-en un actif.",
+      missingDescription:
+        "Forge ne trouve pas cet objectif de vie dans l'instantané actuel. Revenez à la vue des objectifs et choisissez-en un actif.",
       backToGoals: "Retour aux objectifs",
       heroBadgeOne: "{count} projet",
       heroBadgeOther: "{count} projets",
       commandEyebrow: "État de l'objectif",
       commandTitle: "Progression, prochain élan, risque et preuves",
-      commandDescription: "Utilisez cette page pour voir ce qui fait avancer l'objectif, ce qui doit bouger ensuite, et où du soutien est nécessaire.",
+      commandDescription:
+        "Utilisez cette page pour voir ce qui fait avancer l'objectif, ce qui doit bouger ensuite, et où du soutien est nécessaire.",
       signalProgress: "Progression",
       signalNext: "Prochain élan",
       signalRisk: "Risque",
@@ -1143,28 +1286,33 @@ export const fr: typeof en = {
       progressTitle: "{progress}% avec {count} tâches terminées",
       progressDetail: "{xp} XP sont déjà cumulés sur cet objectif.",
       noProject: "Aucun projet actif pour le moment",
-      noProjectDetail: "Ajoutez un projet pour donner à cet objectif un chemin d'exécution concret.",
+      noProjectDetail:
+        "Ajoutez un projet pour donner à cet objectif un chemin d'exécution concret.",
       needsProject: "Projet nécessaire",
       nextMove: "Prochaine action : {value}",
       noRisk: "Aucun signal de dérive pour le moment",
-      noRiskDetail: "Si cet objectif commence à glisser, Forge affichera cette pression ici.",
+      noRiskDetail:
+        "Si cet objectif commence à glisser, Forge affichera cette pression ici.",
       noEvidence: "Aucune preuve récente",
-      noEvidenceDetail: "Les tâches terminées, le mouvement des projets et les actions d'agents apparaîtront ici comme preuve de progression.",
+      noEvidenceDetail:
+        "Les tâches terminées, le mouvement des projets et les actions d'agents apparaîtront ici comme preuve de progression.",
       edit: "Modifier l'objectif de vie",
       addProject: "Ajouter un projet",
       deleteGoal: "Supprimer",
       deleting: "Suppression…",
       deleteGoalConfirm:
-        'Déplacer "{title}" vers la corbeille ? Vous pourrez le restaurer plus tard tant qu\'il n\'est pas supprimé définitivement dans Réglages.',
+        "Déplacer \"{title}\" vers la corbeille ? Vous pourrez le restaurer plus tard tant qu'il n'est pas supprimé définitivement dans Réglages.",
       sectionProjects: "Projets qui font avancer cet objectif",
-      noProjects: "Cet objectif n'a pas encore de projet actif. Ajoutez-en un pour le transformer en mouvement concret.",
+      noProjects:
+        "Cet objectif n'a pas encore de projet actif. Ajoutez-en un pour le transformer en mouvement concret.",
       addNextTask: "Ajouter la prochaine tâche",
       sectionHealth: "Santé de l'objectif",
       fieldProgress: "Progression",
       fieldCompletedTasks: "Tâches terminées",
       fieldXpBanked: "XP cumulés",
       sectionEvidence: "Preuves récentes",
-      noEvidenceLogged: "Aucune preuve n'a encore été enregistrée pour cet objectif. Les tâches terminées, les mises à jour de projet et les actions d'agents apparaîtront ici."
+      noEvidenceLogged:
+        "Aucune preuve n'a encore été enregistrée pour cet objectif. Les tâches terminées, les mises à jour de projet et les actions d'agents apparaîtront ici."
     }
   }
 };
@@ -1175,7 +1323,10 @@ type TranslationDictionary = typeof en;
 export type TranslationKey = LeafPaths<TranslationDictionary>;
 type TranslationParams = Record<string, string | number | null | undefined>;
 
-function resolvePath(dictionary: DictionaryTree, key: string): string | undefined {
+function resolvePath(
+  dictionary: DictionaryTree,
+  key: string
+): string | undefined {
   const segments = key.split(".");
   let current: string | DictionaryTree | undefined = dictionary;
   for (const segment of segments) {
@@ -1198,7 +1349,11 @@ function interpolate(template: string, params?: TranslationParams) {
   });
 }
 
-export function translate(locale: AppLocale, key: TranslationKey, params?: TranslationParams) {
+export function translate(
+  locale: AppLocale,
+  key: TranslationKey,
+  params?: TranslationParams
+) {
   const active = resolvePath(dictionaries[locale], key);
   const fallback = resolvePath(dictionaries.en, key);
   const template = active ?? fallback ?? key;
@@ -1237,7 +1392,13 @@ const defaultValue: I18nValue = {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-export function I18nProvider({ children, locale }: { children: ReactNode; locale: AppLocale }) {
+export function I18nProvider({
+  children,
+  locale
+}: {
+  children: ReactNode;
+  locale: AppLocale;
+}) {
   const value = useMemo<I18nValue>(
     () => ({
       locale,

@@ -733,6 +733,28 @@ export const FORGE_PLUGIN_ROUTE_GROUPS: RouteGroup[] = [
     ]
   },
   {
+    path: "/forge/v1/entity-navigation",
+    match: "prefix",
+    operations: [
+      {
+        method: "GET",
+        pattern: /^\/forge\/v1\/entity-navigation$/,
+        upstreamPath: "/api/v1/entity-navigation",
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/entity-navigation", url)
+      },
+      {
+        method: "POST",
+        pattern: /^\/forge\/v1\/entity-navigation\/touch$/,
+        upstreamPath: "/api/v1/entity-navigation/touch",
+        requestBody: "json",
+        requiresToken: true,
+        target: (_match: RegExpMatchArray, url: URL) =>
+          passthroughSearch("/api/v1/entity-navigation/touch", url)
+      }
+    ]
+  },
+  {
     path: "/forge/v1/artifacts",
     match: "prefix",
     operations: [

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   BedDouble,
   BookOpen,
@@ -45,6 +46,7 @@ import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createEntities,
+  getLifeEvent,
   getLifeEventTravelStatus,
   getLifeEventsTimeline,
   importLifeEventTicket,
@@ -73,12 +75,7 @@ type LifeEventDraft = {
   shortDescription: string;
   description: string;
   eventType: LifeEventType;
-  spanPreset:
-    | "same_day"
-    | "overnight"
-    | "multi_day"
-    | "multi_month"
-    | "custom";
+  spanPreset: "same_day" | "overnight" | "multi_day" | "multi_month" | "custom";
   importance: "ordinary" | "meaningful" | "major" | "life_changing";
   startsAt: string;
   endsAt: string;
@@ -208,16 +205,61 @@ const EVENT_TYPE_GROUPS: Array<{
     label: "Travel and stays",
     description: "Moving, arriving, staying, or being away for a period.",
     items: [
-      { value: "travel_flight", label: "Flight", hint: "Plane journey", icon: Plane },
-      { value: "travel_train", label: "Train", hint: "Rail journey", icon: Train },
-      { value: "travel_car", label: "Car trip", hint: "Drive or road trip", icon: Car },
-      { value: "travel_boat", label: "Boat", hint: "Ferry, ship, boat", icon: Ship },
-      { value: "travel_trip", label: "Trip", hint: "Whole journey", icon: MapPinned },
-      { value: "travel_day", label: "Travel day", hint: "Transit day", icon: MapPin },
-      { value: "stay", label: "Stay", hint: "Days or months somewhere", icon: Home },
-      { value: "lodging", label: "Lodging", hint: "Hotel, Airbnb, host", icon: BedDouble },
+      {
+        value: "travel_flight",
+        label: "Flight",
+        hint: "Plane journey",
+        icon: Plane
+      },
+      {
+        value: "travel_train",
+        label: "Train",
+        hint: "Rail journey",
+        icon: Train
+      },
+      {
+        value: "travel_car",
+        label: "Car trip",
+        hint: "Drive or road trip",
+        icon: Car
+      },
+      {
+        value: "travel_boat",
+        label: "Boat",
+        hint: "Ferry, ship, boat",
+        icon: Ship
+      },
+      {
+        value: "travel_trip",
+        label: "Trip",
+        hint: "Whole journey",
+        icon: MapPinned
+      },
+      {
+        value: "travel_day",
+        label: "Travel day",
+        hint: "Transit day",
+        icon: MapPin
+      },
+      {
+        value: "stay",
+        label: "Stay",
+        hint: "Days or months somewhere",
+        icon: Home
+      },
+      {
+        value: "lodging",
+        label: "Lodging",
+        hint: "Hotel, Airbnb, host",
+        icon: BedDouble
+      },
       { value: "holiday", label: "Holiday", hint: "Time off", icon: Sparkles },
-      { value: "vacation", label: "Vacation", hint: "Leisure trip", icon: Tent },
+      {
+        value: "vacation",
+        label: "Vacation",
+        hint: "Leisure trip",
+        icon: Tent
+      },
       { value: "visit", label: "Visit", hint: "Seeing someone", icon: Users },
       { value: "move", label: "Move", hint: "Changing place", icon: Home }
     ]
@@ -226,45 +268,160 @@ const EVENT_TYPE_GROUPS: Array<{
     label: "Culture and people",
     description: "Events with people, venues, ceremonies, and shared time.",
     items: [
-      { value: "festival", label: "Festival", hint: "Multi-day event", icon: Tent },
+      {
+        value: "festival",
+        label: "Festival",
+        hint: "Multi-day event",
+        icon: Tent
+      },
       { value: "concert", label: "Concert", hint: "Music event", icon: Music },
-      { value: "cinema", label: "Cinema", hint: "Film or screening", icon: Clapperboard },
-      { value: "meal", label: "Meal", hint: "Dinner, lunch, tasting", icon: Utensils },
-      { value: "party", label: "Party", hint: "Social gathering", icon: PartyPopper },
-      { value: "ceremony", label: "Ceremony", hint: "Formal moment", icon: Landmark },
-      { value: "date", label: "Date", hint: "Romantic or personal", icon: Sparkles },
+      {
+        value: "cinema",
+        label: "Cinema",
+        hint: "Film or screening",
+        icon: Clapperboard
+      },
+      {
+        value: "meal",
+        label: "Meal",
+        hint: "Dinner, lunch, tasting",
+        icon: Utensils
+      },
+      {
+        value: "party",
+        label: "Party",
+        hint: "Social gathering",
+        icon: PartyPopper
+      },
+      {
+        value: "ceremony",
+        label: "Ceremony",
+        hint: "Formal moment",
+        icon: Landmark
+      },
+      {
+        value: "date",
+        label: "Date",
+        hint: "Romantic or personal",
+        icon: Sparkles
+      },
       { value: "friends", label: "Friends", hint: "Friend time", icon: Users },
       { value: "family", label: "Family", hint: "Family time", icon: Users },
-      { value: "celebration", label: "Celebration", hint: "Milestone moment", icon: PartyPopper }
+      {
+        value: "celebration",
+        label: "Celebration",
+        hint: "Milestone moment",
+        icon: PartyPopper
+      }
     ]
   },
   {
     label: "Work and learning",
     description: "Long phases, deadlines, study periods, and major work.",
     items: [
-      { value: "work_milestone", label: "Work milestone", hint: "Launch or decision", icon: Milestone },
-      { value: "work_phase", label: "Work phase", hint: "Important work period", icon: BriefcaseBusiness },
-      { value: "thesis_milestone", label: "Thesis milestone", hint: "Thesis checkpoint", icon: GraduationCap },
-      { value: "creative_work", label: "Creative work", hint: "Making or shipping", icon: BookOpen },
-      { value: "class_course", label: "Class or course", hint: "Learning period", icon: GraduationCap },
+      {
+        value: "work_milestone",
+        label: "Work milestone",
+        hint: "Launch or decision",
+        icon: Milestone
+      },
+      {
+        value: "work_phase",
+        label: "Work phase",
+        hint: "Important work period",
+        icon: BriefcaseBusiness
+      },
+      {
+        value: "thesis_milestone",
+        label: "Thesis milestone",
+        hint: "Thesis checkpoint",
+        icon: GraduationCap
+      },
+      {
+        value: "creative_work",
+        label: "Creative work",
+        hint: "Making or shipping",
+        icon: BookOpen
+      },
+      {
+        value: "class_course",
+        label: "Class or course",
+        hint: "Learning period",
+        icon: GraduationCap
+      },
       { value: "exam", label: "Exam", hint: "Assessment", icon: BookOpen },
-      { value: "deadline", label: "Deadline", hint: "Due date", icon: CalendarClock },
-      { value: "conference", label: "Conference", hint: "Talks or congress", icon: BriefcaseBusiness },
-      { value: "retreat", label: "Retreat", hint: "Focused time away", icon: Tent }
+      {
+        value: "deadline",
+        label: "Deadline",
+        hint: "Due date",
+        icon: CalendarClock
+      },
+      {
+        value: "conference",
+        label: "Conference",
+        hint: "Talks or congress",
+        icon: BriefcaseBusiness
+      },
+      {
+        value: "retreat",
+        label: "Retreat",
+        hint: "Focused time away",
+        icon: Tent
+      }
     ]
   },
   {
     label: "Care and life admin",
     description: "Health, administration, memory, and custom life records.",
     items: [
-      { value: "medical", label: "Medical", hint: "Appointment", icon: CalendarClock },
-      { value: "health_episode", label: "Health episode", hint: "Days or weeks of symptoms", icon: HeartPulse },
-      { value: "therapy", label: "Therapy", hint: "Therapy session or period", icon: HeartPulse },
-      { value: "administrative", label: "Admin", hint: "Paperwork or process", icon: CalendarCheck2 },
-      { value: "legal_financial", label: "Legal or financial", hint: "Formal life admin", icon: Landmark },
-      { value: "errand", label: "Errand", hint: "Important practical task", icon: CalendarCheck2 },
-      { value: "memory", label: "Memory", hint: "Something to preserve", icon: Sparkles },
-      { value: "custom", label: "Custom", hint: "Write your own shape", icon: Milestone }
+      {
+        value: "medical",
+        label: "Medical",
+        hint: "Appointment",
+        icon: CalendarClock
+      },
+      {
+        value: "health_episode",
+        label: "Health episode",
+        hint: "Days or weeks of symptoms",
+        icon: HeartPulse
+      },
+      {
+        value: "therapy",
+        label: "Therapy",
+        hint: "Therapy session or period",
+        icon: HeartPulse
+      },
+      {
+        value: "administrative",
+        label: "Admin",
+        hint: "Paperwork or process",
+        icon: CalendarCheck2
+      },
+      {
+        value: "legal_financial",
+        label: "Legal or financial",
+        hint: "Formal life admin",
+        icon: Landmark
+      },
+      {
+        value: "errand",
+        label: "Errand",
+        hint: "Important practical task",
+        icon: CalendarCheck2
+      },
+      {
+        value: "memory",
+        label: "Memory",
+        hint: "Something to preserve",
+        icon: Sparkles
+      },
+      {
+        value: "custom",
+        label: "Custom",
+        hint: "Write your own shape",
+        icon: Milestone
+      }
     ]
   }
 ];
@@ -375,26 +532,23 @@ function applySpanPreset(
       ? addHours(startDate, 1)
       : preset === "overnight"
         ? addDays(startDate, 1)
-      : preset === "multi_day"
-        ? addDays(startDate, 3)
-        : preset === "multi_month"
-          ? addMonths(startDate, 1)
-          : draft.endsAt
-            ? new Date(
-                parseDateTimeInputInTimeZone(draft.endsAt, draft.timezone) ??
-                  addHours(startDate, 1)
-              )
-            : addHours(startDate, 1);
+        : preset === "multi_day"
+          ? addDays(startDate, 3)
+          : preset === "multi_month"
+            ? addMonths(startDate, 1)
+            : draft.endsAt
+              ? new Date(
+                  parseDateTimeInputInTimeZone(draft.endsAt, draft.timezone) ??
+                    addHours(startDate, 1)
+                )
+              : addHours(startDate, 1);
   return {
     spanPreset: preset,
     startsAt: formatDateTimeInputInTimeZone(
       startDate.toISOString(),
       draft.timezone
     ),
-    endsAt: formatDateTimeInputInTimeZone(
-      endDate.toISOString(),
-      draft.timezone
-    )
+    endsAt: formatDateTimeInputInTimeZone(endDate.toISOString(), draft.timezone)
   };
 }
 
@@ -919,8 +1073,8 @@ function canCreateWebGlContext() {
     const canvas = document.createElement("canvas");
     return Boolean(
       canvas.getContext("webgl2") ||
-        canvas.getContext("webgl") ||
-        canvas.getContext("experimental-webgl")
+      canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl")
     );
   } catch {
     return false;
@@ -972,137 +1126,140 @@ function LifeEventRoutePreview({
       return undefined;
     }
     setMapStatus("loading");
-    void import("maplibre-gl").then((maplibre) => {
-      if (cancelled || !containerRef.current) {
-        return;
-      }
-      const supportsWebGl =
-        "supported" in maplibre && typeof maplibre.supported === "function"
-          ? maplibre.supported({ failIfMajorPerformanceCaveat: false })
-          : true;
-      if (!supportsWebGl) {
-        setMapStatus("fallback");
-        return;
-      }
-      const rasterStyle = styleUrl.includes("{x}") || styleUrl.includes("{z}");
-      const mapStyle = rasterStyle
-        ? {
-            version: 8,
-            projection: { type: "globe" },
-            sources: {
-              tiles: { type: "raster", tiles: [styleUrl], tileSize: 256 }
-            },
-            layers: [{ id: "tiles", type: "raster", source: "tiles" }]
+    void import("maplibre-gl")
+      .then((maplibre) => {
+        if (cancelled || !containerRef.current) {
+          return;
+        }
+        const supportsWebGl =
+          "supported" in maplibre && typeof maplibre.supported === "function"
+            ? maplibre.supported({ failIfMajorPerformanceCaveat: false })
+            : true;
+        if (!supportsWebGl) {
+          setMapStatus("fallback");
+          return;
+        }
+        const rasterStyle =
+          styleUrl.includes("{x}") || styleUrl.includes("{z}");
+        const mapStyle = rasterStyle
+          ? {
+              version: 8,
+              projection: { type: "globe" },
+              sources: {
+                tiles: { type: "raster", tiles: [styleUrl], tileSize: 256 }
+              },
+              layers: [{ id: "tiles", type: "raster", source: "tiles" }]
+            }
+          : styleUrl || DEFAULT_GLOBE_STYLE;
+        const first = stops[0]!;
+        try {
+          map = new maplibre.Map({
+            container: containerRef.current,
+            style: mapStyle as ConstructorParameters<
+              typeof maplibre.Map
+            >[0]["style"],
+            center: [first.lon, first.lat],
+            zoom: 1.45,
+            attributionControl: { compact: true }
+          });
+        } catch {
+          setMapStatus("fallback");
+          return;
+        }
+        map.scrollZoom.disable();
+        map.dragRotate.disable();
+        map.touchZoomRotate.disableRotation();
+        map.on("error", () => {
+          if (!cancelled) {
+            setMapStatus("fallback");
           }
-        : styleUrl || DEFAULT_GLOBE_STYLE;
-      const first = stops[0]!;
-      try {
-        map = new maplibre.Map({
-          container: containerRef.current,
-          style: mapStyle as ConstructorParameters<
-            typeof maplibre.Map
-          >[0]["style"],
-          center: [first.lon, first.lat],
-          zoom: 1.45,
-          attributionControl: { compact: true }
         });
-      } catch {
-        setMapStatus("fallback");
-        return;
-      }
-      map.scrollZoom.disable();
-      map.dragRotate.disable();
-      map.touchZoomRotate.disableRotation();
-      map.on("error", () => {
+        map.on("load", () => {
+          if (!map) {
+            return;
+          }
+          try {
+            map.setProjection({ type: "globe" });
+            map.addSource("life-event-route", {
+              type: "geojson",
+              data: routeData
+            });
+            map.addLayer({
+              id: "life-event-route-glow",
+              type: "line",
+              source: "life-event-route",
+              paint: {
+                "line-color": "#2563eb",
+                "line-opacity": 0.22,
+                "line-width": 11
+              }
+            });
+            map.addLayer({
+              id: "life-event-route",
+              type: "line",
+              source: "life-event-route",
+              paint: {
+                "line-color": "#2563eb",
+                "line-opacity": 0.96,
+                "line-width": 4,
+                "line-dasharray": [1.6, 0.7]
+              }
+            });
+            map.addSource("life-event-stops", {
+              type: "geojson",
+              data: stopData
+            });
+            map.addLayer({
+              id: "life-event-stops",
+              type: "circle",
+              source: "life-event-stops",
+              paint: {
+                "circle-radius": 6,
+                "circle-color": "#eff6ff",
+                "circle-stroke-color": "#2563eb",
+                "circle-stroke-width": 2
+              }
+            });
+            map.addLayer({
+              id: "life-event-stop-labels",
+              type: "symbol",
+              source: "life-event-stops",
+              layout: {
+                "text-field": ["get", "label"],
+                "text-size": 12,
+                "text-font": ["Open Sans Semibold"],
+                "text-offset": [0, 1.15],
+                "text-anchor": "top"
+              },
+              paint: {
+                "text-color": "#0f172a",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.5
+              }
+            });
+            const bounds = new maplibre.LngLatBounds(
+              [first.lon, first.lat],
+              [first.lon, first.lat]
+            );
+            for (const stop of stops.slice(1)) {
+              bounds.extend([stop.lon, stop.lat]);
+            }
+            map.fitBounds(bounds.adjustAntiMeridian(), {
+              padding: 52,
+              maxZoom: 3.4,
+              duration: 0
+            });
+            setMapStatus("ready");
+          } catch {
+            setMapStatus("fallback");
+          }
+        });
+      })
+      .catch(() => {
         if (!cancelled) {
           setMapStatus("fallback");
         }
       });
-      map.on("load", () => {
-        if (!map) {
-          return;
-        }
-        try {
-          map.setProjection({ type: "globe" });
-          map.addSource("life-event-route", {
-            type: "geojson",
-            data: routeData
-          });
-          map.addLayer({
-            id: "life-event-route-glow",
-            type: "line",
-            source: "life-event-route",
-            paint: {
-              "line-color": "#2563eb",
-              "line-opacity": 0.22,
-              "line-width": 11
-            }
-          });
-          map.addLayer({
-            id: "life-event-route",
-            type: "line",
-            source: "life-event-route",
-            paint: {
-              "line-color": "#2563eb",
-              "line-opacity": 0.96,
-              "line-width": 4,
-              "line-dasharray": [1.6, 0.7]
-            }
-          });
-          map.addSource("life-event-stops", {
-            type: "geojson",
-            data: stopData
-          });
-          map.addLayer({
-            id: "life-event-stops",
-            type: "circle",
-            source: "life-event-stops",
-            paint: {
-              "circle-radius": 6,
-              "circle-color": "#eff6ff",
-              "circle-stroke-color": "#2563eb",
-              "circle-stroke-width": 2
-            }
-          });
-          map.addLayer({
-            id: "life-event-stop-labels",
-            type: "symbol",
-            source: "life-event-stops",
-            layout: {
-              "text-field": ["get", "label"],
-              "text-size": 12,
-              "text-font": ["Open Sans Semibold"],
-              "text-offset": [0, 1.15],
-              "text-anchor": "top"
-            },
-            paint: {
-              "text-color": "#0f172a",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.5
-            }
-          });
-          const bounds = new maplibre.LngLatBounds(
-            [first.lon, first.lat],
-            [first.lon, first.lat]
-          );
-          for (const stop of stops.slice(1)) {
-            bounds.extend([stop.lon, stop.lat]);
-          }
-          map.fitBounds(bounds.adjustAntiMeridian(), {
-            padding: 52,
-            maxZoom: 3.4,
-            duration: 0
-          });
-          setMapStatus("ready");
-        } catch {
-          setMapStatus("fallback");
-        }
-      });
-    }).catch(() => {
-      if (!cancelled) {
-        setMapStatus("fallback");
-      }
-    });
     return () => {
       cancelled = true;
       map?.remove();
@@ -1222,7 +1379,8 @@ function LifeEventCard({
   );
   const durationLabel = formatDurationLabel(event.startsAt, event.endsAt);
   const timingState = eventTimingState(event);
-  const showDurationBadge = durationParts(event.startsAt, event.endsAt).hours >= 24;
+  const showDurationBadge =
+    durationParts(event.startsAt, event.endsAt).hours >= 24;
   const primaryLocation =
     event.placeLabel ||
     [event.destinationLabel, event.destinationCity, event.destinationCountry]
@@ -1255,7 +1413,10 @@ function LifeEventCard({
               {event.title}
             </span>
             {next ? (
-              <Badge tone={timingState === "current" ? "signal" : "meta"} size="xs">
+              <Badge
+                tone={timingState === "current" ? "signal" : "meta"}
+                size="xs"
+              >
                 {timingState === "current" ? "Now" : "Next"}
               </Badge>
             ) : null}
@@ -1444,8 +1605,10 @@ function FileDropZone({
 
 export function LifeEventsPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusedEventId = searchParams.get("focus")?.trim() || null;
   const [query, setQuery] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(focusedEventId);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<LifeEvent | null>(null);
@@ -1460,17 +1623,71 @@ export function LifeEventsPage() {
     queryFn: async () => (await getLifeEventsTimeline({ limit: 500 })).timeline
   });
   const timeline = timelineQuery.data;
-  const filteredEvents = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+  const focusedEventInTimeline = focusedEventId
+    ? timeline?.events.find((event) => event.id === focusedEventId)
+    : undefined;
+  const focusedEventQuery = useQuery({
+    queryKey: ["life-event-focus", focusedEventId],
+    enabled: Boolean(
+      focusedEventId && timelineQuery.isSuccess && !focusedEventInTimeline
+    ),
+    queryFn: async () => (await getLifeEvent(focusedEventId!)).lifeEvent,
+    retry: false
+  });
+  const timelineEvents = useMemo(() => {
     const events = timeline?.events ?? [];
-    if (!needle) {
+    const focusedEvent = focusedEventQuery.data;
+    if (!focusedEvent || events.some((event) => event.id === focusedEvent.id)) {
       return events;
     }
-    return events.filter((event) =>
+    return [...events, focusedEvent].sort(
+      (left, right) =>
+        left.startsAt.localeCompare(right.startsAt) ||
+        left.createdAt.localeCompare(right.createdAt)
+    );
+  }, [focusedEventQuery.data, timeline?.events]);
+  const filteredEvents = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) {
+      return timelineEvents;
+    }
+    return timelineEvents.filter((event) =>
       buildEventSearchText(event).includes(needle)
     );
-  }, [query, timeline?.events]);
+  }, [query, timelineEvents]);
   const stats = timelineStats(timeline);
+
+  useEffect(() => {
+    if (
+      !focusedEventId ||
+      !timelineEvents.some((event) => event.id === focusedEventId)
+    ) {
+      return;
+    }
+    setQuery("");
+    setExpandedId(focusedEventId);
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(
+        `forge-life-event-${focusedEventId}`
+      );
+      if (typeof target?.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedEventId, timelineEvents]);
+
+  function toggleExpandedEvent(eventId: string) {
+    const nextId = expandedId === eventId ? null : eventId;
+    setExpandedId(nextId);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (nextId) {
+      nextSearchParams.set("focus", nextId);
+    } else {
+      nextSearchParams.delete("focus");
+    }
+    setSearchParams(nextSearchParams, { replace: true });
+  }
 
   const buildLifeEventPayload = (value: LifeEventDraft) => {
     const startsAt = parseDateTimeInputInTimeZone(
@@ -1814,13 +2031,11 @@ export function LifeEventsPage() {
                     parseDateTimeInputInTimeZone(
                       value.startsAt,
                       value.timezone
-                    ) ??
-                      new Date().toISOString(),
+                    ) ?? new Date().toISOString(),
                     parseDateTimeInputInTimeZone(
                       value.endsAt,
                       value.timezone
-                    ) ??
-                      new Date().toISOString()
+                    ) ?? new Date().toISOString()
                   )}
                 </span>{" "}
                 in the Life Events timeline
@@ -1984,6 +2199,8 @@ export function LifeEventsPage() {
             return (
               <div
                 key={event.id}
+                id={`forge-life-event-${event.id}`}
+                data-life-event-id={event.id}
                 className="relative grid grid-cols-[2rem_1fr] gap-3"
               >
                 <div className="relative flex justify-center">
@@ -2004,7 +2221,7 @@ export function LifeEventsPage() {
                   travelStatusLoading={
                     isExpanded ? statusQuery.isFetching : false
                   }
-                  onToggle={() => setExpandedId(isExpanded ? null : event.id)}
+                  onToggle={() => toggleExpandedEvent(event.id)}
                   onEdit={() => {
                     setEditingEvent(event);
                     setDraft(draftFromLifeEvent(event));

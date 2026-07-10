@@ -182,6 +182,11 @@ ATTENTION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "restore": {"method": "POST", "path": "/api/v1/attention-inbox/:id/restore", "write": True},
 }
 
+ENTITY_NAVIGATION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "list": {"method": "GET", "path": "/api/v1/entity-navigation"},
+    "touch": {"method": "POST", "path": "/api/v1/entity-navigation/touch", "write": True},
+}
+
 
 def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
     return object_schema(
@@ -695,6 +700,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(ATTENTION_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(ATTENTION_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_entity_navigation_route",
+        "description": "Call the dedicated Entity Navigation list or touch route. List returns bounded canonical pins and this agent's own recent records. Touch records that this agent viewed an existing in-scope record. Human pin and unpin operations are intentionally unavailable to agents.",
+        "parameters": specialized_route_parameters(ENTITY_NAVIGATION_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(ENTITY_NAVIGATION_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(ENTITY_NAVIGATION_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(ENTITY_NAVIGATION_ROUTE_SPECS, args),
     },
     {
         "name": "forge_call_movement_route",

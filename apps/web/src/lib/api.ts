@@ -19,6 +19,8 @@ import type {
   AttentionInboxPayload,
   AttentionInboxState,
   AttentionInboxStateRecord,
+  EntityNavigationItem,
+  EntityNavigationPayload,
   Artifact,
   ArtifactAuditEvent,
   ArtifactDangerLevel,
@@ -690,7 +692,9 @@ export function getLifeEventsTimeline(input?: {
 }
 
 export function getLifeEvent(id: string) {
-  return request<{ lifeEvent: LifeEvent }>(`/api/v1/life-events/${id}`);
+  return request<{ lifeEvent: LifeEvent }>(
+    `/api/v1/life-events/${encodeURIComponent(id)}`
+  );
 }
 
 export function syncLifeEventCalendar(
@@ -1806,7 +1810,7 @@ export function listArtifactAuditEvents(artifactId: string) {
 }
 
 export function getNote(noteId: string) {
-  return request<{ note: Note }>(`/api/v1/notes/${noteId}`);
+  return request<{ note: Note }>(`/api/v1/notes/${encodeURIComponent(noteId)}`);
 }
 
 export function patchNote(
@@ -3602,9 +3606,15 @@ export function getSleepView(userIds?: string[] | unknown) {
   return request<{ sleep: SleepViewData }>(`/api/v1/health/sleep${suffix}`);
 }
 
+export function getSleepSession(sleepId: string) {
+  return request<{ sleep: import("./types").SleepSessionRecord }>(
+    `/api/v1/health/sleep/${encodeURIComponent(sleepId)}`
+  );
+}
+
 export function getSleepSessionRawDetail(sleepId: string) {
   return request<import("./types").SleepSessionDetailPayload>(
-    `/api/v1/health/sleep/${sleepId}/raw`
+    `/api/v1/health/sleep/${encodeURIComponent(sleepId)}/raw`
   );
 }
 
@@ -4683,6 +4693,59 @@ export function restoreAttentionInboxItem(itemId: string) {
   return request<{ attentionState: AttentionInboxStateRecord }>(
     `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/restore`,
     { method: "POST" }
+  );
+}
+
+export function getEntityNavigation(
+  options: {
+    pinnedLimit?: number;
+    recentLimit?: number;
+    userIds?: string[];
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (typeof options.pinnedLimit === "number") {
+    search.set("pinnedLimit", String(options.pinnedLimit));
+  }
+  if (typeof options.recentLimit === "number") {
+    search.set("recentLimit", String(options.recentLimit));
+  }
+  appendUserIds(search, options.userIds ?? []);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<EntityNavigationPayload>(`/api/v1/entity-navigation${suffix}`);
+}
+
+export function pinEntityNavigation(input: {
+  entityType: CrudEntityType;
+  entityId: string;
+  ownerUserId?: string | null;
+}) {
+  return request<{ pin: EntityNavigationItem }>(
+    "/api/v1/entity-navigation/pins",
+    {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function unpinEntityNavigation(pinId: string) {
+  return request<{ unpinned: true; pinId: string }>(
+    `/api/v1/entity-navigation/pins/${encodeURIComponent(pinId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function touchEntityNavigation(input: {
+  entityType: CrudEntityType;
+  entityId: string;
+}) {
+  return request<{ recent: EntityNavigationItem }>(
+    "/api/v1/entity-navigation/touch",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
   );
 }
 

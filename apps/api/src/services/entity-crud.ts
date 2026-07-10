@@ -25,7 +25,13 @@ import {
   listArtifacts,
   updateArtifactMetadata
 } from "./artifacts.js";
-import { createInsight, deleteInsight, getInsightById, listInsights, updateInsight } from "../repositories/collaboration.js";
+import {
+  createInsight,
+  deleteInsight,
+  getInsightById,
+  listInsights,
+  updateInsight
+} from "../repositories/collaboration.js";
 import {
   createCalendarEvent,
   createTaskTimebox,
@@ -43,8 +49,18 @@ import {
   updateTaskTimebox,
   updateWorkBlockTemplate
 } from "../repositories/calendar.js";
-import { createNote, deleteNote, getNoteById, listNotes, unlinkNotesForEntity, updateNote } from "../repositories/notes.js";
-import { clearEntityOwner, filterOwnedEntities } from "../repositories/entity-ownership.js";
+import {
+  createNote,
+  deleteNote,
+  getNoteById,
+  listNotes,
+  unlinkNotesForEntity,
+  updateNote
+} from "../repositories/notes.js";
+import {
+  clearEntityOwner,
+  filterOwnedEntities
+} from "../repositories/entity-ownership.js";
 import {
   createPreferenceCatalog,
   createPreferenceCatalogItem,
@@ -99,8 +115,20 @@ import {
   restoreDeletedEntityRecord,
   upsertDeletedEntityRecord
 } from "../repositories/deleted-entities.js";
-import { createGoal, deleteGoal, getGoalById, listGoals, updateGoal } from "../repositories/goals.js";
-import { createHabit, deleteHabit, getHabitById, listHabits, updateHabit } from "../repositories/habits.js";
+import {
+  createGoal,
+  deleteGoal,
+  getGoalById,
+  listGoals,
+  updateGoal
+} from "../repositories/goals.js";
+import {
+  createHabit,
+  deleteHabit,
+  getHabitById,
+  listHabits,
+  updateHabit
+} from "../repositories/habits.js";
 import {
   createQuestionnaireInstrument,
   deleteQuestionnaireInstrument,
@@ -161,10 +189,34 @@ import {
   updatePsycheValue,
   updateTriggerReport
 } from "../repositories/psyche.js";
-import { createProject, deleteProject, getProjectById, listProjects, updateProject } from "../repositories/projects.js";
-import { createStrategy, deleteStrategy, getStrategyById, listStrategies, updateStrategy } from "../repositories/strategies.js";
-import { createTag, deleteTag, getTagById, listTags, updateTag } from "../repositories/tags.js";
-import { createTask, deleteTask, getTaskById, listTasks, updateTask } from "../repositories/tasks.js";
+import {
+  createProject,
+  deleteProject,
+  getProjectById,
+  listProjects,
+  updateProject
+} from "../repositories/projects.js";
+import {
+  createStrategy,
+  deleteStrategy,
+  getStrategyById,
+  listStrategies,
+  updateStrategy
+} from "../repositories/strategies.js";
+import {
+  createTag,
+  deleteTag,
+  getTagById,
+  listTags,
+  updateTag
+} from "../repositories/tags.js";
+import {
+  createTask,
+  deleteTask,
+  getTaskById,
+  listTasks,
+  updateTask
+} from "../repositories/tasks.js";
 import {
   createLifeEvent,
   deleteLifeEvent,
@@ -232,12 +284,7 @@ type CrudContext = {
   actor?: string | null;
 };
 
-type CrudOperationType =
-  | "create"
-  | "update"
-  | "delete"
-  | "restore"
-  | "search";
+type CrudOperationType = "create" | "update" | "delete" | "restore" | "search";
 
 type OperationValidationIssue = {
   path: string;
@@ -294,9 +341,19 @@ type CrudEntityCapability = {
   inBin: boolean;
   list: () => Array<Record<string, unknown>>;
   get: (id: string) => Record<string, unknown> | undefined;
-  create: (data: Record<string, unknown>, context: CrudContext) => Record<string, unknown>;
-  update: (id: string, patch: Record<string, unknown>, context: CrudContext) => Record<string, unknown> | undefined;
-  hardDelete: (id: string, context: CrudContext) => Record<string, unknown> | undefined;
+  create: (
+    data: Record<string, unknown>,
+    context: CrudContext
+  ) => Record<string, unknown>;
+  update: (
+    id: string,
+    patch: Record<string, unknown>,
+    context: CrudContext
+  ) => Record<string, unknown> | undefined;
+  hardDelete: (
+    id: string,
+    context: CrudContext
+  ) => Record<string, unknown> | undefined;
 };
 
 const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
@@ -307,9 +364,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listGoals() as Array<Record<string, unknown>>,
     get: (id) => getGoalById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createGoal(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateGoal(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteGoal(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createGoal(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateGoal(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteGoal(id, context) as Record<string, unknown> | undefined
   },
   project: {
     entityType: "project",
@@ -318,9 +380,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listProjects() as Array<Record<string, unknown>>,
     get: (id) => getProjectById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createProject(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateProject(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteProject(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createProject(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateProject(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteProject(id, context) as Record<string, unknown> | undefined
   },
   task: {
     entityType: "task",
@@ -329,9 +396,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listTasks() as Array<Record<string, unknown>>,
     get: (id) => getTaskById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createTask(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateTask(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteTask(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createTask(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateTask(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteTask(id, context) as Record<string, unknown> | undefined
   },
   strategy: {
     entityType: "strategy",
@@ -341,8 +413,10 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     list: () => listStrategies() as Array<Record<string, unknown>>,
     get: (id) => getStrategyById(id) as Record<string, unknown> | undefined,
     create: (data) => createStrategy(data as never) as Record<string, unknown>,
-    update: (id, patch) => updateStrategy(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deleteStrategy(id) as Record<string, unknown> | undefined
+    update: (id, patch) =>
+      updateStrategy(id, patch as never) as Record<string, unknown> | undefined,
+    hardDelete: (id) =>
+      deleteStrategy(id) as Record<string, unknown> | undefined
   },
   habit: {
     entityType: "habit",
@@ -351,9 +425,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listHabits() as Array<Record<string, unknown>>,
     get: (id) => getHabitById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createHabit(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateHabit(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteHabit(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createHabit(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateHabit(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteHabit(id, context) as Record<string, unknown> | undefined
   },
   tag: {
     entityType: "tag",
@@ -362,9 +441,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listTags() as Array<Record<string, unknown>>,
     get: (id) => getTagById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createTag(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateTag(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteTag(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createTag(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateTag(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteTag(id, context) as Record<string, unknown> | undefined
   },
   note: {
     entityType: "note",
@@ -373,9 +457,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listNotes() as Array<Record<string, unknown>>,
     get: (id) => getNoteById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createNote(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateNote(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteNote(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createNote(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateNote(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteNote(id, context) as Record<string, unknown> | undefined
   },
   insight: {
     entityType: "insight",
@@ -384,9 +473,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listInsights() as Array<Record<string, unknown>>,
     get: (id) => getInsightById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createInsight(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateInsight(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteInsight(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createInsight(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateInsight(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteInsight(id, context) as Record<string, unknown> | undefined
   },
   calendar_event: {
     entityType: "calendar_event",
@@ -394,11 +488,19 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () =>
-      listCalendarEvents(ENTITY_CALENDAR_LIST_RANGE) as Array<Record<string, unknown>>,
-    get: (id) => getCalendarEventById(id) as Record<string, unknown> | undefined,
-    create: (data) => createCalendarEvent(data as never) as Record<string, unknown>,
-    update: (id, patch) => updateCalendarEvent(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deleteCalendarEvent(id) as Record<string, unknown> | undefined
+      listCalendarEvents(ENTITY_CALENDAR_LIST_RANGE) as Array<
+        Record<string, unknown>
+      >,
+    get: (id) =>
+      getCalendarEventById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createCalendarEvent(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updateCalendarEvent(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deleteCalendarEvent(id) as Record<string, unknown> | undefined
   },
   work_block_template: {
     entityType: "work_block_template",
@@ -406,10 +508,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listWorkBlockTemplates() as Array<Record<string, unknown>>,
-    get: (id) => getWorkBlockTemplateById(id) as Record<string, unknown> | undefined,
-    create: (data) => createWorkBlockTemplate(data as never) as Record<string, unknown>,
-    update: (id, patch) => updateWorkBlockTemplate(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deleteWorkBlockTemplate(id) as Record<string, unknown> | undefined
+    get: (id) =>
+      getWorkBlockTemplateById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createWorkBlockTemplate(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updateWorkBlockTemplate(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deleteWorkBlockTemplate(id) as Record<string, unknown> | undefined
   },
   task_timebox: {
     entityType: "task_timebox",
@@ -417,11 +525,18 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () =>
-      listTaskTimeboxes(ENTITY_CALENDAR_LIST_RANGE) as Array<Record<string, unknown>>,
+      listTaskTimeboxes(ENTITY_CALENDAR_LIST_RANGE) as Array<
+        Record<string, unknown>
+      >,
     get: (id) => getTaskTimeboxById(id) as Record<string, unknown> | undefined,
-    create: (data) => createTaskTimebox(data as never) as Record<string, unknown>,
-    update: (id, patch) => updateTaskTimebox(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deleteTaskTimebox(id) as Record<string, unknown> | undefined
+    create: (data) =>
+      createTaskTimebox(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updateTaskTimebox(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deleteTaskTimebox(id) as Record<string, unknown> | undefined
   },
   life_event: {
     entityType: "life_event",
@@ -430,9 +545,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listLifeEvents() as Array<Record<string, unknown>>,
     get: (id) => getLifeEventById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createLifeEvent(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateLifeEvent(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteLifeEvent(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createLifeEvent(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateLifeEvent(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteLifeEvent(id, context) as Record<string, unknown> | undefined
   },
   artifact: {
     entityType: "artifact",
@@ -489,9 +609,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listPsycheValues() as Array<Record<string, unknown>>,
     get: (id) => getPsycheValueById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createPsycheValue(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updatePsycheValue(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deletePsycheValue(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createPsycheValue(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updatePsycheValue(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deletePsycheValue(id, context) as Record<string, unknown> | undefined
   },
   behavior_pattern: {
     entityType: "behavior_pattern",
@@ -499,10 +624,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listBehaviorPatterns() as Array<Record<string, unknown>>,
-    get: (id) => getBehaviorPatternById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createBehaviorPattern(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateBehaviorPattern(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteBehaviorPattern(id, context) as Record<string, unknown> | undefined
+    get: (id) =>
+      getBehaviorPatternById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createBehaviorPattern(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateBehaviorPattern(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteBehaviorPattern(id, context) as Record<string, unknown> | undefined
   },
   behavior: {
     entityType: "behavior",
@@ -511,9 +642,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listBehaviors() as Array<Record<string, unknown>>,
     get: (id) => getBehaviorById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createBehavior(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateBehavior(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteBehavior(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createBehavior(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateBehavior(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteBehavior(id, context) as Record<string, unknown> | undefined
   },
   belief_entry: {
     entityType: "belief_entry",
@@ -522,9 +658,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listBeliefEntries() as Array<Record<string, unknown>>,
     get: (id) => getBeliefEntryById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createBeliefEntry(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateBeliefEntry(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteBeliefEntry(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createBeliefEntry(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateBeliefEntry(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteBeliefEntry(id, context) as Record<string, unknown> | undefined
   },
   mode_profile: {
     entityType: "mode_profile",
@@ -533,9 +674,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listModeProfiles() as Array<Record<string, unknown>>,
     get: (id) => getModeProfileById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createModeProfile(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateModeProfile(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteModeProfile(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createModeProfile(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateModeProfile(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteModeProfile(id, context) as Record<string, unknown> | undefined
   },
   mode_guide_session: {
     entityType: "mode_guide_session",
@@ -543,10 +689,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listModeGuideSessions(200) as Array<Record<string, unknown>>,
-    get: (id) => getModeGuideSessionById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createModeGuideSession(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateModeGuideSession(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteModeGuideSession(id, context) as Record<string, unknown> | undefined
+    get: (id) =>
+      getModeGuideSessionById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createModeGuideSession(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateModeGuideSession(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteModeGuideSession(id, context) as Record<string, unknown> | undefined
   },
   flashcard: {
     entityType: "flashcard",
@@ -555,9 +707,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listFlashcards() as Array<Record<string, unknown>>,
     get: (id) => getFlashcardById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createFlashcard(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateFlashcard(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteFlashcard(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createFlashcard(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateFlashcard(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteFlashcard(id, context) as Record<string, unknown> | undefined
   },
   event_type: {
     entityType: "event_type",
@@ -566,9 +723,14 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     inBin: true,
     list: () => listEventTypes() as Array<Record<string, unknown>>,
     get: (id) => getEventTypeById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createEventType(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateEventType(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteEventType(id, context) as Record<string, unknown> | undefined
+    create: (data, context) =>
+      createEventType(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateEventType(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteEventType(id, context) as Record<string, unknown> | undefined
   },
   emotion_definition: {
     entityType: "emotion_definition",
@@ -576,10 +738,21 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listEmotionDefinitions() as Array<Record<string, unknown>>,
-    get: (id) => getEmotionDefinitionById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createEmotionDefinition(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateEmotionDefinition(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteEmotionDefinition(id, context) as Record<string, unknown> | undefined
+    get: (id) =>
+      getEmotionDefinitionById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createEmotionDefinition(data as never, context) as Record<
+        string,
+        unknown
+      >,
+    update: (id, patch, context) =>
+      updateEmotionDefinition(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteEmotionDefinition(id, context) as
+        | Record<string, unknown>
+        | undefined
   },
   trigger_report: {
     entityType: "trigger_report",
@@ -587,10 +760,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listTriggerReports(200) as Array<Record<string, unknown>>,
-    get: (id) => getTriggerReportById(id) as Record<string, unknown> | undefined,
-    create: (data, context) => createTriggerReport(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) => updateTriggerReport(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteTriggerReport(id, context) as Record<string, unknown> | undefined
+    get: (id) =>
+      getTriggerReportById(id) as Record<string, unknown> | undefined,
+    create: (data, context) =>
+      createTriggerReport(data as never, context) as Record<string, unknown>,
+    update: (id, patch, context) =>
+      updateTriggerReport(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteTriggerReport(id, context) as Record<string, unknown> | undefined
   },
   preference_catalog: {
     entityType: "preference_catalog",
@@ -598,10 +777,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceCatalogs() as Array<Record<string, unknown>>,
-    get: (id) => getPreferenceCatalogById(id) as Record<string, unknown> | undefined,
-    create: (data) => createPreferenceCatalog(data as never) as Record<string, unknown>,
-    update: (id, patch) => updatePreferenceCatalog(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deletePreferenceCatalog(id) as Record<string, unknown> | undefined
+    get: (id) =>
+      getPreferenceCatalogById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createPreferenceCatalog(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updatePreferenceCatalog(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deletePreferenceCatalog(id) as Record<string, unknown> | undefined
   },
   preference_catalog_item: {
     entityType: "preference_catalog_item",
@@ -609,10 +794,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceCatalogItems() as Array<Record<string, unknown>>,
-    get: (id) => getPreferenceCatalogItemById(id) as Record<string, unknown> | undefined,
-    create: (data) => createPreferenceCatalogItem(data as never) as Record<string, unknown>,
-    update: (id, patch) => updatePreferenceCatalogItem(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deletePreferenceCatalogItem(id) as Record<string, unknown> | undefined
+    get: (id) =>
+      getPreferenceCatalogItemById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createPreferenceCatalogItem(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updatePreferenceCatalogItem(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deletePreferenceCatalogItem(id) as Record<string, unknown> | undefined
   },
   preference_context: {
     entityType: "preference_context",
@@ -620,10 +811,16 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceContexts() as Array<Record<string, unknown>>,
-    get: (id) => getPreferenceContextById(id) as Record<string, unknown> | undefined,
-    create: (data) => createPreferenceContext(data as never) as Record<string, unknown>,
-    update: (id, patch) => updatePreferenceContext(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deletePreferenceContext(id) as Record<string, unknown> | undefined
+    get: (id) =>
+      getPreferenceContextById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createPreferenceContext(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updatePreferenceContext(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deletePreferenceContext(id) as Record<string, unknown> | undefined
   },
   preference_item: {
     entityType: "preference_item",
@@ -631,23 +828,39 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceItems() as Array<Record<string, unknown>>,
-    get: (id) => getPreferenceItemById(id) as Record<string, unknown> | undefined,
-    create: (data) => createPreferenceItem(data as never) as Record<string, unknown>,
-    update: (id, patch) => updatePreferenceItem(id, patch as never) as Record<string, unknown> | undefined,
-    hardDelete: (id) => deletePreferenceItem(id) as Record<string, unknown> | undefined
+    get: (id) =>
+      getPreferenceItemById(id) as Record<string, unknown> | undefined,
+    create: (data) =>
+      createPreferenceItem(data as never) as Record<string, unknown>,
+    update: (id, patch) =>
+      updatePreferenceItem(id, patch as never) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id) =>
+      deletePreferenceItem(id) as Record<string, unknown> | undefined
   },
   questionnaire_instrument: {
     entityType: "questionnaire_instrument",
     routeBase: "/api/v1/psyche/questionnaires",
     deleteMode: "immediate",
     inBin: false,
-    list: () => listQuestionnaireInstrumentEntities() as Array<Record<string, unknown>>,
-    get: (id) => getQuestionnaireInstrumentEntityById(id) as Record<string, unknown> | undefined,
+    list: () =>
+      listQuestionnaireInstrumentEntities() as Array<Record<string, unknown>>,
+    get: (id) =>
+      getQuestionnaireInstrumentEntityById(id) as
+        | Record<string, unknown>
+        | undefined,
     create: (data, context) =>
       createQuestionnaireInstrument(data as never, context)
         .instrument as Record<string, unknown>,
-    update: (id, patch, context) => updateQuestionnaireInstrument(id, patch as never, context) as Record<string, unknown> | undefined,
-    hardDelete: (id, context) => deleteQuestionnaireInstrument(id, context) as Record<string, unknown> | undefined
+    update: (id, patch, context) =>
+      updateQuestionnaireInstrument(id, patch as never, context) as
+        | Record<string, unknown>
+        | undefined,
+    hardDelete: (id, context) =>
+      deleteQuestionnaireInstrument(id, context) as
+        | Record<string, unknown>
+        | undefined
   }
 };
 
@@ -665,7 +878,17 @@ function getCapability(entityType: CrudEntityType) {
   return CRUD_ENTITY_CAPABILITIES[entityType];
 }
 
-const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) => Record<string, unknown> }> = {
+export function getEntityById(
+  entityType: CrudEntityType,
+  id: string
+): Record<string, unknown> | undefined {
+  return getCapability(entityType).get(id);
+}
+
+const CREATE_ENTITY_SCHEMAS: Record<
+  CrudEntityType,
+  { parse: (value: unknown) => Record<string, unknown> }
+> = {
   goal: createGoalSchema,
   project: createProjectSchema,
   task: createTaskSchema,
@@ -698,7 +921,10 @@ const CREATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) =>
   questionnaire_instrument: createQuestionnaireInstrumentSchema
 };
 
-const UPDATE_ENTITY_SCHEMAS: Record<CrudEntityType, { parse: (value: unknown) => Record<string, unknown> }> = {
+const UPDATE_ENTITY_SCHEMAS: Record<
+  CrudEntityType,
+  { parse: (value: unknown) => Record<string, unknown> }
+> = {
   goal: updateGoalSchema,
   project: updateProjectSchema,
   task: updateTaskSchema,
@@ -878,7 +1104,9 @@ function buildValidationOperationError(input: {
   ).sort();
   const invalidValueGuidance = input.error.issues
     .filter(
-      (issue) => "options" in issue && Array.isArray((issue as { options?: unknown[] }).options)
+      (issue) =>
+        "options" in issue &&
+        Array.isArray((issue as { options?: unknown[] }).options)
     )
     .map((issue) => ({
       path: formatIssuePath(issue.path),
@@ -896,8 +1124,7 @@ function buildValidationOperationError(input: {
       input.operationType === "search"
         ? "forge_search_entities"
         : `forge_${input.operationType}_entities`,
-    summary:
-      `${input.entityType} ${input.operationType} payload failed validation.`,
+    summary: `${input.entityType} ${input.operationType} payload failed validation.`,
     issues,
     missingRequiredFields,
     invalidValueGuidance,
@@ -906,11 +1133,17 @@ function buildValidationOperationError(input: {
   } satisfies OperationErrorPayload;
 }
 
-function parseCreateInput(entityType: CrudEntityType, data: Record<string, unknown>) {
+function parseCreateInput(
+  entityType: CrudEntityType,
+  data: Record<string, unknown>
+) {
   return getCreateSchema(entityType).parse(data);
 }
 
-function parseUpdatePatch(entityType: CrudEntityType, patch: Record<string, unknown>) {
+function parseUpdatePatch(
+  entityType: CrudEntityType,
+  patch: Record<string, unknown>
+) {
   return getUpdateSchema(entityType).parse(patch);
 }
 
@@ -930,23 +1163,27 @@ function markRolledBack(result: EntityOperationResult): EntityOperationResult {
     entityType: result.entityType,
     id: result.id,
     clientRef: result.clientRef,
-    error: toOperationError("rolled_back", "Rolled back because an earlier atomic batch operation failed.")
+    error: toOperationError(
+      "rolled_back",
+      "Rolled back because an earlier atomic batch operation failed."
+    )
   };
 }
 
-function markNotExecuted(
-  entry: {
-    entityType: CrudEntityType;
-    id?: string;
-    clientRef?: string;
-  }
-): EntityOperationResult {
+function markNotExecuted(entry: {
+  entityType: CrudEntityType;
+  id?: string;
+  clientRef?: string;
+}): EntityOperationResult {
   return {
     ok: false,
     entityType: entry.entityType,
     id: entry.id,
     clientRef: entry.clientRef,
-    error: toOperationError("not_executed", "Skipped because an earlier atomic batch operation failed.")
+    error: toOperationError(
+      "not_executed",
+      "Skipped because an earlier atomic batch operation failed."
+    )
   };
 }
 
@@ -1005,7 +1242,11 @@ function executeBatchOperation<
         const result = execute(entry);
         partialResults[index] = result;
         if (!result.ok) {
-          throw new AtomicBatchRollback(index, result.error?.code ?? "batch_failed", result.error?.message ?? "Atomic batch failed.");
+          throw new AtomicBatchRollback(
+            index,
+            result.error?.code ?? "batch_failed",
+            result.error?.message ?? "Atomic batch failed."
+          );
         }
       });
       return partialResults;
@@ -1021,7 +1262,10 @@ function executeBatchOperation<
   }
 }
 
-function describeEntity(entityType: CrudEntityType, entity: Record<string, unknown>) {
+function describeEntity(
+  entityType: CrudEntityType,
+  entity: Record<string, unknown>
+) {
   const title =
     typeof entity.title === "string" && entity.title.trim().length > 0
       ? entity.title
@@ -1029,16 +1273,19 @@ function describeEntity(entityType: CrudEntityType, entity: Record<string, unkno
         ? entity.name
         : typeof entity.label === "string" && entity.label.trim().length > 0
           ? entity.label
-            : typeof entity.summary === "string" && entity.summary.trim().length > 0
-              ? entity.summary
-              : typeof entity.message === "string" && entity.message.trim().length > 0
-                ? entity.message.slice(0, 72)
+          : typeof entity.summary === "string" &&
+              entity.summary.trim().length > 0
+            ? entity.summary
+            : typeof entity.message === "string" &&
+                entity.message.trim().length > 0
+              ? entity.message.slice(0, 72)
               : typeof entity.body === "string" && entity.body.trim().length > 0
                 ? entity.body.slice(0, 72)
-              : entityType.replaceAll("_", " ");
+                : entityType.replaceAll("_", " ");
 
   const subtitle =
-    typeof entity.description === "string" && entity.description.trim().length > 0
+    typeof entity.description === "string" &&
+    entity.description.trim().length > 0
       ? entity.description
       : typeof entity.summary === "string" && entity.summary.trim().length > 0
         ? entity.summary
@@ -1049,34 +1296,64 @@ function describeEntity(entityType: CrudEntityType, entity: Record<string, unkno
   return { title, subtitle };
 }
 
-function linkMatchesTarget(link: unknown, linkedTo: { entityType: CrudEntityType; id: string }) {
+function linkMatchesTarget(
+  link: unknown,
+  linkedTo: { entityType: CrudEntityType; id: string }
+) {
   if (typeof link !== "object" || link === null) {
     return false;
   }
   const candidate = link as Record<string, unknown>;
   return (
-    (candidate.entityType === linkedTo.entityType && candidate.entityId === linkedTo.id) ||
-    (candidate.targetEntityType === linkedTo.entityType && candidate.targetEntityId === linkedTo.id)
+    (candidate.entityType === linkedTo.entityType &&
+      candidate.entityId === linkedTo.id) ||
+    (candidate.targetEntityType === linkedTo.entityType &&
+      candidate.targetEntityId === linkedTo.id)
   );
 }
 
-function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unknown>, linkedTo: { entityType: CrudEntityType; id: string }) {
+function matchesLinkedTo(
+  entityType: CrudEntityType,
+  entity: Record<string, unknown>,
+  linkedTo: { entityType: CrudEntityType; id: string }
+) {
   switch (entityType) {
     case "project":
       return linkedTo.entityType === "goal" && entity.goalId === linkedTo.id;
     case "task":
-      return (linkedTo.entityType === "goal" && entity.goalId === linkedTo.id) || (linkedTo.entityType === "project" && entity.projectId === linkedTo.id);
+      return (
+        (linkedTo.entityType === "goal" && entity.goalId === linkedTo.id) ||
+        (linkedTo.entityType === "project" && entity.projectId === linkedTo.id)
+      );
     case "habit":
       return (
-        (linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "task" && Array.isArray(entity.linkedTaskIds) && entity.linkedTaskIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id))
+        (linkedTo.entityType === "goal" &&
+          Array.isArray(entity.linkedGoalIds) &&
+          entity.linkedGoalIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "project" &&
+          Array.isArray(entity.linkedProjectIds) &&
+          entity.linkedProjectIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "task" &&
+          Array.isArray(entity.linkedTaskIds) &&
+          entity.linkedTaskIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior_pattern" &&
+          Array.isArray(entity.linkedPatternIds) &&
+          entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" &&
+          Array.isArray(entity.linkedBehaviorIds) &&
+          entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" &&
+          Array.isArray(entity.linkedBeliefIds) &&
+          entity.linkedBeliefIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "trigger_report" &&
+          Array.isArray(entity.linkedReportIds) &&
+          entity.linkedReportIds.includes(linkedTo.id))
       );
     case "note":
       return (
@@ -1084,7 +1361,10 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
         entity.links.some((link) => linkMatchesTarget(link, linkedTo))
       );
     case "insight":
-      return entity.entityType === linkedTo.entityType && entity.entityId === linkedTo.id;
+      return (
+        entity.entityType === linkedTo.entityType &&
+        entity.entityId === linkedTo.id
+      );
     case "calendar_event":
     case "life_event":
     case "sleep_session":
@@ -1105,57 +1385,120 @@ function matchesLinkedTo(entityType: CrudEntityType, entity: Record<string, unkn
       );
     case "psyche_value":
       return (
-        (linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "task" && Array.isArray(entity.linkedTaskIds) && entity.linkedTaskIds.includes(linkedTo.id))
+        (linkedTo.entityType === "goal" &&
+          Array.isArray(entity.linkedGoalIds) &&
+          entity.linkedGoalIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "project" &&
+          Array.isArray(entity.linkedProjectIds) &&
+          entity.linkedProjectIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "task" &&
+          Array.isArray(entity.linkedTaskIds) &&
+          entity.linkedTaskIds.includes(linkedTo.id))
       );
     case "behavior_pattern":
       return (
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id))
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" &&
+          Array.isArray(entity.linkedBeliefIds) &&
+          entity.linkedBeliefIds.includes(linkedTo.id))
       );
     case "behavior":
       return (
-        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id))
+        (linkedTo.entityType === "behavior_pattern" &&
+          Array.isArray(entity.linkedPatternIds) &&
+          entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id))
       );
     case "belief_entry":
       return (
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id))
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" &&
+          Array.isArray(entity.linkedBehaviorIds) &&
+          entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "trigger_report" &&
+          Array.isArray(entity.linkedReportIds) &&
+          entity.linkedReportIds.includes(linkedTo.id))
       );
     case "mode_profile":
       return (
-        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id))
+        (linkedTo.entityType === "behavior_pattern" &&
+          Array.isArray(entity.linkedPatternIds) &&
+          entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" &&
+          Array.isArray(entity.linkedBehaviorIds) &&
+          entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id))
       );
     case "flashcard":
       return (
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "trigger_report" && Array.isArray(entity.linkedReportIds) && entity.linkedReportIds.includes(linkedTo.id))
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" &&
+          Array.isArray(entity.linkedBehaviorIds) &&
+          entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior_pattern" &&
+          Array.isArray(entity.linkedPatternIds) &&
+          entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" &&
+          Array.isArray(entity.linkedBeliefIds) &&
+          entity.linkedBeliefIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "trigger_report" &&
+          Array.isArray(entity.linkedReportIds) &&
+          entity.linkedReportIds.includes(linkedTo.id))
       );
     case "trigger_report":
       return (
-        (linkedTo.entityType === "behavior_pattern" && Array.isArray(entity.linkedPatternIds) && entity.linkedPatternIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "psyche_value" && Array.isArray(entity.linkedValueIds) && entity.linkedValueIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "goal" && Array.isArray(entity.linkedGoalIds) && entity.linkedGoalIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "project" && Array.isArray(entity.linkedProjectIds) && entity.linkedProjectIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "task" && Array.isArray(entity.linkedTaskIds) && entity.linkedTaskIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "behavior" && Array.isArray(entity.linkedBehaviorIds) && entity.linkedBehaviorIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "belief_entry" && Array.isArray(entity.linkedBeliefIds) && entity.linkedBeliefIds.includes(linkedTo.id)) ||
-        (linkedTo.entityType === "mode_profile" && Array.isArray(entity.linkedModeIds) && entity.linkedModeIds.includes(linkedTo.id))
+        (linkedTo.entityType === "behavior_pattern" &&
+          Array.isArray(entity.linkedPatternIds) &&
+          entity.linkedPatternIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "psyche_value" &&
+          Array.isArray(entity.linkedValueIds) &&
+          entity.linkedValueIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "goal" &&
+          Array.isArray(entity.linkedGoalIds) &&
+          entity.linkedGoalIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "project" &&
+          Array.isArray(entity.linkedProjectIds) &&
+          entity.linkedProjectIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "task" &&
+          Array.isArray(entity.linkedTaskIds) &&
+          entity.linkedTaskIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "behavior" &&
+          Array.isArray(entity.linkedBehaviorIds) &&
+          entity.linkedBehaviorIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "belief_entry" &&
+          Array.isArray(entity.linkedBeliefIds) &&
+          entity.linkedBeliefIds.includes(linkedTo.id)) ||
+        (linkedTo.entityType === "mode_profile" &&
+          Array.isArray(entity.linkedModeIds) &&
+          entity.linkedModeIds.includes(linkedTo.id))
       );
     case "preference_catalog_item":
-      return linkedTo.entityType === "preference_catalog" && entity.catalogId === linkedTo.id;
+      return (
+        linkedTo.entityType === "preference_catalog" &&
+        entity.catalogId === linkedTo.id
+      );
     case "preference_item":
       return (
         typeof entity.sourceEntityType === "string" &&
@@ -1182,30 +1525,44 @@ function matchesStatus(entity: Record<string, unknown>, statuses?: string[]) {
   if (!statuses || statuses.length === 0) {
     return true;
   }
-  return typeof entity.status === "string" ? statuses.includes(entity.status) : false;
+  return typeof entity.status === "string"
+    ? statuses.includes(entity.status)
+    : false;
 }
 
-function purgeAnchoredCollaboration(entityType: CrudEntityType, entityId: string) {
+function purgeAnchoredCollaboration(
+  entityType: CrudEntityType,
+  entityId: string
+) {
   const insightIds = getDatabase()
     .prepare(`SELECT id FROM insights WHERE entity_type = ? AND entity_id = ?`)
     .all(entityType, entityId) as Array<{ id: string }>;
   if (insightIds.length > 0) {
     const placeholders = insightIds.map(() => "?").join(", ");
     getDatabase()
-      .prepare(`DELETE FROM insight_feedback WHERE insight_id IN (${placeholders})`)
+      .prepare(
+        `DELETE FROM insight_feedback WHERE insight_id IN (${placeholders})`
+      )
       .run(...insightIds.map((row) => row.id));
     getDatabase()
       .prepare(`DELETE FROM insights WHERE id IN (${placeholders})`)
       .run(...insightIds.map((row) => row.id));
     getDatabase()
-      .prepare(`DELETE FROM deleted_entities WHERE entity_type = 'insight' AND entity_id IN (${placeholders})`)
+      .prepare(
+        `DELETE FROM deleted_entities WHERE entity_type = 'insight' AND entity_id IN (${placeholders})`
+      )
       .run(...insightIds.map((row) => row.id));
   }
 
   unlinkNotesForEntity(entityType, entityId, { source: "system", actor: null });
 }
 
-export function deleteEntity(entityType: CrudEntityType, id: string, options: { mode?: DeleteMode; reason?: string }, context: CrudContext) {
+export function deleteEntity(
+  entityType: CrudEntityType,
+  id: string,
+  options: { mode?: DeleteMode; reason?: string },
+  context: CrudContext
+) {
   const capability = getCapability(entityType);
   const mode = options.mode ?? "soft";
   if (capability.deleteMode === "immediate") {
@@ -1237,7 +1594,12 @@ export function deleteEntity(entityType: CrudEntityType, id: string, options: { 
         context
       });
       if (entityType !== "note" && entityType !== "insight") {
-        cascadeSoftDeleteAnchoredCollaboration(entityType, id, context, options.reason ?? "");
+        cascadeSoftDeleteAnchoredCollaboration(
+          entityType,
+          id,
+          context,
+          options.reason ?? ""
+        );
       }
       return entity;
     }
@@ -1266,11 +1628,23 @@ export function restoreEntity(entityType: CrudEntityType, id: string) {
   });
 }
 
-export function createEntities(input: BatchCreateEntitiesInput, context: CrudContext): { results: EntityOperationResult[] } {
+export function createEntities(
+  input: BatchCreateEntitiesInput,
+  context: CrudContext
+): { results: EntityOperationResult[] } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = getCapability(entry.entityType).create(parseCreateInput(entry.entityType, entry.data), context);
-      return { ok: true, entityType: entry.entityType, clientRef: entry.clientRef, id: String(entity.id ?? ""), entity } satisfies EntityOperationResult;
+      const entity = getCapability(entry.entityType).create(
+        parseCreateInput(entry.entityType, entry.data),
+        context
+      );
+      return {
+        ok: true,
+        entityType: entry.entityType,
+        clientRef: entry.clientRef,
+        id: String(entity.id ?? ""),
+        entity
+      } satisfies EntityOperationResult;
     } catch (error) {
       if (error instanceof ZodError) {
         return {
@@ -1292,26 +1666,45 @@ export function createEntities(input: BatchCreateEntitiesInput, context: CrudCon
         ok: false,
         entityType: entry.entityType,
         clientRef: entry.clientRef,
-        error: toOperationError("create_failed", error instanceof Error ? error.message : String(error))
+        error: toOperationError(
+          "create_failed",
+          error instanceof Error ? error.message : String(error)
+        )
       } satisfies EntityOperationResult;
     }
   });
 }
 
-export function updateEntities(input: BatchUpdateEntitiesInput, context: CrudContext): { results: EntityOperationResult[] } {
+export function updateEntities(
+  input: BatchUpdateEntitiesInput,
+  context: CrudContext
+): { results: EntityOperationResult[] } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = getCapability(entry.entityType).update(entry.id, parseUpdatePatch(entry.entityType, entry.patch), context);
+      const entity = getCapability(entry.entityType).update(
+        entry.id,
+        parseUpdatePatch(entry.entityType, entry.patch),
+        context
+      );
       if (!entity) {
         return {
           ok: false,
           entityType: entry.entityType,
           id: entry.id,
           clientRef: entry.clientRef,
-          error: toOperationError("not_found", `${entry.entityType} ${entry.id} was not found.`)
+          error: toOperationError(
+            "not_found",
+            `${entry.entityType} ${entry.id} was not found.`
+          )
         } satisfies EntityOperationResult;
       }
-      return { ok: true, entityType: entry.entityType, id: entry.id, clientRef: entry.clientRef, entity } satisfies EntityOperationResult;
+      return {
+        ok: true,
+        entityType: entry.entityType,
+        id: entry.id,
+        clientRef: entry.clientRef,
+        entity
+      } satisfies EntityOperationResult;
     } catch (error) {
       if (error instanceof ZodError) {
         return {
@@ -1335,39 +1728,64 @@ export function updateEntities(input: BatchUpdateEntitiesInput, context: CrudCon
         entityType: entry.entityType,
         id: entry.id,
         clientRef: entry.clientRef,
-        error: toOperationError("update_failed", error instanceof Error ? error.message : String(error))
+        error: toOperationError(
+          "update_failed",
+          error instanceof Error ? error.message : String(error)
+        )
       } satisfies EntityOperationResult;
     }
   });
 }
 
-export function deleteEntities(input: BatchDeleteEntitiesInput, context: CrudContext): { results: EntityOperationResult[] } {
+export function deleteEntities(
+  input: BatchDeleteEntitiesInput,
+  context: CrudContext
+): { results: EntityOperationResult[] } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = deleteEntity(entry.entityType, entry.id, { mode: entry.mode, reason: entry.reason }, context);
+      const entity = deleteEntity(
+        entry.entityType,
+        entry.id,
+        { mode: entry.mode, reason: entry.reason },
+        context
+      );
       if (!entity) {
         return {
           ok: false,
           entityType: entry.entityType,
           id: entry.id,
           clientRef: entry.clientRef,
-          error: toOperationError("not_found", `${entry.entityType} ${entry.id} was not found.`)
+          error: toOperationError(
+            "not_found",
+            `${entry.entityType} ${entry.id} was not found.`
+          )
         } satisfies EntityOperationResult;
       }
-      return { ok: true, entityType: entry.entityType, id: entry.id, clientRef: entry.clientRef, entity } satisfies EntityOperationResult;
+      return {
+        ok: true,
+        entityType: entry.entityType,
+        id: entry.id,
+        clientRef: entry.clientRef,
+        entity
+      } satisfies EntityOperationResult;
     } catch (error) {
       return {
         ok: false,
         entityType: entry.entityType,
         id: entry.id,
         clientRef: entry.clientRef,
-        error: toOperationError("delete_failed", error instanceof Error ? error.message : String(error))
+        error: toOperationError(
+          "delete_failed",
+          error instanceof Error ? error.message : String(error)
+        )
       } satisfies EntityOperationResult;
     }
   });
 }
 
-export function restoreEntities(input: BatchRestoreEntitiesInput): { results: EntityOperationResult[] } {
+export function restoreEntities(input: BatchRestoreEntitiesInput): {
+  results: EntityOperationResult[];
+} {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
       const entity = restoreEntity(entry.entityType, entry.id);
@@ -1377,56 +1795,116 @@ export function restoreEntities(input: BatchRestoreEntitiesInput): { results: En
           entityType: entry.entityType,
           id: entry.id,
           clientRef: entry.clientRef,
-          error: toOperationError("not_found", `${entry.entityType} ${entry.id} was not found in the bin.`)
+          error: toOperationError(
+            "not_found",
+            `${entry.entityType} ${entry.id} was not found in the bin.`
+          )
         } satisfies EntityOperationResult;
       }
-      return { ok: true, entityType: entry.entityType, id: entry.id, clientRef: entry.clientRef, entity } satisfies EntityOperationResult;
+      return {
+        ok: true,
+        entityType: entry.entityType,
+        id: entry.id,
+        clientRef: entry.clientRef,
+        entity
+      } satisfies EntityOperationResult;
     } catch (error) {
       return {
         ok: false,
         entityType: entry.entityType,
         id: entry.id,
         clientRef: entry.clientRef,
-        error: toOperationError("restore_failed", error instanceof Error ? error.message : String(error))
+        error: toOperationError(
+          "restore_failed",
+          error instanceof Error ? error.message : String(error)
+        )
       } satisfies EntityOperationResult;
     }
   });
 }
 
-export function searchEntities(input: BatchSearchEntitiesInput): { results: EntityOperationResult[] } {
+export function searchEntities(input: BatchSearchEntitiesInput): {
+  results: EntityOperationResult[];
+} {
   const deleted = listDeletedEntities();
-  const defaultEntityTypes = Object.keys(CRUD_ENTITY_CAPABILITIES) as CrudEntityType[];
+  const defaultEntityTypes = Object.keys(
+    CRUD_ENTITY_CAPABILITIES
+  ) as CrudEntityType[];
   return {
     results: input.searches.map((search) => {
-      const entityTypes = search.entityTypes && search.entityTypes.length > 0 ? search.entityTypes : defaultEntityTypes;
+      const entityTypes =
+        search.entityTypes && search.entityTypes.length > 0
+          ? search.entityTypes
+          : defaultEntityTypes;
       const liveMatches = entityTypes.flatMap((entityType) =>
         filterOwnedEntities(
           entityType,
-          getCapability(entityType).list() as Array<Record<string, unknown> & { id: string }>,
+          getCapability(entityType).list() as Array<
+            Record<string, unknown> & { id: string }
+          >,
           search.userIds
         )
-          .filter((entity) => (search.ids && search.ids.length > 0 ? search.ids.includes(String(entity.id ?? "")) : true))
+          .filter((entity) =>
+            search.ids && search.ids.length > 0
+              ? search.ids.includes(String(entity.id ?? ""))
+              : true
+          )
           .filter((entity) => matchesQuery(entity, search.query))
           .filter((entity) => matchesStatus(entity, search.status))
-          .filter((entity) => (search.linkedTo ? matchesLinkedTo(entityType, entity, search.linkedTo) : true))
+          .filter((entity) =>
+            search.linkedTo
+              ? matchesLinkedTo(entityType, entity, search.linkedTo)
+              : true
+          )
           .slice(0, search.limit)
-          .map((entity) => ({ deleted: false, entityType, id: String(entity.id ?? ""), entity }))
+          .map((entity) => ({
+            deleted: false,
+            entityType,
+            id: String(entity.id ?? ""),
+            entity
+          }))
       );
 
       const deletedMatches = search.includeDeleted
         ? deleted
             .filter((item) => entityTypes.includes(item.entityType))
-            .filter((item) => (search.ids && search.ids.length > 0 ? search.ids.includes(item.entityId) : true))
+            .filter((item) =>
+              search.ids && search.ids.length > 0
+                ? search.ids.includes(item.entityId)
+                : true
+            )
             .filter((item) =>
               !search.userIds || search.userIds.length === 0
                 ? true
-                : search.userIds.includes(String((item.snapshot as Record<string, unknown>).userId ?? ""))
+                : search.userIds.includes(
+                    String(
+                      (item.snapshot as Record<string, unknown>).userId ?? ""
+                    )
+                  )
             )
-            .filter((item) => matchesQuery(item.snapshot, search.query) || matchesQuery(item, search.query))
+            .filter(
+              (item) =>
+                matchesQuery(item.snapshot, search.query) ||
+                matchesQuery(item, search.query)
+            )
             .filter((item) => matchesStatus(item.snapshot, search.status))
-            .filter((item) => (search.linkedTo ? matchesLinkedTo(item.entityType, item.snapshot, search.linkedTo) : true))
+            .filter((item) =>
+              search.linkedTo
+                ? matchesLinkedTo(
+                    item.entityType,
+                    item.snapshot,
+                    search.linkedTo
+                  )
+                : true
+            )
             .slice(0, search.limit)
-            .map((item) => ({ deleted: true, entityType: item.entityType, id: item.entityId, entity: item.snapshot, deletedRecord: item }))
+            .map((item) => ({
+              deleted: true,
+              entityType: item.entityType,
+              id: item.entityId,
+              entity: item.snapshot,
+              deletedRecord: item
+            }))
         : [];
 
       return {

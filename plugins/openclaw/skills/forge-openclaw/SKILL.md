@@ -123,6 +123,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `allowedActions`, pass the id through `pathParams.id`, and never dismiss blocked or
   overdue work. The runtime path is `/api/v1/attention-inbox`; the OpenClaw mirror is
   `/forge/v1/attention`.
+- Pins and recently viewed records use `forge_call_entity_navigation_route`.
+  `list` returns bounded canonical pins plus this agent actor's own recent history;
+  `touch` records an exact in-scope entity only after the agent actually viewed it.
+  Agents cannot pin or unpin. Those choices remain human-operator-only in the Forge
+  Action Bar. The runtime path is `/api/v1/entity-navigation`; the OpenClaw mirror is
+  `/forge/v1/entity-navigation`.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
@@ -1017,6 +1023,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_get_doctor`
 `forge_apply_doctor_fix`
 `forge_call_attention_route`
+`forge_call_entity_navigation_route`
 `forge_call_movement_route`
 `forge_call_life_force_route`
 `forge_call_workbench_route`

@@ -294,6 +294,31 @@ final class WatchAppModel: NSObject, ObservableObject {
                 choices: ["Friend", "Work", "Family"]
             )
         ]
+        let pins = ForgeWatchPinsSnapshot(
+            total: 2,
+            items: [
+                .init(
+                    id: "pin_task_watch_quality",
+                    entityType: "task",
+                    entityId: task.id,
+                    title: task.title,
+                    detail: "High priority / Focus",
+                    category: "Task",
+                    targetPath: "/tasks/\(task.id)",
+                    availability: "available"
+                ),
+                .init(
+                    id: "pin_goal_forge_quality",
+                    entityType: "goal",
+                    entityId: "goal_forge_quality",
+                    title: "Make Forge faster and easier to command",
+                    detail: "Active / Quarter",
+                    category: "Goal",
+                    targetPath: "/goals/goal_forge_quality",
+                    availability: "available"
+                )
+            ]
+        )
 
         return ForgeWatchBootstrap(
             schemaVersion: 2,
@@ -415,7 +440,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                     ForgeWatchPsycheSnapshot.RecentReport(id: "report_preview", title: "Evening reflection", occurredAt: now, status: "open")
                 ]
             ),
-            inbox: ForgeWatchInboxSnapshot(prompts: prompts, attention: nil),
+            inbox: ForgeWatchInboxSnapshot(prompts: prompts, attention: nil, pins: pins),
             sync: ForgeWatchSyncSnapshot(
                 pairingSessionId: "pair_preview",
                 generatedAt: now,

@@ -6,6 +6,7 @@ struct CompanionMenuSheet: View {
 
     let openSettings: () -> Void
     let openLifeTimeline: () -> Void
+    let openPinnedRecord: (String) -> Void
     let closeMenu: () -> Void
 
     var body: some View {
@@ -35,6 +36,24 @@ struct CompanionMenuSheet: View {
                             value: attention.activeCount == 0 ? "Clear" : "\(attention.activeCount) active",
                             detail: attention.items.first?.title
                         )
+                    }
+                    if let pins = appModel.watchSessionManager.latestBootstrap.inbox?.pins,
+                       let firstPin = pins.items.first
+                    {
+                        Button {
+                            closeMenu()
+                            DispatchQueue.main.async {
+                                openPinnedRecord(firstPin.targetPath)
+                            }
+                        } label: {
+                            compactStatusRow(
+                                "Pinned",
+                                value: "\(pins.total)",
+                                detail: firstPin.title
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open pinned record \(firstPin.title)")
                     }
                 }
             }

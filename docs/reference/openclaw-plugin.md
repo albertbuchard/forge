@@ -149,6 +149,9 @@ The intended workflow is:
 - use `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` for nutrition/body evidence and N-of-1 food experiments
 - store agent-authored recommendations with `forge_post_insight`
 - use `forge_get_ui_entrypoint` when the user should continue in the visual Forge UI
+- use `forge_call_entity_navigation_route` to list bounded canonical pins or update
+  only the current agent's recent history after it actually views a record; agents
+  cannot pin or unpin
 
 ## Preferences Workspace
 

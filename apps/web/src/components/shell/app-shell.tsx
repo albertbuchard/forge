@@ -91,7 +91,8 @@ import { Badge } from "@/components/ui/badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useLiveEvents } from "@/hooks/use-live-events";
-import { claimTaskRun, patchTask } from "@/lib/api";
+import { claimTaskRun, patchTask, touchEntityNavigation } from "@/lib/api";
+import { resolveEntityNavigationTargetFromLocation } from "@/lib/action-bar";
 import { ForgeApiError } from "@/lib/api-error";
 import { I18nProvider, useI18n } from "@/lib/i18n";
 import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
@@ -989,6 +990,7 @@ export function AppShell() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const xpTimerRef = useRef<number | null>(null);
+  const lastNavigationTargetRef = useRef<string | null>(null);
   const previousXpRef = useRef<number | null>(null);
   const queryClient = useQueryClient();
   const routerLocation = useLocation();
@@ -1093,6 +1095,34 @@ export function AppShell() {
       setOptimisticRouteLocation(null);
     }
   }, [optimisticRoutePathKey, routePathKey]);
+
+  useEffect(() => {
+    if (!operatorSessionQuery.isSuccess) {
+      return;
+    }
+    const target = resolveEntityNavigationTargetFromLocation(
+      routerLocation.pathname,
+      routerLocation.search
+    );
+    if (!target) {
+      lastNavigationTargetRef.current = null;
+      return;
+    }
+    const targetKey = `${target.entityType}:${target.entityId}`;
+    if (lastNavigationTargetRef.current === targetKey) {
+      return;
+    }
+    lastNavigationTargetRef.current = targetKey;
+    void touchEntityNavigation(target).catch(() => {
+      if (lastNavigationTargetRef.current === targetKey) {
+        lastNavigationTargetRef.current = null;
+      }
+    });
+  }, [
+    operatorSessionQuery.isSuccess,
+    routerLocation.pathname,
+    routerLocation.search
+  ]);
 
   useEffect(() => {
     setXpMetricsPollingEnabled(false);

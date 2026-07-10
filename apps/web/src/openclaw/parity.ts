@@ -21,6 +21,7 @@ export type ForgeSupportedPluginApiRoute = {
     | "life_force"
     | "workbench"
     | "attention"
+    | "entity_navigation"
     | "artifact"
     | "life_event"
     | "preferences"
@@ -233,6 +234,16 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       method: "POST",
       path: "/api/v1/attention-inbox/:id/restore",
       purpose: "attention"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/entity-navigation",
+      purpose: "entity_navigation"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/entity-navigation/touch",
+      purpose: "entity_navigation"
     },
     { method: "GET", path: "/api/v1/artifacts", purpose: "artifact" },
     { method: "POST", path: "/api/v1/artifacts", purpose: "artifact" },

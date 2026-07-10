@@ -44,10 +44,8 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { getKnowledgeGraph } from "@/lib/api";
 import {
   KNOWLEDGE_GRAPH_HIERARCHY_ORDER,
-  type KnowledgeGraphEntityKind,
   type KnowledgeGraphNode,
   type KnowledgeGraphQuery,
-  type KnowledgeGraphRelationKind,
   type KnowledgeGraphView
 } from "@/lib/knowledge-graph-types";
 import { buildKnowledgeGraphFocusPayload } from "@/lib/knowledge-graph";
@@ -119,8 +117,7 @@ const graphDialogEyebrowClass =
   "text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
 const graphDialogTitleClass =
   "font-display text-2xl text-[var(--ui-ink-strong)]";
-const graphDialogCopyClass =
-  "text-sm leading-6 text-[var(--ui-ink-soft)]";
+const graphDialogCopyClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
 const graphDialogCardClass =
   "grid min-w-0 gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4";
 const graphDialogMetricCardClass =
@@ -129,8 +126,7 @@ const graphDialogMiniCardClass =
   "min-w-0 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2";
 const graphDialogCardTitleClass =
   "text-sm font-medium text-[var(--ui-ink-strong)]";
-const graphDialogCardCopyClass =
-  "text-xs leading-5 text-[var(--ui-ink-faint)]";
+const graphDialogCardCopyClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
 const graphDialogPillClass =
   "rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1 text-xs text-[var(--ui-ink-soft)]";
 const graphDialogNoticeClass =
@@ -313,6 +309,9 @@ export function KnowledgeGraphPage() {
     () => parseKnowledgeGraphPageState(searchParamsKey),
     [searchParamsKey]
   );
+  const [queryFocusNodeId, setQueryFocusNodeId] = useState(
+    () => parsedPageState.focusNodeId
+  );
 
   const {
     selectedView,
@@ -333,8 +332,12 @@ export function KnowledgeGraphPage() {
   }, [queryText]);
 
   const query = useMemo<KnowledgeGraphQuery>(
-    () => buildKnowledgeGraphQueryFromPageState(parsedPageState),
-    [parsedPageState]
+    () =>
+      buildKnowledgeGraphQueryFromPageState({
+        ...parsedPageState,
+        focusNodeId: queryFocusNodeId
+      }),
+    [parsedPageState, queryFocusNodeId]
   );
 
   const queryKey = useMemo(
@@ -411,6 +414,13 @@ export function KnowledgeGraphPage() {
     if (graph.nodes.some((node) => node.id === focusNodeId)) {
       return;
     }
+    if (queryFocusNodeId !== focusNodeId) {
+      setQueryFocusNodeId(focusNodeId);
+      return;
+    }
+    if (graphQuery.isFetching) {
+      return;
+    }
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -421,7 +431,13 @@ export function KnowledgeGraphPage() {
     );
     setMobilePanelOpen(false);
     pendingMobileSheetNodeIdRef.current = null;
-  }, [focusNodeId, graph, setSearchParams]);
+  }, [
+    focusNodeId,
+    graph,
+    graphQuery.isFetching,
+    queryFocusNodeId,
+    setSearchParams
+  ]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -850,10 +866,7 @@ export function KnowledgeGraphPage() {
         {isMobile ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pt-2 lg:hidden">
             <div className="pointer-events-auto flex items-center gap-1.5">
-              <div
-                title={summaryBadgeTitle}
-                className={graphFloatingChipClass}
-              >
+              <div title={summaryBadgeTitle} className={graphFloatingChipClass}>
                 {summaryBadge}
               </div>
               <div className="ml-auto flex items-center gap-1.5">
@@ -1171,7 +1184,9 @@ export function KnowledgeGraphPage() {
         {!isMobile ? (
           <div className="pointer-events-none absolute bottom-5 left-4 z-20 lg:left-6">
             <div className="flex items-center gap-2">
-              <div className={`pointer-events-auto ${graphSegmentedControlClass}`}>
+              <div
+                className={`pointer-events-auto ${graphSegmentedControlClass}`}
+              >
                 <button
                   type="button"
                   className={`rounded-full px-2.5 py-1.5 text-[10px] transition ${
@@ -1501,9 +1516,7 @@ export function KnowledgeGraphPage() {
 
             <div className={graphDialogHeaderClass}>
               <div className="grid gap-1">
-                <div className={graphDialogEyebrowClass}>
-                  Graph appearance
-                </div>
+                <div className={graphDialogEyebrowClass}>Graph appearance</div>
                 <div className={graphDialogTitleClass}>
                   Tune the focus field
                 </div>
@@ -1793,9 +1806,7 @@ export function KnowledgeGraphPage() {
 
               <div className={graphDialogHeaderClass}>
                 <div className="grid gap-1">
-                  <div className={graphDialogEyebrowClass}>
-                    Dev diagnostics
-                  </div>
+                  <div className={graphDialogEyebrowClass}>Dev diagnostics</div>
                   <div className={graphDialogTitleClass}>
                     Knowledge Graph truth surface
                   </div>
@@ -1813,9 +1824,7 @@ export function KnowledgeGraphPage() {
               <div className="grid gap-4 px-5 py-5">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <div className={graphDialogMetricCardClass}>
-                    <div className={graphDialogEyebrowClass}>
-                      Startup phase
-                    </div>
+                    <div className={graphDialogEyebrowClass}>Startup phase</div>
                     <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.latestStatus?.startupPhase ??
                         "boot"}
@@ -1828,9 +1837,7 @@ export function KnowledgeGraphPage() {
                     </div>
                   </div>
                   <div className={graphDialogMetricCardClass}>
-                    <div className={graphDialogEyebrowClass}>
-                      Camera drift
-                    </div>
+                    <div className={graphDialogEyebrowClass}>Camera drift</div>
                     <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.latestStatus
                         ? knowledgeGraphDiagnostics.latestStatus.driftMetrics.cameraDistanceFromOrigin.toFixed(
@@ -1864,9 +1871,7 @@ export function KnowledgeGraphPage() {
                     </div>
                   </div>
                   <div className={graphDialogMetricCardClass}>
-                    <div className={graphDialogEyebrowClass}>
-                      Snapshot ring
-                    </div>
+                    <div className={graphDialogEyebrowClass}>Snapshot ring</div>
                     <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
                       {knowledgeGraphDiagnostics.recentSnapshots.length}
                     </div>

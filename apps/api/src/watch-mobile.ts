@@ -13,6 +13,7 @@ import { createHabitCheckIn, listHabits } from "./repositories/habits.js";
 import { listGoals } from "./repositories/goals.js";
 import { createNote } from "./repositories/notes.js";
 import { listAttentionInbox } from "./services/attention-inbox.js";
+import { listEntityNavigation } from "./services/entity-navigation.js";
 import { listProjectSummaries } from "./services/projects.js";
 import { listTasks, updateTask } from "./repositories/tasks.js";
 import {
@@ -1477,6 +1478,15 @@ export function buildWatchBootstrap(
     limit: 3,
     offset: 0
   });
+  const entityNavigation = listEntityNavigation({
+    actorKey:
+      pairing.user_id === "user_operator" ? "operator" : `mobile:${pairing.id}`,
+    userIds: [pairing.user_id],
+    projectIds: [],
+    tagIds: [],
+    pinnedLimit: 3,
+    recentLimit: 0
+  });
   const work = buildWorkSnapshot(pairing);
   const direction = buildDirectionSnapshot(pairing);
   const today = buildTodaySnapshot(pairing);
@@ -1516,7 +1526,23 @@ export function buildWatchBootstrap(
           targetPath: item.target.href,
           updatedAt: item.updatedAt
         }))
-      }
+      },
+      pins:
+        entityNavigation.pinnedTotal > 0
+          ? {
+              total: entityNavigation.pinnedTotal,
+              items: entityNavigation.pinned.map((item) => ({
+                id: item.pinId ?? `${item.entityType}:${item.entityId}`,
+                entityType: item.entityType,
+                entityId: item.entityId,
+                title: item.title,
+                detail: item.detail,
+                category: item.category,
+                targetPath: item.targetPath,
+                availability: item.availability
+              }))
+            }
+          : null
     },
     sync: buildSyncSnapshot(pairing),
     habits,

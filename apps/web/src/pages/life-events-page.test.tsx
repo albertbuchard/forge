@@ -1,12 +1,20 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifeEventsPage } from "@/pages/life-events-page";
 import type { LifeEvent, LifeEventTimelinePayload } from "@/lib/types";
 
 const {
   getLifeEventsTimelineMock,
+  getLifeEventMock,
   createEntitiesMock,
   updateEntitiesMock,
   syncLifeEventCalendarMock,
@@ -15,6 +23,7 @@ const {
   importLifeEventTicketMock
 } = vi.hoisted(() => ({
   getLifeEventsTimelineMock: vi.fn(),
+  getLifeEventMock: vi.fn(),
   createEntitiesMock: vi.fn(),
   updateEntitiesMock: vi.fn(),
   syncLifeEventCalendarMock: vi.fn(),
@@ -115,6 +124,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
 vi.mock("@/lib/api", () => ({
   createEntities: createEntitiesMock,
   updateEntities: updateEntitiesMock,
+  getLifeEvent: getLifeEventMock,
   getLifeEventTravelStatus: getLifeEventTravelStatusMock,
   getLifeEventsTimeline: getLifeEventsTimelineMock,
   importLifeEventTicket: importLifeEventTicketMock,
@@ -176,7 +186,10 @@ function buildLifeEvent(overrides: Partial<LifeEvent> = {}): LifeEvent {
   };
 }
 
-function renderPage(timeline: LifeEventTimelinePayload) {
+function renderPage(
+  timeline: LifeEventTimelinePayload,
+  initialEntry = "/life-events"
+) {
   getLifeEventsTimelineMock.mockResolvedValue({ timeline });
   const client = new QueryClient({
     defaultOptions: {
@@ -186,15 +199,71 @@ function renderPage(timeline: LifeEventTimelinePayload) {
   });
   return render(
     <QueryClientProvider client={client}>
-      <LifeEventsPage />
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <LifeEventsPage />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
 
 describe("LifeEventsPage", () => {
+  beforeEach(() => {
+    getLifeEventMock.mockResolvedValue({
+      lifeEvent: buildLifeEvent({
+        id: "lifeevent_outside_window",
+        title: "Future family stay",
+        startsAt: "2027-01-01T10:00:00.000Z",
+        endsAt: "2027-01-01T12:00:00.000Z"
+      })
+    });
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it("opens the exact Life Event from a navigation focus link", async () => {
+    renderPage(
+      {
+        events: [buildLifeEvent()],
+        now: "2026-07-01T12:00:00.000Z",
+        nextLifeEventId: "lifeevent_123",
+        limit: 500,
+        offset: 0
+      },
+      "/life-events?focus=lifeevent_123"
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /^edit$/i })
+    ).toBeInTheDocument();
+    expect(getLifeEventTravelStatusMock).toHaveBeenCalledWith("lifeevent_123");
+  });
+
+  it("loads a focused Life Event outside the bounded timeline window", async () => {
+    renderPage(
+      {
+        events: [buildLifeEvent()],
+        now: "2026-07-01T12:00:00.000Z",
+        nextLifeEventId: "lifeevent_123",
+        limit: 500,
+        offset: 0
+      },
+      "/life-events?focus=lifeevent_outside_window"
+    );
+
+    expect(await screen.findByText("Future family stay")).toBeInTheDocument();
+    expect(getLifeEventMock).toHaveBeenCalledWith("lifeevent_outside_window");
+    expect(getLifeEventTravelStatusMock).toHaveBeenCalledWith(
+      "lifeevent_outside_window"
+    );
+    expect(
+      screen.getAllByTestId("life-event-card").map((card) => card.textContent)
+    ).toEqual([
+      expect.stringContaining("Flight to Paris"),
+      expect.stringContaining("Future family stay")
+    ]);
   });
 
   it("renders the virtualized chronology and opens guided modal flows", async () => {
@@ -221,9 +290,9 @@ describe("LifeEventsPage", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /import tickets/i }));
-    expect(screen.getAllByTestId("guided-question-flow").at(-1)).toHaveTextContent(
-      "Import tickets"
-    );
+    expect(
+      screen.getAllByTestId("guided-question-flow").at(-1)
+    ).toHaveTextContent("Import tickets");
   });
 
   it("keeps the timeline searchable without loading nonmatching cards", async () => {
@@ -250,10 +319,9 @@ describe("LifeEventsPage", () => {
     expect(screen.getByText("Summer festival stay")).toBeInTheDocument();
     expect(screen.getByText("3 months")).toBeInTheDocument();
 
-    fireEvent.change(
-      screen.getByPlaceholderText(/search events, places/i),
-      { target: { value: "festival" } }
-    );
+    fireEvent.change(screen.getByPlaceholderText(/search events, places/i), {
+      target: { value: "festival" }
+    });
 
     await waitFor(() => {
       expect(screen.queryByText("Flight to Paris")).not.toBeInTheDocument();
@@ -272,7 +340,9 @@ describe("LifeEventsPage", () => {
       offset: 0
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: /flight to paris/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /flight to paris/i })
+    );
     fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
 
     expect(screen.getByTestId("guided-question-flow")).toHaveTextContent(

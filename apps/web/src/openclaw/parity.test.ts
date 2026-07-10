@@ -70,6 +70,9 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain(
       "POST /api/v1/attention-inbox/:id/restore"
     );
+    expect(report.mirrored).toContain("GET /api/v1/entity-navigation");
+    expect(report.mirrored).toContain("POST /api/v1/entity-navigation/touch");
+    expect(report.mirrored).not.toContain("PUT /api/v1/entity-navigation/pins");
     expect(report.mirrored).toContain("GET /api/v1/artifacts");
     expect(report.mirrored).toContain("POST /api/v1/artifacts");
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id");

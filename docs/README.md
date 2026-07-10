@@ -120,6 +120,7 @@ checks.
 - [Preferences system](./reference/preferences-system.md): preference storage and agent-facing preference behavior.
 - [Artifact Store](./reference/artifact-store.md): trusted file storage, metadata, safety scans, generic entity links, and human-only downloads.
 - [Life Events](./reference/life-events.md): chronological life-event records, calendar reconciliation, ticket import, and agent route rules.
+- [Pins and recent records](./reference/entity-navigation.md): canonical cross-surface pins, actor-scoped recents, and agent trust boundaries.
 - [Public repo workflow](./reference/public-repo-workflow.md): public repository and publication workflow.
 - [Repository structure](./reference/repository-structure.md): top-level tree, package boundaries, release-sensitive paths, and generated-output rules.
 

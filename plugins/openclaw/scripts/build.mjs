@@ -1,25 +1,45 @@
-import { chmod, copyFile, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(packageRoot, "..", "..");
-const packageSkillDir = path.join(packageRoot, "skills", "forge-openclaw");
 const pluginDistDir = path.join(packageRoot, "dist");
 const pluginServerDir = path.join(packageRoot, "server");
 const codexRuntimeRoot = path.join(repoRoot, "plugins", "codex", "runtime");
 const codexRuntimeDistDir = path.join(codexRuntimeRoot, "dist");
-const codexRuntimeMigrationsDir = path.join(codexRuntimeRoot, "server", "migrations");
+const codexRuntimeMigrationsDir = path.join(
+  codexRuntimeRoot,
+  "server",
+  "migrations"
+);
 const repoWebDistDir = path.join(repoRoot, "dist");
 const repoMigrationsDir = path.join(repoRoot, "apps", "api", "migrations");
 const companionIrohRoot = path.join(repoRoot, "packages", "companion-iroh");
 const companionIrohManifest = path.join(companionIrohRoot, "Cargo.toml");
-const companionIrohBinaryName = process.platform === "win32" ? "forge-companion-iroh.exe" : "forge-companion-iroh";
+const companionIrohBinaryName =
+  process.platform === "win32"
+    ? "forge-companion-iroh.exe"
+    : "forge-companion-iroh";
 const companionIrohPlatformKey = `${process.platform}-${process.arch}`;
-const companionIrohPrebuiltDir = (process.env.FORGE_COMPANION_IROH_PREBUILT_DIR ?? "").trim();
-const companionIrohPackageMode = (process.env.FORGE_COMPANION_IROH_PACKAGE_MODE ?? "source-only")
+const companionIrohPrebuiltDir = (
+  process.env.FORGE_COMPANION_IROH_PREBUILT_DIR ?? ""
+).trim();
+const companionIrohPackageMode = (
+  process.env.FORGE_COMPANION_IROH_PACKAGE_MODE ?? "source-only"
+)
   .trim()
   .toLowerCase();
 const pluginServerEntrySource = `import { existsSync } from "node:fs";
@@ -109,7 +129,11 @@ function run(command, args, cwd) {
         resolve();
         return;
       }
-      reject(new Error(`${command} ${args.join(" ")} exited with code ${code ?? "unknown"}`));
+      reject(
+        new Error(
+          `${command} ${args.join(" ")} exited with code ${code ?? "unknown"}`
+        )
+      );
     });
     child.once("error", reject);
   });
@@ -150,11 +174,15 @@ function normalizeRelativeJsSpecifier(specifier) {
 
 function rewriteRelativeJsSpecifiers(source) {
   return source
-    .replace(/((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(\.\.?\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) =>
-      `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
+    .replace(
+      /((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(\.\.?\/[^"']+)(["'])/g,
+      (_match, prefix, specifier, suffix) =>
+        `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
     )
-    .replace(/(import\s*\(\s*["'])(\.\.?\/[^"']+)(["']\s*\))/g, (_match, prefix, specifier, suffix) =>
-      `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
+    .replace(
+      /(import\s*\(\s*["'])(\.\.?\/[^"']+)(["']\s*\))/g,
+      (_match, prefix, specifier, suffix) =>
+        `${prefix}${normalizeRelativeJsSpecifier(specifier)}${suffix}`
     );
 }
 
@@ -163,7 +191,13 @@ function resolveAliasJsSpecifier(filePath, specifier) {
     return specifier;
   }
 
-  const emittedWebSrcRoot = path.join(pluginDistDir, "server", "apps", "web", "src");
+  const emittedWebSrcRoot = path.join(
+    pluginDistDir,
+    "server",
+    "apps",
+    "web",
+    "src"
+  );
   const targetPath = path.join(emittedWebSrcRoot, specifier.slice(2));
   const relativePath = path.relative(
     path.dirname(filePath),
@@ -175,11 +209,15 @@ function resolveAliasJsSpecifier(filePath, specifier) {
 
 function rewriteAliasJsSpecifiers(filePath, source) {
   return source
-    .replace(/((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(@\/[^"']+)(["'])/g, (_match, prefix, specifier, suffix) =>
-      `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
+    .replace(
+      /((?:import|export)\s[^"'\n]*?\sfrom\s+["'])(@\/[^"']+)(["'])/g,
+      (_match, prefix, specifier, suffix) =>
+        `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
     )
-    .replace(/(import\s*\(\s*["'])(@\/[^"']+)(["']\s*\))/g, (_match, prefix, specifier, suffix) =>
-      `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
+    .replace(
+      /(import\s*\(\s*["'])(@\/[^"']+)(["']\s*\))/g,
+      (_match, prefix, specifier, suffix) =>
+        `${prefix}${resolveAliasJsSpecifier(filePath, specifier)}${suffix}`
     );
 }
 
@@ -245,13 +283,19 @@ async function copyPrebuiltCompanionIroh() {
       continue;
     }
     const sourcePlatformDir = path.join(sourceRoot, entry.name);
-    const targetPlatformDir = path.join(pluginDistDir, "companion-iroh", entry.name);
+    const targetPlatformDir = path.join(
+      pluginDistDir,
+      "companion-iroh",
+      entry.name
+    );
     await cp(sourcePlatformDir, targetPlatformDir, {
       recursive: true,
       force: true
     });
     await chmodIfExists(path.join(targetPlatformDir, "forge-companion-iroh"));
-    await chmodIfExists(path.join(targetPlatformDir, "forge-companion-iroh.exe"));
+    await chmodIfExists(
+      path.join(targetPlatformDir, "forge-companion-iroh.exe")
+    );
   }
 }
 
@@ -259,8 +303,14 @@ async function packageCompanionIroh() {
   const sourceDir = path.join(pluginDistDir, "companion-iroh-src");
   await removePath(sourceDir);
   await mkdir(sourceDir, { recursive: true });
-  await copyFile(path.join(companionIrohRoot, "Cargo.toml"), path.join(sourceDir, "Cargo.toml"));
-  await copyFile(path.join(companionIrohRoot, "Cargo.lock"), path.join(sourceDir, "Cargo.lock"));
+  await copyFile(
+    path.join(companionIrohRoot, "Cargo.toml"),
+    path.join(sourceDir, "Cargo.toml")
+  );
+  await copyFile(
+    path.join(companionIrohRoot, "Cargo.lock"),
+    path.join(sourceDir, "Cargo.lock")
+  );
   await cp(path.join(companionIrohRoot, "src"), path.join(sourceDir, "src"), {
     recursive: true,
     force: true
@@ -319,7 +369,11 @@ await removePath(pluginDistDir);
 await removePath(pluginServerDir);
 await mkdir(pluginDistDir, { recursive: true });
 
-await run("npm", ["exec", "--", "tsc", "-p", "tsconfig.build.json"], packageRoot);
+await run(
+  "npm",
+  ["exec", "--", "tsc", "-p", "tsconfig.build.json"],
+  packageRoot
+);
 // Package builds need emitted runtime JS even when unrelated repo-wide strict
 // type errors exist outside the plugin surface. Keep release verification
 // stricter elsewhere, but use no-check emit here so local packaging can run.
@@ -344,13 +398,22 @@ await run("npm", ["run", "build"], repoRoot);
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
 await removePackagedGamificationAssets();
 await packageCompanionIroh();
-await mkdir(path.join(pluginDistDir, "server", "apps", "api"), { recursive: true });
-await cp(repoMigrationsDir, path.join(pluginDistDir, "server", "apps", "api", "migrations"), { recursive: true, force: true });
+await mkdir(path.join(pluginDistDir, "server", "apps", "api"), {
+  recursive: true
+});
+await cp(
+  repoMigrationsDir,
+  path.join(pluginDistDir, "server", "apps", "api", "migrations"),
+  { recursive: true, force: true }
+);
 await mkdir(path.join(pluginServerDir), { recursive: true });
-await cp(repoMigrationsDir, path.join(pluginServerDir, "migrations"), { recursive: true, force: true });
+await cp(repoMigrationsDir, path.join(pluginServerDir, "migrations"), {
+  recursive: true,
+  force: true
+});
 await writeFile(
   path.join(pluginServerDir, "index.js"),
-  `${pluginServerEntrySource}\n`,
+  pluginServerEntrySource,
   "utf8"
 );
 
@@ -359,4 +422,7 @@ await removePath(codexRuntimeMigrationsDir);
 await mkdir(codexRuntimeRoot, { recursive: true });
 await cp(pluginDistDir, codexRuntimeDistDir, { recursive: true, force: true });
 await mkdir(path.join(codexRuntimeRoot, "server"), { recursive: true });
-await cp(repoMigrationsDir, codexRuntimeMigrationsDir, { recursive: true, force: true });
+await cp(repoMigrationsDir, codexRuntimeMigrationsDir, {
+  recursive: true,
+  force: true
+});

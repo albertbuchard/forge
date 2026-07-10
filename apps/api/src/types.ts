@@ -3152,6 +3152,52 @@ export const attentionInboxDismissSchema = z.object({
   note: z.string().trim().max(500).default("")
 });
 
+export const entityNavigationAvailabilitySchema = z.enum([
+  "available",
+  "deleted",
+  "missing"
+]);
+
+export const entityNavigationItemSchema = z.object({
+  pinId: z.string().nullable(),
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString,
+  detail: trimmedString,
+  category: nonEmptyTrimmedString,
+  targetPath: nonEmptyTrimmedString,
+  ownerUserId: z.string().nullable(),
+  availability: entityNavigationAvailabilitySchema,
+  pinnedAt: z.string().nullable(),
+  lastViewedAt: z.string().nullable(),
+  viewCount: z.number().int().nonnegative()
+});
+
+export const entityNavigationPayloadSchema = z.object({
+  generatedAt: z.string(),
+  pinnedTotal: z.number().int().nonnegative(),
+  recentTotal: z.number().int().nonnegative(),
+  hiddenRecentCount: z.number().int().nonnegative(),
+  pinned: z.array(entityNavigationItemSchema),
+  recent: z.array(entityNavigationItemSchema)
+});
+
+export const entityNavigationQuerySchema = z.object({
+  pinnedLimit: z.coerce.number().int().nonnegative().max(25).default(6),
+  recentLimit: z.coerce.number().int().nonnegative().max(25).default(6)
+});
+
+export const entityNavigationPinInputSchema = z.object({
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString,
+  ownerUserId: nonEmptyTrimmedString.nullable().default(null)
+});
+
+export const entityNavigationTouchInputSchema = z.object({
+  entityType: crudEntityTypeSchema,
+  entityId: nonEmptyTrimmedString
+});
+
 export const agentActionSchema = z.object({
   id: z.string(),
   agentId: z.string().nullable(),
@@ -5403,6 +5449,13 @@ export type AttentionInboxSummary = z.infer<typeof attentionInboxSummarySchema>;
 export type AttentionInboxPayload = z.infer<typeof attentionInboxPayloadSchema>;
 export type AttentionInboxStateRecord = z.infer<
   typeof attentionInboxStateRecordSchema
+>;
+export type EntityNavigationAvailability = z.infer<
+  typeof entityNavigationAvailabilitySchema
+>;
+export type EntityNavigationItem = z.infer<typeof entityNavigationItemSchema>;
+export type EntityNavigationPayload = z.infer<
+  typeof entityNavigationPayloadSchema
 >;
 export type AgentAction = z.infer<typeof agentActionSchema>;
 export type RewardRule = z.infer<typeof rewardRuleSchema>;

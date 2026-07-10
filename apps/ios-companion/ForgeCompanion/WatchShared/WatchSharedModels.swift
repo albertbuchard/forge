@@ -356,6 +356,33 @@ struct ForgeWatchPsycheSnapshot: Codable, Hashable {
 struct ForgeWatchInboxSnapshot: Codable, Hashable {
     let prompts: [ForgeWatchPrompt]
     let attention: ForgeWatchAttentionSnapshot?
+    let pins: ForgeWatchPinsSnapshot?
+
+    init(
+        prompts: [ForgeWatchPrompt],
+        attention: ForgeWatchAttentionSnapshot?,
+        pins: ForgeWatchPinsSnapshot? = nil
+    ) {
+        self.prompts = prompts
+        self.attention = attention
+        self.pins = pins
+    }
+}
+
+struct ForgeWatchPinsSnapshot: Codable, Hashable {
+    struct Item: Codable, Identifiable, Hashable {
+        let id: String
+        let entityType: String
+        let entityId: String
+        let title: String
+        let detail: String
+        let category: String
+        let targetPath: String
+        let availability: String
+    }
+
+    let total: Int
+    let items: [Item]
 }
 
 struct ForgeWatchAttentionSnapshot: Codable, Hashable {

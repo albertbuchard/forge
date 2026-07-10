@@ -12,6 +12,7 @@ import {
   inferActionBarTitle,
   actionBarEntityTypeLabel,
   actionBarEntityTypeToKind,
+  resolveEntityNavigationTargetFromLocation,
   scoreActionBarMatch
 } from "@/lib/action-bar";
 
@@ -44,12 +45,15 @@ describe("action bar helpers", () => {
     expect(
       buildActionBarHref("psyche_value", "value-1", { id: "value-1" })
     ).toBe("/psyche/values?focus=value-1");
-    expect(
-      buildActionBarHref("flashcard", "card-1", { id: "card-1" })
-    ).toBe("/psyche/flashcards?focus=card-1");
+    expect(buildActionBarHref("flashcard", "card-1", { id: "card-1" })).toBe(
+      "/psyche/flashcards?focus=card-1"
+    );
     expect(
       buildActionBarHref("trigger_report", "report-1", { id: "report-1" })
     ).toBe("/psyche/reports/report-1");
+    expect(
+      buildActionBarHref("task_timebox", "timebox-1", { id: "timebox-1" })
+    ).toBe("/calendar?focus=timebox-1&focusType=task_timebox");
     expect(
       buildActionBarHref("note", "note-1", {
         id: "note-1",
@@ -63,7 +67,136 @@ describe("action bar helpers", () => {
         kind: "evidence",
         slug: "ignored"
       })
-    ).toBe("/notes");
+    ).toBe("/notes?focus=note-2");
+    expect(buildActionBarHref("insight", "insight-1", {})).toBe(
+      "/knowledge-graph?focus=insight%3Ainsight-1"
+    );
+  });
+
+  it("resolves canonical navigation targets from detail and focus routes", () => {
+    expect(
+      resolveEntityNavigationTargetFromLocation("/projects/project%20one", "")
+    ).toEqual({ entityType: "project", entityId: "project one" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/psyche/flashcards",
+        "?focus=card-1"
+      )
+    ).toEqual({ entityType: "flashcard", entityId: "card-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/calendar",
+        "?focus=timebox-1&focusType=task_timebox"
+      )
+    ).toEqual({ entityType: "task_timebox", entityId: "timebox-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/calendar",
+        "?focus=event-1&focusType=unknown"
+      )
+    ).toEqual({ entityType: "calendar_event", entityId: "event-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation("/artifacts/artifact%20one", "")
+    ).toEqual({ entityType: "artifact", entityId: "artifact one" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/psyche/questionnaires/instrument-1",
+        ""
+      )
+    ).toEqual({
+      entityType: "questionnaire_instrument",
+      entityId: "instrument-1"
+    });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/sports/workouts/workout-1",
+        ""
+      )
+    ).toEqual({ entityType: "workout_session", entityId: "workout-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation("/sleep", "?focus=sleep-1")
+    ).toEqual({ entityType: "sleep_session", entityId: "sleep-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/life-events",
+        "?focus=life-event-1"
+      )
+    ).toEqual({ entityType: "life_event", entityId: "life-event-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/psyche/modes/guide",
+        "?focus=guide-1"
+      )
+    ).toEqual({ entityType: "mode_guide_session", entityId: "guide-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/preferences",
+        "?tab=table&focusItem=preference-1"
+      )
+    ).toEqual({ entityType: "preference_item", entityId: "preference-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/preferences",
+        "?tab=concepts&focusCatalog=catalog-1"
+      )
+    ).toEqual({ entityType: "preference_catalog", entityId: "catalog-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/preferences",
+        "?tab=concepts&focusCatalogItem=catalog-item-1"
+      )
+    ).toEqual({
+      entityType: "preference_catalog_item",
+      entityId: "catalog-item-1"
+    });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/preferences",
+        "?tab=contexts&focusContext=context-1"
+      )
+    ).toEqual({ entityType: "preference_context", entityId: "context-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/knowledge-graph",
+        "?focus=tag%3Atag-1"
+      )
+    ).toEqual({ entityType: "tag", entityId: "tag-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/knowledge-graph",
+        "?focus=event_type%3Aevent-type-1"
+      )
+    ).toEqual({ entityType: "event_type", entityId: "event-type-1" });
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/knowledge-graph",
+        "?focus=goal%3Agoal-1"
+      )
+    ).toBeNull();
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/psyche/questionnaires/new",
+        ""
+      )
+    ).toBeNull();
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/health/sleep",
+        "?focus=sleep-1"
+      )
+    ).toBeNull();
+    expect(
+      resolveEntityNavigationTargetFromLocation(
+        "/health/sports",
+        "?focus=workout-1"
+      )
+    ).toBeNull();
+    expect(
+      resolveEntityNavigationTargetFromLocation("/tasks/%E0%A4%A", "")
+    ).toBeNull();
+    expect(
+      resolveEntityNavigationTargetFromLocation("/overview", "")
+    ).toBeNull();
   });
 
   it("infers readable titles and details from varied entity shapes", () => {
@@ -111,13 +244,15 @@ describe("action bar helpers", () => {
 
     expect(wikiFilter?.entityTypes).toEqual(["note"]);
     expect(getActionBarEntityTypesForFilters([wikiFilter!])).toEqual(["note"]);
-    expect(entityMatchesActionBarFilters("note", { kind: "wiki" }, [wikiFilter!]))
-      .toBe(true);
+    expect(
+      entityMatchesActionBarFilters("note", { kind: "wiki" }, [wikiFilter!])
+    ).toBe(true);
     expect(
       entityMatchesActionBarFilters("note", { kind: "evidence" }, [wikiFilter!])
     ).toBe(false);
-    expect(entityMatchesActionBarFilters("note", { kind: "wiki" }, [noteFilter!]))
-      .toBe(false);
+    expect(
+      entityMatchesActionBarFilters("note", { kind: "wiki" }, [noteFilter!])
+    ).toBe(false);
     expect(
       entityMatchesActionBarFilters("note", { kind: "evidence" }, [noteFilter!])
     ).toBe(true);
@@ -154,9 +289,9 @@ describe("action bar helpers", () => {
     expect(
       buildActionBarCreateActionMatches("create habit", actions)[0]?.id
     ).toBe("habit");
-    expect(buildActionBarCreateActionMatches("new report", actions)[0]?.id).toBe(
-      "trigger_report"
-    );
+    expect(
+      buildActionBarCreateActionMatches("new report", actions)[0]?.id
+    ).toBe("trigger_report");
     expect(
       buildActionBarCreateActionMatches("create wiki page", actions)[0]?.id
     ).toBe("wiki_page");
@@ -173,16 +308,20 @@ describe("action bar helpers", () => {
       (filter) => filter.id === "habit" || filter.id === "trigger_report"
     );
 
-    expect(createActionMatchesActionBarFilters(habitAction, selectedFilters)).toBe(
-      true
-    );
-    expect(createActionMatchesActionBarFilters(reportAction, selectedFilters)).toBe(
-      true
-    );
+    expect(
+      createActionMatchesActionBarFilters(habitAction, selectedFilters)
+    ).toBe(true);
+    expect(
+      createActionMatchesActionBarFilters(reportAction, selectedFilters)
+    ).toBe(true);
   });
 
   it("scores closer title matches higher than loose matches", () => {
-    const exact = scoreActionBarMatch("forge", "Forge", "forge control surface");
+    const exact = scoreActionBarMatch(
+      "forge",
+      "Forge",
+      "forge control surface"
+    );
     const loose = scoreActionBarMatch(
       "forge",
       "Calendar",

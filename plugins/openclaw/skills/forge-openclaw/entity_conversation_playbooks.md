@@ -742,6 +742,7 @@ entity-style aliases. Treat each pair as the same user-facing flow and normalize
 internally before asking questions:
 
 - `attentionInbox` and `attention_inbox`
+- `entityNavigation` and `entity_navigation`
 - `operatorOverview` and `operator_overview`
 - `operatorContext` and `operator_context`
 - `calendarOverview` and `calendar_overview`
@@ -800,6 +801,10 @@ still knowing the exact write/read family before it acts.
   `forge_call_attention_route` to list the bounded queue or snooze, dismiss, and
   restore eligible returned items. Never invent queue records, use batch CRUD, or
   dismiss blocked and overdue work.
+- `entity_navigation`: canonical pins plus actor-scoped recent history. Use
+  `forge_call_entity_navigation_route` with `list` or `touch`. Touch only an exact
+  record the agent actually viewed. Pin and unpin remain human-operator-only in the
+  Forge Action Bar and are intentionally absent from agent tools.
 - `operator_overview`: read-model-only operator surface. Use
   `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
   the current Forge picture, attention cues, or broad status before choosing a
@@ -2412,6 +2417,40 @@ Preferred opening question:
 
 - "What kind of next move are you trying to find: a decision, blocked work, a review,
   or a system repair?"
+
+## Entity Navigation
+
+Aim: help the current actor reopen a canonical pinned record or resume something
+they actually viewed recently, without turning navigation history into another form.
+
+Arc:
+
+1. List the bounded pinned and recent records before asking the user to reconstruct
+   a title or entity type from memory.
+2. Ask which returned record they mean only when more than one plausible match exists.
+3. Open the exact canonical target and explain when a pinned target is deleted or
+   unavailable instead of silently substituting another record.
+4. Touch a record only after the agent actually viewed that exact in-scope record.
+5. When the user wants to pin or unpin, direct them to the Forge Action Bar so the
+   deliberate choice remains human-controlled.
+
+Lane-to-route map:
+
+- Use the dedicated `forge_call_entity_navigation_route` with `list` or `touch`. Pins
+  are canonical shared or user-owned references; recent history is isolated to the
+  current actor.
+- Pin and unpin are not agent operations and must not be attempted through batch CRUD
+  or an invented route.
+
+Ready to act when:
+
+- a list result identifies the record to reopen, or
+- the agent has actually viewed the exact entity type and id it will touch
+
+Preferred opening question:
+
+- "Are you trying to reopen something pinned, something you viewed recently, or the
+  record we just looked at?"
 
 ## Life Events
 

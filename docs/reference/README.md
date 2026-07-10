@@ -11,5 +11,6 @@ These files are durable Forge references for setup, architecture, and current op
 - [Preferences system](./preferences-system.md)
 - [Artifact Store](./artifact-store.md)
 - [Life Events](./life-events.md)
+- [Pins and recent records](./entity-navigation.md)
 - [Public repo workflow](./public-repo-workflow.md)
 - [Repository structure](./repository-structure.md)

@@ -532,6 +532,9 @@ import {
   attentionInboxDismissSchema,
   attentionInboxQuerySchema,
   attentionInboxSnoozeSchema,
+  entityNavigationPinInputSchema,
+  entityNavigationQuerySchema,
+  entityNavigationTouchInputSchema,
   defaultAgentBootstrapPolicy,
   defaultAgentScopePolicy,
   createAgentActionSchema,
@@ -642,6 +645,12 @@ import {
   listAttentionInbox,
   transitionAttentionInboxState
 } from "./services/attention-inbox.js";
+import {
+  listEntityNavigation,
+  pinEntity,
+  touchEntityNavigation,
+  unpinEntity
+} from "./services/entity-navigation.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -3033,7 +3042,9 @@ const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
   operatorContext: "/api/v1/operator/context",
   operator_context: "/api/v1/operator/context",
   attentionInbox: "/api/v1/attention-inbox",
-  attention_inbox: "/api/v1/attention-inbox"
+  attention_inbox: "/api/v1/attention-inbox",
+  entityNavigation: "/api/v1/entity-navigation",
+  entity_navigation: "/api/v1/entity-navigation"
 } as const satisfies Record<string, string>;
 
 function classifyOnboardingEntity(
@@ -3150,6 +3161,8 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_get_self_observation_calendar | forge_create_entities | forge_update_entities";
     case "attention_inbox":
       return "forge_call_attention_route";
+    case "entity_navigation":
+      return "forge_call_entity_navigation_route";
     case "movement":
       return "forge_call_movement_route";
     case "life_force":
@@ -3195,6 +3208,8 @@ function buildPreferredReadPath(entityType: string) {
       return "/api/v1/operator/context";
     case "attention_inbox":
       return "/api/v1/attention-inbox";
+    case "entity_navigation":
+      return "/api/v1/entity-navigation";
     case "movement":
       return "/api/v1/movement/day | /api/v1/movement/month | /api/v1/movement/all-time | /api/v1/movement/timeline | /api/v1/movement/places | /api/v1/movement/boxes/:id | /api/v1/movement/trips/:id | /api/v1/movement/selection | /api/v1/movement/settings";
     case "life_force":
@@ -3211,6 +3226,8 @@ function buildPreferredReadPath(entityType: string) {
 const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   attention_inbox:
     "Specialized route surface: attention. Route tool: forge_call_attention_route. Route keys: list, snooze, dismiss, restore.",
+  entity_navigation:
+    "Specialized route surface: entityNavigation. Route tool: forge_call_entity_navigation_route. Route keys: list, touch. Pin and unpin remain human-operator-only.",
   life_event:
     "Specialized route surface: lifeEvents. Route tool: forge_call_life_event_route. Route keys: timeline, read, calendarSync, fromCalendarEvent, importTicket, travelStatus.",
   movement:
@@ -4196,6 +4213,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "Use the known-target fast path when the user already supplied the object, action, and likely lane: for normal entities ask only for parent, owner, or duplicate disambiguation that changes the write; for task hierarchy ask only for the project, issue, or parent task that changes placement; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice; for direct Psyche saves ask one accuracy or consent question instead of restarting exploration.",
   "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for catalog entities, use named tools or documented routes for specialized CRUD and action workflows, and for Movement, Life Events, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. Never hide placeholders in query or body, and never guess a nearby path.",
   "For Attention, list the bounded queue through forge_call_attention_route before acting unless the user supplied a stable item id from a current read. Use only an action present in allowedActions, pass the id through pathParams.id, never dismiss blocked or overdue work, and treat snooze or dismiss as reversible actor-scoped decisions rather than edits to the source record.",
+  "For pins and recent records, use forge_call_entity_navigation_route. Agents may list bounded pins and their own actor-scoped recent history or touch an existing in-scope record after viewing it. Pin and unpin are deliberate human-operator actions and must not be attempted through an agent tool, batch CRUD, or an invented route.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
   "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, flashcard for a brief rehearsable reminder to use during a trigger or urge, and wiki_page for durable memory.",
   "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
@@ -5723,6 +5741,23 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"snooze","pathParams":{"id":"attn:insight:ins_123"},"body":{"until":"2026-07-11T09:00:00.000Z","note":"Review after the morning planning block."}}'
   },
   {
+    toolName: "forge_call_entity_navigation_route",
+    summary:
+      "List canonical pins and this agent's recent records, or record one in-scope view.",
+    whenToUse:
+      "Use when the user asks what is pinned or recently opened, or when the agent has just read a specific Forge record and should place that record in its own recent history.",
+    inputShape:
+      '{ routeKey: "list"|"touch", query?: { pinnedLimit?: number, recentLimit?: number, userIds?: string[] }, body?: { entityType: CrudEntityType, entityId: string } }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "List is bounded to at most 25 pins and 25 recent records and remains inside effective user, project, and tag scope.",
+      "Touch requires body.entityType and body.entityId and updates only the calling agent actor's recent history.",
+      "Agents cannot pin or unpin. Those actions require an authenticated human operator session and are intentionally absent from this tool."
+    ],
+    example:
+      '{"routeKey":"touch","body":{"entityType":"project","entityId":"project_123"}}'
+  },
+  {
     toolName: "forge_call_artifact_route",
     summary:
       "Call one allowed Artifact Store route for trusted file upload, metadata, scans, enrichment, generic entity links, trust state, versions, or audit.",
@@ -6803,6 +6838,36 @@ function buildAgentOnboardingPayload(request: {
             "Snooze and dismiss are reversible, actor-scoped decisions. Newer source evidence automatically makes an old decision active again."
           ]
         },
+        entityNavigation: {
+          classification: "specialized_domain_surface",
+          aliases: ["entity_navigation", "pins", "recents", "recent records"],
+          routeTool: "forge_call_entity_navigation_route",
+          summary:
+            "Canonical cross-surface pins plus actor-scoped recently viewed records. Agents can list bounded state and touch records they actually viewed; human operators alone decide what is pinned.",
+          routeKeys: ["list", "touch"],
+          routeSelectionQuestions: [
+            "Is the user trying to reopen something pinned or recently viewed, or did the agent just view a record that should enter its own recent history?",
+            "For a touch, which exact existing entity type and id did the agent actually view?",
+            "If the user wants to pin or unpin, should the agent open the Forge Action Bar so the human can make that deliberate choice?"
+          ],
+          methodRoutes: {
+            list: "GET /api/v1/entity-navigation",
+            touch: "POST /api/v1/entity-navigation/touch"
+          },
+          readRoutes: {
+            list: "/api/v1/entity-navigation"
+          },
+          writeRoutes: {
+            touch: "/api/v1/entity-navigation/touch"
+          },
+          notes: [
+            "Use pinnedLimit and recentLimit, each at most 25. Do not bulk-load unbounded navigation history.",
+            "Recent history is isolated by operator or token actor and filtered through effective user, project, and tag scope.",
+            "Touch only after reading or opening the exact target. It does not mutate the target record.",
+            "Pin and unpin routes require a human operator session and are intentionally absent from agent route tools and HTTP mirrors.",
+            "Pinned deleted or missing records stay visible as unavailable so the human can unpin or inspect the settings bin; unavailable recents stay hidden."
+          ]
+        },
         lifeEvents: {
           classification: "specialized_domain_surface",
           aliases: ["life_event", "life-events", "Life Events"],
@@ -7329,6 +7394,8 @@ function buildAgentOnboardingPayload(request: {
       calendarOverview: "/api/v1/calendar/overview",
       settingsBin: "/api/v1/settings/bin",
       attentionInbox: "/api/v1/attention-inbox",
+      entityNavigation: "/api/v1/entity-navigation",
+      entityNavigationTouch: "/api/v1/entity-navigation/touch",
       batchSearch: "/api/v1/entities/search",
       psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
       psycheEventTypes: "/api/v1/psyche/event-types",
@@ -7370,6 +7437,7 @@ function buildAgentOnboardingPayload(request: {
       uiWorkflow: ["forge_get_ui_entrypoint"],
       specializedDomainWorkflow: [
         "forge_call_attention_route",
+        "forge_call_entity_navigation_route",
         "forge_call_movement_route",
         "forge_call_life_event_route",
         "forge_call_life_force_route",
@@ -7383,6 +7451,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_restore_entities"
       ],
       attentionWorkflow: ["forge_call_attention_route"],
+      entityNavigationWorkflow: ["forge_call_entity_navigation_route"],
       entityWorkflow: [
         "forge_search_entities",
         "forge_create_entities",
@@ -7460,6 +7529,8 @@ function buildAgentOnboardingPayload(request: {
         "For Movement, Life Events, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, calendar match, ticket import, travel status, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, event detail or timeline for Life Events, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, event, artifact, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-events, /forge/v1/life-force, and /forge/v1/workbench.",
       attentionRule:
         "For Attention, use forge_call_attention_route with list, snooze, dismiss, or restore. Read list first unless the user supplied an item id from a current queue; verify allowedActions before acting; fill pathParams.id with the stable returned id; and do not use batch CRUD, invent an attention record, or dismiss blocked or overdue work. The canonical path is /api/v1/attention-inbox and the OpenClaw HTTP mirror is /forge/v1/attention.",
+      entityNavigationRule:
+        "For pins and recents, use forge_call_entity_navigation_route with list or touch. Use bounded list reads for canonical pins and the current agent actor's recent records. Touch only after the agent actually viewed the exact in-scope entityType and entityId. Agents cannot pin or unpin; those deliberate actions remain human-operator-only in the Forge Action Bar. The canonical paths are /api/v1/entity-navigation and /api/v1/entity-navigation/touch, and the agent HTTP mirror is /forge/v1/entity-navigation.",
       artifactStoreRule:
         "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, decrypt, open, run, execute, transform, preview stored file bytes, or submit artifact passwords as an agent; downloads and password encryption actions are human-operator-only.",
       reviewShortcutRule:
@@ -7514,6 +7585,8 @@ function buildAgentOnboardingPayload(request: {
         "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools.",
       attentionRouteToolRule:
         "forge_call_attention_route expects { routeKey, pathParams?, query?, body? }. Use list with state, limit, offset, and optional effective-scope filters; use snooze, dismiss, or restore only with pathParams.id from a current result and only when allowedActions includes that action. Snooze requires body.until; dismiss may include body.note; restore needs no body.",
+      entityNavigationRouteToolRule:
+        "forge_call_entity_navigation_route expects { routeKey, query?, body? }. Use list with pinnedLimit, recentLimit, and optional effective-scope userIds. Use touch only with body.entityType and body.entityId for a record the agent actually viewed. Pin and unpin are not agent operations.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
@@ -15293,6 +15366,104 @@ export async function buildServer(
         state: "active"
       })
     };
+  });
+  const entityNavigationActorKeyFor = (
+    auth: ReturnType<typeof authenticateRequest>
+  ) => (auth.token ? `token:${auth.token.id}` : "operator");
+  const entityNavigationScopeFor = (
+    auth: ReturnType<typeof authenticateRequest>,
+    query?: Record<string, unknown>
+  ) => {
+    const readScope = resolveEffectiveReadScope(query, auth);
+    const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+      scope: readScope,
+      validUserIds: listUsers().map((user) => user.id)
+    });
+    return {
+      userIds: scopedUserIdsForReads,
+      projectIds: readScope.projectIds,
+      tagIds: readScope.tagIds
+    };
+  };
+  app.get("/api/v1/entity-navigation", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/entity-navigation" }
+    );
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const query = entityNavigationQuerySchema.parse(rawQuery);
+    return listEntityNavigation({
+      actorKey: entityNavigationActorKeyFor(auth),
+      ...entityNavigationScopeFor(auth, rawQuery),
+      pinnedLimit: query.pinnedLimit,
+      recentLimit: query.recentLimit
+    });
+  });
+  app.put("/api/v1/entity-navigation/pins", async (request, reply) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/entity-navigation/pins" }
+    );
+    const input = entityNavigationPinInputSchema.parse(request.body ?? {});
+    const result = pinEntity({
+      actorKey: entityNavigationActorKeyFor(auth),
+      ...input
+    });
+    if (result.status === "user_not_found") {
+      throw new HttpError(
+        400,
+        "entity_navigation_user_not_found",
+        "The selected pin owner does not exist."
+      );
+    }
+    if (result.status === "entity_not_found" || !result.item) {
+      throw new HttpError(
+        404,
+        "entity_navigation_target_not_found",
+        "The record is unavailable and cannot be pinned."
+      );
+    }
+    reply.code(201);
+    return { pin: result.item };
+  });
+  app.delete("/api/v1/entity-navigation/pins/:id", async (request) => {
+    const auth = requireOperatorSession(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/entity-navigation/pins/:id" }
+    );
+    const { id } = request.params as { id: string };
+    if (
+      !unpinEntity({ actorKey: entityNavigationActorKeyFor(auth), pinId: id })
+    ) {
+      throw new HttpError(
+        404,
+        "entity_navigation_pin_not_found",
+        "Pin not found."
+      );
+    }
+    return { unpinned: true, pinId: id };
+  });
+  app.post("/api/v1/entity-navigation/touch", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/entity-navigation/touch" }
+    );
+    const input = entityNavigationTouchInputSchema.parse(request.body ?? {});
+    const item = touchEntityNavigation({
+      actorKey: entityNavigationActorKeyFor(auth),
+      ...input,
+      scope: entityNavigationScopeFor(auth)
+    });
+    if (!item) {
+      throw new HttpError(
+        404,
+        "entity_navigation_target_not_found",
+        "The record is unavailable or outside the caller's scope."
+      );
+    }
+    return { recent: item };
   });
   app.get("/api/v1/approval-requests", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {

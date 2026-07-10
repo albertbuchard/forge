@@ -103,6 +103,11 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   a stable item id from a current queue. Use only actions returned in
   `allowedActions`, pass the id through `pathParams.id`, and never dismiss blocked or
   overdue work. The runtime path is `/api/v1/attention-inbox`.
+- Pins and recently viewed records use `forge_call_entity_navigation_route`.
+  `list` returns bounded canonical pins plus this agent actor's own recent history;
+  `touch` records an exact in-scope entity only after the agent actually viewed it.
+  Agents cannot pin or unpin. Those choices remain human-operator-only in the Forge
+  Action Bar. The runtime path is `/api/v1/entity-navigation`.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,

@@ -43,7 +43,10 @@ export function shouldPublishKnowledgeGraphPageDiagnostics() {
     return true;
   }
   try {
-    return new URLSearchParams(window.location.search).get("graphDiagnostics") === "1";
+    return (
+      new URLSearchParams(window.location.search).get("graphDiagnostics") ===
+      "1"
+    );
   } catch {
     return false;
   }
@@ -93,7 +96,9 @@ export function loadKnowledgeGraphPhysicsSettings() {
     return DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS;
   }
   try {
-    const raw = window.localStorage.getItem(KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(
+      KNOWLEDGE_GRAPH_PHYSICS_STORAGE_KEY
+    );
     if (!raw) {
       return DEFAULT_KNOWLEDGE_GRAPH_PHYSICS_SETTINGS;
     }
@@ -253,7 +258,7 @@ export function buildKnowledgeGraphQueryFromPageState(
     updatedFrom: state.updatedFrom,
     updatedTo: state.updatedTo,
     limit: state.maxNodes,
-    focusNodeId: null
+    focusNodeId: state.focusNodeId
   } satisfies KnowledgeGraphQuery;
 }
 
@@ -326,7 +331,8 @@ export function resolveKnowledgeGraphOverlaySyncAction({
 }) {
   const desiredFocusNodeId = isMobile ? null : focusNodeId;
   const desiredRequestKey = desiredFocusNodeId ?? CLEAR_OVERLAY_REQUEST_KEY;
-  const currentRequestKey = shellOverlayFocusNodeId ?? CLEAR_OVERLAY_REQUEST_KEY;
+  const currentRequestKey =
+    shellOverlayFocusNodeId ?? CLEAR_OVERLAY_REQUEST_KEY;
 
   if (desiredRequestKey === currentRequestKey) {
     return {

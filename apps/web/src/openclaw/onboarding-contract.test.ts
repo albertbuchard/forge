@@ -1153,6 +1153,7 @@ describe("forge onboarding contract", () => {
       onboarding.recommendedPluginTools?.specializedDomainWorkflow
     ).toEqual([
       "forge_call_attention_route",
+      "forge_call_entity_navigation_route",
       "forge_call_movement_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
