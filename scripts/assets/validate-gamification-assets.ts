@@ -9,7 +9,7 @@ import {
 } from "../../apps/web/src/lib/gamification-catalog.js";
 
 const projectRoot = path.resolve(import.meta.dirname, "../..");
-const publicRoot = path.join(projectRoot, "public");
+const publicRoot = path.join(projectRoot, "apps", "web", "public");
 const gamificationRoot = path.join(publicRoot, "gamification");
 const generatedManifestPath = path.join(
   gamificationRoot,
@@ -60,7 +60,9 @@ async function assertFile(pathname: string) {
 }
 
 async function fileHash(pathname: string) {
-  return createHash("sha256").update(await readFile(pathname)).digest("hex");
+  return createHash("sha256")
+    .update(await readFile(pathname))
+    .digest("hex");
 }
 
 async function assertSquareImage(pathname: string, size: number) {
@@ -87,7 +89,9 @@ async function assertCroppedImageHasContent(pathname: string) {
 
 async function assertTransparentSprite(pathname: string) {
   const image = sharp(pathname).ensureAlpha();
-  const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await image
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   const pixelCount = info.width * info.height;
   let transparent = 0;
   let opaque = 0;
@@ -118,33 +122,49 @@ async function assertTransparentSprite(pathname: string) {
     throw new Error(`${pathname} does not contain enough transparent area.`);
   }
   if (opaque / pixelCount < 0.01) {
-    throw new Error(`${pathname} does not contain enough opaque subject pixels.`);
+    throw new Error(
+      `${pathname} does not contain enough opaque subject pixels.`
+    );
   }
   if (greenKeyPixels / pixelCount > 0.002) {
-    throw new Error(`${pathname} still contains visible chroma-key background.`);
+    throw new Error(
+      `${pathname} still contains visible chroma-key background.`
+    );
   }
 }
 
 if (GAMIFICATION_CATALOG.length !== 144) {
-  throw new Error(`Expected 144 catalog items, found ${GAMIFICATION_CATALOG.length}`);
+  throw new Error(
+    `Expected 144 catalog items, found ${GAMIFICATION_CATALOG.length}`
+  );
 }
 
 const trophies = GAMIFICATION_CATALOG.filter((item) => item.kind === "trophy");
 const unlocks = GAMIFICATION_CATALOG.filter((item) => item.kind === "unlock");
 if (trophies.length !== 96 || unlocks.length !== 48) {
-  throw new Error(`Expected 96 trophies and 48 unlocks, found ${trophies.length}/${unlocks.length}`);
+  throw new Error(
+    `Expected 96 trophies and 48 unlocks, found ${trophies.length}/${unlocks.length}`
+  );
 }
 
 const xpOnlyTrophies = trophies.filter((item) => {
   const serialized = JSON.stringify(item.requirement);
-  return serialized.includes('"totalXp"') || serialized.includes('"nonManualXp"') || serialized.includes('"level"');
+  return (
+    serialized.includes('"totalXp"') ||
+    serialized.includes('"nonManualXp"') ||
+    serialized.includes('"level"')
+  );
 });
 if (xpOnlyTrophies.length >= trophies.length / 2) {
-  throw new Error("XP-only trophies must remain a minority of the gamification catalog.");
+  throw new Error(
+    "XP-only trophies must remain a minority of the gamification catalog."
+  );
 }
 
 if (GAMIFICATION_MASCOT_KEYS.length !== 30) {
-  throw new Error(`Expected 30 mascot state keys, found ${GAMIFICATION_MASCOT_KEYS.length}`);
+  throw new Error(
+    `Expected 30 mascot state keys, found ${GAMIFICATION_MASCOT_KEYS.length}`
+  );
 }
 
 for (const theme of themes) {
@@ -163,10 +183,17 @@ for (const theme of themes) {
       throw new Error(`${atlasPath} has no readable dimensions.`);
     }
     if (atlas.columns * atlas.rows < atlas.expectedCount) {
-      throw new Error(`${theme}/${atlas.key} atlas grid does not contain ${atlas.expectedCount} slots.`);
+      throw new Error(
+        `${theme}/${atlas.key} atlas grid does not contain ${atlas.expectedCount} slots.`
+      );
     }
-    if (metadata.width / atlas.columns < 96 || metadata.height / atlas.rows < 96) {
-      throw new Error(`${theme}/${atlas.key} atlas cells are too small for reliable cropping.`);
+    if (
+      metadata.width / atlas.columns < 96 ||
+      metadata.height / atlas.rows < 96
+    ) {
+      throw new Error(
+        `${theme}/${atlas.key} atlas cells are too small for reliable cropping.`
+      );
     }
   }
 }
@@ -183,24 +210,40 @@ for (const item of GAMIFICATION_CATALOG) {
 }
 
 const generatedManifestRaw = await readFile(generatedManifestPath, "utf8");
-const generatedManifest = JSON.parse(generatedManifestRaw) as GeneratedAssetRecord[];
+const generatedManifest = JSON.parse(
+  generatedManifestRaw
+) as GeneratedAssetRecord[];
 const generatedKeyByTheme = new Set(
   generatedManifest.map((entry) => `${entry.theme}:${entry.key}`)
 );
 
 for (const theme of themes) {
-  const themeRecords = generatedManifest.filter((entry) => entry.theme === theme);
-  const trophyAtlasRecords = themeRecords.filter((entry) => entry.atlasKey === "trophies");
-  const unlockAtlasRecords = themeRecords.filter((entry) => entry.atlasKey === "unlocks");
-  const mascotAtlasRecords = themeRecords.filter((entry) => entry.atlasKey === "mascots");
+  const themeRecords = generatedManifest.filter(
+    (entry) => entry.theme === theme
+  );
+  const trophyAtlasRecords = themeRecords.filter(
+    (entry) => entry.atlasKey === "trophies"
+  );
+  const unlockAtlasRecords = themeRecords.filter(
+    (entry) => entry.atlasKey === "unlocks"
+  );
+  const mascotAtlasRecords = themeRecords.filter(
+    (entry) => entry.atlasKey === "mascots"
+  );
   if (trophyAtlasRecords.length !== 100) {
-    throw new Error(`${theme} expected 100 cropped trophy sprites, found ${trophyAtlasRecords.length}`);
+    throw new Error(
+      `${theme} expected 100 cropped trophy sprites, found ${trophyAtlasRecords.length}`
+    );
   }
   if (unlockAtlasRecords.length !== 100) {
-    throw new Error(`${theme} expected 100 cropped cosmetic unlock sprites, found ${unlockAtlasRecords.length}`);
+    throw new Error(
+      `${theme} expected 100 cropped cosmetic unlock sprites, found ${unlockAtlasRecords.length}`
+    );
   }
   if (mascotAtlasRecords.length !== 30) {
-    throw new Error(`${theme} expected 30 cropped mascot states, found ${mascotAtlasRecords.length}`);
+    throw new Error(
+      `${theme} expected 30 cropped mascot states, found ${mascotAtlasRecords.length}`
+    );
   }
 
   for (const key of Object.keys(GAMIFICATION_ASSET_MANIFEST)) {
@@ -216,7 +259,10 @@ for (const record of generatedManifest) {
   await assertCroppedImageHasContent(sourcePath);
   await assertTransparentSprite(sourcePath);
   for (const size of [256, 512, 1024] as const) {
-    const relativeSpritePath = record.spritePath.replace("{size}", String(size));
+    const relativeSpritePath = record.spritePath.replace(
+      "{size}",
+      String(size)
+    );
     await assertSquareImage(path.join(publicRoot, relativeSpritePath), size);
     await assertSquareImage(
       path.join(publicRoot, relativeSpritePath.replace(/\.webp$/, ".png")),
@@ -232,7 +278,10 @@ for (const key of Object.keys(GAMIFICATION_ASSET_MANIFEST)) {
   await assertSquareImage(sourcePath, 1024);
   await assertTransparentSprite(sourcePath);
   for (const size of [256, 512, 1024] as const) {
-    const relativeSpritePath = manifest.spritePath.replace("{size}", String(size));
+    const relativeSpritePath = manifest.spritePath.replace(
+      "{size}",
+      String(size)
+    );
     await assertSquareImage(path.join(publicRoot, relativeSpritePath), size);
     await assertSquareImage(
       path.join(publicRoot, relativeSpritePath.replace(/\.webp$/, ".png")),
@@ -255,15 +304,46 @@ for (const item of GAMIFICATION_CATALOG) {
   itemSourceHashes.set(hash, item.assetKey);
 }
 
-const generatedHashes = new Set(generatedManifest.map((entry) => entry.perceptualHash));
+const generatedHashes = new Set(
+  generatedManifest.map((entry) => entry.perceptualHash)
+);
 if (generatedHashes.size !== generatedManifest.length) {
-  throw new Error("Generated asset manifest contains duplicated perceptual hashes.");
+  throw new Error(
+    "Generated asset manifest contains duplicated perceptual hashes."
+  );
 }
 
 for (const theme of themes) {
-  await assertFile(path.join(gamificationRoot, "source", "themes", theme, "sheets", "trophies-cropped-contact-sheet.png"));
-  await assertFile(path.join(gamificationRoot, "source", "themes", theme, "sheets", "unlocks-cropped-contact-sheet.png"));
-  await assertFile(path.join(gamificationRoot, "source", "themes", theme, "sheets", "mascots-contact-sheet.png"));
+  await assertFile(
+    path.join(
+      gamificationRoot,
+      "source",
+      "themes",
+      theme,
+      "sheets",
+      "trophies-cropped-contact-sheet.png"
+    )
+  );
+  await assertFile(
+    path.join(
+      gamificationRoot,
+      "source",
+      "themes",
+      theme,
+      "sheets",
+      "unlocks-cropped-contact-sheet.png"
+    )
+  );
+  await assertFile(
+    path.join(
+      gamificationRoot,
+      "source",
+      "themes",
+      theme,
+      "sheets",
+      "mascots-contact-sheet.png"
+    )
+  );
 }
 
 console.log(

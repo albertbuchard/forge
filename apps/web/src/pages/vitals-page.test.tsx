@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -19,7 +19,8 @@ vi.mock("@/components/shell/app-shell", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  getPsycheMetricsView: (...args: unknown[]) => getPsycheMetricsViewMock(...args),
+  getPsycheMetricsView: (...args: unknown[]) =>
+    getPsycheMetricsViewMock(...args),
   getVitalsView: (...args: unknown[]) => getVitalsViewMock(...args)
 }));
 
@@ -90,8 +91,26 @@ describe("VitalsPage", () => {
             deltaValue: -2,
             coverageDays: 12,
             days: [
-              { dateKey: "2026-04-14", average: 54, minimum: 52, maximum: 58, latest: 54, total: null, sampleCount: 6, latestSampleAt: "2026-04-14T06:30:00.000Z" },
-              { dateKey: "2026-04-15", average: 53, minimum: 51, maximum: 55, latest: 53, total: null, sampleCount: 6, latestSampleAt: "2026-04-15T06:30:00.000Z" }
+              {
+                dateKey: "2026-04-14",
+                average: 54,
+                minimum: 52,
+                maximum: 58,
+                latest: 54,
+                total: null,
+                sampleCount: 6,
+                latestSampleAt: "2026-04-14T06:30:00.000Z"
+              },
+              {
+                dateKey: "2026-04-15",
+                average: 53,
+                minimum: 51,
+                maximum: 55,
+                latest: 53,
+                total: null,
+                sampleCount: 6,
+                latestSampleAt: "2026-04-15T06:30:00.000Z"
+              }
             ]
           },
           {
@@ -106,8 +125,26 @@ describe("VitalsPage", () => {
             deltaValue: 4,
             coverageDays: 12,
             days: [
-              { dateKey: "2026-04-14", average: 61, minimum: 58, maximum: 64, latest: 61, total: null, sampleCount: 4, latestSampleAt: "2026-04-14T06:30:00.000Z" },
-              { dateKey: "2026-04-15", average: 64, minimum: 62, maximum: 66, latest: 64, total: null, sampleCount: 4, latestSampleAt: "2026-04-15T06:30:00.000Z" }
+              {
+                dateKey: "2026-04-14",
+                average: 61,
+                minimum: 58,
+                maximum: 64,
+                latest: 61,
+                total: null,
+                sampleCount: 4,
+                latestSampleAt: "2026-04-14T06:30:00.000Z"
+              },
+              {
+                dateKey: "2026-04-15",
+                average: 64,
+                minimum: 62,
+                maximum: 66,
+                latest: 64,
+                total: null,
+                sampleCount: 4,
+                latestSampleAt: "2026-04-15T06:30:00.000Z"
+              }
             ]
           },
           {
@@ -122,7 +159,16 @@ describe("VitalsPage", () => {
             deltaValue: 0.4,
             coverageDays: 7,
             days: [
-              { dateKey: "2026-04-15", average: 47.2, minimum: 47.2, maximum: 47.2, latest: 47.2, total: null, sampleCount: 1, latestSampleAt: "2026-04-15T07:00:00.000Z" }
+              {
+                dateKey: "2026-04-15",
+                average: 47.2,
+                minimum: 47.2,
+                maximum: 47.2,
+                latest: 47.2,
+                total: null,
+                sampleCount: 1,
+                latestSampleAt: "2026-04-15T07:00:00.000Z"
+              }
             ]
           }
         ]
@@ -180,8 +226,14 @@ describe("VitalsPage", () => {
     expect(screen.getByText("Recovery pulse")).toBeInTheDocument();
     expect(screen.getAllByText("53.0 bpm").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Resting heart rate").length).toBeGreaterThan(0);
-    expect(screen.getByText("Body signals should feel operational, not medical-chart dead.")).toBeInTheDocument();
-    expect(screen.getByText("12 tracked days across 5 metrics")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Body signals should feel operational, not medical-chart dead."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("12 tracked days across 5 metrics")
+    ).toBeInTheDocument();
   });
 
   it("renders Psyche metrics inside vitals when stored history exists", async () => {
@@ -235,8 +287,26 @@ describe("VitalsPage", () => {
             deltaValue: 4,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: 4, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 8, minimum: 8, maximum: 8, latest: 8, total: 8, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 4,
+                minimum: 4,
+                maximum: 4,
+                latest: 4,
+                total: 4,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 8,
+                minimum: 8,
+                maximum: 8,
+                latest: 8,
+                total: 8,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -251,8 +321,26 @@ describe("VitalsPage", () => {
             deltaValue: 12.5,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 12.5, minimum: 12.5, maximum: 12.5, latest: 12.5, total: null, sampleCount: 8, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 25, minimum: 25, maximum: 25, latest: 25, total: null, sampleCount: 12, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 12.5,
+                minimum: 12.5,
+                maximum: 12.5,
+                latest: 12.5,
+                total: null,
+                sampleCount: 8,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 25,
+                minimum: 25,
+                maximum: 25,
+                latest: 25,
+                total: null,
+                sampleCount: 12,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -267,8 +355,26 @@ describe("VitalsPage", () => {
             deltaValue: 2,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 3, minimum: 3, maximum: 3, latest: 3, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 5, minimum: 5, maximum: 5, latest: 5, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 3,
+                minimum: 3,
+                maximum: 3,
+                latest: 3,
+                total: null,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 5,
+                minimum: 5,
+                maximum: 5,
+                latest: 5,
+                total: null,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -283,8 +389,26 @@ describe("VitalsPage", () => {
             deltaValue: 2,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 6, minimum: 6, maximum: 6, latest: 6, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 4,
+                minimum: 4,
+                maximum: 4,
+                latest: 4,
+                total: null,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 6,
+                minimum: 6,
+                maximum: 6,
+                latest: 6,
+                total: null,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           }
         ]
@@ -294,10 +418,17 @@ describe("VitalsPage", () => {
     renderPage();
 
     expect(await screen.findByText("Psyche metrics")).toBeInTheDocument();
-    expect(screen.getByText("Conversation tone alongside body signals")).toBeInTheDocument();
+    expect(
+      screen.getByText("Conversation tone alongside body signals")
+    ).toBeInTheDocument();
     expect(screen.getByText("Cumulative rage profile")).toBeInTheDocument();
     expect(screen.getByText("Max rage peak")).toBeInTheDocument();
-    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain devrage baseline" })
+    );
+    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(
+      0
+    );
     expect(screen.getAllByText("Devrage swears").length).toBeGreaterThan(0);
   });
 });

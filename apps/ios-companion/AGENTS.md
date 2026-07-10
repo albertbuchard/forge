@@ -9,8 +9,8 @@ instructions when they conflict.
 
 Before making substantive changes anywhere in this subtree, read:
 
-1. `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/AGENTS.md`
-2. `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/CRITICAL_XCODE_PROJECT_RULES.md`
+1. `../../AGENTS.md`
+2. `CRITICAL_XCODE_PROJECT_RULES.md`
 
 If the task touches any of these files or concerns build, launch, signing, fullscreen
 behavior, app presentation, project structure, or Xcode configuration, the critical
@@ -26,8 +26,7 @@ rules file is mandatory and binding:
 
 ## Xcode project rule
 
-Treat `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion.xcodeproj`
-as the only live Xcode project for this subtree.
+Treat `ForgeCompanion.xcodeproj` as the only live Xcode project for this subtree.
 
 Do not create, regenerate, or replace Xcode project files casually.
 
@@ -62,10 +61,10 @@ When touching project/build settings:
 
 ## Verification
 
-When project/build settings change, verify with:
+When project/build settings change, run the following from `apps/ios-companion`:
 
-`xcodebuild -project /Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion.xcodeproj -scheme ForgeCompanion build -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO`
+`xcodebuild -project ForgeCompanion.xcodeproj -scheme ForgeCompanion build -destination 'platform=iOS Simulator,name=iPhone 17 Pro' CODE_SIGNING_ALLOWED=NO`
 
 If tests are relevant, also run:
 
-`xcodebuild -project /Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion.xcodeproj -scheme ForgeCompanion -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:ForgeCompanionTests test CODE_SIGNING_ALLOWED=NO`
+`xcodebuild -project ForgeCompanion.xcodeproj -scheme ForgeCompanion -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:ForgeCompanionTests test CODE_SIGNING_ALLOWED=NO`

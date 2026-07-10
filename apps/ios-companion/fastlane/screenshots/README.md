@@ -1,9 +1,8 @@
 ## Forge Companion App Store Screenshots
 
-Generate the current iPhone App Store screenshots with:
+From the Forge repository root, generate the current iPhone App Store screenshots with:
 
 ```bash
-cd /Users/omarclaw/Documents/aurel-monorepo/projects/forge
 npm run media:ios-companion:screenshots
 ```
 

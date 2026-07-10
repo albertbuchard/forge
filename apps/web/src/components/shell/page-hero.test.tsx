@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { PageHero } from "@/components/shell/page-hero";
 
@@ -12,11 +12,11 @@ describe("PageHero", () => {
       />
     );
 
-    expect(
-      screen.getByRole("button", {
-        name: /explain what the training load page shows and how to interpret it/i
-      })
-    ).toBeInTheDocument();
+    const helpButton = screen.getByRole("button", {
+      name: /explain what the training load page shows and how to interpret it/i
+    });
+    expect(helpButton).toBeInTheDocument();
+    fireEvent.click(helpButton);
     expect(screen.getByText("Training Load explained")).toBeInTheDocument();
     expect(
       screen.getAllByText(
@@ -35,6 +35,11 @@ describe("PageHero", () => {
       />
     );
 
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /explain what the vitals page shows and how to interpret it/i
+      })
+    );
     expect(
       screen.getByText(
         "Use this page to compare recent measurements with baseline ranges and data coverage before acting on a trend."

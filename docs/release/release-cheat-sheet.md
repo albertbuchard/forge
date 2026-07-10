@@ -43,8 +43,7 @@ npm exec --yes --package ./packages/forge-memory/forge-memory-${version}.tgz -- 
 All release tags must point at commits already on `main`. The workflows verify that.
 
 Registry-owned plugin releases must be prepared and tagged from the public Forge
-repository `albertbuchard/forge`, checked out at
-`/Users/omarclaw/Documents/aurel-monorepo/projects/forge`. Do not push OpenClaw,
+repository `albertbuchard/forge`, with commands run from its repository root. Do not push OpenClaw,
 Forge Memory, or Hermes release tags from the parent private monorepo
 `albertbuchard/aurel-monorepo`: npm and PyPI trusted publishing are registered to
 the public Forge repository and will reject parent-monorepo runs with npm
@@ -207,7 +206,7 @@ Formatting note:
 
 ## Local Prep Commands
 
-Run these from `/Users/omarclaw/Documents/aurel-monorepo/projects/forge`.
+Run these from the Forge repository root.
 
 ### OpenClaw
 
@@ -313,8 +312,8 @@ Icon rule:
 Then tag:
 
 ```bash
-git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge tag ios-testflight-v1.0
-git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge push origin ios-testflight-v1.0
+git tag ios-testflight-v1.0
+git push origin ios-testflight-v1.0
 ```
 
 ### iOS App Store
@@ -329,8 +328,8 @@ Before tagging:
 Then tag:
 
 ```bash
-git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge tag ios-app-store-v1.0
-git -C /Users/omarclaw/Documents/aurel-monorepo/projects/forge push origin ios-app-store-v1.0
+git tag ios-app-store-v1.0
+git push origin ios-app-store-v1.0
 ```
 
 iOS release rule:

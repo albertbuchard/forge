@@ -20,7 +20,7 @@ launch/display configuration.
 
 The only live Xcode project for the iOS companion is:
 
-`/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion.xcodeproj`
+`apps/ios-companion/ForgeCompanion.xcodeproj`
 
 Do not recreate nested project copies under `ForgeCompanion/`.
 
@@ -40,9 +40,9 @@ explicit user approval:
 
 Relevant files:
 
-- `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion.xcodeproj/project.pbxproj`
-- `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion/Info.plist`
-- `/Users/omarclaw/Documents/aurel-monorepo/projects/forge/apps/ios-companion/ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist`
+- `apps/ios-companion/ForgeCompanion.xcodeproj/project.pbxproj`
+- `apps/ios-companion/ForgeCompanion/Info.plist`
+- `apps/ios-companion/ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist`
 
 ## Repair procedure when build/project issues appear
 

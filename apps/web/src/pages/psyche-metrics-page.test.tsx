@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -10,7 +10,8 @@ const { getPsycheMetricsViewMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  getPsycheMetricsView: (...args: unknown[]) => getPsycheMetricsViewMock(...args)
+  getPsycheMetricsView: (...args: unknown[]) =>
+    getPsycheMetricsViewMock(...args)
 }));
 
 vi.mock("@/components/shell/page-hero", () => ({
@@ -104,7 +105,9 @@ describe("PsycheMetricsPage", () => {
     renderPage();
 
     expect(await screen.findByText("Psyche Metrics")).toBeInTheDocument();
-    expect(screen.getAllByText("No daily metrics yet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No daily metrics yet").length).toBeGreaterThan(
+      0
+    );
     expect(
       screen.getByText(/after the first local backfill finds conversations/i)
     ).toBeInTheDocument();
@@ -161,8 +164,26 @@ describe("PsycheMetricsPage", () => {
             deltaValue: 4,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: 4, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 8, minimum: 8, maximum: 8, latest: 8, total: 8, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 4,
+                minimum: 4,
+                maximum: 4,
+                latest: 4,
+                total: 4,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 8,
+                minimum: 8,
+                maximum: 8,
+                latest: 8,
+                total: 8,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -177,8 +198,26 @@ describe("PsycheMetricsPage", () => {
             deltaValue: 12.5,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 12.5, minimum: 12.5, maximum: 12.5, latest: 12.5, total: null, sampleCount: 8, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 25, minimum: 25, maximum: 25, latest: 25, total: null, sampleCount: 12, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 12.5,
+                minimum: 12.5,
+                maximum: 12.5,
+                latest: 12.5,
+                total: null,
+                sampleCount: 8,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 25,
+                minimum: 25,
+                maximum: 25,
+                latest: 25,
+                total: null,
+                sampleCount: 12,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -193,8 +232,26 @@ describe("PsycheMetricsPage", () => {
             deltaValue: 2,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 3, minimum: 3, maximum: 3, latest: 3, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 5, minimum: 5, maximum: 5, latest: 5, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 3,
+                minimum: 3,
+                maximum: 3,
+                latest: 3,
+                total: null,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 5,
+                minimum: 5,
+                maximum: 5,
+                latest: 5,
+                total: null,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           },
           {
@@ -209,8 +266,26 @@ describe("PsycheMetricsPage", () => {
             deltaValue: 2,
             coverageDays: 2,
             days: [
-              { dateKey: "2026-05-13", average: 4, minimum: 4, maximum: 4, latest: 4, total: null, sampleCount: 1, latestSampleAt: "2026-05-13T00:00:00.000Z" },
-              { dateKey: "2026-05-14", average: 6, minimum: 6, maximum: 6, latest: 6, total: null, sampleCount: 2, latestSampleAt: "2026-05-14T00:00:00.000Z" }
+              {
+                dateKey: "2026-05-13",
+                average: 4,
+                minimum: 4,
+                maximum: 4,
+                latest: 4,
+                total: null,
+                sampleCount: 1,
+                latestSampleAt: "2026-05-13T00:00:00.000Z"
+              },
+              {
+                dateKey: "2026-05-14",
+                average: 6,
+                minimum: 6,
+                maximum: 6,
+                latest: 6,
+                total: null,
+                sampleCount: 2,
+                latestSampleAt: "2026-05-14T00:00:00.000Z"
+              }
             ]
           }
         ]
@@ -221,12 +296,19 @@ describe("PsycheMetricsPage", () => {
 
     expect(await screen.findByText("4 daily metrics")).toBeInTheDocument();
     expect(screen.getByText("Cumulative rage profile")).toBeInTheDocument();
-    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain devrage baseline" })
+    );
+    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(
+      0
+    );
     expect(screen.getByText("Devrage count")).toBeInTheDocument();
     expect(screen.getAllByText("Average rage peak").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Max rage peak").length).toBeGreaterThan(0);
     expect(screen.getByText("Summary statistics")).toBeInTheDocument();
-    expect(screen.getByText(/12 total swears across stored history/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/12 total swears across stored history/i)
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Devrage swears").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Period min").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Period avg").length).toBeGreaterThan(0);
@@ -234,6 +316,8 @@ describe("PsycheMetricsPage", () => {
     expect(screen.getAllByText("4 swears").length).toBeGreaterThan(0);
     expect(screen.getByText("6 swears")).toBeInTheDocument();
     expect(screen.getAllByText("8 swears").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /full screen/i }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /full screen/i }).length
+    ).toBeGreaterThan(0);
   });
 });

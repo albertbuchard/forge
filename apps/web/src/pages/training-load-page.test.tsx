@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -435,12 +435,19 @@ describe("TrainingLoadPage", () => {
     expect(screen.getByText("Productive")).toBeInTheDocument();
     expect(screen.getByText("Zone intelligence")).toBeInTheDocument();
     expect(screen.getByText("Combat readiness")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Explain Acute load" }));
     expect(
       screen.getByText(/Acute load is the last seven days/i)
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain smart training modes" })
+    );
     expect(
       screen.getByText(/Smart modes do not change the underlying data/i)
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain next training targets" })
+    );
     expect(
       screen.getByText(/Next targets translate the selected mode/i)
     ).toBeInTheDocument();
