@@ -836,7 +836,7 @@ private struct MovementLifeTimelineView: View {
     }
 
     private var initialScrollTargetId: String {
-        displayItems.last?.id ?? MovementLifeTimelineItem.currentAnchorId
+        movementTimelineInitialScrollTargetId(items: displayItems)
     }
 
     private var oldestTimelineItem: MovementLifeTimelineItem? {
@@ -3055,7 +3055,6 @@ private struct MovementTimelineStayShape: View {
                 .frame(width: item.isCurrent ? 206 : 182, height: item.displayHeight)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
     }
 }
 
@@ -3148,7 +3147,6 @@ private struct MovementTimelineTripShape: View {
             .frame(width: item.isCurrent ? 206 : 192, height: item.displayHeight, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .id(item.isCurrent ? MovementLifeTimelineItem.currentAnchorId : item.id)
     }
 }
 
@@ -3287,6 +3285,11 @@ func movementViewportItemDisplayHeight(
         return baseHeight
     }
     return max(baseHeight, MovementTimelineViewportLayout.selectedActionPanelMinHeight)
+}
+
+func movementTimelineInitialScrollTargetId(items: [MovementLifeTimelineItem]) -> String {
+    items.last(where: { $0.kind != .anchor })?.id
+        ?? MovementLifeTimelineItem.currentAnchorId
 }
 
 func movementViewportYPosition(

@@ -14,18 +14,41 @@ platform :ios do
     setup_ci if ENV["CI"] && ci_uses_fastlane_setup?
   end
 
+  desc "Audit Forge Companion release metadata, target versions, and protected bundle settings without archiving"
+  lane :audit_release_contract do
+    config = load_release_config
+    validate_release_inputs!(config: config, mode: "validate", require_api_key: false)
+    verify_release_target_versions!(
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: current_build_number
+    )
+    UI.success("Forge Companion release contract is internally consistent.")
+  end
+
   desc "Validate Forge Companion release inputs and produce a local archive without uploading"
   lane :validate_release do |options|
     config = load_release_config
     mode = normalized_release_mode(options[:mode] || "validate")
     metadata_state = validate_release_inputs!(config: config, mode: mode, require_api_key: false)
+    marketing_version = config.dig(:version, :marketing).to_s
+    build_number = current_build_number
+    synchronize_release_target_versions!(
+      marketing_version: marketing_version,
+      build_number: build_number
+    )
     artifact_dir = prepare_artifact_dir(options[:artifact_dir], mode: "validate")
     archive_path = File.join(artifact_dir, "ForgeCompanion.xcarchive")
     ipa_path = build_release_archive!(
       artifact_dir: artifact_dir,
       archive_path: archive_path,
-      marketing_version: config.dig(:version, :marketing).to_s,
+      marketing_version: marketing_version,
       bump_build_number: false
+    )
+    verify_release_archive_bundle_versions!(
+      archive_path: archive_path,
+      config: config,
+      marketing_version: marketing_version,
+      build_number: build_number
     )
     write_release_summary(
       artifact_dir: artifact_dir,
@@ -33,7 +56,7 @@ platform :ios do
       config: config,
       archive_path: archive_path,
       ipa_path: ipa_path,
-      build_number: current_build_number,
+      build_number: build_number,
       metadata_state: metadata_state,
       uploaded: false,
       submitted_for_review: false
@@ -56,6 +79,12 @@ platform :ios do
       archive_path: archive_path,
       marketing_version: config.dig(:version, :marketing).to_s,
       bump_build_number: false
+    )
+    verify_release_archive_bundle_versions!(
+      archive_path: archive_path,
+      config: config,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
     )
     testflight_groups = Array(config.dig(:release, :testflight_groups))
       .map { |group| group.to_s.strip }
@@ -112,6 +141,12 @@ platform :ios do
       archive_path: archive_path,
       marketing_version: config.dig(:version, :marketing).to_s,
       bump_build_number: false
+    )
+    verify_release_archive_bundle_versions!(
+      archive_path: archive_path,
+      config: config,
+      marketing_version: config.dig(:version, :marketing).to_s,
+      build_number: build_number
     )
     upload_to_app_store(
       api_key: api_key,
@@ -430,7 +465,8 @@ def verify_project_bundle_ids!(config)
   expected = {
     "ForgeCompanion" => config.dig(:app, :primary_bundle_id),
     "ForgeWatch Watch App" => config.dig(:app, :watch_bundle_ids, 0),
-    "ForgeWatchExtension" => config.dig(:app, :watch_bundle_ids, 1)
+    "ForgeWatchExtension" => config.dig(:app, :watch_bundle_ids, 1),
+    "ForgeScreenTimeReportExtension" => config.dig(:app, :extension_bundle_ids, 0)
   }
 
   expected.each do |target_name, bundle_id|
@@ -484,10 +520,19 @@ def validate_metadata!(config:, mode:)
 end
 
 def validate_release_inputs!(config:, mode:, require_api_key:)
+  validate_release_version_config!(config)
   verify_project_bundle_ids!(config)
+  verify_protected_app_release_contract!
   metadata_state = validate_metadata!(config: config, mode: mode)
   app_store_connect_api_key_from_env if require_api_key && ENV["FORGE_RELEASE_SKIP_REMOTE_VALIDATION"] != "1"
   metadata_state
+end
+
+def validate_release_version_config!(config)
+  marketing_version = config.dig(:version, :marketing).to_s.strip
+  UI.user_error!(
+    "release.version.marketing must use three numeric components such as 1.0.154"
+  ) unless marketing_version.match?(/\A\d+\.\d+\.\d+\z/)
 end
 
 def ci_uses_fastlane_setup?
@@ -612,6 +657,7 @@ def synchronize_release_target_versions!(marketing_version:, build_number:)
   end
 
   project.save
+  verify_protected_app_release_contract!
   verify_release_target_versions!(
     marketing_version: marketing_version,
     build_number: build_number
@@ -655,14 +701,160 @@ def verify_release_target_versions!(marketing_version:, build_number:)
   end
 end
 
+def read_release_plist!(plist_path)
+  raw = File.binread(plist_path)
+  CFPropertyList.native_types(CFPropertyList::List.new(data: raw).value)
+rescue StandardError => error
+  UI.user_error!("Could not read release plist #{plist_path}: #{error.message}")
+end
+
+def verify_protected_app_plist_data!(plist, context:)
+  required_array_entries = {
+    "BGTaskSchedulerPermittedIdentifiers" => [
+      "com.albertbuchard.ForgeCompanion.health-sync",
+      "com.albertbuchard.ForgeCompanion.health-sync.processing"
+    ],
+    "UIBackgroundModes" => ["fetch", "location", "processing"],
+    "UISupportedInterfaceOrientations" => ["UIInterfaceOrientationPortrait"]
+  }
+  required_array_entries.each do |key, expected_entries|
+    actual_entries = Array(plist[key]).map(&:to_s)
+    missing_entries = expected_entries - actual_entries
+    UI.user_error!(
+      "#{context} is missing protected #{key} values: #{missing_entries.join(", ")}"
+    ) unless missing_entries.empty?
+  end
+
+  required_boolean_values = {
+    "ITSAppUsesNonExemptEncryption" => false,
+    "UIApplicationSupportsIndirectInputEvents" => true,
+    "UIRequiresFullScreen" => true
+  }
+  required_boolean_values.each do |key, expected_value|
+    UI.user_error!(
+      "#{context} must keep protected #{key}=#{expected_value}"
+    ) unless plist.key?(key) && plist[key] == expected_value
+  end
+
+  launch_screen = plist["UILaunchScreen"]
+  UI.user_error!(
+    "#{context} must keep the protected UILaunchScreen dictionary and UIImageName key"
+  ) unless launch_screen.is_a?(Hash) && launch_screen.key?("UIImageName")
+end
+
+def verify_protected_app_release_contract!
+  project = Xcodeproj::Project.open(xcode_project_path)
+  target = project.targets.find { |candidate| candidate.name == "ForgeCompanion" }
+  UI.user_error!("Missing release target ForgeCompanion") unless target
+
+  expected_build_settings = {
+    "TARGETED_DEVICE_FAMILY" => "1",
+    "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" => "AccentColor",
+    "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents" => "YES",
+    "INFOPLIST_KEY_UILaunchScreen_Generation" => "YES",
+    "INFOPLIST_KEY_UIRequiresFullScreen" => "YES",
+    "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone" => "UIInterfaceOrientationPortrait"
+  }
+  target.build_configurations.each do |build_config|
+    expected_build_settings.each do |key, expected_value|
+      actual_value = build_config.build_settings[key].to_s
+      UI.user_error!(
+        "ForgeCompanion #{build_config.name} must keep protected #{key}=#{expected_value}; got #{actual_value.inspect}"
+      ) unless actual_value == expected_value
+    end
+  end
+
+  plist_paths = target.build_configurations.filter_map do |build_config|
+    resolve_project_relative_path(build_config.build_settings["INFOPLIST_FILE"])
+  end.uniq
+  UI.user_error!("ForgeCompanion target does not resolve to exactly one Info.plist") unless plist_paths.length == 1
+  plist_path = plist_paths.first
+  UI.user_error!("ForgeCompanion Info.plist is missing at #{plist_path}") unless File.exist?(plist_path)
+  verify_protected_app_plist_data!(
+    read_release_plist!(plist_path),
+    context: "ForgeCompanion source Info.plist"
+  )
+end
+
+def verify_release_archive_bundle_versions!(archive_path:, config:, marketing_version:, build_number:)
+  applications_path = File.join(archive_path, "Products", "Applications")
+  UI.user_error!("Release archive has no Applications directory: #{applications_path}") unless Dir.exist?(applications_path)
+
+  expected_bundle_ids = [
+    config.dig(:app, :primary_bundle_id),
+    *Array(config.dig(:app, :watch_bundle_ids)),
+    *Array(config.dig(:app, :extension_bundle_ids))
+  ].map { |bundle_id| bundle_id.to_s.strip }.reject(&:empty?).uniq
+  UI.user_error!("Release config does not declare any bundle identifiers") if expected_bundle_ids.empty?
+
+  archived_bundles = {}
+  embedded_release_bundle_ids = []
+  Dir.glob(File.join(applications_path, "**", "Info.plist")).sort.each do |plist_path|
+    plist = read_release_plist!(plist_path)
+    bundle_id = plist["CFBundleIdentifier"].to_s
+    if ["APPL", "XPC!"].include?(plist["CFBundlePackageType"].to_s) && bundle_id.empty? == false
+      embedded_release_bundle_ids << bundle_id
+    end
+    next unless expected_bundle_ids.include?(bundle_id)
+
+    UI.user_error!("Release archive contains duplicate bundle identifier #{bundle_id}") if archived_bundles.key?(bundle_id)
+    if bundle_id == config.dig(:app, :primary_bundle_id).to_s
+      verify_protected_app_plist_data!(plist, context: "Archived ForgeCompanion Info.plist")
+    end
+    archived_bundles[bundle_id] = {
+      path: plist_path,
+      marketing_version: plist["CFBundleShortVersionString"].to_s,
+      build_number: plist["CFBundleVersion"].to_s
+    }
+  end
+
+  missing_bundle_ids = expected_bundle_ids - archived_bundles.keys
+  UI.user_error!(
+    "Release archive is missing configured bundles: #{missing_bundle_ids.join(", ")}"
+  ) unless missing_bundle_ids.empty?
+
+  unexpected_bundle_ids = embedded_release_bundle_ids.uniq - expected_bundle_ids
+  UI.user_error!(
+    "Release archive contains unconfigured app or extension bundles: #{unexpected_bundle_ids.join(", ")}"
+  ) unless unexpected_bundle_ids.empty?
+
+  mismatches = archived_bundles.filter_map do |bundle_id, bundle|
+    next if bundle[:marketing_version] == marketing_version && bundle[:build_number] == build_number.to_s
+
+    "#{bundle_id} has #{bundle[:marketing_version]} (#{bundle[:build_number]}) at #{bundle[:path]}"
+  end
+  UI.user_error!(
+    "Release archive version mismatch; expected #{marketing_version} (#{build_number}): #{mismatches.join("; ")}"
+  ) unless mismatches.empty?
+
+  UI.success(
+    "Verified #{archived_bundles.length} archived bundles at #{marketing_version} (#{build_number})."
+  )
+end
+
 def current_build_number
   project_dir = File.dirname(xcode_project_path)
   command = "cd #{Shellwords.escape(project_dir)} && xcrun agvtool what-version -terse"
-  Actions.sh(command, log: false).strip
-rescue StandardError
-  info_plist_path = File.join(project_dir, "ForgeCompanion", "Info.plist")
-  UI.important("Falling back to #{info_plist_path} for CFBundleVersion because agvtool is unavailable")
-  Actions.sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' #{Shellwords.escape(info_plist_path)}", log: false).strip
+  raw_build_number = begin
+    Actions.sh(command, log: false)
+  rescue StandardError
+    info_plist_path = File.join(project_dir, "ForgeCompanion", "Info.plist")
+    UI.important("Falling back to #{info_plist_path} for CFBundleVersion because agvtool is unavailable")
+    Actions.sh(
+      "/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' #{Shellwords.escape(info_plist_path)}",
+      log: false
+    )
+  end
+  normalize_release_build_number!(raw_build_number)
+end
+
+def normalize_release_build_number!(raw_build_number)
+  values = raw_build_number.to_s.lines.map(&:strip).reject(&:empty?).uniq
+  UI.user_error!(
+    "Release targets must share one positive integer build number; got #{values.inspect}"
+  ) unless values.length == 1 && values.first.match?(/\A[1-9]\d*\z/)
+
+  values.first
 end
 
 def asc_api_key_available?

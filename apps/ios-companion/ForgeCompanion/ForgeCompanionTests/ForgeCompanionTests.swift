@@ -4091,6 +4091,41 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(visibleAroundGym.allSatisfy { $0.boxBottom >= 0 })
     }
 
+    func testMovementTimelineInitialScrollTargetsLatestRealItem() {
+        let first = makeDisplayItem(
+            id: "first-stay",
+            kind: .stay,
+            title: "Home",
+            placeLabel: "Home",
+            startedAt: Date(timeIntervalSince1970: 1_000),
+            endedAt: Date(timeIntervalSince1970: 2_000),
+            durationSeconds: 1_000,
+            origin: .recorded
+        )
+        let current = makeDisplayItem(
+            id: "current-stay",
+            kind: .stay,
+            title: "Office",
+            placeLabel: "Office",
+            startedAt: Date(timeIntervalSince1970: 2_000),
+            endedAt: Date(timeIntervalSince1970: 3_000),
+            durationSeconds: 1_000,
+            origin: .recorded
+        )
+        let anchor = MovementLifeTimelineItem.currentAnchor(
+            referenceDate: Date(timeIntervalSince1970: 3_000)
+        )
+
+        XCTAssertEqual(
+            movementTimelineInitialScrollTargetId(items: [first, current, anchor]),
+            current.id
+        )
+        XCTAssertEqual(
+            movementTimelineInitialScrollTargetId(items: [anchor]),
+            MovementLifeTimelineItem.currentAnchorId
+        )
+    }
+
     func testMovementStoreCachesCanonicalProjectedBoxesFromBootstrap() {
         let projected = try! loadSharedMovementFixture(
             id: "user_defined_missing_override"

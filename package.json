@@ -41,6 +41,7 @@
     "build:openclaw-plugin": "npm --prefix plugins/openclaw run build",
     "test:forge-memory": "npm --prefix packages/forge-memory test",
     "pack:forge-memory": "cd packages/forge-memory && npm pack",
+    "release:ios-companion:audit": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh audit",
     "release:ios-companion:validate": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh validate",
     "release:ios-companion:testflight": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh testflight",
     "release:ios-companion:app-store": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh app-store",

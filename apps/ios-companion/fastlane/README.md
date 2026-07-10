@@ -15,6 +15,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
+### ios audit_release_contract
+
+```sh
+[bundle exec] fastlane ios audit_release_contract
+```
+
+Audit Forge Companion release metadata, target versions, and protected bundle settings without archiving
+
 ### ios validate_release
 
 ```sh

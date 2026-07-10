@@ -113,22 +113,27 @@ The deeper transport reference lives in `docs/reference/companion-iroh.md`.
 
 ## App Store release automation
 
-This repo now includes a one-command Apple release flow for the iPhone companion and
-its embedded watch targets.
+This repo now includes a one-command Apple release flow for the iPhone companion,
+its embedded watch targets, and the Screen Time report extension.
 
 Public entrypoint:
 
+- `./apps/ios-companion/scripts/publish-forge-companion.sh audit`
 - `./apps/ios-companion/scripts/publish-forge-companion.sh validate`
 - `./apps/ios-companion/scripts/publish-forge-companion.sh testflight`
 - `./apps/ios-companion/scripts/publish-forge-companion.sh app-store`
 
 The script bootstraps a local Fastlane toolchain under `apps/ios-companion/vendor/bundle`,
-runs Forge repo checks, archives the canonical generated Xcode project at
+runs Forge repo checks, archives the canonical live Xcode project at
 `apps/ios-companion/ForgeCompanion.xcodeproj`, and then uploads or submits
 depending on the selected mode. It prefers an already-installed modern Ruby and only
 falls back to Homebrew Ruby bootstrap when no suitable Ruby is available. It also
 repairs a missing `rubygems.org` source for that Ruby automatically and can unlock a
-local signing keychain when `FORGE_IOS_KEYCHAIN_PASSWORD` is set.
+local signing keychain when `FORGE_IOS_KEYCHAIN_PASSWORD` is set. Every lane checks
+the protected launch, fullscreen, background-processing, input, and encryption plist
+contract. Archive lanes also verify that every configured app, watch, and extension
+bundle is embedded with the exact requested marketing version and build number.
+The `audit` mode needs no Apple credentials, archive, or signing identity.
 
 This repo now also includes tag-driven GitHub Actions release workflows:
 
@@ -160,7 +165,8 @@ Before the script can publish successfully, make sure App Store Connect / Apple
 Developer already has:
 
 - an app record for `Forge Companion`
-- the iPhone bundle id and watch companion bundle ids configured correctly
+- the iPhone, watch companion, watch extension, and Screen Time report extension
+  bundle ids configured correctly
 - an App Store Connect API key with permission to upload builds and manage releases
 - a persistent Apple Distribution certificate export and matching provisioning
   profiles prepared for CI import

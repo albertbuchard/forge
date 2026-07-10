@@ -4,9 +4,11 @@ app:
   watch_bundle_ids:
     - com.albertbuchard.ForgeCompanion.watchkitapp
     - com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch
+  extension_bundle_ids:
+    - com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension
 
 version:
-  marketing: "1.0.153"
+  marketing: "1.0.154"
 
 release:
   default_mode: testflight

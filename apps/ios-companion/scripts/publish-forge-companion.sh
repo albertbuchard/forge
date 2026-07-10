@@ -39,6 +39,7 @@ unlock_release_keychain_if_configured() {
 usage() {
   cat <<'EOF'
 Usage:
+  ./apps/ios-companion/scripts/publish-forge-companion.sh audit
   ./apps/ios-companion/scripts/publish-forge-companion.sh validate
   ./apps/ios-companion/scripts/publish-forge-companion.sh testflight
   ./apps/ios-companion/scripts/publish-forge-companion.sh app-store
@@ -53,7 +54,7 @@ EOF
 }
 
 case "${MODE}" in
-  validate|testflight|app-store) ;;
+  audit|validate|testflight|app-store) ;;
   *)
     usage
     fail "Unsupported mode '${MODE}'."
@@ -61,15 +62,16 @@ case "${MODE}" in
 esac
 
 ENV_FILE="${IOS_DIR}/.release.env"
-[[ -f "${ENV_FILE}" ]] || fail "Missing ${ENV_FILE}. Copy ${IOS_DIR}/.release.env.example first."
-
-set -a
-source "${ENV_FILE}"
-set +a
+if [[ "${MODE}" != "audit" ]]; then
+  [[ -f "${ENV_FILE}" ]] || fail "Missing ${ENV_FILE}. Copy ${IOS_DIR}/.release.env.example first."
+  set -a
+  source "${ENV_FILE}"
+  set +a
+fi
 
 : "${FORGE_APPLE_TEAM_ID:=KZ65F7924F}"
 
-if [[ "${FORGE_RELEASE_SKIP_REMOTE_VALIDATION:-0}" != "1" ]]; then
+if [[ "${MODE}" != "audit" && "${FORGE_RELEASE_SKIP_REMOTE_VALIDATION:-0}" != "1" ]]; then
   [[ -n "${FORGE_ASC_KEY_ID:-}" ]] || fail "Missing FORGE_ASC_KEY_ID in ${ENV_FILE}."
   [[ -n "${FORGE_ASC_ISSUER_ID:-}" ]] || fail "Missing FORGE_ASC_ISSUER_ID in ${ENV_FILE}."
   if [[ -z "${FORGE_ASC_KEY_PATH:-}" && -z "${FORGE_ASC_KEY_CONTENT_BASE64:-}" ]]; then
@@ -108,7 +110,9 @@ if ! "${RUBY_BIN}" -S bundle -v >/dev/null 2>&1; then
   "${RUBY_BIN}" -S gem install bundler --no-document
 fi
 
-unlock_release_keychain_if_configured
+if [[ "${MODE}" != "audit" ]]; then
+  unlock_release_keychain_if_configured
+fi
 
 info "Installing Fastlane gems locally under apps/ios-companion/vendor/bundle."
 (
@@ -129,29 +133,42 @@ else
   )
 fi
 
-TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
-ARTIFACT_DIR="${IOS_DIR}/.artifacts/releases/${MODE}-${TIMESTAMP}"
-mkdir -p "${ARTIFACT_DIR}"
-
 FASTLANE_LANE="validate_release"
 case "${MODE}" in
+  audit) FASTLANE_LANE="audit_release_contract" ;;
   validate) FASTLANE_LANE="validate_release" ;;
   testflight) FASTLANE_LANE="testflight_release" ;;
   app-store) FASTLANE_LANE="app_store_release" ;;
 esac
 
-info "Running Fastlane lane '${FASTLANE_LANE}'. Artifacts will be written to ${ARTIFACT_DIR}."
-(
-  cd "${IOS_DIR}"
-  BUNDLE_GEMFILE="${IOS_DIR}/Gemfile" \
-  BUNDLE_PATH="${IOS_DIR}/vendor/bundle" \
-  FORGE_RELEASE_ARTIFACT_DIR="${ARTIFACT_DIR}" \
-  FASTLANE_SKIP_UPDATE_CHECK=1 \
-  "${RUBY_BIN}" -S bundle exec fastlane ios "${FASTLANE_LANE}" artifact_dir:"${ARTIFACT_DIR}" mode:"${MODE}"
-)
+if [[ "${MODE}" == "audit" ]]; then
+  info "Running Fastlane lane '${FASTLANE_LANE}' without archiving or signing."
+  (
+    cd "${IOS_DIR}"
+    BUNDLE_GEMFILE="${IOS_DIR}/Gemfile" \
+    BUNDLE_PATH="${IOS_DIR}/vendor/bundle" \
+    FASTLANE_SKIP_UPDATE_CHECK=1 \
+    "${RUBY_BIN}" -S bundle exec fastlane ios "${FASTLANE_LANE}"
+  )
+  info "Release contract audit completed."
+else
+  TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
+  ARTIFACT_DIR="${IOS_DIR}/.artifacts/releases/${MODE}-${TIMESTAMP}"
+  mkdir -p "${ARTIFACT_DIR}"
 
-info "Release flow completed."
-info "Artifacts: ${ARTIFACT_DIR}"
-if [[ -f "${ARTIFACT_DIR}/release-summary.json" ]]; then
-  info "Summary: ${ARTIFACT_DIR}/release-summary.json"
+  info "Running Fastlane lane '${FASTLANE_LANE}'. Artifacts will be written to ${ARTIFACT_DIR}."
+  (
+    cd "${IOS_DIR}"
+    BUNDLE_GEMFILE="${IOS_DIR}/Gemfile" \
+    BUNDLE_PATH="${IOS_DIR}/vendor/bundle" \
+    FORGE_RELEASE_ARTIFACT_DIR="${ARTIFACT_DIR}" \
+    FASTLANE_SKIP_UPDATE_CHECK=1 \
+    "${RUBY_BIN}" -S bundle exec fastlane ios "${FASTLANE_LANE}" artifact_dir:"${ARTIFACT_DIR}" mode:"${MODE}"
+  )
+
+  info "Release flow completed."
+  info "Artifacts: ${ARTIFACT_DIR}"
+  if [[ -f "${ARTIFACT_DIR}/release-summary.json" ]]; then
+    info "Summary: ${ARTIFACT_DIR}/release-summary.json"
+  fi
 fi

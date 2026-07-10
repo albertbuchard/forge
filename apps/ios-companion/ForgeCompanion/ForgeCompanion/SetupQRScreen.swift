@@ -22,64 +22,65 @@ struct SetupQRScreen: View {
             .padding(.horizontal, 20)
             .padding(.top, 18)
 
-            Spacer(minLength: 0)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    Text("Scan your Forge QR.")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
 
-            VStack(alignment: .leading, spacing: 22) {
-                Text("Scan your Forge QR.")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textPrimary)
+                    Text("This is the default private connection path. Forge Companion receives the desktop node and one-time token, then verifies the session before any sync starts.")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Text("This is the default private connection path. Forge Companion receives the desktop node and one-time token, then verifies the session before any sync starts.")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 12) {
+                        step("1", "Run npx forge-memory and choose iOS pairing, or open Forge Settings -> Mobile.")
+                        step("2", "Scan the compact QR, or paste the saved payload if the camera cannot read it.")
+                        step("3", "Approve Health access after pairing so Forge can start the first sync.")
+                    }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    step("1", "Run npx forge-memory and choose iOS pairing, or open Forge Settings -> Mobile.")
-                    step("2", "Scan the compact QR, or paste the saved payload if the camera cannot read it.")
-                    step("3", "Approve Health access after pairing so Forge can start the first sync.")
-                }
+                    CompanionSectionCard {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "lock.shield")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(CompanionStyle.accentStrong)
+                                .frame(width: 28, height: 28)
 
-                CompanionSectionCard {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "lock.shield")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(CompanionStyle.accentStrong)
-                            .frame(width: 28, height: 28)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Tailscale is preferred when it is available.")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(CompanionStyle.textPrimary)
 
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Tailscale is preferred when it is available.")
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(CompanionStyle.textPrimary)
-
-                            Text("Forge uses the QR transport exactly as paired: Tailscale/LAN direct when reachable, or Iroh only for Iroh pairings.")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(CompanionStyle.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                                Text("Forge uses the QR transport exactly as paired: Tailscale/LAN direct when reachable, or Iroh only for Iroh pairings.")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(CompanionStyle.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
-                }
 
-                Button("Open camera scanner") {
-                    companionDebugLog("SetupQRScreen", "tap Open scanner")
-                    scannerVisible = true
-                }
-                .buttonStyle(CompanionFilledButtonStyle())
+                    Button("Open camera scanner") {
+                        companionDebugLog("SetupQRScreen", "tap Open scanner")
+                        scannerVisible = true
+                    }
+                    .buttonStyle(CompanionFilledButtonStyle())
 
-                Button("Paste pairing payload") {
-                    companionDebugLog("SetupQRScreen", "tap Paste pairing payload")
-                    openManual()
-                }
-                .buttonStyle(CompanionGhostButtonStyle())
+                    Button("Paste pairing payload") {
+                        companionDebugLog("SetupQRScreen", "tap Paste pairing payload")
+                        openManual()
+                    }
+                    .buttonStyle(CompanionGhostButtonStyle())
 
-                if let error = appModel.latestError {
-                    Text(error)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(CompanionStyle.destructive)
+                    if let error = appModel.latestError {
+                        Text(error)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.destructive)
+                    }
                 }
+                .padding(.bottom, 34)
             }
             .padding(.horizontal, 26)
-            .padding(.bottom, 34)
+            .padding(.top, 30)
 
             Spacer(minLength: 0)
         }

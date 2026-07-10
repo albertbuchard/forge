@@ -51,8 +51,8 @@ final class ForgeCompanionUITests: XCTestCase {
         scanButton.tap()
 
         XCTAssertTrue(app.staticTexts["Scan your Forge QR."].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Open camera scanner"].isHittable)
-        XCTAssertTrue(app.buttons["Paste pairing payload"].isHittable)
+        XCTAssertTrue(scrollUntilHittable(app.buttons["Open camera scanner"], in: app))
+        XCTAssertTrue(scrollUntilHittable(app.buttons["Paste pairing payload"], in: app))
     }
 
     @MainActor
@@ -62,6 +62,7 @@ final class ForgeCompanionUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Life Timeline"].waitForExistence(timeout: 8))
+        attachScreenshot(named: "Life Timeline initial state")
 
         let segmentButtons = app.buttons.matching(identifier: "MovementTimelineStaySegmentButton")
         XCTAssertTrue(segmentButtons.firstMatch.waitForExistence(timeout: 8))
@@ -84,7 +85,10 @@ final class ForgeCompanionUITests: XCTestCase {
 
         let sheetLabelButton = app.buttons["MovementTimelineDetailSheetLabelLocationButton"]
         XCTAssertTrue(sheetLabelButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(sheetLabelButton.isHittable)
+        XCTAssertTrue(
+            scrollUntilHittable(sheetLabelButton, in: app),
+            "Detail-sheet label action was not reachable.\n\(app.debugDescription)"
+        )
         sheetLabelButton.tap()
 
         XCTAssertTrue(app.navigationBars["Set Location Label"].waitForExistence(timeout: 5))
@@ -102,6 +106,26 @@ final class ForgeCompanionUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["FORGE_COMPANION_DISABLE_SIMULATOR_AUTOMATION"] = "1"
         return app
+    }
+
+    private func attachScreenshot(named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard element.waitForExistence(timeout: 3) else {
+            return false
+        }
+        for _ in 0..<5 {
+            if element.isHittable {
+                return true
+            }
+            app.swipeUp()
+        }
+        return element.isHittable
     }
 
     private func tapFirstHittable(in query: XCUIElementQuery) -> Bool {

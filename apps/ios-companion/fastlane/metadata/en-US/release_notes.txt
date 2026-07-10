@@ -1,5 +1,5 @@
-Forge Companion 1.0.153 surfaces Forge's Attention inbox on iPhone and Apple Watch.
+Forge Companion 1.0.154 adds shared pinned records across Forge.
 
-The iPhone menu now shows the active Attention count and the first item that needs review. The watch Inbox adds a compact summary of active, important, and blocking items, followed by up to three read-only item cards.
+Pin important records from iPhone and open them directly from Apple Watch. Forge keeps the same pinned set across the web app, iPhone, watch, and trusted agents.
 
-Pairing tokens, upload checkpoints, HealthKit data, watch action persistence, and stored user data are unchanged.
+Pairing tokens, HealthKit data, watch action persistence, and stored user data are unchanged.

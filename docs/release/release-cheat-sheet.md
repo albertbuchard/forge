@@ -289,7 +289,8 @@ Before tagging:
 1. update `apps/ios-companion/release/release.yml`
 2. update `apps/ios-companion/fastlane/metadata/en-US/release_notes.txt`
 3. replace any metadata placeholders if still present
-4. commit and push to `main`
+4. run `npm run release:ios-companion:audit`
+5. commit and push to `main`
 
 For upload/process/changelog-only TestFlight builds, keep
 `release.skip_testflight_submission: true` and `release.testflight_groups: []`.
