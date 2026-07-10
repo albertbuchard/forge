@@ -1,7 +1,5 @@
-Forge Companion 1.0.152 tightens watchOS direct sync and paired-iPhone backup behavior for Tailscale pairings.
+Forge Companion 1.0.153 surfaces Forge's Attention inbox on iPhone and Apple Watch.
 
-When the watch gets a live Forge acknowledgement for an action that was also saved in the paired-iPhone backup queue, the phone now removes that acknowledged duplicate from its durable relay queue. This prevents already-accepted watch actions from being replayed later by the phone backup path.
-
-The watch Sync screen also uses clearer wording: direct HTTPS is shown as the primary path, and the paired iPhone is described only as backup when direct sync cannot run.
+The iPhone menu now shows the active Attention count and the first item that needs review. The watch Inbox adds a compact summary of active, important, and blocking items, followed by up to three read-only item cards.
 
 Pairing tokens, upload checkpoints, HealthKit data, watch action persistence, and stored user data are unchanged.
