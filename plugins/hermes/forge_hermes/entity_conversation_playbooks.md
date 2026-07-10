@@ -548,6 +548,11 @@ enough to act.
 - For read-model and review surfaces, the minimum is the practical question plus any
   scope that would change the answer. Once you have that, read the overview instead
   of asking for a preferred report shape.
+- For Attention, list as soon as the user asks what needs a next move. Snooze,
+  dismiss, or restore only after a current read confirms the stable item id and
+  allowed action; snooze also needs a future return time. For Entity Navigation,
+  list once the retrieval question is clear and touch only an exact in-scope record
+  the agent actually viewed. Pin and unpin stay human-only.
 - For specialized Movement, Life Events, Life Force, and Workbench writes, the minimum is the
   selected lane plus the surface-specific target and intended effect:
   Movement span/place/stay/trip/settings/correction, Life Event event/calendar
@@ -627,6 +632,9 @@ Use this before you choose an API path or ask for more structure.
   block", or "run this flow again".
 - For simple stored entities, once the lane is clear, fall back to the shared batch
   CRUD flow.
+- For Attention, choose list, snooze, dismiss, or restore through the dedicated tool
+  after a current queue read. For Entity Navigation, choose bounded list or exact
+  touch through its dedicated tool; never turn pin or unpin into an agent lane.
 - For Movement, Life Events, Life Force, and Workbench, use the lane
   to choose the dedicated route family before you ask for lower-level details.
 
@@ -648,6 +656,10 @@ as real work, not only as a create form.
   action.
 - Read-model surfaces need a practical read question plus scope. Do not ask
   write-shaped questions until the read creates a concrete follow-up.
+- Attention and Entity Navigation need bounded dedicated reads before action.
+  Attention actions require a current returned item and allowed action; Entity
+  Navigation touch requires the exact record the agent actually viewed. Neither
+  surface is batch CRUD, and agent tools never pin or unpin.
 - Movement, Life Events, Life Force, and Workbench need their dedicated operation lanes: review,
   correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or
   status. If the lane depends on current state, read first through the dedicated
@@ -688,6 +700,11 @@ Use this quick split before the conversation gets too detailed.
   `preference_signal`, and `self_observation` are action workflows. Start from what
   the user is trying to do, then use the dedicated action tool or note-backed write
   model.
+- `attention_inbox` and `entity_navigation` are specialized domain surfaces. Use
+  `forge_call_attention_route` for a bounded queue read and eligible snooze,
+  dismiss, or restore actions. Use `forge_call_entity_navigation_route` for bounded
+  pin/recent listing or an exact post-view touch. Do not route either surface through
+  batch CRUD, and do not attempt human-only pin or unpin actions.
 - `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
   `sports_overview`, and `training_load` are read-model-only surfaces. Use them
   when the user wants to understand current Forge state, work risk, calendar
@@ -727,11 +744,15 @@ user-facing API explanation.
    For `wiki_page`, `calendar_connection`, and `artifact`, verify route keys and
    method/path entries from live onboarding `specializedCrudEntities` before calling
    lower-level routes.
-5. For Movement, Life Events, Life Force, and Workbench, verify the `routeKey`, method, path, and
+5. For Attention and Entity Navigation, verify the selected `routeKey` against live
+   onboarding. Attention actions need a current stable item id and allowed action;
+   Entity Navigation touch needs the exact entity type and id actually viewed. Keep
+   pin and unpin outside agent execution.
+6. For Movement, Life Events, Life Force, and Workbench, verify the `routeKey`, method, path, and
    every placeholder in `methodRoutes`; fill `pathParams` by placeholder name before
    the call. Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,
    or use nearby guessed paths.
-6. After the call, confirm the product result in the user's language and run the
+7. After the call, confirm the product result in the user's language and run the
    verification read only when it proves a repair, explains impact, or grounds the
    next decision.
 
@@ -2392,13 +2413,17 @@ stored record type.
 
 Arc:
 
-1. Read the active queue before asking for item details unless the user already gave
-   a stable item id from a current read.
-2. Summarize the most consequential items by severity and source.
-3. Open the underlying record when the source itself needs action.
-4. Snooze only when an item is valid but not actionable yet. Dismiss only when the
+1. When the user asks what needs attention, read the active queue immediately instead
+   of asking them to classify the problem first.
+2. If the user names a specific item or action, refresh the queue unless they already
+   gave a stable item id from a current read.
+3. Reflect why the most consequential item matters now using its severity, source, and
+   current consequence. State uncertainty when the evidence does not establish urgency.
+4. Ask which item they want to handle only when more than one returned item plausibly
+   fits their request, then open the underlying record when the source itself needs action.
+5. Snooze only when an item is valid but not actionable yet. Dismiss only when the
    returned `allowedActions` permits it. Never dismiss blocked or overdue work.
-5. Restore a deferred item when the user wants it active again.
+6. Restore a deferred item when the user wants it active again.
 
 Lane-to-route map:
 
@@ -2409,14 +2434,16 @@ Lane-to-route map:
 
 Ready to act when:
 
-- a current queue read identifies the item
-- the requested action appears in `allowedActions`
+- the user has asked for a current queue read, or
+- a current queue read identifies the stable item id and the requested action appears
+  in `allowedActions`
 - snooze has a future return time
+- blocked or overdue work is being opened for source resolution, never dismissed
 
 Preferred opening question:
 
-- "What kind of next move are you trying to find: a decision, blocked work, a review,
-  or a system repair?"
+- "Should I look across Forge for what most needs a next move, or is there something
+  specific you already want to handle?"
 
 ## Entity Navigation
 
@@ -2444,8 +2471,11 @@ Lane-to-route map:
 
 Ready to act when:
 
-- a list result identifies the record to reopen, or
-- the agent has actually viewed the exact entity type and id it will touch
+- the dedicated published list route identifies the record to reopen, or
+- the agent has actually viewed the exact in-scope entity type and id it will touch
+
+Do not guess a nearby route or treat pin state as agent-owned when neither condition
+is true.
 
 Preferred opening question:
 

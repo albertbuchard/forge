@@ -246,6 +246,8 @@ describe("forge onboarding contract", () => {
       "training_load",
       "weight_loss",
       "wiki_page",
+      "attention_inbox",
+      "entity_navigation",
       "movement",
       "life_force",
       "workbench",
@@ -346,6 +348,12 @@ describe("forge onboarding contract", () => {
     );
     expect(readinessByType.get("life_event")).toMatch(
       /Life Event[\s\S]*working title[\s\S]*start\/end span[\s\S]*shared batch CRUD[\s\S]*published Life Events route key/i
+    );
+    expect(readinessByType.get("attention_inbox")).toMatch(
+      /Ready to list[\s\S]*published route key[\s\S]*current Attention read[\s\S]*stable item id[\s\S]*allowedActions[\s\S]*future return time[\s\S]*never dismissal/i
+    );
+    expect(readinessByType.get("entity_navigation")).toMatch(
+      /Ready to list[\s\S]*published route key[\s\S]*pinned or recently viewed[\s\S]*Ready to touch[\s\S]*actually viewed[\s\S]*exact in-scope entity type and id[\s\S]*human-operator-only/i
     );
     expect(readinessByType.get("movement")).toMatch(
       /Movement lane[\s\S]*time window[\s\S]*place[\s\S]*stay[\s\S]*trip[\s\S]*settings change[\s\S]*published route key/i
@@ -473,6 +481,8 @@ describe("forge onboarding contract", () => {
       "training_load",
       "weight_loss",
       "wiki_page",
+      "attention_inbox",
+      "entity_navigation",
       "movement",
       "life_force",
       "workbench",
@@ -1124,10 +1134,10 @@ describe("forge onboarding contract", () => {
           /quick capture[\s\S]*guided formulation[\s\S]*review-first[\s\S]*action-first[\s\S]*simple storage request/i
         ),
         operationLaneRule: expect.stringMatching(
-          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status[\s\S]*Psyche entities[\s\S]*formulation lane/i
+          /Normal stored entities[\s\S]*added, updated, reviewed or navigated, linked, or placed[\s\S]*Action workflows[\s\S]*start, continue, complete, adjust, judge, signal, publish, sync, or observe[\s\S]*Attention[\s\S]*list, snooze, dismiss, or restore[\s\S]*Entity Navigation[\s\S]*list or touch[\s\S]*pin and unpin stay human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*review, correct, repair, run, inspect, publish, preserve, calendar-sync, ticket-import, or status[\s\S]*Psyche entities[\s\S]*formulation lane/i
         ),
         specializedSurfaceRule: expect.stringMatching(
-          /Movement, Life Events, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-events[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
+          /Attention and Entity Navigation[\s\S]*forge_call_attention_route[\s\S]*forge_call_entity_navigation_route[\s\S]*pin or unpin human-only[\s\S]*Movement, Life Events, Life Force, and Workbench[\s\S]*forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*route-key tool is unavailable, stale, or missing[\s\S]*methodRoutes[\s\S]*do not fall back to generic batch CRUD[\s\S]*read the relevant view back[\s\S]*\/forge\/v1\/attention[\s\S]*\/forge\/v1\/entity-navigation[\s\S]*\/forge\/v1\/movement[\s\S]*\/forge\/v1\/life-events[\s\S]*\/forge\/v1\/life-force[\s\S]*\/forge\/v1\/workbench/i
         ),
         reviewShortcutRule: expect.stringMatching(
           /reviewing or correcting an existing record[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads[\s\S]*answer the practical question/i
@@ -1531,6 +1541,12 @@ describe("forge onboarding contract", () => {
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /review-first requests[\s\S]*correct read posture[\s\S]*shared batch search or read hints[\s\S]*wiki\/calendar dedicated reads[\s\S]*read-model routes[\s\S]*Movement, Life Events, Life Force, or Workbench dedicated reads/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /minimum save-readiness checkpoint[\s\S]*For Attention[\s\S]*stable returned item[\s\S]*allowedActions[\s\S]*For Entity Navigation[\s\S]*exact record the agent actually viewed[\s\S]*pin or unpin to the human operator/i
+    );
+    expect(onboarding.conversationRules.join(" ")).toMatch(
+      /route execution handoff[\s\S]*forge_call_attention_route[\s\S]*forge_call_entity_navigation_route[\s\S]*Never hide placeholders[\s\S]*never guess a nearby path/i
     );
     expect(onboarding.conversationRules.join(" ")).toMatch(
       /Self-observation is not the default container[\s\S]*behavior_pattern for a recurring loop and functional analysis/i

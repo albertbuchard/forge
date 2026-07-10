@@ -511,6 +511,7 @@ describe("question flow simulation cycles", () => {
     wiki_page: "Wiki Page",
     artifact: "Artifact",
     attention_inbox: "Attention",
+    entity_navigation: "Entity Navigation",
     preference_catalog: "Preference Catalog",
     preference_catalog_item: "Preference Catalog Item",
     preference_context: "Preference Context",
@@ -802,6 +803,18 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(
       /specialized Movement, Life Events, Life Force, and Workbench writes[\s\S]*selected lane[\s\S]*surface-specific target[\s\S]*Movement span\/place\/stay\/trip\/settings\/correction[\s\S]*Life Event event\/calendar[\s\S]*Life Force weekday\/profile\/signal[\s\S]*Workbench flow\/run\/node\/input\/output/i
     );
+    expect(entityPlaybook).toMatch(
+      /For Attention, list as soon as the user asks what needs a next move[\s\S]*stable item id[\s\S]*allowed action[\s\S]*For Entity Navigation[\s\S]*exact in-scope record[\s\S]*Pin and unpin stay human-only/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Operation lane checkpoint")).toMatch(
+      /For Attention[\s\S]*list, snooze, dismiss, or restore[\s\S]*For Entity Navigation[\s\S]*bounded list or exact[\s\S]*touch[\s\S]*never turn pin or unpin into an agent lane/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Route posture checkpoint")).toMatch(
+      /`attention_inbox` and `entity_navigation`[\s\S]*forge_call_attention_route[\s\S]*forge_call_entity_navigation_route[\s\S]*Do not route either surface through[\s\S]*batch CRUD/i
+    );
+    expect(getSectionSlice(entityPlaybook, "Route execution handoff")).toMatch(
+      /For Attention and Entity Navigation[\s\S]*routeKey[\s\S]*stable item id and allowed action[\s\S]*exact entity type and id actually viewed[\s\S]*pin and unpin outside agent execution/i
+    );
 
     for (const section of nonPsycheSections) {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
@@ -1023,6 +1036,35 @@ describe("question flow simulation cycles", () => {
       /frontmatter\.observedAt[\s\S]*forge_get_self_observation_calendar[\s\S]*forge_create_entities/i
     );
 
+    const attentionFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "attention_inbox"
+    )?.questionFlow;
+    expect(attentionFlow?.openingQuestion).toMatch(
+      /look across Forge[\s\S]*something specific/i
+    );
+    expect(attentionFlow?.askSequence.join("\n")).toMatch(
+      /read the active queue immediately[\s\S]*instead of asking them to guess[\s\S]*refresh the current queue[\s\S]*allowed actions[\s\S]*Reflect why the most consequential item matters now/i
+    );
+    expect(attentionFlow?.readinessCheck).toMatch(
+      /Ready to list[\s\S]*current Attention read[\s\S]*stable item id[\s\S]*allowedActions[\s\S]*future return time[\s\S]*never dismissal/i
+    );
+
+    const entityNavigationFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "entity_navigation"
+    )?.questionFlow;
+    expect(entityNavigationFlow?.openingQuestion).toMatch(
+      /reopen something pinned[\s\S]*viewed recently[\s\S]*record we just looked at/i
+    );
+    expect(entityNavigationFlow?.askSequence.join("\n")).toMatch(
+      /List the bounded pinned and recent records[\s\S]*more than one plausible target[\s\S]*exact canonical target[\s\S]*Touch a record only after the agent actually viewed[\s\S]*Forge Action Bar/i
+    );
+    expect(entityNavigationFlow?.readinessCheck).toMatch(
+      /published route key[\s\S]*without guessing[\s\S]*Ready to touch only after the agent actually viewed[\s\S]*exact in-scope entity type and id[\s\S]*human-operator-only/i
+    );
+    expect(entityNavigationFlow?.apiAccessHint).toMatch(
+      /Specialized route surface: entityNavigation[\s\S]*forge_call_entity_navigation_route[\s\S]*list[\s\S]*touch[\s\S]*Pin and unpin remain human-operator-only/i
+    );
+
     for (const entityType of ["movement", "life_force", "workbench"] as const) {
       const entry = onboarding.entityCatalog.find(
         (entry) => entry.entityType === entityType
@@ -1117,6 +1159,8 @@ describe("question flow simulation cycles", () => {
     );
 
     const specializedCapsules = [
+      ["attention_inbox", "attention"],
+      ["entity_navigation", "entityNavigation"],
       ["life_event", "lifeEvents"],
       ["movement", "movement"],
       ["life_force", "lifeForce"],

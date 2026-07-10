@@ -1,3 +1,8 @@
+---
+name: forge-codex
+description: Use Forge's curated MCP tools to read, create, update, link, review, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
+---
+
 # Forge Codex
 
 Use this plugin when you want Codex to work directly with Forge through the curated
