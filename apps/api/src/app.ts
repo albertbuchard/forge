@@ -529,6 +529,9 @@ import {
 import {
   activityListQuerySchema,
   activitySourceSchema,
+  attentionInboxDismissSchema,
+  attentionInboxQuerySchema,
+  attentionInboxSnoozeSchema,
   defaultAgentBootstrapPolicy,
   defaultAgentScopePolicy,
   createAgentActionSchema,
@@ -634,6 +637,11 @@ import {
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
+import {
+  getAttentionInboxItem,
+  listAttentionInbox,
+  transitionAttentionInboxState
+} from "./services/attention-inbox.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { createManagerRuntime } from "./managers/runtime.js";
@@ -3023,7 +3031,9 @@ const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
   operatorOverview: "/api/v1/operator/overview",
   operator_overview: "/api/v1/operator/overview",
   operatorContext: "/api/v1/operator/context",
-  operator_context: "/api/v1/operator/context"
+  operator_context: "/api/v1/operator/context",
+  attentionInbox: "/api/v1/attention-inbox",
+  attention_inbox: "/api/v1/attention-inbox"
 } as const satisfies Record<string, string>;
 
 function classifyOnboardingEntity(
@@ -3039,6 +3049,7 @@ function classifyOnboardingEntity(
     return "specialized_crud_entity";
   }
   if (
+    entityType === "attention_inbox" ||
     entityType === "movement" ||
     entityType === "life_force" ||
     entityType === "workbench"
@@ -3082,6 +3093,8 @@ function buildPreferredMutationPath(entityType: string) {
       return "Use /api/v1/preferences/signals to record one direct signal such as favorite or veto.";
     case "work_adjustment":
       return "Use /api/v1/work-adjustments to apply an explicit operator adjustment.";
+    case "attention_inbox":
+      return "Use the dedicated Attention route family to list the bounded queue and snooze, dismiss, or restore only eligible items returned for the current actor.";
     case "movement":
       return "Use the dedicated Movement route family for day, month, all-time, timeline, places, trip detail, selection aggregates, overlays, and repair actions.";
     case "life_force":
@@ -3135,6 +3148,8 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_adjust_work_minutes";
     case "self_observation":
       return "forge_get_self_observation_calendar | forge_create_entities | forge_update_entities";
+    case "attention_inbox":
+      return "forge_call_attention_route";
     case "movement":
       return "forge_call_movement_route";
     case "life_force":
@@ -3178,6 +3193,8 @@ function buildPreferredReadPath(entityType: string) {
       return "/api/v1/preferences/workspace";
     case "work_adjustment":
       return "/api/v1/operator/context";
+    case "attention_inbox":
+      return "/api/v1/attention-inbox";
     case "movement":
       return "/api/v1/movement/day | /api/v1/movement/month | /api/v1/movement/all-time | /api/v1/movement/timeline | /api/v1/movement/places | /api/v1/movement/boxes/:id | /api/v1/movement/trips/:id | /api/v1/movement/selection | /api/v1/movement/settings";
     case "life_force":
@@ -3192,6 +3209,8 @@ function buildPreferredReadPath(entityType: string) {
 }
 
 const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
+  attention_inbox:
+    "Specialized route surface: attention. Route tool: forge_call_attention_route. Route keys: list, snooze, dismiss, restore.",
   life_event:
     "Specialized route surface: lifeEvents. Route tool: forge_call_life_event_route. Route keys: timeline, read, calendarSync, fromCalendarEvent, importTicket, travelStatus.",
   movement:
@@ -3997,6 +4016,24 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     ]
   }),
   enrichOnboardingEntityGuide({
+    entityType: "attention_inbox",
+    purpose:
+      "The derived, actor-scoped queue for decisions, blocked or overdue work, unresolved companion sync, stale agent runtimes, and unreviewed insights that need a next move.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Attention is a bounded read-and-action surface, not a stored batch CRUD entity.",
+      "List the queue through the dedicated Attention route, then use the returned stable item id only for an allowed snooze, dismiss, restore, or open action.",
+      "Tokens see only task and insight evidence within their user, project, and tag scope; operational approval, companion, and runtime signals remain operator-only."
+    ],
+    searchHints: [
+      "Read active items first when the user asks what needs a decision, review, or repair.",
+      "Ask what kind of next move matters only when the queue itself does not make the target clear.",
+      "Do not dismiss blocked or overdue work; open the underlying record and resolve the cause.",
+      "Use snooze only when the item is valid but not actionable yet, and include a short reason when it will help later review."
+    ],
+    fieldGuide: []
+  }),
+  enrichOnboardingEntityGuide({
     entityType: "movement",
     purpose:
       "The specialized Movement surface for day, month, all-time, timeline, trip, place, selection, settings, and manual overlay work.",
@@ -4158,6 +4195,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "If the user already named the exact correction in usable language, confirm only the missing scope, timing, or route-selecting detail that still matters, then act.",
   "Use the known-target fast path when the user already supplied the object, action, and likely lane: for normal entities ask only for parent, owner, or duplicate disambiguation that changes the write; for task hierarchy ask only for the project, issue, or parent task that changes placement; for Movement ask only for the missing interval, boundary, saved object, or confirmation; for Life Force ask only for the weekday, profile field, signal intensity, or planning effect; for Workbench ask only for the missing flow, run, node, input, output, or preservation choice; for direct Psyche saves ask one accuracy or consent question instead of restarting exploration.",
   "Use the route execution handoff before any read, write, run, repair, or publish call: freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only for catalog entities, use named tools or documented routes for specialized CRUD and action workflows, and for Movement, Life Events, Life Force, or Workbench verify routeKey, method, path, and pathParams from live onboarding methodRoutes before calling. Never hide placeholders in query or body, and never guess a nearby path.",
+  "For Attention, list the bounded queue through forge_call_attention_route before acting unless the user supplied a stable item id from a current read. Use only an action present in allowedActions, pass the id through pathParams.id, never dismiss blocked or overdue work, and treat snooze or dismiss as reversible actor-scoped decisions rather than edits to the source record.",
   "Keep API and architecture nouns out of user-facing questions unless the user asks about implementation. Do not ask the user about surfaces, route families, CRUD, payloads, mutation paths, or read paths; ask about the human object such as a wiki page, note, trigger report, behavior pattern, belief, mode, movement timeline, energy model, weekday pattern, flow, run, or node result.",
   "Self-observation is not the default container for Psyche material. Use it only for a lightweight observed event note; prefer trigger_report for one emotionally meaningful episode, behavior_pattern for a recurring loop and functional analysis, behavior for one repeated move, belief_entry for a core sentence, mode_guide_session or mode_profile for an active part-state, flashcard for a brief rehearsable reminder to use during a trigger or urge, and wiki_page for durable memory.",
   "Do not bury schema work in self-observation. If the user is describing a schema theme, preserve it through a belief_entry, behavior_pattern, mode_profile, mode_guide_session, trigger_report, or wiki_page depending on whether it appears as a rule, loop, part-state, live exploration, one episode, or durable explanation.",
@@ -4676,6 +4714,23 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "If the user is reviewing answers, ask what the run should help them understand before proposing edits or completion.",
       "Use the dedicated questionnaire run start, read, update, and complete routes instead of generic entity CRUD.",
       "If answering is still in progress, ask only for the next answer or note that matters."
+    ]
+  },
+  {
+    focus: "attention_inbox",
+    openingQuestion:
+      "What kind of next move are you trying to find: a decision, blocked work, a review, or a system repair?",
+    coachingGoal:
+      "Read the bounded actor-scoped queue, help the user identify the one useful next move, and manage only eligible items without hiding unresolved work.",
+    askSequence: [
+      "Read the active queue before asking for item details unless the user already supplied a stable id from a current read.",
+      "Summarize the most consequential items by severity and source without reciting the entire queue.",
+      "Ask which decision, review, blocked task, or operational repair the user wants to handle only when their target is still ambiguous.",
+      "Open the underlying record when action on the source is required.",
+      "Snooze only when the item is valid but not actionable yet, and ask when it should return if the user did not say.",
+      "Dismiss only review-shaped items whose allowedActions include dismiss; never dismiss blocked or overdue work.",
+      "Restore only a snoozed or dismissed item from the current actor's queue.",
+      "Use the stable item id through pathParams.id and confirm the resulting state after any action."
     ]
   },
   {
@@ -5392,7 +5447,9 @@ function buildEntityQuestionFlow(
     coachingGoal:
       entityPlaybook?.coachingGoal ??
       "Clarify the user's practical job, choose the correct Forge route posture internally, and ask only for the missing detail that changes the action.",
-    askSequence: entityPlaybook ? [...entityPlaybook.askSequence] : [...guide.searchHints],
+    askSequence: entityPlaybook
+      ? [...entityPlaybook.askSequence]
+      : [...guide.searchHints],
     questionStyle: buildQuestionFlowStyle(guide),
     readinessCheck: buildQuestionFlowReadinessCheck(guide),
     ...routeInfo
@@ -5645,6 +5702,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
+  },
+  {
+    toolName: "forge_call_attention_route",
+    summary:
+      "List the current actor's bounded Attention queue or snooze, dismiss, and restore eligible items.",
+    whenToUse:
+      "Use when the user asks what needs a decision, review, repair, or follow-up, or when they explicitly want to manage an existing Attention item.",
+    inputShape:
+      '{ routeKey: "list"|"snooze"|"dismiss"|"restore", pathParams?: { id?: string }, query?: { state?: "active"|"snoozed"|"dismissed", limit?: number, offset?: number, userIds?: string[], projectIds?: string[], tagIds?: string[] }, body?: { until?: string, note?: string } }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Use list first unless the user supplied a stable attention item id from a current read.",
+      "Snooze requires body.until as a future ISO timestamp no more than one year away. Dismiss accepts an optional note. Restore needs no body.",
+      "Use pathParams.id for action routes. Do not put the item id into routeKey, query, or body.",
+      "Blocked and overdue work cannot be dismissed; open and resolve the underlying task instead.",
+      "Attention state is actor-scoped and source changes reactivate previously snoozed or dismissed evidence."
+    ],
+    example:
+      '{"routeKey":"snooze","pathParams":{"id":"attn:insight:ins_123"},"body":{"until":"2026-07-11T09:00:00.000Z","note":"Review after the morning planning block."}}'
   },
   {
     toolName: "forge_call_artifact_route",
@@ -6692,6 +6768,41 @@ function buildAgentOnboardingPayload(request: {
         }
       },
       specializedDomainSurfaces: {
+        attention: {
+          classification: "specialized_domain_surface",
+          aliases: ["attention_inbox", "attention-inbox", "Attention"],
+          routeTool: "forge_call_attention_route",
+          summary:
+            "Derived actor-scoped queue for decisions, blocked or overdue work, unresolved sync, stale runtimes, and unreviewed insights. It is a bounded read-and-action surface, not batch CRUD.",
+          routeKeys: ["list", "snooze", "dismiss", "restore"],
+          routeSelectionQuestions: [
+            "Is the user trying to see what needs attention now, defer one valid item, dismiss one review item, or bring a deferred item back?",
+            "If this is an action, which stable item id came from the current queue and is that action listed in allowedActions?",
+            "If this is a snooze, when will the item become actionable and would a short reason make the later review clearer?",
+            "If this is blocked or overdue work, what underlying task action will resolve it instead of hiding it?"
+          ],
+          methodRoutes: {
+            list: "GET /api/v1/attention-inbox",
+            snooze: "POST /api/v1/attention-inbox/:id/snooze",
+            dismiss: "POST /api/v1/attention-inbox/:id/dismiss",
+            restore: "POST /api/v1/attention-inbox/:id/restore"
+          },
+          readRoutes: {
+            list: "/api/v1/attention-inbox"
+          },
+          writeRoutes: {
+            snooze: "/api/v1/attention-inbox/:id/snooze",
+            dismiss: "/api/v1/attention-inbox/:id/dismiss",
+            restore: "/api/v1/attention-inbox/:id/restore"
+          },
+          notes: [
+            "Use the exact stable item id returned by list and fill it through pathParams.id.",
+            "List is bounded by limit and offset. Do not bulk-load an unbounded queue.",
+            "Token reads stay within effective user, project, and tag scope and do not include operator-only approval, companion-sync, or runtime signals.",
+            "Only use actions present in allowedActions. Blocked and overdue work cannot be dismissed.",
+            "Snooze and dismiss are reversible, actor-scoped decisions. Newer source evidence automatically makes an old decision active again."
+          ]
+        },
         lifeEvents: {
           classification: "specialized_domain_surface",
           aliases: ["life_event", "life-events", "Life Events"],
@@ -7217,6 +7328,7 @@ function buildAgentOnboardingPayload(request: {
       wikiHealth: "/api/v1/wiki/health",
       calendarOverview: "/api/v1/calendar/overview",
       settingsBin: "/api/v1/settings/bin",
+      attentionInbox: "/api/v1/attention-inbox",
       batchSearch: "/api/v1/entities/search",
       psycheSchemaCatalog: "/api/v1/psyche/schema-catalog",
       psycheEventTypes: "/api/v1/psyche/event-types",
@@ -7257,6 +7369,7 @@ function buildAgentOnboardingPayload(request: {
       ],
       uiWorkflow: ["forge_get_ui_entrypoint"],
       specializedDomainWorkflow: [
+        "forge_call_attention_route",
         "forge_call_movement_route",
         "forge_call_life_event_route",
         "forge_call_life_force_route",
@@ -7269,6 +7382,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_delete_entities",
         "forge_restore_entities"
       ],
+      attentionWorkflow: ["forge_call_attention_route"],
       entityWorkflow: [
         "forge_search_entities",
         "forge_create_entities",
@@ -7344,6 +7458,8 @@ function buildAgentOnboardingPayload(request: {
         "After create, update, delete, restore, run, read, or repair actions, confirm the user-facing record, action, and result in the user's language instead of reopening intake. For batch creates and updates, confirm the working title or accepted wording, container, and owner or placement only when those changed retrieval, accountability, or execution; if optional tags, priority, status, color, links, dates, or assignees were left provisional, say that plainly once instead of asking for all of them. For action workflows, confirm the real product action such as task run started or completed, work adjustment applied, preference judgment or signal submitted, questionnaire run updated or completed, calendar connection synced, or self-observation note written. For Psyche saves, confirm the accepted wording and whether it was saved as a first version, update, link, archive, or distinct version; do not reopen origin, evidence, repair, or adjacent entity mapping after the save unless that next object is already visible and materially useful. Ask a follow-up only if it changes the next action: correction, link, schedule, run, publish, enrichment, preservation choice, or UI handoff.",
       specializedSurfaceRule:
         "For Movement, Life Events, Life Force, and Workbench, clarify the job first, then choose the dedicated route family internally and do not guess at a generic CRUD path. Use specializedDomainSurfaces.routeSelectionQuestions when they are present so the next follow-up selects the right route instead of asking generic questions. Before every dedicated call, run a route-contract handshake internally: select the product lane in plain language, verify the matching routeKey against live onboarding routeKeys and methodRoutes, fill any placeholders through pathParams, and ask the user only for the missing product noun that fills the placeholder. When available, use forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, or forge_call_workbench_route after the lane is clear. If a route-key tool is unavailable, stale, or missing the needed key, read live onboarding and use the exact specializedDomainSurfaces.methodRoutes entry for the selected lane; cross-check OpenAPI only to confirm the same method and path, do not fall back to generic batch CRUD, do not invent a nearby raw path, and treat schema disagreement as a Forge contract bug to fix. Before calling a specialized route, inspect its methodRoutes entry for placeholders such as :id, :weekday, :slug, :runId, :nodeId, or :pointId, then fill each one through pathParams with the same placeholder name; do not hide IDs in query, body, or routeKey. If the contract is missing a lane the product clearly supports, report a contract bug instead of silently using generic batch CRUD or a nearby route. In user-facing language, talk about timeline, overlay, calendar match, ticket import, travel status, weekday template, published output, run detail, or node result rather than surfaces, payloads, read paths, mutation paths, or CRUD. If the truth of the current state is still uncertain, read the relevant dedicated view before you mutate it. When the user already named a precise correction or review target, confirm only the route-selecting detail that is still missing. After a concrete Movement, Life Events, Life Force, or Workbench correction, mutation, or result-producing run, read the relevant view back when the user is trying to understand the result rather than just store it: timeline or place/settings detail for Movement, event detail or timeline for Life Events, the Life Force overview for energy-planning impact, and flow detail, run detail, node result, latest node output, published output, or run history for Workbench. After any dedicated read, translate the result into one next action: no change, Movement overlay/place/settings/link, Life Event link/calendar/ticket/status/update, Life Force workload/recovery/timebox/meeting/task-choice change, or Workbench rerun/node inspection/flow edit/publish/preserve/stop. Ask only for the missing span, place, event, artifact, weekday, flow, run, node, output, correction, preservation choice, or confirmation that would change that action. The canonical runtime routes stay under /api/v1/*, and the OpenClaw HTTP mirror exposes the same families under /forge/v1/movement, /forge/v1/life-events, /forge/v1/life-force, and /forge/v1/workbench.",
+      attentionRule:
+        "For Attention, use forge_call_attention_route with list, snooze, dismiss, or restore. Read list first unless the user supplied an item id from a current queue; verify allowedActions before acting; fill pathParams.id with the stable returned id; and do not use batch CRUD, invent an attention record, or dismiss blocked or overdue work. The canonical path is /api/v1/attention-inbox and the OpenClaw HTTP mirror is /forge/v1/attention.",
       artifactStoreRule:
         "For artifacts, ask only for the metadata that changes preservation and retrieval: what the file is, where it came from, why it should be kept, whether it should link to a Forge record, and whether optional LLM enrichment should fill missing title or description. Use dedicated Artifacts routes for upload, scan, enrichment, generic links, trust state, versions, and audit. Use batch CRUD only for artifact metadata search/update/delete/restore. Never download, decrypt, open, run, execute, transform, preview stored file bytes, or submit artifact passwords as an agent; downloads and password encryption actions are human-operator-only.",
       reviewShortcutRule:
@@ -7396,6 +7512,8 @@ function buildAgentOnboardingPayload(request: {
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
         "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools.",
+      attentionRouteToolRule:
+        "forge_call_attention_route expects { routeKey, pathParams?, query?, body? }. Use list with state, limit, offset, and optional effective-scope filters; use snooze, dismiss, or restore only with pathParams.id from a current result and only when allowedActions includes that action. Snooze requires body.until; dismiss may include body.note; restore needs no body.",
       createExample:
         '{"operations":[{"entityType":"goal","data":{"title":"Create meaningfully"},"clientRef":"goal-create-1"},{"entityType":"goal","data":{"title":"Build a beautiful family"},"clientRef":"goal-create-2"}]}',
       updateExample:
@@ -15022,6 +15140,159 @@ export async function buildServer(
       return { error: "Insight not found" };
     }
     return { feedback };
+  });
+  const attentionActorKeyFor = (
+    auth: ReturnType<typeof authenticateRequest>
+  ) => (auth.token ? `token:${auth.token.id}` : "operator");
+  const attentionScopeFor = (
+    auth: ReturnType<typeof authenticateRequest>,
+    query?: Record<string, unknown>
+  ) => {
+    const readScope = resolveEffectiveReadScope(query, auth);
+    const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+      scope: readScope,
+      validUserIds: listUsers().map((user) => user.id)
+    });
+    return {
+      userIds: scopedUserIdsForReads,
+      projectIds: readScope.projectIds,
+      tagIds: readScope.tagIds,
+      includeOperationalSignals: !auth.token
+    };
+  };
+  app.get("/api/v1/attention-inbox", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/attention-inbox" }
+    );
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const query = attentionInboxQuerySchema.parse(rawQuery);
+    return listAttentionInbox({
+      actorKey: attentionActorKeyFor(auth),
+      ...attentionScopeFor(auth, rawQuery),
+      state: query.state,
+      limit: query.limit,
+      offset: query.offset
+    });
+  });
+  app.post("/api/v1/attention-inbox/:id/snooze", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/attention-inbox/:id/snooze" }
+    );
+    const { id } = request.params as { id: string };
+    const input = attentionInboxSnoozeSchema.parse(request.body ?? {});
+    const now = new Date();
+    const until = Date.parse(input.until);
+    const maxSnoozeAt = now.getTime() + 365 * 24 * 60 * 60 * 1000;
+    if (until <= now.getTime() || until > maxSnoozeAt) {
+      throw new HttpError(
+        400,
+        "invalid_attention_snooze",
+        "Snooze until must be in the future and no more than one year away."
+      );
+    }
+    const actorKey = attentionActorKeyFor(auth);
+    const item = getAttentionInboxItem(id, {
+      actorKey,
+      ...attentionScopeFor(auth),
+      now
+    });
+    if (!item) {
+      throw new HttpError(
+        404,
+        "attention_item_not_found",
+        "Attention item not found."
+      );
+    }
+    if (!item.allowedActions.includes("snooze")) {
+      throw new HttpError(
+        409,
+        "attention_action_unavailable",
+        "This attention item cannot be snoozed in its current state."
+      );
+    }
+    return {
+      attentionState: transitionAttentionInboxState({
+        actorKey,
+        item,
+        state: "snoozed",
+        snoozedUntil: input.until,
+        note: input.note
+      })
+    };
+  });
+  app.post("/api/v1/attention-inbox/:id/dismiss", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/attention-inbox/:id/dismiss" }
+    );
+    const { id } = request.params as { id: string };
+    const input = attentionInboxDismissSchema.parse(request.body ?? {});
+    const actorKey = attentionActorKeyFor(auth);
+    const item = getAttentionInboxItem(id, {
+      actorKey,
+      ...attentionScopeFor(auth)
+    });
+    if (!item) {
+      throw new HttpError(
+        404,
+        "attention_item_not_found",
+        "Attention item not found."
+      );
+    }
+    if (!item.allowedActions.includes("dismiss")) {
+      throw new HttpError(
+        409,
+        "attention_action_unavailable",
+        "This attention item cannot be dismissed."
+      );
+    }
+    return {
+      attentionState: transitionAttentionInboxState({
+        actorKey,
+        item,
+        state: "dismissed",
+        note: input.note
+      })
+    };
+  });
+  app.post("/api/v1/attention-inbox/:id/restore", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/attention-inbox/:id/restore" }
+    );
+    const { id } = request.params as { id: string };
+    const actorKey = attentionActorKeyFor(auth);
+    const item = getAttentionInboxItem(id, {
+      actorKey,
+      ...attentionScopeFor(auth)
+    });
+    if (!item) {
+      throw new HttpError(
+        404,
+        "attention_item_not_found",
+        "Attention item not found."
+      );
+    }
+    if (!item.allowedActions.includes("restore")) {
+      throw new HttpError(
+        409,
+        "attention_action_unavailable",
+        "This attention item is already active."
+      );
+    }
+    return {
+      attentionState: transitionAttentionInboxState({
+        actorKey,
+        item,
+        state: "active"
+      })
+    };
   });
   app.get("/api/v1/approval-requests", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {

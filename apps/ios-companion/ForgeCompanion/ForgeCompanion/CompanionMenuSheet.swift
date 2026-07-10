@@ -29,6 +29,13 @@ struct CompanionMenuSheet: View {
                         detail: appModel.companionOperationalDetailLabel
                     )
                     compactStatusRow("Last sync", value: appModel.lastSuccessfulSyncLabel)
+                    if let attention = appModel.watchSessionManager.latestBootstrap.inbox?.attention {
+                        compactStatusRow(
+                            "Attention",
+                            value: attention.activeCount == 0 ? "Clear" : "\(attention.activeCount) active",
+                            detail: attention.items.first?.title
+                        )
+                    }
                 }
             }
 

@@ -933,6 +933,12 @@ final class CompanionAppModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        watchSessionManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
         NotificationCenter.default.publisher(
             for: UIApplication.protectedDataDidBecomeAvailableNotification
         )

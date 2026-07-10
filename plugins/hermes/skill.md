@@ -156,6 +156,11 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `preference_signal`, and `self_observation` are action workflows. Use their
   dedicated tools or note-backed write model instead of generic entity create/update
   when the action route is the real product behavior.
+- Attention is a bounded, actor-scoped read-and-action surface, not batch CRUD.
+  Use `forge_call_attention_route` with `list` before acting unless the user supplied
+  a stable item id from a current queue. Use only actions returned in
+  `allowedActions`, pass the id through `pathParams.id`, and never dismiss blocked or
+  overdue work. The runtime path is `/api/v1/attention-inbox`.
 - Movement, Life Events, Life Force, and Workbench are specialized domain surfaces. Read
   `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and use
   the dedicated route families for timeline/overlay repair, Life Events chronology/calendar/ticket/status, energy templates/signals,
@@ -201,6 +206,12 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
 Concrete route-key examples for internal use:
 
+- Attention active queue:
+  `{"routeKey":"list","query":{"state":"active","limit":25,"offset":0}}`
+- Attention snooze:
+  `{"routeKey":"snooze","pathParams":{"id":"attn:insight:ins_123"},"body":{"until":"2026-07-11T09:00:00.000Z","note":"Review after the morning planning block."}}`
+- Attention restore:
+  `{"routeKey":"restore","pathParams":{"id":"attn:insight:ins_123"}}`
 - Movement all-time read:
   `{"routeKey":"allTime","query":{"userIds":["user_operator"]}}`
 - Movement timeline read:

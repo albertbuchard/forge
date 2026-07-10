@@ -6,6 +6,7 @@ import pytest
 
 from forge_hermes import tools
 from forge_hermes.catalog import (
+    ATTENTION_ROUTE_SPECS,
     LIFE_FORCE_ROUTE_SPECS,
     MOVEMENT_ROUTE_SPECS,
     TOOL_CATALOG,
@@ -168,6 +169,9 @@ def test_update_entities_tool_description_mentions_habit_checkins():
 def test_specialized_domain_tools_are_explicit_route_key_tools():
     specs = {tool["name"]: tool for tool in TOOL_CATALOG}
 
+    assert specs["forge_call_attention_route"]["parameters"]["properties"]["routeKey"][
+        "enum"
+    ] == ["dismiss", "list", "restore", "snooze"]
     assert set(
         specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
     ) >= {
@@ -219,6 +223,9 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "latestNodeOutput",
     }
 
+    attention_route_description = specs["forge_call_attention_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
     movement_route_description = specs["forge_call_movement_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
@@ -228,6 +235,11 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     workbench_route_description = specs["forge_call_workbench_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
+    assert "list: GET /api/v1/attention-inbox" in attention_route_description
+    assert (
+        "snooze: POST /api/v1/attention-inbox/:id/snooze"
+        in attention_route_description
+    )
     assert "day: GET /api/v1/movement/day" in movement_route_description
     assert "userBoxCreate: POST /api/v1/movement/user-boxes" in movement_route_description
     assert (
@@ -246,6 +258,7 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         in workbench_route_description
     )
     for tool_name in [
+        "forge_call_attention_route",
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route",
@@ -264,6 +277,10 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
             in properties["pathParams"]["description"]
         )
 
+    assert specialized_route_path(
+        ATTENTION_ROUTE_SPECS,
+        {"routeKey": "restore", "pathParams": {"id": "attn:task/task 1"}},
+    ) == "/api/v1/attention-inbox/attn%3Atask%2Ftask%201/restore"
     assert specialized_route_path(
         LIFE_FORCE_ROUTE_SPECS,
         {"routeKey": "weekdayTemplate", "pathParams": {"weekday": "monday"}},

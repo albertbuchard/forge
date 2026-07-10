@@ -20,6 +20,7 @@ export type ForgeSupportedPluginApiRoute = {
     | "movement"
     | "life_force"
     | "workbench"
+    | "attention"
     | "artifact"
     | "life_event"
     | "preferences"
@@ -69,12 +70,20 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
     { method: "GET", path: "/api/v1/movement/places", purpose: "movement" },
     { method: "GET", path: "/api/v1/movement/boxes/:id", purpose: "movement" },
     { method: "POST", path: "/api/v1/movement/places", purpose: "movement" },
-    { method: "PATCH", path: "/api/v1/movement/places/:id", purpose: "movement" },
+    {
+      method: "PATCH",
+      path: "/api/v1/movement/places/:id",
+      purpose: "movement"
+    },
     { method: "GET", path: "/api/v1/movement/trips/:id", purpose: "movement" },
     { method: "POST", path: "/api/v1/movement/selection", purpose: "movement" },
     { method: "GET", path: "/api/v1/movement/settings", purpose: "movement" },
     { method: "PATCH", path: "/api/v1/movement/settings", purpose: "movement" },
-    { method: "POST", path: "/api/v1/movement/user-boxes", purpose: "movement" },
+    {
+      method: "POST",
+      path: "/api/v1/movement/user-boxes",
+      purpose: "movement"
+    },
     {
       method: "POST",
       path: "/api/v1/movement/user-boxes/preflight",
@@ -95,10 +104,26 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       path: "/api/v1/movement/automatic-boxes/:id/invalidate",
       purpose: "movement"
     },
-    { method: "PATCH", path: "/api/v1/movement/stays/:id", purpose: "movement" },
-    { method: "DELETE", path: "/api/v1/movement/stays/:id", purpose: "movement" },
-    { method: "PATCH", path: "/api/v1/movement/trips/:id", purpose: "movement" },
-    { method: "DELETE", path: "/api/v1/movement/trips/:id", purpose: "movement" },
+    {
+      method: "PATCH",
+      path: "/api/v1/movement/stays/:id",
+      purpose: "movement"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/movement/stays/:id",
+      purpose: "movement"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/movement/trips/:id",
+      purpose: "movement"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/movement/trips/:id",
+      purpose: "movement"
+    },
     {
       method: "PATCH",
       path: "/api/v1/movement/trips/:id/points/:pointId",
@@ -110,7 +135,11 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       purpose: "movement"
     },
     { method: "GET", path: "/api/v1/life-force", purpose: "life_force" },
-    { method: "PATCH", path: "/api/v1/life-force/profile", purpose: "life_force" },
+    {
+      method: "PATCH",
+      path: "/api/v1/life-force/profile",
+      purpose: "life_force"
+    },
     {
       method: "PUT",
       path: "/api/v1/life-force/templates/:weekday",
@@ -121,12 +150,28 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       path: "/api/v1/life-force/fatigue-signals",
       purpose: "life_force"
     },
-    { method: "GET", path: "/api/v1/workbench/catalog/boxes", purpose: "workbench" },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/catalog/boxes",
+      purpose: "workbench"
+    },
     { method: "GET", path: "/api/v1/workbench/flows", purpose: "workbench" },
     { method: "POST", path: "/api/v1/workbench/flows", purpose: "workbench" },
-    { method: "GET", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
-    { method: "PATCH", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
-    { method: "DELETE", path: "/api/v1/workbench/flows/:id", purpose: "workbench" },
+    {
+      method: "GET",
+      path: "/api/v1/workbench/flows/:id",
+      purpose: "workbench"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/workbench/flows/:id",
+      purpose: "workbench"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/workbench/flows/:id",
+      purpose: "workbench"
+    },
     {
       method: "GET",
       path: "/api/v1/workbench/flows/by-slug/:slug",
@@ -173,17 +218,53 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       path: "/api/v1/workbench/flows/:id/nodes/:nodeId/output",
       purpose: "workbench"
     },
+    { method: "GET", path: "/api/v1/attention-inbox", purpose: "attention" },
+    {
+      method: "POST",
+      path: "/api/v1/attention-inbox/:id/snooze",
+      purpose: "attention"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/attention-inbox/:id/dismiss",
+      purpose: "attention"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/attention-inbox/:id/restore",
+      purpose: "attention"
+    },
     { method: "GET", path: "/api/v1/artifacts", purpose: "artifact" },
     { method: "POST", path: "/api/v1/artifacts", purpose: "artifact" },
     { method: "GET", path: "/api/v1/artifacts/:id", purpose: "artifact" },
     { method: "PATCH", path: "/api/v1/artifacts/:id", purpose: "artifact" },
     { method: "POST", path: "/api/v1/artifacts/:id/scan", purpose: "artifact" },
-    { method: "POST", path: "/api/v1/artifacts/:id/enrich", purpose: "artifact" },
-    { method: "POST", path: "/api/v1/artifacts/:id/links", purpose: "artifact" },
-    { method: "POST", path: "/api/v1/artifacts/:id/trust", purpose: "artifact" },
-    { method: "GET", path: "/api/v1/artifacts/:id/versions", purpose: "artifact" },
+    {
+      method: "POST",
+      path: "/api/v1/artifacts/:id/enrich",
+      purpose: "artifact"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/artifacts/:id/links",
+      purpose: "artifact"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/artifacts/:id/trust",
+      purpose: "artifact"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/artifacts/:id/versions",
+      purpose: "artifact"
+    },
     { method: "GET", path: "/api/v1/artifacts/:id/audit", purpose: "artifact" },
-    { method: "GET", path: "/api/v1/life-events/timeline", purpose: "life_event" },
+    {
+      method: "GET",
+      path: "/api/v1/life-events/timeline",
+      purpose: "life_event"
+    },
     { method: "GET", path: "/api/v1/life-events/:id", purpose: "life_event" },
     {
       method: "POST",
@@ -257,35 +338,151 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       purpose: "calendar"
     },
     { method: "POST", path: "/api/v1/calendar/timeboxes", purpose: "calendar" },
-    { method: "GET", path: "/api/v1/preferences/workspace", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/game/start", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/catalogs", purpose: "preferences" },
-    { method: "PATCH", path: "/api/v1/preferences/catalogs/:id", purpose: "preferences" },
-    { method: "DELETE", path: "/api/v1/preferences/catalogs/:id", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/catalog-items", purpose: "preferences" },
-    { method: "PATCH", path: "/api/v1/preferences/catalog-items/:id", purpose: "preferences" },
-    { method: "DELETE", path: "/api/v1/preferences/catalog-items/:id", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/contexts", purpose: "preferences" },
-    { method: "PATCH", path: "/api/v1/preferences/contexts/:id", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/contexts/merge", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/items", purpose: "preferences" },
-    { method: "PATCH", path: "/api/v1/preferences/items/:id", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/items/from-entity", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/judgments", purpose: "preferences" },
-    { method: "POST", path: "/api/v1/preferences/signals", purpose: "preferences" },
-    { method: "PATCH", path: "/api/v1/preferences/items/:id/score", purpose: "preferences" },
-    { method: "GET", path: "/api/v1/psyche/questionnaires", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaires", purpose: "questionnaires" },
-    { method: "GET", path: "/api/v1/psyche/questionnaires/:id", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaires/:id/clone", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaires/:id/draft", purpose: "questionnaires" },
-    { method: "PATCH", path: "/api/v1/psyche/questionnaires/:id/draft", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaires/:id/publish", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaires/:id/runs", purpose: "questionnaires" },
-    { method: "GET", path: "/api/v1/psyche/questionnaire-runs/:id", purpose: "questionnaires" },
-    { method: "PATCH", path: "/api/v1/psyche/questionnaire-runs/:id", purpose: "questionnaires" },
-    { method: "POST", path: "/api/v1/psyche/questionnaire-runs/:id/complete", purpose: "questionnaires" },
-    { method: "GET", path: "/api/v1/psyche/self-observation/calendar", purpose: "questionnaires" },
+    {
+      method: "GET",
+      path: "/api/v1/preferences/workspace",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/game/start",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/catalogs",
+      purpose: "preferences"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/preferences/catalogs/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/preferences/catalogs/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/catalog-items",
+      purpose: "preferences"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/preferences/catalog-items/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "DELETE",
+      path: "/api/v1/preferences/catalog-items/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/contexts",
+      purpose: "preferences"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/preferences/contexts/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/contexts/merge",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/items",
+      purpose: "preferences"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/preferences/items/:id",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/items/from-entity",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/judgments",
+      purpose: "preferences"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/preferences/signals",
+      purpose: "preferences"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/preferences/items/:id/score",
+      purpose: "preferences"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/psyche/questionnaires",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaires",
+      purpose: "questionnaires"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/psyche/questionnaires/:id",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaires/:id/clone",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaires/:id/draft",
+      purpose: "questionnaires"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/psyche/questionnaires/:id/draft",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaires/:id/publish",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaires/:id/runs",
+      purpose: "questionnaires"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/psyche/questionnaire-runs/:id",
+      purpose: "questionnaires"
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/psyche/questionnaire-runs/:id",
+      purpose: "questionnaires"
+    },
+    {
+      method: "POST",
+      path: "/api/v1/psyche/questionnaire-runs/:id/complete",
+      purpose: "questionnaires"
+    },
+    {
+      method: "GET",
+      path: "/api/v1/psyche/self-observation/calendar",
+      purpose: "questionnaires"
+    },
     { method: "POST", path: "/api/v1/entities/search", purpose: "entities" },
     { method: "POST", path: "/api/v1/entities/create", purpose: "entities" },
     { method: "POST", path: "/api/v1/entities/update", purpose: "entities" },

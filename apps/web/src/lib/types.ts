@@ -3982,6 +3982,80 @@ export interface ApprovalRequest {
   updatedAt: string;
 }
 
+export type AttentionInboxSource =
+  | "approval"
+  | "insight"
+  | "task"
+  | "companion_sync"
+  | "agent_session";
+
+export type AttentionInboxState = "active" | "snoozed" | "dismissed";
+
+export type AttentionInboxAction =
+  | "open"
+  | "approve"
+  | "reject"
+  | "snooze"
+  | "dismiss"
+  | "restore";
+
+export interface AttentionInboxItem {
+  id: string;
+  source: AttentionInboxSource;
+  kind:
+    | "decision"
+    | "review"
+    | "blocked_work"
+    | "overdue_work"
+    | "sync_problem"
+    | "runtime_problem";
+  severity: "notice" | "important" | "blocking";
+  state: AttentionInboxState;
+  title: string;
+  reason: string;
+  detail: string;
+  target: {
+    entityType: string | null;
+    entityId: string | null;
+    label: string;
+    href: string;
+  };
+  allowedActions: AttentionInboxAction[];
+  createdAt: string;
+  updatedAt: string;
+  sourceUpdatedAt: string;
+  dueAt: string | null;
+  snoozedUntil: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface AttentionInboxPayload {
+  generatedAt: string;
+  state: AttentionInboxState;
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  summary: {
+    activeCount: number;
+    snoozedCount: number;
+    dismissedCount: number;
+    blockingCount: number;
+    importantCount: number;
+    sourceCounts: Record<AttentionInboxSource, number>;
+  };
+  items: AttentionInboxItem[];
+}
+
+export interface AttentionInboxStateRecord {
+  itemId: string;
+  state: AttentionInboxState;
+  snoozedUntil: string | null;
+  sourceUpdatedAt: string;
+  note: string;
+  updatedAt: string;
+}
+
 export interface StrategyLinkedEntity {
   entityType: CrudEntityType;
   entityId: string;

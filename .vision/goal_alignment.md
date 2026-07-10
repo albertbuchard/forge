@@ -22,6 +22,8 @@ Forge should provide an Artifact Store for trusted stored files that belong in t
 
 Forge should provide Life Events as a first-class chronological memory surface for important personal events. A Life Event is a structured record for something meaningful that happened or will happen in time, connected to the calendar when appropriate but not reduced to a calendar block. Life Events can be short moments or intervals lasting days, weeks, or months, including travel, flights, trains, car trips, stays, lodging, holidays, vacations, visits, moves, festivals, retreats, conferences, concerts, cinema, dates, friends, family, work phases, work milestones, thesis milestones, health episodes, administrative events, celebrations, memories, and custom events. They should link to calendar events, ticket artifacts, wiki pages, notes, goals, projects, tasks, Psyche records, movement context, and other Forge entities through the general `entity_links` model.
 
+Forge should provide one bounded Attention surface for existing records and operational evidence that need a next move. It derives actor-scoped items from decisions, unreviewed insights, blocked or overdue work, companion sync problems, and stale agent runtimes; it does not create a second source of truth. Items expose stable ids, severity, reason, target, and allowed actions. Snooze and dismiss are reversible per actor, changed source evidence reactivates an item, and blocked or overdue work cannot be hidden through dismissal.
+
 Forge should stay modern and production-grade:
 
 - React 19
@@ -69,6 +71,7 @@ Forge already has strong foundations:
 - goals, projects, strategies, tasks, task runs, habits, notes, wiki, preferences, health, movement, and Psyche surfaces
 - an Artifact Store for trusted human-download-only files with precise metadata, provenance, static scans, danger scoring, versions, audit history, optional LLM metadata enrichment, a dedicated web view, and relationships stored through general entity links
 - Life Events for chronological personal event memory, including short events and longer stays or periods, with calendar reconciliation, ticket artifact import, travel segments, status reads, a virtualized web timeline, guided modal creation/import flows, and relationships stored through general entity links
+- an actor-scoped Attention queue with bounded pagination, reversible snooze/dismiss/restore state, source-change reactivation, a responsive web view, agent route contracts, and compact iPhone/watch Inbox summaries
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support
 - a React web app mounted under `/forge/`
 - a Fastify API under `/api/v1/`

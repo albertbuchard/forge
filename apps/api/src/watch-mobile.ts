@@ -12,6 +12,7 @@ import {
 import { createHabitCheckIn, listHabits } from "./repositories/habits.js";
 import { listGoals } from "./repositories/goals.js";
 import { createNote } from "./repositories/notes.js";
+import { listAttentionInbox } from "./services/attention-inbox.js";
 import { listProjectSummaries } from "./services/projects.js";
 import { listTasks, updateTask } from "./repositories/tasks.js";
 import {
@@ -613,9 +614,10 @@ function createWatchObservationNote(
       showInIndex: false,
       aliases: [],
       summary: "",
-      contentMarkdown: options.contentLines
-        .filter((line) => line.trim().length > 0)
-        .join("\n") || options.title,
+      contentMarkdown:
+        options.contentLines
+          .filter((line) => line.trim().length > 0)
+          .join("\n") || options.title,
       author: "Apple Watch",
       tags: ["watch", "psyche", "Self-observation", ...(options.tags ?? [])],
       links: options.links ?? [],
@@ -641,7 +643,8 @@ function projectPsycheEvent(
   if (event.eventType === "trigger_capture") {
     const trigger = stringPayloadValue(event.payload, "trigger");
     const eventTypeLabel = stringPayloadValue(event.payload, "eventTypeLabel");
-    const eventTypeId = stringPayloadValue(event.payload, "eventTypeId") || null;
+    const eventTypeId =
+      stringPayloadValue(event.payload, "eventTypeId") || null;
     const emotion = stringPayloadValue(event.payload, "emotion");
     const outcome = stringPayloadValue(event.payload, "outcome");
     const intensity = stringPayloadValue(event.payload, "intensity");
@@ -653,16 +656,21 @@ function projectPsycheEvent(
       "Watch trigger observation";
     const report = createTriggerReport(
       {
-        title: trigger ? `Watch trigger: ${trigger}` : "Watch trigger observation",
+        title: trigger
+          ? `Watch trigger: ${trigger}`
+          : "Watch trigger observation",
         status: "draft",
         eventTypeId,
-        customEventType: eventTypeId ? "" : eventTypeLabel || trigger || "Watch trigger",
+        customEventType: eventTypeId
+          ? ""
+          : eventTypeLabel || trigger || "Watch trigger",
         eventSituation: situation,
         occurredAt: event.recordedAt,
         emotions: emotion
           ? [
               {
-                emotionDefinitionId: stringPayloadValue(event.payload, "emotionId") || null,
+                emotionDefinitionId:
+                  stringPayloadValue(event.payload, "emotionId") || null,
                 label: emotion,
                 intensity: intensity ? Number(intensity) || 0 : 0,
                 note: "Captured from Apple Watch."
@@ -675,7 +683,8 @@ function projectPsycheEvent(
               {
                 text: outcome,
                 mode: "",
-                behaviorId: stringPayloadValue(event.payload, "behaviorId") || null
+                behaviorId:
+                  stringPayloadValue(event.payload, "behaviorId") || null
               }
             ]
           : [],
@@ -717,7 +726,9 @@ function projectPsycheEvent(
         outcome ? `Outcome: ${outcome}` : "",
         situation ? `Situation: ${situation}` : ""
       ],
-      links: [{ entityType: "trigger_report", entityId: report.id, anchorKey: null }],
+      links: [
+        { entityType: "trigger_report", entityId: report.id, anchorKey: null }
+      ],
       tags: ["trigger"]
     });
     return {
@@ -951,14 +962,16 @@ function compactTaskRun(run: Record<string, unknown>) {
 
 function buildWorkSnapshot(pairing: PairingSessionLike) {
   const scope = userScopeFilter(pairing);
-  const allTasks = (listTasks({ ...scope, limit: 100 }) as Array<
-    Record<string, unknown>
-  >).map(compactTask);
-  const activeRuns = (listTaskRuns({
-    ...scope,
-    active: true,
-    limit: 12
-  }) as Array<Record<string, unknown>>).map(compactTaskRun);
+  const allTasks = (
+    listTasks({ ...scope, limit: 100 }) as Array<Record<string, unknown>>
+  ).map(compactTask);
+  const activeRuns = (
+    listTaskRuns({
+      ...scope,
+      active: true,
+      limit: 12
+    }) as Array<Record<string, unknown>>
+  ).map(compactTaskRun);
   const visibleTasks = allTasks.filter((task) => task.status !== "done");
   const statuses = ["focus", "in_progress", "blocked", "backlog", "done"];
   const lanes = statuses.map((status) => {
@@ -979,7 +992,8 @@ function buildWorkSnapshot(pairing: PairingSessionLike) {
   return {
     actor: watchActorLabel(pairing),
     activeRuns,
-    currentRun: activeRuns.find((run) => run.isCurrent) ?? activeRuns[0] ?? null,
+    currentRun:
+      activeRuns.find((run) => run.isCurrent) ?? activeRuns[0] ?? null,
     nextTask:
       visibleTasks.find((task) => task.status === "focus") ??
       visibleTasks.find((task) => task.status === "in_progress") ??
@@ -1026,9 +1040,11 @@ function buildDirectionSnapshot(pairing: PairingSessionLike) {
 
 function buildTodaySnapshot(pairing: PairingSessionLike) {
   const todayKey = formatLocalDateKey();
-  const tasks = (listTasks({ ...userScopeFilter(pairing), limit: 100 }) as Array<
-    Record<string, unknown>
-  >).map(compactTask);
+  const tasks = (
+    listTasks({ ...userScopeFilter(pairing), limit: 100 }) as Array<
+      Record<string, unknown>
+    >
+  ).map(compactTask);
   const dueToday = tasks
     .filter((task) => task.status !== "done" && task.dueDate === todayKey)
     .slice(0, 8);
@@ -1220,9 +1236,14 @@ function compactFallbackOptions(labels: string[], payloadKey: string) {
 }
 
 function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
-  const userIds = pairing.user_id === "user_operator" ? undefined : [pairing.user_id];
+  const userIds =
+    pairing.user_id === "user_operator" ? undefined : [pairing.user_id];
   const owned = <T extends { userId?: string | null }>(items: T[]) =>
-    userIds ? items.filter((item) => item.userId == null || userIds.includes(item.userId)) : items;
+    userIds
+      ? items.filter(
+          (item) => item.userId == null || userIds.includes(item.userId)
+        )
+      : items;
 
   const events = owned(listEventTypes())
     .slice(0, 8)
@@ -1298,7 +1319,10 @@ function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
         options:
           events.length > 0
             ? events
-            : compactFallbackOptions(triggerOptions.slice(0, 6), "eventTypeLabel")
+            : compactFallbackOptions(
+                triggerOptions.slice(0, 6),
+                "eventTypeLabel"
+              )
       },
       {
         id: "emotion",
@@ -1325,7 +1349,10 @@ function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
         title: "Urge outcome",
         prompt: "What did you do with the urge?",
         eventType: "trigger_capture",
-        options: compactFallbackOptions(["Resisted", "Indulged", "Delayed", "Repaired"], "outcome")
+        options: compactFallbackOptions(
+          ["Resisted", "Indulged", "Delayed", "Repaired"],
+          "outcome"
+        )
       },
       {
         id: "value",
@@ -1335,7 +1362,10 @@ function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
         options:
           values.length > 0
             ? values
-            : compactFallbackOptions(["Health", "Work", "Love", "Courage"], "value")
+            : compactFallbackOptions(
+                ["Health", "Work", "Love", "Courage"],
+                "value"
+              )
       },
       {
         id: "mode",
@@ -1345,7 +1375,10 @@ function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
         options:
           modes.length > 0
             ? modes
-            : compactFallbackOptions(["Protected", "Avoidant", "Driven", "Connected"], "mode")
+            : compactFallbackOptions(
+                ["Protected", "Avoidant", "Driven", "Connected"],
+                "mode"
+              )
       },
       {
         id: "behavior",
@@ -1355,14 +1388,20 @@ function buildWatchPsycheSnapshot(pairing: PairingSessionLike) {
         options:
           behaviors.length > 0
             ? behaviors
-            : compactFallbackOptions(["Avoided", "Approached", "Scrolled", "Asked"], "behavior")
+            : compactFallbackOptions(
+                ["Avoided", "Approached", "Scrolled", "Asked"],
+                "behavior"
+              )
       },
       {
         id: "routine",
         title: "Routine",
         prompt: "Log one daily signal.",
         eventType: "routine_check",
-        options: compactFallbackOptions(routinePromptOptions.slice(0, 6), "routine")
+        options: compactFallbackOptions(
+          routinePromptOptions.slice(0, 6),
+          "routine"
+        )
       }
     ],
     recentReports
@@ -1427,6 +1466,17 @@ export function buildWatchBootstrap(
     });
 
   const pendingPrompts = buildPendingPrompts(pairing.user_id);
+  const attention = listAttentionInbox({
+    actorKey:
+      pairing.user_id === "user_operator" ? "operator" : `mobile:${pairing.id}`,
+    userIds: [pairing.user_id],
+    projectIds: [],
+    tagIds: [],
+    includeOperationalSignals: pairing.user_id === "user_operator",
+    state: "active",
+    limit: 3,
+    offset: 0
+  });
   const work = buildWorkSnapshot(pairing);
   const direction = buildDirectionSnapshot(pairing);
   const today = buildTodaySnapshot(pairing);
@@ -1451,7 +1501,22 @@ export function buildWatchBootstrap(
     movement: buildMovementSnapshot(pairing.user_id),
     psyche: buildWatchPsycheSnapshot(pairing),
     inbox: {
-      prompts: pendingPrompts
+      prompts: pendingPrompts,
+      attention: {
+        activeCount: attention.summary.activeCount,
+        blockingCount: attention.summary.blockingCount,
+        importantCount: attention.summary.importantCount,
+        items: attention.items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          reason: item.reason,
+          source: item.source,
+          severity: item.severity,
+          targetLabel: item.target.label,
+          targetPath: item.target.href,
+          updatedAt: item.updatedAt
+        }))
+      }
     },
     sync: buildSyncSnapshot(pairing),
     habits,
@@ -1607,14 +1672,21 @@ function writeActionReceipt(
 
 const habitCommandPayloadSchema = z.object({
   habitId: z.string().trim().min(1),
-  dateKey: z.string().trim().min(1).default(() => formatLocalDateKey()),
+  dateKey: z
+    .string()
+    .trim()
+    .min(1)
+    .default(() => formatLocalDateKey()),
   status: z.enum(["done", "missed"]),
   note: z.string().trim().default("")
 });
 
 const captureCommandPayloadSchema = z.object({
   eventType: watchCaptureEventTypeSchema,
-  recordedAt: z.string().datetime().default(() => nowIso()),
+  recordedAt: z
+    .string()
+    .datetime()
+    .default(() => nowIso()),
   promptId: z.string().trim().min(1).nullable().optional().default(null),
   linkedContext: watchLinkedContextSchema.default({}),
   payload: z.record(z.string(), z.unknown()).default({})
@@ -1906,10 +1978,7 @@ export function ingestWatchCommandBatch(
           existing.result_json,
           {}
         ),
-        error: safeJsonParse<Record<string, unknown>>(
-          existing.error_json,
-          {}
-        )
+        error: safeJsonParse<Record<string, unknown>>(existing.error_json, {})
       });
       continue;
     }

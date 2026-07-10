@@ -57,6 +57,7 @@ import {
   type WorkItemGitRef,
   type WorkItemLevel
 } from "../types.js";
+import { formatLocalDateKey } from "@/lib/date-keys.js";
 
 type TaskRow = {
   id: string;
@@ -413,7 +414,9 @@ function normalizeCompletedAt(
   overrideCompletedAt?: string
 ): string | null {
   if (status === "done") {
-    return overrideCompletedAt ?? existingCompletedAt ?? new Date().toISOString();
+    return (
+      overrideCompletedAt ?? existingCompletedAt ?? new Date().toISOString()
+    );
   }
   return null;
 }
@@ -711,7 +714,9 @@ function updateTaskRecord(
           ? null
           : JSON.stringify(input.schedulingRules),
       nextSort,
-      input.resolutionKind === undefined ? current.resolutionKind : input.resolutionKind,
+      input.resolutionKind === undefined
+        ? current.resolutionKind
+        : input.resolutionKind,
       input.splitParentTaskId === undefined
         ? current.splitParentTaskId
         : input.splitParentTaskId,
@@ -758,7 +763,9 @@ function updateTaskRecord(
       title: updated.title,
       plannedDurationSeconds: updated.plannedDurationSeconds,
       actionCostBand:
-        input.actionCostBand ?? updated.actionPointSummary?.costBand ?? "standard"
+        input.actionCostBand ??
+        updated.actionPointSummary?.costBand ??
+        "standard"
     });
   }
   if (updated && activity) {
@@ -865,9 +872,9 @@ function fingerprintTaskCreate(input: CreateTaskInput): string {
         tagIds: parsed.tagIds,
         notes: parsed.notes.map(
           (note: NonNullable<CreateTaskInput["notes"]>[number]) => ({
-          contentMarkdown: note.contentMarkdown,
-          author: note.author,
-          links: note.links
+            contentMarkdown: note.contentMarkdown,
+            author: note.author,
+            links: note.links
           })
         )
       })
@@ -992,22 +999,24 @@ function insertTaskRecord(
   return task;
 }
 
-export function listTasks(filters: TaskListQuery = {}): Task[] {
+export function listTasks(
+  filters: TaskListQuery = {},
+  options: { now?: Date } = {}
+): Task[] {
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const weekIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const now = options.now ?? new Date();
+  const todayIso = formatLocalDateKey(now);
+  const weekIso = formatLocalDateKey(
+    new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  );
 
   if (filters.status) {
     whereClauses.push("status = ?");
     params.push(filters.status);
   }
   if (filters.levels && filters.levels.length > 0) {
-    whereClauses.push(
-      `level IN (${filters.levels.map(() => "?").join(", ")})`
-    );
+    whereClauses.push(`level IN (${filters.levels.map(() => "?").join(", ")})`);
     params.push(...filters.levels);
   }
   if (filters.owner) {
@@ -1306,7 +1315,10 @@ export function splitTask(
       60,
       remainingExpectedDurationSeconds - firstChildDurationSeconds
     );
-    const firstChildTotalAp = Math.max(1, Math.round(remainingAp * remainingRatio));
+    const firstChildTotalAp = Math.max(
+      1,
+      Math.round(remainingAp * remainingRatio)
+    );
     const secondChildTotalAp = Math.max(1, remainingAp - firstChildTotalAp);
     const parent = updateTaskRecord(
       current,
@@ -1317,7 +1329,11 @@ export function splitTask(
       activity
     );
     if (!parent) {
-      throw new HttpError(500, "task_split_failed", "Could not mark the original task as split.");
+      throw new HttpError(
+        500,
+        "task_split_failed",
+        "Could not mark the original task as split."
+      );
     }
     const totalCostPoints = current.points;
     const firstChild = insertTaskRecord(
@@ -1378,16 +1394,8 @@ export function splitTask(
       actionCostBand: current.actionPointSummary.costBand,
       totalCostAp: secondChildTotalAp
     });
-    updateTaskRecord(
-      firstChild,
-      { splitParentTaskId: current.id },
-      activity
-    );
-    updateTaskRecord(
-      secondChild,
-      { splitParentTaskId: current.id },
-      activity
-    );
+    updateTaskRecord(firstChild, { splitParentTaskId: current.id }, activity);
+    updateTaskRecord(secondChild, { splitParentTaskId: current.id }, activity);
     if (activity) {
       recordActivityEvent({
         entityType: "task",

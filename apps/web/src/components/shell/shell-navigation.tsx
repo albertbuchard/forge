@@ -13,9 +13,14 @@ import {
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent
+} from "react";
 import { ArrowUpRight, GripVertical, Settings } from "lucide-react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 import { SheetScaffold } from "@/components/experience/sheet-scaffold";
 import {
@@ -46,6 +51,8 @@ const DESKTOP_SIDEBAR_METRICS_POSITION_STORAGE_KEY =
   "forge.desktop-sidebar-metrics-position";
 const DESKTOP_KNOWLEDGE_GRAPH_MIGRATION = "desktop-knowledge-graph-default-v1";
 const MOBILE_KNOWLEDGE_GRAPH_MIGRATION = "mobile-knowledge-graph-default-v1";
+const DESKTOP_ATTENTION_MIGRATION = "desktop-attention-default-v1";
+const MOBILE_ATTENTION_MIGRATION = "mobile-attention-default-v1";
 
 export function shouldCaptureRouteIntent(event: ReactMouseEvent) {
   return (
@@ -105,25 +112,26 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
         return;
       }
     };
-    const applyKnowledgeGraphMigration = (
+    const applyMissingRouteMigration = (
       ids: string[],
       migrationKey: string,
+      routeId: string,
       insertAfterId: string
     ) => {
       const migrationState = readMigrationState();
       if (migrationState[migrationKey]) {
         return ids;
       }
-      const nextIds = ids.includes("knowledge-graph")
+      const nextIds = ids.includes(routeId)
         ? ids
         : (() => {
             const insertIndex = ids.indexOf(insertAfterId);
             if (insertIndex < 0) {
-              return [...ids, "knowledge-graph"];
+              return [...ids, routeId];
             }
             return [
               ...ids.slice(0, insertIndex + 1),
-              "knowledge-graph",
+              routeId,
               ...ids.slice(insertIndex + 1)
             ];
           })();
@@ -135,17 +143,29 @@ function readStoredNavIds(storageKey: string, defaults: string[]) {
     };
 
     if (storageKey === DESKTOP_NAV_STORAGE_KEY) {
-      return applyKnowledgeGraphMigration(
-        resolved,
-        DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
-        "calendar"
+      return applyMissingRouteMigration(
+        applyMissingRouteMigration(
+          resolved,
+          DESKTOP_KNOWLEDGE_GRAPH_MIGRATION,
+          "knowledge-graph",
+          "calendar"
+        ),
+        DESKTOP_ATTENTION_MIGRATION,
+        "attention",
+        "overview"
       );
     }
     if (storageKey === MOBILE_NAV_STORAGE_KEY) {
-      return applyKnowledgeGraphMigration(
-        resolved,
-        MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
-        "notes"
+      return applyMissingRouteMigration(
+        applyMissingRouteMigration(
+          resolved,
+          MOBILE_KNOWLEDGE_GRAPH_MIGRATION,
+          "knowledge-graph",
+          "notes"
+        ),
+        MOBILE_ATTENTION_MIGRATION,
+        "attention",
+        "overview"
       );
     }
     return resolved;

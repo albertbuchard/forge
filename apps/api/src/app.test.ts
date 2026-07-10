@@ -9575,6 +9575,20 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
         promptCount: number;
       };
       watch: {
+        inbox: {
+          attention: {
+            activeCount: number;
+            blockingCount: number;
+            importantCount: number;
+            items: Array<{
+              id: string;
+              title: string;
+              source: string;
+              severity: string;
+              targetPath: string;
+            }>;
+          };
+        };
         habits: Array<{
           id: string;
           dueToday: boolean;
@@ -9599,6 +9613,15 @@ test("watch bootstrap serves compact habit state for legacy pairings and watch h
       initialBootstrap.habits.length
     );
     assert.ok(initialBootstrapBody.measurement.promptCount >= 0);
+    assert.ok(initialBootstrap.inbox.attention.activeCount >= 0);
+    assert.ok(initialBootstrap.inbox.attention.blockingCount >= 0);
+    assert.ok(initialBootstrap.inbox.attention.importantCount >= 0);
+    assert.ok(initialBootstrap.inbox.attention.items.length <= 3);
+    for (const item of initialBootstrap.inbox.attention.items) {
+      assert.match(item.id, /^attn:/);
+      assert.ok(item.title.length > 0);
+      assert.match(item.targetPath, /^\/forge\//);
+    }
     assert.ok(initialBootstrap.habits.length >= 2);
     assert.equal(initialBootstrap.habits[0]?.dueToday, true);
     assert.equal(

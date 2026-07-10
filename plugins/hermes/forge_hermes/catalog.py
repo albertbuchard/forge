@@ -175,6 +175,13 @@ LIFE_EVENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "travelStatus": {"method": "GET", "path": "/api/v1/life-events/:id/travel-status"},
 }
 
+ATTENTION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "list": {"method": "GET", "path": "/api/v1/attention-inbox"},
+    "snooze": {"method": "POST", "path": "/api/v1/attention-inbox/:id/snooze", "write": True},
+    "dismiss": {"method": "POST", "path": "/api/v1/attention-inbox/:id/dismiss", "write": True},
+    "restore": {"method": "POST", "path": "/api/v1/attention-inbox/:id/restore", "write": True},
+}
+
 
 def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
     return object_schema(
@@ -679,6 +686,15 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema({}),
         "method": "GET",
         "path": "/api/v1/agents/onboarding",
+    },
+    {
+        "name": "forge_call_attention_route",
+        "description": "Call one allowed dedicated Attention route to list the current actor's bounded queue or snooze, dismiss, and restore an eligible item. Use the stable item id returned by list through pathParams.id. Do not invent attention records or use batch CRUD for this derived queue.",
+        "parameters": specialized_route_parameters(ATTENTION_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(ATTENTION_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(ATTENTION_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(ATTENTION_ROUTE_SPECS, args),
     },
     {
         "name": "forge_call_movement_route",

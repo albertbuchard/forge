@@ -741,6 +741,7 @@ Live onboarding publishes several read-model surfaces with both camelCase and
 entity-style aliases. Treat each pair as the same user-facing flow and normalize it
 internally before asking questions:
 
+- `attentionInbox` and `attention_inbox`
 - `operatorOverview` and `operator_overview`
 - `operatorContext` and `operator_context`
 - `calendarOverview` and `calendar_overview`
@@ -795,6 +796,10 @@ still knowing the exact write/read family before it acts.
   `entity_links`. Use batch CRUD for artifact metadata delete/restore. Do not
   download, decrypt, open, execute, preview, transform file bytes, or submit artifact
   passwords as an agent. Password and byte routes are human-operator-only actions.
+- `attention_inbox`: actor-scoped derived surface. Use
+  `forge_call_attention_route` to list the bounded queue or snooze, dismiss, and
+  restore eligible returned items. Never invent queue records, use batch CRUD, or
+  dismiss blocked and overdue work.
 - `operator_overview`: read-model-only operator surface. Use
   `forge_get_operator_overview` or `/api/v1/operator/overview` when the user wants
   the current Forge picture, attention cues, or broad status before choosing a
@@ -2373,6 +2378,40 @@ Ready to act when:
 Preferred opening question:
 
 - "What do you want Forge to remember about this item right now?"
+
+## Attention
+
+Aim: show the current actor the bounded set of decisions, blocked or overdue work,
+reviews, and operational problems that need a next move without creating another
+stored record type.
+
+Arc:
+
+1. Read the active queue before asking for item details unless the user already gave
+   a stable item id from a current read.
+2. Summarize the most consequential items by severity and source.
+3. Open the underlying record when the source itself needs action.
+4. Snooze only when an item is valid but not actionable yet. Dismiss only when the
+   returned `allowedActions` permits it. Never dismiss blocked or overdue work.
+5. Restore a deferred item when the user wants it active again.
+
+Lane-to-route map:
+
+- Attention is a derived actor-scoped surface, not batch CRUD. Use the dedicated
+  `forge_call_attention_route` with `list`, `snooze`, `dismiss`, or `restore`.
+- Pass the stable returned id through `pathParams.id`. The canonical runtime path is
+  `/api/v1/attention-inbox`; the OpenClaw mirror is `/forge/v1/attention`.
+
+Ready to act when:
+
+- a current queue read identifies the item
+- the requested action appears in `allowedActions`
+- snooze has a future return time
+
+Preferred opening question:
+
+- "What kind of next move are you trying to find: a decision, blocked work, a review,
+  or a system repair?"
 
 ## Life Events
 

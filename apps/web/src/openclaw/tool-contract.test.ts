@@ -75,6 +75,7 @@ async function loadOnboardingRouteContracts() {
     )
   );
   return {
+    attention: surfaces.attention,
     movement: surfaces.movement,
     lifeForce: surfaces.lifeForce,
     workbench: surfaces.workbench,
@@ -131,12 +132,18 @@ function readPropertyDescription(schema: Record<string, unknown>, key: string) {
 
 function readRouteGuideFromDescription(description: string) {
   const guide = /Exact routes: ([\s\S]+?)\. For any /.exec(description)?.[1];
-  expect(guide, "routeKey description should publish exact route guide").toBeTruthy();
+  expect(
+    guide,
+    "routeKey description should publish exact route guide"
+  ).toBeTruthy();
 
   return Object.fromEntries(
     guide!.split("; ").map((entry) => {
       const match = /^([^:]+):\s+([A-Z]+)\s+(\/api\/v1\/\S+)$/.exec(entry);
-      expect(match, `route guide entry should be parseable: ${entry}`).toBeTruthy();
+      expect(
+        match,
+        `route guide entry should be parseable: ${entry}`
+      ).toBeTruthy();
       return [match![1], `${match![2]} ${match![3]}`];
     })
   );
@@ -148,11 +155,15 @@ function readHermesRouteSpecs(constantName: string) {
     "utf8"
   );
   const start = source.indexOf(`${constantName}:`);
-  expect(start, `${constantName} should exist in Hermes catalog`).toBeGreaterThanOrEqual(
-    0
-  );
+  expect(
+    start,
+    `${constantName} should exist in Hermes catalog`
+  ).toBeGreaterThanOrEqual(0);
   const bodyStart = source.indexOf("{", start);
-  expect(bodyStart, `${constantName} should open a dict`).toBeGreaterThanOrEqual(0);
+  expect(
+    bodyStart,
+    `${constantName} should open a dict`
+  ).toBeGreaterThanOrEqual(0);
 
   let depth = 0;
   let bodyEnd = -1;
@@ -173,9 +184,11 @@ function readHermesRouteSpecs(constantName: string) {
 
   const body = source.slice(bodyStart, bodyEnd + 1);
   return Object.fromEntries(
-    [...body.matchAll(/"([^"]+)":\s*\{"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g)].map(
-      (match) => [match[1], `${match[2]} ${match[3]}`]
-    )
+    [
+      ...body.matchAll(
+        /"([^"]+)":\s*\{"method":\s*"([A-Z]+)",\s*"path":\s*"([^"]+)"/g
+      )
+    ].map((match) => [match[1], `${match[2]} ${match[3]}`])
   );
 }
 
@@ -198,9 +211,10 @@ function readHermesManifestToolNames() {
   );
   const lines = source.split(/\r?\n/);
   const start = lines.findIndex((line) => line.trim() === "provides_tools:");
-  expect(start, "Hermes plugin.yaml should list provides_tools").toBeGreaterThanOrEqual(
-    0
-  );
+  expect(
+    start,
+    "Hermes plugin.yaml should list provides_tools"
+  ).toBeGreaterThanOrEqual(0);
   const tools: string[] = [];
   for (const line of lines.slice(start + 1)) {
     if (line.startsWith("  - ")) {
@@ -228,9 +242,9 @@ describe("openclaw tool contracts", () => {
       makeApiRouteKey("POST", "/api/v1/calendar/timeboxes")
     ];
 
-    expect(expectedToolRoutes.every((route) => supportedRoutes.has(route))).toBe(
-      true
-    );
+    expect(
+      expectedToolRoutes.every((route) => supportedRoutes.has(route))
+    ).toBe(true);
     expect(expectedToolRoutes.every((route) => mirroredRoutes.has(route))).toBe(
       true
     );
@@ -242,14 +256,19 @@ describe("openclaw tool contracts", () => {
     const parameterProperties = Object.keys(
       (calendarOverview.parameters?.properties as Record<string, unknown>) ?? {}
     ).sort();
-    const backendProperties = Object.keys(calendarOverviewQuerySchema.shape).sort();
+    const backendProperties = Object.keys(
+      calendarOverviewQuerySchema.shape
+    ).sort();
 
     expect(parameterProperties).toEqual(backendProperties);
   });
 
   it("matches the backend calendar provider enum and requires selected calendars", () => {
     const tools = collectRegisteredTools();
-    const connectCalendar = requireTool(tools, "forge_connect_calendar_provider");
+    const connectCalendar = requireTool(
+      tools,
+      "forge_connect_calendar_provider"
+    );
     const providerValues = readTypeBoxUnionValues(
       connectCalendar.parameters ?? {},
       "provider"
@@ -267,12 +286,11 @@ describe("openclaw tool contracts", () => {
 
   it("publishes the Psyche schema catalog as a read-only reference tool", () => {
     const tools = collectRegisteredTools();
-    const schemaCatalog = requireTool(
-      tools,
-      "forge_get_psyche_schema_catalog"
-    );
+    const schemaCatalog = requireTool(tools, "forge_get_psyche_schema_catalog");
 
-    expect(schemaCatalog.description).toMatch(/read-only Psyche schema catalog/i);
+    expect(schemaCatalog.description).toMatch(
+      /read-only Psyche schema catalog/i
+    );
     expect(schemaCatalog.description).toMatch(/schemaId/i);
     expect(schemaCatalog.description).toMatch(/not user-owned belief records/i);
     expect(collectSupportedPluginApiRouteKeys()).toContain(
@@ -285,12 +303,17 @@ describe("openclaw tool contracts", () => {
 
   it("publishes dedicated route-key tools for specialized domain surfaces", async () => {
     const tools = collectRegisteredTools();
+    const attention = requireTool(tools, "forge_call_attention_route");
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
     const artifact = requireTool(tools, "forge_call_artifact_route");
     const lifeEvents = requireTool(tools, "forge_call_life_event_route");
     const onboardingSurfaces = await loadOnboardingRouteContracts();
+    const attentionRouteKeys = readTypeBoxUnionValues(
+      attention.parameters ?? {},
+      "routeKey"
+    );
     const movementRouteKeys = readTypeBoxUnionValues(
       movement.parameters ?? {},
       "routeKey"
@@ -312,6 +335,9 @@ describe("openclaw tool contracts", () => {
       "routeKey"
     );
 
+    expect(attentionRouteKeys).toEqual(
+      [...onboardingSurfaces.attention.routeKeys].sort()
+    );
     expect(movementRouteKeys).toEqual(
       [...onboardingSurfaces.movement.routeKeys].sort()
     );
@@ -327,6 +353,11 @@ describe("openclaw tool contracts", () => {
     expect(lifeEventRouteKeys).toEqual(
       [...onboardingSurfaces.lifeEvents.routeKeys].sort()
     );
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(attention.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.attention.methodRoutes);
     expect(
       readRouteGuideFromDescription(
         readPropertyDescription(movement.parameters ?? {}, "routeKey")
@@ -353,6 +384,12 @@ describe("openclaw tool contracts", () => {
       )
     ).toEqual(onboardingSurfaces.lifeEvents.methodRoutes);
 
+    expect(attentionRouteKeys).toEqual([
+      "dismiss",
+      "list",
+      "restore",
+      "snooze"
+    ]);
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
         "day",
@@ -430,7 +467,14 @@ describe("openclaw tool contracts", () => {
       "travelStatus"
     ]);
 
-    for (const tool of [movement, lifeForce, workbench, artifact, lifeEvents]) {
+    for (const tool of [
+      attention,
+      movement,
+      lifeForce,
+      workbench,
+      artifact,
+      lifeEvents
+    ]) {
       expect(tool.parameters?.required).toEqual(["routeKey"]);
       expect(tool.description ?? "").toMatch(/dedicated/i);
     }
@@ -445,31 +489,59 @@ describe("openclaw tool contracts", () => {
     expect(artifact.description ?? "").toMatch(/generic entity-link/i);
     expect(lifeEvents.description ?? "").toMatch(/shared batch CRUD/i);
     expect(lifeEvents.description ?? "").toMatch(/generic entity_links/i);
+    expect(attention.description ?? "").toMatch(/stable item id/i);
+    expect(attention.description ?? "").toMatch(/derived queue/i);
 
-    expect(readPropertyDescription(movement.parameters ?? {}, "routeKey")).toMatch(
+    expect(
+      readPropertyDescription(attention.parameters ?? {}, "routeKey")
+    ).toMatch(
+      /list: GET \/api\/v1\/attention-inbox[\s\S]*snooze: POST \/api\/v1\/attention-inbox\/:id\/snooze[\s\S]*restore: POST \/api\/v1\/attention-inbox\/:id\/restore/
+    );
+    expect(
+      readPropertyDescription(movement.parameters ?? {}, "routeKey")
+    ).toMatch(
       /day: GET \/api\/v1\/movement\/day[\s\S]*userBoxCreate: POST \/api\/v1\/movement\/user-boxes[\s\S]*tripPointDelete: DELETE \/api\/v1\/movement\/trips\/:id\/points\/:pointId/
     );
-    expect(readPropertyDescription(lifeForce.parameters ?? {}, "routeKey")).toMatch(
+    expect(
+      readPropertyDescription(lifeForce.parameters ?? {}, "routeKey")
+    ).toMatch(
       /overview: GET \/api\/v1\/life-force[\s\S]*weekdayTemplate: PUT \/api\/v1\/life-force\/templates\/:weekday/
     );
-    expect(readPropertyDescription(workbench.parameters ?? {}, "routeKey")).toMatch(
+    expect(
+      readPropertyDescription(workbench.parameters ?? {}, "routeKey")
+    ).toMatch(
       /listFlows: GET \/api\/v1\/workbench\/flows[\s\S]*runFlow: POST \/api\/v1\/workbench\/flows\/:id\/run[\s\S]*latestNodeOutput: GET \/api\/v1\/workbench\/flows\/:id\/nodes\/:nodeId\/output/
     );
-    expect(readPropertyDescription(artifact.parameters ?? {}, "routeKey")).toMatch(
+    expect(
+      readPropertyDescription(artifact.parameters ?? {}, "routeKey")
+    ).toMatch(
       /list: GET \/api\/v1\/artifacts[\s\S]*createWithBytes: POST \/api\/v1\/artifacts[\s\S]*replaceGenericLinks: POST \/api\/v1\/artifacts\/:id\/links[\s\S]*audit: GET \/api\/v1\/artifacts\/:id\/audit/
     );
-    expect(readPropertyDescription(artifact.parameters ?? {}, "routeKey")).not.toMatch(
-      /download/i
-    );
-    expect(readPropertyDescription(lifeEvents.parameters ?? {}, "routeKey")).toMatch(
+    expect(
+      readPropertyDescription(artifact.parameters ?? {}, "routeKey")
+    ).not.toMatch(/download/i);
+    expect(
+      readPropertyDescription(lifeEvents.parameters ?? {}, "routeKey")
+    ).toMatch(
       /timeline: GET \/api\/v1\/life-events\/timeline[\s\S]*calendarSync: POST \/api\/v1\/life-events\/:id\/calendar-sync[\s\S]*importTicket: POST \/api\/v1\/life-events\/import-ticket[\s\S]*travelStatus: GET \/api\/v1\/life-events\/:id\/travel-status/
     );
 
-    for (const tool of [movement, lifeForce, workbench, artifact, lifeEvents]) {
-      expect(readPropertyDescription(tool.parameters ?? {}, "routeKey")).toMatch(
+    for (const tool of [
+      attention,
+      movement,
+      lifeForce,
+      workbench,
+      artifact,
+      lifeEvents
+    ]) {
+      expect(
+        readPropertyDescription(tool.parameters ?? {}, "routeKey")
+      ).toMatch(
         /fill pathParams with that exact placeholder name[\s\S]*do not put raw paths or ids into routeKey/i
       );
-      expect(readPropertyDescription(tool.parameters ?? {}, "pathParams")).toMatch(
+      expect(
+        readPropertyDescription(tool.parameters ?? {}, "pathParams")
+      ).toMatch(
         /Use the exact :placeholder names shown in the routeKey description/i
       );
     }
@@ -478,6 +550,9 @@ describe("openclaw tool contracts", () => {
   it("keeps Hermes specialized route specs aligned with live onboarding", async () => {
     const onboardingSurfaces = await loadOnboardingRouteContracts();
 
+    expect(readHermesRouteSpecs("ATTENTION_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.attention.methodRoutes
+    );
     expect(readHermesRouteSpecs("MOVEMENT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.movement.methodRoutes
     );

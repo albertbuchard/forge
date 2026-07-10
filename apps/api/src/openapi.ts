@@ -133,6 +133,11 @@ const API_TAGS = [
     description: "Approval workflows for deferred or gated agent actions."
   },
   {
+    name: "Attention",
+    description:
+      "A bounded, deduplicated queue of existing Forge records that need review or a decision."
+  },
+  {
     name: "Entity Batch",
     description:
       "Batch create, update, delete, restore, and search operations across entity types."
@@ -254,6 +259,7 @@ const API_TAG_GROUPS = [
       "Metrics",
       "Reviews",
       "Insights",
+      "Attention",
       "Workbench"
     ]
   },
@@ -309,6 +315,9 @@ function resolveTagsForPath(path: string) {
   }
   if (path.startsWith("/api/v1/approval-requests")) {
     return ["Approvals"];
+  }
+  if (path.startsWith("/api/v1/attention-inbox")) {
+    return ["Attention"];
   }
   if (
     path.startsWith("/api/v1/agents") ||
@@ -2789,6 +2798,185 @@ export function buildOpenApiDocument() {
       rejectedAt: nullable({ type: "string", format: "date-time" }),
       resolutionNote: { type: "string" },
       createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const attentionInboxTarget = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId", "label", "href"],
+    properties: {
+      entityType: nullable({ type: "string" }),
+      entityId: nullable({ type: "string" }),
+      label: { type: "string" },
+      href: { type: "string" }
+    }
+  };
+
+  const attentionInboxItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "source",
+      "kind",
+      "severity",
+      "state",
+      "title",
+      "reason",
+      "detail",
+      "target",
+      "allowedActions",
+      "createdAt",
+      "updatedAt",
+      "sourceUpdatedAt",
+      "dueAt",
+      "snoozedUntil",
+      "metadata"
+    ],
+    properties: {
+      id: {
+        type: "string",
+        description:
+          "Stable derived ID. Send this exact value, URL-encoded, to an attention action route."
+      },
+      source: {
+        type: "string",
+        enum: ["approval", "insight", "task", "companion_sync", "agent_session"]
+      },
+      kind: {
+        type: "string",
+        enum: [
+          "decision",
+          "review",
+          "blocked_work",
+          "overdue_work",
+          "sync_problem",
+          "runtime_problem"
+        ]
+      },
+      severity: {
+        type: "string",
+        enum: ["notice", "important", "blocking"],
+        description:
+          "Evidence-derived priority. Forge does not manufacture urgency from age alone."
+      },
+      state: {
+        type: "string",
+        enum: ["active", "snoozed", "dismissed"]
+      },
+      title: { type: "string" },
+      reason: {
+        type: "string",
+        description: "Why the record currently belongs in the queue."
+      },
+      detail: { type: "string" },
+      target: { $ref: "#/components/schemas/AttentionInboxTarget" },
+      allowedActions: arrayOf({
+        type: "string",
+        enum: ["open", "approve", "reject", "snooze", "dismiss", "restore"]
+      }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      sourceUpdatedAt: {
+        type: "string",
+        format: "date-time",
+        description:
+          "Version marker for the underlying evidence. A changed source automatically reactivates a previously snoozed or dismissed item."
+      },
+      dueAt: nullable({ type: "string" }),
+      snoozedUntil: nullable({ type: "string", format: "date-time" }),
+      metadata: { type: "object", additionalProperties: true }
+    }
+  };
+
+  const attentionInboxSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "activeCount",
+      "snoozedCount",
+      "dismissedCount",
+      "blockingCount",
+      "importantCount",
+      "sourceCounts"
+    ],
+    properties: {
+      activeCount: { type: "integer", minimum: 0 },
+      snoozedCount: { type: "integer", minimum: 0 },
+      dismissedCount: { type: "integer", minimum: 0 },
+      blockingCount: { type: "integer", minimum: 0 },
+      importantCount: { type: "integer", minimum: 0 },
+      sourceCounts: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "approval",
+          "insight",
+          "task",
+          "companion_sync",
+          "agent_session"
+        ],
+        properties: {
+          approval: { type: "integer", minimum: 0 },
+          insight: { type: "integer", minimum: 0 },
+          task: { type: "integer", minimum: 0 },
+          companion_sync: { type: "integer", minimum: 0 },
+          agent_session: { type: "integer", minimum: 0 }
+        }
+      }
+    }
+  };
+
+  const attentionInboxPayload = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "generatedAt",
+      "state",
+      "total",
+      "offset",
+      "limit",
+      "hasMore",
+      "summary",
+      "items"
+    ],
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      state: {
+        type: "string",
+        enum: ["active", "snoozed", "dismissed"]
+      },
+      total: { type: "integer", minimum: 0 },
+      offset: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      hasMore: { type: "boolean" },
+      summary: { $ref: "#/components/schemas/AttentionInboxSummary" },
+      items: arrayOf({ $ref: "#/components/schemas/AttentionInboxItem" })
+    }
+  };
+
+  const attentionInboxStateRecord = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "itemId",
+      "state",
+      "snoozedUntil",
+      "sourceUpdatedAt",
+      "note",
+      "updatedAt"
+    ],
+    properties: {
+      itemId: { type: "string" },
+      state: {
+        type: "string",
+        enum: ["active", "snoozed", "dismissed"]
+      },
+      snoozedUntil: nullable({ type: "string", format: "date-time" }),
+      sourceUpdatedAt: { type: "string", format: "date-time" },
+      note: { type: "string" },
       updatedAt: { type: "string", format: "date-time" }
     }
   };
@@ -6642,6 +6830,11 @@ export function buildOpenApiDocument() {
         Insight: insight,
         InsightFeedback: insightFeedback,
         ApprovalRequest: approvalRequest,
+        AttentionInboxTarget: attentionInboxTarget,
+        AttentionInboxItem: attentionInboxItem,
+        AttentionInboxSummary: attentionInboxSummary,
+        AttentionInboxPayload: attentionInboxPayload,
+        AttentionInboxStateRecord: attentionInboxStateRecord,
         AgentAction: agentAction,
         RewardRule: rewardRule,
         RewardLedgerEvent: rewardLedgerEvent,
@@ -12977,6 +13170,193 @@ export function buildOpenApiDocument() {
               },
               "Insight feedback"
             )
+          }
+        }
+      },
+      "/api/v1/attention-inbox": {
+        get: {
+          summary: "Read the current actor's bounded attention queue",
+          description:
+            "Requires an operator session or a token with read scope. Operator sessions can receive pending approvals, unresolved companion syncs, and stale agent runtime signals. Tokens receive only task and insight records allowed by their user, project, and tag scope. Results are deduplicated, sorted by evidence-derived severity and recency, and bounded per source.",
+          parameters: [
+            {
+              name: "state",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["active", "snoozed", "dismissed"],
+                default: "active"
+              }
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 25
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 0,
+                maximum: 10000,
+                default: 0
+              }
+            },
+            {
+              name: "userId",
+              in: "query",
+              schema: { type: "string" },
+              description:
+                "Optional operator user filter. A scoped token can only narrow, never widen, its configured user policy."
+            },
+            {
+              name: "userIds",
+              in: "query",
+              schema: arrayOf({ type: "string" }),
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated user filter. A scoped token can only narrow, never widen, its configured user policy."
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              { $ref: "#/components/schemas/AttentionInboxPayload" },
+              "Attention inbox payload"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/attention-inbox/{id}/snooze": {
+        post: {
+          summary: "Snooze an eligible attention item",
+          description:
+            "Requires write scope. The item must advertise snooze in allowedActions. Snoozes must end in the future and within one year. If the underlying source changes, Forge reactivates the item immediately.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "URL-encoded AttentionInboxItem.id."
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["until"],
+                  properties: {
+                    until: { type: "string", format: "date-time" },
+                    note: { type: "string", maxLength: 500, default: "" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["attentionState"],
+                properties: {
+                  attentionState: {
+                    $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  }
+                }
+              },
+              "Snoozed attention state"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/attention-inbox/{id}/dismiss": {
+        post: {
+          summary: "Dismiss an eligible attention item",
+          description:
+            "Requires write scope. The item must advertise dismiss in allowedActions. Blocked and overdue work cannot be dismissed; it can only be opened or snoozed. If the underlying source changes, Forge reactivates a dismissed item.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "URL-encoded AttentionInboxItem.id."
+            }
+          ],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    note: { type: "string", maxLength: 500, default: "" }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["attentionState"],
+                properties: {
+                  attentionState: {
+                    $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  }
+                }
+              },
+              "Dismissed attention state"
+            ),
+            default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/attention-inbox/{id}/restore": {
+        post: {
+          summary: "Restore a snoozed or dismissed attention item",
+          description:
+            "Requires write scope. Restore is available only while the current source version remains snoozed or dismissed.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "URL-encoded AttentionInboxItem.id."
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["attentionState"],
+                properties: {
+                  attentionState: {
+                    $ref: "#/components/schemas/AttentionInboxStateRecord"
+                  }
+                }
+              },
+              "Restored attention state"
+            ),
+            default: { $ref: "#/components/responses/Error" }
           }
         }
       },

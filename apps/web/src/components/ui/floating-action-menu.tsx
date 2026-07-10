@@ -1,4 +1,4 @@
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useRef, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,27 +28,73 @@ export function FloatingActionMenu({
   position: { x: number; y: number } | null;
   onClose: () => void;
 }) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     let active = false;
     const enableInteractions = window.setTimeout(() => {
       active = true;
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+        ?.focus();
     }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        event.preventDefault();
+        onCloseRef.current();
+        return;
       }
+      if (
+        event.key !== "ArrowDown" &&
+        event.key !== "ArrowUp" &&
+        event.key !== "Home" &&
+        event.key !== "End"
+      ) {
+        return;
+      }
+      const menuItems = Array.from(
+        menuRef.current?.querySelectorAll<HTMLButtonElement>(
+          '[role="menuitem"]:not(:disabled)'
+        ) ?? []
+      );
+      if (menuItems.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      const currentIndex = menuItems.findIndex(
+        (item) => item === document.activeElement
+      );
+      const nextIndex =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? menuItems.length - 1
+            : event.key === "ArrowUp"
+              ? (currentIndex - 1 + menuItems.length) % menuItems.length
+              : (currentIndex + 1) % menuItems.length;
+      menuItems[nextIndex]?.focus();
     };
 
     const onPointerDown = () => {
       if (!active) {
         return;
       }
-      onClose();
+      onCloseRef.current();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -57,16 +103,20 @@ export function FloatingActionMenu({
       window.clearTimeout(enableInteractions);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
+      previousFocusRef.current?.focus();
     };
-  }, [onClose, open]);
+  }, [open]);
 
   if (!open || !position || typeof document === "undefined") {
     return null;
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[70]" aria-hidden="true">
+    <div className="fixed inset-0 z-[70]" role="presentation">
       <div
+        ref={menuRef}
+        role="menu"
+        aria-label={title}
         className="fixed z-[71] flex max-h-[min(34rem,calc(100dvh-1.5rem))] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[26px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-modal)] p-2 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl"
         style={{
           left: Math.min(position.x, window.innerWidth - 24 - 352),
@@ -87,6 +137,7 @@ export function FloatingActionMenu({
           </div>
           <button
             type="button"
+            aria-label="Close menu"
             className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
             onClick={onClose}
           >
@@ -102,6 +153,7 @@ export function FloatingActionMenu({
                 <button
                   key={item.id}
                   type="button"
+                  role="menuitem"
                   disabled={item.disabled}
                   onClick={() => {
                     if (item.disabled) {

@@ -191,7 +191,9 @@ final class ForgeCompanionTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("test-fixtures")
+            .deletingLastPathComponent()
+            .appendingPathComponent("tests")
+            .appendingPathComponent("fixtures")
             .appendingPathComponent("movement-canonical-box-fixtures.json")
         let data = try Data(contentsOf: fixtureURL)
         let catalog = try JSONDecoder().decode(SharedMovementFixtureCatalog.self, from: data)
@@ -2063,6 +2065,55 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(bootstrap.habits.first?.alignedActionLabel, "Done")
         XCTAssertEqual(bootstrap.habits.first?.last7History.count, 7)
         XCTAssertEqual(bootstrap.checkInOptions.recentPeople.first, "Julien")
+    }
+
+    func testWatchBootstrapDecodesCompactAttentionPayload() throws {
+        let json = """
+        {
+          "schemaVersion": 2,
+          "generatedAt": "2026-07-09T22:00:00Z",
+          "inbox": {
+            "prompts": [],
+            "attention": {
+              "activeCount": 4,
+              "blockingCount": 1,
+              "importantCount": 2,
+              "items": [
+                {
+                  "id": "attn:task:task_1",
+                  "title": "Resolve the blocked import",
+                  "reason": "This task is blocked and needs a next move.",
+                  "source": "task",
+                  "severity": "blocking",
+                  "targetLabel": "Open task",
+                  "targetPath": "/forge/tasks/task_1",
+                  "updatedAt": "2026-07-09T21:55:00Z"
+                }
+              ]
+            }
+          },
+          "habits": [],
+          "checkInOptions": {
+            "activities": [],
+            "emotions": [],
+            "triggers": [],
+            "placeCategories": [],
+            "routinePrompts": [],
+            "recentPeople": []
+          },
+          "pendingPrompts": []
+        }
+        """
+
+        let bootstrap = try JSONDecoder().decode(
+            ForgeWatchBootstrap.self,
+            from: Data(json.utf8)
+        )
+
+        XCTAssertEqual(bootstrap.inbox?.attention?.activeCount, 4)
+        XCTAssertEqual(bootstrap.inbox?.attention?.blockingCount, 1)
+        XCTAssertEqual(bootstrap.inbox?.attention?.items.first?.id, "attn:task:task_1")
+        XCTAssertEqual(bootstrap.inbox?.attention?.items.first?.targetPath, "/forge/tasks/task_1")
     }
 
     func testWatchTaskStatusCommandEnvelopeEncodesBlockedPayload() throws {

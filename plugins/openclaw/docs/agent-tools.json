@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-09T20:19:08.724Z",
+  "generatedAt": "2026-07-10T00:18:24.905Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -99,6 +99,27 @@
         "Optional LLM enrichment can fill missing metadata, but it must not lower the deterministic scanner danger score."
       ],
       "example": "{\"routeKey\":\"replaceGenericLinks\",\"pathParams\":{\"id\":\"artifact_123\"},\"body\":{\"links\":[{\"entityType\":\"wiki_page\",\"entityId\":\"note_budget_model\",\"relationship\":\"embedded_reference\",\"anchorKey\":\"budget-workbook\"}]}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_attention_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Attention Route",
+      "summary": "List the current actor's bounded Attention queue or snooze, dismiss, and restore eligible items.",
+      "whenToUse": "Use when the user asks what needs a decision, review, repair, or follow-up, or when they explicitly want to manage an existing Attention item.",
+      "inputShape": "{ routeKey: \"list\"|\"snooze\"|\"dismiss\"|\"restore\", pathParams?: { id?: string }, query?: { state?: \"active\"|\"snoozed\"|\"dismissed\", limit?: number, offset?: number, userIds?: string[], projectIds?: string[], tagIds?: string[] }, body?: { until?: string, note?: string } }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Use list first unless the user supplied a stable attention item id from a current read.",
+        "Snooze requires body.until as a future ISO timestamp no more than one year away. Dismiss accepts an optional note. Restore needs no body.",
+        "Use pathParams.id for action routes. Do not put the item id into routeKey, query, or body.",
+        "Blocked and overdue work cannot be dismissed; open and resolve the underlying task instead.",
+        "Attention state is actor-scoped and source changes reactivate previously snoozed or dismissed evidence."
+      ],
+      "example": "{\"routeKey\":\"snooze\",\"pathParams\":{\"id\":\"attn:insight:ins_123\"},\"body\":{\"until\":\"2026-07-11T09:00:00.000Z\",\"note\":\"Review after the morning planning block.\"}}",
       "catalogDocumented": true
     },
     {

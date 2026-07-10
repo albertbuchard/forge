@@ -60,6 +60,16 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain(
       "GET /api/v1/workbench/flows/:id/nodes/:nodeId/output"
     );
+    expect(report.mirrored).toContain("GET /api/v1/attention-inbox");
+    expect(report.mirrored).toContain(
+      "POST /api/v1/attention-inbox/:id/snooze"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/attention-inbox/:id/dismiss"
+    );
+    expect(report.mirrored).toContain(
+      "POST /api/v1/attention-inbox/:id/restore"
+    );
     expect(report.mirrored).toContain("GET /api/v1/artifacts");
     expect(report.mirrored).toContain("POST /api/v1/artifacts");
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id");
@@ -71,7 +81,9 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/versions");
     expect(report.mirrored).toContain("GET /api/v1/artifacts/:id/audit");
     expect(report.mirrored).not.toContain("GET /api/v1/artifacts/:id/download");
-    expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/download");
+    expect(report.mirrored).not.toContain(
+      "POST /api/v1/artifacts/:id/download"
+    );
     expect(report.mirrored).not.toContain("POST /api/v1/artifacts/:id/encrypt");
     expect(report.mirrored).toContain("GET /api/v1/life-events/timeline");
     expect(report.mirrored).toContain("GET /api/v1/life-events/:id");
@@ -81,9 +93,7 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain(
       "POST /api/v1/life-events/from-calendar-event"
     );
-    expect(report.mirrored).toContain(
-      "POST /api/v1/life-events/import-ticket"
-    );
+    expect(report.mirrored).toContain("POST /api/v1/life-events/import-ticket");
     expect(report.mirrored).toContain(
       "GET /api/v1/life-events/:id/travel-status"
     );
@@ -95,7 +105,9 @@ describe("forge plugin route parity", () => {
     expect(report.mirrored).toContain("GET /api/v1/calendar/connections");
     expect(report.mirrored).toContain("POST /api/v1/calendar/connections");
     expect(report.mirrored).toContain("PATCH /api/v1/calendar/connections/:id");
-    expect(report.mirrored).toContain("DELETE /api/v1/calendar/connections/:id");
+    expect(report.mirrored).toContain(
+      "DELETE /api/v1/calendar/connections/:id"
+    );
     expect(report.mirrored).toContain(
       "GET /api/v1/calendar/connections/:id/discovery"
     );
@@ -157,15 +169,15 @@ describe("forge plugin route parity", () => {
     expect(supported.has("GET /api/v1/artifacts")).toBe(true);
     expect(supported.has("POST /api/v1/artifacts")).toBe(true);
     expect(supported.has("POST /api/v1/artifacts/:id/links")).toBe(true);
-    expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
-      false
-    );
-    expect(supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
-      false
-    );
-    expect(supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)).toBe(
-      false
-    );
+    expect(
+      supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)
+    ).toBe(false);
+    expect(
+      supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)
+    ).toBe(false);
+    expect(
+      supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)
+    ).toBe(false);
     expect(supported.has("GET /api/v1/life-events/timeline")).toBe(true);
     expect(supported.has("GET /api/v1/life-events/:id")).toBe(true);
     expect(supported.has("POST /api/v1/life-events/:id/calendar-sync")).toBe(
@@ -293,15 +305,15 @@ describe("forge plugin route parity", () => {
         `${route} should stay mirrored`
       ).toBe(true);
     }
-    expect(supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
-      false
-    );
-    expect(supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)).toBe(
-      false
-    );
-    expect(supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)).toBe(
-      false
-    );
+    expect(
+      supported.has("GET /api/v1/artifacts/:id/download" as ApiRouteKey)
+    ).toBe(false);
+    expect(
+      supported.has("POST /api/v1/artifacts/:id/download" as ApiRouteKey)
+    ).toBe(false);
+    expect(
+      supported.has("POST /api/v1/artifacts/:id/encrypt" as ApiRouteKey)
+    ).toBe(false);
   });
 
   it("labels specialized domain route families with their own route purposes", () => {
@@ -319,12 +331,10 @@ describe("forge plugin route parity", () => {
       "movement"
     );
     expect(purposeByRoute.get("GET /api/v1/life-force")).toBe("life_force");
-    expect(
-      purposeByRoute.get("POST /api/v1/life-force/fatigue-signals")
-    ).toBe("life_force");
-    expect(purposeByRoute.get("GET /api/v1/workbench/flows")).toBe(
-      "workbench"
+    expect(purposeByRoute.get("POST /api/v1/life-force/fatigue-signals")).toBe(
+      "life_force"
     );
+    expect(purposeByRoute.get("GET /api/v1/workbench/flows")).toBe("workbench");
     expect(
       purposeByRoute.get("GET /api/v1/workbench/flows/:id/nodes/:nodeId/output")
     ).toBe("workbench");
@@ -338,7 +348,9 @@ describe("forge plugin route parity", () => {
     expect(
       purposeByRoute.get("POST /api/v1/life-events/from-calendar-event")
     ).toBe("life_event");
-    expect(purposeByRoute.get("GET /api/v1/artifacts/:id/download")).toBeUndefined();
+    expect(
+      purposeByRoute.get("GET /api/v1/artifacts/:id/download")
+    ).toBeUndefined();
   });
 
   it("mirrors exactly the curated upstream routes", () => {

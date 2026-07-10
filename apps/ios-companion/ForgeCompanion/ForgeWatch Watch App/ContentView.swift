@@ -207,6 +207,7 @@ private struct WatchSurfacePager: View {
             case .inbox:
                 InboxSurface(
                     prompts: bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts,
+                    attention: bootstrap.inbox?.attention,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCapture: onCapture
                 )
@@ -255,7 +256,9 @@ private struct WatchSurfacePager: View {
         case .psyche:
             return max(1, psycheCardCount(bootstrap.psyche))
         case .inbox:
-            return max(1, (bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts).count)
+            let prompts = bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts
+            let attentionCards = bootstrap.inbox?.attention.map { 1 + $0.items.count } ?? 0
+            return max(1, attentionCards + prompts.count)
         case .sync:
             return 1
         }
@@ -1100,14 +1103,71 @@ private struct PsycheRecentReportCard: View {
 
 private struct InboxSurface: View {
     let prompts: [ForgeWatchPrompt]
+    let attention: ForgeWatchAttentionSnapshot?
     @Binding var selection: Int
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
 
     var body: some View {
-        if prompts.isEmpty {
+        if prompts.isEmpty, attention == nil {
             EmptySurfaceCard(title: "Inbox clear", message: "No watch-sized prompts are waiting.")
         } else {
-            SurfaceCarousel(selection: $selection, count: prompts.count) {
+            SurfaceCarousel(selection: $selection, count: cardCount) {
+                if let attention {
+                    WatchCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 7) {
+                                Image(systemName: "tray.full.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(attention.blockingCount > 0 ? WatchTheme.danger : WatchTheme.accent)
+                                Text("Attention")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                            }
+
+                            HStack(spacing: 6) {
+                                DenseMetric(title: "Active", value: "\(attention.activeCount)", tint: WatchTheme.accent)
+                                DenseMetric(title: "Important", value: "\(attention.importantCount)", tint: WatchTheme.accent)
+                                DenseMetric(title: "Blocking", value: "\(attention.blockingCount)", tint: WatchTheme.danger)
+                            }
+
+                            Text(attention.items.first?.title ?? "Nothing needs a next move.")
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(WatchTheme.textMuted)
+                                .lineLimit(2)
+                        }
+                    }
+                    .tag(0)
+
+                    ForEach(Array(attention.items.enumerated()), id: \.element.id) { index, item in
+                        WatchCard {
+                            VStack(alignment: .leading, spacing: 7) {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(severityColor(item.severity))
+                                        .frame(width: 7, height: 7)
+                                    Text(item.source.replacingOccurrences(of: "_", with: " ").capitalized)
+                                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                                        .foregroundStyle(WatchTheme.textMuted)
+                                        .lineLimit(1)
+                                }
+                                Text(item.title)
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textPrimary)
+                                    .lineLimit(2)
+                                Text(item.reason)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(WatchTheme.textMuted)
+                                    .lineLimit(3)
+                                Text(item.targetLabel)
+                                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(WatchTheme.accent)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .tag(index + 1)
+                    }
+                }
+
                 ForEach(Array(prompts.enumerated()), id: \.element.id) { index, prompt in
                     WatchCard {
                         VStack(alignment: .leading, spacing: 7) {
@@ -1127,9 +1187,28 @@ private struct InboxSurface: View {
                             }
                         }
                     }
-                    .tag(index)
+                    .tag(attentionCardCount + index)
                 }
             }
+        }
+    }
+
+    private var attentionCardCount: Int {
+        attention.map { 1 + $0.items.count } ?? 0
+    }
+
+    private var cardCount: Int {
+        max(1, attentionCardCount + prompts.count)
+    }
+
+    private func severityColor(_ severity: String) -> Color {
+        switch severity {
+        case "blocking":
+            return WatchTheme.danger
+        case "important":
+            return WatchTheme.accent
+        default:
+            return WatchTheme.accent
         }
     }
 

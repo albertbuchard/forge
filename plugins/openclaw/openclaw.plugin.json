@@ -5,16 +5,10 @@
   "version": "0.3.24",
   "activation": {
     "onStartup": true,
-    "onCapabilities": [
-      "tool"
-    ],
-    "onCommands": [
-      "forge"
-    ]
+    "onCapabilities": ["tool"],
+    "onCommands": ["forge"]
   },
-  "skills": [
-    "./skills"
-  ],
+  "skills": ["./skills"],
   "commandAliases": [
     {
       "name": "forge"
@@ -25,6 +19,7 @@
       "forge_adjust_work_minutes",
       "forge_apply_doctor_fix",
       "forge_call_artifact_route",
+      "forge_call_attention_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
       "forge_call_movement_route",

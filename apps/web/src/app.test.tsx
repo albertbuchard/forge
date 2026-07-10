@@ -77,6 +77,10 @@ vi.mock("@/pages/activity-page", () => ({
   ActivityPage: () => <div>Activity route</div>
 }));
 
+vi.mock("@/pages/attention-inbox-page", () => ({
+  AttentionInboxPage: () => <div>Attention route</div>
+}));
+
 vi.mock("@/pages/insights-page", () => ({
   InsightsPage: () => <div>Insights route</div>
 }));
@@ -102,7 +106,9 @@ vi.mock("@/pages/psyche-questionnaires-page", () => ({
 }));
 
 vi.mock("@/pages/psyche-questionnaire-detail-page", () => ({
-  PsycheQuestionnaireDetailPage: () => <div>Psyche questionnaire detail route</div>
+  PsycheQuestionnaireDetailPage: () => (
+    <div>Psyche questionnaire detail route</div>
+  )
 }));
 
 vi.mock("@/pages/psyche-questionnaire-run-page", () => ({
@@ -110,11 +116,15 @@ vi.mock("@/pages/psyche-questionnaire-run-page", () => ({
 }));
 
 vi.mock("@/pages/psyche-questionnaire-run-detail-page", () => ({
-  PsycheQuestionnaireRunDetailPage: () => <div>Psyche questionnaire run detail route</div>
+  PsycheQuestionnaireRunDetailPage: () => (
+    <div>Psyche questionnaire run detail route</div>
+  )
 }));
 
 vi.mock("@/pages/psyche-questionnaire-builder-page", () => ({
-  PsycheQuestionnaireBuilderPage: () => <div>Psyche questionnaire builder route</div>
+  PsycheQuestionnaireBuilderPage: () => (
+    <div>Psyche questionnaire builder route</div>
+  )
 }));
 
 vi.mock("@/pages/psyche-self-observation-page", () => ({
@@ -218,49 +228,71 @@ describe("App routing", () => {
 
     renderApp("/psyche/reports/report_1");
 
-    expect(await screen.findByText("Psyche report detail route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche report detail route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/behaviors");
-    expect(await screen.findByText("Psyche behaviors route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche behaviors route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/questionnaires");
-    expect(await screen.findByText("Psyche questionnaires route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche questionnaires route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/questionnaires/q_1");
-    expect(await screen.findByText("Psyche questionnaire detail route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche questionnaire detail route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/questionnaires/q_1/take");
-    expect(await screen.findByText("Psyche questionnaire run route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche questionnaire run route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/questionnaire-runs/run_1");
-    expect(await screen.findByText("Psyche questionnaire run detail route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche questionnaire run detail route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/self-observation");
-    expect(await screen.findByText("Psyche self observation route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche self observation route")
+    ).toBeInTheDocument();
 
     renderApp("/psyche/screen-time");
-    expect(await screen.findByText("Psyche screen time route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche screen time route")
+    ).toBeInTheDocument();
 
     render(
       <MemoryRouter initialEntries={["/psyche/schemas-beliefs"]}>
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByText("Psyche schemas beliefs route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche schemas beliefs route")
+    ).toBeInTheDocument();
 
     render(
       <MemoryRouter initialEntries={["/psyche/modes/guide"]}>
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByText("Psyche mode guide route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche mode guide route")
+    ).toBeInTheDocument();
 
     render(
       <MemoryRouter initialEntries={["/psyche/questionnaires/new"]}>
         <App />
       </MemoryRouter>
     );
-    expect(await screen.findByText("Psyche questionnaire builder route")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Psyche questionnaire builder route")
+    ).toBeInTheDocument();
   });
 
   it("redirects legacy campaigns to projects", async () => {
@@ -275,6 +307,13 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Habits route")).toBeInTheDocument();
+  });
+
+  it("renders the attention queue inside the shell", async () => {
+    renderApp("/attention");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Attention route")).toBeInTheDocument();
   });
 
   it("renders wiki reading and writing routes inside the shell", async () => {

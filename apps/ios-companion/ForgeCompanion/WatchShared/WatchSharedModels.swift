@@ -355,6 +355,25 @@ struct ForgeWatchPsycheSnapshot: Codable, Hashable {
 
 struct ForgeWatchInboxSnapshot: Codable, Hashable {
     let prompts: [ForgeWatchPrompt]
+    let attention: ForgeWatchAttentionSnapshot?
+}
+
+struct ForgeWatchAttentionSnapshot: Codable, Hashable {
+    struct Item: Codable, Identifiable, Hashable {
+        let id: String
+        let title: String
+        let reason: String
+        let source: String
+        let severity: String
+        let targetLabel: String
+        let targetPath: String
+        let updatedAt: String
+    }
+
+    let activeCount: Int
+    let blockingCount: Int
+    let importantCount: Int
+    let items: [Item]
 }
 
 struct ForgeWatchSyncSnapshot: Codable, Hashable {

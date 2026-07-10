@@ -196,12 +196,7 @@ export const diagnosticLogLevelSchema = z.preprocess(
     const normalized = value.trim().toLowerCase();
     return normalized === "warn" ? "warning" : normalized;
   },
-  z.enum([
-    "debug",
-    "info",
-    "warning",
-    "error"
-  ])
+  z.enum(["debug", "info", "warning", "error"])
 );
 export const diagnosticLogSourceSchema = z.enum([
   "ui",
@@ -289,9 +284,9 @@ export const agentBootstrapPolicySchema = z.object({
     .min(0)
     .max(50)
     .default(defaultAgentBootstrapPolicy.peoplePageLimit),
-  includePeoplePages: z.boolean().default(
-    defaultAgentBootstrapPolicy.includePeoplePages
-  )
+  includePeoplePages: z
+    .boolean()
+    .default(defaultAgentBootstrapPolicy.includePeoplePages)
 });
 export const defaultAgentScopePolicy = {
   userIds: [],
@@ -498,11 +493,15 @@ const uniqueStringArraySchema = z
   });
 
 export const agentScopePolicySchema = z.object({
-  userIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.userIds]),
+  userIds: uniqueStringArraySchema.default(() => [
+    ...defaultAgentScopePolicy.userIds
+  ]),
   projectIds: uniqueStringArraySchema.default(() => [
     ...defaultAgentScopePolicy.projectIds
   ]),
-  tagIds: uniqueStringArraySchema.default(() => [...defaultAgentScopePolicy.tagIds])
+  tagIds: uniqueStringArraySchema.default(() => [
+    ...defaultAgentScopePolicy.tagIds
+  ])
 });
 
 const integerMinuteSchema = z
@@ -790,7 +789,11 @@ export const lifeForceStatStateSchema = z.object({
 });
 
 export const lifeForceCurvePointSchema = z.object({
-  minuteOfDay: z.number().int().min(0).max(24 * 60),
+  minuteOfDay: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60),
   rateApPerHour: z.number().min(0),
   locked: z.boolean().optional()
 });
@@ -1802,7 +1805,9 @@ export const gamificationMetricKeySchema = z.enum([
   "activeCategoryCount"
 ]);
 
-export type GamificationRequirement = z.infer<typeof gamificationRequirementSchema>;
+export type GamificationRequirement = z.infer<
+  typeof gamificationRequirementSchema
+>;
 export const gamificationRequirementSchema: z.ZodType<
   | {
       metric: z.infer<typeof gamificationMetricKeySchema>;
@@ -1845,20 +1850,24 @@ export const gamificationCatalogItemSchema = z.object({
   requirementText: z.string(),
   reward: z.string(),
   unlockType: gamificationUnlockTypeSchema.nullable(),
-  rewardPayload: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  rewardPayload: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.null()])
+  ),
   assetKey: z.string(),
   sheetKey: z.string(),
   rarity: gamificationCatalogRaritySchema,
   sortOrder: z.number().int().nonnegative()
 });
-export const gamificationCatalogEntrySchema = gamificationCatalogItemSchema.extend({
-  unlocked: z.boolean(),
-  unlockedAt: z.string().nullable(),
-  progressCurrent: z.number().int().nonnegative(),
-  progressTarget: z.number().int().positive(),
-  progressPercent: z.number().min(0).max(100),
-  celebrationSeenAt: z.string().nullable()
-});
+export const gamificationCatalogEntrySchema =
+  gamificationCatalogItemSchema.extend({
+    unlocked: z.boolean(),
+    unlockedAt: z.string().nullable(),
+    progressCurrent: z.number().int().nonnegative(),
+    progressTarget: z.number().int().positive(),
+    progressPercent: z.number().min(0).max(100),
+    celebrationSeenAt: z.string().nullable()
+  });
 export const gamificationMascotStateSchema = z.object({
   mood: z.enum([
     "idle",
@@ -1913,7 +1922,10 @@ export const gamificationCelebrationSchema = z.object({
   title: z.string(),
   summary: z.string(),
   assetKey: z.string(),
-  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  metadata: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.null()])
+  ),
   createdAt: z.string(),
   seenAt: z.string().nullable()
 });
@@ -2306,11 +2318,7 @@ export const modelSettingsPayloadSchema = z.object({
   })
 });
 
-export const aiProcessorTriggerModeSchema = z.enum([
-  "manual",
-  "route",
-  "cron"
-]);
+export const aiProcessorTriggerModeSchema = z.enum(["manual", "route", "cron"]);
 
 export const aiProcessorCapabilityModeSchema = z.enum([
   "content",
@@ -2444,7 +2452,10 @@ export const forgeBoxToolAdapterSchema = z.object({
 const workbenchPortKindSchema = z
   .enum([...WORKBENCH_PORT_KINDS, ...LEGACY_WORKBENCH_PORT_KINDS] as [
     (typeof WORKBENCH_PORT_KINDS)[number],
-    ...Array<(typeof WORKBENCH_PORT_KINDS)[number] | (typeof LEGACY_WORKBENCH_PORT_KINDS)[number]>
+    ...Array<
+      | (typeof WORKBENCH_PORT_KINDS)[number]
+      | (typeof LEGACY_WORKBENCH_PORT_KINDS)[number]
+    >
   ])
   .transform((value) => normalizeWorkbenchPortKind({ kind: value }));
 
@@ -2475,10 +2486,12 @@ export const aiConnectorPublicInputBindingSchema = z.object({
   targetKind: z.enum(["input", "param"]).default("input")
 });
 
-export const aiConnectorPublicInputSchema = forgeBoxPortDefinitionSchema.extend({
-  defaultValue: z.unknown().optional(),
-  bindings: z.array(aiConnectorPublicInputBindingSchema).default([])
-});
+export const aiConnectorPublicInputSchema = forgeBoxPortDefinitionSchema.extend(
+  {
+    defaultValue: z.unknown().optional(),
+    bindings: z.array(aiConnectorPublicInputBindingSchema).default([])
+  }
+);
 
 export const forgeBoxCatalogEntrySchema = z.object({
   id: nonEmptyTrimmedString,
@@ -2491,7 +2504,10 @@ export const forgeBoxCatalogEntrySchema = z.object({
   description: trimmedString.default(""),
   category: nonEmptyTrimmedString,
   tags: z.array(nonEmptyTrimmedString).default([]),
-  capabilityModes: z.array(forgeBoxCapabilityModeSchema).default(["content"]).optional(),
+  capabilityModes: z
+    .array(forgeBoxCapabilityModeSchema)
+    .default(["content"])
+    .optional(),
   inputs: z.array(forgeBoxPortDefinitionSchema).default([]),
   params: z.array(forgeBoxPortDefinitionSchema).default([]),
   output: z.array(forgeBoxPortDefinitionSchema).default([]),
@@ -2748,13 +2764,15 @@ export const agentIdentitySchema = z.object({
   provider: agentRuntimeProviderSchema.nullable().default(null),
   machineKey: z.string().nullable().default(null),
   personaKey: z.string().nullable().default(null),
-  linkedUsers: z.array(
-    z.object({
-      userId: z.string(),
-      role: z.string(),
-      user: userSummarySchema.nullable().default(null)
-    })
-  ).default([]),
+  linkedUsers: z
+    .array(
+      z.object({
+        userId: z.string(),
+        role: z.string(),
+        user: userSummarySchema.nullable().default(null)
+      })
+    )
+    .default([]),
   trustLevel: agentTrustLevelSchema,
   autonomyMode: autonomyModeSchema,
   approvalMode: approvalModeSchema,
@@ -2829,8 +2847,8 @@ const agentRuntimeSessionLocatorBaseSchema = z.object({
   externalSessionId: trimmedString.nullable().optional()
 });
 
-const agentRuntimeSessionLocatorSchema = agentRuntimeSessionLocatorBaseSchema
-  .superRefine((value, context) => {
+const agentRuntimeSessionLocatorSchema =
+  agentRuntimeSessionLocatorBaseSchema.superRefine((value, context) => {
     const hasSessionId = Boolean(value.sessionId?.trim());
     const hasCompositeKey =
       Boolean(value.provider) && Boolean(value.sessionKey?.trim());
@@ -2873,52 +2891,56 @@ export const createAgentRuntimeSessionSchema = z.object({
 });
 
 export const heartbeatAgentRuntimeSessionSchema =
-  agentRuntimeSessionLocatorBaseSchema.extend({
-    status: z
-      .union([
-        z.literal("connected"),
-        z.literal("reconnecting"),
-        z.literal("error")
-      ])
-      .optional(),
-    summary: trimmedString.default(""),
-    metadata: z.record(z.string(), z.unknown()).default({}),
-    lastError: trimmedString.nullable().default(null)
-  }).superRefine((value, context) => {
-    const hasSessionId = Boolean(value.sessionId?.trim());
-    const hasCompositeKey =
-      Boolean(value.provider) && Boolean(value.sessionKey?.trim());
-    if (!hasSessionId && !hasCompositeKey) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sessionId"],
-        message:
-          "Provide either sessionId or the provider + sessionKey locator."
-      });
-    }
-  });
+  agentRuntimeSessionLocatorBaseSchema
+    .extend({
+      status: z
+        .union([
+          z.literal("connected"),
+          z.literal("reconnecting"),
+          z.literal("error")
+        ])
+        .optional(),
+      summary: trimmedString.default(""),
+      metadata: z.record(z.string(), z.unknown()).default({}),
+      lastError: trimmedString.nullable().default(null)
+    })
+    .superRefine((value, context) => {
+      const hasSessionId = Boolean(value.sessionId?.trim());
+      const hasCompositeKey =
+        Boolean(value.provider) && Boolean(value.sessionKey?.trim());
+      if (!hasSessionId && !hasCompositeKey) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sessionId"],
+          message:
+            "Provide either sessionId or the provider + sessionKey locator."
+        });
+      }
+    });
 
 export const createAgentRuntimeSessionEventSchema =
-  agentRuntimeSessionLocatorBaseSchema.extend({
-    eventType: nonEmptyTrimmedString,
-    level: agentRuntimeEventLevelSchema.default("info"),
-    title: nonEmptyTrimmedString,
-    summary: trimmedString.default(""),
-    metadata: z.record(z.string(), z.unknown()).default({}),
-    status: agentRuntimeSessionStatusSchema.optional()
-  }).superRefine((value, context) => {
-    const hasSessionId = Boolean(value.sessionId?.trim());
-    const hasCompositeKey =
-      Boolean(value.provider) && Boolean(value.sessionKey?.trim());
-    if (!hasSessionId && !hasCompositeKey) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sessionId"],
-        message:
-          "Provide either sessionId or the provider + sessionKey locator."
-      });
-    }
-  });
+  agentRuntimeSessionLocatorBaseSchema
+    .extend({
+      eventType: nonEmptyTrimmedString,
+      level: agentRuntimeEventLevelSchema.default("info"),
+      title: nonEmptyTrimmedString,
+      summary: trimmedString.default(""),
+      metadata: z.record(z.string(), z.unknown()).default({}),
+      status: agentRuntimeSessionStatusSchema.optional()
+    })
+    .superRefine((value, context) => {
+      const hasSessionId = Boolean(value.sessionId?.trim());
+      const hasCompositeKey =
+        Boolean(value.provider) && Boolean(value.sessionKey?.trim());
+      if (!hasSessionId && !hasCompositeKey) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sessionId"],
+          message:
+            "Provide either sessionId or the provider + sessionKey locator."
+        });
+      }
+    });
 
 export const reconnectAgentRuntimeSessionSchema = z.object({
   note: trimmedString.default("")
@@ -3017,6 +3039,117 @@ export const approvalRequestSchema = z.object({
   resolutionNote: z.string(),
   createdAt: z.string(),
   updatedAt: z.string()
+});
+
+export const attentionInboxSourceSchema = z.enum([
+  "approval",
+  "insight",
+  "task",
+  "companion_sync",
+  "agent_session"
+]);
+
+export const attentionInboxKindSchema = z.enum([
+  "decision",
+  "review",
+  "blocked_work",
+  "overdue_work",
+  "sync_problem",
+  "runtime_problem"
+]);
+
+export const attentionInboxSeveritySchema = z.enum([
+  "notice",
+  "important",
+  "blocking"
+]);
+
+export const attentionInboxStateSchema = z.enum([
+  "active",
+  "snoozed",
+  "dismissed"
+]);
+
+export const attentionInboxActionSchema = z.enum([
+  "open",
+  "approve",
+  "reject",
+  "snooze",
+  "dismiss",
+  "restore"
+]);
+
+export const attentionInboxTargetSchema = z.object({
+  entityType: z.string().nullable(),
+  entityId: z.string().nullable(),
+  label: z.string(),
+  href: z.string()
+});
+
+export const attentionInboxItemSchema = z.object({
+  id: z.string(),
+  source: attentionInboxSourceSchema,
+  kind: attentionInboxKindSchema,
+  severity: attentionInboxSeveritySchema,
+  state: attentionInboxStateSchema,
+  title: z.string(),
+  reason: z.string(),
+  detail: z.string(),
+  target: attentionInboxTargetSchema,
+  allowedActions: z.array(attentionInboxActionSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  sourceUpdatedAt: z.string(),
+  dueAt: z.string().nullable(),
+  snoozedUntil: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown())
+});
+
+export const attentionInboxSummarySchema = z.object({
+  activeCount: z.number().int().nonnegative(),
+  snoozedCount: z.number().int().nonnegative(),
+  dismissedCount: z.number().int().nonnegative(),
+  blockingCount: z.number().int().nonnegative(),
+  importantCount: z.number().int().nonnegative(),
+  sourceCounts: z.record(
+    attentionInboxSourceSchema,
+    z.number().int().nonnegative()
+  )
+});
+
+export const attentionInboxPayloadSchema = z.object({
+  generatedAt: z.string(),
+  state: attentionInboxStateSchema,
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  hasMore: z.boolean(),
+  summary: attentionInboxSummarySchema,
+  items: z.array(attentionInboxItemSchema)
+});
+
+export const attentionInboxStateRecordSchema = z.object({
+  itemId: z.string(),
+  state: attentionInboxStateSchema,
+  snoozedUntil: z.string().nullable(),
+  sourceUpdatedAt: z.string(),
+  note: z.string(),
+  updatedAt: z.string()
+});
+
+export const attentionInboxQuerySchema = z.object({
+  state: attentionInboxStateSchema.default("active"),
+  limit: z.coerce.number().int().positive().max(100).default(25),
+  offset: z.coerce.number().int().nonnegative().max(10_000).default(0)
+});
+
+export const attentionInboxSnoozeSchema = z.object({
+  until: dateTimeSchema,
+  note: z.string().trim().max(500).default("")
+});
+
+export const attentionInboxDismissSchema = z.object({
+  note: z.string().trim().max(500).default("")
 });
 
 export const agentActionSchema = z.object({
@@ -3367,18 +3500,15 @@ export const notesListQuerySchema = z
 export const taskListQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   levels: z
-    .preprocess(
-      (value) => {
-        if (Array.isArray(value)) {
-          return value;
-        }
-        if (typeof value === "string" && value.trim().length > 0) {
-          return value.split(",").map((entry) => entry.trim());
-        }
-        return undefined;
-      },
-      z.array(workItemLevelSchema).optional()
-    )
+    .preprocess((value) => {
+      if (Array.isArray(value)) {
+        return value;
+      }
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value.split(",").map((entry) => entry.trim());
+      }
+      return undefined;
+    }, z.array(workItemLevelSchema).optional())
     .optional(),
   owner: nonEmptyTrimmedString.optional(),
   goalId: nonEmptyTrimmedString.optional(),
@@ -3855,7 +3985,8 @@ export const createLifeEventSchema = z
     primaryCalendarEventId: trimmedString.nullable().optional(),
     calendarSyncState: lifeEventCalendarSyncStateSchema.default("not_synced"),
     calendarMatchConfidence: z.number().min(0).max(1).nullable().optional(),
-    calendarProjection: lifeEventCalendarProjectionSchema.default("link_or_create"),
+    calendarProjection:
+      lifeEventCalendarProjectionSchema.default("link_or_create"),
     sourceKind: lifeEventSourceKindSchema.default("manual"),
     sourceArtifactId: trimmedString.nullable().optional(),
     extractionStatus: lifeEventExtractionStatusSchema.default("none"),
@@ -4582,7 +4713,9 @@ export const createAgentTokenSchema = z.object({
   autonomyMode: autonomyModeSchema.default("approval_required"),
   approvalMode: approvalModeSchema.default("approval_by_default"),
   scopes: uniqueStringArraySchema.default(["read", "write", "insights"]),
-  bootstrapPolicy: agentBootstrapPolicySchema.default(defaultAgentBootstrapPolicy),
+  bootstrapPolicy: agentBootstrapPolicySchema.default(
+    defaultAgentBootstrapPolicy
+  ),
   scopePolicy: agentScopePolicySchema.default(defaultAgentScopePolicy)
 });
 
@@ -5084,7 +5217,9 @@ export type LifeEventEntityLink = z.infer<typeof lifeEventEntityLinkSchema>;
 export type LifeEventType = z.infer<typeof lifeEventTypeSchema>;
 export type LifeEventStatus = z.infer<typeof lifeEventStatusSchema>;
 export type LifeEventImportance = z.infer<typeof lifeEventImportanceSchema>;
-export type LifeEventTransportMode = z.infer<typeof lifeEventTransportModeSchema>;
+export type LifeEventTransportMode = z.infer<
+  typeof lifeEventTransportModeSchema
+>;
 export type LifeEventCalendarProjection = z.infer<
   typeof lifeEventCalendarProjectionSchema
 >;
@@ -5119,12 +5254,22 @@ export type NoteSummary = z.infer<typeof noteSummarySchema>;
 export type NotesSummaryByEntity = z.infer<typeof notesSummaryByEntitySchema>;
 export type NoteKind = z.infer<typeof noteKindSchema>;
 export type AchievementSignal = z.infer<typeof achievementSignalSchema>;
-export type GamificationCatalogEntry = z.infer<typeof gamificationCatalogEntrySchema>;
-export type GamificationCatalogItem = z.infer<typeof gamificationCatalogItemSchema>;
-export type GamificationCatalogPayload = z.infer<typeof gamificationCatalogPayloadSchema>;
-export type GamificationCelebration = z.infer<typeof gamificationCelebrationSchema>;
+export type GamificationCatalogEntry = z.infer<
+  typeof gamificationCatalogEntrySchema
+>;
+export type GamificationCatalogItem = z.infer<
+  typeof gamificationCatalogItemSchema
+>;
+export type GamificationCatalogPayload = z.infer<
+  typeof gamificationCatalogPayloadSchema
+>;
+export type GamificationCelebration = z.infer<
+  typeof gamificationCelebrationSchema
+>;
 export type GamificationEquipment = z.infer<typeof gamificationEquipmentSchema>;
-export type GamificationMascotState = z.infer<typeof gamificationMascotStateSchema>;
+export type GamificationMascotState = z.infer<
+  typeof gamificationMascotStateSchema
+>;
 export type GamificationProfile = z.infer<typeof gamificationProfileSchema>;
 export type GamificationOverview = z.infer<typeof gamificationOverviewSchema>;
 export type GamificationScope = z.infer<typeof gamificationScopeSchema>;
@@ -5177,7 +5322,9 @@ export type ForgeBoxPortDefinition = z.infer<
 export type ForgeBoxCatalogEntry = z.infer<typeof forgeBoxCatalogEntrySchema>;
 export type ForgeBoxSnapshot = z.infer<typeof forgeBoxSnapshotSchema>;
 export type AiConnectorKind = z.infer<typeof aiConnectorKindSchema>;
-export type AiConnectorPublicInput = z.infer<typeof aiConnectorPublicInputSchema>;
+export type AiConnectorPublicInput = z.infer<
+  typeof aiConnectorPublicInputSchema
+>;
 export type AiConnectorNode = z.infer<typeof aiConnectorNodeSchema>;
 export type AiConnectorEdge = z.infer<typeof aiConnectorEdgeSchema>;
 export type AiConnectorOutput = z.infer<typeof aiConnectorOutputSchema>;
@@ -5195,7 +5342,9 @@ export type NotificationPreferences = z.infer<
   typeof notificationPreferencesSchema
 >;
 export type ThemePreference = z.infer<typeof themePreferenceSchema>;
-export type GamificationThemePreference = z.infer<typeof gamificationThemeSchema>;
+export type GamificationThemePreference = z.infer<
+  typeof gamificationThemeSchema
+>;
 export type ExecutionSettings = z.infer<typeof executionSettingsSchema>;
 export type AppLocale = z.infer<typeof appLocaleSchema>;
 export type AgentIdentity = z.infer<typeof agentIdentitySchema>;
@@ -5242,6 +5391,19 @@ export type DeleteMode = z.infer<typeof deleteModeSchema>;
 export type DeletedEntityRecord = z.infer<typeof deletedEntityRecordSchema>;
 export type SettingsBinPayload = z.infer<typeof settingsBinPayloadSchema>;
 export type ApprovalRequest = z.infer<typeof approvalRequestSchema>;
+export type AttentionInboxSource = z.infer<typeof attentionInboxSourceSchema>;
+export type AttentionInboxKind = z.infer<typeof attentionInboxKindSchema>;
+export type AttentionInboxSeverity = z.infer<
+  typeof attentionInboxSeveritySchema
+>;
+export type AttentionInboxState = z.infer<typeof attentionInboxStateSchema>;
+export type AttentionInboxAction = z.infer<typeof attentionInboxActionSchema>;
+export type AttentionInboxItem = z.infer<typeof attentionInboxItemSchema>;
+export type AttentionInboxSummary = z.infer<typeof attentionInboxSummarySchema>;
+export type AttentionInboxPayload = z.infer<typeof attentionInboxPayloadSchema>;
+export type AttentionInboxStateRecord = z.infer<
+  typeof attentionInboxStateRecordSchema
+>;
 export type AgentAction = z.infer<typeof agentActionSchema>;
 export type RewardRule = z.infer<typeof rewardRuleSchema>;
 export type RewardLedgerEvent = z.infer<typeof rewardLedgerEventSchema>;
@@ -5261,15 +5423,15 @@ export type TagKind = z.infer<typeof tagKindSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type WorkItem = z.infer<typeof taskSchema>;
 export type WorkItemLevel = z.infer<typeof workItemLevelSchema>;
-export type WorkItemExecutionMode = z.infer<
-  typeof workItemExecutionModeSchema
->;
+export type WorkItemExecutionMode = z.infer<typeof workItemExecutionModeSchema>;
 export type WorkItemGitRef = z.infer<typeof workItemGitRefSchema>;
 export type TaskTimeSummary = z.infer<typeof taskTimeSummarySchema>;
 export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 export type EventsListQuery = z.infer<typeof eventsListQuerySchema>;
-export type DiagnosticLogListQuery = z.infer<typeof diagnosticLogListQuerySchema>;
+export type DiagnosticLogListQuery = z.infer<
+  typeof diagnosticLogListQuerySchema
+>;
 export type ProjectListQuery = z.infer<typeof projectListQuerySchema>;
 export type Strategy = z.infer<typeof strategySchema>;
 export type StrategyGraph = z.infer<typeof strategyGraphSchema>;
@@ -5309,7 +5471,9 @@ export type UpdateCalendarConnectionInput = z.infer<
 export type UpdateWorkBlockTemplateInput = z.infer<
   typeof updateWorkBlockTemplateSchema
 >;
-export type CreateDiagnosticLogInput = z.infer<typeof createDiagnosticLogSchema>;
+export type CreateDiagnosticLogInput = z.infer<
+  typeof createDiagnosticLogSchema
+>;
 export type UpdateTaskTimeboxInput = z.infer<typeof updateTaskTimeboxSchema>;
 export type UpdateCalendarEventInput = z.infer<
   typeof updateCalendarEventSchema

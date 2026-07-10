@@ -8,8 +8,7 @@ import {
 } from "./api-client.js";
 import type { ForgePluginToolApi } from "./plugin-sdk-types.js";
 
-type StaticLike<T> =
-  T extends TObject<infer _P> ? Record<string, unknown> : never;
+type StaticLike<T> = T extends TObject ? Record<string, unknown> : never;
 
 function jsonResult<T>(payload: T): AgentToolResult<T> {
   return {
@@ -30,6 +29,16 @@ function normalizeText(value: unknown) {
 function normalizeOptionalText(value: unknown) {
   const text = normalizeText(value);
   return text.length > 0 ? text : undefined;
+}
+
+function omitToolFields(
+  value: Record<string, unknown>,
+  excludedKeys: readonly string[]
+) {
+  const excluded = new Set(excludedKeys);
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !excluded.has(key))
+  );
 }
 
 function normalizeTaskRunStartRequest(params: Record<string, unknown>) {
@@ -336,19 +345,31 @@ const lifeEventRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const attentionRouteSpecs = {
+  list: { method: "GET", path: "/api/v1/attention-inbox" },
+  snooze: {
+    method: "POST",
+    path: "/api/v1/attention-inbox/:id/snooze",
+    requiresToken: true
+  },
+  dismiss: {
+    method: "POST",
+    path: "/api/v1/attention-inbox/:id/dismiss",
+    requiresToken: true
+  },
+  restore: {
+    method: "POST",
+    path: "/api/v1/attention-inbox/:id/restore",
+    requiresToken: true
+  }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
 const optionalDeleteMode = () =>
   Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
 const optionalBoolean = () => Type.Optional(Type.Boolean());
-const optionalInteger = (minimum?: number, maximum?: number) =>
-  Type.Optional(
-    Type.Integer({
-      ...(typeof minimum === "number" ? { minimum } : {}),
-      ...(typeof maximum === "number" ? { maximum } : {})
-    })
-  );
 const calendarOverviewReadSchema = Type.Object({
   from: optionalString(),
   to: optionalString(),
@@ -803,6 +824,14 @@ export function registerForgePluginTools(
     }),
     method: "POST",
     path: "/api/v1/doctor/fixes"
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_attention_route",
+    label: "Forge Attention Route",
+    description:
+      "Call one allowed dedicated Attention route to list the current actor's bounded queue or snooze, dismiss, and restore an eligible item. Use the stable item id returned by list through pathParams.id. Do not invent attention records or use batch CRUD for this derived queue.",
+    routeSpecs: attentionRouteSpecs
   });
 
   registerSpecializedRouteTool(api, config, {
@@ -1287,7 +1316,7 @@ export function registerForgePluginTools(
     parameters: nutritionFoodLogSchema(),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1351,7 +1380,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1387,7 +1416,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1427,7 +1456,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1462,7 +1491,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1516,7 +1545,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds"]);
       return jsonResult(
         await runWrite(config, {
           method: "POST",
@@ -1559,7 +1588,7 @@ export function registerForgePluginTools(
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
-      const { userIds: _userIds, experimentId: _experimentId, ...body } = typed;
+      const body = omitToolFields(typed, ["userIds", "experimentId"]);
       return jsonResult(
         await runWrite(config, {
           method: "PATCH",

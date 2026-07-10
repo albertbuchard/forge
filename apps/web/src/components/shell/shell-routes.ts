@@ -12,6 +12,7 @@ import {
   Gauge,
   GitBranch,
   HeartPulse,
+  Inbox,
   LayoutDashboard,
   Map,
   Milestone,
@@ -50,6 +51,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.overview",
     detailKey: "common.routeDetails.overview",
     icon: LayoutDashboard
+  },
+  {
+    id: "attention",
+    to: "/attention",
+    label: "Attention",
+    detail: ROUTE_VIEW_CATALOG["attention-index"].description,
+    icon: Inbox
   },
   {
     id: "life-force",
@@ -247,12 +255,15 @@ const PSYCHE_SHORTCUT_DETAILS: Record<string, string> = {
   "/psyche/flashcards": ROUTE_VIEW_CATALOG["psyche-flashcards"].description,
   "/psyche/values": ROUTE_VIEW_CATALOG["psyche-values"].description,
   "/psyche/patterns": ROUTE_VIEW_CATALOG["psyche-patterns"].description,
-  "/psyche/questionnaires": ROUTE_VIEW_CATALOG["psyche-questionnaires"].description,
-  "/psyche/self-observation": ROUTE_VIEW_CATALOG["psyche-self-observation"].description,
+  "/psyche/questionnaires":
+    ROUTE_VIEW_CATALOG["psyche-questionnaires"].description,
+  "/psyche/self-observation":
+    ROUTE_VIEW_CATALOG["psyche-self-observation"].description,
   "/psyche/behaviors": ROUTE_VIEW_CATALOG["psyche-behaviors"].description,
   "/psyche/reports": ROUTE_VIEW_CATALOG["psyche-reports"].description,
   "/psyche/goal-map": ROUTE_VIEW_CATALOG["psyche-goal-map"].description,
-  "/psyche/schemas-beliefs": ROUTE_VIEW_CATALOG["psyche-schemas-beliefs"].description,
+  "/psyche/schemas-beliefs":
+    ROUTE_VIEW_CATALOG["psyche-schemas-beliefs"].description,
   "/psyche/modes": ROUTE_VIEW_CATALOG["psyche-modes"].description,
   "/psyche/screen-time": ROUTE_VIEW_CATALOG["psyche-screen-time"].description,
   "/preferences": ROUTE_VIEW_CATALOG["preferences-index"].description,
@@ -266,7 +277,9 @@ const PSYCHE_SHORTCUT_ROUTES: ShellRouteDefinition[] = PSYCHE_SECTIONS.filter(
   to: route.to,
   icon: route.icon,
   label: route.label,
-  detail: PSYCHE_SHORTCUT_DETAILS[route.to] ?? ROUTE_VIEW_CATALOG["psyche-index"].description
+  detail:
+    PSYCHE_SHORTCUT_DETAILS[route.to] ??
+    ROUTE_VIEW_CATALOG["psyche-index"].description
 }));
 
 export const NAV_ROUTE_REGISTRY: ShellRouteDefinition[] = [

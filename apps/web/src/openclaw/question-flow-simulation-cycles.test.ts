@@ -203,6 +203,7 @@ describe("question flow simulation cycles", () => {
     "Note",
     "Wiki Page",
     "Artifact",
+    "Attention",
     "Insight",
     "Calendar Event",
     "Work Block Template",
@@ -265,6 +266,8 @@ describe("question flow simulation cycles", () => {
       "Create a durable reference page for a recurring research method.",
     Artifact:
       "Store this spreadsheet so I can retrieve it later with its provenance and project context.",
+    Attention:
+      "Review what needs a next move and defer one valid review until tomorrow.",
     Insight:
       "Save the pattern I noticed from the last three blocked work sessions.",
     "Calendar Event": "Schedule a focused review call in local time.",
@@ -346,6 +349,7 @@ describe("question flow simulation cycles", () => {
     Note: ["add", "update", "review", "link"],
     "Wiki Page": ["create", "read", "update", "browse"],
     Artifact: ["trusted-upload", "metadata-update", "enrich", "link"],
+    Attention: ["list", "snooze", "dismiss", "restore"],
     Insight: ["add", "review", "link", "preserve"],
     "Calendar Event": ["add", "update", "review", "delete"],
     "Work Block Template": ["add", "update", "review", "delete"],
@@ -435,6 +439,7 @@ describe("question flow simulation cycles", () => {
     Note: "batch",
     "Wiki Page": "specializedCrud",
     Artifact: "specializedCrud",
+    Attention: "specializedDomain",
     Insight: "batch",
     "Calendar Event": "batch",
     "Work Block Template": "batch",
@@ -500,6 +505,7 @@ describe("question flow simulation cycles", () => {
     calendar_connection: "Calendar Connection",
     wiki_page: "Wiki Page",
     artifact: "Artifact",
+    attention_inbox: "Attention",
     preference_catalog: "Preference Catalog",
     preference_catalog_item: "Preference Catalog Item",
     preference_context: "Preference Context",
@@ -525,6 +531,8 @@ describe("question flow simulation cycles", () => {
   } as const;
 
   const readModelAliasFlowSectionByKey = {
+    attentionInbox: "Attention",
+    attention_inbox: "Attention",
     operatorOverview: "Operator Overview",
     operator_overview: "Operator Overview",
     operatorContext: "Operator Context",
@@ -575,6 +583,7 @@ describe("question flow simulation cycles", () => {
     "wiki_page",
     "calendar_connection",
     "artifact",
+    "attention_inbox",
     "operator_overview",
     "operator_context",
     "calendar_overview",
@@ -595,6 +604,12 @@ describe("question flow simulation cycles", () => {
   ] as const;
 
   const specializedSurfaceRouteScenarios = {
+    Attention: {
+      list: "Review the current bounded queue before choosing a next move.",
+      snooze: "Defer an eligible item until a specific future time.",
+      dismiss: "Dismiss a non-blocking item only when the queue permits it.",
+      restore: "Return a snoozed or dismissed item to the active queue."
+    },
     Movement: {
       day: "Review one day of movement before interpreting time in place.",
       month: "Review a month before answering a travel behavior question.",
@@ -894,6 +909,7 @@ describe("question flow simulation cycles", () => {
     }
 
     const surfaceToScenarioName = {
+      attention: "Attention",
       movement: "Movement",
       lifeEvents: "Life Events",
       lifeForce: "Life Force",
@@ -928,14 +944,19 @@ describe("question flow simulation cycles", () => {
     for (const entry of onboarding.entityCatalog) {
       const flow = entry.questionFlow;
       expect(flow, `${entry.entityType} question flow`).toBeTruthy();
-      expect(flow.openingQuestion, `${entry.entityType} opening`).toMatch(/\?$/);
+      expect(flow.openingQuestion, `${entry.entityType} opening`).toMatch(
+        /\?$/
+      );
       expect(flow.openingQuestion, `${entry.entityType} opening`).not.toMatch(
         userFacingJargon
       );
       expect(flow.coachingGoal, `${entry.entityType} coaching goal`).toMatch(
         /\w/
       );
-      expect(flow.askSequence.length, `${entry.entityType} sequence`).toBeGreaterThan(0);
+      expect(
+        flow.askSequence.length,
+        `${entry.entityType} sequence`
+      ).toBeGreaterThan(0);
       expect(flow.routePosture, `${entry.entityType} route posture`).toBe(
         entry.classification
       );
@@ -1023,7 +1044,9 @@ describe("question flow simulation cycles", () => {
     expect(lifeForceReadiness).toMatch(
       /Life Force lane[\s\S]*current-energy question[\s\S]*profile assumption[\s\S]*weekday curve[\s\S]*fatigue signal[\s\S]*planning effect/i
     );
-    expect(lifeForceReadiness).not.toMatch(/\bmovement|stay|trip|flow|run|node\b/i);
+    expect(lifeForceReadiness).not.toMatch(
+      /\bmovement|stay|trip|flow|run|node\b/i
+    );
 
     const workbenchReadiness = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "workbench"
@@ -1031,7 +1054,9 @@ describe("question flow simulation cycles", () => {
     expect(workbenchReadiness).toMatch(
       /Workbench lane[\s\S]*saved flow[\s\S]*input contract[\s\S]*run[\s\S]*node[\s\S]*latest output[\s\S]*published result/i
     );
-    expect(workbenchReadiness).not.toMatch(/\bmovement|weekday|fatigue|Life Event\b/i);
+    expect(workbenchReadiness).not.toMatch(
+      /\bmovement|weekday|fatigue|Life Event\b/i
+    );
 
     const movementFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "movement"

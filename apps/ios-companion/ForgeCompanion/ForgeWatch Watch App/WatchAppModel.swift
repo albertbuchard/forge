@@ -415,7 +415,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                     ForgeWatchPsycheSnapshot.RecentReport(id: "report_preview", title: "Evening reflection", occurredAt: now, status: "open")
                 ]
             ),
-            inbox: ForgeWatchInboxSnapshot(prompts: prompts),
+            inbox: ForgeWatchInboxSnapshot(prompts: prompts, attention: nil),
             sync: ForgeWatchSyncSnapshot(
                 pairingSessionId: "pair_preview",
                 generatedAt: now,

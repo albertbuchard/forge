@@ -288,13 +288,19 @@ describe("forge onboarding contract", () => {
         `${catalogEntry.entityType} should publish a sequenced flow`
       ).toBeGreaterThan(0);
       expect(flow.routePosture).toBe(catalogEntry.classification);
-      expect(flow.apiAccessHint).toContain(`Focus: ${catalogEntry.entityType}.`);
+      expect(flow.apiAccessHint).toContain(
+        `Focus: ${catalogEntry.entityType}.`
+      );
       expect(flow.apiAccessHint).toContain(
         `Route posture: ${catalogEntry.classification}.`
       );
 
-      const psychePlaybook = psychePlaybooksByFocus.get(catalogEntry.entityType);
-      const entityPlaybook = entityPlaybooksByFocus.get(catalogEntry.entityType);
+      const psychePlaybook = psychePlaybooksByFocus.get(
+        catalogEntry.entityType
+      );
+      const entityPlaybook = entityPlaybooksByFocus.get(
+        catalogEntry.entityType
+      );
       if (psychePlaybook) {
         expect(flow.questionStyle).toBe("therapist_like_active_listening");
         expect(flow.openingQuestion).toBe(psychePlaybook.openingQuestion);
@@ -319,7 +325,9 @@ describe("forge onboarding contract", () => {
           expect(flow.readinessCheck).toMatch(/note-backed observation/i);
           expect(flow.readinessCheck).toMatch(/stronger Psyche container/i);
           expect(flow.readinessCheck).toMatch(/at least one meaningful/i);
-          expect(flow.readinessCheck).toMatch(/accepted or corrected by the user/i);
+          expect(flow.readinessCheck).toMatch(
+            /accepted or corrected by the user/i
+          );
         } else {
           expect(flow.questionStyle).toBe("operational_fast_path");
           expect(flow.readinessCheck).toMatch(/dedicated workflow route/i);
@@ -1144,6 +1152,7 @@ describe("forge onboarding contract", () => {
     expect(
       onboarding.recommendedPluginTools?.specializedDomainWorkflow
     ).toEqual([
+      "forge_call_attention_route",
       "forge_call_movement_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
@@ -1774,9 +1783,15 @@ describe("forge onboarding contract", () => {
         )
       ])
     );
+    type OpenApiSchemaNode = {
+      properties?: Record<string, OpenApiSchemaNode>;
+      items?: OpenApiSchemaNode;
+      additionalProperties?: boolean | OpenApiSchemaNode;
+      [key: string]: unknown;
+    };
     const openapiSchemas = (
       openapi.components as {
-        schemas?: Record<string, { properties?: Record<string, any> }>;
+        schemas?: Record<string, OpenApiSchemaNode>;
       }
     )?.schemas;
     const routeModelSchema =

@@ -8,6 +8,7 @@ import {
 import {
   ActivityPage,
   ArtifactsPage,
+  AttentionInboxPage,
   CalendarPage,
   CompanionSyncLabPage,
   GoalDetailPage,
@@ -646,6 +647,15 @@ export function App() {
               "Activity",
               "Activity log and event history.",
               <ActivityPage />
+            )}
+          />
+          <Route
+            path="attention"
+            element={surface(
+              "attention-index",
+              "Attention",
+              "A bounded queue of decisions and unresolved operational signals.",
+              <AttentionInboxPage />
             )}
           />
           <Route

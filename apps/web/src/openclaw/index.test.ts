@@ -384,6 +384,7 @@ describe("forge openclaw plugin", () => {
       "/forge/v1/movement",
       "/forge/v1/life-force",
       "/forge/v1/workbench",
+      "/forge/v1/attention",
       "/forge/v1/artifacts",
       "/forge/v1/life-events",
       "/forge/v1/calendar",
@@ -418,6 +419,7 @@ describe("forge openclaw plugin", () => {
       "forge_adjust_work_minutes",
       "forge_apply_doctor_fix",
       "forge_call_artifact_route",
+      "forge_call_attention_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
       "forge_call_movement_route",
@@ -851,8 +853,8 @@ describe("forge openclaw plugin", () => {
     ).resolves.toBeDefined();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    const calledUrls = fetchMock.mock.calls.map(
-      ([url]) => (url as URL).toString()
+    const calledUrls = fetchMock.mock.calls.map(([url]) =>
+      (url as URL).toString()
     );
     expect(calledUrls).toEqual([
       "http://127.0.0.1:4318/api/v1/auth/operator-session",
@@ -952,7 +954,9 @@ describe("forge openclaw plugin", () => {
     expect(apiClientSource).not.toMatch(
       /import\s+\w+\s+from\s+["']\.\.\/\.\.\/\.\.\/\.\.\/package\.json/
     );
-    expect(apiClientSource).toContain("../../../../plugins/openclaw/package.json");
+    expect(apiClientSource).toContain(
+      "../../../../plugins/openclaw/package.json"
+    );
     expect(apiClientSource).toContain("../../package.json");
   });
 });

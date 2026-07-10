@@ -16,6 +16,9 @@ import type {
   OperatorSession,
   CreateManualRewardGrantInput,
   ApprovalRequest,
+  AttentionInboxPayload,
+  AttentionInboxState,
+  AttentionInboxStateRecord,
   Artifact,
   ArtifactAuditEvent,
   ArtifactDangerLevel,
@@ -41,7 +44,6 @@ import type {
   CompanionOverviewPayload,
   CompanionPairingQrPayload,
   CompanionPairingTransportMode,
-  DiagnosticLogEntry,
   EventLogEntry,
   EntityLinkInput,
   FitnessViewData,
@@ -514,7 +516,7 @@ async function requestBlob(
     throw createApiError(path, response, body);
   }
   const disposition = response.headers.get("content-disposition");
-  const fileNameMatch = disposition?.match(/filename=\"([^\"]+)\"/i);
+  const fileNameMatch = disposition?.match(/filename="([^"]+)"/i);
   return {
     blob: await response.blob(),
     fileName: fileNameMatch?.[1] ?? null,
@@ -4628,6 +4630,59 @@ export function rejectApprovalRequest(approvalRequestId: string, note = "") {
       method: "POST",
       body: JSON.stringify({ note })
     }
+  );
+}
+
+export function getAttentionInbox(
+  options: {
+    state?: AttentionInboxState;
+    limit?: number;
+    offset?: number;
+    userIds?: string[];
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (options.state) {
+    search.set("state", options.state);
+  }
+  if (options.limit) {
+    search.set("limit", String(options.limit));
+  }
+  if (typeof options.offset === "number") {
+    search.set("offset", String(options.offset));
+  }
+  appendUserIds(search, options.userIds ?? []);
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<AttentionInboxPayload>(`/api/v1/attention-inbox${suffix}`);
+}
+
+export function snoozeAttentionInboxItem(
+  itemId: string,
+  input: { until: string; note?: string }
+) {
+  return request<{ attentionState: AttentionInboxStateRecord }>(
+    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/snooze`,
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
+  );
+}
+
+export function dismissAttentionInboxItem(itemId: string, note = "") {
+  return request<{ attentionState: AttentionInboxStateRecord }>(
+    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/dismiss`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }
+  );
+}
+
+export function restoreAttentionInboxItem(itemId: string) {
+  return request<{ attentionState: AttentionInboxStateRecord }>(
+    `/api/v1/attention-inbox/${encodeURIComponent(itemId)}/restore`,
+    { method: "POST" }
   );
 }
 

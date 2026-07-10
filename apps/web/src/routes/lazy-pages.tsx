@@ -5,6 +5,11 @@ export const ActivityPage = lazy(() =>
     default: module.ActivityPage
   }))
 );
+export const AttentionInboxPage = lazy(() =>
+  import("@/pages/attention-inbox-page").then((module) => ({
+    default: module.AttentionInboxPage
+  }))
+);
 export const ArtifactsPage = lazy(() =>
   import("@/pages/artifacts-page").then((module) => ({
     default: module.ArtifactsPage
