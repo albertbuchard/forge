@@ -106,12 +106,17 @@ import type {
 } from "./nodes.js";
 import { normalizeWorkbenchPortDefinitions } from "./nodes.js";
 
-export const WORKBENCH_COMPONENT_AUTOLOAD: Array<WorkbenchRegisteredComponent<any>> = [
-  TimeWidget as WorkbenchRegisteredComponent,
-  MiniCalendarWidget as WorkbenchRegisteredComponent,
-  SpotifyWidget as WorkbenchRegisteredComponent,
-  WeatherWidget as WorkbenchRegisteredComponent,
-  QuickCaptureWidget as WorkbenchRegisteredComponent,
+export const WORKBENCH_COMPONENT_AUTOLOAD: Array<{
+  workbench: WorkbenchNodeDefinition;
+}> = [
+  TimeWidget as WorkbenchRegisteredComponent<{ compact: boolean }>,
+  MiniCalendarWidget as WorkbenchRegisteredComponent<{ compact: boolean }>,
+  SpotifyWidget as WorkbenchRegisteredComponent<{ surfaceId: string }>,
+  WeatherWidget as WorkbenchRegisteredComponent<{ compact: boolean }>,
+  QuickCaptureWidget as WorkbenchRegisteredComponent<{
+    compact: boolean;
+    defaultUserId?: string | null;
+  }>,
   CalendarOverviewBox,
   CalendarEventsBox,
   CalendarPlanningBox,

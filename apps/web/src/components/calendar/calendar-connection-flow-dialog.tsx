@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   QuestionFlowDialog,
@@ -168,27 +168,30 @@ export function CalendarConnectionFlowDialog({
   >(null);
   const popupRef = useRef<Window | null>(null);
 
-  const findSharedForgeWriteTarget = (excludeConnectionIds: string[] = []) => {
-    const excluded = new Set(excludeConnectionIds);
-    return (
-      existingConnections.find((connection) => {
-        if (excluded.has(connection.id)) {
-          return false;
-        }
-        return (
-          typeof connection.config?.forgeCalendarUrl === "string" &&
-          connection.config.forgeCalendarUrl.trim().length > 0
-        );
-      }) ?? null
-    );
-  };
+  const findSharedForgeWriteTarget = useCallback(
+    (excludeConnectionIds: string[] = []) => {
+      const excluded = new Set(excludeConnectionIds);
+      return (
+        existingConnections.find((connection) => {
+          if (excluded.has(connection.id)) {
+            return false;
+          }
+          return (
+            typeof connection.config?.forgeCalendarUrl === "string" &&
+            connection.config.forgeCalendarUrl.trim().length > 0
+          );
+        }) ?? null
+      );
+    },
+    [existingConnections]
+  );
 
   const sharedForgeWriteTarget = useMemo(
     () =>
       draft.provider === "microsoft"
         ? null
         : findSharedForgeWriteTarget(draft.replaceConnectionIds),
-    [draft.provider, draft.replaceConnectionIds, existingConnections]
+    [draft.provider, draft.replaceConnectionIds, findSharedForgeWriteTarget]
   );
   const sharedForgeWriteTargetLabel = sharedForgeWriteTarget
     ? sharedForgeWriteTarget.accountLabel &&
@@ -214,42 +217,45 @@ export function CalendarConnectionFlowDialog({
     popupRef.current = null;
   };
 
-  const applyDiscoveryPayload = (payload: CalendarDiscoveryPayload) => {
-    setDiscovery(payload);
-    const syncSelection = payload.calendars
-      .filter((calendar) => calendar.selectedByDefault)
-      .map((calendar) => calendar.url);
-    const existingForge = payload.calendars.find(
-      (calendar) => calendar.isForgeCandidate
-    );
-    setDraft((current) => {
-      const sharedWriteTarget = findSharedForgeWriteTarget(
-        current.replaceConnectionIds
+  const applyDiscoveryPayload = useCallback(
+    (payload: CalendarDiscoveryPayload) => {
+      setDiscovery(payload);
+      const syncSelection = payload.calendars
+        .filter((calendar) => calendar.selectedByDefault)
+        .map((calendar) => calendar.url);
+      const existingForge = payload.calendars.find(
+        (calendar) => calendar.isForgeCandidate
       );
-      return {
-        ...current,
-        selectedCalendarUrls:
-          current.selectedCalendarUrls.length > 0
-            ? current.selectedCalendarUrls.filter((url) =>
-                payload.calendars.some((calendar) => calendar.url === url)
-              )
-            : syncSelection,
-        forgeCalendarUrl:
-          current.provider === "microsoft"
-            ? null
-            : sharedWriteTarget
+      setDraft((current) => {
+        const sharedWriteTarget = findSharedForgeWriteTarget(
+          current.replaceConnectionIds
+        );
+        return {
+          ...current,
+          selectedCalendarUrls:
+            current.selectedCalendarUrls.length > 0
+              ? current.selectedCalendarUrls.filter((url) =>
+                  payload.calendars.some((calendar) => calendar.url === url)
+                )
+              : syncSelection,
+          forgeCalendarUrl:
+            current.provider === "microsoft"
               ? null
-              : (existingForge?.url ?? current.forgeCalendarUrl ?? null),
-        createForgeCalendar:
-          current.provider === "microsoft"
-            ? false
-            : sharedWriteTarget
+              : sharedWriteTarget
+                ? null
+                : (existingForge?.url ?? current.forgeCalendarUrl ?? null),
+          createForgeCalendar:
+            current.provider === "microsoft"
               ? false
-              : current.createForgeCalendar && !existingForge
-      };
-    });
-    setSubmitError(null);
-  };
+              : sharedWriteTarget
+                ? false
+                : current.createForgeCalendar && !existingForge
+        };
+      });
+      setSubmitError(null);
+    },
+    [findSharedForgeWriteTarget]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -268,13 +274,6 @@ export function CalendarConnectionFlowDialog({
     setGoogleSetupMessage(null);
     setMicrosoftSetupMessage(null);
   }, [initialProvider, open]);
-
-  useEffect(() => {
-    if (!open || draft.provider !== "macos_local") {
-      return;
-    }
-    void macosStatusMutation.mutateAsync();
-  }, [draft.provider, open]);
 
   useEffect(() => {
     if (
@@ -312,6 +311,7 @@ export function CalendarConnectionFlowDialog({
     draft.createForgeCalendar,
     draft.forgeCalendarUrl,
     draft.provider,
+    findSharedForgeWriteTarget,
     open,
     sharedForgeWriteTarget
   ]);
@@ -338,112 +338,6 @@ export function CalendarConnectionFlowDialog({
     setSavedMicrosoftSettingsDraft(savedDraft);
     setMicrosoftSetupMessage(null);
   }, [microsoftSetup, open]);
-
-  useEffect(() => {
-    if (!open || !googleSession || googleSession.status !== "pending") {
-      return;
-    }
-
-    const callbackOrigin = new URL(activeGoogleSetup.redirectUri).origin;
-    let requestInFlight = false;
-    const refreshSession = () => {
-      if (requestInFlight) {
-        return;
-      }
-      requestInFlight = true;
-      void loadGoogleSession(googleSession.sessionId).finally(() => {
-        requestInFlight = false;
-      });
-    };
-    const handleMessage = (event: MessageEvent<GooglePopupMessage>) => {
-      if (event.origin !== callbackOrigin) {
-        return;
-      }
-      if (
-        event.data?.type !== "forge:google-calendar-auth" ||
-        event.data?.sessionId !== googleSession.sessionId
-      ) {
-        return;
-      }
-      refreshSession();
-    };
-    const handleFocus = () => {
-      refreshSession();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshSession();
-      }
-    };
-
-    const interval = window.setInterval(
-      refreshSession,
-      OAUTH_SESSION_POLL_INTERVAL_MS
-    );
-
-    window.addEventListener("message", handleMessage);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("message", handleMessage);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(interval);
-    };
-  }, [activeGoogleSetup.redirectUri, googleSession, open]);
-
-  useEffect(() => {
-    if (!open || !microsoftSession || microsoftSession.status !== "pending") {
-      return;
-    }
-
-    const callbackOrigin = new URL(activeMicrosoftSetup.redirectUri).origin;
-    let requestInFlight = false;
-    const refreshSession = () => {
-      if (requestInFlight) {
-        return;
-      }
-      requestInFlight = true;
-      void loadMicrosoftSession(microsoftSession.sessionId).finally(() => {
-        requestInFlight = false;
-      });
-    };
-    const handleMessage = (event: MessageEvent<MicrosoftPopupMessage>) => {
-      if (event.origin !== callbackOrigin) {
-        return;
-      }
-      if (
-        event.data?.type !== "forge:microsoft-calendar-auth" ||
-        event.data?.sessionId !== microsoftSession.sessionId
-      ) {
-        return;
-      }
-      refreshSession();
-    };
-    const handleFocus = () => {
-      refreshSession();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshSession();
-      }
-    };
-
-    const interval = window.setInterval(
-      refreshSession,
-      OAUTH_SESSION_POLL_INTERVAL_MS
-    );
-
-    window.addEventListener("message", handleMessage);
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("message", handleMessage);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(interval);
-    };
-  }, [activeMicrosoftSetup.redirectUri, microsoftSession, open]);
 
   const discoveryMutation = useMutation<{
     discovery: CalendarDiscoveryPayload | null;
@@ -515,6 +409,14 @@ export function CalendarConnectionFlowDialog({
       }
     }
   });
+  const refreshMacosStatus = macosStatusMutation.mutateAsync;
+
+  useEffect(() => {
+    if (!open || draft.provider !== "macos_local") {
+      return;
+    }
+    void refreshMacosStatus();
+  }, [draft.provider, open, refreshMacosStatus]);
 
   const macosAccessMutation = useMutation({
     mutationFn: requestMacOSLocalCalendarAccess,
@@ -737,7 +639,7 @@ export function CalendarConnectionFlowDialog({
     return undefined;
   };
 
-  const loadGoogleSession = async (
+  const loadGoogleSession = useCallback(async (
     sessionId: string,
     options?: { afterPopupClose?: boolean }
   ) => {
@@ -768,9 +670,9 @@ export function CalendarConnectionFlowDialog({
           : "Forge could not confirm the Google sign-in session."
       );
     }
-  };
+  }, [activeGoogleSetup.redirectUri, applyDiscoveryPayload]);
 
-  const loadMicrosoftSession = async (
+  const loadMicrosoftSession = useCallback(async (
     sessionId: string,
     options?: { afterPopupClose?: boolean }
   ) => {
@@ -801,7 +703,110 @@ export function CalendarConnectionFlowDialog({
           : "Forge could not confirm the Microsoft sign-in session."
       );
     }
-  };
+  }, [applyDiscoveryPayload]);
+
+  useEffect(() => {
+    if (!open || !googleSession || googleSession.status !== "pending") {
+      return;
+    }
+
+    const callbackOrigin = new URL(activeGoogleSetup.redirectUri).origin;
+    let requestInFlight = false;
+    const refreshSession = () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+      void loadGoogleSession(googleSession.sessionId).finally(() => {
+        requestInFlight = false;
+      });
+    };
+    const handleMessage = (event: MessageEvent<GooglePopupMessage>) => {
+      if (event.origin !== callbackOrigin) {
+        return;
+      }
+      if (
+        event.data?.type !== "forge:google-calendar-auth" ||
+        event.data?.sessionId !== googleSession.sessionId
+      ) {
+        return;
+      }
+      refreshSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession();
+      }
+    };
+
+    const interval = window.setInterval(
+      refreshSession,
+      OAUTH_SESSION_POLL_INTERVAL_MS
+    );
+    window.addEventListener("message", handleMessage);
+    window.addEventListener("focus", refreshSession);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("focus", refreshSession);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [activeGoogleSetup.redirectUri, googleSession, loadGoogleSession, open]);
+
+  useEffect(() => {
+    if (!open || !microsoftSession || microsoftSession.status !== "pending") {
+      return;
+    }
+
+    const callbackOrigin = new URL(activeMicrosoftSetup.redirectUri).origin;
+    let requestInFlight = false;
+    const refreshSession = () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+      void loadMicrosoftSession(microsoftSession.sessionId).finally(() => {
+        requestInFlight = false;
+      });
+    };
+    const handleMessage = (event: MessageEvent<MicrosoftPopupMessage>) => {
+      if (event.origin !== callbackOrigin) {
+        return;
+      }
+      if (
+        event.data?.type !== "forge:microsoft-calendar-auth" ||
+        event.data?.sessionId !== microsoftSession.sessionId
+      ) {
+        return;
+      }
+      refreshSession();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSession();
+      }
+    };
+
+    const interval = window.setInterval(
+      refreshSession,
+      OAUTH_SESSION_POLL_INTERVAL_MS
+    );
+    window.addEventListener("message", handleMessage);
+    window.addEventListener("focus", refreshSession);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("focus", refreshSession);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [
+    activeMicrosoftSetup.redirectUri,
+    loadMicrosoftSession,
+    microsoftSession,
+    open
+  ]);
 
   const startGoogleFlow = async () => {
     try {
@@ -897,8 +902,7 @@ export function CalendarConnectionFlowDialog({
     }
   };
 
-  const steps = useMemo<Array<QuestionFlowStep<ConnectionDraft>>>(
-    () => [
+  const steps: Array<QuestionFlowStep<ConnectionDraft>> = [
       {
         id: "provider",
         eyebrow: "Connection",
@@ -1054,42 +1058,7 @@ export function CalendarConnectionFlowDialog({
           />
         )
       }
-    ],
-    [
-      discovery,
-      discoveryMutation.isPending,
-      draft.provider,
-      googleClientIdEditing,
-      googleSettingsDraft,
-      googleSession,
-      activeGoogleSetup.clientId,
-      googleSetupMessage,
-      activeGoogleSetup.allowedOrigins,
-      activeGoogleSetup.appBaseUrl,
-      activeGoogleSetup.isLocalOnly,
-      activeGoogleSetup.isReadyForPairing,
-      activeGoogleSetup.redirectUri,
-      googleRedirectOrigin,
-      hasUnsavedGoogleSettings,
-      googlePairingAllowedFromCurrentOrigin,
-      googleWrongRouteMessage,
-      hasUnsavedMicrosoftSettings,
-      microsoftSettingsDraft,
-      activeMicrosoftSetup.setupMessage,
-      microsoftSetupMessage,
-      microsoftValidation,
-      saveGoogleSettingsMutation.isPending,
-      saveMicrosoftSettingsMutation.isPending,
-      savedMicrosoftSettingsDraft,
-      testMicrosoftSettingsMutation.isPending,
-      activeMicrosoftSetup.isReadyForSignIn,
-      activeMicrosoftSetup.redirectUri,
-      macosDiscovery,
-      microsoftSession,
-      sharedForgeWriteTarget,
-      sharedForgeWriteTargetLabel
-    ]
-  );
+    ];
 
   const submitLabel =
     draft.provider === "macos_local" && draft.replaceConnectionIds.length > 0

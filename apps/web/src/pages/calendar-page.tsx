@@ -902,55 +902,64 @@ export function CalendarPage() {
   const writableCalendars = overview.calendars.filter(
     (calendar) => calendar.canWrite
   );
-  const describeLinkOwner = (label: string, ownerSummary: string) =>
-    ownerSummary ? `${label} · ${ownerSummary}` : label;
-  const linkOptions = [
-    ...shell.snapshot.goals.map((goal) => ({
-      entityType: "goal" as const,
-      entityId: goal.id,
-      label: goal.title,
-      subtitle: describeLinkOwner("Goal", formatUserSummaryLine(goal.user))
-    })),
-    ...shell.snapshot.projects.map((project) => ({
-      entityType: "project" as const,
-      entityId: project.id,
-      label: project.title,
-      subtitle: describeLinkOwner(
-        "Project",
-        formatUserSummaryLine(project.user)
-      )
-    })),
-    ...shell.snapshot.tasks.map((task) => ({
-      entityType: "task" as const,
-      entityId: task.id,
-      label: task.title,
-      subtitle: describeLinkOwner("Task", formatUserSummaryLine(task.user))
-    })),
-    ...shell.snapshot.strategies.map((strategy) => ({
-      entityType: "strategy" as const,
-      entityId: strategy.id,
-      label: strategy.title,
-      subtitle: describeLinkOwner(
-        "Strategy",
-        formatUserSummaryLine(strategy.user)
-      )
-    })),
-    ...shell.snapshot.habits.map((habit) => ({
-      entityType: "habit" as const,
-      entityId: habit.id,
-      label: habit.title,
-      subtitle: describeLinkOwner("Habit", formatUserSummaryLine(habit.user))
-    })),
-    ...(lifeEventsQuery.data?.events ?? []).map((event) => ({
-      entityType: "life_event" as const,
-      entityId: event.id,
-      label: event.title,
-      subtitle: describeLinkOwner(
-        "Life Event",
-        formatUserSummaryLine(event.user)
-      )
-    }))
-  ];
+  const linkOptions = useMemo(() => {
+    const describeLinkOwner = (label: string, ownerSummary: string) =>
+      ownerSummary ? `${label} · ${ownerSummary}` : label;
+    return [
+      ...shell.snapshot.goals.map((goal) => ({
+        entityType: "goal" as const,
+        entityId: goal.id,
+        label: goal.title,
+        subtitle: describeLinkOwner("Goal", formatUserSummaryLine(goal.user))
+      })),
+      ...shell.snapshot.projects.map((project) => ({
+        entityType: "project" as const,
+        entityId: project.id,
+        label: project.title,
+        subtitle: describeLinkOwner(
+          "Project",
+          formatUserSummaryLine(project.user)
+        )
+      })),
+      ...shell.snapshot.tasks.map((task) => ({
+        entityType: "task" as const,
+        entityId: task.id,
+        label: task.title,
+        subtitle: describeLinkOwner("Task", formatUserSummaryLine(task.user))
+      })),
+      ...shell.snapshot.strategies.map((strategy) => ({
+        entityType: "strategy" as const,
+        entityId: strategy.id,
+        label: strategy.title,
+        subtitle: describeLinkOwner(
+          "Strategy",
+          formatUserSummaryLine(strategy.user)
+        )
+      })),
+      ...shell.snapshot.habits.map((habit) => ({
+        entityType: "habit" as const,
+        entityId: habit.id,
+        label: habit.title,
+        subtitle: describeLinkOwner("Habit", formatUserSummaryLine(habit.user))
+      })),
+      ...(lifeEventsQuery.data?.events ?? []).map((event) => ({
+        entityType: "life_event" as const,
+        entityId: event.id,
+        label: event.title,
+        subtitle: describeLinkOwner(
+          "Life Event",
+          formatUserSummaryLine(event.user)
+        )
+      }))
+    ];
+  }, [
+    lifeEventsQuery.data?.events,
+    shell.snapshot.goals,
+    shell.snapshot.habits,
+    shell.snapshot.projects,
+    shell.snapshot.strategies,
+    shell.snapshot.tasks
+  ]);
   const linkLabelByKey = useMemo(
     () =>
       new Map(
@@ -1066,7 +1075,7 @@ export function CalendarPage() {
     completeClipboardPaste();
   };
 
-  const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
+  const activeMenuItems: FloatingActionMenuItem[] = (() => {
     if (!menuState) {
       return [];
     }
@@ -1224,20 +1233,7 @@ export function CalendarPage() {
         }
       }
     ];
-  }, [
-    clearClipboard,
-    clipboardCalendarEvents,
-    clipboardEntry,
-    days,
-    deleteEventMutation,
-    deleteWorkBlockMutation,
-    markLifeEventMutation,
-    menuState,
-    overview.events,
-    overview.workBlockTemplates,
-    selectedWorkBlockTemplate,
-    setClipboardEntry
-  ]);
+  })();
 
   if (calendarQuery.isLoading) {
     return <SurfaceSkeleton />;

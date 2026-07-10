@@ -76,6 +76,10 @@ type HelperResponse<T> =
       error: string;
     };
 
+const HELPER_RESPONSE_POLL_INTERVAL_MS = 50;
+const HELPER_PERMISSION_TIMEOUT_SECONDS = 285;
+const HELPER_RESPONSE_TIMEOUT_MS = 300_000;
+
 type MockCalendarStore = {
   status?: MacOSCalendarAccessStatus;
   granted?: boolean;
@@ -192,7 +196,9 @@ func requestAccess(store: EKEventStore) throws -> [String: Any] {
     }
   }
 
-  semaphore.wait()
+  if semaphore.wait(timeout: .now() + .seconds(${HELPER_PERMISSION_TIMEOUT_SECONDS})) == .timedOut {
+    throw HelperError.unavailable("Calendar permission was not answered in time.")
+  }
   if let capturedError {
     throw capturedError
   }
@@ -660,10 +666,95 @@ async function ensureHelperCompiled() {
   return { binaryPath, sourceHash, plistHash };
 }
 
+export function buildMacOSCalendarHelperLaunchArgs(input: {
+  appPath: string;
+  encodedRequest: string;
+  responsePath: string;
+}) {
+  return [
+    "-n",
+    input.appPath,
+    "--args",
+    "--request-base64",
+    input.encodedRequest,
+    "--response-file",
+    input.responsePath
+  ];
+}
+
+function isMissingHelperResponse(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
+}
+
+export async function waitForMacOSCalendarHelperResponse<
+  T extends Record<string, unknown>
+>(
+  responsePath: string,
+  options: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    readText?: (targetPath: string) => Promise<string>;
+    wait?: (delayMs: number) => Promise<void>;
+    now?: () => number;
+  } = {}
+): Promise<T> {
+  const timeoutMs = Math.max(
+    0,
+    options.timeoutMs ?? HELPER_RESPONSE_TIMEOUT_MS
+  );
+  const pollIntervalMs = Math.max(
+    1,
+    options.pollIntervalMs ?? HELPER_RESPONSE_POLL_INTERVAL_MS
+  );
+  const readText =
+    options.readText ?? ((targetPath) => readFile(targetPath, "utf8"));
+  const wait =
+    options.wait ??
+    ((delayMs) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, delayMs);
+      }));
+  const now = options.now ?? Date.now;
+  const deadline = now() + timeoutMs;
+
+  while (true) {
+    try {
+      const raw = await readText(responsePath);
+      const parsed = JSON.parse(raw) as HelperResponse<T>;
+      if (!parsed.ok) {
+        throw new Error(parsed.error);
+      }
+      return parsed;
+    } catch (error) {
+      if (!isMissingHelperResponse(error)) {
+        throw error;
+      }
+    }
+    const remainingMs = deadline - now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    await wait(Math.min(pollIntervalMs, remainingMs));
+  }
+
+  const timeoutLabel =
+    timeoutMs < 1_000
+      ? `${timeoutMs} milliseconds`
+      : `${Math.round(timeoutMs / 1_000)} seconds`;
+  throw new Error(
+    `Forge macOS Calendar Helper did not respond within ${timeoutLabel}.`
+  );
+}
+
 async function runHelperViaApp<T extends Record<string, unknown>>(
   payload: Record<string, unknown>
 ): Promise<T> {
-  const { binaryPath } = await ensureHelperCompiled();
+  await ensureHelperCompiled();
   const appPath = helperAppPath();
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
   const responsePath = path.join(
@@ -674,16 +765,11 @@ async function runHelperViaApp<T extends Record<string, unknown>>(
   try {
     await execFile(
       "open",
-      [
-        "-W",
-        "-n",
+      buildMacOSCalendarHelperLaunchArgs({
         appPath,
-        "--args",
-        "--request-base64",
-        encoded,
-        "--response-file",
+        encodedRequest: encoded,
         responsePath
-      ],
+      }),
       {
         maxBuffer: 8 * 1024 * 1024,
         env: {
@@ -692,15 +778,9 @@ async function runHelperViaApp<T extends Record<string, unknown>>(
         }
       }
     );
-    const raw = await readFile(responsePath, "utf8");
-    const parsed = JSON.parse(raw) as HelperResponse<T>;
-    if (!parsed.ok) {
-      throw new Error(parsed.error);
-    }
-    return parsed;
+    return await waitForMacOSCalendarHelperResponse<T>(responsePath);
   } finally {
     await rm(responsePath, { force: true }).catch(() => undefined);
-    void binaryPath;
   }
 }
 

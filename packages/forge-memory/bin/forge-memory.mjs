@@ -1099,6 +1099,60 @@ async function isPortAvailable(port) {
   });
 }
 
+function resolveDevServerEntry(repoRoot) {
+  const candidates = [
+    path.join(repoRoot, "apps", "api", "src", "index.ts"),
+    path.join(repoRoot, "server", "src", "index.ts")
+  ];
+  const entry = candidates.find((candidate) => fs.existsSync(candidate));
+  if (entry) return entry;
+  throw new Error(
+    `Forge API source entry was not found. Checked: ${candidates.join(", ")}`
+  );
+}
+
+async function isForgeDevWebServer(port, repoRoot) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1_500);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/forge/`, {
+      headers: { accept: "text/html" },
+      signal: controller.signal
+    });
+    if (!response.ok) return false;
+    const html = await response.text();
+    if (
+      !html.includes("<title>Forge</title>") ||
+      !html.includes('/forge/@vite/client')
+    ) {
+      return false;
+    }
+
+    const sourceEntry = path
+      .resolve(repoRoot, "apps", "web", "src", "main.tsx")
+      .split(path.sep)
+      .join("/");
+    const sourceUrlPath = sourceEntry
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const sourceResponse = await fetch(
+      `http://127.0.0.1:${port}/forge/@fs${sourceUrlPath}`,
+      {
+        headers: { accept: "text/javascript" },
+        signal: controller.signal
+      }
+    );
+    if (!sourceResponse.ok) return false;
+    const source = await sourceResponse.text();
+    return source.includes("import.meta.hot") && source.includes(sourceEntry);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function findFreePort(startPort) {
   if (startPort === 0) {
     return await new Promise((resolve, reject) => {
@@ -1780,7 +1834,9 @@ async function stopRecordedRuntimeProcess(pid) {
     signalDetachedProcessGroup(pid, "SIGTERM") || signalProcess(pid, "SIGTERM");
   if (!signaled) return false;
   if (await waitForProcessExit(pid)) return true;
-  signalDetachedProcessGroup(pid, "SIGKILL") || signalProcess(pid, "SIGKILL");
+  if (!signalDetachedProcessGroup(pid, "SIGKILL")) {
+    signalProcess(pid, "SIGKILL");
+  }
   await waitForProcessExit(pid, 500);
   return true;
 }
@@ -1976,28 +2032,85 @@ async function startRuntime(config) {
   await fsp.mkdir(path.dirname(logPath()), { recursive: true });
   await fsp.mkdir(path.dirname(runtimeStatePath()), { recursive: true });
   await fsp.mkdir(config.dataRoot, { recursive: true });
-  const out = fs.openSync(logPath(), "a");
   const children = [];
+  let out;
 
-  if (config.mode === "dev") {
-    if (!config.repo)
-      throw new Error("Dev mode requires a Forge repo checkout.");
-    const tsx = path.join(
-      config.repo,
-      "node_modules",
-      "tsx",
-      "dist",
-      "cli.mjs"
-    );
-    if (!fs.existsSync(tsx))
-      throw new Error(
-        `tsx was not found at ${tsx}. Run npm install in the Forge repo.`
+  try {
+    out = fs.openSync(logPath(), "a");
+    if (config.mode === "dev") {
+      if (!config.repo)
+        throw new Error("Dev mode requires a Forge repo checkout.");
+      const tsx = path.join(
+        config.repo,
+        "node_modules",
+        "tsx",
+        "dist",
+        "cli.mjs"
       );
-    const server = spawn(
-      process.execPath,
-      [tsx, path.join(config.repo, "server", "src", "index.ts")],
-      {
-        cwd: config.repo,
+      if (!fs.existsSync(tsx))
+        throw new Error(
+          `tsx was not found at ${tsx}. Run npm install in the Forge repo.`
+        );
+      const serverEntry = resolveDevServerEntry(config.repo);
+      const webPortAvailable = await isPortAvailable(config.webPort);
+      if (
+        !webPortAvailable &&
+        !(await isForgeDevWebServer(config.webPort, config.repo))
+      ) {
+        throw new Error(
+          `Port ${config.webPort} is already in use by a service that is not the Forge Vite dev server.`
+        );
+      }
+      const server = spawn(
+        process.execPath,
+        [tsx, serverEntry],
+        {
+          cwd: config.repo,
+          detached: true,
+          stdio: ["ignore", out, out],
+          env: {
+            ...process.env,
+            HOST: "127.0.0.1",
+            PORT: String(config.port),
+            FORGE_BASE_PATH: "/forge/",
+            FORGE_DATA_ROOT: config.dataRoot,
+            FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
+          }
+        }
+      );
+      server.unref();
+      children.push({ role: "server", pid: server.pid });
+      if (webPortAvailable) {
+        const web = spawn(
+          "npm",
+          [
+            "run",
+            "dev:web",
+            "--",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            String(config.webPort)
+          ],
+          {
+            cwd: config.repo,
+            detached: true,
+            stdio: ["ignore", out, out],
+            env: {
+              ...process.env,
+              FORGE_API_ORIGIN: `http://127.0.0.1:${config.port}`,
+              FORGE_BASE_PATH: "/forge/"
+            }
+          }
+        );
+        web.unref();
+        children.push({ role: "web", pid: web.pid });
+      }
+    } else {
+      const pluginRoot = await ensurePackagedRuntimeInstalled();
+      const entry = path.join(pluginRoot, "server", "index.js");
+      const child = spawn(process.execPath, [entry], {
+        cwd: pluginRoot,
         detached: true,
         stdio: ["ignore", out, out],
         env: {
@@ -2005,52 +2118,25 @@ async function startRuntime(config) {
           HOST: "127.0.0.1",
           PORT: String(config.port),
           FORGE_BASE_PATH: "/forge/",
-          FORGE_DATA_ROOT: config.dataRoot,
-          FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
+          FORGE_DATA_ROOT: config.dataRoot
         }
-      }
+      });
+      child.unref();
+      children.push({ role: "server", pid: child.pid });
+    }
+  } catch (error) {
+    await Promise.all(
+      children.map(async (child) => {
+        if (typeof child.pid !== "number") return;
+        await stopRecordedRuntimeProcess(child.pid).catch(() => false);
+      })
     );
-    server.unref();
-    children.push({ role: "server", pid: server.pid });
-    const web = spawn(
-      "npm",
-      [
-        "run",
-        "dev:web",
-        "--",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(config.webPort)
-      ],
-      {
-        cwd: config.repo,
-        detached: true,
-        stdio: ["ignore", out, out],
-        env: { ...process.env, FORGE_BASE_PATH: "/forge/" }
-      }
-    );
-    web.unref();
-    children.push({ role: "web", pid: web.pid });
-  } else {
-    const pluginRoot = await ensurePackagedRuntimeInstalled();
-    const entry = path.join(pluginRoot, "server", "index.js");
-    const child = spawn(process.execPath, [entry], {
-      cwd: pluginRoot,
-      detached: true,
-      stdio: ["ignore", out, out],
-      env: {
-        ...process.env,
-        HOST: "127.0.0.1",
-        PORT: String(config.port),
-        FORGE_BASE_PATH: "/forge/",
-        FORGE_DATA_ROOT: config.dataRoot
-      }
-    });
-    child.unref();
-    children.push({ role: "server", pid: child.pid });
+    throw error;
+  } finally {
+    if (typeof out === "number") {
+      fs.closeSync(out);
+    }
   }
-  fs.closeSync(out);
 
   const state = {
     mode: config.mode,

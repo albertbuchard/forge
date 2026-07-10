@@ -89,10 +89,6 @@ function buildProcessorSlug(title: string, id: string) {
   return `${slugifySegment(title)}-${id.slice(-6)}`;
 }
 
-function processorWidgetId(processorId: string) {
-  return `aiproc:${processorId}`;
-}
-
 function processorIdFromNodeId(nodeId: string) {
   return nodeId.startsWith("aiproc:") ? nodeId.slice("aiproc:".length) : null;
 }

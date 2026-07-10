@@ -525,8 +525,7 @@ export function TimeboxPlanningDialog({
       ? "Forge will use this task's current duration target and scheduling rules while it looks for viable slots."
       : "Forge will use the task's current planned duration and scheduling rules when it searches for valid slots.";
 
-  const steps = useMemo<Array<QuestionFlowStep<PlannerDraft>>>(
-    () => [
+  const steps: Array<QuestionFlowStep<PlannerDraft>> = [
       {
         id: "task",
         eyebrow: "Planning",
@@ -1094,28 +1093,7 @@ export function TimeboxPlanningDialog({
           );
         }
       }
-    ],
-    [
-      availableTasks,
-      calendarDayQuery.isLoading,
-      dayBlocks,
-      dayEvents,
-      dayTimeboxes,
-      draft.plannerMode,
-      editingTimebox,
-      from,
-      lockedTaskId,
-      maxDateKey,
-      manualPreview,
-      minDateKey,
-      selectedTask,
-      suggestionQuery.data,
-      suggestionQuery.isLoading,
-      taskStepDescription,
-      taskStepTitle,
-      to
-    ]
-  );
+    ];
 
   return (
     <QuestionFlowDialog

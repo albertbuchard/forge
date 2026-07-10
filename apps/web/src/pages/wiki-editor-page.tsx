@@ -78,8 +78,6 @@ const WIKI_FRAME_CLASS =
   "rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] shadow-[var(--ui-shadow-card)]";
 const WIKI_EYEBROW_CLASS =
   "text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
-const WIKI_MUTED_TEXT_CLASS = "text-[var(--ui-ink-soft)]";
-const WIKI_STRONG_TEXT_CLASS = "text-[var(--ui-ink-strong)]";
 const WIKI_EDITOR_FIELD_CLASS =
   "w-full rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-3 text-[13px] text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_40%,transparent)]";
 const WIKI_EDITOR_CHIP_CLASS =

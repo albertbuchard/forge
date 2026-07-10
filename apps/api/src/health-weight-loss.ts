@@ -520,10 +520,6 @@ function newId(prefix: string) {
   return `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
 }
 
-function dayKey(value: string) {
-  return value.slice(0, 10);
-}
-
 function resolveTimeZone(timeZone: string | null | undefined) {
   const candidate = timeZone?.trim();
   if (!candidate) {
@@ -978,10 +974,6 @@ function buildStoredEnergyModel(input: {
     todayMovementCaloriesFromRange != null
       ? n(todayMovementCaloriesFromRange.movement_calories_kcal) || null
       : (movementByDay.get(todayKey) ?? null);
-  const todayWorkoutMovementCalories =
-    todayWorkoutEnergy != null || todayMovementCalories != null
-      ? n(todayWorkoutEnergy) + n(todayMovementCalories)
-      : null;
   const todayStepEstimatedCalories = estimateStepActiveCaloriesKcal({
     stepCount: todayStepCount,
     weightKg: input.latestWeightKg

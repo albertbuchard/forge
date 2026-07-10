@@ -10,6 +10,18 @@ import { I18nProvider } from "@/lib/i18n";
 import { TaskDialog } from "./task-dialog";
 import type { Goal, ProjectSummary, Tag, Task, UserSummary } from "@/lib/types";
 
+const apiMocks = vi.hoisted(() => ({
+  createGoal: vi.fn()
+}));
+
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return {
+    ...actual,
+    createGoal: apiMocks.createGoal
+  };
+});
+
 function installMatchMedia() {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -30,6 +42,7 @@ describe("TaskDialog", () => {
   beforeEach(() => {
     installMatchMedia();
     window.localStorage.clear();
+    apiMocks.createGoal.mockReset();
   });
 
   afterEach(() => {
@@ -311,5 +324,45 @@ describe("TaskDialog", () => {
       deltaMinutes: 35,
       note: "Adjusted from task editor."
     });
+  });
+
+  it("prevents duplicate anchor creation while the first request is pending", async () => {
+    apiMocks.createGoal.mockImplementation(
+      () => new Promise(() => undefined)
+    );
+
+    render(
+      <I18nProvider locale="en">
+        <TaskDialog
+          open
+          goals={[]}
+          projects={[]}
+          tags={[]}
+          users={[]}
+          editingTask={null}
+          onOpenChange={vi.fn()}
+          onSubmit={vi.fn(async () => {})}
+        />
+      </I18nProvider>
+    );
+
+    const anchorInput = screen.getByPlaceholderText(
+      'Search or create Goal, Project, or parent Issue like Goal + "Creative system"'
+    );
+    fireEvent.focus(anchorInput);
+    fireEvent.change(anchorInput, { target: { value: "New anchor" } });
+
+    const createGoalButton = screen.getByRole("button", {
+      name: /Create goal/i
+    });
+    fireEvent.click(createGoalButton);
+
+    await waitFor(() => {
+      expect(apiMocks.createGoal).toHaveBeenCalledTimes(1);
+      expect(createGoalButton).toBeDisabled();
+    });
+
+    fireEvent.click(createGoalButton);
+    expect(apiMocks.createGoal).toHaveBeenCalledTimes(1);
   });
 });

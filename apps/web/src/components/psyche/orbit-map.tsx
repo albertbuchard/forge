@@ -150,15 +150,18 @@ export function OrbitMap({
     return () => observer.disconnect();
   }, []);
 
-  const denseNodes =
-    nodes.length > 0
-      ? nodes
-      : [
-          { id: "values", label: "Values", title: "Add value", detail: "Name what matters", href: "/psyche/values?create=1", angle: -86, radius: 112, tone: "mint" as const },
-          { id: "patterns", label: "Patterns", title: "Add pattern", detail: "Map a loop", href: "/psyche/patterns?create=1", angle: -14, radius: 122, tone: "rose" as const },
-          { id: "beliefs", label: "Beliefs", title: "Add belief", detail: "Capture a script", href: "/psyche/schemas-beliefs?create=1", angle: 72, radius: 118, tone: "violet" as const },
-          { id: "reports", label: "Reports", title: "Reflect", detail: "Open the chain", href: "/psyche/reports?create=1", angle: 160, radius: 124, tone: "sky" as const }
-        ];
+  const denseNodes = useMemo(
+    () =>
+      nodes.length > 0
+        ? nodes
+        : [
+            { id: "values", label: "Values", title: "Add value", detail: "Name what matters", href: "/psyche/values?create=1", angle: -86, radius: 112, tone: "mint" as const },
+            { id: "patterns", label: "Patterns", title: "Add pattern", detail: "Map a loop", href: "/psyche/patterns?create=1", angle: -14, radius: 122, tone: "rose" as const },
+            { id: "beliefs", label: "Beliefs", title: "Add belief", detail: "Capture a script", href: "/psyche/schemas-beliefs?create=1", angle: 72, radius: 118, tone: "violet" as const },
+            { id: "reports", label: "Reports", title: "Reflect", detail: "Open the chain", href: "/psyche/reports?create=1", angle: 160, radius: 124, tone: "sky" as const }
+          ],
+    [nodes]
+  );
   const packedNodes = useMemo(
     () => packOrbitNodes(denseNodes, Math.max(frameSize.width, 320), Math.max(frameSize.height, 320)),
     [denseNodes, frameSize.height, frameSize.width]

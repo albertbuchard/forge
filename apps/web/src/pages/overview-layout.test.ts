@@ -34,11 +34,11 @@ describe("normalizeOverviewLayout", () => {
     expect(normalized.order).toEqual([
       "hero",
       "summary",
+      "gamification",
       "signals",
       "pipeline",
       "body-signals",
       "goals",
-      "gamification",
       "life-force",
       "weather"
     ]);
@@ -86,11 +86,11 @@ describe("normalizeOverviewLayout", () => {
     expect(normalized.order).toEqual([
       "hero",
       "summary",
+      "gamification",
       "signals",
       "pipeline",
       "body-signals",
       "goals",
-      "gamification",
       "life-force",
       "time",
       "weather"
@@ -135,14 +135,38 @@ describe("normalizeOverviewLayout", () => {
     const current = layout([
       "hero",
       "summary",
+      "gamification",
       "signals",
       "pipeline",
       "body-signals",
       "goals",
-      "gamification",
       "life-force"
     ]);
 
     expect(normalizeOverviewLayout(current)).toBe(current);
+  });
+
+  it("restores the required Forge Smith widget without disturbing custom order", () => {
+    const customized = layout(
+      ["hero", "goals", "gamification", "summary"],
+      "2026-07-10T08:00:00.000Z",
+      {
+        gamification: {
+          hidden: true,
+          fullWidth: false,
+          titleVisible: false,
+          descriptionVisible: false
+        }
+      }
+    );
+
+    expect(normalizeOverviewLayout(customized)).toMatchObject({
+      order: customized.order,
+      widgets: {
+        gamification: {
+          hidden: false
+        }
+      }
+    });
   });
 });

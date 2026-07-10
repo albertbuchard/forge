@@ -210,6 +210,9 @@ export function GamificationOverviewWidget({
             <img
               src={getGamificationThemePreviewUrl(gamificationTheme)}
               alt={`${selectedStyleLabel} preview`}
+              decoding="async"
+              width={64}
+              height={64}
               className="size-16 object-contain"
             />
           </div>
@@ -272,11 +275,104 @@ export function GamificationOverviewWidget({
     );
   }
 
+  if (compact) {
+    return (
+      <section
+        data-testid="forge-smith-overview"
+        className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-3 shadow-[var(--ui-shadow-soft)]"
+      >
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_18%,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_36%),radial-gradient(circle_at_84%_80%,color-mix(in_srgb,var(--primary)_9%,transparent),transparent_38%)]" />
+        <div className="grid min-w-0 grid-cols-[7.75rem_minmax(0,1fr)] gap-3">
+          <div className="relative min-h-[10.5rem] overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
+            <img
+              src={getGamificationSpriteUrl(
+                metrics.mascot.spriteKey,
+                512,
+                gamificationTheme
+              )}
+              alt="Forge Smith mascot"
+              decoding="async"
+              width={512}
+              height={512}
+              onError={hideMissingGamificationImage}
+              className="absolute inset-0 size-full object-contain object-center p-1 drop-shadow-[var(--ui-shadow-soft)]"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_94%,transparent),transparent)] p-2.5">
+              <div className="truncate font-label text-[9px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                {metrics.scope.label} · {equippedSkin.replaceAll("-", " ")}
+              </div>
+              <div className="mt-1 line-clamp-2 font-display text-sm leading-5 text-[var(--ui-ink-strong)]">
+                {metrics.mascot.headline}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-col justify-between py-0.5">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--tertiary)]">
+                  Level {profile.level}
+                </Badge>
+                <Badge className="bg-[var(--ui-surface-2)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]">
+                  {profile.streakDays} days
+                </Badge>
+              </div>
+              <div className="mt-2 flex min-w-0 items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-display text-lg leading-6 text-[var(--ui-ink-strong)]">
+                    Forge level {profile.level}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+                    {metrics.mascot.line}
+                  </p>
+                </div>
+                <Link
+                  to="/rewards"
+                  aria-label="Open Trophy Hall"
+                  title="Open Trophy Hall"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
+                >
+                  <Trophy className="size-4" />
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-2 min-w-0">
+              <ProgressMeter value={progress} />
+              <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--ui-ink-faint)]">
+                <span className="truncate">
+                  {profile.currentLevelXp}/{profile.nextLevelXp} XP
+                </span>
+                <span className="shrink-0">
+                  {profile.xpToNextLevel ??
+                    profile.nextLevelXp - profile.currentLevelXp}{" "}
+                  to next
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="relative isolate min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 shadow-[var(--ui-shadow-soft)] md:p-5">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_20%,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_34%),radial-gradient(circle_at_82%_10%,color-mix(in_srgb,var(--info)_10%,transparent),transparent_32%),radial-gradient(circle_at_76%_82%,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_34%)]" />
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(18rem,0.84fr)_minmax(0,1.16fr)] lg:items-center">
-        <div className="relative min-h-[17rem] overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
+      <div
+        className={cn(
+          "grid min-w-0 gap-4",
+          compact
+            ? "grid-cols-1"
+            : "lg:grid-cols-[minmax(18rem,0.84fr)_minmax(0,1.16fr)] lg:items-center"
+        )}
+      >
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]",
+            compact ? "min-h-[11rem]" : "min-h-[17rem]"
+          )}
+        >
           <img
             src={getGamificationSpriteUrl(
               metrics.mascot.spriteKey,
@@ -284,14 +380,30 @@ export function GamificationOverviewWidget({
               gamificationTheme
             )}
             alt="Forge Smith mascot"
+            decoding="async"
+            width={512}
+            height={512}
             onError={hideMissingGamificationImage}
-            className="absolute inset-x-0 bottom-3 mx-auto h-[15.5rem] max-w-none object-contain drop-shadow-[var(--ui-shadow-soft)]"
+            className={cn(
+              "absolute inset-x-0 mx-auto max-w-none object-contain drop-shadow-[var(--ui-shadow-soft)]",
+              compact ? "bottom-1 h-[10.5rem]" : "bottom-3 h-[15.5rem]"
+            )}
           />
-          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_92%,transparent),transparent)] p-4">
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_92%,transparent),transparent)]",
+              compact ? "p-3" : "p-4"
+            )}
+          >
             <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {metrics.scope.label} · {equippedSkin.replaceAll("-", " ")}
             </div>
-            <div className="mt-1 font-display text-xl text-[var(--ui-ink-strong)]">
+            <div
+              className={cn(
+                "mt-1 font-display text-[var(--ui-ink-strong)]",
+                compact ? "text-base" : "text-xl"
+              )}
+            >
               {metrics.mascot.headline}
             </div>
           </div>
@@ -312,7 +424,12 @@ export function GamificationOverviewWidget({
           <div className="mt-4 grid gap-3">
             <div className="flex min-w-0 items-end justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-display text-2xl text-[var(--ui-ink-strong)] md:text-3xl">
+                <div
+                  className={cn(
+                    "font-display text-[var(--ui-ink-strong)]",
+                    compact ? "text-xl" : "text-2xl md:text-3xl"
+                  )}
+                >
                   Forge level {profile.level}
                 </div>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
@@ -361,6 +478,10 @@ export function GamificationOverviewWidget({
                             gamificationTheme
                           )}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
+                          width={32}
+                          height={32}
                           onError={hideMissingGamificationImage}
                           className="size-8 object-contain opacity-90"
                         />
@@ -401,6 +522,10 @@ export function GamificationOverviewWidget({
                         )}
                         alt={item.title}
                         title={item.title}
+                        loading="lazy"
+                        decoding="async"
+                        width={44}
+                        height={44}
                         onError={hideMissingGamificationImage}
                         className="size-11 rounded-2xl bg-[var(--ui-surface-2)] object-contain p-1"
                       />

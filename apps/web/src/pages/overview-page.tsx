@@ -41,10 +41,7 @@ import {
 } from "@/lib/life-force-display";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
-import type {
-  MovementDayData,
-  VitalsViewData
-} from "@/lib/types";
+import type { MovementDayData, VitalsViewData } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { normalizeOverviewLayout } from "@/pages/overview-layout";
 
@@ -382,18 +379,20 @@ export function OverviewPage() {
       id: "gamification",
       title: "Forge Smith",
       description: "Selected-user level, XP, streak, trophy, and unlock state.",
-      defaultWidth: 12,
-      defaultHeight: 4,
-      defaultHidden: true,
+      defaultWidth: 4,
+      defaultHeight: 3,
+      defaultHidden: false,
+      minWidth: 4,
       minHeight: 3,
+      removable: false,
       surfaceChrome: "none",
       defaultTitleVisible: false,
       defaultDescriptionVisible: false,
-      render: ({ compact }) =>
+      render: () =>
         xpMetricsQuery.data ? (
           <GamificationOverviewWidget
             metrics={xpMetricsQuery.data.metrics}
-            compact={compact}
+            compact
           />
         ) : (
           <GamificationOverviewWidget
@@ -451,7 +450,7 @@ export function OverviewPage() {
               dailyAmbientXp: 0,
               dailyAmbientCap: 12
             }}
-            compact={compact}
+            compact
           />
         )
     },
@@ -460,7 +459,7 @@ export function OverviewPage() {
       title: "Momentum summary",
       description:
         "Smaller titles and denser metrics free space for the widgets themselves.",
-      defaultWidth: 12,
+      defaultWidth: 8,
       defaultHeight: 3,
       minWidth: 6,
       defaultTitleVisible: false,

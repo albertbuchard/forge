@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -128,14 +128,14 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const syncScrollMetrics = () => {
+  const syncScrollMetrics = useCallback(() => {
     const element = scrollParentRef.current;
     if (!element) {
       return;
     }
     setScrollTop(element.scrollTop);
     setViewportHeight(element.clientHeight);
-  };
+  }, []);
 
   const timelineQuery = useInfiniteQuery({
     queryKey: ["forge-movement-life-timeline", ...userIds],
@@ -326,42 +326,46 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     [mostRelevantSleepSegmentId, segments, sleepOverlayVisible]
   );
 
-  const scrollToTimelineItem = (
-    segmentId: string,
-    behavior: ScrollBehavior = "smooth"
-  ) => {
-    const element = scrollParentRef.current;
-    const item = timelineItemById.get(segmentId);
-    if (!element || !item) {
-      return;
-    }
-    const targetTop = Math.max(
-      0,
-      item.boxTop - element.clientHeight / 2 + item.displayHeight / 2
-    );
-    if (typeof element.scrollTo === "function") {
-      element.scrollTo({
-        top: targetTop,
-        behavior
-      });
-      return;
-    }
-    element.scrollTop = targetTop;
-  };
+  const scrollToTimelineItem = useCallback(
+    (segmentId: string, behavior: ScrollBehavior = "smooth") => {
+      const element = scrollParentRef.current;
+      const item = timelineItemById.get(segmentId);
+      if (!element || !item) {
+        return;
+      }
+      const targetTop = Math.max(
+        0,
+        item.boxTop - element.clientHeight / 2 + item.displayHeight / 2
+      );
+      if (typeof element.scrollTo === "function") {
+        element.scrollTo({
+          top: targetTop,
+          behavior
+        });
+        return;
+      }
+      element.scrollTop = targetTop;
+    },
+    [timelineItemById]
+  );
+
+  const fetchNextDataPage = dataTimelineQuery.fetchNextPage;
+  const hasNextDataPage = dataTimelineQuery.hasNextPage;
+  const isFetchingNextDataPage = dataTimelineQuery.isFetchingNextPage;
 
   useEffect(() => {
     if (!dataModalOpen) {
       return;
     }
-    if (!dataTimelineQuery.hasNextPage || dataTimelineQuery.isFetchingNextPage) {
+    if (!hasNextDataPage || isFetchingNextDataPage) {
       return;
     }
-    void dataTimelineQuery.fetchNextPage();
+    void fetchNextDataPage();
   }, [
     dataModalOpen,
-    dataTimelineQuery.fetchNextPage,
-    dataTimelineQuery.hasNextPage,
-    dataTimelineQuery.isFetchingNextPage
+    fetchNextDataPage,
+    hasNextDataPage,
+    isFetchingNextDataPage
   ]);
 
   useEffect(() => {
@@ -404,7 +408,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         syncScrollMetrics();
       });
     }
-  }, [displaySegments.length, timelineLayout.totalHeight, timelineItemById]);
+  }, [
+    displaySegments,
+    scrollToTimelineItem,
+    syncScrollMetrics,
+    timelineLayout.totalHeight
+  ]);
 
   useEffect(() => {
     const element = scrollParentRef.current;
@@ -417,7 +426,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
-  }, []);
+  }, [syncScrollMetrics]);
 
   useEffect(() => {
     if (!selectedSegmentId) {
@@ -464,7 +473,12 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         scrollToTimelineItem(targetId);
       }
     });
-  }, [displaySegments, mostRelevantSleepSegmentId, sleepOverlayVisible, timelineItemById]);
+  }, [
+    displaySegments,
+    mostRelevantSleepSegmentId,
+    scrollToTimelineItem,
+    sleepOverlayVisible
+  ]);
 
   const invalidateMovementProjectionQueries = async () => {
     await Promise.all([

@@ -269,17 +269,6 @@ function deriveDataRootFromDatabasePath(databasePath: string) {
   return path.dirname(databasePath);
 }
 
-function emptyCounts() {
-  return {
-    notes: 0,
-    goals: 0,
-    projects: 0,
-    tasks: 0,
-    taskRuns: 0,
-    tags: 0
-  };
-}
-
 function countRowsInDatabase(database: DatabaseSync, table: string) {
   try {
     const row = database

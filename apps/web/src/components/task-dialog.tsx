@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LoaderCircle, Plus, Search, X } from "lucide-react";
 import {
   FlowChoiceGrid,
   FlowField,
@@ -12,10 +12,8 @@ import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { defaultProjectValues } from "@/components/project-dialog";
 import { Badge } from "@/components/ui/badge";
 import { EntityBadge } from "@/components/ui/entity-badge";
-import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
 import { createGoal, createProject, createWorkItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -499,11 +497,11 @@ export function TaskDialog({
   onSubmit: (input: QuickTaskInput, taskId?: string) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const safeGoals = goals ?? [];
-  const safeProjects = projects ?? [];
+  const safeGoals = useMemo(() => goals ?? [], [goals]);
+  const safeProjects = useMemo(() => projects ?? [], [projects]);
   const safeWorkItems = workItems ?? EMPTY_WORK_ITEMS;
   const safeTags = tags ?? [];
-  const safeUsers = users ?? [];
+  const safeUsers = useMemo(() => users ?? [], [users]);
   const [draft, setDraft] = useState<QuickTaskInput>(defaultTaskValues);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
@@ -516,6 +514,7 @@ export function TaskDialog({
   const [anchorCreatePendingId, setAnchorCreatePendingId] = useState<
     string | null
   >(null);
+  const anchorCreatePendingRef = useRef<string | null>(null);
   const [trackedMinutesDraft, setTrackedMinutesDraft] = useState(0);
 
   const updateFieldErrors = (errors: Record<string, string[] | undefined>) => {
@@ -537,6 +536,7 @@ export function TaskDialog({
     setAnchorOpen(false);
     setAnchorHighlightedIndex(0);
     setAnchorError(null);
+    anchorCreatePendingRef.current = null;
     setAnchorCreatePendingId(null);
     setTrackedMinutesDraft(
       editingTask
@@ -718,6 +718,9 @@ export function TaskDialog({
   };
 
   const createAnchor = async (option: CreateAnchorOption) => {
+    if (anchorCreatePendingRef.current) {
+      return;
+    }
     if (option.disabled) {
       setAnchorError(option.disabledReason ?? option.description);
       return;
@@ -728,6 +731,7 @@ export function TaskDialog({
       return;
     }
 
+    anchorCreatePendingRef.current = option.id;
     setAnchorCreatePendingId(option.id);
     setAnchorError(null);
 
@@ -823,6 +827,7 @@ export function TaskDialog({
           : "Unable to create that linked entity right now."
       );
     } finally {
+      anchorCreatePendingRef.current = null;
       setAnchorCreatePendingId(null);
     }
   };
@@ -834,7 +839,7 @@ export function TaskDialog({
       title: "Choose where this work belongs",
       description:
         "Anchor the work through the hierarchy. Tasks can carry a goal, project, and issue parent together so the chain of meaning stays explicit.",
-      render: (value, setValue) => (
+      render: (value) => (
         <>
           <FlowField
             label="Hierarchy anchors"
@@ -936,7 +941,9 @@ export function TaskDialog({
                           if (suggestion.mode === "existing") {
                             selectAnchor(suggestion);
                           } else {
-                            void createAnchor(suggestion);
+                            if (!anchorCreatePendingId) {
+                              void createAnchor(suggestion);
+                            }
                           }
                         }
                       }}
@@ -954,7 +961,8 @@ export function TaskDialog({
                             type="button"
                             disabled={
                               suggestion.mode === "create" &&
-                              suggestion.disabled
+                              (suggestion.disabled ||
+                                anchorCreatePendingId !== null)
                             }
                             className={cn(
                               "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
@@ -962,7 +970,8 @@ export function TaskDialog({
                                 ? "bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                                 : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]",
                               suggestion.mode === "create" &&
-                                suggestion.disabled &&
+                                (suggestion.disabled ||
+                                  anchorCreatePendingId !== null) &&
                                 "cursor-not-allowed opacity-45"
                             )}
                             onMouseEnter={() =>
@@ -1001,7 +1010,11 @@ export function TaskDialog({
                             </div>
                             {suggestion.mode === "create" ? (
                               <span className="rounded-full bg-[var(--primary)]/12 p-2 text-[var(--primary)]">
-                                <Plus className="size-3.5" />
+                                {anchorCreatePendingId === suggestion.id ? (
+                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                ) : (
+                                  <Plus className="size-3.5" />
+                                )}
                               </span>
                             ) : null}
                           </button>
@@ -1512,7 +1525,7 @@ export function TaskDialog({
       title: "Capture launch context if this task needs a durable work note",
       description:
         "These notes become linked Markdown evidence on the task immediately, which helps preserve setup context, blockers, or handoff detail.",
-      render: (value, setValue) => (
+      render: () => (
         <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
           Use the previous step for completion closeout. Use linked notes here
           only when you want durable extra context, setup detail, or handoff

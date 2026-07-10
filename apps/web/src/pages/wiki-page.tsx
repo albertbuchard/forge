@@ -303,10 +303,13 @@ export function WikiPage() {
 
   const activeSpaceId =
     selectedSpaceId || settingsQuery.data?.settings.spaces[0]?.id || "";
-  const embeddingProfiles =
-    settingsQuery.data?.settings.embeddingProfiles.filter(
-      (profile) => profile.enabled
-    ) ?? [];
+  const embeddingProfiles = useMemo(
+    () =>
+      settingsQuery.data?.settings.embeddingProfiles.filter(
+        (profile) => profile.enabled
+      ) ?? [],
+    [settingsQuery.data?.settings.embeddingProfiles]
+  );
 
   useEffect(() => {
     if (!selectedEmbeddingProfileId && embeddingProfiles[0]?.id) {

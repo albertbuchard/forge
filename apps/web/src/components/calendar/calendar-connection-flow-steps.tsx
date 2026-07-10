@@ -37,8 +37,6 @@ const EYEBROW_CLASS =
 const BODY_TEXT_CLASS = "text-sm leading-6 text-[var(--ui-ink-soft)]";
 const STRONG_TEXT_CLASS = "font-medium text-[var(--ui-ink-strong)]";
 const META_BADGE_CLASS = "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]";
-const SUCCESS_BADGE_CLASS =
-  "bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_74%,var(--ui-ink-strong)_26%)]";
 const INFO_BADGE_CLASS =
   "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]";
 const WARNING_CALLOUT_CLASS =

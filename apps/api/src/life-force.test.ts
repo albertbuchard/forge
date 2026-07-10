@@ -5,7 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
-import { createWorkoutSession } from "./health.js";
 import {
   createCalendarEvent,
   createTaskTimebox,

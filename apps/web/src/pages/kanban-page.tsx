@@ -7,7 +7,7 @@ import {
   KanbanFiltersBox,
   KanbanSummaryBox
 } from "@/components/workbench-boxes/kanban/kanban-boxes";
-import { ExecutionBoard, LANE_ORDER } from "@/components/execution-board";
+import { ExecutionBoard } from "@/components/execution-board";
 import { ProjectDialog } from "@/components/project-dialog";
 import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import {

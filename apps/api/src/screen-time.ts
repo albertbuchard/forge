@@ -21,12 +21,7 @@ const screenTimeCaptureStateSchema = z.enum([
   "needs_authorization"
 ]);
 
-const screenTimeCaptureFreshnessSchema = z.enum([
-  "empty",
-  "fresh",
-  "stale",
-  "unavailable"
-]);
+type ScreenTimeCaptureFreshness = "empty" | "fresh" | "stale" | "unavailable";
 
 const screenTimeAppUsageInputSchema = z.object({
   bundleIdentifier: z.string().trim().min(1),
@@ -222,7 +217,7 @@ function screenTimeCaptureStats(input: {
       : hasCapture
         ? 1
         : 0;
-  const captureFreshness: z.infer<typeof screenTimeCaptureFreshnessSchema> =
+  const captureFreshness: ScreenTimeCaptureFreshness =
     input.authorizationStatus === "unavailable"
       ? "unavailable"
       : !hasCapture

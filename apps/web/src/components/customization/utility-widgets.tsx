@@ -18,10 +18,7 @@ import {
   createNoteTool,
   createSummaryOutput
 } from "../../lib/workbench/contracts.js";
-import type {
-  WorkbenchNodeExecutionInput,
-  WorkbenchRegisteredComponent
-} from "../../lib/workbench/nodes.js";
+import type { WorkbenchRegisteredComponent } from "../../lib/workbench/nodes.js";
 import { cn } from "../../lib/utils.js";
 import { createGenericWorkbenchNodeView } from "../workbench-boxes/shared/generic-node-view.js";
 
@@ -29,6 +26,8 @@ type WeatherSnapshot = {
   temperature: number;
   weatherCode: number;
 };
+
+const UTILITY_TIME_REFRESH_INTERVAL_MS = 30_000;
 
 function formatMonthGrid(baseDate: Date) {
   const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
@@ -61,7 +60,10 @@ export function TimeWidget({ compact }: { compact: boolean }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    const timer = window.setInterval(
+      () => setNow(new Date()),
+      UTILITY_TIME_REFRESH_INTERVAL_MS
+    );
     return () => window.clearInterval(timer);
   }, []);
 
@@ -96,11 +98,29 @@ export function TimeWidget({ compact }: { compact: boolean }) {
 }
 
 export function MiniCalendarWidget({ compact }: { compact: boolean }) {
-  const today = new Date();
+  const [today, setToday] = useState(() => new Date());
   const days = useMemo(() => formatMonthGrid(today), [today]);
   const weekdayLabels = compact
     ? ["M", "T", "W", "T", "F", "S", "S"]
     : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  useEffect(() => {
+    const refreshDate = () => {
+      const next = new Date();
+      setToday((current) =>
+        current.toDateString() === next.toDateString() ? current : next
+      );
+    };
+    const timer = window.setInterval(
+      refreshDate,
+      UTILITY_TIME_REFRESH_INTERVAL_MS
+    );
+    document.addEventListener("visibilitychange", refreshDate);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshDate);
+    };
+  }, []);
 
   return (
     <div className="grid gap-3 rounded-[20px] bg-white/[0.03] p-4">

@@ -104,7 +104,6 @@ import {
   selectSelectedUserIds
 } from "@/features/shell/selectors";
 import { useShellBackgroundActivity } from "@/features/shell/use-shell-background-activity";
-import { useShellCollapseController } from "@/features/shell/use-shell-collapse-controller";
 import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
 import { useShellSessionTelemetry } from "@/features/shell/use-shell-session-telemetry";
 import { useShellTaskHeartbeat } from "@/features/shell/use-shell-task-heartbeat";
@@ -155,6 +154,44 @@ const LazyActionBar = lazy(() =>
     default: module.ActionBar
   }))
 );
+
+const DESKTOP_SHELL_QUERY = "(min-width: 1024px)";
+
+function useDesktopShellLayout() {
+  const [desktop, setDesktop] = useState(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return true;
+    }
+    return window.matchMedia(DESKTOP_SHELL_QUERY).matches;
+  });
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(DESKTOP_SHELL_QUERY);
+    const updateMatch = (event: MediaQueryListEvent) =>
+      setDesktop(event.matches);
+    setDesktop(mediaQuery.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateMatch);
+      return () => mediaQuery.removeEventListener("change", updateMatch);
+    }
+
+    mediaQuery.addListener(updateMatch);
+    return () => mediaQuery.removeListener(updateMatch);
+  }, []);
+
+  return desktop;
+}
 
 type ShellContextValue = {
   snapshot: ForgeSnapshot;
@@ -417,37 +454,14 @@ function ShellFrame({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useShellCollapseController(shellRootRef);
   const shellRootStyle = useMemo(
     () =>
       ({
-        "--forge-shell-collapse": "0",
-        "--forge-shell-desktop-header-padding-top": "18px",
-        "--forge-shell-desktop-header-padding-bottom": "15px",
-        "--forge-shell-desktop-title-size": "1.42rem",
-        "--forge-shell-desktop-primary-translate-y": "0px",
-        "--forge-shell-desktop-primary-scale": "1",
-        "--forge-shell-desktop-secondary-opacity": "1",
-        "--forge-shell-desktop-secondary-max-height": "176px",
-        "--forge-shell-desktop-secondary-spacing": "14px",
-        "--forge-shell-desktop-secondary-translate-y": "0px",
-        "--forge-shell-mobile-header-padding-top": "14px",
-        "--forge-shell-mobile-header-padding-bottom": "12px",
-        "--forge-shell-mobile-title-size": "1.2rem",
-        "--forge-shell-mobile-primary-translate-y": "0px",
-        "--forge-shell-mobile-primary-scale": "1",
-        "--forge-shell-mobile-copy-opacity": "1",
-        "--forge-shell-mobile-copy-max-height": "320px",
-        "--forge-shell-mobile-copy-translate-y": "0px",
-        "--forge-shell-hero-padding-top": "20px",
-        "--forge-shell-hero-padding-bottom": "20px",
-        "--forge-shell-hero-title-translate-y": "0px",
-        "--forge-shell-hero-title-scale": "1",
-        "--forge-shell-hero-description-opacity": "1",
-        "--forge-shell-hero-description-translate-y": "0px"
+        "--forge-shell-desktop-header-padding-top": "10px"
       }) as CSSProperties,
     []
   );
+  const desktopLayout = useDesktopShellLayout();
   return (
     <div ref={shellRootRef} className="min-h-screen" style={shellRootStyle}>
       <Suspense fallback={null}>
@@ -463,166 +477,339 @@ function ShellFrame({
       </Suspense>
       {createActions.dialogs}
 
-      <div
-        className="hidden lg:grid lg:min-h-screen"
-        style={{
-          gridTemplateColumns: navCollapsed
-            ? "5.75rem minmax(0,1fr)"
-            : "17.75rem minmax(0,1fr)"
-        }}
-      >
-        <aside
-          className={cn(
-            "flex min-h-screen flex-col border-r border-[var(--ui-border-subtle)] py-6 backdrop-blur-xl transition-[padding,width]",
-            navCollapsed ? "px-3" : "px-5"
-          )}
+      {desktopLayout ? (
+        <div
+          className="grid min-h-screen"
           style={{
-            background:
-              "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 94%, transparent), color-mix(in srgb, var(--surface-low) 92%, transparent))"
+            gridTemplateColumns: navCollapsed
+              ? "5.75rem minmax(0,1fr)"
+              : "17.75rem minmax(0,1fr)"
           }}
         >
-          <div
+          <aside
             className={cn(
-              "flex items-start",
-              navCollapsed
-                ? "flex-col items-center gap-3"
-                : "justify-between gap-3"
+              "flex min-h-screen flex-col border-r border-[var(--ui-border-subtle)] py-6 transition-[padding,width]",
+              navCollapsed ? "px-3" : "px-5"
             )}
+            style={{
+              background:
+                "linear-gradient(180deg, var(--surface-panel), var(--surface-low))"
+            }}
           >
-            <Link
-              to="/overview"
-              className={cn("block min-w-0", navCollapsed && "text-center")}
+            <div
+              className={cn(
+                "flex items-start",
+                navCollapsed
+                  ? "flex-col items-center gap-3"
+                  : "justify-between gap-3"
+              )}
             >
-              <div
-                className={cn(
-                  "font-display text-[var(--primary)]",
-                  navCollapsed ? "text-2xl" : "text-3xl"
+              <Link
+                to="/overview"
+                className={cn("block min-w-0", navCollapsed && "text-center")}
+              >
+                <div
+                  className={cn(
+                    "font-display text-[var(--primary)]",
+                    navCollapsed ? "text-2xl" : "text-3xl"
+                  )}
+                >
+                  {t("common.shell.appMark")}
+                </div>
+                {!navCollapsed ? (
+                  <div className="type-meta mt-2 text-[var(--ui-ink-faint)]">
+                    Level {shell.snapshot.metrics.level}
+                  </div>
+                ) : null}
+              </Link>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mt-0.5 px-2.5"
+                onClick={() => setNavCollapsed((current) => !current)}
+                aria-label={t(
+                  navCollapsed
+                    ? "common.shell.expandSidebar"
+                    : "common.shell.collapseSidebar"
+                )}
+                title={t(
+                  navCollapsed
+                    ? "common.shell.expandSidebar"
+                    : "common.shell.collapseSidebar"
                 )}
               >
-                {t("common.shell.appMark")}
-              </div>
-              {!navCollapsed ? (
-                <div className="type-meta mt-2 text-[var(--ui-ink-faint)]">
-                  Level {shell.snapshot.metrics.level}
-                </div>
-              ) : null}
-            </Link>
+                {navCollapsed ? (
+                  <ChevronsRight className="size-4" />
+                ) : (
+                  <ChevronsLeft className="size-4" />
+                )}
+              </Button>
+            </div>
+
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              className="mt-0.5 px-2.5"
-              onClick={() => setNavCollapsed((current) => !current)}
-              aria-label={t(
-                navCollapsed
-                  ? "common.shell.expandSidebar"
-                  : "common.shell.collapseSidebar"
+              className={cn(
+                "mt-3",
+                navCollapsed ? "px-2.5" : "w-full justify-start px-3"
               )}
-              title={t(
-                navCollapsed
-                  ? "common.shell.expandSidebar"
-                  : "common.shell.collapseSidebar"
-              )}
+              onClick={() => setNavEditorOpen(true)}
             >
-              {navCollapsed ? (
-                <ChevronsRight className="size-4" />
-              ) : (
-                <ChevronsLeft className="size-4" />
-              )}
+              <GripVertical className="size-4" />
+              {!navCollapsed ? "Customize nav" : null}
             </Button>
-          </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className={cn(
-              "mt-3",
-              navCollapsed ? "px-2.5" : "w-full justify-start px-3"
-            )}
-            onClick={() => setNavEditorOpen(true)}
-          >
-            <GripVertical className="size-4" />
-            {!navCollapsed ? "Customize nav" : null}
-          </Button>
-
-          {desktopSidebarMetricsPosition === "above" ? (
-            <SidebarMetricsPanel
-              metrics={sidebarMetrics}
-              collapsed={navCollapsed}
-            />
-          ) : null}
-
-          <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
-            {desktopRoutes.map((route) => (
-              <NavItem
-                key={route.id}
-                route={route}
-                compact={navCollapsed}
-                onRouteIntent={onRouteIntent}
+            {desktopSidebarMetricsPosition === "above" ? (
+              <SidebarMetricsPanel
+                metrics={sidebarMetrics}
+                collapsed={navCollapsed}
               />
-            ))}
-          </div>
+            ) : null}
 
-          {desktopSidebarMetricsPosition === "below" ? (
-            <SidebarMetricsPanel
-              metrics={sidebarMetrics}
-              collapsed={navCollapsed}
-            />
-          ) : null}
-        </aside>
+            <div className={cn("grid gap-2", navCollapsed ? "mt-6" : "mt-8")}>
+              {desktopRoutes.map((route) => (
+                <NavItem
+                  key={route.id}
+                  route={route}
+                  compact={navCollapsed}
+                  onRouteIntent={onRouteIntent}
+                />
+              ))}
+            </div>
 
-        <div className="min-h-screen">
-          <TaskTimerRailProvider>
-            <header
-              className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-6 backdrop-blur-xl"
-              style={{
-                background:
-                  "color-mix(in srgb, var(--surface-glass) 92%, transparent)",
-                paddingTop: "var(--forge-shell-desktop-header-padding-top)",
-                paddingBottom:
-                  "var(--forge-shell-desktop-header-padding-bottom)",
-                willChange: "padding, background-color"
-              }}
-            >
-              {/* ── Title row: page title + work bar + action buttons — all same height ── */}
-              <div
-                className="flex items-center justify-between gap-4"
+            {desktopSidebarMetricsPosition === "below" ? (
+              <SidebarMetricsPanel
+                metrics={sidebarMetrics}
+                collapsed={navCollapsed}
+              />
+            ) : null}
+          </aside>
+
+          <div className="min-h-screen">
+            <TaskTimerRailProvider>
+              <header
+                className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-6 py-2.5"
                 style={{
-                  transform:
-                    "translateY(var(--forge-shell-desktop-primary-translate-y)) scale(var(--forge-shell-desktop-primary-scale))",
-                  transformOrigin: "top center",
-                  willChange: "transform"
+                  background:
+                    "linear-gradient(180deg, var(--surface-panel), var(--surface-low))"
                 }}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-5">
-                  <div
-                    className="flex shrink-0 items-center gap-2 font-display text-[var(--ui-ink-strong)]"
-                    style={{
-                      fontSize: "var(--forge-shell-desktop-title-size)",
-                      lineHeight: 1,
-                      willChange: "font-size"
-                    }}
-                  >
-                    <span>{getRouteLabel(active, t)}</span>
-                    <InfoTooltip
-                      className="font-sans"
-                      label={`Explain ${getRouteLabel(active, t)}`}
-                      title={activeHelp.title}
-                      content={
-                        <span className="grid gap-2">
-                          <span>{activeHelp.purpose}</span>
-                          <span>{activeHelp.primaryAction}</span>
-                          {activeHelp.metricNote ? (
-                            <span className="text-[var(--ui-ink-soft)]">
-                              {activeHelp.metricNote}
-                            </span>
-                          ) : null}
-                        </span>
-                      }
+                {/* ── Title row: page title + work bar + action buttons — all same height ── */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-5">
+                    <div className="flex shrink-0 items-center gap-2 font-display text-[1.2rem] leading-none text-[var(--ui-ink-strong)]">
+                      <span>{getRouteLabel(active, t)}</span>
+                      <InfoTooltip
+                        className="font-sans"
+                        label={`Explain ${getRouteLabel(active, t)}`}
+                        title={activeHelp.title}
+                        content={
+                          <span className="grid gap-2">
+                            <span>{activeHelp.purpose}</span>
+                            <span>{activeHelp.primaryAction}</span>
+                            {activeHelp.metricNote ? (
+                              <span className="text-[var(--ui-ink-soft)]">
+                                {activeHelp.metricNote}
+                              </span>
+                            ) : null}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <TaskTimerRailBar
+                        runs={shell.snapshot.activeTaskRuns}
+                        tasks={shell.snapshot.tasks}
+                        generatedAt={shell.snapshot.meta.generatedAt}
+                        timeAccountingMode={
+                          settings.execution.timeAccountingMode
+                        }
+                        pending={timerPending}
+                        onOpenStartWork={() => onOpenStartWork()}
+                        onPause={onPauseRun}
+                        onFocus={onFocusRun}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <GamificationMiniHud
+                      metrics={shell.snapshot.metrics}
+                      className="hidden 2xl:inline-flex"
+                    />
+                    {activityCount > 0 || hasActiveIngestJobs ? (
+                      <AmbientActivityPill
+                        active
+                        label={activityLabel}
+                        onClick={() => setBackgroundActivityOpen(true)}
+                      />
+                    ) : null}
+                    <div
+                      ref={setDesktopCreateTriggerTarget}
+                      className="shrink-0"
+                    />
+                    <ShellCommandButton
+                      onClick={() => setActionBarOpen(true)}
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="min-w-0 px-3.5"
+                      onClick={() => void shell.refresh()}
+                    >
+                      <RefreshCcw className="size-4" />
+                      {t("common.actions.refresh")}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ── Expanded work detail — full width below the title row ── */}
+                <TaskTimerRailPanel
+                  runs={shell.snapshot.activeTaskRuns}
+                  tasks={shell.snapshot.tasks}
+                  generatedAt={shell.snapshot.meta.generatedAt}
+                  timeAccountingMode={settings.execution.timeAccountingMode}
+                  pending={timerPending}
+                  onOpenStartWork={() => onOpenStartWork()}
+                  onFocus={onFocusRun}
+                  onPause={onPauseRun}
+                  onComplete={onCompleteRun}
+                />
+
+                <div className="mt-2 flex items-center justify-between gap-4 border-t border-[var(--ui-border-subtle)] pt-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    {railLinks.map((link) => (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        className="interactive-tap inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--ui-surface-1)] px-4 py-2 text-center text-[13px] leading-tight text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] sm:whitespace-nowrap"
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                    <UserScopeSelector
+                      users={shell.snapshot.users}
+                      selectedUserIds={shell.selectedUserIds}
+                      onChange={shell.setSelectedUserIds}
+                      compact
                     />
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge tone="meta">
+                      {t(
+                        shell.snapshot.metrics.streakDays === 1
+                          ? "common.shell.momentum.streakBadgeOne"
+                          : "common.shell.momentum.streakBadgeOther",
+                        {
+                          count: shell.snapshot.metrics.streakDays
+                        }
+                      )}
+                    </Badge>
+                    <Badge tone="meta">
+                      {t("common.shell.momentum.weeklyXp", {
+                        count: shell.snapshot.metrics.weeklyXp
+                      })}
+                    </Badge>
+                    <Badge tone={isPsyche ? "signal" : "meta"}>
+                      {isPsyche
+                        ? t("common.shell.momentum.psycheMode")
+                        : t("common.shell.momentum.liveMomentum", {
+                            count: shell.snapshot.metrics.momentumScore
+                          })}
+                    </Badge>
+                  </div>
+                </div>
+              </header>
+            </TaskTimerRailProvider>
+
+            <div className="px-6 pt-3">
+              <StartWorkComposer
+                open={startWorkOpen}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    onCloseStartWork();
+                  }
+                }}
+                presentation="desktop_inline"
+                tasks={shell.snapshot.tasks}
+                projects={shell.snapshot.dashboard.projects}
+                activeRunCount={shell.snapshot.activeTaskRuns.length}
+                maxActiveTasks={settings.execution.maxActiveTasks}
+                timeAccountingMode={settings.execution.timeAccountingMode}
+                pending={startWorkPending}
+                errorMessage={startWorkError}
+                initialTaskId={startWorkDefaults.taskId ?? null}
+                defaultProjectId={startWorkDefaults.projectId ?? null}
+                onStartExisting={onStartExistingTask}
+                onCreateAndStart={onCreateAndStartTask}
+              />
+            </div>
+
+            <main className="px-6 pb-3">
+              <div className="min-w-0">
+                <RouteTransitionFrame
+                  routeKey={transitionKey}
+                  tone={isPsyche ? "psyche" : "core"}
+                >
+                  {children}
+                </RouteTransitionFrame>
+              </div>
+            </main>
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-[100dvh] overflow-x-clip">
+          <TaskTimerRailProvider>
+            {!immersiveMobileSurface ? (
+              <header
+                className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-4 py-2"
+                style={{
+                  background:
+                    "linear-gradient(180deg, var(--surface-panel), var(--surface-low))"
+                }}
+              >
+                <div className="grid gap-2">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <div className="min-w-0 truncate font-display text-[1.05rem] text-[var(--ui-ink-strong)]">
+                        {getRouteLabel(active, t)}
+                      </div>
+                      <InfoTooltip
+                        className="shrink-0"
+                        label={`Explain ${getRouteLabel(active, t)}`}
+                        title={activeHelp.title}
+                        content={
+                          <span className="grid gap-2">
+                            <span>{activeHelp.purpose}</span>
+                            <span>{activeHelp.primaryAction}</span>
+                            {activeHelp.metricNote ? (
+                              <span className="text-[var(--ui-ink-soft)]">
+                                {activeHelp.metricNote}
+                              </span>
+                            ) : null}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="size-11 rounded-full p-0"
+                        onClick={() => setActionBarOpen(true)}
+                        aria-label={t("common.actionBar.title")}
+                        title={t("common.actionBar.title")}
+                      >
+                        <Search className="size-4" />
+                      </Button>
+                      <div
+                        ref={setMobileCreateTriggerTarget}
+                        className="shrink-0"
+                      />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
                     <TaskTimerRailBar
                       runs={shell.snapshot.activeTaskRuns}
                       tasks={shell.snapshot.tasks}
@@ -635,333 +822,118 @@ function ShellFrame({
                     />
                   </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <GamificationMiniHud
-                    metrics={shell.snapshot.metrics}
-                    className="hidden 2xl:inline-flex"
-                  />
-                  {activityCount > 0 || hasActiveIngestJobs ? (
-                    <AmbientActivityPill
-                      active
-                      label={activityLabel}
-                      onClick={() => setBackgroundActivityOpen(true)}
-                    />
-                  ) : null}
-                  <div
-                    ref={setDesktopCreateTriggerTarget}
-                    className="shrink-0"
-                  />
-                  <ShellCommandButton onClick={() => setActionBarOpen(true)} />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="min-w-0 px-3.5"
-                    onClick={() => void shell.refresh()}
-                  >
-                    <RefreshCcw className="size-4" />
-                    {t("common.actions.refresh")}
-                  </Button>
-                </div>
-              </div>
 
-              {/* ── Expanded work detail — full width below the title row ── */}
-              <TaskTimerRailPanel
-                runs={shell.snapshot.activeTaskRuns}
-                tasks={shell.snapshot.tasks}
-                generatedAt={shell.snapshot.meta.generatedAt}
-                timeAccountingMode={settings.execution.timeAccountingMode}
-                pending={timerPending}
-                onOpenStartWork={() => onOpenStartWork()}
-                onFocus={onFocusRun}
-                onPause={onPauseRun}
-                onComplete={onCompleteRun}
-              />
+                {/* ── Expanded work detail — full width below the title row ── */}
+                <TaskTimerRailPanel
+                  runs={shell.snapshot.activeTaskRuns}
+                  tasks={shell.snapshot.tasks}
+                  generatedAt={shell.snapshot.meta.generatedAt}
+                  timeAccountingMode={settings.execution.timeAccountingMode}
+                  pending={timerPending}
+                  onOpenStartWork={() => onOpenStartWork()}
+                  onFocus={onFocusRun}
+                  onPause={onPauseRun}
+                  onComplete={onCompleteRun}
+                />
 
-              <div
-                className="flex items-center justify-between gap-4 overflow-hidden border-t border-[var(--ui-border-subtle)]"
-                style={{
-                  opacity: "var(--forge-shell-desktop-secondary-opacity)",
-                  maxHeight: "var(--forge-shell-desktop-secondary-max-height)",
-                  marginTop: "var(--forge-shell-desktop-secondary-spacing)",
-                  paddingTop: "var(--forge-shell-desktop-secondary-spacing)",
-                  transform:
-                    "translateY(var(--forge-shell-desktop-secondary-translate-y))",
-                  willChange: "opacity, max-height, transform"
-                }}
-              >
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {railLinks.map((link) => (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      className="interactive-tap inline-flex min-h-10 min-w-0 max-w-full items-center justify-center rounded-full bg-[var(--ui-surface-1)] px-4 py-2 text-center text-[13px] leading-tight text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] sm:whitespace-nowrap"
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
-                  <UserScopeSelector
-                    users={shell.snapshot.users}
-                    selectedUserIds={shell.selectedUserIds}
-                    onChange={shell.setSelectedUserIds}
-                    compact
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="meta">
-                    {t(
-                      shell.snapshot.metrics.streakDays === 1
-                        ? "common.shell.momentum.streakBadgeOne"
-                        : "common.shell.momentum.streakBadgeOther",
-                      {
-                        count: shell.snapshot.metrics.streakDays
-                      }
-                    )}
-                  </Badge>
-                  <Badge tone="meta">
-                    {t("common.shell.momentum.weeklyXp", {
-                      count: shell.snapshot.metrics.weeklyXp
-                    })}
-                  </Badge>
-                  <Badge tone={isPsyche ? "signal" : "meta"}>
-                    {isPsyche
-                      ? t("common.shell.momentum.psycheMode")
-                      : t("common.shell.momentum.liveMomentum", {
-                          count: shell.snapshot.metrics.momentumScore
-                        })}
-                  </Badge>
-                </div>
-              </div>
-            </header>
+                {activityCount > 0 ||
+                hasActiveIngestJobs ||
+                shell.snapshot.users.length > 1 ? (
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                    {activityCount > 0 || hasActiveIngestJobs ? (
+                      <AmbientActivityPill
+                        active
+                        label={activityLabel}
+                        onClick={() => setBackgroundActivityOpen(true)}
+                      />
+                    ) : null}
+                    {shell.snapshot.users.length > 1 ? (
+                      <div className="min-w-0 overflow-x-auto">
+                        <UserScopeSelector
+                          users={shell.snapshot.users}
+                          selectedUserIds={shell.selectedUserIds}
+                          onChange={shell.setSelectedUserIds}
+                          compact
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </header>
+            ) : null}
           </TaskTimerRailProvider>
 
-          <div className="px-6 pt-3">
-            <StartWorkComposer
-              open={startWorkOpen}
-              onOpenChange={(open) => {
-                if (!open) {
-                  onCloseStartWork();
-                }
-              }}
-              presentation="desktop_inline"
-              tasks={shell.snapshot.tasks}
-              projects={shell.snapshot.dashboard.projects}
-              activeRunCount={shell.snapshot.activeTaskRuns.length}
-              maxActiveTasks={settings.execution.maxActiveTasks}
-              timeAccountingMode={settings.execution.timeAccountingMode}
-              pending={startWorkPending}
-              errorMessage={startWorkError}
-              initialTaskId={startWorkDefaults.taskId ?? null}
-              defaultProjectId={startWorkDefaults.projectId ?? null}
-              onStartExisting={onStartExistingTask}
-              onCreateAndStart={onCreateAndStartTask}
-            />
-          </div>
+          <StartWorkComposer
+            open={startWorkOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                onCloseStartWork();
+              }
+            }}
+            presentation="mobile_sheet"
+            tasks={shell.snapshot.tasks}
+            projects={shell.snapshot.dashboard.projects}
+            activeRunCount={shell.snapshot.activeTaskRuns.length}
+            maxActiveTasks={settings.execution.maxActiveTasks}
+            timeAccountingMode={settings.execution.timeAccountingMode}
+            pending={startWorkPending}
+            errorMessage={startWorkError}
+            initialTaskId={startWorkDefaults.taskId ?? null}
+            defaultProjectId={startWorkDefaults.projectId ?? null}
+            onStartExisting={onStartExistingTask}
+            onCreateAndStart={onCreateAndStartTask}
+          />
 
-          <main className="px-6 pb-3">
-            <div className="min-w-0">
-              <RouteTransitionFrame
-                routeKey={transitionKey}
-                tone={isPsyche ? "psyche" : "core"}
-              >
-                {children}
-              </RouteTransitionFrame>
-            </div>
-          </main>
-        </div>
-      </div>
-
-      <div className="min-h-[100dvh] overflow-x-clip lg:hidden">
-        <TaskTimerRailProvider>
-          {!immersiveMobileSurface ? (
-            <header
-              className="sticky top-0 z-30 border-b border-[var(--ui-border-subtle)] px-4 backdrop-blur-xl"
-              style={{
-                background:
-                  "color-mix(in srgb, var(--surface-glass) 96%, transparent)",
-                paddingTop: "var(--forge-shell-mobile-header-padding-top)",
-                paddingBottom:
-                  "var(--forge-shell-mobile-header-padding-bottom)",
-                willChange: "padding, background-color"
-              }}
-            >
-              <div
-                className="grid gap-2"
-                style={{
-                  transform:
-                    "translateY(var(--forge-shell-mobile-primary-translate-y)) scale(var(--forge-shell-mobile-primary-scale))",
-                  transformOrigin: "top center",
-                  willChange: "transform"
-                }}
-              >
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <div
-                      className="min-w-0 truncate font-display text-[var(--ui-ink-strong)]"
-                      style={{
-                        fontSize: "var(--forge-shell-mobile-title-size)",
-                        willChange: "font-size"
-                      }}
-                    >
-                      {getRouteLabel(active, t)}
-                    </div>
-                    <InfoTooltip
-                      className="shrink-0"
-                      label={`Explain ${getRouteLabel(active, t)}`}
-                      title={activeHelp.title}
-                      content={
-                        <span className="grid gap-2">
-                          <span>{activeHelp.purpose}</span>
-                          <span>{activeHelp.primaryAction}</span>
-                          {activeHelp.metricNote ? (
-                            <span className="text-[var(--ui-ink-soft)]">
-                              {activeHelp.metricNote}
-                            </span>
-                          ) : null}
-                        </span>
-                      }
-                    />
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="size-11 rounded-full p-0"
-                      onClick={() => setActionBarOpen(true)}
-                      aria-label={t("common.actionBar.title")}
-                      title={t("common.actionBar.title")}
-                    >
-                      <Search className="size-4" />
-                    </Button>
-                    <div
-                      ref={setMobileCreateTriggerTarget}
-                      className="shrink-0"
-                    />
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <TaskTimerRailBar
-                    runs={shell.snapshot.activeTaskRuns}
-                    tasks={shell.snapshot.tasks}
-                    generatedAt={shell.snapshot.meta.generatedAt}
-                    timeAccountingMode={settings.execution.timeAccountingMode}
-                    pending={timerPending}
-                    onOpenStartWork={() => onOpenStartWork()}
-                    onPause={onPauseRun}
-                    onFocus={onFocusRun}
-                  />
-                </div>
-              </div>
-
-              {/* ── Expanded work detail — full width below the title row ── */}
-              <TaskTimerRailPanel
-                runs={shell.snapshot.activeTaskRuns}
-                tasks={shell.snapshot.tasks}
-                generatedAt={shell.snapshot.meta.generatedAt}
-                timeAccountingMode={settings.execution.timeAccountingMode}
-                pending={timerPending}
-                onOpenStartWork={() => onOpenStartWork()}
-                onFocus={onFocusRun}
-                onPause={onPauseRun}
-                onComplete={onCompleteRun}
-              />
-
-              {activityCount > 0 ||
-              hasActiveIngestJobs ||
-              shell.snapshot.users.length > 1 ? (
-                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-                  {activityCount > 0 || hasActiveIngestJobs ? (
-                    <AmbientActivityPill
-                      active
-                      label={activityLabel}
-                      onClick={() => setBackgroundActivityOpen(true)}
-                    />
-                  ) : null}
-                  {shell.snapshot.users.length > 1 ? (
-                    <div className="min-w-0 overflow-x-auto">
-                      <UserScopeSelector
-                        users={shell.snapshot.users}
-                        selectedUserIds={shell.selectedUserIds}
-                        onChange={shell.setSelectedUserIds}
-                        compact
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </header>
-          ) : null}
-        </TaskTimerRailProvider>
-
-        <StartWorkComposer
-          open={startWorkOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              onCloseStartWork();
-            }
-          }}
-          presentation="mobile_sheet"
-          tasks={shell.snapshot.tasks}
-          projects={shell.snapshot.dashboard.projects}
-          activeRunCount={shell.snapshot.activeTaskRuns.length}
-          maxActiveTasks={settings.execution.maxActiveTasks}
-          timeAccountingMode={settings.execution.timeAccountingMode}
-          pending={startWorkPending}
-          errorMessage={startWorkError}
-          initialTaskId={startWorkDefaults.taskId ?? null}
-          defaultProjectId={startWorkDefaults.projectId ?? null}
-          onStartExisting={onStartExistingTask}
-          onCreateAndStart={onCreateAndStartTask}
-        />
-
-        <main
-          className={cn(
-            "overflow-x-clip pb-2.5 lg:pb-24",
-            knowledgeGraphSurface
-              ? "px-0"
-              : immersiveMobileSurface
+          <main
+            className={cn(
+              "overflow-x-clip pb-2.5 lg:pb-24",
+              knowledgeGraphSurface
                 ? "px-0"
-                : "px-4"
-          )}
-          style={{
-            paddingBottom: "calc(var(--forge-mobile-nav-clearance) + 2.5rem)",
-            paddingLeft: knowledgeGraphSurface
-              ? "var(--forge-safe-area-left)"
-              : immersiveMobileSurface
+                : immersiveMobileSurface
+                  ? "px-0"
+                  : "px-4"
+            )}
+            style={{
+              paddingBottom: "calc(var(--forge-mobile-nav-clearance) + 2.5rem)",
+              paddingLeft: knowledgeGraphSurface
                 ? "var(--forge-safe-area-left)"
-                : "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
-            paddingRight: knowledgeGraphSurface
-              ? "var(--forge-safe-area-right)"
-              : immersiveMobileSurface
+                : immersiveMobileSurface
+                  ? "var(--forge-safe-area-left)"
+                  : "max(1rem, calc(var(--forge-safe-area-left) + 1rem))",
+              paddingRight: knowledgeGraphSurface
                 ? "var(--forge-safe-area-right)"
-                : "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
-          }}
-        >
-          <RouteTransitionFrame
-            routeKey={transitionKey}
-            tone={isPsyche ? "psyche" : "core"}
+                : immersiveMobileSurface
+                  ? "var(--forge-safe-area-right)"
+                  : "max(1rem, calc(var(--forge-safe-area-right) + 1rem))"
+            }}
           >
-            {children}
-          </RouteTransitionFrame>
-        </main>
-        <MobileBottomNav
-          routes={mobileRoutes}
-          onOpenEditor={() => setNavEditorOpen(true)}
-          onRouteIntent={onRouteIntent}
-        />
+            <RouteTransitionFrame
+              routeKey={transitionKey}
+              tone={isPsyche ? "psyche" : "core"}
+            >
+              {children}
+            </RouteTransitionFrame>
+          </main>
+          <MobileBottomNav
+            routes={mobileRoutes}
+            onOpenEditor={() => setNavEditorOpen(true)}
+            onRouteIntent={onRouteIntent}
+          />
 
-        <ShellNavEditor
-          open={navEditorOpen}
-          onOpenChange={setNavEditorOpen}
-          desktopNavIds={desktopNavIds}
-          onDesktopNavIdsChange={setDesktopNavIds}
-          desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
-          onDesktopSidebarMetricsPositionChange={
-            setDesktopSidebarMetricsPosition
-          }
-          mobileNavIds={mobileNavIds}
-          onMobileNavIdsChange={setMobileNavIds}
-        />
-      </div>
+          <ShellNavEditor
+            open={navEditorOpen}
+            onOpenChange={setNavEditorOpen}
+            desktopNavIds={desktopNavIds}
+            onDesktopNavIdsChange={setDesktopNavIds}
+            desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
+            onDesktopSidebarMetricsPositionChange={
+              setDesktopSidebarMetricsPosition
+            }
+            mobileNavIds={mobileNavIds}
+            onMobileNavIdsChange={setMobileNavIds}
+          />
+        </div>
+      )}
 
       <ShellBackgroundActivityDialog
         open={backgroundActivityOpen}

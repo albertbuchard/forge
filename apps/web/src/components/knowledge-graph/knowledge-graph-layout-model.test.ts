@@ -12,7 +12,6 @@ import {
   KNOWLEDGE_GRAPH_MAX_FOCUS_SPRING_REDUCTION,
   KNOWLEDGE_GRAPH_MAX_GRAVITY_STRENGTH,
   KNOWLEDGE_GRAPH_MIN_EDGE_SPRING_STRENGTH,
-  KNOWLEDGE_GRAPH_MIN_FOCUS_SHELL_SPACING,
   getKnowledgeGraphSpringReduction,
   getKnowledgeGraphHopAttenuation,
   reconcileKnowledgeGraphFocusSources,

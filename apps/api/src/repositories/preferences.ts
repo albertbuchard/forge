@@ -1323,7 +1323,6 @@ function computeScores(options: {
   existingScores: ScoreRow[];
 }) {
   const {
-    profile,
     contexts,
     selectedContext,
     items,
@@ -1967,7 +1966,7 @@ function buildWorkspace(
   judgments: PairwiseJudgment[],
   signals: AbsoluteSignal[],
   scores: ScoreComputation[],
-  dimensions: PreferenceDimensionSummary[]
+  _dimensions: PreferenceDimensionSummary[]
 ): PreferenceWorkspacePayload {
   const catalogs = listCatalogs(profile.id);
   const storedScores = listStoredScores(selectedContext.id);

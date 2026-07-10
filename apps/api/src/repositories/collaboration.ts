@@ -101,8 +101,6 @@ type AgentActionRow = {
   completed_at: string | null;
 };
 
-type MetadataValue = string | number | boolean | null;
-
 export type CollaborationContext = {
   source: ActivitySource;
   actor?: string | null;

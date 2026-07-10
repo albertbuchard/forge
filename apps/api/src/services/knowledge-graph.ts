@@ -39,7 +39,6 @@ import { getEntityVisual } from "@/lib/entity-visuals.js";
 import { listArtifacts } from "./artifacts.js";
 import {
   KNOWLEDGE_GRAPH_RELATION_FAMILY_MAP,
-  KNOWLEDGE_GRAPH_RELATION_LABELS,
   buildKnowledgeGraphFocusHref,
   buildKnowledgeGraphNodeId,
   getKnowledgeGraphEntityHref,
@@ -49,9 +48,7 @@ import {
   type KnowledgeGraphFocusPayload,
   type KnowledgeGraphNode,
   type KnowledgeGraphPayload,
-  type KnowledgeGraphQuery,
-  type KnowledgeGraphRelationGroup,
-  type KnowledgeGraphRelationKind
+  type KnowledgeGraphQuery
 } from "@/lib/knowledge-graph-types.js";
 
 type OwnedLike = {

@@ -172,7 +172,10 @@ export function SettingsBinPage() {
     onSuccess: invalidateBin
   });
 
-  const records = binQuery.data?.bin.records ?? [];
+  const records = useMemo(
+    () => binQuery.data?.bin.records ?? [],
+    [binQuery.data?.bin.records]
+  );
   const normalizedQuery = query.trim().toLowerCase();
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {

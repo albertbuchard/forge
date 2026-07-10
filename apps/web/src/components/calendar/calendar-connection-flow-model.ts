@@ -263,14 +263,6 @@ export function describeGoogleRouteRequirement(input: {
   allowedOrigins: string[];
   isLocalOnly: boolean;
 }) {
-  const allowedLocalOrigins = input.allowedOrigins.filter((origin) => {
-    try {
-      return isLoopbackHostname(new URL(origin).hostname);
-    } catch {
-      return false;
-    }
-  });
-
   const redirectHostname = (() => {
     try {
       return new URL(input.redirectUri).hostname;

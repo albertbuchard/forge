@@ -35,7 +35,6 @@ import {
   computeWorkTime,
   emptyTaskTimeSummary
 } from "../services/work-time.js";
-import { resolveTaskExpectedDurationSeconds } from "../services/life-force-model.js";
 import {
   buildTasksLifeForceFields,
   buildTaskLifeForceFields,
@@ -483,10 +482,6 @@ function resolveProjectAndGoalIds(
   const currentProject = current?.projectId
     ? (getProjectById(current.projectId) ?? null)
     : null;
-  const currentProjectGoalId =
-    currentProject?.goalId && getGoalById(currentProject.goalId)
-      ? currentProject.goalId
-      : null;
   const currentProjectId = currentProject?.id ?? null;
   const requestedGoalId =
     input.goalId === undefined ? currentGoalId : input.goalId;

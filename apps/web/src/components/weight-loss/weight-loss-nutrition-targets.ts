@@ -105,14 +105,7 @@ function targetRange(min: number, max: number) {
   return `${formatTarget(min)}-${formatTarget(max)}`;
 }
 
-function fiberTarget(
-  sex: Sex,
-  ageYears: number,
-  calories: number,
-  stored: number
-) {
-  const dri =
-    sex === "male" ? (ageYears >= 51 ? 30 : 38) : ageYears >= 51 ? 21 : 25;
+function fiberTarget(calories: number, stored: number) {
   const energyAdjusted = Math.round((calories / 1000) * 14);
   return stored > 0 ? stored : energyAdjusted;
 }
@@ -345,8 +338,6 @@ export function buildNutritionTargetGroups(
     savedFat: numeric(view.target.fatGramsTarget)
   });
   const fiber = fiberTarget(
-    sex,
-    ageYears,
     calorieTarget,
     asNumber(view.target.fiberGramsTarget, 0)
   );

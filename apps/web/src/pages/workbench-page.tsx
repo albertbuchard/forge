@@ -41,7 +41,10 @@ export function WorkbenchPage() {
     }
   });
 
-  const flows = flowsQuery.data?.flows ?? [];
+  const flows = useMemo(
+    () => flowsQuery.data?.flows ?? [],
+    [flowsQuery.data?.flows]
+  );
   const filterOptions = useMemo<FacetedTokenOption[]>(() => {
     const byKind: FacetedTokenOption[] = [
       {

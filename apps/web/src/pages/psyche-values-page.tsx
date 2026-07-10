@@ -83,7 +83,10 @@ export function PsycheValuesPage() {
     queryFn: listPsycheValues
   });
 
-  const values = valuesQuery.data?.values ?? [];
+  const values = useMemo(
+    () => valuesQuery.data?.values ?? [],
+    [valuesQuery.data?.values]
+  );
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedValueId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;

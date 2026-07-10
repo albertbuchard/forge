@@ -458,11 +458,6 @@ function safeContentProtection(input: {
   });
 }
 
-function normalizeNullableText(value: string | null | undefined) {
-  const text = value?.trim();
-  return text && text.length > 0 ? text : null;
-}
-
 function sanitizeFileName(fileName: string) {
   return path
     .basename(fileName)
@@ -651,11 +646,15 @@ function computeDanger(findings: ArtifactScanFinding[]) {
 }
 
 function safeUtf8(buffer: Buffer, limit = MAX_TEXT_EXTRACTION_CHARS) {
-  return buffer
-    .subarray(0, limit)
-    .toString("utf8")
-    .replace(/\u0000/g, "")
-    .trim();
+  return (
+    buffer
+      .subarray(0, limit)
+      .toString("utf8")
+      // Binary uploads can contain null bytes even after UTF-8 decoding.
+      // eslint-disable-next-line no-control-regex
+      .replace(/\u0000/g, "")
+      .trim()
+  );
 }
 
 function stripXml(xml: string) {
@@ -859,11 +858,15 @@ function scanPdf(buffer: Buffer, findings: ArtifactScanFinding[]) {
       "The PDF contains embedded file references."
     );
   }
-  return text
-    .replace(/[^\x09\x0a\x0d\x20-\x7e]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_TEXT_EXTRACTION_CHARS);
+  return (
+    text
+      // Keep printable ASCII plus tab and line endings for safe metadata samples.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[^\x09\x0a\x0d\x20-\x7e]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_TEXT_EXTRACTION_CHARS)
+  );
 }
 
 function scanDelimitedText(text: string, findings: ArtifactScanFinding[]) {

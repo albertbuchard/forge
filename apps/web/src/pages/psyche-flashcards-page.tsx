@@ -547,7 +547,10 @@ export function PsycheFlashcardsPage() {
     }
   });
 
-  const flashcards = flashcardsQuery.data?.flashcards ?? [];
+  const flashcards = useMemo(
+    () => flashcardsQuery.data?.flashcards ?? [],
+    [flashcardsQuery.data?.flashcards]
+  );
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) {

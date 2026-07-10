@@ -225,7 +225,6 @@ export function ProjectDetailPage() {
     payload.tasks.find((task) => task.status === "blocked") ??
     payload.tasks.find((task) => task.status === "backlog") ??
     null;
-  const latestEvidence = payload.activity[0] ?? null;
   const notesSummaryByEntity =
     "notesSummaryByEntity" in payload
       ? payload.notesSummaryByEntity

@@ -206,6 +206,9 @@ export function KnowledgeGraphPage() {
   const overlayFocusNodeIdRef = useRef<string | null>(null);
   const overlaySyncRequestKeyRef = useRef<string | null>(null);
   const graphQueryDiagnosticsSignatureRef = useRef<string | null>(null);
+  const handleFocusNodeRef = useRef<(node: KnowledgeGraphNode | null) => void>(
+    () => undefined
+  );
   const diagnosticsLoggerRef = useRef(
     createKnowledgeGraphUiLogger("/knowledge-graph")
   );
@@ -272,6 +275,8 @@ export function KnowledgeGraphPage() {
       details
     });
   };
+  const recordPageDiagnosticsEventRef = useRef(recordPageDiagnosticsEvent);
+  recordPageDiagnosticsEventRef.current = recordPageDiagnosticsEvent;
 
   useEffect(() => {
     if (
@@ -358,17 +363,17 @@ export function KnowledgeGraphPage() {
   });
 
   const graph = graphQuery.data;
+  const arrivalSearchRef = useRef(searchParams.toString());
 
   useEffect(() => {
-    recordPageDiagnosticsEvent({
+    recordPageDiagnosticsEventRef.current({
       level: "info",
       eventKey: "route_arrival",
       message: "Arrived on the Knowledge Graph page.",
       details: {
-        search: searchParams.toString()
+        search: arrivalSearchRef.current
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -393,7 +398,7 @@ export function KnowledgeGraphPage() {
       return;
     }
     graphQueryDiagnosticsSignatureRef.current = nextSignature;
-    recordPageDiagnosticsEvent({
+    recordPageDiagnosticsEventRef.current({
       level: "info",
       eventKey: "graph_query_resolved",
       message: "Knowledge graph query resolved.",
@@ -501,7 +506,7 @@ export function KnowledgeGraphPage() {
       return;
     }
     overlayFocusNodeIdRef.current = nextFocusNodeId;
-    recordPageDiagnosticsEvent({
+    recordPageDiagnosticsEventRef.current({
       level: "debug",
       eventKey: nextFocusNodeId ? "drawer_open" : "drawer_close",
       message: nextFocusNodeId
@@ -539,7 +544,7 @@ export function KnowledgeGraphPage() {
         const nextNode = nodeId
           ? (graph.nodes.find((node) => node.id === nodeId) ?? null)
           : null;
-        handleFocusNode(nextNode);
+        handleFocusNodeRef.current(nextNode);
       },
       activateFocusedNode: () => {
         if (!focusNodeId || !graph) {
@@ -548,14 +553,14 @@ export function KnowledgeGraphPage() {
         const nextNode =
           graph.nodes.find((node) => node.id === focusNodeId) ?? null;
         if (nextNode) {
-          handleFocusNode(nextNode);
+          handleFocusNodeRef.current(nextNode);
         }
       }
     };
     return () => {
       delete window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__;
     };
-  }, [focusNodeId, isMobile, mobilePanelOpen, selectedView]);
+  }, [focusNodeId, graph, isMobile, mobilePanelOpen, selectedView]);
 
   const setParam = (mutate: (next: URLSearchParams) => void) => {
     setSearchParams(
@@ -601,6 +606,7 @@ export function KnowledgeGraphPage() {
       setMobileFiltersOpen(false);
     }
   };
+  handleFocusNodeRef.current = handleFocusNode;
 
   const handleNavigateNode = (node: KnowledgeGraphNode) => {
     if (node.href) {

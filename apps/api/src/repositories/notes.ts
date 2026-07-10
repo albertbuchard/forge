@@ -6,8 +6,7 @@ import {
   filterDeletedEntities,
   getDeletedEntityRecord,
   clearDeletedEntityRecord,
-  isEntityDeleted,
-  upsertDeletedEntityRecord
+  isEntityDeleted
 } from "./deleted-entities.js";
 import { recordEventLog } from "./event-log.js";
 import {
@@ -221,14 +220,6 @@ function stripMarkdown(markdown: string): string {
     .replace(/~~([^~]+)~~/g, "$1")
     .replace(/\r/g, "")
     .trim();
-}
-
-function describeNote(note: Pick<Note, "contentPlain" | "contentMarkdown">) {
-  const plain = note.contentPlain.trim() || stripMarkdown(note.contentMarkdown);
-  const compact = plain.replace(/\s+/g, " ").trim();
-  const title = compact.slice(0, 72) || "Note";
-  const subtitle = compact.length > 72 ? compact.slice(72, 168).trim() : "";
-  return { title, subtitle };
 }
 
 function buildFtsQuery(query: string): string | null {
@@ -895,7 +886,7 @@ export function buildNotesSummaryByEntity(): NotesSummaryByEntity {
 export function unlinkNotesForEntity(
   entityType: CrudEntityType,
   entityId: string,
-  context: NoteContext
+  _context: NoteContext
 ) {
   cleanupExpiredNotes();
   const noteIds = getDatabase()

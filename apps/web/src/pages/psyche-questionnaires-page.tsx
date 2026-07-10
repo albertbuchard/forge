@@ -116,7 +116,10 @@ export function PsycheQuestionnairesPage() {
     queryFn: () => listQuestionnaires()
   });
 
-  const instruments = questionnairesQuery.data?.instruments ?? [];
+  const instruments = useMemo(
+    () => questionnairesQuery.data?.instruments ?? [],
+    [questionnairesQuery.data?.instruments]
+  );
   const filterOptions = useMemo(
     () => buildFilterOptions(instruments),
     [instruments]

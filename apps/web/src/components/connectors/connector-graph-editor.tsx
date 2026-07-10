@@ -9,11 +9,8 @@ import {
   ReactFlow,
   applyEdgeChanges,
   applyNodeChanges,
-  type Connection,
   type Edge,
-  type EdgeChange,
   type Node,
-  type NodeChange,
   type NodeProps
 } from "@xyflow/react";
 import { Cpu, Database, MessageSquare, SendHorizontal, SquareTerminal } from "lucide-react";
@@ -25,6 +22,7 @@ import type {
   AiConnectorKind,
   AiConnectorNode,
   AiConnectorRun,
+  AiModelProvider,
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -257,7 +255,7 @@ export function ConnectorGraphEditor({
   modelConnections: Array<{
     id: string;
     label: string;
-    provider: string;
+    provider: AiModelProvider;
     model: string;
     baseUrl: string;
   }>;
@@ -610,7 +608,7 @@ export function ConnectorGraphEditor({
                           ...node.data,
                           modelConfig: {
                             connectionId: nextConnection?.id ?? null,
-                            provider: (nextConnection?.provider as any) ?? null,
+                            provider: nextConnection?.provider ?? null,
                             baseUrl: nextConnection?.baseUrl ?? null,
                             model: nextConnection?.model ?? "",
                             thinking: node.data.modelConfig?.thinking ?? null,

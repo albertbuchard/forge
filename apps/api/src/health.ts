@@ -800,17 +800,6 @@ type DailySummaryRow = {
 
 type StoredVitalMetricSummary = z.infer<typeof vitalMetricSummarySchema>;
 
-type StoredVitalMetricDays = Array<{
-  dateKey: string;
-  average: number | null;
-  minimum: number | null;
-  maximum: number | null;
-  latest: number | null;
-  total: number | null;
-  sampleCount: number;
-  latestSampleAt: string | null;
-}>;
-
 type HealthImportRunRow = {
   id: string;
   pairing_session_id: string | null;
@@ -997,10 +986,6 @@ function upsertPairingSourceState(
 
 function dayKey(value: string) {
   return value.slice(0, 10);
-}
-
-function diffMinutes(left: string, right: string) {
-  return Math.round(Math.abs(Date.parse(left) - Date.parse(right)) / 60_000);
 }
 
 function average(values: number[]) {
@@ -7015,10 +7000,6 @@ function createZoneRecord(): ZoneSecondsRecord {
   return Object.fromEntries(
     WORKOUT_ZONE_ORDER.map((key) => [key, 0])
   ) as ZoneSecondsRecord;
-}
-
-function createDomainRecord(): DomainSecondsRecord {
-  return { low: 0, moderate: 0, high: 0 };
 }
 
 function addSessionZones(target: ZoneSecondsRecord, session: TrainingLoadSession) {

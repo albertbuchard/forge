@@ -1,7 +1,9 @@
-import { useMemo, useState, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Flame,
   Lock,
   Search,
@@ -116,6 +118,42 @@ const rewardTitleClass = "text-[var(--ui-ink-strong)]";
 const rewardBodyClass = "text-[var(--ui-ink-soft)]";
 const rewardFaintClass = "text-[var(--ui-ink-faint)]";
 const rewardBadgeClass = "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
+export const DEFAULT_REWARD_GROUP_PREVIEW_COUNT = 4;
+
+export function rewardGroupPreviewCountForWidth(width: number) {
+  if (width >= 1280) return DEFAULT_REWARD_GROUP_PREVIEW_COUNT;
+  if (width >= 640) return 2;
+  return 1;
+}
+
+export function selectRewardGroupItems<T>(
+  items: T[],
+  expanded: boolean,
+  revealCompleteResults: boolean,
+  previewCount = DEFAULT_REWARD_GROUP_PREVIEW_COUNT
+) {
+  return expanded || revealCompleteResults
+    ? items
+    : items.slice(0, previewCount);
+}
+
+function useRewardGroupPreviewCount() {
+  const [previewCount, setPreviewCount] = useState(() =>
+    rewardGroupPreviewCountForWidth(
+      typeof window === "undefined" ? 1280 : window.innerWidth
+    )
+  );
+
+  useEffect(() => {
+    const updatePreviewCount = () =>
+      setPreviewCount(rewardGroupPreviewCountForWidth(window.innerWidth));
+    updatePreviewCount();
+    window.addEventListener("resize", updatePreviewCount, { passive: true });
+    return () => window.removeEventListener("resize", updatePreviewCount);
+  }, []);
+
+  return previewCount;
+}
 
 function getUnlockValue(item: GamificationCatalogEntry) {
   const config = item.unlockType ? equipConfig[item.unlockType] : null;
@@ -151,6 +189,10 @@ function RewardTile({
         <img
           src={getGamificationSpriteUrl(item.assetKey, 512, gamificationTheme)}
           alt=""
+          loading="lazy"
+          decoding="async"
+          width={144}
+          height={144}
           onError={hideMissingGamificationImage}
           className={cn(
             "size-36 object-contain drop-shadow-[var(--ui-shadow-soft)] transition group-hover:scale-[1.03]",
@@ -198,6 +240,10 @@ export function RewardsPage() {
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] =
     useState<GamificationCatalogEntry | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<
+    Set<GamificationCatalogCategory>
+  >(() => new Set());
+  const rewardGroupPreviewCount = useRewardGroupPreviewCount();
   const catalogQuery = useQuery({
     queryKey: ["forge-gamification-catalog", ...selectedUserIds],
     queryFn: () => getGamificationCatalog(selectedUserIds)
@@ -217,7 +263,7 @@ export function RewardsPage() {
     }
   });
   const catalog = catalogQuery.data?.catalog;
-  const items = catalog?.items ?? [];
+  const items = useMemo(() => catalog?.items ?? [], [catalog?.items]);
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
@@ -240,6 +286,11 @@ export function RewardsPage() {
 
   const equipment =
     catalog?.equipment ?? xpQuery.data?.metrics.equipment ?? null;
+  const revealCompleteResults =
+    query.trim().length > 0 ||
+    category !== "all" ||
+    tier !== "all" ||
+    state !== "all";
   const armoryItems = items.filter(
     (item) =>
       item.kind === "unlock" && item.unlockType && equipConfig[item.unlockType]
@@ -375,6 +426,9 @@ export function RewardsPage() {
                   gamificationTheme
                 )}
                 alt=""
+                decoding="async"
+                width={44}
+                height={44}
                 onError={hideMissingGamificationImage}
                 className="size-11 object-contain"
               />
@@ -406,6 +460,9 @@ export function RewardsPage() {
                 gamificationTheme
               )}
               alt="Forge Smith mascot"
+              decoding="async"
+              width={512}
+              height={512}
               onError={hideMissingGamificationImage}
               className="absolute inset-x-0 bottom-0 mx-auto h-[23rem] object-contain"
             />
@@ -454,6 +511,10 @@ export function RewardsPage() {
                       gamificationTheme
                     )}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width={112}
+                    height={112}
                     onError={hideMissingGamificationImage}
                     className={cn(
                       "mx-auto mt-3 size-28 object-contain",
@@ -510,6 +571,10 @@ export function RewardsPage() {
                   <img
                     src={getGamificationSpriteUrl(key, 256, gamificationTheme)}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width={112}
+                    height={112}
                     onError={hideMissingGamificationImage}
                     className="mx-auto size-28 object-contain"
                   />
@@ -535,6 +600,10 @@ export function RewardsPage() {
                   <img
                     src={getGamificationSpriteUrl(key, 256, gamificationTheme)}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    width={112}
+                    height={112}
                     onError={hideMissingGamificationImage}
                     className="mx-auto size-28 object-contain"
                   />
@@ -555,6 +624,14 @@ export function RewardsPage() {
               (item) => item.category === group.id
             );
             if (groupItems.length === 0) return null;
+            const expanded = expandedCategories.has(group.id);
+            const visibleGroupItems = selectRewardGroupItems(
+              groupItems,
+              expanded,
+              revealCompleteResults,
+              rewardGroupPreviewCount
+            );
+            const bounded = visibleGroupItems.length < groupItems.length;
             return (
               <section key={group.id} className="grid gap-3">
                 <div className="flex items-end justify-between gap-3">
@@ -563,12 +640,41 @@ export function RewardsPage() {
                       {group.label}
                     </div>
                     <div className={`text-sm ${rewardFaintClass}`}>
-                      {groupItems.length} visible rewards
+                      {bounded
+                        ? `${visibleGroupItems.length} of ${groupItems.length} shown`
+                        : `${groupItems.length} visible rewards`}
                     </div>
                   </div>
+                  {!revealCompleteResults &&
+                  groupItems.length > rewardGroupPreviewCount ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setExpandedCategories((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.id)) {
+                            next.delete(group.id);
+                          } else {
+                            next.add(group.id);
+                          }
+                          return next;
+                        })
+                      }
+                    >
+                      {expanded ? (
+                        <ChevronUp className="size-4" />
+                      ) : (
+                        <ChevronDown className="size-4" />
+                      )}
+                      {expanded ? "Show less" : `Show all ${groupItems.length}`}
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {groupItems.map((item) => (
+                  {visibleGroupItems.map((item) => (
                     <RewardTile
                       key={item.id}
                       item={item}
@@ -600,6 +706,9 @@ export function RewardsPage() {
                   gamificationTheme
                 )}
                 alt=""
+                decoding="async"
+                width={128}
+                height={128}
                 onError={hideMissingGamificationImage}
                 className="size-32 shrink-0 object-contain"
               />

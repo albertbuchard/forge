@@ -2,7 +2,7 @@ import { listActivityEvents } from "../repositories/activity-events.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { getGoalById, listGoals } from "../repositories/goals.js";
 import { buildNotesSummaryByEntity } from "../repositories/notes.js";
-import { getProjectById, listProjects } from "../repositories/projects.js";
+import { listProjects } from "../repositories/projects.js";
 import { listTasks } from "../repositories/tasks.js";
 import { listProjectWorkAdjustmentSecondsMap } from "../repositories/work-adjustments.js";
 import { emptyTaskTimeSummary } from "./work-time.js";

@@ -130,14 +130,18 @@ export function StrategyDetailPage() {
       })
     );
   }, [projectsById, strategy, tasksById]);
-  const strategyContractShape = strategy ?? {
-    title: "",
-    overview: "",
-    endStateDescription: "",
-    targetGoalIds: [],
-    targetProjectIds: [],
-    graph: { nodes: [], edges: [] }
-  };
+  const strategyContractShape = useMemo(
+    () =>
+      strategy ?? {
+        title: "",
+        overview: "",
+        endStateDescription: "",
+        targetGoalIds: [],
+        targetProjectIds: [],
+        graph: { nodes: [], edges: [] }
+      },
+    [strategy]
+  );
   const contractChecks = useMemo(
     () => buildStrategyContractChecks(strategyContractShape),
     [strategyContractShape]

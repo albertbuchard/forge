@@ -29,7 +29,9 @@ export function FieldHint({
   className?: string;
 }) {
   return (
-    <div className={cn("text-sm leading-6 text-[var(--ui-ink-soft)]", className)}>
+    <div
+      className={cn("text-sm leading-6 text-[var(--ui-ink-soft)]", className)}
+    >
       {children}
     </div>
   );
@@ -56,18 +58,17 @@ export function InfoTooltip({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const tooltipId = useId();
   const tooltipPanel =
-    typeof document === "undefined"
+    !open || typeof document === "undefined"
       ? null
       : createPortal(
           <span
             id={tooltipId}
             role="tooltip"
-            aria-hidden={!open}
-            data-state={open ? "open" : "closed"}
+            data-state="open"
             style={panelStyle}
             className={cn(
               "pointer-events-none fixed z-[9999] grid overflow-y-auto rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2.5 text-left font-sans text-sm normal-case leading-6 tracking-normal text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl transition",
-              open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
+              "translate-y-0 opacity-100",
               panelClassName
             )}
           >
@@ -99,10 +100,7 @@ export function InfoTooltip({
       const width =
         window.innerWidth < 480
           ? window.innerWidth - TOOLTIP_GUTTER_PX * 2
-          : Math.min(
-              maxWidthPx,
-              window.innerWidth - TOOLTIP_GUTTER_PX * 2
-            );
+          : Math.min(maxWidthPx, window.innerWidth - TOOLTIP_GUTTER_PX * 2);
       const centeredLeft = rect.left + rect.width / 2 - width / 2;
       const maxLeft = window.innerWidth - width - TOOLTIP_GUTTER_PX;
       const left = Math.max(TOOLTIP_GUTTER_PX, Math.min(centeredLeft, maxLeft));

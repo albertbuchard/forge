@@ -38,6 +38,26 @@ export type SurfaceWidgetLayoutDefinition = {
   autoSizeHeight?: boolean;
 };
 
+export function buildSurfaceWidgetLayoutDefaults(
+  widgets: SurfaceWidgetLayoutDefinition[]
+): SurfaceWidgetLayoutDefinition[] {
+  return widgets.map((widget) => ({
+    id: widget.id,
+    defaultWidth: widget.defaultWidth,
+    defaultHidden: widget.defaultHidden,
+    defaultFullWidth: widget.defaultFullWidth,
+    defaultTitleVisible: widget.defaultTitleVisible,
+    defaultDescriptionVisible: widget.defaultDescriptionVisible,
+    defaultPlacement: widget.defaultPlacement
+  }));
+}
+
+export function buildSurfaceWidgetLayoutDefaultsSignature(
+  widgets: SurfaceWidgetLayoutDefinition[]
+) {
+  return JSON.stringify(buildSurfaceWidgetLayoutDefaults(widgets));
+}
+
 const STORAGE_PREFIX = "forge.surface-layout.v3";
 
 function storageKey(surfaceId: string) {

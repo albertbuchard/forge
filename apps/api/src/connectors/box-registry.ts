@@ -12,6 +12,7 @@ import type {
   ForgeBoxCatalogEntry,
   ForgeBoxSnapshot
 } from "../types.js";
+import { noteKindSchema } from "../types.js";
 import {
   executeCommonWorkbenchTool,
   mapWorkbenchTools
@@ -112,12 +113,14 @@ function createRuntimeContext(input?: {
         (() => getInsightsPayload()) as WorkbenchRuntimeServices["overview"]["getInsights"]
     },
     wiki: {
-      listPages: ((input) =>
-        listWikiPages({
+      listPages: ((input) => {
+        const kind = noteKindSchema.optional().parse(input?.kind);
+        return listWikiPages({
           spaceId: typeof input?.spaceId === "string" ? input.spaceId : undefined,
-          kind: typeof input?.kind === "string" ? (input.kind as any) : undefined,
+          kind,
           limit: typeof input?.limit === "number" ? input.limit : undefined
-        })) as WorkbenchRuntimeServices["wiki"]["listPages"],
+        });
+      }) as WorkbenchRuntimeServices["wiki"]["listPages"],
       getHealth: (() => getWikiHealth()) as WorkbenchRuntimeServices["wiki"]["getHealth"]
     },
     tasks: {

@@ -499,7 +499,12 @@ export function SettingsCalendarPage() {
         }
       }
     ],
-    [managedConnection, managedDiscoveryQuery]
+    [
+      managedConnection,
+      managedDiscoveryQuery,
+      managedResources,
+      manageSelectionSeeded
+    ]
   );
 
   if (

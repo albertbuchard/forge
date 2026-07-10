@@ -2847,21 +2847,6 @@ const agentRuntimeSessionLocatorBaseSchema = z.object({
   externalSessionId: trimmedString.nullable().optional()
 });
 
-const agentRuntimeSessionLocatorSchema =
-  agentRuntimeSessionLocatorBaseSchema.superRefine((value, context) => {
-    const hasSessionId = Boolean(value.sessionId?.trim());
-    const hasCompositeKey =
-      Boolean(value.provider) && Boolean(value.sessionKey?.trim());
-    if (!hasSessionId && !hasCompositeKey) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sessionId"],
-        message:
-          "Provide either sessionId or the provider + sessionKey locator."
-      });
-    }
-  });
-
 export const createAgentRuntimeSessionSchema = z.object({
   provider: agentRuntimeProviderSchema,
   agentLabel: nonEmptyTrimmedString,

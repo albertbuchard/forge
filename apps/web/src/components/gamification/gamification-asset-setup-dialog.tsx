@@ -35,7 +35,10 @@ export function GamificationAssetSetupDialog() {
     staleTime: 30_000
   });
 
-  const styles = assetsQuery.data?.assets.styles ?? [];
+  const styles = useMemo(
+    () => assetsQuery.data?.assets.styles ?? [],
+    [assetsQuery.data?.assets.styles]
+  );
   const installedStyles = styles.filter((style) => style.installed);
   const settingsRoute = location.pathname.startsWith("/settings");
   const open =

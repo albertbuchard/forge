@@ -160,12 +160,18 @@ export function PsychePatternsPage() {
     queryFn: listBehaviors
   });
 
-  const patterns = patternsQuery.data?.patterns ?? [];
+  const patterns = useMemo(
+    () => patternsQuery.data?.patterns ?? [],
+    [patternsQuery.data?.patterns]
+  );
   const values = valuesQuery.data?.values ?? [];
   const schemas = schemasQuery.data?.schemas ?? [];
   const modes = modesQuery.data?.modes ?? [];
   const beliefs = beliefsQuery.data?.beliefs ?? [];
-  const behaviors = behaviorsQuery.data?.behaviors ?? [];
+  const behaviors = useMemo(
+    () => behaviorsQuery.data?.behaviors ?? [],
+    [behaviorsQuery.data?.behaviors]
+  );
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const focusedPatternId = searchParams.get("focus");
   const notesSummaryByEntity = shell.snapshot.dashboard.notesSummaryByEntity;

@@ -20,7 +20,10 @@ export function useShellBackgroundActivity({
     refetchOnReconnect: true
   });
 
-  const recentIngestJobs = ingestJobsQuery.data?.jobs ?? [];
+  const recentIngestJobs = useMemo(
+    () => ingestJobsQuery.data?.jobs ?? [],
+    [ingestJobsQuery.data?.jobs]
+  );
   const hasActiveIngestJobs = recentIngestJobs.some((job) =>
     ["queued", "processing"].includes(job.job.status)
   );

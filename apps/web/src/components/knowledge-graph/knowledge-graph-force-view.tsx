@@ -782,6 +782,33 @@ export const KnowledgeGraphForceView = forwardRef<
     }));
   };
 
+  const lifecycleCallbacksRef = useRef({
+    animateCameraToDesired,
+    buildCurrentStatus,
+    buildFallbackOverviewCameraState,
+    buildSigmaOverviewCameraState,
+    publishCurrentDiagnostics,
+    recordDiagnosticsEvent,
+    recordSnapshot,
+    resetCameraToOrigin,
+    safeRefreshSigma,
+    updateDesiredCameraFromGraph,
+    verifyStartupInvariant
+  });
+  lifecycleCallbacksRef.current = {
+    animateCameraToDesired,
+    buildCurrentStatus,
+    buildFallbackOverviewCameraState,
+    buildSigmaOverviewCameraState,
+    publishCurrentDiagnostics,
+    recordDiagnosticsEvent,
+    recordSnapshot,
+    resetCameraToOrigin,
+    safeRefreshSigma,
+    updateDesiredCameraFromGraph,
+    verifyStartupInvariant
+  };
+
   useEffect(() => {
     onSelectNodeRef.current = onSelectNode;
   }, [onSelectNode]);
@@ -836,7 +863,7 @@ export const KnowledgeGraphForceView = forwardRef<
           x: nextX,
           y: nextY
         } satisfies KnowledgeGraphLayoutWorkerMessage);
-        safeRefreshSigma();
+        lifecycleCallbacksRef.current.safeRefreshSigma();
         if (!sigmaRef.current && graphRef.current) {
           setFallbackSnapshot(buildFallbackSnapshot(graphRef.current, renderedEdges));
         }
@@ -927,7 +954,10 @@ export const KnowledgeGraphForceView = forwardRef<
         if (sigmaRef.current) {
           void sigmaRef.current
             .getCamera()
-            .animate(buildSigmaOverviewCameraState(), { duration: 220 });
+            .animate(
+              lifecycleCallbacksRef.current.buildSigmaOverviewCameraState(),
+              { duration: 220 }
+            );
           return;
         }
         if (fallbackSnapshot) {
@@ -935,23 +965,25 @@ export const KnowledgeGraphForceView = forwardRef<
         }
       },
       recenterOnFocus: () => {
-        updateDesiredCameraFromGraph();
+        lifecycleCallbacksRef.current.updateDesiredCameraFromGraph();
         if (!desiredCameraRef.current) {
           return;
         }
-        animateCameraToDesired(220);
+        lifecycleCallbacksRef.current.animateCameraToDesired(220);
       }
     }),
-    [fallbackSnapshot, renderedEdges]
+    [fallbackSnapshot]
   );
 
   useEffect(() => {
+    const positionCache = positionCacheRef.current;
+    const cameraStateCache = cameraStateCacheRef.current;
     return () => {
       if (graphRef.current) {
-        rememberGraphPositions(graphRef.current, positionCacheRef.current);
+        rememberGraphPositions(graphRef.current, positionCache);
       }
       if (sigmaRef.current && datasetSignatureRef.current) {
-        cameraStateCacheRef.current.set(
+        cameraStateCache.set(
           datasetSignatureRef.current,
           sigmaRef.current.getCamera().getState()
         );
@@ -960,7 +992,7 @@ export const KnowledgeGraphForceView = forwardRef<
       workerRef.current?.terminate();
       workerRef.current = null;
       if (diagnosticsEnabled) {
-        recordDiagnosticsEvent({
+        lifecycleCallbacksRef.current.recordDiagnosticsEvent({
           level: "debug",
           eventKey: "sigma_killed",
           message: "Disposed the knowledge graph renderer."
@@ -973,6 +1005,16 @@ export const KnowledgeGraphForceView = forwardRef<
   }, [diagnosticsEnabled]);
 
   useEffect(() => {
+    const {
+      buildFallbackOverviewCameraState,
+      buildSigmaOverviewCameraState,
+      publishCurrentDiagnostics,
+      recordDiagnosticsEvent,
+      recordSnapshot,
+      resetCameraToOrigin,
+      safeRefreshSigma,
+      verifyStartupInvariant
+    } = lifecycleCallbacksRef.current;
     if (!containerRef.current || !isContainerReady(containerRef.current, containerSize)) {
       return;
     }
@@ -1430,9 +1472,9 @@ export const KnowledgeGraphForceView = forwardRef<
       }
     });
   }, [
-    containerSize.height,
-    containerSize.width,
+    containerSize,
     datasetSignature,
+    diagnosticsEnabled,
     focusNodeId,
     nodes,
     physicsSettings,
@@ -1440,6 +1482,7 @@ export const KnowledgeGraphForceView = forwardRef<
   ]);
 
   useEffect(() => {
+    const { recordDiagnosticsEvent } = lifecycleCallbacksRef.current;
     if (!workerRef.current || !graphRef.current) {
       return;
     }
@@ -1478,6 +1521,8 @@ export const KnowledgeGraphForceView = forwardRef<
   }, [physicsSettings]);
 
   useEffect(() => {
+    const { publishCurrentDiagnostics, recordSnapshot } =
+      lifecycleCallbacksRef.current;
     if (!diagnosticsEnabled || !graphRef.current || !datasetSignatureRef.current) {
       return;
     }
@@ -1493,6 +1538,7 @@ export const KnowledgeGraphForceView = forwardRef<
   }, [datasetSignature, diagnosticsEnabled]);
 
   useEffect(() => {
+    const { safeRefreshSigma } = lifecycleCallbacksRef.current;
     if (!sigmaRef.current || !graphRef.current) {
       return;
     }
@@ -1528,6 +1574,12 @@ export const KnowledgeGraphForceView = forwardRef<
   }, [detailNodeIds, draggedNodeId, focusNodeId, hoveredNodeId, relatedNodeIds]);
 
   useEffect(() => {
+    const {
+      buildCurrentStatus,
+      recordDiagnosticsEvent,
+      recordSnapshot,
+      verifyStartupInvariant
+    } = lifecycleCallbacksRef.current;
     if (
       !fallbackSnapshot ||
       !datasetSignatureRef.current ||

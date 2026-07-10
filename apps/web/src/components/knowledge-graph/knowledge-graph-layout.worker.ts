@@ -555,7 +555,7 @@ function applyDraggedNodeIntervention(current: LayoutState) {
   }
 }
 
-function computePhase(current: LayoutState, nowMs: number) {
+function computePhase(current: LayoutState) {
   if (current.dragIndex >= 0) {
     current.phase = "dragging";
     return;
@@ -603,7 +603,7 @@ function tick(current: LayoutState, nowMs: number) {
   applyCollision(current);
   applyDraggedNodeIntervention(current);
   integrate(current);
-  computePhase(current, nowMs);
+  computePhase(current);
   current.tick += 1;
 }
 

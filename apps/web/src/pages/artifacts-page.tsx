@@ -54,7 +54,6 @@ import type {
   ArtifactScanFinding,
   ArtifactScanResult,
   ArtifactSourceKind,
-  ArtifactState,
   ArtifactUploadInput,
   EntityLinkInput
 } from "@/lib/types";
@@ -487,7 +486,10 @@ export function ArtifactsPage() {
       })
   });
 
-  const artifacts = artifactsQuery.data?.artifacts ?? [];
+  const artifacts = useMemo(
+    () => artifactsQuery.data?.artifacts ?? [],
+    [artifactsQuery.data?.artifacts]
+  );
   const totalArtifacts = artifactsQuery.data?.total ?? artifacts.length;
   const pageOffset =
     artifactsQuery.data?.offset ?? pageIndex * ARTIFACT_PAGE_SIZE;
@@ -759,11 +761,7 @@ export function ArtifactsPage() {
     setGenericLinksText(
       selectedArtifact ? formatGenericLinksText(selectedArtifact.links) : ""
     );
-  }, [
-    selectedArtifact?.id,
-    selectedArtifact?.links.length,
-    selectedArtifact?.updatedAt
-  ]);
+  }, [selectedArtifact]);
 
   const uploadResultByItemId = useMemo(
     () => new Map(uploadResults.map((result) => [result.itemId, result])),

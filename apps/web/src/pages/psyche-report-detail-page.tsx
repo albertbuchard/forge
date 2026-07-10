@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { ChainCanvas } from "@/components/psyche/chain-canvas";
 import { InsightFlowDialog } from "@/components/insights/insight-flow-dialog";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
-import { SchemaBadge } from "@/components/psyche/schema-badge";
 import {
   BehaviorRowsEditor,
   EmotionRowsEditor,
@@ -16,7 +15,6 @@ import {
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { FieldHint, InfoTooltip } from "@/components/ui/info-tooltip";
@@ -38,7 +36,6 @@ import { formatLines } from "@/lib/psyche-formats";
 import { triggerReportSchema } from "@/lib/psyche-schemas";
 import type {
   ModeTimelineEntry,
-  SchemaCatalogEntry,
   TriggerBehavior,
   TriggerEmotion,
   TriggerReport,
@@ -51,7 +48,6 @@ import {
   getSchemaVisual,
   toggleSchemaSelection
 } from "@/lib/schema-visuals";
-import { formatDateTime } from "@/lib/utils";
 
 type ReportEditorShape = {
   title: string;

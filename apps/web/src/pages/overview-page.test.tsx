@@ -736,7 +736,7 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("keeps detailed reward and Life Force workspaces optional by default", () => {
+  it("keeps the compact Forge Smith visible and detailed Life Force optional", () => {
     useForgeShellMock.mockReturnValue({
       snapshot: createSnapshot(),
       selectedUserIds: [],
@@ -747,7 +747,7 @@ describe("OverviewPage", () => {
 
     expect(screen.getByTestId("overview-widget-gamification")).toHaveAttribute(
       "data-default-hidden",
-      "true"
+      "false"
     );
     expect(screen.getByTestId("overview-widget-life-force")).toHaveAttribute(
       "data-default-hidden",

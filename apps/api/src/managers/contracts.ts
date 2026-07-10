@@ -104,7 +104,11 @@ export interface SecretStoreAdapter {
   secureEquals(left: string, right: string): boolean;
 }
 
-export interface SessionStoreAdapter<TSession> extends StoreAdapter<TSession, { activeOnly?: boolean }, Partial<TSession>> {}
+export type SessionStoreAdapter<TSession> = StoreAdapter<
+  TSession,
+  { activeOnly?: boolean },
+  Partial<TSession>
+>;
 
 export interface AssetStoreAdapter {
   resolveClientDir(): string;

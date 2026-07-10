@@ -7,9 +7,7 @@ import type {
 import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
-  OperatorSession,
   SettingsPayload,
-  SleepViewData,
   WikiIngestJobPayload
 } from "@/lib/types";
 import {
@@ -60,9 +58,9 @@ import type {
 } from "@/lib/psyche-types";
 
 type ForgeApiQueryError = unknown;
-type AsyncResult<T extends (...args: any[]) => Promise<any>> = Awaited<
-  ReturnType<T>
->;
+type AsyncResult<T> = T extends (...args: never[]) => infer TResult
+  ? Awaited<TResult>
+  : never;
 
 async function resolveResult<T>(run: () => Promise<T>) {
   try {

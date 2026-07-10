@@ -30,7 +30,6 @@ import {
   workBlockTemplateSchema,
   type ActivitySource,
   type CalendarConnection,
-  type CalendarEvent,
   type CalendarEventLink,
   type CalendarEventOrigin,
   type CalendarEventSource,

@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { Provider } from "react-redux";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Location } from "react-router-dom";
+import { NavigationType, type Location } from "react-router-dom";
 import { createAppStore } from "@/store/store";
 import { useShellRouteHandoff } from "@/features/shell/use-shell-route-handoff";
 
@@ -53,7 +53,7 @@ describe("useShellRouteHandoff", () => {
           ...props,
           routerLocationContext: {
             location: props.routerLocation,
-            navigationType: "PUSH"
+            navigationType: NavigationType.Push
           }
         }),
       {
@@ -120,7 +120,7 @@ describe("useShellRouteHandoff", () => {
           outlet: overviewOutlet,
           routerLocationContext: {
             location: overviewLocation,
-            navigationType: "PUSH"
+            navigationType: NavigationType.Push
           },
           externalFetching: 0,
           routeReady: true,

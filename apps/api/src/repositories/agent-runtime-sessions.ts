@@ -9,7 +9,6 @@ import {
   agentRuntimeReconnectPlanSchema,
   agentRuntimeSessionEventSchema,
   agentRuntimeSessionSchema,
-  agentRuntimeSessionStatusSchema,
   createAgentRuntimeSessionEventSchema,
   createAgentRuntimeSessionSchema,
   disconnectAgentRuntimeSessionSchema,

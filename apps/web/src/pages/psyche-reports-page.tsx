@@ -63,7 +63,6 @@ import type {
   ModeProfile,
   ModeTimelineEntry,
   PsycheValue,
-  SchemaCatalogEntry,
   TriggerBehavior,
   TriggerEmotion,
   TriggerThought
@@ -254,7 +253,7 @@ export function PsycheReportsPage() {
       next.delete("taskId");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [defaultUserId, searchParams, setSearchParams]);
 
   const saveMutation = useMutation({
     mutationFn: async (value: ReportDraft) => {

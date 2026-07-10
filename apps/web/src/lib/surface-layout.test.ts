@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { breakpointFromWidth, scaleWidgetSpan } from "@/lib/surface-layout";
+import {
+  breakpointFromWidth,
+  buildSurfaceWidgetLayoutDefaultsSignature,
+  scaleWidgetSpan
+} from "@/lib/surface-layout";
 
 describe("surface layout breakpoints", () => {
   it("maps measured container widths to stable grid column counts", () => {
@@ -38,5 +42,33 @@ describe("surface layout breakpoints", () => {
         "lg"
       )
     ).toBe(8);
+  });
+
+  it("keeps layout hydration stable when only render content changes", () => {
+    const first = [
+      {
+        id: "runway",
+        defaultWidth: 8,
+        defaultPlacement: "top" as const,
+        title: "Runway",
+        render: () => "first"
+      }
+    ];
+    const second = [
+      {
+        ...first[0],
+        title: "Updated runway",
+        render: () => "second"
+      }
+    ];
+
+    expect(buildSurfaceWidgetLayoutDefaultsSignature(first)).toBe(
+      buildSurfaceWidgetLayoutDefaultsSignature(second)
+    );
+    expect(
+      buildSurfaceWidgetLayoutDefaultsSignature([
+        { ...second[0], defaultPlacement: "flow" }
+      ])
+    ).not.toBe(buildSurfaceWidgetLayoutDefaultsSignature(first));
   });
 });

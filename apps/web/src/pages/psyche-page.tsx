@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  EditableSurface,
-  type SurfaceWidgetDefinition
-} from "@/components/customization/editable-surface";
+import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
 import { buildGoalGravityScene } from "@/components/psyche/goal-gravity-scene";
 import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";

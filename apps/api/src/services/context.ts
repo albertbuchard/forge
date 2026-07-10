@@ -1,9 +1,6 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
-import { listGoals } from "../repositories/goals.js";
-import { listHabits } from "../repositories/habits.js";
 import { listRewardLedger } from "../repositories/rewards.js";
 import { listTags, listTagsByIds } from "../repositories/tags.js";
-import { listTasks } from "../repositories/tasks.js";
 import { getDashboard } from "./dashboard.js";
 import {
   overviewContextSchema,
@@ -145,7 +142,6 @@ export function getOverviewContext(now = new Date(), options: ContextOptions = {
   const dueHabits = dashboard.habits.filter((habit) => habit.dueToday).slice(0, 6);
   const goals = dashboard.goals;
   const tasks = dashboard.tasks;
-  const habits = dashboard.habits;
   return overviewContextSchema.parse({
     generatedAt: now.toISOString(),
     strategicHeader: {

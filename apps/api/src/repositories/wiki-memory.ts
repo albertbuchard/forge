@@ -1,19 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import AdmZip, { type AdmZipEntry } from "adm-zip";
-import {
-  accessSync,
-  existsSync,
-  readdirSync,
-  unlinkSync,
-  rmSync
-} from "node:fs";
-import {
-  access,
-  mkdir,
-  readFile,
-  rm,
-  writeFile
-} from "node:fs/promises";
+import { existsSync, readdirSync, unlinkSync, rmSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { resolveDataDir, getDatabase } from "../db.js";
@@ -28,7 +16,8 @@ import {
   type CreateNoteInput,
   type CrudEntityType,
   type Note,
-  type NoteKind
+  type NoteKind,
+  type UpdateNoteInput
 } from "../types.js";
 import {
   deleteEncryptedSecret,
@@ -731,26 +720,6 @@ function getNoteBySlugRaw(
   return row;
 }
 
-function getNoteByTitleRaw(
-  spaceId: string,
-  title: string,
-  exceptNoteId?: string
-) {
-  return getDatabase()
-    .prepare(
-      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source,
-              tags_json, destroy_at, source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
-       FROM notes
-       WHERE space_id = ?
-         AND lower(title) = lower(?)
-         ${exceptNoteId ? "AND id != ?" : ""}
-       LIMIT 1`
-    )
-    .get(
-      ...(exceptNoteId ? [spaceId, title, exceptNoteId] : [spaceId, title])
-    ) as NoteRow | undefined;
-}
-
 function listNotesByTitleRaw(
   spaceId: string,
   title: string,
@@ -1311,248 +1280,6 @@ async function readSecretApiKey(
   }
   const payload = secrets.openJson<StoredSecretPayload>(cipherText);
   return payload.apiKey || null;
-}
-
-async function compileTextWithLlm(
-  profile: WikiLlmProfile,
-  secrets: SecretsManager,
-  input: { titleHint: string; rawText: string; mimeType: string }
-) {
-  const apiKey = await readSecretApiKey(profile.secretId, secrets);
-  if (!apiKey) {
-    return null;
-  }
-
-  const prompt = [
-    "You compile user-provided source material into a local wiki page.",
-    "Return JSON with keys title, summary, markdown, tags, entityProposals, pageUpdateSuggestions, articleCandidates.",
-    "The markdown should be concise, structured, and agent-readable.",
-    "entityProposals should be an array of objects with entityType, title, summary, rationale, confidence, and suggestedFields.",
-    "pageUpdateSuggestions should be an array of objects with targetSlug, rationale, and patchSummary.",
-    "articleCandidates should be an array of objects with title, slug, rationale, and summary.",
-    profile.systemPrompt.trim()
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const response = await fetch(
-    `${profile.baseUrl.replace(/\/$/, "")}/chat/completions`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: profile.model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: prompt
-          },
-          {
-            role: "user",
-            content: `Title hint: ${input.titleHint || "none"}\nMime type: ${input.mimeType}\n\nSource:\n${input.rawText.slice(0, 24_000)}`
-          }
-        ]
-      })
-    }
-  );
-  if (!response.ok) {
-    throw new Error(`LLM compilation failed: ${response.status}`);
-  }
-  const payload = (await response.json()) as {
-    choices?: Array<{
-      message?: { content?: string };
-    }>;
-  };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(content) as {
-      title?: string;
-      summary?: string;
-      markdown?: string;
-      tags?: string[];
-      entityProposals?: Array<Record<string, unknown>>;
-      pageUpdateSuggestions?: Array<Record<string, unknown>>;
-      articleCandidates?: Array<Record<string, unknown>>;
-    };
-    return {
-      title: parsed.title?.trim() || input.titleHint || "Imported source",
-      summary: parsed.summary?.trim() || "",
-      markdown: parsed.markdown?.trim() || input.rawText.trim(),
-      tags: normalizeTags(parsed.tags),
-      entityProposals: Array.isArray(parsed.entityProposals)
-        ? parsed.entityProposals.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : [],
-      pageUpdateSuggestions: Array.isArray(parsed.pageUpdateSuggestions)
-        ? parsed.pageUpdateSuggestions.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : [],
-      articleCandidates: Array.isArray(parsed.articleCandidates)
-        ? parsed.articleCandidates.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : []
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function compileImageWithLlm(
-  profile: WikiLlmProfile,
-  secrets: SecretsManager,
-  input: { titleHint: string; binary: Buffer; mimeType: string }
-) {
-  const apiKey = await readSecretApiKey(profile.secretId, secrets);
-  if (!apiKey) {
-    return null;
-  }
-
-  const prompt = [
-    "You compile a user-provided image into a local wiki page.",
-    "Return JSON with keys title, summary, markdown, tags, entityProposals, pageUpdateSuggestions, articleCandidates.",
-    "Describe the image, capture useful extracted text when visible, and keep the markdown structured for an agent memory wiki.",
-    "entityProposals should be an array of objects with entityType, title, summary, rationale, confidence, and suggestedFields.",
-    "pageUpdateSuggestions should be an array of objects with targetSlug, rationale, and patchSummary.",
-    "articleCandidates should be an array of objects with title, slug, rationale, and summary.",
-    profile.systemPrompt.trim()
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const response = await fetch(
-    `${profile.baseUrl.replace(/\/$/, "")}/chat/completions`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: profile.model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: prompt
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Title hint: ${input.titleHint || "none"}\nMime type: ${input.mimeType}`
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${input.mimeType};base64,${input.binary.toString("base64")}`,
-                  detail: "low"
-                }
-              }
-            ]
-          }
-        ]
-      })
-    }
-  );
-  if (!response.ok) {
-    throw new Error(`LLM image compilation failed: ${response.status}`);
-  }
-  const payload = (await response.json()) as {
-    choices?: Array<{
-      message?: { content?: string };
-    }>;
-  };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(content) as {
-      title?: string;
-      summary?: string;
-      markdown?: string;
-      tags?: string[];
-      entityProposals?: Array<Record<string, unknown>>;
-      pageUpdateSuggestions?: Array<Record<string, unknown>>;
-      articleCandidates?: Array<Record<string, unknown>>;
-    };
-    return {
-      title: parsed.title?.trim() || input.titleHint || "Imported image",
-      summary: parsed.summary?.trim() || "",
-      markdown:
-        parsed.markdown?.trim() ||
-        `# ${parsed.title?.trim() || input.titleHint || "Imported image"}\n\nImage imported into Forge wiki memory.\n`,
-      tags: normalizeTags(parsed.tags),
-      entityProposals: Array.isArray(parsed.entityProposals)
-        ? parsed.entityProposals.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : [],
-      pageUpdateSuggestions: Array.isArray(parsed.pageUpdateSuggestions)
-        ? parsed.pageUpdateSuggestions.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : [],
-      articleCandidates: Array.isArray(parsed.articleCandidates)
-        ? parsed.articleCandidates.filter(
-            (entry): entry is Record<string, unknown> =>
-              entry !== null && typeof entry === "object"
-          )
-        : []
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function compileSourceWithLlm(
-  profile: WikiLlmProfile,
-  secrets: SecretsManager,
-  input: {
-    titleHint: string;
-    rawText: string;
-    binary: Buffer | null;
-    mimeType: string;
-    parseStrategy: "auto" | "text_only" | "multimodal";
-  }
-) {
-  if (input.rawText.trim()) {
-    return compileTextWithLlm(profile, secrets, {
-      titleHint: input.titleHint,
-      rawText: input.rawText,
-      mimeType: input.mimeType
-    });
-  }
-  if (
-    input.binary &&
-    input.parseStrategy !== "text_only" &&
-    input.mimeType.startsWith("image/")
-  ) {
-    return compileImageWithLlm(profile, secrets, {
-      titleHint: input.titleHint,
-      binary: input.binary,
-      mimeType: input.mimeType
-    });
-  }
-  return null;
 }
 
 async function embedTexts(
@@ -3936,7 +3663,7 @@ function createPageCandidatePayload(input: {
 export async function processWikiIngestJob(
   jobId: string,
   options: {
-    llm: LlmManager;
+    llm: Pick<LlmManager, "compileWikiIngest">;
   }
 ) {
   const job = readWikiIngestJobRow(jobId);
@@ -4708,10 +4435,7 @@ export async function reviewWikiIngestJob(
   input: z.input<typeof reviewWikiIngestJobSchema>,
   options: {
     createNote: (note: CreateNoteInput) => Note;
-    updateNote: (
-      noteId: string,
-      patch: Record<string, unknown>
-    ) => Note | undefined;
+    updateNote: (noteId: string, patch: UpdateNoteInput) => Note | undefined;
     publishEntity: (proposal: Record<string, unknown>) => {
       entityType: string;
       entityId: string;

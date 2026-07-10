@@ -17,7 +17,6 @@ import {
   type Task
 } from "../types.js";
 import {
-  DEFAULT_TASK_TOTAL_AP,
   LIFE_FORCE_BASELINE_DAILY_AP,
   buildDefaultTaskActionProfile,
   buildTaskActionPointSummary,
@@ -539,18 +538,6 @@ function buildEffectiveProfile(
 
 function rateToTotalAp(rateApPerHour: number, durationSeconds: number) {
   return Number(((durationSeconds / 3600) * rateApPerHour).toFixed(4));
-}
-
-function overlapsWindow(
-  leftStartIso: string,
-  leftEndIso: string,
-  rightStartIso: string,
-  rightEndIso: string
-) {
-  return (
-    Date.parse(leftStartIso) < Date.parse(rightEndIso) &&
-    Date.parse(leftEndIso) > Date.parse(rightStartIso)
-  );
 }
 
 function clipWindowToRange(window: TimeWindow, range: TimeWindow) {
@@ -1138,26 +1125,6 @@ function seededActionProfiles(): ActionProfile[] {
       updatedAt: now
     })
   ];
-}
-
-function mapTemplateProfileRow(row: {
-  id: string;
-  profile_key: string;
-  entity_type: string | null;
-  title: string;
-  profile_json: string;
-  created_at: string;
-  updated_at: string;
-}): ActionProfile {
-  return actionProfileSchema.parse({
-    id: row.id,
-    profileKey: row.profile_key,
-    entityType: row.entity_type,
-    title: row.title,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    ...(JSON.parse(row.profile_json) as Record<string, unknown>)
-  });
 }
 
 function mapEntityProfileRow(
@@ -3435,15 +3402,6 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
   const currentCurve = parseCurvePoints(snapshot.points_json);
   const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
   const instantCapacityApPerHour = interpolateCurveRate(currentCurve, minuteOfDay);
-  const activeSourceWindows = [
-    ...taskRuns.activeDrains,
-    ...workouts.activeDrains,
-    ...movement.activeDrains,
-    ...plannedContainers.activeDrains
-  ].map((entry) => ({
-    startAt: entry.startsAt ?? now.toISOString(),
-    endAt: entry.endsAt ?? now.toISOString()
-  }));
   const activeDrains = [
     ...taskRuns.activeDrains,
     ...workouts.activeDrains,

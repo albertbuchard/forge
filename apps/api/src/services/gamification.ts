@@ -158,10 +158,6 @@ function startOfWeek(date: Date): Date {
   return clone;
 }
 
-function dayKey(isoDate: string): string {
-  return isoDate.slice(0, 10);
-}
-
 function isAlignedHabitCheckIn(
   habit: Habit,
   checkIn: Habit["checkIns"][number]
@@ -174,14 +170,6 @@ function isAlignedHabitCheckIn(
 
 export function xpToAdvance(level: number): number {
   return 100 + Math.round(35 * Math.pow(Math.max(0, level - 1), 1.25));
-}
-
-function cumulativeXpForLevel(level: number): number {
-  let total = 0;
-  for (let cursor = 1; cursor < level; cursor += 1) {
-    total += xpToAdvance(cursor);
-  }
-  return total;
 }
 
 export function calculateLevel(totalXp: number): {
@@ -694,24 +682,6 @@ function countOwnedRows(
   );
 }
 
-function countDistinctOwnedRows(
-  tableName: string,
-  entityType: string,
-  distinctSql: string,
-  scope: GamificationScope,
-  whereSql = "1 = 1",
-  whereParams: unknown[] = []
-): number {
-  const scopeClause = ownerScopeClause("t", "eo", entityType, scope);
-  return scalarNumber(
-    `SELECT COUNT(DISTINCT ${distinctSql}) AS value
-     FROM ${tableName} t
-     ${scopeClause.join}
-     WHERE (${whereSql})${scopeClause.where}`,
-    [...scopeClause.joinParams, ...whereParams, ...scopeClause.whereParams]
-  );
-}
-
 function countRowsByUser(
   tableName: string,
   scope: GamificationScope,
@@ -795,16 +765,6 @@ function buildMetricValues(input: {
   const positiveRewards = input.scopedRewards.filter(isQualifyingStreakReward);
   const doneTasks = input.tasks.filter((task) => task.status === "done");
   const completedRunWhere = "r.status IN ('completed', 'released', 'timed_out')";
-  const psycheEntityTypes = new Set([
-    "psyche_value",
-    "behavior_pattern",
-    "behavior",
-    "belief_entry",
-    "mode_profile",
-    "mode_guide_session",
-    "flashcard",
-    "trigger_report"
-  ]);
   const nonManualXp = positiveRewards.reduce(
     (sum, reward) => sum + reward.deltaXp,
     0

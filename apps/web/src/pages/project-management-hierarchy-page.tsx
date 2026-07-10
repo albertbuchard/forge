@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
-import { Tree } from "react-arborist";
+import { Tree, type TreeApi } from "react-arborist";
 import { Link } from "react-router-dom";
 import {
   EntityLinkMultiSelect,
@@ -811,7 +811,7 @@ function HierarchySearchBar({
 
 export function ProjectManagementHierarchyPage() {
   const shell = useForgeShell();
-  const treeRef = useRef<any>(null);
+  const treeRef = useRef<TreeApi<HierarchyNode> | null>(null);
   const [query, setQuery] = useState("");
   const [searchClauses, setSearchClauses] = useState<HierarchySearchClause[]>(
     []

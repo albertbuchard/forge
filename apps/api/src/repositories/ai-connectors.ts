@@ -32,7 +32,6 @@ import {
   readModelConnectionCredential
 } from "./model-settings.js";
 import {
-  createAiProcessor,
   getAiProcessorById,
   listAiProcessorLinks,
   listAiProcessors
@@ -40,7 +39,6 @@ import {
 import {
   buildConnectorOutputCatalogEntry,
   executeForgeBoxTool,
-  getForgeBoxCatalogEntry,
   resolveForgeBoxSnapshot
 } from "../connectors/box-registry.js";
 import { normalizeWorkbenchPortDefinition } from "@/lib/workbench/nodes.js";

@@ -5,7 +5,6 @@ import type { KnowledgeGraphFocusPayload } from "@/lib/knowledge-graph-types";
 export type PendingRouteStatus = "idle" | "loading" | "ready";
 
 export interface ShellState {
-  collapseProgress: number;
   selectedUserIds: string[];
   displayedRouteKey: string;
   pendingRouteKey: string | null;
@@ -15,7 +14,6 @@ export interface ShellState {
 }
 
 const initialState: ShellState = {
-  collapseProgress: 0,
   selectedUserIds: readStoredSelectedUserIds(),
   displayedRouteKey: "",
   pendingRouteKey: null,
@@ -33,9 +31,6 @@ const shellSlice = createSlice({
     },
     setSelectedUserIds(state, action: PayloadAction<string[]>) {
       state.selectedUserIds = action.payload;
-    },
-    setCollapseProgress(state, action: PayloadAction<number>) {
-      state.collapseProgress = action.payload;
     },
     syncDisplayedRouteKey(state, action: PayloadAction<string>) {
       state.displayedRouteKey = action.payload;
@@ -93,7 +88,6 @@ export const {
   commitPendingRoute,
   hydrateSelectedUserIds,
   setKnowledgeGraphOverlayFocus,
-  setCollapseProgress,
   setPendingRouteStatus,
   setRouteReadyToCommit,
   setSelectedUserIds,

@@ -53,8 +53,11 @@ export function EntityLinkMultiSelect({
   const [createdOptions, setCreatedOptions] = useState<EntityLinkOption[]>([]);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const safeOptions = options ?? [];
-  const safeSelectedValues = selectedValues ?? [];
+  const safeOptions = useMemo(() => options ?? [], [options]);
+  const safeSelectedValues = useMemo(
+    () => selectedValues ?? [],
+    [selectedValues]
+  );
   const actionBarVariant = variant === "action-bar";
   const menuStyle = useAnchoredOverlayPosition(rootRef, open, {
     offset: 6,

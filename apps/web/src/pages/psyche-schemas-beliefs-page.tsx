@@ -297,7 +297,10 @@ export function PsycheSchemasBeliefsPage() {
     queryFn: listTriggerReports
   });
 
-  const schemas = schemasQuery.data?.schemas ?? [];
+  const schemas = useMemo(
+    () => schemasQuery.data?.schemas ?? [],
+    [schemasQuery.data?.schemas]
+  );
   const beliefs = beliefsQuery.data?.beliefs ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
   const modes = modesQuery.data?.modes ?? [];

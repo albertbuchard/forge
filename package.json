@@ -51,7 +51,7 @@
     "media:web:docs-fixture": "node --import tsx ./scripts/docs/prepare-web-docs-screenshot-data.ts",
     "media:web:docs-screenshots": "node ./scripts/docs/capture-web-docs-screenshots.mjs",
     "check:openclaw-plugin": "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write ."
   },
   "dependencies": {

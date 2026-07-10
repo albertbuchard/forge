@@ -57,11 +57,6 @@ function getDefaultBasePath() {
   return process.env.FORGE_BASE_PATH ?? "/forge/";
 }
 
-function getDevWebOrigin() {
-  const value = process.env.FORGE_DEV_WEB_ORIGIN?.trim();
-  return value && value.length > 0 ? value : null;
-}
-
 function shouldAutostartDevWeb(env: NodeJS.ProcessEnv) {
   const value = env.FORGE_DEV_WEB_AUTOSTART?.trim().toLowerCase();
   return value !== "0" && value !== "false" && value !== "no";

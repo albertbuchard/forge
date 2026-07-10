@@ -160,7 +160,10 @@ export function SettingsRewardsPage() {
     onSuccess: invalidateRewards
   });
 
-  const rewardRules = rewardRulesQuery.data?.rules ?? [];
+  const rewardRules = useMemo(
+    () => rewardRulesQuery.data?.rules ?? [],
+    [rewardRulesQuery.data?.rules]
+  );
   const rewardableOptionsByType = useMemo<
     Record<RewardableEntityType, RewardableOption[]>
   >(

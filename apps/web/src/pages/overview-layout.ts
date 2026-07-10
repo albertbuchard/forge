@@ -22,6 +22,17 @@ const GENERATED_OVERVIEW_CORE_ORDER = [
 const OPERATIONAL_OVERVIEW_CORE_ORDER = [
   "hero",
   "summary",
+  "gamification",
+  "signals",
+  "pipeline",
+  "body-signals",
+  "goals",
+  "life-force"
+] as const;
+
+const PREVIOUS_OPERATIONAL_OVERVIEW_CORE_ORDER = [
+  "hero",
+  "summary",
   "signals",
   "pipeline",
   "body-signals",
@@ -59,39 +70,55 @@ export function normalizeOverviewLayout(
     layout.order,
     LEGACY_OVERVIEW_CORE_ORDER
   );
+  const usesPreviousOperationalCoreOrder = startsWithOrder(
+    layout.order,
+    PREVIOUS_OPERATIONAL_OVERVIEW_CORE_ORDER
+  );
 
-  if (!isGeneratedDefault && !usesLegacyCoreOrder) {
-    return layout;
-  }
-
+  const shouldMigrateOrder =
+    isGeneratedDefault ||
+    usesLegacyCoreOrder ||
+    usesPreviousOperationalCoreOrder;
   const availableIds = new Set(layout.order);
   const coreIds = new Set<string>(OPERATIONAL_OVERVIEW_CORE_ORDER);
-  const nextOrder = [
-    ...OPERATIONAL_OVERVIEW_CORE_ORDER.filter((widgetId) =>
-      availableIds.has(widgetId)
-    ),
-    ...layout.order.filter((widgetId) => !coreIds.has(widgetId))
-  ];
+  const nextOrder = shouldMigrateOrder
+    ? [
+        ...OPERATIONAL_OVERVIEW_CORE_ORDER.filter((widgetId) =>
+          availableIds.has(widgetId)
+        ),
+        ...layout.order.filter((widgetId) => !coreIds.has(widgetId))
+      ]
+    : layout.order;
   let nextWidgets = layout.widgets;
 
-  for (const [widgetId, defaults] of Object.entries(
-    OPERATIONAL_PRESENTATION_DEFAULTS
-  )) {
-    const current = nextWidgets[widgetId];
-    if (!current) {
-      continue;
+  if (shouldMigrateOrder) {
+    for (const [widgetId, defaults] of Object.entries(
+      OPERATIONAL_PRESENTATION_DEFAULTS
+    )) {
+      const current = nextWidgets[widgetId];
+      if (!current) {
+        continue;
+      }
+      const needsUpdate = Object.entries(defaults).some(
+        ([key, value]) =>
+          current[key as "titleVisible" | "descriptionVisible"] !== value
+      );
+      if (!needsUpdate) {
+        continue;
+      }
+      if (nextWidgets === layout.widgets) {
+        nextWidgets = { ...layout.widgets };
+      }
+      nextWidgets[widgetId] = { ...current, ...defaults };
     }
-    const needsUpdate = Object.entries(defaults).some(
-      ([key, value]) =>
-        current[key as "titleVisible" | "descriptionVisible"] !== value
-    );
-    if (!needsUpdate) {
-      continue;
-    }
+  }
+
+  const gamification = nextWidgets.gamification;
+  if (gamification?.hidden) {
     if (nextWidgets === layout.widgets) {
       nextWidgets = { ...layout.widgets };
     }
-    nextWidgets[widgetId] = { ...current, ...defaults };
+    nextWidgets.gamification = { ...gamification, hidden: false };
   }
 
   return ordersEqual(layout.order, nextOrder) && nextWidgets === layout.widgets

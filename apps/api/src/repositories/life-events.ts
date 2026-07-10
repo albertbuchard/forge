@@ -27,9 +27,7 @@ import {
   updateLifeEventSchema,
   type ActivitySource,
   type CalendarEvent,
-  type CreateLifeEventInput,
   type LifeEvent,
-  type LifeEventCalendarProjection,
   type LifeEventSegment,
   type LifeEventSegmentInput,
   type UpdateLifeEventInput

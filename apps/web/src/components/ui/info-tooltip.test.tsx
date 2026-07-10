@@ -13,15 +13,14 @@ describe("InfoTooltip", () => {
     );
 
     const button = screen.getByRole("button", { name: "Explain acute load" });
-    const tooltip = screen.getByRole("tooltip", { hidden: true });
 
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(tooltip).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     fireEvent.click(button);
 
     expect(button).toHaveAttribute("aria-expanded", "true");
-    expect(tooltip).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getByRole("tooltip")).toHaveAttribute("data-state", "open");
     expect(screen.getByText("Acute load")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -32,6 +31,6 @@ describe("InfoTooltip", () => {
     fireEvent.keyDown(button, { key: "Escape" });
 
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(tooltip).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });

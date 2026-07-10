@@ -24,7 +24,14 @@ import {
   Minimize2,
   RotateCcw
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WorkbenchBox } from "@/components/workbench/workbench-box";
@@ -37,6 +44,7 @@ import {
   SURFACE_COLUMNS,
   breakpointFromWidth,
   buildDefaultSurfaceLayoutPayload,
+  buildSurfaceWidgetLayoutDefaults,
   mergeSurfaceLayoutPayload,
   moveItemInOrder,
   readCachedSurfaceLayout,
@@ -253,34 +261,38 @@ export function EditableSurface({
   actions?: ReactNode;
   normalizeLayout?: (layout: SurfaceLayoutPayload) => SurfaceLayoutPayload;
 }) {
-  const widgetLayoutSignature = useMemo(
-    () =>
-      JSON.stringify(
-        widgets.map((widget) => ({
-          id: widget.id,
-          defaultWidth: widget.defaultWidth,
-          defaultHidden: widget.defaultHidden,
-          defaultPlacement: widget.defaultPlacement,
-          defaultFullWidth: widget.defaultFullWidth,
-          defaultTitleVisible: widget.defaultTitleVisible,
-          defaultDescriptionVisible: widget.defaultDescriptionVisible
-        }))
-      ),
-    [widgets]
-  );
+  const nextLayoutDefaultWidgets = buildSurfaceWidgetLayoutDefaults(widgets);
+  const layoutDefaultsSignature = JSON.stringify(nextLayoutDefaultWidgets);
+  const stableLayoutDefaultsRef = useRef({
+    signature: layoutDefaultsSignature,
+    widgets: nextLayoutDefaultWidgets
+  });
+  if (stableLayoutDefaultsRef.current.signature !== layoutDefaultsSignature) {
+    stableLayoutDefaultsRef.current = {
+      signature: layoutDefaultsSignature,
+      widgets: nextLayoutDefaultWidgets
+    };
+  }
+  const layoutDefaultWidgets = stableLayoutDefaultsRef.current.widgets;
   const defaults = useMemo(() => {
-    const payload = buildDefaultSurfaceLayoutPayload(surfaceId, widgets);
+    const payload = buildDefaultSurfaceLayoutPayload(
+      surfaceId,
+      layoutDefaultWidgets
+    );
     return normalizeLayout ? normalizeLayout(payload) : payload;
-  }, [normalizeLayout, surfaceId, widgetLayoutSignature]);
-  const normalizePayload = (payload: SurfaceLayoutPayload) =>
-    normalizeLayout ? normalizeLayout(payload) : payload;
+  }, [layoutDefaultWidgets, normalizeLayout, surfaceId]);
+  const normalizePayload = useCallback(
+    (payload: SurfaceLayoutPayload) =>
+      normalizeLayout ? normalizeLayout(payload) : payload,
+    [normalizeLayout]
+  );
   const [editing, setEditing] = useState(defaultEditing);
   const [containerWidth, setContainerWidth] = useState(1280);
   const [layoutPayload, setLayoutPayload] = useState<SurfaceLayoutPayload>(() =>
     normalizePayload(
       mergeSurfaceLayoutPayload(
         surfaceId,
-        widgets,
+        layoutDefaultWidgets,
         readCachedSurfaceLayout(surfaceId) ?? defaults
       )
     )
@@ -291,7 +303,7 @@ export function EditableSurface({
     normalizePayload(
       mergeSurfaceLayoutPayload(
         surfaceId,
-        widgets,
+        layoutDefaultWidgets,
         readCachedSurfaceLayout(surfaceId) ?? defaults
       )
     )
@@ -327,7 +339,7 @@ export function EditableSurface({
     const merged = normalizePayload(
       mergeSurfaceLayoutPayload(
         surfaceId,
-        widgets,
+        layoutDefaultWidgets,
         remoteSurfaceLayout ??
           readCachedSurfaceLayout(surfaceId) ??
           defaults
@@ -341,11 +353,10 @@ export function EditableSurface({
     hydrationCompleteRef.current = true;
   }, [
     defaults,
+    layoutDefaultWidgets,
     remoteSurfaceLayout,
-    normalizeLayout,
-    surfaceId,
-    widgetLayoutSignature,
-    widgets
+    normalizePayload,
+    surfaceId
   ]);
 
   useEffect(() => {
@@ -447,7 +458,7 @@ export function EditableSurface({
 
   function handleReset() {
     const next = normalizePayload(
-      buildDefaultSurfaceLayoutPayload(surfaceId, widgets)
+      buildDefaultSurfaceLayoutPayload(surfaceId, layoutDefaultWidgets)
     );
     setLayoutPayload(next);
     writeCachedSurfaceLayout(next);

@@ -216,6 +216,7 @@ export function PsycheQuestionnaireBuilderPage() {
       }
     }
   });
+  const prepareDraft = prepareDraftMutation.mutate;
 
   const createMutation = useMutation({
     mutationFn: async () => createQuestionnaire(parseState(state)),
@@ -263,11 +264,16 @@ export function PsycheQuestionnaireBuilderPage() {
       return;
     }
     if (!instrument.draftVersion && !prepareDraftMutation.isPending) {
-      prepareDraftMutation.mutate();
+      prepareDraft();
       return;
     }
     setState(toBuilderState(instrument));
-  }, [instrumentId, prepareDraftMutation.isPending, questionnaireForDraft]);
+  }, [
+    instrumentId,
+    prepareDraft,
+    prepareDraftMutation.isPending,
+    questionnaireForDraft
+  ]);
 
   const pageTitle = instrumentId ? "Edit questionnaire" : "Build questionnaire";
   const detail = detailQuery.data?.instrument ?? null;

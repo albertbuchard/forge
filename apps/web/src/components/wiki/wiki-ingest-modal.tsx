@@ -46,8 +46,6 @@ type IngestMode = "files" | "url" | "text";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "processing"]);
 const STALE_INGEST_RESUME_THRESHOLD_MS = 15_000;
-const INGEST_EYEBROW_CLASS =
-  "text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]";
 const INGEST_PANEL_CLASS =
   "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]";
 const INGEST_MUTED_PANEL_CLASS =
@@ -56,8 +54,6 @@ const INGEST_SELECTED_CLASS =
   "border-[color-mix(in_srgb,var(--primary)_30%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]";
 const INGEST_IDLE_CLASS =
   "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]";
-const INGEST_BADGE_CLASS =
-  "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]";
 const SEARCHABLE_ENTITY_TYPES: CrudEntityType[] = [
   "goal",
   "project",
@@ -76,14 +72,6 @@ type IngestDecisionDraft = {
   mappedEntityLabel?: string;
   targetNoteId?: string;
   targetNoteLabel?: string;
-};
-
-type MappedEntitySearchResult = {
-  entityType: CrudEntityType;
-  entityId: string;
-  label: string;
-  description: string;
-  kind: EntityKind | null;
 };
 
 type MappedPageSearchResult = {

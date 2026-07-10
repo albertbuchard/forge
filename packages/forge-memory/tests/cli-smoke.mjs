@@ -8,6 +8,16 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
+const cliSource = fs.readFileSync(bin, "utf8");
+if (!cliSource.includes('path.join(repoRoot, "apps", "api", "src", "index.ts")')) {
+  throw new Error("Forge Memory dev runtime must prefer the current apps/api entry");
+}
+if (!cliSource.includes("isForgeDevWebServer(config.webPort, config.repo)")) {
+  throw new Error("Forge Memory dev runtime must validate reusable Vite servers");
+}
+if (!cliSource.includes("FORGE_API_ORIGIN: `http://127.0.0.1:${config.port}`")) {
+  throw new Error("Forge Memory dev Vite must proxy to the configured API port");
+}
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
 const dataRoot = path.join(tempHome, "data");
 const fakeBinDir = path.join(tempHome, "bin");

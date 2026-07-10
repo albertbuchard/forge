@@ -9,11 +9,6 @@ export const selectSelectedUserIds = createSelector(
   (shell) => shell.selectedUserIds
 );
 
-export const selectCollapseProgress = createSelector(
-  selectShellState,
-  (shell) => shell.collapseProgress
-);
-
 export const selectRouteHandoffState = createSelector(
   selectShellState,
   (shell) => ({

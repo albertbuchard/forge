@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
 import { AbstractAuditedManager } from "../base.js";
-import type { AuthContext } from "../contracts.js";
 import { getSettings } from "../../repositories/settings.js";
 import type { DatabaseManager } from "./database-manager.js";
 import type { SecretsManager } from "./secrets-manager.js";

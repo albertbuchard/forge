@@ -21,7 +21,6 @@ import {
 } from "@/lib/strategy-contract";
 import { buildStrategyAlignmentBreakdown } from "@/lib/strategy-metrics";
 import type {
-  CrudEntityType,
   DashboardGoal,
   Habit,
   ProjectSummary,

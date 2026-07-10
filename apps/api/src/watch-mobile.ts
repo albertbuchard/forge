@@ -37,15 +37,6 @@ import {
 import { formatLocalDateKey } from "@/lib/date-keys.js";
 import type { CreateNoteInput } from "./types.js";
 
-const watchHistoryStateSchema = z.enum(["aligned", "unaligned", "unknown"]);
-const watchPromptKindSchema = z.enum([
-  "new_place",
-  "trip_label",
-  "workout_annotation",
-  "social_follow_up",
-  "unknown_block",
-  "routine_check"
-]);
 const watchCaptureEventTypeSchema = z.enum([
   "activity_check_in",
   "emotion_check_in",
@@ -141,23 +132,6 @@ type PairingSessionLike = {
   id: string;
   user_id: string;
   capability_flags_json?: string;
-};
-
-type WatchCaptureEventRow = {
-  id: string;
-  pairing_session_id: string | null;
-  user_id: string;
-  dedupe_key: string;
-  source_device: string;
-  event_type: z.infer<typeof watchCaptureEventTypeSchema>;
-  prompt_id: string | null;
-  recorded_at: string;
-  received_at: string;
-  linked_context_json: string;
-  payload_json: string;
-  projection_status: string;
-  projection_details_json: string;
-  created_at: string;
 };
 
 type WorkoutPromptRow = {

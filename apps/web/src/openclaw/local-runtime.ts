@@ -990,7 +990,6 @@ export async function getForgeRuntimeStatus(config: ForgePluginConfig): Promise<
   }
   const pid = state?.pid ?? null;
   const managed = Boolean(state);
-  const running = healthy || (pid !== null && processExists(pid));
 
   if (!isLocalOrigin(config.origin)) {
     return {

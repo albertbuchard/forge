@@ -574,10 +574,7 @@ export function WeightLossPage() {
       String(Math.round(loadedView.energyModel.todayActiveCaloriesKcal ?? 0))
     );
     setActiveCaloriesError(null);
-  }, [
-    loadedView?.generatedAt,
-    loadedView?.energyModel.todayActiveCaloriesKcal
-  ]);
+  }, [loadedView]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey });
 

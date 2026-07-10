@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { Location as RouterLocation } from "react-router-dom";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ContextType,
+  type ReactNode
+} from "react";
+import {
+  UNSAFE_LocationContext,
+  type Location as RouterLocation
+} from "react-router-dom";
 import {
   beginRouteHandoff,
   commitPendingRoute,
@@ -13,6 +22,8 @@ type RouteRenderState = {
   location: RouterLocation;
 };
 
+type RouterLocationContext = ContextType<typeof UNSAFE_LocationContext>;
+
 export function useShellRouteHandoff({
   routePathKey,
   routerLocation,
@@ -25,7 +36,7 @@ export function useShellRouteHandoff({
   routePathKey: string;
   routerLocation: RouterLocation;
   outlet: ReactNode;
-  routerLocationContext: any;
+  routerLocationContext: RouterLocationContext;
   externalFetching: number;
   routeReady: boolean;
   destinationLoadingNode: ReactNode;

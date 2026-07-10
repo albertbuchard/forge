@@ -27,7 +27,6 @@ const userDialogPanelClass =
   "rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
 const userDialogTitleClass = "text-sm font-medium text-[var(--ui-ink-strong)]";
 const userDialogBodyClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
-const userDialogFaintClass = "text-xs leading-5 text-[var(--ui-ink-faint)]";
 
 export type UserDraft = {
   kind: UserKind;

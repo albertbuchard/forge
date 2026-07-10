@@ -96,9 +96,7 @@ export function PageHero({
     <header
       className="relative min-w-0 w-full max-w-full overflow-visible border-b border-[var(--ui-border-subtle)] px-5 py-5 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7 lg:py-6"
       style={{
-        background: "var(--hero-gradient)",
-        paddingTop: "var(--forge-shell-hero-padding-top)",
-        paddingBottom: "var(--forge-shell-hero-padding-bottom)"
+        background: "var(--hero-gradient)"
       }}
     >
       <div
@@ -143,15 +141,7 @@ export function PageHero({
             hasHeaderMeta ? "mt-3" : ""
           )}
         >
-          <div
-            className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]"
-            style={{
-              transform:
-                "translateY(var(--forge-shell-hero-title-translate-y)) scale(var(--forge-shell-hero-title-scale))",
-              transformOrigin: "top left",
-              willChange: "transform"
-            }}
-          >
+          <div className="min-w-0 text-[clamp(1.85rem,3.5vw,4rem)] font-medium leading-[0.92] text-[var(--ui-ink-strong)]">
             {title}
           </div>
           {resolvedHelpContent ? (
@@ -166,15 +156,7 @@ export function PageHero({
             />
           ) : null}
         </div>
-        <div
-          className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-[var(--ui-ink-soft)] sm:text-[15px]"
-          style={{
-            opacity: "var(--forge-shell-hero-description-opacity)",
-            transform:
-              "translateY(var(--forge-shell-hero-description-translate-y))",
-            willChange: "opacity, transform"
-          }}
-        >
+        <div className="mt-2 min-w-0 max-w-3xl text-[14px] leading-6 text-[var(--ui-ink-soft)] sm:text-[15px]">
           {description}
         </div>
       </div>

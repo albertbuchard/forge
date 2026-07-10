@@ -7,7 +7,6 @@ import {
   type AiModelConnection,
   type AgentIdentity,
   type AiModelProvider,
-  type OpenAiCodexOauthSession,
   type UpsertAiModelConnectionInput
 } from "../types.js";
 import {

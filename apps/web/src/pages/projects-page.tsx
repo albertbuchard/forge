@@ -36,6 +36,7 @@ import {
   buildOwnedEntitySearchText,
   formatOwnedEntityDescription
 } from "@/lib/user-ownership";
+import type { Task } from "@/lib/types";
 
 const PROJECT_TYPE_LABELS = {
   execution: "Execution",
@@ -72,7 +73,7 @@ export function ProjectsPage() {
     const usersById = new Map(
       shell.snapshot.users.map((user) => [user.id, user])
     );
-    const tasksByProjectId = new Map<string, typeof shell.snapshot.tasks>();
+    const tasksByProjectId = new Map<string, Task[]>();
 
     for (const task of shell.snapshot.tasks) {
       if (!task.projectId) {

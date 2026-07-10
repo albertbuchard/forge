@@ -13,12 +13,10 @@ import {
   requestMacOSCalendarAccess,
   upsertMacOSLocalEvent,
   listMacOSLocalEvents,
-  type MacOSCalendarAccessStatus,
   type MacOSLocalCalendarRecord,
   type MacOSLocalEventRecord
 } from "./macos-calendar-helper.js";
 import {
-  getGoogleCalendarOauthCallbackPath,
   isGoogleCalendarOriginAllowed,
   isGoogleCalendarLoopbackOrigin,
   resolveGoogleCalendarOauthPrivateConfig
@@ -41,7 +39,6 @@ import {
   getCalendarById,
   getCalendarConnectionById,
   getCalendarEventStorageRecord,
-  getPrimaryCalendarEventSource,
   getCalendarOverview,
   isSupersededCalendarConnection,
   listCalendarConnections,
@@ -54,7 +51,6 @@ import {
   recordCalendarActivity,
   storeEncryptedSecret,
   rehomeCalendarConnectionReferences,
-  updateCalendarEvent,
   updateCalendarConnectionRecord,
   updateTaskTimebox,
   upsertCalendarEventRecord,
@@ -293,7 +289,6 @@ const GOOGLE_CALENDAR_LIST_URL =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 const GOOGLE_CALENDAR_CREATE_URL =
   "https://www.googleapis.com/calendar/v3/calendars";
-const GOOGLE_CALLBACK_PATH = getGoogleCalendarOauthCallbackPath();
 const GOOGLE_OAUTH_SCOPES = [
   "openid",
   "email",

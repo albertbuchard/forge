@@ -189,7 +189,7 @@ export function createSearchInputs(input: {
   ] satisfies WorkbenchInputDefinition[];
 }
 
-export function createSearchParams(input: {
+export function createSearchParams(_input: {
   itemKind: string;
   defaultQuery?: string;
   defaultEntityTypes?: string[];

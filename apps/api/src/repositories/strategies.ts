@@ -24,17 +24,14 @@ import {
   getTaskTimeboxById,
   getWorkBlockTemplateById
 } from "./calendar.js";
-import { getGoalById, listGoals } from "./goals.js";
+import { getGoalById } from "./goals.js";
 import { getHabitById } from "./habits.js";
 import { getInsightById } from "./collaboration.js";
 import { getNoteById } from "./notes.js";
 import { getProjectById } from "./projects.js";
 import { getTagById } from "./tags.js";
 import { getTaskById, listTasks } from "./tasks.js";
-import {
-  getProjectSummary,
-  listProjectSummaries
-} from "../services/projects.js";
+import { getProjectSummary } from "../services/projects.js";
 import {
   createStrategySchema,
   strategySchema,

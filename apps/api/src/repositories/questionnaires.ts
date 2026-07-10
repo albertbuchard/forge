@@ -26,7 +26,6 @@ import {
   type QuestionnaireInstrumentDetail,
   type QuestionnaireInstrumentSummary,
   type QuestionnaireRun,
-  type QuestionnaireRunDetail,
   type QuestionnaireScoreDefinition,
   type QuestionnaireScoreExpression,
   type QuestionnaireScoring,
@@ -1597,7 +1596,7 @@ export function startQuestionnaireRun(
 export function updateQuestionnaireRun(
   runId: string,
   input: unknown,
-  context: QuestionnaireContext
+  _context: QuestionnaireContext
 ) {
   const parsed = updateQuestionnaireRunSchema.parse(input ?? {});
   return runInTransaction(() => {

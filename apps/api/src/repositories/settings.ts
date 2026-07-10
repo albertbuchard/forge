@@ -10,7 +10,6 @@ import { recordEventLog } from "./event-log.js";
 import { resolveGoogleCalendarOauthPublicConfig } from "../services/google-calendar-oauth-config.js";
 import {
   buildConnectionAgentIdentity,
-  defaultBaseUrlForProvider,
   FORGE_DEFAULT_AGENT_ID,
   getAiModelConnectionById,
   listAiModelConnections,

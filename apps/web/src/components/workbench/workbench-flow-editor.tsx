@@ -66,10 +66,11 @@ import { buildWorkbenchToolCatalog } from "@/lib/workbench/tool-catalog";
 import type {
   AiConnector,
   AiConnectorKind,
+  AiConnectorNode,
   AiConnectorPublicInput,
   AiConnectorRun,
-  ForgeBoxCatalogEntry,
-  ForgeBoxPortDefinition
+  AiModelProvider,
+  ForgeBoxCatalogEntry
 } from "@/lib/types";
 import {
   useGetWorkbenchFlowRunNodeQuery,
@@ -80,6 +81,17 @@ import { cn } from "@/lib/utils";
 const NODE_TYPES = {
   workbench: WorkbenchNodeCard
 };
+
+const WORKBENCH_VALUE_TYPES = [
+  "string",
+  "number",
+  "boolean",
+  "null",
+  "array",
+  "object"
+] as const satisfies readonly NonNullable<
+  AiConnectorNode["data"]["valueType"]
+>[];
 
 const workbenchCanvasButtonClassName =
   "inline-flex h-11 items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] px-4 text-sm font-medium text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-surface-hover)]";
@@ -112,7 +124,7 @@ export function WorkbenchFlowEditor({
   modelConnections: Array<{
     id: string;
     label: string;
-    provider: string;
+    provider: AiModelProvider;
     model: string;
     baseUrl: string;
   }>;
@@ -374,7 +386,7 @@ export function WorkbenchFlowEditor({
       return;
     }
     setSaveState((current) => (current === "saving" ? current : "dirty"));
-  }, [draftSnapshot]);
+  }, [draftPatch, draftSnapshot]);
   const aiNodeSteps = useMemo<
     QuestionFlowStep<WorkbenchGraphNodeData>[]
   >(() => {
@@ -484,7 +496,7 @@ export function WorkbenchFlowEditor({
                   setValue({
                     modelConfig: {
                       connectionId: connection?.id ?? null,
-                      provider: (connection?.provider ?? null) as any,
+                      provider: connection?.provider ?? null,
                       baseUrl: connection?.baseUrl ?? null,
                       model: connection?.model ?? "",
                       thinking: value.modelConfig?.thinking ?? null,
@@ -1336,25 +1348,24 @@ export function WorkbenchFlowEditor({
                     <>
                       <select
                         value={selectedNode.data.valueType ?? "string"}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const valueType = WORKBENCH_VALUE_TYPES.find(
+                            (candidate) => candidate === event.target.value
+                          );
+                          if (!valueType) {
+                            return;
+                          }
                           updateSelectedNode((node) => ({
                             ...node,
                             data: {
                               ...node.data,
-                              valueType: event.target.value as any
+                              valueType
                             }
-                          }))
-                        }
+                          }));
+                        }}
                         className={WORKBENCH_FIELD_CLASS}
                       >
-                        {[
-                          "string",
-                          "number",
-                          "boolean",
-                          "null",
-                          "array",
-                          "object"
-                        ].map((kind) => (
+                        {WORKBENCH_VALUE_TYPES.map((kind) => (
                           <option key={kind} value={kind}>
                             {kind}
                           </option>

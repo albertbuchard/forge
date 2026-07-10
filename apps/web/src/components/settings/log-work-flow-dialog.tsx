@@ -65,9 +65,6 @@ export function LogWorkFlowDialog({
     }
   }, [open, defaultOwner]);
 
-  const patch = (update: Partial<LogWorkDraft>) =>
-    setDraft((prev) => ({ ...prev, ...update }));
-
   const steps: Array<QuestionFlowStep<LogWorkDraft>> = [
     {
       id: "source",

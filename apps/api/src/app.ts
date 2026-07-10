@@ -96,7 +96,6 @@ import {
   createHabit,
   createHabitCheckIn,
   deleteHabitCheckIn,
-  deleteHabit,
   getHabitById,
   listHabits,
   updateHabit
@@ -236,7 +235,6 @@ import {
 } from "./repositories/preferences.js";
 import {
   createStrategy,
-  deleteStrategy,
   getStrategyById,
   listStrategies,
   updateStrategy
@@ -338,7 +336,6 @@ import {
   listWorkBlockInstances,
   listWorkBlockTemplates,
   updateCalendarEvent,
-  updateCalendarConnectionRecord,
   updateTaskTimebox,
   updateWorkBlockTemplate
 } from "./repositories/calendar.js";
@@ -13935,11 +13932,15 @@ export async function buildServer(
           targetGoalIds: readStringArrayField(suggestedFields, "targetGoalIds"),
           targetProjectIds,
           linkedEntities: linkedEntities.filter(
-            (entry): entry is { entityType: any; entityId: string } =>
-              entry.entityType !== "goal" &&
-              entry.entityType !== "note" &&
+            (
+              entry
+            ): entry is {
+              entityType: "task" | "project";
+              entityId: string;
+            } =>
+              (entry.entityType === "task" || entry.entityType === "project") &&
               typeof entry.entityId === "string"
-          ) as Array<{ entityType: "task" | "project"; entityId: string }>,
+          ),
           graph: {
             nodes: [
               {
@@ -14215,7 +14216,7 @@ export async function buildServer(
       {
         createNote: (note) => createNote(note, toActivityContext(auth)),
         updateNote: (noteId, patch) =>
-          updateNote(noteId, patch as any, toActivityContext(auth)),
+          updateNote(noteId, patch, toActivityContext(auth)),
         publishEntity: (proposal) =>
           publishIngestProposalEntity(proposal, auth),
         resolveMappedEntity: (entityType, entityId) =>

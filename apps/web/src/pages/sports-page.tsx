@@ -1092,7 +1092,7 @@ export function SportsPage() {
   });
 
   const fitness = fitnessQuery.data;
-  const sessions = fitness?.sessions ?? [];
+  const sessions = useMemo(() => fitness?.sessions ?? [], [fitness?.sessions]);
   const analysisSessions = fitness?.analysisSessions ?? sessions;
   const linkOptions = buildHealthEntityLinkOptions({
     goals: shell.snapshot.dashboard.goals,

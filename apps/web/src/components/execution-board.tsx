@@ -35,6 +35,7 @@ import {
   useSensors,
   type CollisionDetection,
   type DraggableAttributes,
+  type DraggableSyntheticListeners,
   type DragEndEvent,
   type DragStartEvent
 } from "@dnd-kit/core";
@@ -343,7 +344,7 @@ function TaskCardShell({
   style?: React.CSSProperties;
   setNodeRef?: (element: HTMLElement | null) => void;
   dragAttributes?: DraggableAttributes;
-  dragListeners?: any;
+  dragListeners?: DraggableSyntheticListeners;
   isMobile?: boolean;
   onSelect: (taskId: string) => void;
   onStartTask?: (taskId: string) => Promise<void>;
@@ -828,7 +829,7 @@ function ProjectCardShell({
   style?: React.CSSProperties;
   setNodeRef?: (element: HTMLElement | null) => void;
   dragAttributes?: DraggableAttributes;
-  dragListeners?: any;
+  dragListeners?: DraggableSyntheticListeners;
   isMobile?: boolean;
   onStepProject?: (
     projectId: string,
@@ -1377,7 +1378,7 @@ export function ExecutionBoard({
   const activeBoardItem = activeTaskId
     ? (boardItems.find((item) => item.id === activeTaskId) ?? null)
     : null;
-  const activeMenuItems = useMemo<FloatingActionMenuItem[]>(() => {
+  const activeMenuItems: FloatingActionMenuItem[] = (() => {
     if (!menuState) {
       return [];
     }
@@ -1449,25 +1450,7 @@ export function ExecutionBoard({
       deletePendingTaskId,
       onRequestDelete: requestTaskDelete
     });
-  }, [
-    boardProjects,
-    boardTasks,
-    menuState,
-    onCreateIssueForProject,
-    onCreateSubtaskForTask,
-    onCreateTaskForIssue,
-    onEditProject,
-    onEditTask,
-    onLinkProject,
-    onLinkTask,
-    onMove,
-    onMoveProject,
-    onDeleteTask,
-    onOpenProject,
-    onOpenTask,
-    deletePendingTaskId,
-    skipDeleteConfirm
-  ]);
+  })();
 
   function renderLaneItems(laneItems: BoardItem[]) {
     if (laneItems.length === 0) {

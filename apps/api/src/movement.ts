@@ -318,15 +318,14 @@ export const movementTripPatchSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional()
 });
 const movementBoxKindSchema = z.enum(["stay", "trip", "missing"]);
-const movementBoxSourceKindSchema = z.enum(["automatic", "user_defined"]);
-const movementBoxOriginSchema = z.enum([
-  "recorded",
-  "continued_stay",
-  "repaired_gap",
-  "missing",
-  "user_defined",
-  "user_invalidated"
-]);
+type MovementBoxSourceKind = "automatic" | "user_defined";
+type MovementBoxOrigin =
+  | "recorded"
+  | "continued_stay"
+  | "repaired_gap"
+  | "missing"
+  | "user_defined"
+  | "user_invalidated";
 const movementUserBoxSchemaBase = z.object({
   kind: movementBoxKindSchema,
   startedAt: z.string().datetime(),
@@ -591,8 +590,8 @@ type MovementBoxRow = {
   id: string;
   user_id: string;
   kind: z.infer<typeof movementBoxKindSchema>;
-  source_kind: z.infer<typeof movementBoxSourceKindSchema>;
-  origin: z.infer<typeof movementBoxOriginSchema>;
+  source_kind: MovementBoxSourceKind;
+  origin: MovementBoxOrigin;
   started_at: string;
   ended_at: string;
   title: string;
@@ -826,7 +825,7 @@ function listMovementTripOverrides(userId: string) {
 
 function listMovementBoxRows(input: {
   userIds?: string[];
-  sourceKinds?: Array<z.infer<typeof movementBoxSourceKindSchema>>;
+  sourceKinds?: MovementBoxSourceKind[];
   includeDeleted?: boolean;
 }) {
   const clauses: string[] = [];
@@ -994,8 +993,8 @@ function insertMovementBox(input: {
   id?: string;
   userId: string;
   kind: z.infer<typeof movementBoxKindSchema>;
-  sourceKind: z.infer<typeof movementBoxSourceKindSchema>;
-  origin: z.infer<typeof movementBoxOriginSchema>;
+  sourceKind: MovementBoxSourceKind;
+  origin: MovementBoxOrigin;
   startedAt: string;
   endedAt: string;
   title?: string;
@@ -1236,29 +1235,6 @@ function applyTripPointSyncDirectives(input: {
         externalUid: point.externalUid
       });
     });
-}
-
-function mapTripStopRowToInput(stop: MovementTripStopRow) {
-  const place = stop.place_id
-    ? (getDatabase()
-        .prepare(
-          `SELECT external_uid
-           FROM movement_places
-           WHERE id = ?`
-        )
-        .get(stop.place_id) as { external_uid: string } | undefined)
-    : undefined;
-  return {
-    externalUid: stop.external_uid,
-    label: stop.label,
-    startedAt: stop.started_at,
-    endedAt: stop.ended_at,
-    latitude: stop.latitude,
-    longitude: stop.longitude,
-    radiusMeters: stop.radius_meters,
-    placeExternalUid: place?.external_uid ?? "",
-    metadata: safeJsonParse<Record<string, unknown>>(stop.metadata_json, {})
-  };
 }
 
 function replaceTripPoints(
@@ -2603,7 +2579,6 @@ function upsertMovementStay(
   const fresh = getDatabase()
     .prepare(`SELECT * FROM movement_stays WHERE user_id = ? AND external_uid = ?`)
     .get(pairing.user_id, parsed.externalUid) as MovementStayRow;
-  const freshMetadata = safeJsonParse<Record<string, unknown>>(fresh.metadata_json, {});
   return {
     mode: existing ? "updated" as const : "created" as const,
     stayId: fresh.id
@@ -2998,10 +2973,6 @@ export function updateMovementPlace(
   return place;
 }
 
-function buildMovementTimelineTitleForStay(stay: ReturnType<typeof mapMovementStay>) {
-  return stay.place?.label || stay.label || "Stay";
-}
-
 function movementStayTags(stay: ReturnType<typeof mapMovementStay>) {
   const metricTags = Array.isArray((stay.metrics as Record<string, unknown>).tags)
     ? (((stay.metrics as Record<string, unknown>).tags as string[]) ?? [])
@@ -3014,34 +2985,6 @@ function movementStayTags(stay: ReturnType<typeof mapMovementStay>) {
     ...metricTags,
     ...metadataTags
   ]);
-}
-
-function buildMovementTimelineSubtitleForStay(
-  stay: ReturnType<typeof mapMovementStay>
-) {
-  const tags = movementStayTags(stay);
-  if (tags.length > 0) {
-    return tags.join(" · ");
-  }
-  return stay.classification === "stationary" ? "Stay" : stay.classification;
-}
-
-function buildMovementTimelineTitleForTrip(trip: ReturnType<typeof mapMovementTrip>) {
-  return (
-    trip.label ||
-    `${trip.startPlace?.label ?? "Unknown"} → ${trip.endPlace?.label ?? "Unknown"}`
-  );
-}
-
-function buildMovementTimelineSubtitleForTrip(
-  trip: ReturnType<typeof mapMovementTrip>
-) {
-  const parts = [
-    trip.distanceMeters > 0 ? `${round(trip.distanceMeters / 1000, 1)} km` : "",
-    trip.activityType || trip.travelMode,
-    trip.stops.length > 0 ? `${trip.stops.length} stop${trip.stops.length === 1 ? "" : "s"}` : ""
-  ].filter(Boolean);
-  return parts.join(" · ");
 }
 
 function compareMovementTimelineDescending(

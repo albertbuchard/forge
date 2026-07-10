@@ -257,9 +257,6 @@ export function AgentTokenFlowDialog({
     }
   }, [open, initialPreset, defaultAgentLabel, recommendedScopes]);
 
-  const patch = (update: Partial<TokenDraft>) =>
-    setDraft((prev) => ({ ...prev, ...update }));
-
   const steps: Array<QuestionFlowStep<TokenDraft>> = [
     {
       id: "preset",

@@ -200,10 +200,6 @@ function allOf(...requirements: GamificationRequirement[]): GamificationRequirem
   return { allOf: requirements };
 }
 
-function anyOf(...requirements: GamificationRequirement[]): GamificationRequirement {
-  return { anyOf: requirements };
-}
-
 function slugify(value: string) {
   return value
     .toLowerCase()

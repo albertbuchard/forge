@@ -7,7 +7,6 @@ import {
   type KnowledgeGraphDiagnosticsPayload,
   type KnowledgeGraphStartupPhase
 } from "@/lib/knowledge-graph-dev-diagnostics";
-import type { KnowledgeGraphNode } from "@/lib/knowledge-graph-types";
 import {
   projectFallbackNode,
   type FallbackGraphSnapshot,

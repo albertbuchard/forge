@@ -21,8 +21,7 @@ import { getQuestionnaireVisibilityState } from "@/lib/questionnaire-flow";
 import type {
   QuestionnaireAnswerInput,
   QuestionnaireItem,
-  QuestionnaireRunDetail,
-  QuestionnaireSection
+  QuestionnaireRunDetail
 } from "@/lib/questionnaire-types";
 import { cn } from "@/lib/utils";
 
@@ -106,8 +105,14 @@ export function PsycheQuestionnaireRunPage() {
     [runDetail]
   );
 
-  const sections = runDetail?.version.definition.sections ?? [];
-  const items = runDetail?.version.definition.items ?? [];
+  const sections = useMemo(
+    () => runDetail?.version.definition.sections ?? [],
+    [runDetail?.version.definition.sections]
+  );
+  const items = useMemo(
+    () => runDetail?.version.definition.items ?? [],
+    [runDetail?.version.definition.items]
+  );
   const visibility = useMemo(
     () =>
       runDetail

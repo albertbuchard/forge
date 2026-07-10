@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Clock3,
   Route,
-  Save,
   PencilLine,
-  Trash2
 } from "lucide-react";
 import {
   Area,
@@ -146,18 +143,6 @@ function toLocalDateTimeInput(value: string) {
   }
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
-}
-
-function fromLocalDateTimeInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date.toISOString();
 }
 
 function buildPointDraft(point: MovementTripPointRecord): MovementPointDraft {

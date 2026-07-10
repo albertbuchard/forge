@@ -1424,6 +1424,7 @@ export function LifeForceTodayCard({
 }) {
   const resolvedUserIds = Array.isArray(selectedUserIds) ? selectedUserIds : [];
   const queryClient = useQueryClient();
+  const [feedback, setFeedback] = useState<string | null>(null);
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...resolvedUserIds],
     queryFn: () => getLifeForce(resolvedUserIds),
@@ -1435,24 +1436,6 @@ export function LifeForceTodayCard({
             templates: []
           }
   });
-  const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
-  if (!payload) {
-    return (
-      <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-          Life Force
-        </div>
-        <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-          Not calibrated yet
-        </div>
-        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-          Today can still load without a Life Force snapshot, but the AP and
-          instant headroom model is not available for this state yet.
-        </div>
-      </Card>
-    );
-  }
-  const [feedback, setFeedback] = useState<string | null>(null);
   const tiredMutation = useMutation({
     mutationFn: () =>
       createFatigueSignal({ signalType: "tired" }, resolvedUserIds),
@@ -1479,6 +1462,23 @@ export function LifeForceTodayCard({
       setFeedback("Recovery signal applied. Today’s headroom has been eased.");
     }
   });
+  const payload = lifeForceQuery.data?.lifeForce ?? fallbackLifeForce;
+  if (!payload) {
+    return (
+      <Card className="p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          Life Force
+        </div>
+        <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
+          Not calibrated yet
+        </div>
+        <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+          Today can still load without a Life Force snapshot, but the AP and
+          instant headroom model is not available for this state yet.
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <LifeForceCompact

@@ -657,7 +657,6 @@ export function PsycheGraphCanvas({
             })}
 
             {nodes.map((node) => {
-              const isSelected = selectedNodeId === node.id;
               const isHovered = hoveredNodeId === node.id;
               const isActive = activeNodeId === node.id;
               const tone = getToneForNode(node);

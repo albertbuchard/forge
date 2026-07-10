@@ -16830,7 +16830,7 @@ test("wiki ingest recovery does not reuse one OpenAI response across duplicate f
             articleCandidates: []
           };
         }
-      } as any
+      }
     });
 
     assert.deepEqual(resumeResponseIds, ["resp_first_duplicate_file", null]);
@@ -21728,11 +21728,11 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.match(
       onboardingBody.onboarding.mutationGuidance.createExample,
-      /\"operations\":\[/
+      /"operations":\[/
     );
     assert.match(
       onboardingBody.onboarding.mutationGuidance.updateExample,
-      /\"paused\"/
+      /"paused"/
     );
 
     const rotated = await app.inject({

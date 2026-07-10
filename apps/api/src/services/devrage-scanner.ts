@@ -7,6 +7,14 @@ import { createInterface } from "node:readline/promises";
 
 const require = createRequire(import.meta.url);
 
+type BetterSqliteConstructor = new (
+  filename: string,
+  options: { readonly: true }
+) => {
+  prepare(sql: string): { all(): unknown[] };
+  close(): void;
+};
+
 export type MessageRole = "assistant" | "user" | "developer" | "system" | "unknown";
 
 export type DevrageSource =
@@ -1343,9 +1351,12 @@ function statIsFile(value: string): boolean {
   }
 }
 
-function loadBetterSqlite(): any {
+function loadBetterSqlite(): BetterSqliteConstructor | null {
   try {
-    return require("better-sqlite3");
+    const candidate: unknown = require("better-sqlite3");
+    return typeof candidate === "function"
+      ? (candidate as BetterSqliteConstructor)
+      : null;
   } catch {
     return null;
   }

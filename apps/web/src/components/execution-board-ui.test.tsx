@@ -1,5 +1,5 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/lib/i18n";
 import type { Goal, NotesSummaryByEntity, Tag, Task, TaskRun } from "@/lib/types";
@@ -362,21 +362,6 @@ describe("ExecutionBoard card surface", () => {
       actionPointSummary: undefined,
       splitSuggestion: undefined
     };
-    const goal = {
-      id: "goal_1",
-      title: "Ship Forge",
-      description: "",
-      status: "active",
-      horizon: "lifetime",
-      targetPoints: 120,
-      themeColor: "#c0c1ff",
-      createdAt: "2026-04-11T08:00:00.000Z",
-      updatedAt: "2026-04-11T08:00:00.000Z",
-      tagIds: [],
-      owner: "Albert",
-      userId: "user_operator",
-      user: task.user
-    } as unknown as Goal;
     const onRequestDelete = vi.fn();
     const items = buildExecutionBoardTaskMenuItems({
       task,
