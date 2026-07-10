@@ -398,3 +398,19 @@ Progression requirements:
 - celebration animations should be polished, queued, and respectful of reduced-motion preferences
 
 The Forge Smith mascot is a dramatic blacksmith mentor with hard-pressure streak energy. It can look powerful, stern, wise, or abandoned depending on streak health, but the design must stay motivating and avoid unsafe or cruel imagery.
+
+### 16. Web Runtime Performance And Visual Stability
+
+Forge must mount the active route exactly once. Desktop and mobile shells may have different navigation and controls, but a CSS-hidden breakpoint branch must not keep a second copy of the route tree, queries, images, effects, or form state mounted.
+
+Scrolling and route transitions must preserve complete painted content. The persistent shell and primary page content must not use scroll-linked size, opacity, or transform changes that make labels, cards, images, or descriptions disappear. Backdrop filters are reserved for short-lived overlays; static cards, sidebars, and sticky headers use stable opaque or near-opaque surfaces. Closed help tooltips must not leave fixed blurred portal nodes in the document.
+
+Images must declare stable dimensions. Below-fold catalog images use lazy loading and asynchronous decoding, while first-viewport identity images such as the Forge Smith remain immediately available. Large catalogs use bounded responsive previews, pagination, or virtualization. Search and explicit filters still return the complete matching set, and users can expand a bounded group without losing access to any record.
+
+The current 144-item gamification catalog has these regression budgets in the source-backed local runtime:
+
+- Overview renders one `main`, no closed tooltip panels, no horizontal overflow, and no more than 900 DOM elements at 1280 x 720 with the current operator data.
+- Trophy Hall defaults to no more than 1,200 DOM elements and 40 image nodes at 1280 x 720.
+- Trophy Hall defaults to no more than 500 DOM elements and 15 image nodes at 390 x 844.
+- Alternating Overview and Trophy Hall at least eight times, and jumping through at least twenty scroll positions, produces no blank, black, or background-flash frame after route readiness.
+- Desktop and mobile screenshots confirm that the Forge Smith and trophy art are visible, correctly framed, and do not create horizontal overflow.
