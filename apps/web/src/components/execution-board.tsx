@@ -9,6 +9,7 @@ import {
 import {
   Bot,
   ArrowUpRight,
+  CircleAlert,
   ChevronDown,
   ChevronUp,
   Files,
@@ -22,7 +23,8 @@ import {
   PlusCircle,
   Scissors,
   Square,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import {
   DndContext,
@@ -1305,6 +1307,7 @@ export function ExecutionBoard({
   const [optimisticProjectStatuses, setOptimisticProjectStatuses] = useState<
     Record<string, TaskStatus>
   >({});
+  const [moveError, setMoveError] = useState<string | null>(null);
   const laneLabels: Record<TaskStatus, { title: string; detail: string }> = {
     backlog: {
       title: t("common.executionBoard.laneBacklogTitle"),
@@ -1433,7 +1436,7 @@ export function ExecutionBoard({
             label: `Move to ${status.replaceAll("_", " ")}`,
             description:
               "Update the project workflow lane without leaving the board.",
-            onSelect: () => void onMoveProject?.(project.id, status)
+            onSelect: () => void moveProjectToStatus(project.id, status)
           })
         )
       ];
@@ -1451,7 +1454,7 @@ export function ExecutionBoard({
       onLinkTask,
       onCreateTaskForIssue,
       onCreateSubtaskForTask,
-      onMove,
+      onMove: moveTaskToStatus,
       onDeleteTask,
       deletePendingTaskId,
       onRequestDelete: requestTaskDelete
@@ -1761,6 +1764,61 @@ export function ExecutionBoard({
     setConfirmingDeleteTask(task);
   }
 
+  async function moveTaskToStatus(taskId: string, nextStatus: TaskStatus) {
+    const task = boardTasks.find((entry) => entry.id === taskId);
+    if (!task || task.status === nextStatus) {
+      return;
+    }
+
+    setMoveError(null);
+    setOptimisticStatuses((current) => ({
+      ...current,
+      [task.id]: nextStatus
+    }));
+    try {
+      await onMove(task.id, nextStatus);
+    } catch (error) {
+      setOptimisticStatuses((current) => {
+        const next = { ...current };
+        delete next[task.id];
+        return next;
+      });
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setMoveError(
+        `Could not move ${task.title} to ${laneLabels[nextStatus].title}. The board restored its previous lane.${detail}`
+      );
+    }
+  }
+
+  async function moveProjectToStatus(
+    projectId: string,
+    nextStatus: TaskStatus
+  ) {
+    const project = boardProjects.find((entry) => entry.id === projectId);
+    if (!project || !onMoveProject || project.workflowStatus === nextStatus) {
+      return;
+    }
+
+    setMoveError(null);
+    setOptimisticProjectStatuses((current) => ({
+      ...current,
+      [project.id]: nextStatus
+    }));
+    try {
+      await onMoveProject(project.id, nextStatus);
+    } catch (error) {
+      setOptimisticProjectStatuses((current) => {
+        const next = { ...current };
+        delete next[project.id];
+        return next;
+      });
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setMoveError(
+        `Could not move ${project.title} to ${laneLabels[nextStatus].title}. The board restored its previous lane.${detail}`
+      );
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveTaskId(null);
@@ -1828,20 +1886,7 @@ export function ExecutionBoard({
     }
 
     if (boardItem.kind === "task") {
-      setOptimisticStatuses((current) => ({
-        ...current,
-        [boardItem.task.id]: laneId
-      }));
-      try {
-        await onMove(boardItem.task.id, laneId);
-      } catch (error) {
-        setOptimisticStatuses((current) => {
-          const next = { ...current };
-          delete next[boardItem.task.id];
-          return next;
-        });
-        throw error;
-      }
+      await moveTaskToStatus(boardItem.task.id, laneId);
       return;
     }
 
@@ -1849,20 +1894,7 @@ export function ExecutionBoard({
       return;
     }
 
-    setOptimisticProjectStatuses((current) => ({
-      ...current,
-      [boardItem.project.id]: laneId
-    }));
-    try {
-      await onMoveProject(boardItem.project.id, laneId);
-    } catch (error) {
-      setOptimisticProjectStatuses((current) => {
-        const next = { ...current };
-        delete next[boardItem.project.id];
-        return next;
-      });
-      throw error;
-    }
+    await moveProjectToStatus(boardItem.project.id, laneId);
   }
 
   async function handleStepTask(
@@ -1882,21 +1914,7 @@ export function ExecutionBoard({
       return;
     }
 
-    setOptimisticStatuses((current) => ({
-      ...current,
-      [task.id]: nextStatus
-    }));
-
-    try {
-      await onMove(task.id, nextStatus);
-    } catch (error) {
-      setOptimisticStatuses((current) => {
-        const next = { ...current };
-        delete next[task.id];
-        return next;
-      });
-      throw error;
-    }
+    await moveTaskToStatus(task.id, nextStatus);
   }
 
   async function handleStepProject(
@@ -1916,21 +1934,7 @@ export function ExecutionBoard({
       return;
     }
 
-    setOptimisticProjectStatuses((current) => ({
-      ...current,
-      [project.id]: nextStatus
-    }));
-
-    try {
-      await onMoveProject(project.id, nextStatus);
-    } catch (error) {
-      setOptimisticProjectStatuses((current) => {
-        const next = { ...current };
-        delete next[project.id];
-        return next;
-      });
-      throw error;
-    }
+    await moveProjectToStatus(project.id, nextStatus);
   }
 
   function openTaskMenu(event: ReactMouseEvent<HTMLButtonElement>, task: Task) {
@@ -1974,6 +1978,23 @@ export function ExecutionBoard({
           title={t("common.executionBoard.deleteDropTitle")}
           detail={t("common.executionBoard.deleteDropDetail")}
         />
+      ) : null}
+      {moveError ? (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--danger)]"
+        >
+          <CircleAlert className="mt-1 size-4 shrink-0" />
+          <span className="min-w-0 flex-1">{moveError}</span>
+          <button
+            type="button"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full transition hover:bg-[var(--ui-surface-hover)]"
+            aria-label="Dismiss board move error"
+            onClick={() => setMoveError(null)}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       ) : null}
       <div className="w-full max-w-full min-w-0 pb-2">
         {isMobileBoard ? (

@@ -5,6 +5,7 @@ enum ForgeWatchStorage {
     nonisolated static let bootstrapKey = "forge_watch_bootstrap"
     nonisolated static let outgoingQueueKey = "forge_watch_outgoing_queue"
     nonisolated static let incomingQueueKey = "forge_watch_incoming_queue"
+    nonisolated static let receiptHistoryKey = "forge_watch_receipt_history"
     nonisolated static let pendingLaunchDestinationKey = "forge_watch_pending_launch_destination"
     nonisolated static let actionMessageKey = "forge_watch_action_message"
     nonisolated static let ackMessageKey = "forge_watch_ack_message"
@@ -16,6 +17,81 @@ enum ForgeWatchStorage {
             return .standard
         }
         return UserDefaults(suiteName: appGroupId) ?? .standard
+    }
+}
+
+enum ForgeWatchSnapshotSource: String, Codable, Hashable {
+    case unavailable
+    case cache
+    case direct
+    case phone
+    case preview
+
+    var label: String {
+        switch self {
+        case .unavailable:
+            return "No snapshot"
+        case .cache:
+            return "On-device cache"
+        case .direct:
+            return "Direct Forge"
+        case .phone:
+            return "Paired iPhone"
+        case .preview:
+            return "Preview"
+        }
+    }
+}
+
+struct ForgeWatchSnapshotFreshness: Hashable {
+    enum State: Hashable {
+        case fresh
+        case stale
+        case clockSkew
+        case unavailable
+    }
+
+    nonisolated static let freshInterval: TimeInterval = 15 * 60
+    nonisolated static let futureClockSkewTolerance: TimeInterval = 5 * 60
+
+    let state: State
+    let ageSeconds: TimeInterval?
+
+    var shortLabel: String {
+        switch state {
+        case .fresh:
+            guard let ageSeconds else { return "Fresh" }
+            return ageSeconds < 60 ? "Fresh now" : "Fresh \(Int(ageSeconds / 60))m"
+        case .stale:
+            guard let ageSeconds else { return "Stale" }
+            if ageSeconds < 60 * 60 {
+                return "Stale \(Int(ageSeconds / 60))m"
+            }
+            return "Stale \(Int(ageSeconds / 3_600))h"
+        case .clockSkew:
+            return "Clock mismatch"
+        case .unavailable:
+            return "Waiting for snapshot"
+        }
+    }
+
+    nonisolated static func evaluate(
+        generatedAt: String,
+        hasSnapshot: Bool,
+        now: Date
+    ) -> ForgeWatchSnapshotFreshness {
+        guard hasSnapshot, let generatedDate = ISO8601DateFormatter().date(from: generatedAt) else {
+            return ForgeWatchSnapshotFreshness(state: .unavailable, ageSeconds: nil)
+        }
+        let age = now.timeIntervalSince(generatedDate)
+        if age < -futureClockSkewTolerance {
+            return ForgeWatchSnapshotFreshness(state: .clockSkew, ageSeconds: age)
+        }
+        let normalizedAge = max(0, age)
+        return ForgeWatchSnapshotFreshness(
+            state: normalizedAge <= freshInterval ? .fresh : .stale,
+            ageSeconds: normalizedAge
+        )
     }
 }
 
@@ -465,6 +541,15 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         pendingPrompts: []
     )
 
+    var hasSnapshotContent: Bool {
+        connection != nil
+            || now != nil
+            || work != nil
+            || sync != nil
+            || habits.isEmpty == false
+            || pendingPrompts.isEmpty == false
+    }
+
     func withConnection(_ connection: ForgeWatchConnection?) -> ForgeWatchBootstrap {
         ForgeWatchBootstrap(
             schemaVersion: schemaVersion,
@@ -541,10 +626,27 @@ struct ForgeWatchOutboundBatchEnvelope: Codable, Hashable {
 
 struct ForgeWatchAckEnvelope: Codable, Hashable {
     let actionId: String
+    let kind: String?
     let processedAt: String
     let status: String?
     let error: [String: String]?
     let bootstrap: ForgeWatchBootstrap?
+
+    init(
+        actionId: String,
+        kind: String? = nil,
+        processedAt: String,
+        status: String?,
+        error: [String: String]?,
+        bootstrap: ForgeWatchBootstrap?
+    ) {
+        self.actionId = actionId
+        self.kind = kind
+        self.processedAt = processedAt
+        self.status = status
+        self.error = error
+        self.bootstrap = bootstrap
+    }
 }
 
 struct ForgeWatchAckBatchEnvelope: Codable, Hashable {
@@ -560,6 +662,95 @@ enum ForgeWatchActionQueueReconciliation {
     }
 }
 
+enum ForgeWatchDurableQueueBackpressure: Hashable {
+    case actionCount(maximum: Int)
+    case encodedBytes(maximum: Int)
+    case encodingFailed
+
+    nonisolated func message(storageName: String) -> String {
+        switch self {
+        case .actionCount(let maximum):
+            return "\(storageName) action storage is full at \(maximum) pending actions. Sync pending actions before trying again."
+        case .encodedBytes(let maximum):
+            let kibibytes = max(1, maximum / 1_024)
+            return "\(storageName) action storage is full at \(kibibytes) KB. Sync pending actions before trying again."
+        case .encodingFailed:
+            return "\(storageName) could not save this action. The existing pending actions were preserved."
+        }
+    }
+}
+
+struct ForgeWatchDurableQueueAdmission {
+    let queue: [ForgeWatchOutboundEnvelope]
+    let encodedData: Data?
+    let backpressure: ForgeWatchDurableQueueBackpressure?
+    let inserted: Bool
+}
+
+enum ForgeWatchDurableQueuePolicy {
+    nonisolated static let maximumActionCount = 250
+    nonisolated static let maximumEncodedBytes = 512 * 1_024
+
+    nonisolated static func appending(
+        _ envelope: ForgeWatchOutboundEnvelope,
+        to queue: [ForgeWatchOutboundEnvelope],
+        maximumActionCount: Int = maximumActionCount,
+        maximumEncodedBytes: Int = maximumEncodedBytes
+    ) -> ForgeWatchDurableQueueAdmission {
+        if queue.contains(where: { $0.id == envelope.id }) {
+            return ForgeWatchDurableQueueAdmission(
+                queue: queue,
+                encodedData: nil,
+                backpressure: nil,
+                inserted: false
+            )
+        }
+
+        guard queue.count < maximumActionCount else {
+            return ForgeWatchDurableQueueAdmission(
+                queue: queue,
+                encodedData: nil,
+                backpressure: .actionCount(maximum: maximumActionCount),
+                inserted: false
+            )
+        }
+
+        let candidate = queue + [envelope]
+        guard let encodedData = try? JSONEncoder().encode(candidate) else {
+            return ForgeWatchDurableQueueAdmission(
+                queue: queue,
+                encodedData: nil,
+                backpressure: .encodingFailed,
+                inserted: false
+            )
+        }
+        guard encodedData.count <= maximumEncodedBytes else {
+            return ForgeWatchDurableQueueAdmission(
+                queue: queue,
+                encodedData: nil,
+                backpressure: .encodedBytes(maximum: maximumEncodedBytes),
+                inserted: false
+            )
+        }
+        return ForgeWatchDurableQueueAdmission(
+            queue: candidate,
+            encodedData: encodedData,
+            backpressure: nil,
+            inserted: true
+        )
+    }
+}
+
+enum ForgeWatchActionBatchPolicy {
+    nonisolated static let maximumActionCount = 20
+
+    nonisolated static func nextBatch(
+        from envelopes: [ForgeWatchOutboundEnvelope]
+    ) -> [ForgeWatchOutboundEnvelope] {
+        Array(envelopes.prefix(maximumActionCount))
+    }
+}
+
 enum ForgeWatchPhoneFallbackBatchPolicy {
     nonisolated static func reachablePhoneExchangeCount(forActionCount actionCount: Int) -> Int {
         actionCount > 0 ? 1 : 0
@@ -571,6 +762,81 @@ struct ForgeWatchCommandReceipt: Codable, Hashable {
     let kind: String
     let status: String
     let processedAt: String
+}
+
+struct ForgeWatchStoredReceipt: Codable, Identifiable, Hashable {
+    var id: String { actionId }
+
+    let actionId: String
+    let kind: String
+    let status: String
+    let processedAt: String
+    let errorMessage: String?
+}
+
+enum ForgeWatchReceiptHistoryPolicy {
+    nonisolated static let maximumReceiptCount = 25
+
+    nonisolated static func merging(
+        _ incoming: [ForgeWatchStoredReceipt],
+        into existing: [ForgeWatchStoredReceipt]
+    ) -> [ForgeWatchStoredReceipt] {
+        var merged = existing
+        for receipt in incoming {
+            merged.removeAll { $0.actionId == receipt.actionId }
+            merged.insert(receipt, at: 0)
+        }
+        return Array(merged.prefix(maximumReceiptCount))
+    }
+}
+
+struct ForgeWatchReceiptLifecycleUpdate: Hashable {
+    let remainingQueue: [ForgeWatchOutboundEnvelope]
+    let receiptHistory: [ForgeWatchStoredReceipt]
+    let completedReceipt: ForgeWatchStoredReceipt?
+    let shouldContinueFlushing: Bool
+}
+
+enum ForgeWatchReceiptLifecycle {
+    nonisolated static func applying(
+        _ ack: ForgeWatchAckEnvelope,
+        to queue: [ForgeWatchOutboundEnvelope],
+        receiptHistory: [ForgeWatchStoredReceipt]
+    ) -> ForgeWatchReceiptLifecycleUpdate {
+        guard ack.status != "deferred" else {
+            return ForgeWatchReceiptLifecycleUpdate(
+                remainingQueue: queue,
+                receiptHistory: receiptHistory,
+                completedReceipt: nil,
+                shouldContinueFlushing: false
+            )
+        }
+
+        let queuedEnvelope = queue.first { $0.id == ack.actionId }
+        let receipt = (ack.kind ?? queuedEnvelope?.kind.rawValue).map {
+            ForgeWatchStoredReceipt(
+                actionId: ack.actionId,
+                kind: $0,
+                status: ack.status ?? "processed",
+                processedAt: ack.processedAt,
+                errorMessage: ack.error?["message"]
+                    ?? (ack.status == "failed" ? "Forge rejected this action" : nil)
+            )
+        }
+        let remainingQueue = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
+            afterAcknowledging: [ack.actionId],
+            in: queue
+        )
+        let updatedReceiptHistory = receipt.map {
+            ForgeWatchReceiptHistoryPolicy.merging([$0], into: receiptHistory)
+        } ?? receiptHistory
+        return ForgeWatchReceiptLifecycleUpdate(
+            remainingQueue: remainingQueue,
+            receiptHistory: updatedReceiptHistory,
+            completedReceipt: receipt,
+            shouldContinueFlushing: remainingQueue.isEmpty == false
+        )
+    }
 }
 
 struct ForgeWatchCommandBatchReceipt: Codable, Hashable {

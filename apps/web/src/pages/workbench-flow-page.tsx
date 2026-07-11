@@ -1,9 +1,14 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { PageHero } from "@/components/shell/page-hero";
+import { Button } from "@/components/ui/button";
 import { useWorkbenchNodeCatalog } from "@/components/workbench/workbench-provider";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import {
   useChatWorkbenchFlowMutation,
   useDeleteWorkbenchFlowMutation,
@@ -28,7 +33,7 @@ export function WorkbenchFlowPage() {
   const [runFlow] = useRunWorkbenchFlowMutation();
   const [chatFlow] = useChatWorkbenchFlowMutation();
 
-  if (flowQuery.isLoading || settingsQuery.isLoading) {
+  if (flowQuery.isLoading) {
     return (
       <LoadingState
         eyebrow="Workbench Flow"
@@ -38,10 +43,8 @@ export function WorkbenchFlowPage() {
     );
   }
 
-  if (
-    flowQuery.isError || settingsQuery.isError || !flowQuery.data
-  ) {
-    if (!flowQuery.data && !flowQuery.isError && !settingsQuery.isError) {
+  if (flowQuery.isError || !flowQuery.data) {
+    if (!flowQuery.data && !flowQuery.isError) {
       return (
         <EmptyState
           eyebrow="Workbench Flow"
@@ -51,10 +54,7 @@ export function WorkbenchFlowPage() {
       );
     }
     return (
-      <ErrorState
-        eyebrow="Workbench Flow"
-        error={flowQuery.error ?? settingsQuery.error ?? null}
-      />
+      <ErrorState eyebrow="Workbench Flow" error={flowQuery.error ?? null} />
     );
   }
 
@@ -65,7 +65,8 @@ export function WorkbenchFlowPage() {
         title={flowQuery.data.flow.title}
         titleText={flowQuery.data.flow.title}
         description={
-          flowQuery.data.flow.description || "Inspect, run, and publish this Workbench flow."
+          flowQuery.data.flow.description ||
+          "Inspect, run, and publish this Workbench flow."
         }
         badge={flowQuery.data.flow.kind}
         actions={
@@ -75,18 +76,37 @@ export function WorkbenchFlowPage() {
           />
         }
       />
+      {settingsQuery.isError ? (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm text-[var(--warning)] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>
+            Model settings are unavailable. The graph remains editable, but AI
+            nodes cannot run until Forge reconnects.
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void settingsQuery.refetch()}
+          >
+            Retry settings
+          </Button>
+        </div>
+      ) : null}
       <WorkbenchFlowEditor
         flow={flowQuery.data.flow}
         boxes={boxes}
-        modelConnections={(settingsQuery.data!.settings.modelSettings.connections ?? []).map(
-          (connection) => ({
-            id: connection.id,
-            label: connection.label,
-            provider: connection.provider,
-            model: connection.model,
-            baseUrl: connection.baseUrl
-          })
-        )}
+        modelConnections={(
+          settingsQuery.data?.settings.modelSettings.connections ?? []
+        ).map((connection) => ({
+          id: connection.id,
+          label: connection.label,
+          provider: connection.provider,
+          model: connection.model,
+          baseUrl: connection.baseUrl
+        }))}
         runs={flowQuery.data.runs}
         onSave={async (patch) => {
           await updateFlow({ flowId, patch }).unwrap();

@@ -12,12 +12,10 @@ import { I18nProvider } from "@/lib/i18n";
 import { KanbanPage } from "./kanban-page";
 import type { ForgeSnapshot, Task, UserSummary } from "@/lib/types";
 
-const { splitTaskMock, useForgeShellMock } = vi.hoisted(
-  () => ({
-    splitTaskMock: vi.fn(),
-    useForgeShellMock: vi.fn()
-  })
-);
+const { splitTaskMock, useForgeShellMock } = vi.hoisted(() => ({
+  splitTaskMock: vi.fn(),
+  useForgeShellMock: vi.fn()
+}));
 
 vi.mock("@/lib/api", () => ({
   createWorkAdjustment: vi.fn(),
@@ -175,7 +173,8 @@ function createTask({
     },
     splitSuggestion: {
       shouldSplit: true,
-      reason: "This task has already absorbed more than two expected days of work.",
+      reason:
+        "This task has already absorbed more than two expected days of work.",
       thresholdSeconds: 172_800
     }
   };
@@ -240,8 +239,7 @@ function createSnapshot(tasks: Task[], users: UserSummary[]): ForgeSnapshot {
           createdAt: "2026-04-11T08:00:00.000Z",
           updatedAt: "2026-04-11T08:00:00.000Z",
           userId: "user_operator",
-          user:
-            users.find((user) => user.id === "user_operator") ?? users[0]!,
+          user: users.find((user) => user.id === "user_operator") ?? users[0]!,
           owner: "Albert",
           assigneeUserIds: [],
           assignees: [],
@@ -510,7 +508,9 @@ describe("KanbanPage split flow", () => {
     fireEvent.change(screen.getByRole("slider"), {
       target: { value: "65" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /create split tasks/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /create split tasks/i })
+    );
 
     await waitFor(() => {
       expect(splitTaskMock).toHaveBeenCalledWith("task_1", {
@@ -580,6 +580,39 @@ describe("KanbanPage split flow", () => {
     });
   });
 
+  it("finds work by reusable tag name in board search", async () => {
+    renderKanban([
+      createTask({
+        id: "task_1",
+        title: "Ship board polish",
+        goalId: "goal_1",
+        projectId: "project_1",
+        tagIds: ["tag_focus"],
+        user: humanUser
+      }),
+      createTask({
+        id: "task_2",
+        title: "Run concierge sync",
+        goalId: "goal_2",
+        projectId: "project_2",
+        tagIds: ["tag_ops"],
+        user: botUser
+      })
+    ]);
+
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Search projects, issues, tasks, subtasks, PRDs, owners, and assignees"
+      ),
+      { target: { value: "Ops" } }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Execution board 1")).toBeInTheDocument();
+      expect(screen.getByText("Run concierge sync")).toBeInTheDocument();
+    });
+  });
+
   it("filters owners by kind chips and specific users from the same compact multiselect", async () => {
     renderKanban([
       createTask({
@@ -635,7 +668,9 @@ describe("KanbanPage split flow", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Execution board 2")).toBeInTheDocument();
-      expect(screen.getByText("Human planning pass | Bot queue flush")).toBeInTheDocument();
+      expect(
+        screen.getByText("Human planning pass | Bot queue flush")
+      ).toBeInTheDocument();
     });
   });
 });

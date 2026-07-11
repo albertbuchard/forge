@@ -8,7 +8,11 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GamificationOverviewWidget } from "@/components/gamification/gamification-widgets";
+import {
+  GamificationCelebrationLayer,
+  GamificationOverviewWidget,
+  getGamificationNoticeMotion
+} from "@/components/gamification/gamification-widgets";
 import { GamificationThemeProvider } from "@/components/gamification/use-gamification-theme";
 import type { XpMetricsPayload } from "@/lib/types";
 
@@ -181,5 +185,57 @@ describe("GamificationOverviewWidget", () => {
       )
     );
     expect(image).not.toHaveAttribute("hidden");
+  });
+
+  it("removes decorative notice transitions when reduced motion is requested", () => {
+    expect(getGamificationNoticeMotion(true, "celebration")).toEqual({
+      initial: false,
+      animate: { opacity: 1 },
+      exit: { opacity: 1 },
+      transition: { duration: 0 }
+    });
+    expect(getGamificationNoticeMotion(true, "xp").transition.duration).toBe(0);
+    expect(
+      getGamificationNoticeMotion(false, "celebration").transition.duration
+    ).toBeGreaterThan(0);
+  });
+
+  it("announces celebrations and allows immediate dismissal", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    });
+    const onSeen = vi.fn();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <GamificationThemeProvider initialTheme="dark-fantasy">
+          <GamificationCelebrationLayer
+            xpNotice={null}
+            celebrations={[
+              {
+                id: "celebration_1",
+                userId: "user_1",
+                kind: "trophy",
+                itemId: "trophy_1",
+                title: "The First Heat",
+                summary: "A truthful milestone from completed Forge work.",
+                assetKey: "item-trophy-xp-levels-the-first-heat",
+                metadata: {},
+                createdAt: "2026-07-11T10:00:00.000Z",
+                seenAt: null
+              }
+            ]}
+            onSeen={onSeen}
+          />
+        </GamificationThemeProvider>
+      </QueryClientProvider>
+    );
+
+    expect(view.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(view.getByRole("status")).toHaveTextContent("The First Heat");
+
+    fireEvent.click(
+      view.getByRole("button", { name: "Dismiss trophy celebration" })
+    );
+    expect(onSeen).toHaveBeenCalledWith("celebration_1");
   });
 });

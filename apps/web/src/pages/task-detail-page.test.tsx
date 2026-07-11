@@ -58,10 +58,9 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/shell/app-shell", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/components/shell/app-shell")>(
-      "@/components/shell/app-shell"
-    );
+  const actual = await vi.importActual<
+    typeof import("@/components/shell/app-shell")
+  >("@/components/shell/app-shell");
   return {
     ...actual,
     useForgeShell: useForgeShellMock
@@ -77,7 +76,9 @@ vi.mock("@/components/calendar/task-scheduling-dialog", () => ({
 }));
 
 vi.mock("@/components/experience/sheet-scaffold", () => ({
-  SheetScaffold: ({ children }: { children: ReactNode }) => <div>{children}</div>
+  SheetScaffold: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  )
 }));
 
 vi.mock("@/components/knowledge-graph/open-in-graph-button", () => ({
@@ -281,9 +282,12 @@ describe("TaskDetailPage", () => {
             sortOrder: 1,
             resolutionKind: null,
             splitParentTaskId: null,
-            aiInstructions: "Use the kanban patterns and finish in one focused AI pass.",
+            aiInstructions:
+              "Use the kanban patterns and finish in one focused AI pass.",
             executionMode: "afk",
-            acceptanceCriteria: ["Given the task page, when it loads, then the new fields are visible."],
+            acceptanceCriteria: [
+              "Given the task page, when it loads, then the new fields are visible."
+            ],
             blockerLinks: [
               {
                 entityType: "task",
@@ -292,7 +296,8 @@ describe("TaskDetailPage", () => {
               }
             ],
             completionReport: {
-              workSummary: "Added the task dossier and mobile-safe action rail.",
+              workSummary:
+                "Added the task dossier and mobile-safe action rail.",
               modifiedFiles: [
                 "apps/web/src/pages/task-detail-page.tsx",
                 "apps/web/src/pages/task-detail-page.test.tsx"
@@ -536,7 +541,8 @@ describe("TaskDetailPage", () => {
         sortOrder: 1,
         resolutionKind: null,
         splitParentTaskId: null,
-        aiInstructions: "Use the kanban patterns and finish in one focused AI pass.",
+        aiInstructions:
+          "Use the kanban patterns and finish in one focused AI pass.",
         executionMode: "afk",
         acceptanceCriteria: [
           "Given the task page, when it loads, then the new fields are visible."
@@ -653,8 +659,12 @@ describe("TaskDetailPage", () => {
     expect(screen.getByText("Bot collaboration live")).toBeInTheDocument();
     expect(screen.getByText("feature")).toBeInTheDocument();
     expect(screen.getByText("Waiting on timer polish")).toBeInTheDocument();
-    expect(screen.getByText("Added the task dossier and mobile-safe action rail.")).toBeInTheDocument();
-    expect(screen.getByText("apps/web/src/pages/task-detail-page.tsx")).toBeInTheDocument();
+    expect(
+      screen.getByText("Added the task dossier and mobile-safe action rail.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("apps/web/src/pages/task-detail-page.tsx")
+    ).toBeInTheDocument();
     expect(screen.getByText("abc1234")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open ref/i })).toHaveAttribute(
       "href",
@@ -671,15 +681,19 @@ describe("TaskDetailPage", () => {
     expect(screen.getByText("Scheduled blocks")).toBeInTheDocument();
     expect(screen.getByText("Deep work tomorrow morning")).toBeInTheDocument();
     expect(screen.getByText(/Timeboxed ·/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Timeboxed ·/i })
-    ).toHaveAttribute("href", "/calendar?timeboxId=timebox_1");
+    expect(screen.getByText("Start live work")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Timeboxed ·/i })).toHaveAttribute(
+      "href",
+      "/calendar?timeboxId=timebox_1"
+    );
     expect(
       screen.getByRole("link", { name: "Open in calendar" })
     ).toHaveAttribute("href", "/calendar?timeboxId=timebox_1");
     expect(screen.getByText("Edit task scheduling")).toBeInTheDocument();
     expect(
-      screen.getByText(/This task only debits the Action Points you actually worked today/i)
+      screen.getByText(
+        /This task only debits the Action Points you actually worked today/i
+      )
     ).toBeInTheDocument();
   });
 

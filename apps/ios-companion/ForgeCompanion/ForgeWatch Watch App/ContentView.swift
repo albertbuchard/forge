@@ -22,6 +22,7 @@ struct ContentView: View {
                     bootstrap: appModel.bootstrap,
                     directMetric: appModel.lastDirectSyncMetric,
                     pendingActionCount: appModel.pendingActionCount,
+                    latestReceipt: appModel.latestReceipt,
                     onHabitTap: { selectedHabit = $0 },
                     onCommandTap: { selectedCommand = $0 },
                     onCommand: appModel.queueCommand,
@@ -81,8 +82,16 @@ struct ContentView: View {
                     .foregroundStyle(WatchTheme.textPrimary)
                     .lineLimit(1)
 
+                TimelineView(.periodic(from: Date(), by: 60)) { context in
+                    Text(snapshotSummary(now: context.date))
+                        .foregroundStyle(snapshotStatusTint(now: context.date))
+                        .accessibilityLabel(snapshotAccessibilityLabel(now: context.date))
+                }
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .lineLimit(1)
+
                 Text(appModel.lastStatusMessage)
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .font(.system(size: 8, weight: .medium, design: .rounded))
                     .foregroundStyle(WatchTheme.textMuted)
                     .lineLimit(1)
             }
@@ -99,6 +108,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(WatchTheme.textMuted)
+            .accessibilityLabel("Previous surface")
 
             Text("\(surfaceIndex(navigation.selectedSurface) + 1)/\(surfaces.count)")
                 .font(.system(size: 10, weight: .bold, design: .rounded))
@@ -106,6 +116,7 @@ struct ContentView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(Color.white.opacity(0.1)))
+                .accessibilityLabel("Surface \(surfaceIndex(navigation.selectedSurface) + 1) of \(surfaces.count)")
 
             Button {
                 withAnimation(.snappy(duration: 0.18)) {
@@ -117,6 +128,26 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(WatchTheme.textMuted)
+            .accessibilityLabel("Next surface")
+        }
+    }
+
+    private func snapshotSummary(now: Date) -> String {
+        "\(appModel.snapshotFreshness(now: now).shortLabel) · \(appModel.snapshotSource.label)"
+    }
+
+    private func snapshotAccessibilityLabel(now: Date) -> String {
+        "Forge snapshot \(appModel.snapshotFreshness(now: now).shortLabel), source \(appModel.snapshotSource.label)"
+    }
+
+    private func snapshotStatusTint(now: Date) -> Color {
+        switch appModel.snapshotFreshness(now: now).state {
+        case .fresh:
+            return WatchTheme.success
+        case .stale, .clockSkew:
+            return WatchTheme.accent
+        case .unavailable:
+            return WatchTheme.textMuted
         }
     }
 
@@ -137,6 +168,7 @@ private struct WatchSurfacePager: View {
     let bootstrap: ForgeWatchBootstrap
     let directMetric: ForgeWatchDirectSyncMetric?
     let pendingActionCount: Int
+    let latestReceipt: ForgeWatchStoredReceipt?
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
@@ -218,6 +250,7 @@ private struct WatchSurfacePager: View {
                     connection: bootstrap.connection,
                     directMetric: directMetric,
                     pendingActionCount: pendingActionCount,
+                    latestReceipt: latestReceipt,
                     onRefresh: onRefresh,
                     onRetry: onRetry
                 )
@@ -1289,6 +1322,7 @@ private struct SyncSurface: View {
     let connection: ForgeWatchConnection?
     let directMetric: ForgeWatchDirectSyncMetric?
     let pendingActionCount: Int
+    let latestReceipt: ForgeWatchStoredReceipt?
     let onRefresh: () -> Void
     let onRetry: () -> Void
 
@@ -1325,6 +1359,23 @@ private struct SyncSurface: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.78)
                     }
+                }
+                if let latestReceipt {
+                    Divider().background(WatchTheme.border)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: receiptSystemImage(latestReceipt.status))
+                            .foregroundStyle(receiptTint(latestReceipt.status))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Last receipt · \(receiptKindLabel(latestReceipt.kind))")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(WatchTheme.textPrimary)
+                                .lineLimit(1)
+                            Text(latestReceipt.status.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.system(size: 9, weight: .medium, design: .rounded))
+                                .foregroundStyle(receiptTint(latestReceipt.status))
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
                 }
                 HStack(spacing: 6) {
                     Button {
@@ -1386,6 +1437,18 @@ private struct SyncSurface: View {
             return "Clear"
         }
         return connection?.directNetworkingEnabled == true ? "Sending" : "Backup"
+    }
+
+    private func receiptKindLabel(_ kind: String) -> String {
+        kind.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private func receiptSystemImage(_ status: String) -> String {
+        status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill"
+    }
+
+    private func receiptTint(_ status: String) -> Color {
+        status == "failed" ? WatchTheme.danger : WatchTheme.success
     }
 }
 

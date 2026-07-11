@@ -285,11 +285,11 @@ Concrete route-key examples for internal use:
 - Workbench latest node output:
   `{"routeKey":"latestNodeOutput","pathParams":{"id":"flow_research_digest","nodeId":"node_summary"}}`
 - Workbench run execution:
-  `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"input":{"topic":"question flow quality"}}}`
+  `{"routeKey":"runFlow","pathParams":{"id":"flow_research_digest"},"body":{"inputs":{"topic":"question flow quality"}}}`
 - Workbench one-off input execution:
-  `{"routeKey":"runByPayload","body":{"flow":{"title":"One-off digest","nodes":[]},"input":{"topic":"question flow quality"}}}`
+  `{"routeKey":"runByPayload","body":{"flowId":"flow_research_digest","inputs":{"topic":"question flow quality"}}}`
 - Workbench flow chat follow-up:
-  `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"message":"Refine the summary around API route risks and keep the published output stable."}}`
+  `{"routeKey":"chatFlow","pathParams":{"id":"flow_research_digest"},"body":{"userInput":"Refine the summary around API route risks and keep the published output stable."}}`
 - Artifact metadata list:
   `{"routeKey":"list","query":{"query":"thesis budget","formatFamily":"spreadsheet","limit":20}}`
 - Artifact trusted upload:
@@ -585,6 +585,11 @@ For wiki-specific recall:
 - For Workbench flow chat follow-ups, use `POST /api/v1/workbench/flows/:id/chat`
   only when the user wants flow-specific conversation. Do not turn that follow-up
   into a new run, note, or generic entity update unless the user asks for that.
+- Hermes Workbench mutations include a `verification` object. Report `verified` or
+  `verified_absent` only when read-back confirms the affected flow or run. Treat
+  `failed` and any reported field `mismatches` as a partial success that must be
+  stated plainly, and `unavailable` as a request to retrieve the returned ids through
+  the matching detail route before claiming the mutation is complete.
 - Keep dedicated Preferences tools only for real preference actions and read models: workspace reads, game starts, context merges, entity seeding, judgments, direct signals, and score overrides.
 - For `work_adjustment`, ask what existing task or project the correction belongs to, whether time should be added or removed, and what truthful reason should stay with it before calling `forge_adjust_work_minutes`.
 - For `preference_judgment` and `preference_signal`, ask what comparison or direct mark the user is actually trying to make, what context it belongs to, and only then call the dedicated judgment or signal route.

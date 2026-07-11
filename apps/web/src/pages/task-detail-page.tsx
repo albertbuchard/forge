@@ -23,6 +23,7 @@ import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { TaskDialog } from "@/components/task-dialog";
+import { TaskRunControls } from "@/components/task-run-controls";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
 import { PageHero } from "@/components/shell/page-hero";
@@ -35,13 +36,16 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
 import {
   completeTaskRun,
+  claimTaskRun,
   createTaskTimebox,
   createWorkAdjustment,
   deleteTask,
   deleteTaskTimebox,
+  focusTaskRun,
   getCalendarOverview,
   getLifeForce,
   getTaskContext,
+  heartbeatTaskRun,
   patchTaskTimebox,
   patchTask,
   releaseTaskRun,
@@ -250,6 +254,31 @@ export function TaskDetailPage() {
     }) => completeTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: invalidateAll
   });
+  const claimRunMutation = useMutation({
+    mutationFn: (input: Parameters<typeof claimTaskRun>[1]) =>
+      claimTaskRun(params.taskId!, input),
+    onSuccess: invalidateAll
+  });
+  const heartbeatRunMutation = useMutation({
+    mutationFn: ({
+      runId,
+      input
+    }: {
+      runId: string;
+      input: Parameters<typeof heartbeatTaskRun>[1];
+    }) => heartbeatTaskRun(runId, input),
+    onSuccess: invalidateAll
+  });
+  const focusRunMutation = useMutation({
+    mutationFn: ({
+      runId,
+      input
+    }: {
+      runId: string;
+      input: Parameters<typeof focusTaskRun>[1];
+    }) => focusTaskRun(runId, input),
+    onSuccess: invalidateAll
+  });
   const workAdjustmentMutation = useMutation({
     mutationFn: createWorkAdjustment,
     onSuccess: invalidateAll
@@ -304,6 +333,19 @@ export function TaskDetailPage() {
   }
 
   const currentRun = payload.activeTaskRun ?? null;
+  const taskRunMutations = [
+    claimRunMutation,
+    heartbeatRunMutation,
+    focusRunMutation,
+    releaseRunMutation,
+    completeRunMutation
+  ];
+  const taskRunError = taskRunMutations
+    .map((mutation) => mutation.error)
+    .find((error): error is Error => error instanceof Error);
+  const taskRunPending = taskRunMutations.some(
+    (mutation) => mutation.isPending
+  );
   const actionPointSummary = payload.task.actionPointSummary ?? null;
   const currentStatus =
     TASK_STATUS_META.find((entry) => entry.status === payload.task.status) ??
@@ -1358,6 +1400,30 @@ export function TaskDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="mt-5">
+          <TaskRunControls
+            task={payload.task}
+            activeTaskRun={currentRun}
+            pending={taskRunPending}
+            errorMessage={taskRunError?.message ?? null}
+            onClaim={async (input) => {
+              await claimRunMutation.mutateAsync(input);
+            }}
+            onHeartbeat={async (runId, input) => {
+              await heartbeatRunMutation.mutateAsync({ runId, input });
+            }}
+            onFocus={async (runId, input) => {
+              await focusRunMutation.mutateAsync({ runId, input });
+            }}
+            onComplete={async (runId, input) => {
+              await completeRunMutation.mutateAsync({ runId, ...input });
+            }}
+            onRelease={async (runId, input) => {
+              await releaseRunMutation.mutateAsync({ runId, ...input });
+            }}
+          />
         </div>
 
         <div className="mt-5">

@@ -13,6 +13,54 @@ private let companionDebugLogExportFormatter: ISO8601DateFormatter = {
     return formatter
 }()
 
+private struct CompanionDiagnosticRedactionRule {
+    let expression: NSRegularExpression
+    let replacement: String
+}
+
+private let companionDiagnosticRedactionRules: [CompanionDiagnosticRedactionRule] = [
+    (
+        #"(?i)(\b(?:authorization)\s*[:=]\s*(?:bearer|basic)\s+)[^\s,;]+"#,
+        "$1<redacted>"
+    ),
+    (
+        #"(?i)(\b(?:cookie|set-cookie)\s*[:=]\s*)[^\r\n]+"#,
+        "$1<redacted>"
+    ),
+    (
+        #"(?i)(\b(?:pairing[_-]?token|access[_-]?token|refresh[_-]?token|api[_-]?key|password|secret|session(?:[_-]?id)?)\b\s*[\"']?\s*[:=]\s*[\"']?)[^\"'\s,;&]+"#,
+        "$1<redacted>"
+    ),
+    (
+        #"(?i)(https?://[^:/\s]+:)[^@\s/]+@"#,
+        "$1<redacted>@"
+    ),
+    (
+        #"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,})?\b"#,
+        "<redacted-token>"
+    )
+].compactMap { pattern, replacement in
+    guard let expression = try? NSRegularExpression(pattern: pattern) else {
+        return nil
+    }
+    return CompanionDiagnosticRedactionRule(
+        expression: expression,
+        replacement: replacement
+    )
+}
+
+nonisolated
+func companionRedactDiagnosticMessage(_ message: String) -> String {
+    companionDiagnosticRedactionRules.reduce(message) { result, rule in
+        let range = NSRange(result.startIndex..<result.endIndex, in: result)
+        return rule.expression.stringByReplacingMatches(
+            in: result,
+            range: range,
+            withTemplate: rule.replacement
+        )
+    }
+}
+
 private func inferCompanionDebugLogLevel(for message: String) -> CompanionDebugLogLevel {
     let normalized = message.lowercased()
     let hasActualErrorValue = normalized.contains("error=")
@@ -88,7 +136,7 @@ struct CompanionDebugLogEntry: Codable, Identifiable, Hashable {
         self.id = id
         self.timestamp = timestamp
         self.scope = scope
-        self.message = message
+        self.message = companionRedactDiagnosticMessage(message)
         self.level = level
     }
 
@@ -97,7 +145,9 @@ struct CompanionDebugLogEntry: Codable, Identifiable, Hashable {
         id = try container.decode(String.self, forKey: .id)
         timestamp = try container.decode(Date.self, forKey: .timestamp)
         scope = try container.decode(String.self, forKey: .scope)
-        message = try container.decode(String.self, forKey: .message)
+        message = companionRedactDiagnosticMessage(
+            try container.decode(String.self, forKey: .message)
+        )
         level = try container.decodeIfPresent(CompanionDebugLogLevel.self, forKey: .level) ?? .info
     }
 
@@ -166,7 +216,7 @@ final class CompanionDebugLogStore: ObservableObject {
             id: UUID().uuidString.lowercased(),
             timestamp: timestamp,
             scope: scope,
-            message: message,
+            message: companionRedactDiagnosticMessage(message),
             level: level
         )
         entries.insert(entry, at: 0)
@@ -254,7 +304,7 @@ func companionDebugLog(
     level: CompanionDebugLogLevel,
     _ message: @autoclosure () -> String
 ) {
-    let renderedMessage = message()
+    let renderedMessage = companionRedactDiagnosticMessage(message())
     let timestamp = Date()
     let renderedTimestamp = companionDebugLogExportFormatter.string(from: timestamp)
     print("[ForgeCompanion][\(renderedTimestamp)][\(level.label)][\(scope)] \(renderedMessage)")

@@ -16,6 +16,7 @@ import {
   downloadArtifactWithPassword,
   getArtifact,
   listArtifacts,
+  replaceArtifactEntityLinks,
   uploadArtifact
 } from "@/lib/api";
 import type { Artifact } from "@/lib/types";
@@ -170,12 +171,14 @@ vi.mock("@/lib/api", () => ({
   downloadArtifact: vi.fn(async () => ({
     blob: new Blob(["plain"]),
     fileName: "budget.xlsx",
-    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   })),
   downloadArtifactWithPassword: vi.fn(async () => ({
     blob: new Blob(["plain"]),
     fileName: "budget.xlsx",
-    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   })),
   encryptArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   enrichArtifact: vi.fn(),
@@ -233,6 +236,14 @@ describe("ArtifactsPage", () => {
     expect(screen.getByText("Project")).toBeInTheDocument();
     expect(screen.getByText("project_thesis")).toBeInTheDocument();
     expect(screen.getByText("Evidence")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open record" })).toHaveAttribute(
+      "href",
+      "/projects/project_thesis"
+    );
+    expect(screen.getByRole("link", { name: "Open in graph" })).toHaveAttribute(
+      "href",
+      "/knowledge-graph?focus=project%3Aproject_thesis"
+    );
 
     await waitFor(() => {
       expect(screen.getByText("artifact.created")).toBeInTheDocument();
@@ -303,6 +314,16 @@ describe("ArtifactsPage", () => {
     fireEvent.change(screen.getByLabelText("Source label or provenance note"), {
       target: { value: "Meeting folder" }
     });
+    fireEvent.click(screen.getByRole("button", { name: "Add relationship" }));
+    fireEvent.change(screen.getByLabelText("Entity type for relationship 1"), {
+      target: { value: "goal" }
+    });
+    fireEvent.change(screen.getByLabelText("Entity ID for relationship 1"), {
+      target: { value: "goal_upload" }
+    });
+    fireEvent.change(screen.getByLabelText("Relationship for relationship 1"), {
+      target: { value: "evidence" }
+    });
     fireEvent.click(
       screen.getByRole("button", { name: /back to file queue/i })
     );
@@ -324,11 +345,125 @@ describe("ArtifactsPage", () => {
     expect(vi.mocked(uploadArtifact).mock.calls[1]?.[0]).toMatchObject({
       originalFileName: "protocol.docx",
       title: "Protocol notes",
-      sourceLabel: "Meeting folder"
+      sourceLabel: "Meeting folder",
+      links: [
+        {
+          entityType: "goal",
+          entityId: "goal_upload",
+          relationship: "evidence",
+          anchorKey: ""
+        }
+      ]
     });
     expect(
       await screen.findByText("2 uploaded · 0 failed")
     ).toBeInTheDocument();
+  });
+
+  it("keeps the guided upload queue bounded and reports files it cannot add", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    const files = Array.from(
+      { length: 26 },
+      (_, index) =>
+        new File([String(index)], `evidence-${index}.txt`, {
+          type: "text/plain"
+        })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: { files }
+    });
+
+    expect(
+      await screen.findByText("The upload queue accepts at most 25 files.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("25 of 25 files")).toBeInTheDocument();
+    expect(screen.getByLabelText("Artifact files")).toBeDisabled();
+    expect(screen.queryByText("evidence-25.txt")).not.toBeInTheDocument();
+  });
+
+  it("uses a guided relationship flow and saves normalized general entity links", async () => {
+    vi.mocked(replaceArtifactEntityLinks).mockResolvedValue({
+      artifact: mockArtifact
+    });
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Manage links" })
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Manage entity relationships"
+      })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add relationship" }));
+    fireEvent.change(screen.getByLabelText("Entity type for relationship 2"), {
+      target: { value: "note" }
+    });
+    fireEvent.change(screen.getByLabelText("Entity ID for relationship 2"), {
+      target: { value: "note:with:colons" }
+    });
+    fireEvent.change(screen.getByLabelText("Relationship for relationship 2"), {
+      target: { value: "source" }
+    });
+    fireEvent.change(screen.getByLabelText("Anchor key for relationship 2"), {
+      target: { value: "methods" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Save artifact relationships"
+      })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save relationships" }));
+
+    await waitFor(() => {
+      expect(replaceArtifactEntityLinks).toHaveBeenCalledWith("artifact_123", [
+        {
+          entityType: "project",
+          entityId: "project_thesis",
+          relationship: "evidence",
+          anchorKey: ""
+        },
+        {
+          entityType: "note",
+          entityId: "note:with:colons",
+          relationship: "source",
+          anchorKey: "methods"
+        }
+      ]);
+    });
+  });
+
+  it("filters the bounded artifact list by one exact linked record", async () => {
+    renderArtifactsPage();
+
+    fireEvent.change(
+      await screen.findByLabelText("Filter by linked entity type"),
+      { target: { value: "project" } }
+    );
+    expect(
+      await screen.findByText("Enter both fields to filter by a linked record.")
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Filter by linked entity ID"), {
+      target: { value: "project_thesis" }
+    });
+
+    await waitFor(() => {
+      expect(listArtifacts).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          linkedEntityType: "project",
+          linkedEntityId: "project_thesis",
+          limit: 50,
+          offset: 0
+        })
+      );
+    });
   });
 
   it("validates guided upload encryption fields and applies one password to selected files", async () => {
@@ -390,7 +525,9 @@ describe("ArtifactsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
 
     expect(
-      await screen.findByText("Password is required when encryption is enabled.")
+      await screen.findByText(
+        "Password is required when encryption is enabled."
+      )
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
@@ -401,7 +538,9 @@ describe("ArtifactsPage", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
     expect(
-      await screen.findByRole("heading", { name: "Choose the files to preserve" })
+      await screen.findByRole("heading", {
+        name: "Choose the files to preserve"
+      })
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "sample passphrase" }
@@ -425,7 +564,9 @@ describe("ArtifactsPage", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
     expect(
-      await screen.findByRole("heading", { name: "Choose the files to preserve" })
+      await screen.findByRole("heading", {
+        name: "Choose the files to preserve"
+      })
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Confirm password"), {
       target: { value: "sample passphrase" }
@@ -474,7 +615,9 @@ describe("ArtifactsPage", () => {
     });
     vi.mocked(getArtifact).mockResolvedValue({ artifact: encryptedArtifact });
     vi.mocked(downloadArtifactWithPassword)
-      .mockRejectedValueOnce(new Error("The password did not decrypt this artifact."))
+      .mockRejectedValueOnce(
+        new Error("The password did not decrypt this artifact.")
+      )
       .mockResolvedValueOnce({
         blob: new Blob(["plain"]),
         fileName: "budget.xlsx",
@@ -491,13 +634,19 @@ describe("ArtifactsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Enter artifact password" })
     ).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
-    expect(await screen.findByText("Password is required.")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^download$/i }).at(-1)!
+    );
+    expect(
+      await screen.findByText("Password is required.")
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "wrong" }
     });
-    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^download$/i }).at(-1)!
+    );
     expect(
       await screen.findByText("The password did not decrypt this artifact.")
     ).toBeInTheDocument();
@@ -505,7 +654,9 @@ describe("ArtifactsPage", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "correct" }
     });
-    fireEvent.click(screen.getAllByRole("button", { name: /^download$/i }).at(-1)!);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^download$/i }).at(-1)!
+    );
 
     await waitFor(() => {
       expect(downloadArtifactWithPassword).toHaveBeenLastCalledWith(
@@ -579,5 +730,33 @@ describe("ArtifactsPage", () => {
         ]
       });
     });
+  });
+
+  it("keeps blocked artifact bytes unavailable and explains the disabled action", async () => {
+    const blockedArtifact: Artifact = {
+      ...mockArtifact,
+      artifactState: "blocked",
+      dangerLevel: "blocked",
+      dangerScore: 100
+    };
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [blockedArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({ artifact: blockedArtifact });
+
+    renderArtifactsPage();
+
+    expect(
+      await screen.findByText(
+        "Download is blocked by the artifact safety state."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^download$/i })).toBeDisabled();
+    expect(downloadArtifact).not.toHaveBeenCalled();
+    expect(downloadArtifactWithPassword).not.toHaveBeenCalled();
   });
 });

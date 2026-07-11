@@ -153,6 +153,28 @@ WORKBENCH_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "latestNodeOutput": {"method": "GET", "path": "/api/v1/workbench/flows/:id/nodes/:nodeId/output"},
 }
 
+WORKBENCH_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
+    {
+        "routeKey": "runFlow",
+        "pathParams": {"id": "flow_research_digest"},
+        "body": {"inputs": {"topic": "question flow quality"}},
+    },
+    {
+        "routeKey": "runByPayload",
+        "body": {
+            "flowId": "flow_research_digest",
+            "inputs": {"topic": "question flow quality"},
+        },
+    },
+    {
+        "routeKey": "chatFlow",
+        "pathParams": {"id": "flow_research_digest"},
+        "body": {
+            "userInput": "Refine the summary around API route risks and keep the published output stable."
+        },
+    },
+]
+
 ARTIFACT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "list": {"method": "GET", "path": "/api/v1/artifacts"},
     "createWithBytes": {"method": "POST", "path": "/api/v1/artifacts", "write": True},
@@ -188,8 +210,11 @@ ENTITY_NAVIGATION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> JsonSchema:
-    return object_schema(
+def specialized_route_parameters(
+    route_specs: Dict[str, Dict[str, Any]],
+    examples: Optional[List[Dict[str, Any]]] = None,
+) -> JsonSchema:
+    schema = object_schema(
         {
             "routeKey": {
                 "enum": sorted(route_specs.keys()),
@@ -212,6 +237,9 @@ def specialized_route_parameters(route_specs: Dict[str, Dict[str, Any]]) -> Json
         },
         required=["routeKey"],
     )
+    if examples:
+        schema["examples"] = examples
+    return schema
 
 
 def _specialized_route_spec(route_specs: Dict[str, Dict[str, Any]], args: Dict[str, Any]) -> Dict[str, Any]:
@@ -731,8 +759,10 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_call_workbench_route",
-        "description": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
-        "parameters": specialized_route_parameters(WORKBENCH_ROUTE_SPECS),
+        "description": "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench. Mutations return explicit read-back verification status when Forge returns enough ids to verify the affected flow or run.",
+        "parameters": specialized_route_parameters(
+            WORKBENCH_ROUTE_SPECS, WORKBENCH_ROUTE_EXAMPLES
+        ),
         "method_builder": lambda args: specialized_route_method(WORKBENCH_ROUTE_SPECS, args),
         "path_builder": lambda args: specialized_route_path(WORKBENCH_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,

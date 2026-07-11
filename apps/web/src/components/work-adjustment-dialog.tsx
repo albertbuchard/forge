@@ -169,6 +169,7 @@ export function WorkAdjustmentDialog({
           >
             <div className="flex flex-wrap items-center gap-3">
               <Input
+                aria-label="Minutes"
                 type="number"
                 min={1}
                 className="w-36"
@@ -227,8 +228,9 @@ export function WorkAdjustmentDialog({
               </div>
             </div>
             <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              Reward cadence: {cadence.fixedXp} XP every{" "}
-              {cadence.intervalMinutes} credited minutes.{" "}
+              {xpMetricsQuery.isError
+                ? `Live reward cadence is unavailable. Previewing the default ${cadence.fixedXp} XP every ${cadence.intervalMinutes} credited minutes. `
+                : `Reward cadence: ${cadence.fixedXp} XP every ${cadence.intervalMinutes} credited minutes. `}
               {preview.bucketDelta === 0
                 ? "This change does not cross a reward bucket."
                 : `This change crosses ${Math.abs(preview.bucketDelta)} reward bucket${Math.abs(preview.bucketDelta) === 1 ? "" : "s"}.`}
@@ -270,12 +272,10 @@ export function WorkAdjustmentDialog({
       error={submitError}
       onSubmit={async () => {
         setSubmitError(null);
-        const safeMinutes = Math.max(0, Math.trunc(draft.minutes || 0));
-        const deltaMinutes = draft.mode === "add" ? safeMinutes : -safeMinutes;
         const parsed = workAdjustmentMutationSchema.safeParse({
           entityType,
           entityId,
-          deltaMinutes,
+          deltaMinutes: preview.appliedDeltaMinutes,
           note: draft.note
         });
 

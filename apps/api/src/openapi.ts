@@ -6439,11 +6439,16 @@ export function buildOpenApiDocument() {
     type: "object",
     required: ["entityType", "entityId"],
     properties: {
-      entityType: { type: "string" },
-      entityId: { type: "string" },
-      anchorKey: { type: "string" },
-      relationship: { type: "string", default: "related" }
+      entityType: { type: "string", minLength: 1, maxLength: 64 },
+      entityId: { type: "string", minLength: 1, maxLength: 512 },
+      anchorKey: { type: "string", maxLength: 256 },
+      relationship: { type: "string", maxLength: 64, default: "related" }
     }
+  };
+
+  const artifactEntityLinkInputs = {
+    ...arrayOf(entityLinkInput),
+    maxItems: 100
   };
 
   const crudEntityType = {
@@ -7003,7 +7008,7 @@ export function buildOpenApiDocument() {
       uploadedByAgentId: nullable({ type: "string" }),
       actingForUserId: nullable({ type: "string" }),
       downloadPolicy: { type: "string", enum: ["human_only", "disabled"] },
-      links: arrayOf(entityLinkInput),
+      links: artifactEntityLinkInputs,
       metadata: { type: "object", additionalProperties: true },
       contentProtection: {
         oneOf: [
@@ -7076,12 +7081,7 @@ export function buildOpenApiDocument() {
       shortDescription: { type: "string" },
       description: { type: "string" },
       sourceLabel: { type: "string" },
-      artifactState: {
-        type: "string",
-        enum: ["active", "quarantined", "blocked", "archived", "metadata_only"]
-      },
-      downloadPolicy: { type: "string", enum: ["human_only", "disabled"] },
-      links: arrayOf(entityLinkInput),
+      links: artifactEntityLinkInputs,
       metadata: { type: "object", additionalProperties: true }
     }
   };
@@ -7167,6 +7167,75 @@ export function buildOpenApiDocument() {
       source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
       metadata: { type: "object", additionalProperties: true },
       createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const artifactVersionPage = {
+    type: "object",
+    required: ["versions", "total", "limit", "offset", "hasMore"],
+    properties: {
+      versions: arrayOf({ $ref: "#/components/schemas/ArtifactVersion" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" }
+    }
+  };
+
+  const artifactAuditEventPage = {
+    type: "object",
+    required: ["events", "total", "limit", "offset", "hasMore"],
+    properties: {
+      events: arrayOf({ $ref: "#/components/schemas/ArtifactAuditEvent" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" }
+    }
+  };
+
+  const workbenchRun = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "connectorId",
+      "mode",
+      "status",
+      "userInput",
+      "inputs",
+      "context",
+      "conversationId",
+      "result",
+      "error",
+      "createdAt",
+      "completedAt"
+    ],
+    properties: {
+      id: { type: "string", minLength: 1 },
+      connectorId: { type: "string", minLength: 1 },
+      mode: { type: "string", enum: ["run", "chat"] },
+      status: { type: "string", enum: ["running", "completed", "failed"] },
+      userInput: { type: "string" },
+      inputs: { type: "object", additionalProperties: true },
+      context: { type: "object", additionalProperties: true },
+      conversationId: nullable({ type: "string" }),
+      result: nullable({ type: "object", additionalProperties: true }),
+      error: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      completedAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
+  const workbenchRunPage = {
+    type: "object",
+    required: ["runs", "total", "limit", "offset", "hasMore"],
+    properties: {
+      runs: arrayOf({ $ref: "#/components/schemas/WorkbenchRun" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" }
     }
   };
 
@@ -7323,6 +7392,10 @@ export function buildOpenApiDocument() {
         ArtifactEnrichmentInput: artifactEnrichmentInput,
         ArtifactVersion: artifactVersion,
         ArtifactAuditEvent: artifactAuditEvent,
+        ArtifactVersionPage: artifactVersionPage,
+        ArtifactAuditEventPage: artifactAuditEventPage,
+        WorkbenchRun: workbenchRun,
+        WorkbenchRunPage: workbenchRunPage,
         HealthLink: healthLink,
         SleepSession: sleepSession,
         WorkoutSession: workoutSession,
@@ -7718,9 +7791,12 @@ export function buildOpenApiDocument() {
                   type: "object",
                   required: ["links"],
                   properties: {
-                    links: arrayOf({
-                      $ref: "#/components/schemas/EntityLinkInput"
-                    })
+                    links: {
+                      ...arrayOf({
+                        $ref: "#/components/schemas/EntityLinkInput"
+                      }),
+                      maxItems: 100
+                    }
                   }
                 }
               }
@@ -7782,21 +7858,28 @@ export function buildOpenApiDocument() {
             in: "path",
             required: true,
             schema: { type: "string" }
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 50
+            }
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: { type: "integer", minimum: 0, default: 0 }
           }
         ],
         get: {
           summary: "List artifact versions",
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["versions"],
-                properties: {
-                  versions: arrayOf({
-                    $ref: "#/components/schemas/ArtifactVersion"
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/ArtifactVersionPage" },
               "Artifact versions"
             ),
             default: { $ref: "#/components/responses/Error" }
@@ -7810,21 +7893,28 @@ export function buildOpenApiDocument() {
             in: "path",
             required: true,
             schema: { type: "string" }
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 50
+            }
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: { type: "integer", minimum: 0, default: 0 }
           }
         ],
         get: {
           summary: "List artifact audit events",
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["events"],
-                properties: {
-                  events: arrayOf({
-                    $ref: "#/components/schemas/ArtifactAuditEvent"
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/ArtifactAuditEventPage" },
               "Artifact audit events"
             ),
             default: { $ref: "#/components/responses/Error" }
@@ -9694,17 +9784,49 @@ export function buildOpenApiDocument() {
       "/api/v1/workbench/flows/{id}": {
         get: {
           summary: "Read one Workbench flow with runs",
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 20
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["flow", "runs"],
+                required: [
+                  "flow",
+                  "runs",
+                  "total",
+                  "limit",
+                  "offset",
+                  "hasMore",
+                  "conversation"
+                ],
                 properties: {
                   flow: {
                     type: "object",
                     additionalProperties: true
                   },
                   runs: arrayOf({
+                    $ref: "#/components/schemas/WorkbenchRun"
+                  }),
+                  total: { type: "integer", minimum: 0 },
+                  limit: { type: "integer", minimum: 1, maximum: 100 },
+                  offset: { type: "integer", minimum: 0 },
+                  hasMore: { type: "boolean" },
+                  conversation: nullable({
                     type: "object",
                     additionalProperties: true
                   })
@@ -9782,14 +9904,11 @@ export function buildOpenApiDocument() {
                     type: "object",
                     additionalProperties: true
                   },
-                  run: {
+                  run: { $ref: "#/components/schemas/WorkbenchRun" },
+                  conversation: nullable({
                     type: "object",
                     additionalProperties: true
-                  },
-                  conversation: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  })
                 }
               },
               "Workbench flow execution"
@@ -9811,14 +9930,11 @@ export function buildOpenApiDocument() {
                     type: "object",
                     additionalProperties: true
                   },
-                  run: {
+                  run: { $ref: "#/components/schemas/WorkbenchRun" },
+                  conversation: nullable({
                     type: "object",
                     additionalProperties: true
-                  },
-                  conversation: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  })
                 }
               },
               "Workbench flow execution"
@@ -9860,22 +9976,26 @@ export function buildOpenApiDocument() {
       "/api/v1/workbench/flows/{id}/runs": {
         get: {
           summary: "List Workbench runs for one flow",
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 20
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["flow", "runs"],
-                properties: {
-                  flow: {
-                    type: "object",
-                    additionalProperties: true
-                  },
-                  runs: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/WorkbenchRunPage" },
               "Workbench run list"
             ),
             "404": { $ref: "#/components/responses/Error" }
@@ -9895,10 +10015,7 @@ export function buildOpenApiDocument() {
                     type: "object",
                     additionalProperties: true
                   },
-                  run: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  run: { $ref: "#/components/schemas/WorkbenchRun" }
                 }
               },
               "Workbench run detail"
@@ -9914,13 +10031,9 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["flow", "run", "nodeResults"],
+                required: ["flow", "nodeResults"],
                 properties: {
                   flow: {
-                    type: "object",
-                    additionalProperties: true
-                  },
-                  run: {
                     type: "object",
                     additionalProperties: true
                   },

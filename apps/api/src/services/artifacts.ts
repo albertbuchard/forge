@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
 import { z } from "zod";
@@ -113,12 +113,20 @@ const trimmedString = z.string().trim();
 const optionalTrimmedString = trimmedString.optional().default("");
 const nullableId = trimmedString.nullable().optional().default(null);
 
+export const MAX_ARTIFACT_ENTITY_LINKS = 100;
+export const DEFAULT_ARTIFACT_HISTORY_LIMIT = 50;
+export const MAX_ARTIFACT_HISTORY_LIMIT = 100;
+
 export const entityLinkInputSchema = z.object({
-  entityType: z.string().trim().min(1),
-  entityId: z.string().trim().min(1),
-  anchorKey: z.string().trim().optional().default(""),
-  relationship: z.string().trim().optional().default("related")
+  entityType: z.string().trim().min(1).max(64),
+  entityId: z.string().trim().min(1).max(512),
+  anchorKey: z.string().trim().max(256).optional().default(""),
+  relationship: z.string().trim().max(64).optional().default("related")
 });
+
+const artifactEntityLinksSchema = z
+  .array(entityLinkInputSchema)
+  .max(MAX_ARTIFACT_ENTITY_LINKS);
 
 export const artifactUploadContentProtectionSchema = z
   .union([
@@ -146,7 +154,7 @@ export const artifactUploadSchema = z.object({
   uploadedByAgentId: nullableId,
   actingForUserId: nullableId,
   downloadPolicy: artifactDownloadPolicySchema.optional().default("human_only"),
-  links: z.array(entityLinkInputSchema).optional().default([]),
+  links: artifactEntityLinksSchema.optional().default([]),
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
   contentProtection: artifactUploadContentProtectionSchema,
   useLlmEnrichment: z.boolean().optional().default(false),
@@ -163,7 +171,7 @@ export const artifactMetadataCreateSchema = z.object({
   uploadedByUserId: nullableId,
   uploadedByAgentId: nullableId,
   actingForUserId: nullableId,
-  links: z.array(entityLinkInputSchema).optional().default([]),
+  links: artifactEntityLinksSchema.optional().default([]),
   metadata: z.record(z.string(), z.unknown()).optional().default({})
 });
 
@@ -172,10 +180,19 @@ export const artifactMetadataPatchSchema = z.object({
   shortDescription: trimmedString.optional(),
   description: trimmedString.optional(),
   sourceLabel: trimmedString.optional(),
-  artifactState: artifactStateSchema.optional(),
-  downloadPolicy: artifactDownloadPolicySchema.optional(),
-  links: z.array(entityLinkInputSchema).optional(),
+  links: artifactEntityLinksSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional()
+});
+
+export const artifactHistoryQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_ARTIFACT_HISTORY_LIMIT)
+    .optional()
+    .default(DEFAULT_ARTIFACT_HISTORY_LIMIT),
+  offset: z.coerce.number().int().min(0).optional().default(0)
 });
 
 export const artifactListQuerySchema = z.object({
@@ -548,12 +565,207 @@ function resolveStoragePath(storageKey: string) {
   return resolved;
 }
 
+type BlobIntegrityMismatch = {
+  expectedStoredByteSize: number;
+  actualStoredByteSize: number | null;
+  expectedStoredContentSha256: string;
+  actualStoredContentSha256: string | null;
+};
+
+function detectBlobIntegrityMismatch(
+  bytes: Buffer,
+  expectedStoredByteSize: number,
+  expectedStoredContentSha256: string
+): BlobIntegrityMismatch | null {
+  const actualStoredContentSha256 = sha256(bytes);
+  if (
+    bytes.byteLength === expectedStoredByteSize &&
+    actualStoredContentSha256 === expectedStoredContentSha256
+  ) {
+    return null;
+  }
+  return {
+    expectedStoredByteSize,
+    actualStoredByteSize: bytes.byteLength,
+    expectedStoredContentSha256,
+    actualStoredContentSha256
+  };
+}
+
+function blockArtifactsForBlobIntegrityMismatch(input: {
+  storageKey: string;
+  phase: "reuse" | "download";
+  mismatch: BlobIntegrityMismatch;
+  context: ArtifactContext;
+}) {
+  const affected = getDatabase()
+    .prepare(
+      `SELECT id, artifact_state
+       FROM artifacts
+       WHERE storage_key = ?`
+    )
+    .all(input.storageKey) as Array<{
+    id: string;
+    artifact_state: ArtifactState;
+  }>;
+  const metadata = {
+    phase: input.phase,
+    storageKey: input.storageKey,
+    ...input.mismatch,
+    artifactDataPreserved: true,
+    deletionAttempted: false
+  };
+
+  runInTransaction(() => {
+    const updatedAt = nowIso();
+    for (const artifact of affected) {
+      getDatabase()
+        .prepare(
+          `UPDATE artifacts
+           SET artifact_state = 'blocked', updated_at = ?
+           WHERE id = ?`
+        )
+        .run(updatedAt, artifact.id);
+      recordArtifactAudit(
+        artifact.id,
+        "artifact.blob_integrity_mismatch",
+        input.context,
+        {
+          ...metadata,
+          previousArtifactState: artifact.artifact_state,
+          blockedArtifactState: "blocked"
+        }
+      );
+    }
+    if (affected.length === 0) {
+      recordEventLog({
+        eventKind: "artifact.blob_integrity_mismatch",
+        entityType: "artifact" as CrudEntityType,
+        entityId: `blob:${input.mismatch.expectedStoredContentSha256}`,
+        actor: input.context.actor ?? input.context.token?.agentLabel ?? null,
+        source: input.context.source,
+        metadata: toEventMetadata(metadata)
+      });
+    }
+  });
+}
+
+function throwBlobIntegrityMismatch(input: {
+  storageKey: string;
+  phase: "reuse" | "download";
+  mismatch: BlobIntegrityMismatch;
+  context: ArtifactContext;
+}): never {
+  blockArtifactsForBlobIntegrityMismatch(input);
+  throw new HttpError(
+    409,
+    "artifact_blob_integrity_mismatch",
+    "Stored artifact bytes do not match their recorded size and SHA-256. The data was preserved and referenced artifacts were blocked.",
+    {
+      phase: input.phase,
+      storageKey: input.storageKey,
+      ...input.mismatch,
+      artifactDataPreserved: true
+    }
+  );
+}
+
+async function readVerifiedStoredBlob(input: {
+  storageKey: string;
+  expectedStoredByteSize: number;
+  expectedStoredContentSha256: string;
+  phase: "reuse" | "download";
+  context: ArtifactContext;
+}) {
+  const storagePath = resolveStoragePath(input.storageKey);
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(storagePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    throwBlobIntegrityMismatch({
+      storageKey: input.storageKey,
+      phase: input.phase,
+      context: input.context,
+      mismatch: {
+        expectedStoredByteSize: input.expectedStoredByteSize,
+        actualStoredByteSize: null,
+        expectedStoredContentSha256: input.expectedStoredContentSha256,
+        actualStoredContentSha256: null
+      }
+    });
+  }
+  const mismatch = detectBlobIntegrityMismatch(
+    bytes,
+    input.expectedStoredByteSize,
+    input.expectedStoredContentSha256
+  );
+  if (mismatch) {
+    throwBlobIntegrityMismatch({
+      storageKey: input.storageKey,
+      phase: input.phase,
+      mismatch,
+      context: input.context
+    });
+  }
+  return bytes;
+}
+
+function verifyPlaintextIdentityOrThrow(
+  artifact: Artifact,
+  plaintext: Buffer,
+  context: ArtifactContext
+) {
+  const actualContentSha256 = sha256(plaintext);
+  if (
+    plaintext.byteLength === artifact.byteSize &&
+    actualContentSha256 === artifact.contentSha256
+  ) {
+    return;
+  }
+  const metadata = {
+    expectedByteSize: artifact.byteSize,
+    actualByteSize: plaintext.byteLength,
+    expectedContentSha256: artifact.contentSha256,
+    actualContentSha256,
+    previousArtifactState: artifact.artifactState,
+    blockedArtifactState: "blocked",
+    artifactDataPreserved: true,
+    deletionAttempted: false
+  };
+  plaintext.fill(0);
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `UPDATE artifacts
+         SET artifact_state = 'blocked', updated_at = ?
+         WHERE id = ?`
+      )
+      .run(nowIso(), artifact.id);
+    recordArtifactAudit(
+      artifact.id,
+      "artifact.plaintext_identity_mismatch",
+      context,
+      metadata
+    );
+  });
+  throw new HttpError(
+    409,
+    "artifact_plaintext_identity_mismatch",
+    "The plaintext artifact bytes do not match their recorded size and SHA-256. The data was preserved and the artifact was blocked.",
+    { artifactId: artifact.id, ...metadata }
+  );
+}
+
 async function ensureBlobStored(input: {
   contentSha256: string;
   plaintextByteSize: number;
   storedBuffer: Buffer;
   detectedMimeType: string;
   contentProtectionMode: ArtifactContentProtectionMode;
+  context: ArtifactContext;
 }) {
   const storedContentSha256 = sha256(input.storedBuffer);
   const storageKey = storageKeyForHash(storedContentSha256);
@@ -565,14 +777,29 @@ async function ensureBlobStored(input: {
     const tmpPath = `${storagePath}.${process.pid}.${Date.now()}.tmp`;
     try {
       await writeFile(tmpPath, input.storedBuffer, { flag: "wx" });
-      await rename(tmpPath, storagePath);
+      try {
+        await link(tmpPath, storagePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+          throw error;
+        }
+      }
     } catch (error) {
-      await rm(tmpPath, { force: true }).catch(() => undefined);
       if (!existsSync(storagePath)) {
         throw error;
       }
+    } finally {
+      await rm(tmpPath, { force: true }).catch(() => undefined);
     }
   }
+
+  await readVerifiedStoredBlob({
+    storageKey,
+    expectedStoredByteSize: input.storedBuffer.byteLength,
+    expectedStoredContentSha256: storedContentSha256,
+    phase: "reuse",
+    context: input.context
+  });
 
   getDatabase()
     .prepare(
@@ -1276,8 +1503,7 @@ export async function createArtifactFromUpload(
     throw new Error("Artifact upload content is empty or invalid base64.");
   }
   const requestedProtection = parsed.contentProtection;
-  const encryptContent =
-    requestedProtection?.mode === "password_encrypted";
+  const encryptContent = requestedProtection?.mode === "password_encrypted";
   if (encryptContent && context.token) {
     throw new HttpError(
       403,
@@ -1332,7 +1558,8 @@ export async function createArtifactFromUpload(
     plaintextByteSize: buffer.byteLength,
     storedBuffer,
     detectedMimeType: scan.detectedMimeType,
-    contentProtectionMode
+    contentProtectionMode,
+    context
   });
   const sourceKind =
     parsed.sourceKind ??
@@ -1555,7 +1782,7 @@ export function updateArtifactMetadata(
       .prepare(
         `UPDATE artifacts
          SET title = ?, short_description = ?, description = ?, source_label = ?,
-             artifact_state = ?, download_policy = ?, metadata_json = ?, updated_at = ?
+             metadata_json = ?, updated_at = ?
          WHERE id = ?`
       )
       .run(
@@ -1563,8 +1790,6 @@ export function updateArtifactMetadata(
         parsed.shortDescription ?? existing.shortDescription,
         parsed.description ?? existing.description,
         parsed.sourceLabel ?? existing.sourceLabel,
-        parsed.artifactState ?? existing.artifactState,
-        parsed.downloadPolicy ?? existing.downloadPolicy,
         JSON.stringify(nextMetadata),
         updatedAt,
         id
@@ -1617,7 +1842,11 @@ function parseArtifactEncryptionEnvelope(artifact: Artifact) {
   return parseJsonObject(row.content_encryption_json);
 }
 
-export async function readArtifactDownload(id: string, password = "") {
+export async function readArtifactDownload(
+  id: string,
+  password: string,
+  context: ArtifactContext
+) {
   const artifact = getArtifactById(id);
   if (!artifact) {
     return null;
@@ -1628,8 +1857,13 @@ export async function readArtifactDownload(id: string, password = "") {
   ) {
     throw new Error("This artifact is not downloadable in its current state.");
   }
-  const storagePath = resolveStoragePath(artifact.storageKey);
-  const storedBytes = await readFile(storagePath);
+  const storedBytes = await readVerifiedStoredBlob({
+    storageKey: artifact.storageKey,
+    expectedStoredByteSize: artifact.storedByteSize,
+    expectedStoredContentSha256: artifact.storedContentSha256,
+    phase: "download",
+    context
+  });
   if (artifact.contentProtection.mode === "password_encrypted") {
     if (!password.trim()) {
       throw new HttpError(
@@ -1645,6 +1879,7 @@ export async function readArtifactDownload(id: string, password = "") {
         password,
         envelope: parseArtifactEncryptionEnvelope(artifact)
       });
+      verifyPlaintextIdentityOrThrow(artifact, decrypted.plaintext, context);
       return {
         artifact,
         bytes: decrypted.plaintext
@@ -1661,6 +1896,7 @@ export async function readArtifactDownload(id: string, password = "") {
       throw error;
     }
   }
+  verifyPlaintextIdentityOrThrow(artifact, storedBytes, context);
   return {
     artifact,
     bytes: storedBytes
@@ -1747,7 +1983,8 @@ export async function encryptExistingArtifact(
     plaintextByteSize: artifact.byteSize,
     storedBuffer: encrypted.ciphertext,
     detectedMimeType: artifact.detectedMimeType,
-    contentProtectionMode: "password_encrypted"
+    contentProtectionMode: "password_encrypted",
+    context
   });
   const retainedPlaintextReference = getDatabase()
     .prepare(
@@ -2084,13 +2321,14 @@ export function replaceArtifactEntityLinks(
   if (!artifact) {
     return undefined;
   }
+  const parsedLinks = artifactEntityLinksSchema.parse(links);
   runInTransaction(() => {
-    replaceEntityLinksForArtifact(id, links, context);
+    replaceEntityLinksForArtifact(id, parsedLinks, context);
     getDatabase()
       .prepare("UPDATE artifacts SET updated_at = ? WHERE id = ?")
       .run(nowIso(), id);
     recordArtifactAudit(id, "artifact.links_updated", context, {
-      linkCount: links.length
+      linkCount: parsedLinks.length
     });
   });
   return getArtifactById(id)!;
@@ -2106,28 +2344,41 @@ export function patchArtifactTrust(
     return undefined;
   }
   const parsed = artifactTrustPatchSchema.parse(input);
-  getDatabase()
-    .prepare(
-      `UPDATE artifacts
-       SET artifact_state = ?, download_policy = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      parsed.artifactState,
-      parsed.downloadPolicy ?? artifact.downloadPolicy,
-      nowIso(),
-      id
-    );
-  recordArtifactAudit(id, "artifact.trust_state_updated", context, {
-    from: artifact.artifactState,
-    to: parsed.artifactState,
-    reason: parsed.reason
+  const nextDownloadPolicy = parsed.downloadPolicy ?? artifact.downloadPolicy;
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `UPDATE artifacts
+         SET artifact_state = ?, download_policy = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(parsed.artifactState, nextDownloadPolicy, nowIso(), id);
+    recordArtifactAudit(id, "artifact.trust_state_updated", context, {
+      from: artifact.artifactState,
+      to: parsed.artifactState,
+      fromDownloadPolicy: artifact.downloadPolicy,
+      toDownloadPolicy: nextDownloadPolicy,
+      reason: parsed.reason
+    });
   });
   return getArtifactById(id)!;
 }
 
-export function listArtifactVersions(id: string) {
-  return getDatabase()
+export function listArtifactVersionsPage(
+  id: string,
+  input: z.input<typeof artifactHistoryQuerySchema> = {}
+) {
+  const parsed = artifactHistoryQuerySchema.parse(input);
+  const total = (
+    getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM artifact_versions
+         WHERE artifact_id = ?`
+      )
+      .get(id) as { count: number }
+  ).count;
+  const versions = getDatabase()
     .prepare(
       `SELECT id, artifact_id, version_number, content_sha256, storage_key,
               byte_size, stored_content_sha256, stored_byte_size,
@@ -2136,9 +2387,10 @@ export function listArtifactVersions(id: string) {
               enrichment_results_json, created_by_actor, created_at
        FROM artifact_versions
        WHERE artifact_id = ?
-       ORDER BY version_number DESC`
+       ORDER BY version_number DESC
+       LIMIT ? OFFSET ?`
     )
-    .all(id)
+    .all(id, parsed.limit, parsed.offset)
     .map((row) => {
       const version = row as ArtifactVersionRow;
       return {
@@ -2164,17 +2416,45 @@ export function listArtifactVersions(id: string) {
         createdAt: version.created_at
       } satisfies ArtifactVersion;
     });
+  return {
+    versions,
+    total,
+    limit: parsed.limit,
+    offset: parsed.offset,
+    hasMore: parsed.offset + versions.length < total
+  };
 }
 
-export function listArtifactAuditEvents(id: string) {
-  return getDatabase()
+export function listArtifactVersions(
+  id: string,
+  input: z.input<typeof artifactHistoryQuerySchema> = {}
+) {
+  return listArtifactVersionsPage(id, input).versions;
+}
+
+export function listArtifactAuditEventsPage(
+  id: string,
+  input: z.input<typeof artifactHistoryQuerySchema> = {}
+) {
+  const parsed = artifactHistoryQuerySchema.parse(input);
+  const total = (
+    getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM artifact_audit_events
+         WHERE artifact_id = ?`
+      )
+      .get(id) as { count: number }
+  ).count;
+  const events = getDatabase()
     .prepare(
       `SELECT id, artifact_id, event_type, actor, source, metadata_json, created_at
        FROM artifact_audit_events
        WHERE artifact_id = ?
-       ORDER BY created_at DESC`
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`
     )
-    .all(id)
+    .all(id, parsed.limit, parsed.offset)
     .map((row) => {
       const event = row as ArtifactAuditEventRow;
       return {
@@ -2187,4 +2467,18 @@ export function listArtifactAuditEvents(id: string) {
         createdAt: event.created_at
       } satisfies ArtifactAuditEvent;
     });
+  return {
+    events,
+    total,
+    limit: parsed.limit,
+    offset: parsed.offset,
+    hasMore: parsed.offset + events.length < total
+  };
+}
+
+export function listArtifactAuditEvents(
+  id: string,
+  input: z.input<typeof artifactHistoryQuerySchema> = {}
+) {
+  return listArtifactAuditEventsPage(id, input).events;
 }

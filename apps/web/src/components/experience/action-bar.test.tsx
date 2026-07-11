@@ -6,6 +6,7 @@ import {
   waitFor
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionBar } from "@/components/experience/action-bar";
@@ -191,6 +192,66 @@ describe("ActionBar", () => {
     expect(screen.queryByText("Recent focus task")).not.toBeInTheDocument();
   });
 
+  it("provides an explicit close control on phone and desktop", async () => {
+    const onOpenChange = vi.fn();
+    renderActionBar({ onOpenChange });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close Forge Action bar" })
+    );
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("returns focus to the shell trigger after closing", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false }
+      }
+    });
+
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      const triggerRef = useRef<HTMLButtonElement | null>(null);
+      return (
+        <>
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={() => setOpen(true)}
+          >
+            Open Action Bar
+          </button>
+          <ActionBar
+            open={open}
+            onOpenChange={setOpen}
+            snapshot={createSnapshot()}
+            selectedUserIds={[]}
+            createActions={[]}
+            returnFocusRef={triggerRef}
+          />
+        </>
+      );
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <Harness />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Open Action Bar" });
+    fireEvent.click(trigger);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close Forge Action bar" })
+    );
+
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("unpins a canonical item without opening it", async () => {
     renderActionBar();
 
@@ -212,6 +273,18 @@ describe("ActionBar", () => {
     fireEvent.click(await screen.findByText("Recently opened project"));
 
     expect(touchEntityNavigationMock).not.toHaveBeenCalled();
+  });
+
+  it("searches every primary Forge domain, not only the default route shortcuts", async () => {
+    renderActionBar();
+
+    fireEvent.change(
+      screen.getAllByPlaceholderText(/search anything in forge/i)[0]!,
+      { target: { value: "artifacts" } }
+    );
+
+    expect(await screen.findByText("Artifacts")).toBeInTheDocument();
+    expect(screen.getByText(/trusted files/i)).toBeInTheDocument();
   });
 
   it("lets the shell route tracker handle exact Knowledge Graph routes", async () => {

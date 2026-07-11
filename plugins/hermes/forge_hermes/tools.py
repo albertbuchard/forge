@@ -36,6 +36,16 @@ GATEWAY_RUNTIME_STOP: Optional[threading.Event] = None
 
 logger = logging.getLogger(__name__)
 
+WORKBENCH_MUTABLE_FLOW_FIELDS = (
+    "title",
+    "description",
+    "kind",
+    "homeSurfaceId",
+    "endpointEnabled",
+    "publicInputs",
+    "graph",
+)
+
 
 @dataclass
 class ForgeConfig:
@@ -1002,6 +1012,140 @@ def _resolve_doctor(config: ForgeConfig) -> Dict[str, Any]:
     }
 
 
+def _workbench_verification_target(
+    args: Dict[str, Any], payload: Any
+) -> tuple[str, str] | None:
+    route_key = _normalize_text(args.get("routeKey"))
+    path_params = _safe_dict(args.get("pathParams"))
+    response = _safe_dict(payload)
+    flow = _safe_dict(response.get("flow"))
+    run = _safe_dict(response.get("run"))
+    flow_id = _normalize_text(flow.get("id") or path_params.get("id"))
+
+    if route_key in {"createFlow", "updateFlow", "deleteFlow"} and flow_id:
+        return route_key, f"/api/v1/workbench/flows/{parse.quote(flow_id, safe='')}"
+
+    if route_key in {"runFlow", "runByPayload", "chatFlow"}:
+        run_id = _normalize_text(run.get("id"))
+        if flow_id and run_id:
+            return (
+                route_key,
+                f"/api/v1/workbench/flows/{parse.quote(flow_id, safe='')}"
+                f"/runs/{parse.quote(run_id, safe='')}",
+            )
+    return None
+
+
+def _with_workbench_readback(
+    config: ForgeConfig, args: Dict[str, Any], payload: Any
+) -> Dict[str, Any]:
+    response = dict(payload) if isinstance(payload, dict) else {"result": payload}
+    target = _workbench_verification_target(args, payload)
+    route_key = _normalize_text(args.get("routeKey"))
+    if target is None:
+        response["verification"] = {
+            "status": "unavailable",
+            "routeKey": route_key,
+            "message": "The mutation response did not include the flow and run ids required for read-back verification.",
+        }
+        return response
+
+    _, read_path = target
+    try:
+        readback = _request_json(config, "GET", read_path, write=False)
+    except ForgePluginError as exc:
+        if route_key == "deleteFlow" and exc.code == "forge_http_404":
+            response["verification"] = {
+                "status": "verified_absent",
+                "routeKey": route_key,
+                "readPath": read_path,
+            }
+            return response
+        response["verification"] = {
+            "status": "failed",
+            "routeKey": route_key,
+            "readPath": read_path,
+            "error": {"code": exc.code, "message": str(exc)},
+        }
+        return response
+
+    if route_key == "deleteFlow":
+        response["verification"] = {
+            "status": "failed",
+            "routeKey": route_key,
+            "readPath": read_path,
+            "message": "Forge still returned the deleted flow during read-back verification.",
+        }
+        return response
+
+    if route_key == "updateFlow":
+        requested = _safe_dict(args.get("body"))
+        readback_flow = _safe_dict(_safe_dict(readback).get("flow"))
+        checked_fields = [
+            field for field in WORKBENCH_MUTABLE_FLOW_FIELDS if field in requested
+        ]
+        mismatches = []
+        for field in checked_fields:
+            actual_present = field in readback_flow
+            requested_value = requested[field]
+            actual_value = readback_flow.get(field)
+            requested_json = json.dumps(
+                requested_value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            actual_json = (
+                json.dumps(
+                    actual_value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                if actual_present
+                else None
+            )
+            if actual_present and requested_json == actual_json:
+                continue
+            mismatch = {
+                "field": field,
+                "requested": requested_value,
+                "actualPresent": actual_present,
+            }
+            if actual_present:
+                mismatch["actual"] = actual_value
+            mismatches.append(mismatch)
+
+        if mismatches:
+            response["verification"] = {
+                "status": "failed",
+                "routeKey": route_key,
+                "readPath": read_path,
+                "message": "Forge read-back did not exactly preserve every requested mutable flow field.",
+                "checkedFields": checked_fields,
+                "mismatches": mismatches,
+                "readback": readback,
+            }
+            return response
+
+        response["verification"] = {
+            "status": "verified",
+            "routeKey": route_key,
+            "readPath": read_path,
+            "checkedFields": checked_fields,
+            "readback": readback,
+        }
+        return response
+
+    response["verification"] = {
+        "status": "verified",
+        "routeKey": route_key,
+        "readPath": read_path,
+        "readback": readback,
+    }
+    return response
+
+
 def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     config = _ensure_runtime(_load_config())
     custom_handler = spec.get("custom_handler")
@@ -1016,7 +1160,10 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     method = _resolve_method(spec, args)
     body = None if method in {"GET", "DELETE"} else _resolve_body(spec, args, config)
     write = _resolve_write(spec, args, method)
-    return _request_json(config, method, path, body=body, write=write)
+    payload = _request_json(config, method, path, body=body, write=write)
+    if spec.get("name") == "forge_call_workbench_route" and write:
+        return _with_workbench_readback(config, args, payload)
+    return payload
 
 
 TOOL_SPECS = {spec["name"]: spec for spec in TOOL_CATALOG}

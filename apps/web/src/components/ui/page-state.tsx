@@ -17,7 +17,12 @@ export function LoadingState({
 }) {
   const { t } = useI18n();
   return (
-    <Card className="surface-pulse ambient-glow mx-auto grid max-w-2xl gap-4 text-center">
+    <Card
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="surface-pulse ambient-glow mx-auto grid max-w-2xl gap-4 text-center"
+    >
       <div className="type-label text-[var(--ui-ink-faint)]">
         {eyebrow ?? t("common.labels.loading")}
       </div>
@@ -48,7 +53,11 @@ export function ErrorState({
   const { title, description, code } = describeApiError(error);
 
   return (
-    <Card className="mx-auto grid max-w-2xl gap-4">
+    <Card
+      role="alert"
+      aria-live="assertive"
+      className="mx-auto grid max-w-2xl gap-4"
+    >
       <div className="type-label text-[var(--danger)]">
         {eyebrow ?? t("common.labels.connectionState")}
       </div>
@@ -84,9 +93,13 @@ export function EmptyState({
 }) {
   const { t } = useI18n();
   return (
-    <Card className="mx-auto grid max-w-2xl gap-4 text-center">
+    <Card
+      role="status"
+      aria-live="polite"
+      className="mx-auto grid max-w-2xl gap-4 text-center"
+    >
       <div className="type-label text-[var(--ui-ink-faint)]">
-        {eyebrow ?? t("common.labels.loading")}
+        {eyebrow ?? t("common.labels.empty")}
       </div>
       <div className="type-display-section text-[var(--ui-ink-strong)]">
         {title}

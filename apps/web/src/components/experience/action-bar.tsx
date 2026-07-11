@@ -1,5 +1,12 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -24,6 +31,7 @@ import {
   Settings,
   SlidersHorizontal,
   Target,
+  X,
   Zap
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -32,6 +40,11 @@ import {
   type EntityLinkOption
 } from "@/components/psyche/entity-link-multiselect";
 import type { ForgeCreateAction } from "@/components/create-menu";
+import {
+  PRIMARY_ROUTES,
+  getRouteDetail,
+  getRouteLabel
+} from "@/components/shell/shell-routes";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
@@ -69,6 +82,7 @@ type ActionBarProps = {
   snapshot: ForgeSnapshot;
   selectedUserIds: string[];
   createActions: ForgeCreateAction[];
+  returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
 type ActionBarSection =
@@ -257,7 +271,8 @@ export function ActionBar({
   onOpenChange,
   snapshot,
   selectedUserIds,
-  createActions
+  createActions,
+  returnFocusRef
 }: ActionBarProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -530,6 +545,35 @@ export function ActionBar({
     [t]
   );
 
+  const searchableRouteItems = useMemo<ActionBarItem[]>(() => {
+    const existingHrefs = new Set(routeItems.map((item) => item.href));
+    const routeCategory = t("common.commandPalette.categoryRoute");
+    return [
+      ...routeItems,
+      ...PRIMARY_ROUTES.filter((route) => !existingHrefs.has(route.to)).map(
+        (route) => {
+          const title = getRouteLabel(route, t);
+          const detail = getRouteDetail(route, t);
+          return {
+            id: `route-${route.id}`,
+            title,
+            detail,
+            href: route.to,
+            category: routeCategory,
+            section: "routes" as const,
+            searchText: buildRouteItemSearchText(
+              title,
+              detail,
+              routeCategory
+            ),
+            score: 0,
+            ...getAuxiliaryVisual("route", route.icon)
+          };
+        }
+      )
+    ];
+  }, [routeItems, t]);
+
   const entityNavigationQuery = useQuery({
     queryKey: [
       "forge-entity-navigation",
@@ -767,7 +811,7 @@ export function ActionBar({
       return [];
     }
 
-    return routeItems
+    return searchableRouteItems
       .map((item) => ({
         ...item,
         score: scoreActionBarMatch(deferredQuery, item.title, item.searchText)
@@ -778,7 +822,7 @@ export function ActionBar({
           right.score - left.score || left.title.localeCompare(right.title)
       )
       .slice(0, 4);
-  }, [deferredQuery, normalizedQuery, routeItems]);
+  }, [deferredQuery, normalizedQuery, searchableRouteItems]);
 
   const quickActionItems = useMemo<ActionBarItem[]>(() => {
     return buildActionBarCreateActionMatches(deferredQuery, createActions)
@@ -899,7 +943,16 @@ export function ActionBar({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
-        <Dialog.Content className="surface-modal-panel fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-[30px] border sm:inset-x-6 sm:bottom-6 sm:top-6 md:left-1/2 md:right-auto md:top-[9vh] md:h-[min(82vh,48rem)] md:w-[min(64rem,calc(100vw-2rem))] md:-translate-x-1/2 md:bottom-auto">
+        <Dialog.Content
+          className="surface-modal-panel fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-[30px] border sm:inset-x-6 sm:bottom-6 sm:top-6 md:left-1/2 md:right-auto md:top-[9vh] md:h-[min(82vh,48rem)] md:w-[min(64rem,calc(100vw-2rem))] md:-translate-x-1/2 md:bottom-auto"
+          onCloseAutoFocus={(event) => {
+            const returnTarget = returnFocusRef?.current;
+            if (returnTarget?.isConnected) {
+              event.preventDefault();
+              returnTarget.focus();
+            }
+          }}
+        >
           <Dialog.Title className="sr-only">
             {t("common.actionBar.title")}
           </Dialog.Title>
@@ -926,13 +979,25 @@ export function ActionBar({
                   </div>
                 ) : null}
               </div>
-              <div className="hidden flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] sm:flex">
-                <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
-                  Shift Shift
-                </span>
-                <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
-                  Cmd/Ctrl K
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="hidden flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)] sm:flex">
+                  <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
+                    Shift Shift
+                  </span>
+                  <span className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-1">
+                    Cmd/Ctrl K
+                  </span>
+                </div>
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    aria-label={`${t("common.actions.close")} ${t("common.actionBar.title")}`}
+                    title={t("common.actions.close")}
+                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </Dialog.Close>
               </div>
             </div>
 

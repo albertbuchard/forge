@@ -49,6 +49,7 @@ const SOURCES: DiagnosticLogSource[] = [
   "openclaw"
 ];
 const DIAGNOSTIC_LOG_PAGE_SIZE = 60;
+const DIAGNOSTIC_LOG_SEARCH_DEBOUNCE_MS = 300;
 const logEyebrowClass =
   "text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]";
 const logBodyClass = "text-[var(--ui-ink-soft)]";
@@ -568,30 +569,79 @@ export function SettingsLogsPage() {
       entities: uniqueValues(entityFilters)
     };
   }, [searchParams]);
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const searchParamsRef = useRef(searchParams);
+  const committedSearchRef = useRef(filters.search);
+  searchParamsRef.current = searchParams;
+
+  useEffect(() => {
+    if (filters.search === committedSearchRef.current) {
+      return;
+    }
+    committedSearchRef.current = filters.search;
+    setSearchInput(filters.search);
+  }, [filters.search]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const nextSearch = searchInput.trim();
+      const next = new URLSearchParams(searchParamsRef.current);
+      if ((next.get("search") ?? "") === nextSearch) {
+        committedSearchRef.current = nextSearch;
+        return;
+      }
+
+      committedSearchRef.current = nextSearch;
+      if (nextSearch) {
+        next.set("search", nextSearch);
+      } else {
+        next.delete("search");
+      }
+      setSearchParams(next, { replace: true });
+    }, DIAGNOSTIC_LOG_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput, setSearchParams]);
+
+  const serverFilters = useMemo(() => {
+    const exactValue = (values: string[]) =>
+      values.length === 1 ? values[0] : undefined;
+    const entity = exactValue(filters.entities);
+    const entitySeparator = entity?.indexOf(":") ?? -1;
+
+    return {
+      search: filters.search.trim() || undefined,
+      level: exactValue(filters.levels),
+      source: exactValue(filters.sources),
+      scope: exactValue(filters.scopes),
+      route: exactValue(filters.routes),
+      jobId: exactValue(filters.jobs),
+      entityType:
+        entity && entitySeparator > 0
+          ? entity.slice(0, entitySeparator)
+          : undefined,
+      entityId:
+        entity && entitySeparator > 0
+          ? entity.slice(entitySeparator + 1)
+          : undefined
+    };
+  }, [filters]);
 
   const logsQuery = useInfiniteQuery({
-    queryKey: ["forge-diagnostic-logs", "settings-filters"],
+    queryKey: ["forge-diagnostic-logs", "settings-filters", serverFilters],
     initialPageParam: null as DiagnosticLogCursor | null,
     queryFn: ({ pageParam }) =>
       listDiagnosticLogs({
         limit: DIAGNOSTIC_LOG_PAGE_SIZE,
+        ...serverFilters,
         beforeCreatedAt: pageParam?.beforeCreatedAt,
         beforeId: pageParam?.beforeId
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor,
+    placeholderData: (previousData) => previousData,
     retry: false,
     refetchOnWindowFocus: false
   });
-
-  const setTextFilter = (key: string, value: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (value.trim()) {
-      next.set(key, value.trim());
-    } else {
-      next.delete(key);
-    }
-    setSearchParams(next, { replace: true });
-  };
 
   const setMultiFilter = (
     key: string,
@@ -622,6 +672,8 @@ export function SettingsLogsPage() {
       "entityType",
       "entityId"
     ].forEach((key) => next.delete(key));
+    committedSearchRef.current = "";
+    setSearchInput("");
     setSearchParams(next, { replace: true });
   };
 
@@ -629,7 +681,7 @@ export function SettingsLogsPage() {
     () => logsQuery.data?.pages.flatMap((page) => page.logs) ?? [],
     [logsQuery.data]
   );
-  const normalizedSearch = normalize(filters.search);
+  const normalizedSearch = normalize(searchInput);
   const scrollParentRef = useRef<HTMLDivElement | null>(null);
 
   const levelOptions = useMemo<FilterOption[]>(
@@ -751,7 +803,7 @@ export function SettingsLogsPage() {
   );
 
   const filterSignature = [
-    filters.search,
+    searchInput,
     filters.levels.join("|"),
     filters.sources.join("|"),
     filters.scopes.join("|"),
@@ -784,6 +836,9 @@ export function SettingsLogsPage() {
       void logsQuery.fetchNextPage();
     }
   };
+  const retryOlderLogs = () => {
+    void logsQuery.fetchNextPage();
+  };
 
   const activeFilterCount =
     filters.levels.length +
@@ -792,7 +847,7 @@ export function SettingsLogsPage() {
     filters.routes.length +
     filters.jobs.length +
     filters.entities.length +
-    (filters.search.trim() ? 1 : 0);
+    (searchInput.trim() ? 1 : 0);
 
   if (logsQuery.isPending) {
     return (
@@ -806,7 +861,7 @@ export function SettingsLogsPage() {
     );
   }
 
-  if (logsQuery.isError) {
+  if (logsQuery.isError && !logsQuery.data) {
     return (
       <ErrorState
         eyebrow="Settings"
@@ -837,6 +892,11 @@ export function SettingsLogsPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {logsQuery.isFetching && !logsQuery.isFetchingNextPage ? (
+              <span role="status" className={`text-xs ${logFaintClass}`}>
+                Updating log results...
+              </span>
+            ) : null}
             {activeFilterCount > 0 ? (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear {activeFilterCount}
@@ -857,12 +917,29 @@ export function SettingsLogsPage() {
         <label className="grid gap-2">
           <span className={logEyebrowClass}>Search message or details</span>
           <Input
-            value={filters.search}
-            onChange={(event) => setTextFilter("search", event.target.value)}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
             placeholder="LLM compilation failed, wiki_ingest, request_failed…"
             className="h-11 rounded-[20px]"
           />
         </label>
+
+        {logsQuery.isError ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--ui-ink-medium)]"
+          >
+            <span>Updated log results could not be loaded.</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void logsQuery.refetch()}
+            >
+              Retry search
+            </Button>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 xl:grid-cols-2">
           <CompactFilterMultiSelect
@@ -957,11 +1034,23 @@ export function SettingsLogsPage() {
               <div
                 className={`border-t border-[var(--ui-border-subtle)] px-1 py-3 text-center text-xs ${logFaintClass}`}
               >
-                {logsQuery.isFetchingNextPage
-                  ? "Loading older logs..."
-                  : logsQuery.hasNextPage
-                    ? "Scroll to load older logs."
-                    : `Showing all ${rawLogs.length} loaded logs.`}
+                {logsQuery.isFetchNextPageError ? (
+                  <div
+                    role="alert"
+                    className="flex flex-wrap items-center justify-center gap-2"
+                  >
+                    <span>Older logs could not be loaded.</span>
+                    <Button variant="ghost" size="sm" onClick={retryOlderLogs}>
+                      Retry older logs
+                    </Button>
+                  </div>
+                ) : logsQuery.isFetchingNextPage ? (
+                  "Loading older logs..."
+                ) : logsQuery.hasNextPage ? (
+                  "Scroll to load older logs."
+                ) : (
+                  `Showing all ${rawLogs.length} loaded logs.`
+                )}
               </div>
             </div>
           </Card>

@@ -1,6 +1,14 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { SyntheticEvent } from "react";
-import { Download, Flame, Settings, Sparkles, Trophy, Zap } from "lucide-react";
+import { useEffect, useRef, type SyntheticEvent } from "react";
+import {
+  Download,
+  Flame,
+  Settings,
+  Sparkles,
+  Trophy,
+  X,
+  Zap
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +137,34 @@ function formatCompactNumber(value: number) {
     notation: value >= 10_000 ? "compact" : "standard",
     maximumFractionDigits: 1
   }).format(value);
+}
+
+export function getGamificationNoticeMotion(
+  reduceMotion: boolean | null,
+  kind: "celebration" | "xp"
+) {
+  if (reduceMotion) {
+    return {
+      initial: false as const,
+      animate: { opacity: 1 },
+      exit: { opacity: 1 },
+      transition: { duration: 0 }
+    };
+  }
+
+  return kind === "celebration"
+    ? {
+        initial: { opacity: 0, y: 20, scale: 0.96 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: 16, scale: 0.98 },
+        transition: { duration: 0.28, ease: "easeOut" as const }
+      }
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: 10 },
+        transition: { duration: 0.2, ease: "easeOut" as const }
+      };
 }
 
 export function GamificationMiniHud({
@@ -667,46 +703,60 @@ export function GamificationCelebrationLayer({
   const reduceMotion = useReducedMotion();
   const gamificationTheme = useGamificationTheme();
   const celebration = celebrations[0] ?? null;
+  const onSeenRef = useRef(onSeen);
+  onSeenRef.current = onSeen;
   const isMajor =
     celebration?.kind === "level" ||
     celebration?.kind === "trophy" ||
     celebration?.kind === "unlock";
+  const celebrationMotion = getGamificationNoticeMotion(
+    reduceMotion,
+    "celebration"
+  );
+  const xpMotion = getGamificationNoticeMotion(reduceMotion, "xp");
+
+  useEffect(() => {
+    if (!celebration) {
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => onSeenRef.current(celebration.id),
+      isMajor ? 3000 : 1800
+    );
+    return () => window.clearTimeout(timeout);
+  }, [celebration, isMajor]);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={!reduceMotion}>
       {celebration ? (
         <motion.div
           key={celebration.id}
-          initial={
-            reduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.96 }
-          }
-          animate={
-            reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }
-          }
-          exit={
-            reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }
-          }
-          transition={{ duration: 0.28, ease: "easeOut" }}
+          {...celebrationMotion}
           className={cn(
             "pointer-events-auto fixed z-50 px-4",
             isMajor
               ? "inset-x-0 bottom-24 flex justify-center lg:bottom-8"
               : "right-0 bottom-24 lg:bottom-8"
           )}
-          onAnimationComplete={() => {
-            window.setTimeout(
-              () => onSeen(celebration.id),
-              isMajor ? 3000 : 1800
-            );
-          }}
         >
           <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
             className={cn(
               "relative min-w-0 overflow-hidden rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
               isMajor ? "w-full max-w-[34rem] p-4" : "max-w-[24rem] p-3"
             )}
           >
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_22%_12%,color-mix(in_srgb,var(--tertiary)_16%,transparent),transparent_42%),radial-gradient(circle_at_82%_16%,color-mix(in_srgb,var(--primary)_14%,transparent),transparent_38%)]" />
+            <button
+              type="button"
+              aria-label={`Dismiss ${celebration.kind} celebration`}
+              onClick={() => onSeen(celebration.id)}
+              className="absolute right-2 top-2 grid size-9 place-items-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+            >
+              <X className="size-4" />
+            </button>
             <div className="flex min-w-0 items-center gap-3">
               <img
                 src={getGamificationSpriteUrl(
@@ -730,14 +780,19 @@ export function GamificationCelebrationLayer({
                   isMajor ? "size-24" : "size-14"
                 )}
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 pr-7">
                 <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--tertiary)]">
                   {celebration.kind}
                 </div>
-                <div className="mt-1 truncate font-display text-xl text-[var(--ui-ink-strong)]">
+                <div className="mt-1 break-words font-display text-xl text-[var(--ui-ink-strong)]">
                   {celebration.title}
                 </div>
-                <div className="mt-1 line-clamp-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                <div
+                  className={cn(
+                    "mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]",
+                    !isMajor && "line-clamp-2"
+                  )}
+                >
                   {celebration.summary}
                 </div>
               </div>
@@ -747,12 +802,13 @@ export function GamificationCelebrationLayer({
       ) : xpNotice ? (
         <motion.div
           key={`xp-${xpNotice.totalXp}`}
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14 }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+          {...xpMotion}
           className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 lg:bottom-6"
         >
           <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
             className={cn(
               "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-[var(--ui-shadow-floating)] backdrop-blur-xl",
               xpNotice.deltaXp > 0

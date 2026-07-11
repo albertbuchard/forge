@@ -344,20 +344,42 @@ test("artifact store supports human password encryption without exposing passwor
         contentProtection: {
           mode: string;
           passwordHint: string | null;
-          kdfParams: { memlimit: number; opslimit: number; parallelism: number };
+          kdfParams: {
+            memlimit: number;
+            opslimit: number;
+            parallelism: number;
+          };
         };
       };
     };
-    assert.equal(uploadBody.artifact.contentProtection.mode, "password_encrypted");
-    assert.equal(uploadBody.artifact.contentProtection.passwordHint, "sample hint");
-    assert.equal(uploadBody.artifact.contentProtection.kdfParams.memlimit >= 19 * 1024 * 1024, true);
-    assert.equal(uploadBody.artifact.contentProtection.kdfParams.opslimit >= 2, true);
-    assert.equal(uploadBody.artifact.contentProtection.kdfParams.parallelism, 1);
+    assert.equal(
+      uploadBody.artifact.contentProtection.mode,
+      "password_encrypted"
+    );
+    assert.equal(
+      uploadBody.artifact.contentProtection.passwordHint,
+      "sample hint"
+    );
+    assert.equal(
+      uploadBody.artifact.contentProtection.kdfParams.memlimit >=
+        19 * 1024 * 1024,
+      true
+    );
+    assert.equal(
+      uploadBody.artifact.contentProtection.kdfParams.opslimit >= 2,
+      true
+    );
+    assert.equal(
+      uploadBody.artifact.contentProtection.kdfParams.parallelism,
+      1
+    );
     assert.notEqual(
       uploadBody.artifact.contentSha256,
       uploadBody.artifact.storedContentSha256
     );
-    assert.ok(uploadBody.artifact.storedByteSize > uploadBody.artifact.byteSize);
+    assert.ok(
+      uploadBody.artifact.storedByteSize > uploadBody.artifact.byteSize
+    );
     assert.equal(JSON.stringify(uploadBody).includes(password), false);
     assert.equal(
       (await readFile(uploadBody.artifact.storagePath)).equals(
@@ -373,8 +395,11 @@ test("artifact store supports human password encryption without exposing passwor
     });
     assert.equal(readMetadata.statusCode, 200);
     assert.equal(
-      (readMetadata.json() as { artifact: { contentProtection: { mode: string } } })
-        .artifact.contentProtection.mode,
+      (
+        readMetadata.json() as {
+          artifact: { contentProtection: { mode: string } };
+        }
+      ).artifact.contentProtection.mode,
       "password_encrypted"
     );
     assert.equal(readMetadata.body.includes(password), false);
@@ -437,7 +462,10 @@ test("artifact store supports human password encryption without exposing passwor
       headers: { cookie }
     });
     assert.equal(rescan.statusCode, 409);
-    assert.equal((rescan.json() as { code: string }).code, "artifact_content_encrypted");
+    assert.equal(
+      (rescan.json() as { code: string }).code,
+      "artifact_content_encrypted"
+    );
 
     const agentEncryptedUpload = await app.inject({
       method: "POST",
@@ -481,13 +509,21 @@ test("artifact store supports human password encryption without exposing passwor
     });
     assert.equal(encryptExisting.statusCode, 200);
     assert.equal(
-      (encryptExisting.json() as { artifact: { contentProtection: { mode: string; passwordHint: string | null } } })
-        .artifact.contentProtection.mode,
+      (
+        encryptExisting.json() as {
+          artifact: {
+            contentProtection: { mode: string; passwordHint: string | null };
+          };
+        }
+      ).artifact.contentProtection.mode,
       "password_encrypted"
     );
     assert.equal(
-      (encryptExisting.json() as { artifact: { contentProtection: { passwordHint: string | null } } })
-        .artifact.contentProtection.passwordHint,
+      (
+        encryptExisting.json() as {
+          artifact: { contentProtection: { passwordHint: string | null } };
+        }
+      ).artifact.contentProtection.passwordHint,
       "existing hint"
     );
     assert.equal(encryptExisting.body.includes(password), false);
@@ -605,7 +641,10 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
     });
     assert.equal(linkedPage.statusCode, 200);
     const linkedBody = linkedPage.json() as {
-      artifacts: Array<{ links: Array<{ targetEntityId: string }> }>;
+      artifacts: Array<{
+        id: string;
+        links: Array<{ targetEntityId: string }>;
+      }>;
       total: number;
       hasMore: boolean;
     };
@@ -616,6 +655,20 @@ test("artifact listing is paginated and keeps filters bounded for large stores",
       linkedBody.artifacts[0]?.links[0]?.targetEntityId,
       "goal_artifact_scale"
     );
+
+    const oversizedLinkReplacement = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${linkedBody.artifacts[0]?.id}/links`,
+      headers: { cookie },
+      payload: {
+        links: Array.from({ length: 101 }, (_, index) => ({
+          entityType: "note",
+          entityId: `note_${index}`,
+          relationship: "related"
+        }))
+      }
+    });
+    assert.equal(oversizedLinkReplacement.statusCode, 400);
   } finally {
     await app.close();
     closeDatabase();

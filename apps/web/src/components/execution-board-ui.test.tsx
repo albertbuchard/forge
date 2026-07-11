@@ -1,15 +1,21 @@
 import { MemoryRouter } from "react-router-dom";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/lib/i18n";
-import type { Goal, NotesSummaryByEntity, Tag, Task, TaskRun } from "@/lib/types";
+import type {
+  Goal,
+  NotesSummaryByEntity,
+  Tag,
+  Task,
+  TaskRun
+} from "@/lib/types";
 import {
   buildExecutionBoardTaskMenuItems,
   ExecutionBoard
 } from "./execution-board";
 
 describe("ExecutionBoard card surface", () => {
-  it("renders AP badges and opens the split action from the card", () => {
+  it("renders AP badges, opens split, and reports a rolled-back move", async () => {
     const task: Task = {
       id: "task_1",
       title: "Split-ready task",
@@ -74,7 +80,8 @@ describe("ExecutionBoard card surface", () => {
       },
       splitSuggestion: {
         shouldSplit: true,
-        reason: "The current live plan would push this task beyond twice its expected duration.",
+        reason:
+          "The current live plan would push this task beyond twice its expected duration.",
         thresholdSeconds: 172_800
       }
     };
@@ -102,6 +109,7 @@ describe("ExecutionBoard card surface", () => {
     } as unknown as Tag;
     const notesSummaryByEntity: NotesSummaryByEntity = {};
     const onSplitTask = vi.fn();
+    const onMove = vi.fn().mockRejectedValue(new Error("Network unavailable."));
     const activeRun: TaskRun = {
       id: "run_1",
       taskId: task.id,
@@ -149,7 +157,7 @@ describe("ExecutionBoard card surface", () => {
             goals={[goal]}
             tags={[tag]}
             selectedTaskId={task.id}
-            onMove={vi.fn(async () => {})}
+            onMove={onMove}
             onSelectTask={vi.fn()}
             onSplitTask={onSplitTask}
             notesSummaryByEntity={notesSummaryByEntity}
@@ -171,6 +179,18 @@ describe("ExecutionBoard card surface", () => {
     );
 
     expect(onSplitTask).toHaveBeenCalledWith("task_1");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /open split-ready task actions/i })
+    );
+    fireEvent.click(screen.getByText("Move to backlog"));
+
+    await waitFor(() => {
+      expect(onMove).toHaveBeenCalledWith("task_1", "backlog");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /restored its previous lane.*network unavailable/i
+      );
+    });
   });
 
   it("shows a stop control for tasks with an active run and releases that run", () => {

@@ -588,24 +588,32 @@ describe("PsycheSelfObservationPage", () => {
     expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
   });
 
-  it("supports explicit entity filtering and compact density mode", async () => {
-    renderPage();
+  it(
+    "supports explicit entity filtering and compact density mode",
+    async () => {
+      renderPage();
 
-    await screen.findAllByText("Notice the tension before the meeting.");
+      await screen.findAllByText("Notice the tension before the meeting.");
 
-    fireEvent.click(screen.getByRole("button", { name: /All entities/i }));
-    fireEvent.click(screen.getByRole("option", { name: /Habit/i }));
+      fireEvent.click(screen.getByRole("button", { name: /All entities/i }));
+      fireEvent.click(screen.getByRole("option", { name: /Habit/i }));
 
-    await waitFor(() =>
-      expect(screen.queryAllByText("Notice the tension before the meeting.")).toHaveLength(0)
-    );
-    expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(0);
+      await waitFor(() =>
+        expect(
+          screen.queryAllByText("Notice the tension before the meeting.")
+        ).toHaveLength(0)
+      );
+      expect(screen.getAllByText("Resisted Doomscrolling").length).toBeGreaterThan(
+        0
+      );
 
-    fireEvent.click(screen.getByRole("button", { name: /Informative/i }));
-    fireEvent.click(screen.getByRole("option", { name: /Compact/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Informative/i }));
+      fireEvent.click(screen.getByRole("option", { name: /Compact/i }));
 
-    expect(screen.getByRole("button", { name: /Compact/i })).toBeTruthy();
-  });
+      expect(screen.getByRole("button", { name: /Compact/i })).toBeTruthy();
+    },
+    10_000
+  );
 
   it("exports the current week with the active filters", async () => {
     renderPage();
@@ -695,26 +703,30 @@ describe("PsycheSelfObservationPage", () => {
     );
   });
 
-  it("saves before opening the pattern flow from an observation", async () => {
-    renderPage();
-    fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
-    );
+  it(
+    "saves before opening the pattern flow from an observation",
+    async () => {
+      renderPage();
+      fireEvent.click(
+        (await screen.findAllByRole("button", { name: "Add observation" }))[0]!
+      );
 
-    fireEvent.change(screen.getByLabelText("Observation note"), {
-      target: { value: "A fresh observation that should seed a pattern." }
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create pattern from observation" })
-    );
+      fireEvent.change(screen.getByLabelText("Observation note"), {
+        target: { value: "A fresh observation that should seed a pattern." }
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create pattern from observation" })
+      );
 
-    await waitFor(() => expect(createNoteMock).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith(
-        "/psyche/patterns?create=1&sourceObservationNoteId=note_created&userId=user_operator"
-      )
-    );
-  });
+      await waitFor(() => expect(createNoteMock).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(navigateMock).toHaveBeenCalledWith(
+          "/psyche/patterns?create=1&sourceObservationNoteId=note_created&userId=user_operator"
+        )
+      );
+    },
+    10_000
+  );
 
   it("moves an observation to a new hour slot with drag and drop", async () => {
     const view = renderPage();

@@ -365,7 +365,7 @@ test("workbench flows can be created, run, and expose published outputs", async 
 
     const runsResponse = await app.inject({
       method: "GET",
-      url: `/api/v1/workbench/flows/${connectorId}/runs`,
+      url: `/api/v1/workbench/flows/${connectorId}/runs?limit=1&offset=1`,
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"
@@ -374,10 +374,21 @@ test("workbench flows can be created, run, and expose published outputs", async 
     assert.equal(runsResponse.statusCode, 200);
     const runsBody = runsResponse.json() as {
       runs: Array<{ status: string; result: { primaryText: string } }>;
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
     };
-    assert.ok(runsBody.runs.length >= 2);
+    assert.equal(runsBody.runs.length, 1);
+    assert.equal(runsBody.total, 2);
+    assert.equal(runsBody.limit, 1);
+    assert.equal(runsBody.offset, 1);
+    assert.equal(runsBody.hasMore, false);
     assert.equal(runsBody.runs[0]?.status, "completed");
-    assert.match(runsBody.runs[0]?.result.primaryText ?? "", /Mock consumed linked inputs/);
+    assert.match(
+      runsBody.runs[0]?.result.primaryText ?? "",
+      /Mock consumed linked inputs/
+    );
 
     const workbenchBySlugResponse = await app.inject({
       method: "GET",

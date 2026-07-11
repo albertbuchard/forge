@@ -1564,6 +1564,176 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertEqual(remaining.map(\.id), [durableOnlyPending.id])
     }
 
+    func testWatchActionBatchPolicyBoundsExchangeWithoutDroppingOutboxItems() {
+        let outbox = (0..<47).map { makeWatchEnvelope(id: "action_\($0)") }
+
+        let batch = ForgeWatchActionBatchPolicy.nextBatch(from: outbox)
+
+        XCTAssertEqual(batch.count, ForgeWatchActionBatchPolicy.maximumActionCount)
+        XCTAssertEqual(batch.map(\.id), Array(outbox.prefix(20)).map(\.id))
+        XCTAssertEqual(outbox.count, 47)
+    }
+
+    func testWatchDurableQueueRejectsCountOverflowWithoutDroppingStoredActions() {
+        let stored = [
+            makeWatchEnvelope(id: "stored_1"),
+            makeWatchEnvelope(id: "stored_2")
+        ]
+
+        let admission = ForgeWatchDurableQueuePolicy.appending(
+            makeWatchEnvelope(id: "rejected"),
+            to: stored,
+            maximumActionCount: 2,
+            maximumEncodedBytes: ForgeWatchDurableQueuePolicy.maximumEncodedBytes
+        )
+
+        XCTAssertFalse(admission.inserted)
+        XCTAssertNil(admission.encodedData)
+        XCTAssertEqual(admission.queue, stored)
+        XCTAssertEqual(admission.backpressure, .actionCount(maximum: 2))
+        XCTAssertTrue(
+            admission.backpressure?.message(storageName: "Watch").contains("full") == true
+        )
+    }
+
+    func testWatchDurableQueueRejectsEncodedByteOverflowWithoutDroppingStoredActions() throws {
+        let stored = [makeWatchEnvelope(id: "stored")]
+        let storedByteCount = try JSONEncoder().encode(stored).count
+
+        let admission = ForgeWatchDurableQueuePolicy.appending(
+            makeWatchEnvelope(id: "rejected"),
+            to: stored,
+            maximumActionCount: 10,
+            maximumEncodedBytes: storedByteCount
+        )
+
+        XCTAssertFalse(admission.inserted)
+        XCTAssertNil(admission.encodedData)
+        XCTAssertEqual(admission.queue, stored)
+        XCTAssertEqual(admission.backpressure, .encodedBytes(maximum: storedByteCount))
+        XCTAssertTrue(
+            admission.backpressure?.message(storageName: "iPhone").contains("full") == true
+        )
+    }
+
+    func testWatchSnapshotFreshnessHandlesStaleOfflineAndClockSkewStates() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-11T12:00:00Z"))
+
+        XCTAssertEqual(
+            ForgeWatchSnapshotFreshness.evaluate(
+                generatedAt: "2026-07-11T11:55:00Z",
+                hasSnapshot: true,
+                now: now
+            ).state,
+            .fresh
+        )
+        XCTAssertEqual(
+            ForgeWatchSnapshotFreshness.evaluate(
+                generatedAt: "2026-07-11T11:40:00Z",
+                hasSnapshot: true,
+                now: now
+            ).state,
+            .stale
+        )
+        XCTAssertEqual(
+            ForgeWatchSnapshotFreshness.evaluate(
+                generatedAt: "2026-07-11T12:06:00Z",
+                hasSnapshot: true,
+                now: now
+            ).state,
+            .clockSkew
+        )
+        XCTAssertEqual(
+            ForgeWatchSnapshotFreshness.evaluate(
+                generatedAt: "not-a-date",
+                hasSnapshot: false,
+                now: now
+            ).state,
+            .unavailable
+        )
+    }
+
+    func testWatchReceiptHistoryIsBoundedAndDeduplicated() {
+        let existing = (0..<30).map {
+            ForgeWatchStoredReceipt(
+                actionId: "action_\($0)",
+                kind: "capture_event",
+                status: "processed",
+                processedAt: "2026-07-11T10:00:00Z",
+                errorMessage: nil
+            )
+        }
+        let replacement = ForgeWatchStoredReceipt(
+            actionId: "action_5",
+            kind: "capture_event",
+            status: "failed",
+            processedAt: "2026-07-11T10:05:00Z",
+            errorMessage: "Forge rejected this action"
+        )
+
+        let merged = ForgeWatchReceiptHistoryPolicy.merging([replacement], into: existing)
+
+        XCTAssertEqual(merged.count, ForgeWatchReceiptHistoryPolicy.maximumReceiptCount)
+        XCTAssertEqual(merged.first, replacement)
+        XCTAssertEqual(merged.filter { $0.actionId == replacement.actionId }.count, 1)
+    }
+
+    func testAsynchronousSingleAckPersistsReceiptAndContinuesWithNextBoundedBatch() throws {
+        let acknowledged = makeWatchEnvelope(id: "acknowledged")
+        let remaining = (0..<25).map { makeWatchEnvelope(id: "remaining_\($0)") }
+        let queue = [acknowledged] + remaining
+        let ack = ForgeWatchAckEnvelope(
+            actionId: acknowledged.id,
+            kind: acknowledged.kind.rawValue,
+            processedAt: "2026-07-11T10:01:00Z",
+            status: "processed",
+            error: nil,
+            bootstrap: nil
+        )
+
+        let update = ForgeWatchReceiptLifecycle.applying(
+            ack,
+            to: queue,
+            receiptHistory: []
+        )
+        let nextBatch = ForgeWatchActionBatchPolicy.nextBatch(from: update.remainingQueue)
+        let persistedData = try JSONEncoder().encode(update.receiptHistory)
+        let restoredReceipts = try JSONDecoder().decode(
+            [ForgeWatchStoredReceipt].self,
+            from: persistedData
+        )
+
+        XCTAssertEqual(update.remainingQueue, remaining)
+        XCTAssertEqual(update.completedReceipt?.actionId, acknowledged.id)
+        XCTAssertEqual(restoredReceipts.first?.actionId, acknowledged.id)
+        XCTAssertTrue(update.shouldContinueFlushing)
+        XCTAssertEqual(nextBatch.count, ForgeWatchActionBatchPolicy.maximumActionCount)
+        XCTAssertEqual(nextBatch.map(\.id), Array(remaining.prefix(20)).map(\.id))
+    }
+
+    func testDeferredReceiptKeepsDurableActionAndDoesNotStartAnotherFlush() {
+        let pending = makeWatchEnvelope(id: "pending")
+        let ack = ForgeWatchAckEnvelope(
+            actionId: pending.id,
+            kind: pending.kind.rawValue,
+            processedAt: "2026-07-11T10:01:00Z",
+            status: "deferred",
+            error: ["message": "Forge pairing is not ready"],
+            bootstrap: nil
+        )
+
+        let update = ForgeWatchReceiptLifecycle.applying(
+            ack,
+            to: [pending],
+            receiptHistory: []
+        )
+
+        XCTAssertEqual(update.remainingQueue, [pending])
+        XCTAssertTrue(update.receiptHistory.isEmpty)
+        XCTAssertNil(update.completedReceipt)
+        XCTAssertFalse(update.shouldContinueFlushing)
+    }
+
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.failureFallbackCooldownSeconds, 3)
         XCTAssertEqual(ForgeWatchDirectRoutePolicy.directRetryAfterFailureDelaySeconds, 3.25)
@@ -7579,6 +7749,71 @@ final class ForgeCompanionTests: XCTestCase {
 
         XCTAssertTrue(rendered.contains("[INFO][MovementLifeTimeline] openPlaceLabelDraft item=stay_1 initialQuery=Home"))
         XCTAssertTrue(rendered.contains("[ERROR][MovementLifeTimeline] savePlaceDraft failed item=stay_1 label=Home error=Request timed out"))
+    }
+
+    func testCompanionDebugLogRedactsCredentialsAcrossCommonDiagnosticFormats() {
+        let labeledSecrets = companionRedactDiagnosticMessage(
+            #"pairingToken=pair-secret sessionId='pair-session' api_key: abc123 password=hunter2"#
+        )
+        let requestSecrets = companionRedactDiagnosticMessage(
+            "Authorization: Bearer header.payload.signature"
+        )
+        let querySecrets = companionRedactDiagnosticMessage(
+            "GET https://forge.example/pair?pairing_token=query-secret&session-id=query-session"
+        )
+        let cookieSecrets = companionRedactDiagnosticMessage(
+            "Set-Cookie: forge_operator_session=session-cookie; Path=/; HttpOnly"
+        )
+        let userInfoSecret = companionRedactDiagnosticMessage(
+            "https://operator:plain-password@forge.example/api/v1"
+        )
+        let jwtSecret = companionRedactDiagnosticMessage(
+            "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGJlcnQifQ.signaturevalue"
+        )
+        let activeCheckpoint = companionRedactDiagnosticMessage(
+            "discarding active health sync checkpoint session=sync_01J123SECRET chunkingVersion=2 currentChunkingVersion=3 ageSeconds=42 windowAgeSeconds=84"
+        )
+
+        for secret in [
+            "pair-secret", "pair-session", "abc123", "hunter2",
+            "header.payload.signature", "query-secret", "query-session",
+            "session-cookie", "plain-password", "eyJhbGciOiJIUzI1NiJ9",
+            "sync_01J123SECRET"
+        ] {
+            XCTAssertFalse(
+                [
+                    labeledSecrets, requestSecrets, querySecrets, cookieSecrets,
+                    userInfoSecret, jwtSecret, activeCheckpoint
+                ]
+                    .joined(separator: "\n")
+                    .contains(secret)
+            )
+        }
+        XCTAssertTrue(labeledSecrets.contains("pairingToken=<redacted>"))
+        XCTAssertTrue(requestSecrets.contains("Bearer <redacted>"))
+        XCTAssertTrue(querySecrets.contains("pairing_token=<redacted>"))
+        XCTAssertTrue(cookieSecrets.contains("Set-Cookie: <redacted>"))
+        XCTAssertTrue(userInfoSecret.contains(":<redacted>@"))
+        XCTAssertTrue(jwtSecret.contains("<redacted-token>"))
+        XCTAssertEqual(
+            activeCheckpoint,
+            "discarding active health sync checkpoint session=<redacted> chunkingVersion=2 currentChunkingVersion=3 ageSeconds=42 windowAgeSeconds=84"
+        )
+    }
+
+    func testCompanionDebugLogEntryRedactsLegacyPersistedMessageDuringDecode() throws {
+        let data = Data(
+            #"{"id":"legacy","timestamp":0,"scope":"Pairing","message":"pairingToken=legacy-secret sessionId=legacy-session","level":"info"}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(CompanionDebugLogEntry.self, from: data)
+
+        XCTAssertFalse(decoded.message.contains("legacy-secret"))
+        XCTAssertFalse(decoded.message.contains("legacy-session"))
+        XCTAssertEqual(
+            decoded.message,
+            "pairingToken=<redacted> sessionId=<redacted>"
+        )
     }
 
     func testCompanionDebugLogPrunesRegularLogsBeforeErrors() {

@@ -20,6 +20,15 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  ArtifactEntityLinksEditor,
+  ArtifactEntityLinksList,
+  ArtifactEntityTypeInput,
+  artifactEntityLinkDraftsToInputs,
+  artifactEntityLinksToDrafts,
+  validateArtifactEntityLinkDrafts,
+  type ArtifactEntityLinkDraft
+} from "@/components/artifacts/artifact-entity-links";
+import {
   FlowField,
   QuestionFlowDialog,
   type QuestionFlowStep
@@ -76,6 +85,7 @@ const FORMAT_FAMILIES: ArtifactFormatFamily[] = [
 ];
 
 const ARTIFACT_PAGE_SIZE = 50;
+const MAX_ARTIFACT_UPLOAD_QUEUE_FILES = 25;
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -161,18 +171,23 @@ function createUploadQueueItem(file: File): ArtifactUploadQueueItem {
     sourceLabel: "",
     sourceKind: "upload",
     useLlmEnrichment: false,
-    genericLinksText: "",
+    linkDrafts: [],
     metadataText: ""
   };
 }
 
 function appendUploadFiles(value: ArtifactUploadFlowValue, files: File[]) {
-  if (files.length === 0) {
+  const availableSlots = Math.max(
+    0,
+    MAX_ARTIFACT_UPLOAD_QUEUE_FILES - value.items.length
+  );
+  const acceptedFiles = files.slice(0, availableSlots);
+  if (acceptedFiles.length === 0) {
     return value;
   }
   return {
     ...value,
-    items: [...value.items, ...files.map(createUploadQueueItem)],
+    items: [...value.items, ...acceptedFiles.map(createUploadQueueItem)],
     activeItemId: null
   };
 }
@@ -227,7 +242,7 @@ type UploadDraft = {
   description: string;
   sourceLabel: string;
   useLlmEnrichment: boolean;
-  genericLinksText: string;
+  linkDrafts: ArtifactEntityLinkDraft[];
 };
 
 type ArtifactUploadQueueItem = UploadDraft & {
@@ -254,6 +269,10 @@ type EncryptFlowValue = {
   password: string;
   passwordConfirm: string;
   passwordHint: string;
+};
+
+type ArtifactLinkFlowValue = {
+  drafts: ArtifactEntityLinkDraft[];
 };
 
 type ArtifactUploadResult =
@@ -290,6 +309,10 @@ const EMPTY_ENCRYPT_FLOW_VALUE: EncryptFlowValue = {
   passwordHint: ""
 };
 
+const EMPTY_LINK_FLOW_VALUE: ArtifactLinkFlowValue = {
+  drafts: []
+};
+
 const ARTIFACT_ACCEPT_EXTENSIONS = [
   ".xlsx",
   ".xlsm",
@@ -316,38 +339,6 @@ const SOURCE_KIND_OPTIONS: ArtifactSourceKind[] = [
   "external_reference",
   "manual"
 ];
-
-function parseGenericLinksText(value: string): EntityLinkInput[] {
-  return value
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [
-        entityType = "",
-        entityId = "",
-        relationship = "related",
-        anchorKey = ""
-      ] = line.split(":").map((part) => part.trim());
-      return { entityType, entityId, relationship, anchorKey };
-    })
-    .filter((link) => link.entityType.length > 0 && link.entityId.length > 0);
-}
-
-function formatGenericLinksText(links: Artifact["links"]) {
-  return links
-    .map((link) =>
-      [
-        link.targetEntityType,
-        link.targetEntityId,
-        link.relationship || "related",
-        link.anchorKey ?? ""
-      ]
-        .filter((part, index) => index < 3 || part.length > 0)
-        .join(":")
-    )
-    .join("\n");
-}
 
 function ArtifactListItem({
   artifact,
@@ -447,8 +438,11 @@ export function ArtifactsPage() {
   const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">(
     ""
   );
+  const [linkedEntityType, setLinkedEntityType] = useState("");
+  const [linkedEntityId, setLinkedEntityId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [linksDialogOpen, setLinksDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [downloadPasswordDialogOpen, setDownloadPasswordDialogOpen] =
     useState(false);
@@ -459,6 +453,9 @@ export function ArtifactsPage() {
     useState<PasswordFlowValue>(EMPTY_PASSWORD_FLOW_VALUE);
   const [encryptFlowValue, setEncryptFlowValue] = useState<EncryptFlowValue>(
     EMPTY_ENCRYPT_FLOW_VALUE
+  );
+  const [linkFlowValue, setLinkFlowValue] = useState<ArtifactLinkFlowValue>(
+    EMPTY_LINK_FLOW_VALUE
   );
   const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>(
     []
@@ -472,18 +469,42 @@ export function ArtifactsPage() {
   const [encryptDialogError, setEncryptDialogError] = useState<string | null>(
     null
   );
+  const [linksDialogError, setLinksDialogError] = useState<string | null>(null);
   const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] = useState<
     string | null
   >(null);
-  const [genericLinksText, setGenericLinksText] = useState("");
+  const hasCompleteLinkedEntityFilter = Boolean(
+    linkedEntityType.trim() && linkedEntityId.trim()
+  );
+  const hasAnyFilter = Boolean(
+    query.trim() ||
+    dangerLevel ||
+    formatFamily ||
+    linkedEntityType.trim() ||
+    linkedEntityId.trim()
+  );
 
   const artifactsQuery = useQuery({
-    queryKey: ["artifacts", query, dangerLevel, formatFamily, pageIndex],
+    queryKey: [
+      "artifacts",
+      query,
+      dangerLevel,
+      formatFamily,
+      linkedEntityType,
+      linkedEntityId,
+      pageIndex
+    ],
     queryFn: () =>
       listArtifacts({
         query: query || undefined,
         dangerLevel: dangerLevel || undefined,
         formatFamily: formatFamily || undefined,
+        linkedEntityType: hasCompleteLinkedEntityFilter
+          ? linkedEntityType
+          : undefined,
+        linkedEntityId: hasCompleteLinkedEntityFilter
+          ? linkedEntityId
+          : undefined,
         limit: ARTIFACT_PAGE_SIZE,
         offset: pageIndex * ARTIFACT_PAGE_SIZE
       })
@@ -533,7 +554,7 @@ export function ArtifactsPage() {
 
   useEffect(() => {
     setPageIndex(0);
-  }, [query, dangerLevel, formatFamily]);
+  }, [query, dangerLevel, formatFamily, linkedEntityType, linkedEntityId]);
 
   useEffect(() => {
     if (pageIndex > 0 && artifactsQuery.data && artifacts.length === 0) {
@@ -546,6 +567,7 @@ export function ArtifactsPage() {
       setArchiveDialogOpen(false);
       setDownloadPasswordDialogOpen(false);
       setEncryptDialogOpen(false);
+      setLinksDialogOpen(false);
     }
   }, [selectedArtifact]);
 
@@ -584,7 +606,7 @@ export function ArtifactsPage() {
             sourceKind: item.sourceKind,
             sourceLabel: item.sourceLabel,
             metadata: parseMetadataText(item.metadataText),
-            links: parseGenericLinksText(item.genericLinksText),
+            links: artifactEntityLinkDraftsToInputs(item.linkDrafts),
             contentProtection: uploadFlowValue.encryptContent
               ? {
                   mode: "password_encrypted",
@@ -656,7 +678,11 @@ export function ArtifactsPage() {
   const linksMutation = useMutation({
     mutationFn: (links: EntityLinkInput[]) =>
       replaceArtifactEntityLinks(selectedArtifact!.id, links),
-    onSuccess: invalidateArtifacts
+    onSuccess: async () => {
+      setLinksDialogOpen(false);
+      setLinksDialogError(null);
+      await invalidateArtifacts();
+    }
   });
 
   const downloadMutation = useMutation({
@@ -759,12 +785,21 @@ export function ArtifactsPage() {
   const findings = scanFindings(selectedArtifact);
   const versionCount = versionsQuery.data?.versions.length ?? 0;
   const auditEvents = auditQuery.data?.events ?? [];
-
-  useEffect(() => {
-    setGenericLinksText(
-      selectedArtifact ? formatGenericLinksText(selectedArtifact.links) : ""
-    );
-  }, [selectedArtifact]);
+  const downloadDisabledReason = selectedArtifact
+    ? selectedArtifact.artifactState === "blocked"
+      ? "Download is blocked by the artifact safety state."
+      : selectedArtifact.downloadPolicy !== "human_only"
+        ? "Download is disabled by this artifact's policy."
+        : null
+    : null;
+  const artifactActionError =
+    patchMutation.error ??
+    scanMutation.error ??
+    enrichMutation.error ??
+    downloadMutation.error;
+  const enrichmentStatus = selectedArtifact?.enrichmentResults as
+    | { status?: unknown; reason?: unknown; error?: unknown }
+    | undefined;
 
   const uploadResultByItemId = useMemo(
     () => new Map(uploadResults.map((result) => [result.itemId, result])),
@@ -796,10 +831,15 @@ export function ArtifactsPage() {
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => {
                 event.preventDefault();
+                const files = Array.from(event.dataTransfer.files);
                 setUploadResults([]);
-                setValue(
-                  appendUploadFiles(value, Array.from(event.dataTransfer.files))
+                setUploadDialogError(
+                  files.length + value.items.length >
+                    MAX_ARTIFACT_UPLOAD_QUEUE_FILES
+                    ? `The upload queue accepts at most ${MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files.`
+                    : null
                 );
+                setValue(appendUploadFiles(value, files));
               }}
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -818,10 +858,19 @@ export function ArtifactsPage() {
                   type="file"
                   multiple
                   accept={ARTIFACT_ACCEPT_EXTENSIONS}
+                  disabled={
+                    value.items.length >= MAX_ARTIFACT_UPLOAD_QUEUE_FILES
+                  }
                   className="w-full sm:max-w-xs"
                   onChange={(event) => {
                     const files = Array.from(event.target.files ?? []);
                     setUploadResults([]);
+                    setUploadDialogError(
+                      files.length + value.items.length >
+                        MAX_ARTIFACT_UPLOAD_QUEUE_FILES
+                        ? `The upload queue accepts at most ${MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files.`
+                        : null
+                    );
                     setValue(appendUploadFiles(value, files));
                     event.target.value = "";
                   }}
@@ -856,6 +905,9 @@ export function ArtifactsPage() {
                 ))}
               </div>
             )}
+            <div className="text-xs text-[var(--ui-ink-muted)]">
+              {value.items.length} of {MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files
+            </div>
 
             <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
               <label className="flex items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
@@ -1033,21 +1085,19 @@ export function ArtifactsPage() {
                   />
                 </FlowField>
 
-                <FlowField
-                  label="Generic entity links"
-                  hint="One per line: entityType:entityId:relationship:anchorKey"
-                >
-                  <Textarea
-                    value={activeItem.genericLinksText}
-                    onChange={(event) =>
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-[var(--ui-ink-medium)]">
+                    Forge entity relationships
+                  </div>
+                  <ArtifactEntityLinksEditor
+                    drafts={activeItem.linkDrafts}
+                    onChange={(linkDrafts) =>
                       setValue(
-                        updateUploadItem(value, activeItem.id, {
-                          genericLinksText: event.target.value
-                        })
+                        updateUploadItem(value, activeItem.id, { linkDrafts })
                       )
                     }
                   />
-                </FlowField>
+                </div>
 
                 <FlowField
                   label="Metadata JSON"
@@ -1225,6 +1275,46 @@ export function ArtifactsPage() {
     [uploadResultByItemId, uploadResults]
   );
 
+  const linkFlowSteps = useMemo<Array<QuestionFlowStep<ArtifactLinkFlowValue>>>(
+    () => [
+      {
+        id: "relationships",
+        eyebrow: "Connect",
+        title: "Manage entity relationships",
+        description:
+          "Use exact Forge entity types and IDs. Relationships are stored in the shared entity graph.",
+        render: (value, setValue) => (
+          <ArtifactEntityLinksEditor
+            drafts={value.drafts}
+            onChange={(drafts) => setValue({ drafts })}
+          />
+        )
+      },
+      {
+        id: "review",
+        eyebrow: "Review",
+        title: "Save artifact relationships",
+        description:
+          "This replaces the artifact's current relationship set without changing stored file bytes.",
+        render: (value) => (
+          <ArtifactEntityLinksList
+            links={value.drafts.map((draft) => ({
+              sourceEntityType: "artifact",
+              sourceEntityId: selectedArtifact?.id ?? "",
+              targetEntityType: draft.entityType.trim(),
+              targetEntityId: draft.entityId.trim(),
+              relationship: draft.relationship.trim() || "related",
+              anchorKey: draft.anchorKey.trim() || null,
+              createdByActor: null,
+              createdAt: ""
+            }))}
+          />
+        )
+      }
+    ],
+    [selectedArtifact?.id]
+  );
+
   const archiveFlowSteps = useMemo<
     Array<QuestionFlowStep<Record<string, never>>>
   >(
@@ -1356,6 +1446,10 @@ export function ArtifactsPage() {
     try {
       for (const item of itemsToUpload) {
         parseMetadataText(item.metadataText);
+        const linkError = validateArtifactEntityLinkDrafts(item.linkDrafts);
+        if (linkError) {
+          throw new Error(`${item.file.name}: ${linkError}`);
+        }
       }
     } catch (error) {
       setUploadDialogError(readErrorMessage(error));
@@ -1393,6 +1487,31 @@ export function ArtifactsPage() {
     await encryptMutation.mutateAsync(encryptFlowValue);
   };
 
+  const openLinksDialog = () => {
+    if (!selectedArtifact) {
+      return;
+    }
+    setLinkFlowValue({
+      drafts: artifactEntityLinksToDrafts(selectedArtifact.links)
+    });
+    setLinksDialogError(null);
+    setLinksDialogOpen(true);
+  };
+
+  const submitLinksFlow = async () => {
+    const validationError = validateArtifactEntityLinkDrafts(
+      linkFlowValue.drafts
+    );
+    if (validationError) {
+      setLinksDialogError(validationError);
+      return;
+    }
+    setLinksDialogError(null);
+    await linksMutation.mutateAsync(
+      artifactEntityLinkDraftsToInputs(linkFlowValue.drafts)
+    );
+  };
+
   return (
     <div className="min-h-full bg-[var(--ui-bg)] text-[var(--ui-ink-strong)]">
       <PageHero
@@ -1416,12 +1535,14 @@ export function ArtifactsPage() {
               Store
             </div>
             <Input
+              aria-label="Search artifacts"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search title, file, description, provenance"
             />
             <div className="grid grid-cols-2 gap-2">
               <select
+                aria-label="Filter by danger level"
                 value={dangerLevel}
                 onChange={(event) =>
                   setDangerLevel(event.target.value as ArtifactDangerLevel | "")
@@ -1436,6 +1557,7 @@ export function ArtifactsPage() {
                 ))}
               </select>
               <select
+                aria-label="Filter by format family"
                 value={formatFamily}
                 onChange={(event) =>
                   setFormatFamily(
@@ -1451,6 +1573,43 @@ export function ArtifactsPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="grid gap-2 border-t border-[var(--ui-border-subtle)] pt-3">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                Linked record
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <ArtifactEntityTypeInput
+                  ariaLabel="Filter by linked entity type"
+                  value={linkedEntityType}
+                  onChange={setLinkedEntityType}
+                />
+                <Input
+                  aria-label="Filter by linked entity ID"
+                  value={linkedEntityId}
+                  onChange={(event) => setLinkedEntityId(event.target.value)}
+                  placeholder="Exact entity ID"
+                />
+              </div>
+              {Boolean(linkedEntityType.trim()) !==
+              Boolean(linkedEntityId.trim()) ? (
+                <p className="text-xs text-[var(--warning)]" role="status">
+                  Enter both fields to filter by a linked record.
+                </p>
+              ) : null}
+              {linkedEntityType || linkedEntityId ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setLinkedEntityType("");
+                    setLinkedEntityId("");
+                  }}
+                >
+                  Clear linked filter
+                </Button>
+              ) : null}
             </div>
           </Card>
 
@@ -1492,11 +1651,18 @@ export function ArtifactsPage() {
                 Loading artifacts...
               </Card>
             ) : artifactsQuery.error ? (
-              <ErrorState error={artifactsQuery.error} />
+              <ErrorState
+                error={artifactsQuery.error}
+                onRetry={() => void artifactsQuery.refetch()}
+              />
             ) : artifacts.length === 0 ? (
               <EmptyState
                 title="No artifacts found"
-                description="Upload a trusted file to create the first artifact record."
+                description={
+                  hasAnyFilter
+                    ? "No artifact records match the current search and filters."
+                    : "Upload a trusted file to create the first artifact record."
+                }
               />
             ) : (
               artifacts.map((artifact) => (
@@ -1517,7 +1683,10 @@ export function ArtifactsPage() {
               Loading artifact...
             </Card>
           ) : artifactId && selectedArtifactQuery.error ? (
-            <ErrorState error={selectedArtifactQuery.error} />
+            <ErrorState
+              error={selectedArtifactQuery.error}
+              onRetry={() => void selectedArtifactQuery.refetch()}
+            />
           ) : !selectedArtifact ? (
             <EmptyState
               title="Select an artifact"
@@ -1541,6 +1710,11 @@ export function ArtifactsPage() {
                       </Badge>
                       <Badge tone="meta">
                         {selectedArtifact.detectedExtension.toUpperCase()}
+                      </Badge>
+                      <Badge tone="meta">
+                        {selectedArtifact.downloadPolicy === "human_only"
+                          ? "Human-only download"
+                          : "Download disabled"}
                       </Badge>
                       {isEncryptedArtifact(selectedArtifact) ? (
                         <Badge tone="meta">
@@ -1623,6 +1797,33 @@ export function ArtifactsPage() {
                   </div>
                 </div>
 
+                {downloadDisabledReason ? (
+                  <p className="rounded-[var(--radius-card)] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--warning)]">
+                    {downloadDisabledReason}
+                  </p>
+                ) : null}
+                {artifactActionError ? (
+                  <p
+                    className="rounded-[var(--radius-card)] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
+                    role="alert"
+                  >
+                    {readErrorMessage(artifactActionError)}
+                  </p>
+                ) : null}
+                {typeof enrichmentStatus?.status === "string" ? (
+                  <p
+                    className="text-sm text-[var(--ui-ink-muted)]"
+                    role="status"
+                  >
+                    Enrichment: {titleCase(enrichmentStatus.status)}
+                    {typeof enrichmentStatus.reason === "string"
+                      ? ` · ${enrichmentStatus.reason}`
+                      : typeof enrichmentStatus.error === "string"
+                        ? ` · ${enrichmentStatus.error}`
+                        : ""}
+                  </p>
+                ) : null}
+
                 <div className="grid gap-3 md:grid-cols-5">
                   {[
                     ["File", selectedArtifact.originalFileName],
@@ -1701,9 +1902,13 @@ export function ArtifactsPage() {
                     <ShieldAlert className="size-4 text-[var(--primary)]" />
                     Safety Findings
                   </div>
-                  {findings.length === 0 ? (
+                  {!isScanResult(selectedArtifact.scanResults) ? (
                     <p className="text-sm text-[var(--ui-ink-muted)]">
-                      No findings recorded.
+                      No static scan result is available.
+                    </p>
+                  ) : findings.length === 0 ? (
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      Static scan completed with no findings.
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -1739,55 +1944,14 @@ export function ArtifactsPage() {
                     <Link2 className="size-4 text-[var(--primary)]" />
                     Entity Links
                   </div>
-                  {selectedArtifact.links.length === 0 ? (
-                    <p className="text-sm text-[var(--ui-ink-muted)]">
-                      No linked entities.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selectedArtifact.links.map((link) => (
-                        <div
-                          key={`${link.targetEntityType}:${link.targetEntityId}:${link.relationship}`}
-                          className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
-                        >
-                          <div className="font-medium">
-                            {titleCase(link.targetEntityType)}
-                          </div>
-                          <div className="mt-1 break-all text-xs text-[var(--ui-ink-muted)]">
-                            {link.targetEntityId}
-                          </div>
-                          <Badge className="mt-2" size="xs" tone="meta">
-                            {titleCase(link.relationship)}
-                          </Badge>
-                          {link.anchorKey ? (
-                            <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
-                              Anchor: {link.anchorKey}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <Textarea
-                    value={genericLinksText}
-                    onChange={(event) =>
-                      setGenericLinksText(event.target.value)
-                    }
-                    placeholder="Generic entity links, one per line: entityType:entityId:relationship:anchorKey"
-                    aria-label="Generic entity links"
-                  />
+                  <ArtifactEntityLinksList links={selectedArtifact.links} />
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() =>
-                      linksMutation.mutate(
-                        parseGenericLinksText(genericLinksText)
-                      )
-                    }
-                    pending={linksMutation.isPending}
+                    onClick={openLinksDialog}
                   >
                     <Link2 className="size-4" />
-                    Save Links
+                    Manage links
                   </Button>
                 </Card>
               </div>
@@ -1798,20 +1962,45 @@ export function ArtifactsPage() {
                     <FileSearch className="size-4 text-[var(--primary)]" />
                     Versions
                   </div>
-                  {(versionsQuery.data?.versions ?? []).map((version) => (
+                  {versionsQuery.isLoading ? (
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      Loading versions...
+                    </p>
+                  ) : versionsQuery.error ? (
                     <div
-                      key={version.id}
-                      className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
+                      className="grid gap-2 text-sm text-[var(--danger)]"
+                      role="alert"
                     >
-                      <div className="font-medium">
-                        Version {version.versionNumber}
-                      </div>
-                      <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                        {formatBytes(version.byteSize)} ·{" "}
-                        {version.originalFileName}
-                      </div>
+                      <span>{readErrorMessage(versionsQuery.error)}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void versionsQuery.refetch()}
+                      >
+                        Retry versions
+                      </Button>
                     </div>
-                  ))}
+                  ) : (versionsQuery.data?.versions ?? []).length === 0 ? (
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      No artifact versions are recorded.
+                    </p>
+                  ) : (
+                    (versionsQuery.data?.versions ?? []).map((version) => (
+                      <div
+                        key={version.id}
+                        className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
+                      >
+                        <div className="font-medium">
+                          Version {version.versionNumber}
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                          {formatBytes(version.byteSize)} ·{" "}
+                          {version.originalFileName}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </Card>
 
                 <Card className="space-y-3">
@@ -1819,18 +2008,49 @@ export function ArtifactsPage() {
                     <FileSearch className="size-4 text-[var(--primary)]" />
                     Audit
                   </div>
-                  {auditEvents.slice(0, 10).map((event) => (
+                  {auditQuery.isLoading ? (
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      Loading audit history...
+                    </p>
+                  ) : auditQuery.error ? (
                     <div
-                      key={event.id}
-                      className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
+                      className="grid gap-2 text-sm text-[var(--danger)]"
+                      role="alert"
                     >
-                      <div className="font-medium">{event.eventType}</div>
-                      <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                        {new Date(event.createdAt).toLocaleString()} ·{" "}
-                        {event.source}
-                      </div>
+                      <span>{readErrorMessage(auditQuery.error)}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void auditQuery.refetch()}
+                      >
+                        Retry audit history
+                      </Button>
                     </div>
-                  ))}
+                  ) : auditEvents.length === 0 ? (
+                    <p className="text-sm text-[var(--ui-ink-muted)]">
+                      No audit events are recorded.
+                    </p>
+                  ) : (
+                    auditEvents.slice(0, 10).map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
+                      >
+                        <div className="font-medium">{event.eventType}</div>
+                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                          {new Date(event.createdAt).toLocaleString()} ·{" "}
+                          {event.source}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {auditEvents.length > 10 ? (
+                    <p className="text-xs text-[var(--ui-ink-muted)]">
+                      Showing 10 most recent of {auditEvents.length} loaded
+                      events.
+                    </p>
+                  ) : null}
                 </Card>
               </div>
             </>
@@ -1877,6 +2097,36 @@ export function ArtifactsPage() {
           return null;
         }}
         onSubmit={submitUploadFlow}
+      />
+      <QuestionFlowDialog
+        open={linksDialogOpen}
+        onOpenChange={(open) => {
+          setLinksDialogOpen(open);
+          if (!open) {
+            setLinksDialogError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Manage artifact links"
+        description="Connect this artifact to Forge records through the shared entity relationship model."
+        value={linkFlowValue}
+        onChange={setLinkFlowValue}
+        steps={linkFlowSteps}
+        pending={linksMutation.isPending}
+        pendingLabel="Saving"
+        submitLabel="Save relationships"
+        error={
+          linksDialogError ??
+          (linksMutation.error instanceof Error
+            ? linksMutation.error.message
+            : null)
+        }
+        resolveContinueNudge={(stepId, value) =>
+          stepId === "relationships" && value.drafts.length === 0
+            ? "Saving with no relationships removes every current artifact link."
+            : null
+        }
+        onSubmit={submitLinksFlow}
       />
       <QuestionFlowDialog
         open={archiveDialogOpen}

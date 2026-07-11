@@ -1,14 +1,26 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConnector, AiConnectorRun, ForgeBoxCatalogEntry } from "@/lib/types";
+import type {
+  AiConnector,
+  AiConnectorRun,
+  ForgeBoxCatalogEntry
+} from "@/lib/types";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
 
 const mockRunNodesQuery = vi.fn();
 const mockRunNodeQuery = vi.fn();
 
 vi.mock("@xyflow/react", () => ({
-  ReactFlow: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ReactFlow: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   Background: () => null,
   Handle: () => <div />,
   Position: {
@@ -38,8 +50,49 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
       {children}
     </label>
   ),
-  QuestionFlowDialog: ({ open, title }: { open: boolean; title: string }) =>
-    open ? <div>{title}</div> : null
+  QuestionFlowDialog: ({
+    open,
+    title,
+    value,
+    onChange,
+    steps,
+    submitLabel,
+    error,
+    onSubmit
+  }: {
+    open: boolean;
+    title: string;
+    value?: Record<string, unknown>;
+    onChange?: (value: Record<string, unknown>) => void;
+    steps?: Array<{
+      id: string;
+      render: (
+        value: Record<string, unknown>,
+        setValue: (patch: Record<string, unknown>) => void
+      ) => React.ReactNode;
+    }>;
+    submitLabel?: string;
+    error?: string | null;
+    onSubmit?: () => Promise<void>;
+  }) =>
+    open ? (
+      <div>
+        <div>{title}</div>
+        {(steps ?? []).map((step) => (
+          <div key={step.id}>
+            {step.render(value ?? {}, (patch) =>
+              onChange?.({ ...(value ?? {}), ...patch })
+            )}
+          </div>
+        ))}
+        {error ? <div role="alert">{error}</div> : null}
+        {submitLabel ? (
+          <button type="button" onClick={() => void onSubmit?.()}>
+            {submitLabel}
+          </button>
+        ) : null}
+      </div>
+    ) : null
 }));
 
 vi.mock("@/components/workbench/workbench-provider", () => ({
@@ -47,8 +100,10 @@ vi.mock("@/components/workbench/workbench-provider", () => ({
 }));
 
 vi.mock("@/store/api/forge-api", () => ({
-  useGetWorkbenchFlowRunNodesQuery: (...args: unknown[]) => mockRunNodesQuery(...args),
-  useGetWorkbenchFlowRunNodeQuery: (...args: unknown[]) => mockRunNodeQuery(...args)
+  useGetWorkbenchFlowRunNodesQuery: (...args: unknown[]) =>
+    mockRunNodesQuery(...args),
+  useGetWorkbenchFlowRunNodeQuery: (...args: unknown[]) =>
+    mockRunNodeQuery(...args)
 }));
 
 const BASE_FLOW: AiConnector = {
@@ -191,9 +246,11 @@ function renderEditor(input?: {
   runs?: AiConnectorRun[];
   onRun?: ReturnType<typeof vi.fn>;
   onChat?: ReturnType<typeof vi.fn>;
+  onDelete?: ReturnType<typeof vi.fn>;
 }) {
   const onRun = input?.onRun ?? vi.fn().mockResolvedValue(undefined);
   const onChat = input?.onChat ?? vi.fn().mockResolvedValue(undefined);
+  const onDelete = input?.onDelete ?? vi.fn().mockResolvedValue(undefined);
   render(
     <MemoryRouter>
       <WorkbenchFlowEditor
@@ -202,13 +259,13 @@ function renderEditor(input?: {
         modelConnections={[]}
         runs={input?.runs ?? []}
         onSave={vi.fn().mockResolvedValue(undefined)}
-        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onDelete={onDelete}
         onRun={onRun}
         onChat={onChat}
       />
     </MemoryRouter>
   );
-  return { onRun, onChat };
+  return { onRun, onChat, onDelete };
 }
 
 describe("WorkbenchFlowEditor", () => {
@@ -287,8 +344,11 @@ describe("WorkbenchFlowEditor", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Run flow" })[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Run" }));
 
-    const validationMessages = await screen.findAllByText((_, element) =>
-      element?.textContent?.includes('Flow input "Topic" must match the text type.') ?? false
+    const validationMessages = await screen.findAllByText(
+      (_, element) =>
+        element?.textContent?.includes(
+          'Flow input "Topic" must match the text type.'
+        ) ?? false
     );
     expect(validationMessages.length).toBeGreaterThan(0);
     expect(onRun).not.toHaveBeenCalled();
@@ -351,12 +411,66 @@ describe("WorkbenchFlowEditor", () => {
       ]
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Latest run · completed/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Latest run · completed/i })
+    );
 
     expect(await screen.findByText("Run inspector")).toBeInTheDocument();
     expect(await screen.findByText("Node results")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Project search/i }));
     expect(await screen.findByText("Output map")).toBeInTheDocument();
     expect(await screen.findAllByText("Project summary")).not.toHaveLength(0);
+  });
+
+  it("locks the run action while one execution is in flight", async () => {
+    let resolveRun: (() => void) | undefined;
+    const onRun = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRun = resolve;
+        })
+    );
+    renderEditor({ onRun });
+
+    fireEvent.click(screen.getByRole("button", { name: "Run flow" }));
+    fireEvent.change(screen.getByPlaceholderText("Topic"), {
+      target: { value: "bounded execution" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+
+    const pendingButton = await screen.findByRole("button", {
+      name: "Running"
+    });
+    expect(pendingButton).toBeDisabled();
+    expect(onRun).toHaveBeenCalledTimes(1);
+
+    resolveRun?.();
+    await waitFor(() => expect(pendingButton).not.toBeInTheDocument());
+  });
+
+  it("requires the exact title before deleting a saved flow", async () => {
+    const { onDelete } = renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Flow settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete flow" }));
+
+    const confirmButton = await screen.findByRole("button", {
+      name: "Delete flow"
+    });
+    fireEvent.click(confirmButton);
+    expect(
+      await screen.findByText(
+        'Type "Workbench Test Flow" exactly to delete this flow.'
+      )
+    ).toBeInTheDocument();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.change(
+      screen.getByLabelText('Type "Workbench Test Flow" to confirm'),
+      { target: { value: "Workbench Test Flow" } }
+    );
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
   });
 });

@@ -87,19 +87,37 @@ final class WatchSessionManager: NSObject, ObservableObject {
         return queue
     }
 
-    private func saveQueue(_ queue: [ForgeWatchOutboundEnvelope]) {
-        if let data = try? encoder.encode(queue) {
-            defaults.set(data, forKey: ForgeWatchStorage.incomingQueueKey)
+    @discardableResult
+    private func saveQueue(_ queue: [ForgeWatchOutboundEnvelope]) -> Bool {
+        guard let data = try? encoder.encode(queue) else {
+            lastStatusMessage = ForgeWatchDurableQueueBackpressure.encodingFailed.message(
+                storageName: "iPhone"
+            )
+            return false
         }
+        defaults.set(data, forKey: ForgeWatchStorage.incomingQueueKey)
+        return true
     }
 
-    private func appendToQueue(_ envelope: ForgeWatchOutboundEnvelope) {
-        var queue = loadQueue()
-        guard queue.contains(where: { $0.id == envelope.id }) == false else {
-            return
+    @discardableResult
+    private func appendToQueue(
+        _ envelope: ForgeWatchOutboundEnvelope
+    ) -> ForgeWatchDurableQueueBackpressure? {
+        let admission = ForgeWatchDurableQueuePolicy.appending(envelope, to: loadQueue())
+        if let backpressure = admission.backpressure {
+            lastStatusMessage = backpressure.message(storageName: "iPhone")
+            return backpressure
         }
-        queue.append(envelope)
-        saveQueue(queue)
+        guard admission.inserted else {
+            return nil
+        }
+        guard let encodedData = admission.encodedData else {
+            let backpressure = ForgeWatchDurableQueueBackpressure.encodingFailed
+            lastStatusMessage = backpressure.message(storageName: "iPhone")
+            return backpressure
+        }
+        defaults.set(encodedData, forKey: ForgeWatchStorage.incomingQueueKey)
+        return nil
     }
 
     private func publishBootstrap(_ bootstrap: ForgeWatchBootstrap) {
@@ -137,6 +155,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
     ) -> ForgeWatchAckEnvelope {
         ForgeWatchAckEnvelope(
             actionId: envelope.id,
+            kind: envelope.kind.rawValue,
             processedAt: ISO8601DateFormatter().string(from: Date()),
             status: "deferred",
             error: ["message": message],
@@ -157,12 +176,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
             return ForgeWatchAckBatchEnvelope(acks: [])
         }
         guard let pairing = pairingProvider?() else {
+            var backpressureByActionId: [String: ForgeWatchDurableQueueBackpressure] = [:]
             for envelope in envelopes {
-                appendToQueue(envelope)
+                backpressureByActionId[envelope.id] = appendToQueue(envelope)
             }
             return ForgeWatchAckBatchEnvelope(
                 acks: envelopes.map {
-                    deferredAck(for: $0, message: "Forge pairing is not ready")
+                    deferredAck(
+                        for: $0,
+                        message: backpressureByActionId[$0.id]?.message(storageName: "iPhone")
+                            ?? "Forge pairing is not ready"
+                    )
                 }
             )
         }
@@ -197,11 +221,16 @@ final class WatchSessionManager: NSObject, ObservableObject {
             }
             let acks = envelopes.map { envelope in
                 guard let receipt = receiptsByActionId[envelope.id] else {
-                    appendToQueue(envelope)
-                    return deferredAck(for: envelope, message: "Forge did not acknowledge the watch action")
+                    let backpressure = appendToQueue(envelope)
+                    return deferredAck(
+                        for: envelope,
+                        message: backpressure?.message(storageName: "iPhone")
+                            ?? "Forge did not acknowledge the watch action"
+                    )
                 }
                 return ForgeWatchAckEnvelope(
                     actionId: receipt.actionId,
+                    kind: receipt.kind,
                     processedAt: receipt.processedAt,
                     status: receipt.status,
                     error: nil,
@@ -211,12 +240,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
             lastStatusMessage = "Watch actions processed"
             return ForgeWatchAckBatchEnvelope(acks: acks)
         } catch {
+            var backpressureByActionId: [String: ForgeWatchDurableQueueBackpressure] = [:]
             for envelope in envelopes {
-                appendToQueue(envelope)
+                backpressureByActionId[envelope.id] = appendToQueue(envelope)
             }
             return ForgeWatchAckBatchEnvelope(
                 acks: envelopes.map {
-                    deferredAck(for: $0, message: error.localizedDescription)
+                    deferredAck(
+                        for: $0,
+                        message: backpressureByActionId[$0.id]?.message(storageName: "iPhone")
+                            ?? error.localizedDescription
+                    )
                 }
             )
         }
@@ -258,16 +292,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
                 lastStatusMessage = "Watch bridge caught up"
                 return
             }
+            let batch = ForgeWatchActionBatchPolicy.nextBatch(from: remaining)
 
             do {
                 let result = try await syncClient.submitWatchCommandBatch(
-                    device: remaining.first?.device ?? ForgeWatchDeviceDescriptor(
+                    device: batch.first?.device ?? ForgeWatchDeviceDescriptor(
                         name: "Apple Watch",
                         platform: "watchos",
                         appVersion: "",
                         sourceDevice: "Apple Watch"
                     ),
-                    envelopes: remaining,
+                    envelopes: batch,
                     pairing: pairing
                 )
                 let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
@@ -278,6 +313,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     sendAck(
                         ForgeWatchAckEnvelope(
                             actionId: receipt.actionId,
+                            kind: receipt.kind,
                             processedAt: receipt.processedAt,
                             status: receipt.status,
                             error: nil,
@@ -290,7 +326,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     afterAcknowledging: acknowledgedIds,
                     in: latestQueue
                 )
-                saveQueue(stillPending)
+                guard saveQueue(stillPending) else {
+                    return
+                }
                 if stillPending.isEmpty {
                     lastStatusMessage = "Watch bridge caught up"
                     return
@@ -406,7 +444,15 @@ extension WatchSessionManager: WCSessionDelegate {
                     self.lastStatusMessage = "Ignored invalid watch payload"
                     return
                 }
-                self.appendToQueue(envelope)
+                if let backpressure = self.appendToQueue(envelope) {
+                    self.sendAck(
+                        self.deferredAck(
+                            for: envelope,
+                            message: backpressure.message(storageName: "iPhone")
+                        )
+                    )
+                    return
+                }
                 await self.processPendingQueue()
             }
         }
@@ -419,7 +465,14 @@ extension WatchSessionManager: WCSessionDelegate {
             }
             if let batch = try? self.decoder.decode(ForgeWatchOutboundBatchEnvelope.self, from: messageData) {
                 for envelope in batch.envelopes {
-                    self.appendToQueue(envelope)
+                    if let backpressure = self.appendToQueue(envelope) {
+                        self.sendAck(
+                            self.deferredAck(
+                                for: envelope,
+                                message: backpressure.message(storageName: "iPhone")
+                            )
+                        )
+                    }
                 }
                 await self.processPendingQueue()
                 return
@@ -428,8 +481,16 @@ extension WatchSessionManager: WCSessionDelegate {
                 self.lastStatusMessage = "Ignored invalid watch payload"
                 return
             }
-                self.appendToQueue(envelope)
-                await self.processPendingQueue()
+            if let backpressure = self.appendToQueue(envelope) {
+                self.sendAck(
+                    self.deferredAck(
+                        for: envelope,
+                        message: backpressure.message(storageName: "iPhone")
+                    )
+                )
+                return
+            }
+            await self.processPendingQueue()
         }
     }
 

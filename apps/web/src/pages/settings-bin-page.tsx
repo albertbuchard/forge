@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, Search, Trash2 } from "lucide-react";
 import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
@@ -98,6 +98,7 @@ const binActivePillClass =
   "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]";
 const binRowClass =
   "grid min-w-0 gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]";
+const BIN_PAGE_SIZE = 40;
 
 function formatDeletedAt(value: string) {
   return new Date(value).toLocaleString();
@@ -109,6 +110,7 @@ export function SettingsBinPage() {
   const [selectedEntityTypes, setSelectedEntityTypes] = useState<
     CrudEntityType[]
   >([]);
+  const [visibleLimit, setVisibleLimit] = useState(BIN_PAGE_SIZE);
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
@@ -172,6 +174,17 @@ export function SettingsBinPage() {
     onSuccess: invalidateBin
   });
 
+  const mutationError =
+    restoreMutation.error ??
+    hardDeleteMutation.error ??
+    bulkRestoreMutation.error ??
+    bulkHardDeleteMutation.error;
+  const anyMutationPending =
+    restoreMutation.isPending ||
+    hardDeleteMutation.isPending ||
+    bulkRestoreMutation.isPending ||
+    bulkHardDeleteMutation.isPending;
+
   const records = useMemo(
     () => binQuery.data?.bin.records ?? [],
     [binQuery.data?.bin.records]
@@ -202,9 +215,17 @@ export function SettingsBinPage() {
       return haystack.includes(normalizedQuery);
     });
   }, [normalizedQuery, records, selectedEntityTypes]);
+  useEffect(() => {
+    setVisibleLimit(BIN_PAGE_SIZE);
+  }, [normalizedQuery, selectedEntityTypes]);
+
+  const visibleRecords = useMemo(
+    () => filteredRecords.slice(0, visibleLimit),
+    [filteredRecords, visibleLimit]
+  );
   const groupedRecords = useMemo(() => {
     const grouped = new Map<CrudEntityType, DeletedEntityRecord[]>();
-    for (const record of filteredRecords) {
+    for (const record of visibleRecords) {
       const list = grouped.get(record.entityType) ?? [];
       list.push(record);
       grouped.set(record.entityType, list);
@@ -212,7 +233,7 @@ export function SettingsBinPage() {
     return [...grouped.entries()].sort((a, b) =>
       ENTITY_LABELS[a[0]].localeCompare(ENTITY_LABELS[b[0]])
     );
-  }, [filteredRecords]);
+  }, [visibleRecords]);
   const availableEntityTypes = useMemo(
     () =>
       [...new Set(records.map((record) => record.entityType))].sort(
@@ -229,17 +250,33 @@ export function SettingsBinPage() {
     );
   }
 
-  async function hardDeleteVisible() {
-    if (filteredRecords.length === 0) {
+  function resetMutationErrors() {
+    restoreMutation.reset();
+    hardDeleteMutation.reset();
+    bulkRestoreMutation.reset();
+    bulkHardDeleteMutation.reset();
+  }
+
+  function confirmHardDelete(record: DeletedEntityRecord) {
+    const confirmed = window.confirm(
+      `Permanently delete "${record.title}"? This removes the ${record.entityType.replaceAll("_", " ")} record and cannot be undone.`
+    );
+    if (confirmed) {
+      hardDeleteMutation.mutate(record);
+    }
+  }
+
+  function hardDeleteShown() {
+    if (visibleRecords.length === 0) {
       return;
     }
     const confirmed = window.confirm(
-      `Permanently delete ${filteredRecords.length} item${filteredRecords.length === 1 ? "" : "s"} from the bin? This cannot be undone.`
+      `Permanently delete the ${visibleRecords.length} shown item${visibleRecords.length === 1 ? "" : "s"} from the bin? This cannot be undone.`
     );
     if (!confirmed) {
       return;
     }
-    await bulkHardDeleteMutation.mutateAsync(filteredRecords);
+    bulkHardDeleteMutation.mutate(visibleRecords);
   }
 
   if (operatorSessionQuery.isLoading || binQuery.isLoading) {
@@ -323,37 +360,53 @@ export function SettingsBinPage() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={filteredRecords.length === 0}
+              disabled={visibleRecords.length === 0 || anyMutationPending}
               pending={bulkRestoreMutation.isPending}
               pendingLabel="Restoring"
-              onClick={() =>
-                void bulkRestoreMutation.mutateAsync(filteredRecords)
-              }
+              onClick={() => bulkRestoreMutation.mutate(visibleRecords)}
             >
               <ArchiveRestore className="size-4" />
-              <span>Restore visible</span>
+              <span>Restore shown</span>
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              disabled={filteredRecords.length === 0}
+              disabled={visibleRecords.length === 0 || anyMutationPending}
               pending={bulkHardDeleteMutation.isPending}
               pendingLabel="Deleting"
-              onClick={() => void hardDeleteVisible()}
+              onClick={hardDeleteShown}
             >
               <Trash2 className="size-4" />
-              <span>Delete visible forever</span>
+              <span>Delete shown forever</span>
             </Button>
           </div>
         </div>
 
         <div className={`flex flex-wrap gap-3 text-sm ${binFaintClass}`}>
-          <span>{filteredRecords.length} visible</span>
+          <span>
+            {visibleRecords.length} shown of {filteredRecords.length} matching
+          </span>
           {selectedEntityTypes.length > 0 ? (
             <span>{selectedEntityTypes.length} type filters active</span>
           ) : null}
           {normalizedQuery ? <span>Search: “{query.trim()}”</span> : null}
         </div>
+
+        {mutationError ? (
+          <div
+            role="alert"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
+          >
+            <span className="min-w-0 break-words">
+              {mutationError instanceof Error
+                ? mutationError.message
+                : "The bin operation could not be completed."}
+            </span>
+            <Button variant="ghost" size="sm" onClick={resetMutationErrors}>
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       {records.length === 0 ? (
@@ -439,11 +492,16 @@ export function SettingsBinPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          pending={restoreMutation.isPending}
-                          pendingLabel="Restoring"
-                          onClick={() =>
-                            void restoreMutation.mutateAsync(record)
+                          disabled={anyMutationPending}
+                          pending={
+                            restoreMutation.isPending &&
+                            restoreMutation.variables?.entityType ===
+                              record.entityType &&
+                            restoreMutation.variables?.entityId ===
+                              record.entityId
                           }
+                          pendingLabel="Restoring"
+                          onClick={() => restoreMutation.mutate(record)}
                         >
                           <ArchiveRestore className="size-4" />
                           <span>Restore</span>
@@ -451,11 +509,16 @@ export function SettingsBinPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          pending={hardDeleteMutation.isPending}
-                          pendingLabel="Deleting"
-                          onClick={() =>
-                            void hardDeleteMutation.mutateAsync(record)
+                          disabled={anyMutationPending}
+                          pending={
+                            hardDeleteMutation.isPending &&
+                            hardDeleteMutation.variables?.entityType ===
+                              record.entityType &&
+                            hardDeleteMutation.variables?.entityId ===
+                              record.entityId
                           }
+                          pendingLabel="Deleting"
+                          onClick={() => confirmHardDelete(record)}
                         >
                           <Trash2 className="size-4" />
                           <span>Delete forever</span>
@@ -467,6 +530,23 @@ export function SettingsBinPage() {
               </Card>
             );
           })}
+          {visibleRecords.length < filteredRecords.length ? (
+            <div className="flex justify-center">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  setVisibleLimit((current) => current + BIN_PAGE_SIZE)
+                }
+              >
+                Show{" "}
+                {Math.min(
+                  BIN_PAGE_SIZE,
+                  filteredRecords.length - visibleRecords.length
+                )}{" "}
+                more
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

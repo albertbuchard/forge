@@ -11,6 +11,12 @@ final class WatchAppModel: NSObject, ObservableObject {
     @Published var lastStatusMessage = "Waiting for Forge"
     @Published var lastDirectSyncMetric: ForgeWatchDirectSyncMetric?
     @Published private(set) var pendingActionCount = 0
+    @Published private(set) var snapshotSource: ForgeWatchSnapshotSource = .unavailable
+    @Published private(set) var recentReceipts: [ForgeWatchStoredReceipt] = []
+
+    var latestReceipt: ForgeWatchStoredReceipt? {
+        recentReceipts.first
+    }
 
     private let defaults = ForgeWatchStorage.sharedDefaults()
     private let encoder = JSONEncoder()
@@ -32,11 +38,23 @@ final class WatchAppModel: NSObject, ObservableObject {
             self.bootstrap = ForgeWatchBootstrap.empty
         }
         super.init()
-        if preview == false {
+        if preview {
+            snapshotSource = .preview
+        } else {
             bootstrap = loadBootstrap()
+            snapshotSource = bootstrap.hasSnapshotContent ? .cache : .unavailable
+            recentReceipts = loadReceiptHistory()
             pendingActionCount = loadQueue().count
             activateSession()
         }
+    }
+
+    func snapshotFreshness(now: Date = Date()) -> ForgeWatchSnapshotFreshness {
+        ForgeWatchSnapshotFreshness.evaluate(
+            generatedAt: bootstrap.generatedAt,
+            hasSnapshot: bootstrap.hasSnapshotContent,
+            now: now
+        )
     }
 
     func activateSession() {
@@ -95,26 +113,28 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     private func flushPendingActionsThroughPhone(_ queue: [ForgeWatchOutboundEnvelope]) {
+        let batch = ForgeWatchActionBatchPolicy.nextBatch(from: queue)
+        guard batch.isEmpty == false else { return }
         if WCSession.default.isReachable {
-            if let data = try? encoder.encode(ForgeWatchOutboundBatchEnvelope(envelopes: queue)) {
+            if let data = try? encoder.encode(ForgeWatchOutboundBatchEnvelope(envelopes: batch)) {
                 WCSession.default.sendMessageData(data) { [weak self] replyData in
                     Task { @MainActor in
                         guard let self else { return }
                         if let ackBatch = try? self.decoder.decode(ForgeWatchAckBatchEnvelope.self, from: replyData) {
                             self.applyAckBatch(ackBatch)
                         } else if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: replyData) {
-                            self.applyAck(ack)
+                            self.applyAsyncAck(ack)
                         }
                     }
                 } errorHandler: { [weak self] error in
                     Task { @MainActor in
                         self?.lastStatusMessage = "Paired iPhone backup failed: \(error.localizedDescription)"
-                        self?.transferActionsThroughPhone(queue)
+                        self?.transferActionsThroughPhone(batch)
                     }
                 }
             }
         } else {
-            transferActionsThroughPhone(queue)
+            transferActionsThroughPhone(batch)
         }
         if let cooldownMessage = directCooldownFallbackMessage() {
             lastStatusMessage = cooldownMessage
@@ -495,23 +515,25 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     func queueHabitCheckIn(for habit: ForgeWatchHabitSummary, status: String, note: String = "") {
-        optimisticUpdate(habitId: habit.id, status: status)
-        enqueue(
-            ForgeWatchOutboundEnvelope(
-                id: UUID().uuidString,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
-                device: currentDeviceDescriptor(),
-                kind: .habitCheckIn,
-                habitCheckIn: ForgeWatchHabitCheckInAction(
-                    habitId: habit.id,
-                    dateKey: Date().ISO8601Format().prefix(10).description,
-                    status: status,
-                    note: note
-                ),
-                captureEvent: nil,
-                command: nil
-            )
+        let envelope = ForgeWatchOutboundEnvelope(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            device: currentDeviceDescriptor(),
+            kind: .habitCheckIn,
+            habitCheckIn: ForgeWatchHabitCheckInAction(
+                habitId: habit.id,
+                dateKey: Date().ISO8601Format().prefix(10).description,
+                status: status,
+                note: note
+            ),
+            captureEvent: nil,
+            command: nil
         )
+        guard enqueue(envelope) else {
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
+        optimisticUpdate(habitId: habit.id, status: status)
         WKInterfaceDevice.current().play(.success)
     }
 
@@ -521,51 +543,69 @@ final class WatchAppModel: NSObject, ObservableObject {
         linkedContext: ForgeWatchLinkedContext = .empty,
         payload: [String: String] = [:]
     ) {
-        enqueue(
-            ForgeWatchOutboundEnvelope(
-                id: UUID().uuidString,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
-                device: currentDeviceDescriptor(),
-                kind: .captureEvent,
-                habitCheckIn: nil,
-                captureEvent: ForgeWatchCaptureEventAction(
-                    eventType: eventType,
-                    recordedAt: ISO8601DateFormatter().string(from: Date()),
-                    promptId: promptId,
-                    linkedContext: linkedContext,
-                    payload: payload
-                ),
-                command: nil
-            )
+        let envelope = ForgeWatchOutboundEnvelope(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            device: currentDeviceDescriptor(),
+            kind: .captureEvent,
+            habitCheckIn: nil,
+            captureEvent: ForgeWatchCaptureEventAction(
+                eventType: eventType,
+                recordedAt: ISO8601DateFormatter().string(from: Date()),
+                promptId: promptId,
+                linkedContext: linkedContext,
+                payload: payload
+            ),
+            command: nil
         )
+        guard enqueue(envelope) else {
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
         WKInterfaceDevice.current().play(.success)
     }
 
     func queueCommand(kind: ForgeWatchActionKind, payload: [String: String]) {
-        enqueue(
-            ForgeWatchOutboundEnvelope(
-                id: UUID().uuidString,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
-                device: currentDeviceDescriptor(),
-                kind: kind,
-                habitCheckIn: nil,
-                captureEvent: nil,
-                command: ForgeWatchCommandAction(payload: payload)
-            )
+        let envelope = ForgeWatchOutboundEnvelope(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            device: currentDeviceDescriptor(),
+            kind: kind,
+            habitCheckIn: nil,
+            captureEvent: nil,
+            command: ForgeWatchCommandAction(payload: payload)
         )
+        guard enqueue(envelope) else {
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
         WKInterfaceDevice.current().play(.click)
     }
 
-    private func enqueue(_ envelope: ForgeWatchOutboundEnvelope) {
-        var queue = loadQueue()
-        queue.append(envelope)
-        saveQueue(queue)
+    @discardableResult
+    private func enqueue(_ envelope: ForgeWatchOutboundEnvelope) -> Bool {
+        let admission = ForgeWatchDurableQueuePolicy.appending(envelope, to: loadQueue())
+        if let backpressure = admission.backpressure {
+            lastStatusMessage = backpressure.message(storageName: "Watch")
+            return false
+        }
+        if admission.inserted {
+            guard let encodedData = admission.encodedData else {
+                lastStatusMessage = ForgeWatchDurableQueueBackpressure.encodingFailed.message(
+                    storageName: "Watch"
+                )
+                return false
+            }
+            defaults.set(encodedData, forKey: ForgeWatchStorage.outgoingQueueKey)
+            pendingActionCount = admission.queue.count
+        }
         if let connection = directConnection() {
             lastStatusMessage = "Sending to Forge through \(connection.transportLabel)"
         } else {
             lastStatusMessage = directCooldownFallbackMessage() ?? "Waiting for paired iPhone backup"
         }
         flushPendingActions()
+        return true
     }
 
     private struct WatchBootstrapRequest: Encodable {
@@ -745,7 +785,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             )
             let envelope = result.response
             clearDirectRouteCooldown()
-            saveBootstrap(envelope.watch.withConnection(connection))
+            saveBootstrap(envelope.watch.withConnection(connection), source: .direct)
             lastStatusMessage = "Synced: \(result.metric.summary)"
             flushPendingActions()
         } catch {
@@ -765,7 +805,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             flushPendingActionsThroughPhone(loadQueue())
             return
         }
-        let queue = loadQueue()
+        let queue = ForgeWatchActionBatchPolicy.nextBatch(from: loadQueue())
         guard queue.isEmpty == false else { return }
         do {
             lastStatusMessage = "Syncing with Forge through \(connection.transportLabel)"
@@ -784,7 +824,18 @@ final class WatchAppModel: NSObject, ObservableObject {
             )
             let envelope = result.response
             clearDirectRouteCooldown()
-            saveBootstrap(envelope.watch.withConnection(connection))
+            saveBootstrap(envelope.watch.withConnection(connection), source: .direct)
+            storeReceipts(
+                envelope.receipt.receipts.map {
+                    ForgeWatchStoredReceipt(
+                        actionId: $0.actionId,
+                        kind: $0.kind,
+                        status: $0.status,
+                        processedAt: $0.processedAt,
+                        errorMessage: nil
+                    )
+                }
+            )
             let acknowledgedIds = Set(envelope.receipt.receipts.map(\.actionId))
             let latestQueue = loadQueue()
             saveQueue(
@@ -974,9 +1025,15 @@ final class WatchAppModel: NSObject, ObservableObject {
         saveBootstrap(bootstrap)
     }
 
-    private func saveBootstrap(_ bootstrap: ForgeWatchBootstrap) {
+    private func saveBootstrap(
+        _ bootstrap: ForgeWatchBootstrap,
+        source: ForgeWatchSnapshotSource? = nil
+    ) {
         let merged = bootstrap.withConnection(bootstrap.connection ?? self.bootstrap.connection)
         self.bootstrap = merged
+        if let source {
+            snapshotSource = source
+        }
         if let data = try? encoder.encode(merged) {
             defaults.set(data, forKey: ForgeWatchStorage.bootstrapKey)
         }
@@ -992,11 +1049,17 @@ final class WatchAppModel: NSObject, ObservableObject {
         return bootstrap
     }
 
-    private func saveQueue(_ queue: [ForgeWatchOutboundEnvelope]) {
-        pendingActionCount = queue.count
-        if let data = try? encoder.encode(queue) {
-            defaults.set(data, forKey: ForgeWatchStorage.outgoingQueueKey)
+    @discardableResult
+    private func saveQueue(_ queue: [ForgeWatchOutboundEnvelope]) -> Bool {
+        guard let data = try? encoder.encode(queue) else {
+            lastStatusMessage = ForgeWatchDurableQueueBackpressure.encodingFailed.message(
+                storageName: "Watch"
+            )
+            return false
         }
+        defaults.set(data, forKey: ForgeWatchStorage.outgoingQueueKey)
+        pendingActionCount = queue.count
+        return true
     }
 
     private func loadQueue() -> [ForgeWatchOutboundEnvelope] {
@@ -1009,21 +1072,48 @@ final class WatchAppModel: NSObject, ObservableObject {
         return queue
     }
 
-    private func removeQueuedAction(id: String) {
-        let queue = loadQueue().filter { $0.id != id }
-        saveQueue(queue)
-        lastStatusMessage = queue.isEmpty ? "Synced with Forge" : "Still sending \(queue.count)"
+    private func saveReceiptHistory(_ receipts: [ForgeWatchStoredReceipt]) {
+        recentReceipts = receipts
+        if let data = try? encoder.encode(receipts) {
+            defaults.set(data, forKey: ForgeWatchStorage.receiptHistoryKey)
+        }
     }
 
-    private func applyAck(_ ack: ForgeWatchAckEnvelope) {
+    private func loadReceiptHistory() -> [ForgeWatchStoredReceipt] {
+        guard
+            let data = defaults.data(forKey: ForgeWatchStorage.receiptHistoryKey),
+            let receipts = try? decoder.decode([ForgeWatchStoredReceipt].self, from: data)
+        else {
+            return []
+        }
+        return Array(receipts.prefix(ForgeWatchReceiptHistoryPolicy.maximumReceiptCount))
+    }
+
+    private func storeReceipts(_ receipts: [ForgeWatchStoredReceipt]) {
+        guard receipts.isEmpty == false else { return }
+        saveReceiptHistory(
+            ForgeWatchReceiptHistoryPolicy.merging(receipts, into: recentReceipts)
+        )
+    }
+
+    @discardableResult
+    private func applyAck(_ ack: ForgeWatchAckEnvelope) -> Bool {
         if ack.status == "deferred" {
             let message = ack.error?["message"] ?? "paired iPhone backup deferred"
             lastStatusMessage = "Still sending: \(message)"
-            return
+            return false
         }
-        removeQueuedAction(id: ack.actionId)
+        let update = ForgeWatchReceiptLifecycle.applying(
+            ack,
+            to: loadQueue(),
+            receiptHistory: recentReceipts
+        )
+        if update.receiptHistory != recentReceipts {
+            saveReceiptHistory(update.receiptHistory)
+        }
+        saveQueue(update.remainingQueue)
         if let bootstrap = ack.bootstrap {
-            saveBootstrap(bootstrap)
+            saveBootstrap(bootstrap, source: .phone)
         }
         if ack.status == "failed" {
             lastStatusMessage = "Forge rejected one action"
@@ -1031,11 +1121,22 @@ final class WatchAppModel: NSObject, ObservableObject {
         } else {
             WKInterfaceDevice.current().play(.success)
         }
+        return update.shouldContinueFlushing
+    }
+
+    private func applyAsyncAck(_ ack: ForgeWatchAckEnvelope) {
+        if applyAck(ack), loadQueue().isEmpty == false {
+            flushPendingActions()
+        }
     }
 
     private func applyAckBatch(_ batch: ForgeWatchAckBatchEnvelope) {
+        var shouldContinueFlushing = false
         for ack in batch.acks {
-            applyAck(ack)
+            shouldContinueFlushing = applyAck(ack) || shouldContinueFlushing
+        }
+        if shouldContinueFlushing, loadQueue().isEmpty == false {
+            flushPendingActions()
         }
     }
 
@@ -1084,7 +1185,7 @@ extension WatchAppModel: WCSessionDelegate {
         else { return }
         Task { @MainActor in
             if let bootstrap = try? self.decoder.decode(ForgeWatchBootstrap.self, from: data) {
-                self.saveBootstrap(bootstrap)
+                self.saveBootstrap(bootstrap, source: .phone)
                 self.lastStatusMessage = "Received watch refresh"
             }
         }
@@ -1097,7 +1198,7 @@ extension WatchAppModel: WCSessionDelegate {
         guard let data = userInfo[ForgeWatchStorage.ackMessageKey] as? Data else { return }
         Task { @MainActor in
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: data) {
-                self.applyAck(ack)
+                self.applyAsyncAck(ack)
             }
         }
     }
@@ -1105,7 +1206,7 @@ extension WatchAppModel: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
         Task { @MainActor in
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: messageData) {
-                self.applyAck(ack)
+                self.applyAsyncAck(ack)
             }
         }
     }

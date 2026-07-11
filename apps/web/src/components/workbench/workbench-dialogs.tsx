@@ -248,7 +248,7 @@ export function WorkbenchFlowSettingsDialog({
   onPublicInputsChange,
   nodes,
   flowId,
-  onDelete,
+  onDeleteRequest,
   onSave
 }: {
   open: boolean;
@@ -263,7 +263,7 @@ export function WorkbenchFlowSettingsDialog({
   onPublicInputsChange: (inputs: AiConnectorPublicInput[]) => void;
   nodes: Node<WorkbenchGraphNodeData>[];
   flowId: string;
-  onDelete: () => Promise<void>;
+  onDeleteRequest: () => void;
   onSave: () => Promise<void>;
 }) {
   return (
@@ -306,13 +306,7 @@ export function WorkbenchFlowSettingsDialog({
           {flowId}
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-2">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              void onDelete();
-            }}
-          >
+          <Button type="button" variant="secondary" onClick={onDeleteRequest}>
             <Trash2 className="size-4" />
             Delete flow
           </Button>
@@ -360,6 +354,7 @@ export function WorkbenchRunFlowDialog({
   onDebugEnabledChange,
   onRun,
   onChat,
+  pending,
   runs
 }: {
   open: boolean;
@@ -378,6 +373,7 @@ export function WorkbenchRunFlowDialog({
   onDebugEnabledChange: (debugEnabled: boolean) => void;
   onRun: () => void;
   onChat: () => void;
+  pending: boolean;
   runs: AiConnectorRun[];
 }) {
   return (
@@ -530,11 +526,22 @@ export function WorkbenchRunFlowDialog({
           Return debug trace
         </label>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="primary" onClick={onRun}>
+          <Button
+            type="button"
+            variant="primary"
+            pending={pending}
+            pendingLabel="Running"
+            onClick={onRun}
+          >
             <Play className="size-4" />
             Run
           </Button>
-          <Button type="button" variant="secondary" onClick={onChat}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={onChat}
+          >
             <MessageSquare className="size-4" />
             Chat
           </Button>

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskRunControls } from "@/components/task-run-controls";
 import type { Task, TaskRun } from "@/lib/types";
 
@@ -21,7 +21,8 @@ const task: Task = {
   plannedDurationSeconds: null,
   schedulingRules: null,
   sortOrder: 1,
-  aiInstructions: "Complete the methods section in one focused writing session.",
+  aiInstructions:
+    "Complete the methods section in one focused writing session.",
   executionMode: null,
   acceptanceCriteria: [],
   blockerLinks: [],
@@ -70,6 +71,10 @@ const activeTaskRun: TaskRun = {
   updatedAt: "2026-03-22T10:10:00.000Z"
 };
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("TaskRunControls", () => {
   it("starts a planned task timer with actor, note, and lease duration", async () => {
     const onClaim = vi.fn().mockResolvedValue(undefined);
@@ -87,11 +92,19 @@ describe("TaskRunControls", () => {
       />
     );
 
-    fireEvent.change(screen.getByLabelText("Actor"), { target: { value: "Aurel" } });
+    fireEvent.change(screen.getByLabelText("Actor"), {
+      target: { value: "Aurel" }
+    });
     fireEvent.click(screen.getByRole("button", { name: /planned session/i }));
-    fireEvent.change(screen.getByLabelText("Planned minutes"), { target: { value: "30" } });
-    fireEvent.change(screen.getByLabelText("Heartbeat window"), { target: { value: "20" } });
-    fireEvent.change(screen.getByLabelText("Session note"), { target: { value: "Drafting the thesis discussion now." } });
+    fireEvent.change(screen.getByLabelText("Planned minutes"), {
+      target: { value: "30" }
+    });
+    fireEvent.change(screen.getByLabelText("Heartbeat window"), {
+      target: { value: "20" }
+    });
+    fireEvent.change(screen.getByLabelText("Session note"), {
+      target: { value: "Drafting the thesis discussion now." }
+    });
     fireEvent.click(screen.getByRole("button", { name: /start timer/i }));
 
     expect(onClaim).toHaveBeenCalledWith({
@@ -127,5 +140,65 @@ describe("TaskRunControls", () => {
       actor: "Albert",
       note: "Writing the discussion bridge."
     });
+  });
+
+  it("bounds planned and heartbeat minutes before starting a run", async () => {
+    const onClaim = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <TaskRunControls
+        task={task}
+        activeTaskRun={null}
+        pending={false}
+        errorMessage={null}
+        onClaim={onClaim}
+        onHeartbeat={vi.fn()}
+        onComplete={vi.fn()}
+        onRelease={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /planned session/i }));
+    fireEvent.change(screen.getByLabelText("Planned minutes"), {
+      target: { value: "2000" }
+    });
+    fireEvent.change(screen.getByLabelText("Heartbeat window"), {
+      target: { value: "999" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start timer/i }));
+
+    expect(onClaim).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plannedDurationSeconds: 1440 * 60,
+        leaseTtlSeconds: 240 * 60
+      })
+    );
+  });
+
+  it("requires an accountable actor before starting a run", async () => {
+    const onClaim = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <TaskRunControls
+        task={task}
+        activeTaskRun={null}
+        pending={false}
+        errorMessage={null}
+        onClaim={onClaim}
+        onHeartbeat={vi.fn()}
+        onComplete={vi.fn()}
+        onRelease={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Actor"), {
+      target: { value: "   " }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start timer/i }));
+
+    expect(onClaim).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter the actor responsible for this work session."
+    );
   });
 });

@@ -8,6 +8,7 @@ import {
   Suspense,
   useState,
   type CSSProperties,
+  type MouseEventHandler,
   type ReactNode
 } from "react";
 import {
@@ -233,7 +234,11 @@ type ShellContextValue = {
 const ShellContext = createContext<ShellContextValue | null>(null);
 let lastKnownShellContext: ShellContextValue | null = null;
 
-function ShellCommandButton({ onClick }: { onClick: () => void }) {
+function ShellCommandButton({
+  onClick
+}: {
+  onClick: MouseEventHandler<HTMLButtonElement>;
+}) {
   const { t } = useI18n();
 
   return (
@@ -324,6 +329,7 @@ function ShellFrame({
   const activeHelp = getSurfaceHelp(active.id);
   const transitionKey = getRouteTransitionKey(routeLocation.pathname);
   const [actionBarOpen, setActionBarOpen] = useState(false);
+  const actionBarReturnFocusRef = useRef<HTMLElement | null>(null);
   const [backgroundActivityOpen, setBackgroundActivityOpen] = useState(false);
   const [desktopCreateTriggerTarget, setDesktopCreateTriggerTarget] =
     useState<HTMLDivElement | null>(null);
@@ -419,7 +425,12 @@ function ShellFrame({
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setActionBarOpen((current) => !current);
+        setActionBarOpen((current) => {
+          if (!current && document.activeElement instanceof HTMLElement) {
+            actionBarReturnFocusRef.current = document.activeElement;
+          }
+          return !current;
+        });
         lastStandaloneShiftAt = 0;
         return;
       }
@@ -434,6 +445,9 @@ function ShellFrame({
         const now = window.performance.now();
         if (now - lastStandaloneShiftAt <= 360) {
           event.preventDefault();
+          if (document.activeElement instanceof HTMLElement) {
+            actionBarReturnFocusRef.current = document.activeElement;
+          }
           setActionBarOpen(true);
           lastStandaloneShiftAt = 0;
           return;
@@ -500,6 +514,7 @@ function ShellFrame({
             snapshot={shell.snapshot}
             selectedUserIds={shell.selectedUserIds}
             createActions={createActions.actions}
+            returnFocusRef={actionBarReturnFocusRef}
           />
         ) : null}
       </Suspense>
@@ -697,7 +712,10 @@ function ShellFrame({
                       className="shrink-0"
                     />
                     <ShellCommandButton
-                      onClick={() => setActionBarOpen(true)}
+                      onClick={(event) => {
+                        actionBarReturnFocusRef.current = event.currentTarget;
+                        setActionBarOpen(true);
+                      }}
                     />
                     <Button
                       variant="secondary"
@@ -875,7 +893,11 @@ function ShellFrame({
                           variant="secondary"
                           size="sm"
                           className="size-11 rounded-full p-0"
-                          onClick={() => setActionBarOpen(true)}
+                          onClick={(event) => {
+                            actionBarReturnFocusRef.current =
+                              event.currentTarget;
+                            setActionBarOpen(true);
+                          }}
                           aria-label={t("common.actionBar.title")}
                           title={t("common.actionBar.title")}
                         >

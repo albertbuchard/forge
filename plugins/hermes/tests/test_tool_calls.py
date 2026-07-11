@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +13,7 @@ from forge_hermes.catalog import (
     LIFE_FORCE_ROUTE_SPECS,
     MOVEMENT_ROUTE_SPECS,
     TOOL_CATALOG,
+    WORKBENCH_ROUTE_EXAMPLES,
     WORKBENCH_ROUTE_SPECS,
     release_task_run_body,
     release_task_run_path,
@@ -19,6 +22,9 @@ from forge_hermes.catalog import (
     start_task_run_body,
     start_task_run_path,
 )
+
+
+HERMES_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -276,7 +282,6 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "nodeResult",
         "latestNodeOutput",
     }
-
     attention_route_description = specs["forge_call_attention_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
@@ -375,6 +380,99 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     )
 
 
+def _extract_published_workbench_execution_examples(skill_path: Path):
+    text = skill_path.read_text(encoding="utf-8")
+    labels = (
+        "Workbench run execution",
+        "Workbench one-off input execution",
+        "Workbench flow chat follow-up",
+    )
+    examples = []
+    for label in labels:
+        match = re.search(
+            rf"^- {re.escape(label)}:\n\s+`(?P<payload>\{{.*\}})`$",
+            text,
+            flags=re.MULTILINE,
+        )
+        assert match is not None, f"Missing published example: {label} in {skill_path}"
+        examples.append(json.loads(match.group("payload")))
+    return examples
+
+
+def test_published_workbench_examples_execute_with_exact_api_fields(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    tool_spec = next(
+        spec for spec in TOOL_CATALOG if spec["name"] == "forge_call_workbench_route"
+    )
+    expected_examples = WORKBENCH_ROUTE_EXAMPLES
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="token",
+        actor_label="Albert",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+    calls = []
+
+    def fake_request(current, method, path, body=None, write=None, **_kwargs):  # noqa: ANN001
+        calls.append((method, path, body))
+        if method == "POST":
+            return {
+                "flow": {"id": "flow_research_digest"},
+                "run": {"id": f"run_{len(calls)}"},
+            }
+        if method == "GET":
+            return {"run": {"id": path.rsplit("/", 1)[-1], "status": "completed"}}
+        raise AssertionError(f"Unexpected request: {method} {path}")
+
+    monkeypatch.setattr(tools, "_request_json", fake_request)
+
+    assert tool_spec["parameters"]["examples"] == expected_examples
+    for skill_path in (
+        HERMES_PLUGIN_ROOT / "skill.md",
+        HERMES_PLUGIN_ROOT / "forge_hermes" / "skill.md",
+    ):
+        assert _extract_published_workbench_execution_examples(
+            skill_path
+        ) == expected_examples
+
+    expected_routes = {
+        "runFlow": "/api/v1/workbench/flows/flow_research_digest/run",
+        "runByPayload": "/api/v1/workbench/run",
+        "chatFlow": "/api/v1/workbench/flows/flow_research_digest/chat",
+    }
+    for example in expected_examples:
+        route_key = example["routeKey"]
+        assert tool_spec["method_builder"](example) == "POST"
+        assert tool_spec["path_builder"](example) == expected_routes[route_key]
+        assert tool_spec["body_builder"](example, None) == example["body"]
+        result = json.loads(
+            tools.build_handler("forge_call_workbench_route")(example)
+        )
+        assert result["verification"]["status"] == "verified"
+
+    assert expected_examples[0]["body"] == {
+        "inputs": {"topic": "question flow quality"}
+    }
+    assert expected_examples[1]["body"] == {
+        "flowId": "flow_research_digest",
+        "inputs": {"topic": "question flow quality"},
+    }
+    assert expected_examples[2]["body"] == {
+        "userInput": "Refine the summary around API route risks and keep the published output stable."
+    }
+    assert [call for call in calls if call[0] == "POST"] == [
+        ("POST", expected_routes[example["routeKey"]], example["body"])
+        for example in expected_examples
+    ]
+
+
 def test_life_force_route_handler_uses_dedicated_put_route(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -451,6 +549,244 @@ def test_life_force_route_handler_uses_dedicated_put_route(
     assert calls[1]["method"] == "PUT"
     assert calls[1]["body"] == {"points": [{"hour": 13, "freeAp": -4}]}
     assert all("/api/v1/entities" not in str(call["url"]) for call in calls)
+
+
+def test_workbench_create_handler_reads_back_the_created_flow(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="token",
+        actor_label="Albert",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+    calls: list[tuple[str, str, object]] = []
+
+    def fake_request(current, method, path, body=None, write=None, **_kwargs):  # noqa: ANN001
+        calls.append((method, path, body))
+        if method == "POST":
+            return {"flow": {"id": "flow/123", "title": "Risk review"}}
+        if method == "GET":
+            return {
+                "flow": {
+                    "id": "flow/123",
+                    "title": "Risk review",
+                    "publicInputs": [],
+                }
+            }
+        raise AssertionError(f"Unexpected request: {method} {path}")
+
+    monkeypatch.setattr(tools, "_request_json", fake_request)
+
+    handler = tools.build_handler("forge_call_workbench_route")
+    payload = json.loads(
+        handler(
+            {
+                "routeKey": "createFlow",
+                "body": {"title": "Risk review", "kind": "functor"},
+            }
+        )
+    )
+
+    assert payload["flow"]["id"] == "flow/123"
+    assert payload["verification"] == {
+        "status": "verified",
+        "routeKey": "createFlow",
+        "readPath": "/api/v1/workbench/flows/flow%2F123",
+        "readback": {
+            "flow": {
+                "id": "flow/123",
+                "title": "Risk review",
+                "publicInputs": [],
+            }
+        },
+    }
+    assert calls == [
+        (
+            "POST",
+            "/api/v1/workbench/flows",
+            {"title": "Risk review", "kind": "functor"},
+        ),
+        ("GET", "/api/v1/workbench/flows/flow%2F123", None),
+    ]
+
+
+def test_workbench_update_handler_reports_every_readback_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="token",
+        actor_label="Albert",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+    requested_graph = {
+        "nodes": [{"id": "node_summary", "type": "output", "label": "Summary"}],
+        "edges": [],
+    }
+    requested_body = {
+        "title": "  Risk review  ",
+        "description": "Review API risks.",
+        "kind": "functor",
+        "homeSurfaceId": "overview",
+        "endpointEnabled": False,
+        "publicInputs": [],
+        "graph": requested_graph,
+    }
+
+    def fake_request(current, method, path, body=None, write=None, **_kwargs):  # noqa: ANN001
+        if method == "PATCH":
+            return {"flow": {"id": "flow_123"}}
+        if method == "GET":
+            return {
+                "flow": {
+                    "id": "flow_123",
+                    "title": "Risk review",
+                    "description": "Review API risks.",
+                    "kind": "functor",
+                    "endpointEnabled": False,
+                    "publicInputs": [],
+                    "graph": {
+                        "nodes": [
+                            {
+                                "id": "node_summary",
+                                "type": "output",
+                                "label": "Normalized summary",
+                            }
+                        ],
+                        "edges": [],
+                    },
+                }
+            }
+        raise AssertionError(f"Unexpected request: {method} {path}")
+
+    monkeypatch.setattr(tools, "_request_json", fake_request)
+
+    payload = json.loads(
+        tools.build_handler("forge_call_workbench_route")(
+            {
+                "routeKey": "updateFlow",
+                "pathParams": {"id": "flow_123"},
+                "body": requested_body,
+            }
+        )
+    )
+
+    verification = payload["verification"]
+    assert verification["status"] == "failed"
+    assert verification["routeKey"] == "updateFlow"
+    assert verification["readPath"] == "/api/v1/workbench/flows/flow_123"
+    assert verification["checkedFields"] == list(tools.WORKBENCH_MUTABLE_FLOW_FIELDS)
+    assert verification["mismatches"] == [
+        {
+            "field": "title",
+            "requested": "  Risk review  ",
+            "actualPresent": True,
+            "actual": "Risk review",
+        },
+        {
+            "field": "homeSurfaceId",
+            "requested": "overview",
+            "actualPresent": False,
+        },
+        {
+            "field": "graph",
+            "requested": requested_graph,
+            "actualPresent": True,
+            "actual": {
+                "nodes": [
+                    {
+                        "id": "node_summary",
+                        "type": "output",
+                        "label": "Normalized summary",
+                    }
+                ],
+                "edges": [],
+            },
+        },
+    ]
+    assert verification["readback"] == {
+        "flow": {
+            "id": "flow_123",
+            "title": "Risk review",
+            "description": "Review API risks.",
+            "kind": "functor",
+            "endpointEnabled": False,
+            "publicInputs": [],
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "node_summary",
+                        "type": "output",
+                        "label": "Normalized summary",
+                    }
+                ],
+                "edges": [],
+            },
+        }
+    }
+
+
+def test_workbench_run_handler_reports_partial_readback_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = tools.ForgeConfig(
+        origin="http://127.0.0.1",
+        port=4317,
+        base_url="http://127.0.0.1:4317",
+        web_app_url="http://127.0.0.1:4317/forge/",
+        data_root="",
+        api_token="token",
+        actor_label="Albert",
+        timeout_ms=4000,
+    )
+    monkeypatch.setattr(tools, "_load_config", lambda: config)
+    monkeypatch.setattr(tools, "_ensure_runtime", lambda current: current)
+
+    def fake_request(current, method, path, body=None, write=None, **_kwargs):  # noqa: ANN001
+        if method == "POST":
+            return {
+                "flow": {"id": "flow_123"},
+                "run": {"id": "run_456", "status": "completed"},
+            }
+        raise tools.ForgePluginError(
+            "forge_unreachable", "Forge disconnected before run verification."
+        )
+
+    monkeypatch.setattr(tools, "_request_json", fake_request)
+
+    payload = json.loads(
+        tools.build_handler("forge_call_workbench_route")(
+            {
+                "routeKey": "runFlow",
+                "pathParams": {"id": "flow_123"},
+                "body": {"inputs": {"topic": "risk"}},
+            }
+        )
+    )
+
+    assert payload["run"]["id"] == "run_456"
+    assert payload["verification"] == {
+        "status": "failed",
+        "routeKey": "runFlow",
+        "readPath": "/api/v1/workbench/flows/flow_123/runs/run_456",
+        "error": {
+            "code": "forge_unreachable",
+            "message": "Forge disconnected before run verification.",
+        },
+    }
 
 
 def test_update_entities_handler_uses_batch_route_for_habit_checkins(

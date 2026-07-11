@@ -11,6 +11,29 @@ import XCTest
 @MainActor
 final class ForgeWatch_Watch_AppTests: XCTestCase {
 
+    private func makeEnvelope(id: String) -> ForgeWatchOutboundEnvelope {
+        ForgeWatchOutboundEnvelope(
+            id: id,
+            createdAt: "2026-07-11T10:00:00Z",
+            device: ForgeWatchDeviceDescriptor(
+                name: "Apple Watch",
+                platform: "watchos",
+                appVersion: "1.0",
+                sourceDevice: "Watch"
+            ),
+            kind: .captureEvent,
+            habitCheckIn: nil,
+            captureEvent: ForgeWatchCaptureEventAction(
+                eventType: "note",
+                recordedAt: "2026-07-11T10:00:00Z",
+                promptId: nil,
+                linkedContext: .empty,
+                payload: ["note": id]
+            ),
+            command: nil
+        )
+    }
+
     func testQueueHabitCheckInOptimisticallyUpdatesCurrentSegment() throws {
         ForgeWatchStorage.sharedDefaults().removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
         defer {
@@ -164,6 +187,109 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("phone fallback"))
         XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("Iroh"))
         XCTAssertFalse(metric.summary.localizedCaseInsensitiveContains("queued"))
+    }
+
+    func testSnapshotFreshnessDistinguishesFreshStaleClockSkewAndUnavailable() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-11T12:00:00Z"))
+
+        let fresh = ForgeWatchSnapshotFreshness.evaluate(
+            generatedAt: "2026-07-11T11:55:00Z",
+            hasSnapshot: true,
+            now: now
+        )
+        let stale = ForgeWatchSnapshotFreshness.evaluate(
+            generatedAt: "2026-07-11T11:40:00Z",
+            hasSnapshot: true,
+            now: now
+        )
+        let skewed = ForgeWatchSnapshotFreshness.evaluate(
+            generatedAt: "2026-07-11T12:06:00Z",
+            hasSnapshot: true,
+            now: now
+        )
+        let unavailable = ForgeWatchSnapshotFreshness.evaluate(
+            generatedAt: "not-a-date",
+            hasSnapshot: false,
+            now: now
+        )
+
+        XCTAssertEqual(fresh.state, .fresh)
+        XCTAssertEqual(fresh.shortLabel, "Fresh 5m")
+        XCTAssertEqual(stale.state, .stale)
+        XCTAssertEqual(stale.shortLabel, "Stale 20m")
+        XCTAssertEqual(skewed.state, .clockSkew)
+        XCTAssertEqual(unavailable.state, .unavailable)
+    }
+
+    func testWatchActionBatchPolicyBoundsExchangeWithoutDroppingOutboxItems() {
+        let outbox = (0..<47).map { makeEnvelope(id: "action_\($0)") }
+
+        let batch = ForgeWatchActionBatchPolicy.nextBatch(from: outbox)
+
+        XCTAssertEqual(batch.count, ForgeWatchActionBatchPolicy.maximumActionCount)
+        XCTAssertEqual(batch.map(\.id), Array(outbox.prefix(20)).map(\.id))
+        XCTAssertEqual(outbox.count, 47)
+    }
+
+    func testReceiptHistoryIsBoundedAndReplacesDuplicateActionReceipt() {
+        let existing = (0..<30).map {
+            ForgeWatchStoredReceipt(
+                actionId: "action_\($0)",
+                kind: "capture_event",
+                status: "processed",
+                processedAt: "2026-07-11T10:00:00Z",
+                errorMessage: nil
+            )
+        }
+        let replacement = ForgeWatchStoredReceipt(
+            actionId: "action_5",
+            kind: "capture_event",
+            status: "failed",
+            processedAt: "2026-07-11T10:05:00Z",
+            errorMessage: "Forge rejected this action"
+        )
+
+        let merged = ForgeWatchReceiptHistoryPolicy.merging([replacement], into: existing)
+
+        XCTAssertEqual(merged.count, ForgeWatchReceiptHistoryPolicy.maximumReceiptCount)
+        XCTAssertEqual(merged.first, replacement)
+        XCTAssertEqual(merged.filter { $0.actionId == replacement.actionId }.count, 1)
+    }
+
+    func testWatchOutboxRemainsPendingUntilReceiptThenPersistsReceipt() throws {
+        let defaults = ForgeWatchStorage.sharedDefaults()
+        defaults.removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+        defaults.removeObject(forKey: ForgeWatchStorage.receiptHistoryKey)
+        defer {
+            defaults.removeObject(forKey: ForgeWatchStorage.outgoingQueueKey)
+            defaults.removeObject(forKey: ForgeWatchStorage.receiptHistoryKey)
+        }
+        let model = WatchAppModel(preview: true)
+
+        model.queueCaptureEvent(eventType: "note", payload: ["note": "Remember this"])
+        let queueData = try XCTUnwrap(defaults.data(forKey: ForgeWatchStorage.outgoingQueueKey))
+        let queue = try JSONDecoder().decode([ForgeWatchOutboundEnvelope].self, from: queueData)
+        let action = try XCTUnwrap(queue.first)
+
+        XCTAssertEqual(model.pendingActionCount, 1)
+        XCTAssertNil(model.latestReceipt)
+
+        model.applyAckForTesting(
+            ForgeWatchAckEnvelope(
+                actionId: action.id,
+                kind: action.kind.rawValue,
+                processedAt: "2026-07-11T10:01:00Z",
+                status: "processed",
+                error: nil,
+                bootstrap: nil
+            )
+        )
+
+        XCTAssertEqual(model.pendingActionCount, 0)
+        XCTAssertEqual(model.latestReceipt?.actionId, action.id)
+        let receiptData = try XCTUnwrap(defaults.data(forKey: ForgeWatchStorage.receiptHistoryKey))
+        let stored = try JSONDecoder().decode([ForgeWatchStoredReceipt].self, from: receiptData)
+        XCTAssertEqual(stored.first?.actionId, action.id)
     }
 
 }

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   CheckCheck,
+  CircleAlert,
   PauseCircle,
   Play,
   RefreshCw,
   Timer,
-  TimerReset
+  TimerReset,
+  WifiOff
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,14 @@ function toPlannedMinutes(plannedDurationSeconds: number | null): string {
     : String(Math.max(1, Math.round(plannedDurationSeconds / 60)));
 }
 
+function parseBoundedMinutes(value: string, fallback: number, maximum: number) {
+  const parsed = Number.parseInt(value, 10);
+  return Math.min(
+    maximum,
+    Math.max(1, Number.isFinite(parsed) ? parsed : fallback)
+  );
+}
+
 function formatDuration(totalSeconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(safeSeconds / 3600);
@@ -75,6 +85,10 @@ export function TaskRunControls({
   const [plannedMinutes, setPlannedMinutes] = useState(
     toPlannedMinutes(activeTaskRun?.plannedDurationSeconds ?? null)
   );
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine
+  );
 
   useEffect(() => {
     setActor(activeTaskRun?.actor ?? task.owner);
@@ -86,14 +100,50 @@ export function TaskRunControls({
     );
   }, [activeTaskRun, task.id, task.owner]);
 
-  const leaseTtlSeconds = Math.max(
-    60,
-    Number.parseInt(leaseMinutes, 10) * 60 || 900
-  );
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const boundedLeaseMinutes = parseBoundedMinutes(leaseMinutes, 15, 240);
+  const leaseTtlSeconds = boundedLeaseMinutes * 60;
+  const boundedPlannedMinutes = parseBoundedMinutes(plannedMinutes, 45, 1440);
   const plannedDurationSeconds =
-    timerMode === "planned"
-      ? Math.max(60, Number.parseInt(plannedMinutes, 10) * 60 || 2700)
-      : null;
+    timerMode === "planned" ? boundedPlannedMinutes * 60 : null;
+  const leaseExpiresAt = activeTaskRun?.leaseExpiresAt
+    ? Date.parse(activeTaskRun.leaseExpiresAt)
+    : Number.NaN;
+  const leaseExpired =
+    activeTaskRun?.status === "active" &&
+    Number.isFinite(leaseExpiresAt) &&
+    leaseExpiresAt <= Date.now();
+
+  const performAction = async (action: () => Promise<void>) => {
+    setLocalError(null);
+    if (!isOnline) {
+      setLocalError("Reconnect before changing this task run.");
+      return;
+    }
+    if (!actor.trim()) {
+      setLocalError("Enter the actor responsible for this work session.");
+      return;
+    }
+    try {
+      await action();
+    } catch (error) {
+      setLocalError(
+        error instanceof Error
+          ? error.message
+          : "Could not update this task run right now."
+      );
+    }
+  };
 
   return (
     <div className="rounded-[24px] bg-[linear-gradient(180deg,var(--ui-accent-soft),var(--ui-surface-1))] p-4">
@@ -269,8 +319,13 @@ export function TaskRunControls({
               <Button
                 variant="secondary"
                 pending={pending}
+                disabled={!isOnline}
                 pendingLabel="Switching"
-                onClick={async () => onFocus(activeTaskRun.id, { actor })}
+                onClick={() =>
+                  void performAction(() =>
+                    onFocus(activeTaskRun.id, { actor: actor.trim() })
+                  )
+                }
               >
                 <Timer className="mr-2 size-3.5" />
                 Make current
@@ -279,9 +334,16 @@ export function TaskRunControls({
             <Button
               variant="secondary"
               pending={pending}
+              disabled={!isOnline}
               pendingLabel="Sending"
-              onClick={async () =>
-                onHeartbeat(activeTaskRun.id, { actor, leaseTtlSeconds, note })
+              onClick={() =>
+                void performAction(() =>
+                  onHeartbeat(activeTaskRun.id, {
+                    actor: actor.trim(),
+                    leaseTtlSeconds,
+                    note
+                  })
+                )
               }
             >
               <RefreshCw className="mr-2 size-3.5" />
@@ -289,9 +351,12 @@ export function TaskRunControls({
             </Button>
             <Button
               pending={pending}
+              disabled={!isOnline}
               pendingLabel="Completing"
-              onClick={async () =>
-                onComplete(activeTaskRun.id, { actor, note })
+              onClick={() =>
+                void performAction(() =>
+                  onComplete(activeTaskRun.id, { actor: actor.trim(), note })
+                )
               }
             >
               <CheckCheck className="mr-2 size-3.5" />
@@ -300,8 +365,13 @@ export function TaskRunControls({
             <Button
               variant="ghost"
               pending={pending}
+              disabled={!isOnline}
               pendingLabel="Pausing"
-              onClick={async () => onRelease(activeTaskRun.id, { actor, note })}
+              onClick={() =>
+                void performAction(() =>
+                  onRelease(activeTaskRun.id, { actor: actor.trim(), note })
+                )
+              }
             >
               <PauseCircle className="mr-2 size-3.5" />
               Pause timer
@@ -310,16 +380,19 @@ export function TaskRunControls({
         ) : (
           <Button
             pending={pending}
+            disabled={!isOnline}
             pendingLabel="Starting"
-            onClick={async () =>
-              onClaim({
-                actor,
-                timerMode,
-                plannedDurationSeconds,
-                isCurrent: true,
-                leaseTtlSeconds,
-                note
-              })
+            onClick={() =>
+              void performAction(() =>
+                onClaim({
+                  actor: actor.trim(),
+                  timerMode,
+                  plannedDurationSeconds,
+                  isCurrent: true,
+                  leaseTtlSeconds,
+                  note
+                })
+              )
             }
           >
             <Play className="mr-2 size-3.5" />
@@ -334,7 +407,7 @@ export function TaskRunControls({
         </div>
         <div className="rounded-full bg-[var(--ui-surface-1)] px-3 py-2">
           {timerMode === "planned"
-            ? `${plannedMinutes} min target`
+            ? `${boundedPlannedMinutes} min target`
             : "Unlimited session"}
         </div>
         <div className="rounded-full bg-[var(--ui-surface-1)] px-3 py-2">
@@ -342,16 +415,35 @@ export function TaskRunControls({
         </div>
       </div>
 
-      {errorMessage ? (
-        <div className="mt-4 rounded-[18px] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--danger)]">
-          {errorMessage}
+      {!isOnline ? (
+        <div
+          role="status"
+          className="mt-4 flex items-start gap-2 rounded-[18px] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]"
+        >
+          <WifiOff className="mt-1 size-4 shrink-0" />
+          Task-run actions are unavailable offline. Existing session details
+          remain visible.
+        </div>
+      ) : null}
+
+      {localError || errorMessage ? (
+        <div
+          role="alert"
+          className="mt-4 flex items-start gap-2 rounded-[18px] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--danger)]"
+        >
+          <CircleAlert className="mt-1 size-4 shrink-0" />
+          <span>{localError ?? errorMessage}</span>
         </div>
       ) : null}
 
       {activeTaskRun?.status === "active" ? (
-        <div className="mt-4 flex items-center gap-2 text-[12px] text-[var(--ui-ink-faint)]">
+        <div
+          className={`mt-4 flex items-center gap-2 text-[12px] ${leaseExpired ? "text-[var(--danger)]" : "text-[var(--ui-ink-faint)]"}`}
+        >
           <TimerReset className="size-3.5" />
-          Last heartbeat {formatDateTime(activeTaskRun.heartbeatAt)}
+          {leaseExpired
+            ? `Heartbeat overdue; lease expired ${formatDateTime(activeTaskRun.leaseExpiresAt)}.`
+            : `Last heartbeat ${formatDateTime(activeTaskRun.heartbeatAt)}`}
         </div>
       ) : null}
     </div>

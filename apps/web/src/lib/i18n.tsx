@@ -32,6 +32,7 @@ function createEnglishDictionary() {
       },
       labels: {
         loading: "Loading",
+        empty: "No data",
         backgroundActivity: "Background activity",
         syncInProgress: "Sync in progress",
         connectionState: "Connection state",
@@ -680,6 +681,7 @@ export const fr: typeof en = {
     },
     labels: {
       loading: "Chargement",
+      empty: "Aucune donnée",
       backgroundActivity: "Activité en arrière-plan",
       syncInProgress: "Synchronisation en cours",
       connectionState: "État de la connexion",

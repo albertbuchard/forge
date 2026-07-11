@@ -8368,16 +8368,22 @@
         ],
         "properties": {
           "entityType": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
           },
           "entityId": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
           },
           "anchorKey": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 256
           },
           "relationship": {
             "type": "string",
+            "maxLength": 64,
             "default": "related"
           }
         }
@@ -9789,20 +9795,27 @@
               ],
               "properties": {
                 "entityType": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
                 "entityId": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
                 },
                 "anchorKey": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 256
                 },
                 "relationship": {
                   "type": "string",
+                  "maxLength": 64,
                   "default": "related"
                 }
               }
-            }
+            },
+            "maxItems": 100
           },
           "metadata": {
             "type": "object",
@@ -9895,23 +9908,6 @@
           "sourceLabel": {
             "type": "string"
           },
-          "artifactState": {
-            "type": "string",
-            "enum": [
-              "active",
-              "quarantined",
-              "blocked",
-              "archived",
-              "metadata_only"
-            ]
-          },
-          "downloadPolicy": {
-            "type": "string",
-            "enum": [
-              "human_only",
-              "disabled"
-            ]
-          },
           "links": {
             "type": "array",
             "items": {
@@ -9922,20 +9918,27 @@
               ],
               "properties": {
                 "entityType": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
                 "entityId": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
                 },
                 "anchorKey": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 256
                 },
                 "relationship": {
                   "type": "string",
+                  "maxLength": 64,
                   "default": "related"
                 }
               }
-            }
+            },
+            "maxItems": 100
           },
           "metadata": {
             "type": "object",
@@ -10204,6 +10207,208 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ArtifactVersionPage": {
+        "type": "object",
+        "required": [
+          "versions",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ],
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactVersion"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ArtifactAuditEventPage": {
+        "type": "object",
+        "required": [
+          "events",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactAuditEvent"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkbenchRun": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "connectorId",
+          "mode",
+          "status",
+          "userInput",
+          "inputs",
+          "context",
+          "conversationId",
+          "result",
+          "error",
+          "createdAt",
+          "completedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "connectorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "run",
+              "chat"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "userInput": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkbenchRunPage": {
+        "type": "object",
+        "required": [
+          "runs",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ],
+        "properties": {
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbenchRun"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
           }
         }
       },
@@ -16503,7 +16708,8 @@
                     "type": "array",
                     "items": {
                       "$ref": "#/components/schemas/EntityLinkInput"
-                    }
+                    },
+                    "maxItems": 100
                   }
                 }
               }
@@ -16600,6 +16806,25 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          }
         }
       ],
       "get": {
@@ -16610,18 +16835,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "versions"
-                  ],
-                  "properties": {
-                    "versions": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ArtifactVersion"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ArtifactVersionPage"
                 }
               }
             }
@@ -16645,6 +16859,25 @@
           "schema": {
             "type": "string"
           }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          }
         }
       ],
       "get": {
@@ -16655,18 +16888,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "events"
-                  ],
-                  "properties": {
-                    "events": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ArtifactAuditEvent"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/ArtifactAuditEventPage"
                 }
               }
             }
@@ -20239,6 +20461,27 @@
     "/api/v1/workbench/flows/{id}": {
       "get": {
         "summary": "Read one Workbench flow with runs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Workbench flow detail",
@@ -20248,7 +20491,12 @@
                   "type": "object",
                   "required": [
                     "flow",
-                    "runs"
+                    "runs",
+                    "total",
+                    "limit",
+                    "offset",
+                    "hasMore",
+                    "conversation"
                   ],
                   "properties": {
                     "flow": {
@@ -20258,9 +20506,35 @@
                     "runs": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "$ref": "#/components/schemas/WorkbenchRun"
                       }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    },
+                    "offset": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "conversation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -20385,12 +20659,18 @@
                       "additionalProperties": true
                     },
                     "run": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "$ref": "#/components/schemas/WorkbenchRun"
                     },
                     "conversation": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -20428,12 +20708,18 @@
                       "additionalProperties": true
                     },
                     "run": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "$ref": "#/components/schemas/WorkbenchRun"
                     },
                     "conversation": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -20503,30 +20789,34 @@
     "/api/v1/workbench/flows/{id}/runs": {
       "get": {
         "summary": "List Workbench runs for one flow",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Workbench run list",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "flow",
-                    "runs"
-                  ],
-                  "properties": {
-                    "flow": {
-                      "type": "object",
-                      "additionalProperties": true
-                    },
-                    "runs": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/WorkbenchRunPage"
                 }
               }
             }
@@ -20561,8 +20851,7 @@
                       "additionalProperties": true
                     },
                     "run": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "$ref": "#/components/schemas/WorkbenchRun"
                     }
                   }
                 }
@@ -20591,15 +20880,10 @@
                   "type": "object",
                   "required": [
                     "flow",
-                    "run",
                     "nodeResults"
                   ],
                   "properties": {
                     "flow": {
-                      "type": "object",
-                      "additionalProperties": true
-                    },
-                    "run": {
                       "type": "object",
                       "additionalProperties": true
                     },

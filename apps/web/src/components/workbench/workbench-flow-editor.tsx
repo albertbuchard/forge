@@ -171,6 +171,11 @@ export function WorkbenchFlowEditor({
   const [runInputs, setRunInputs] = useState<Record<string, unknown>>({});
   const [debugEnabled, setDebugEnabled] = useState(true);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runPending, setRunPending] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<WorkbenchSaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
@@ -885,46 +890,50 @@ export function WorkbenchFlowEditor({
   }
 
   async function handleRunAction(mode: "run" | "chat") {
-    const saved = await persistDraft();
-    if (!saved) {
-      setRunError(
-        "Forge could not save the latest flow changes before running. Fix the save error and try again."
-      );
+    if (runPending) {
       return;
     }
-    const graphIssue = validateWorkbenchGraphBeforeRun(nodes, edges);
-    if (graphIssue) {
-      setRunError(graphIssue);
-      return;
-    }
-    if (hasAiNodes && modelConnections.length === 0) {
-      setRunError(
-        [
-          "This flow includes an AI node, but no model is configured in Forge yet.",
-          "Open Settings > Models, add a model connection, then try again."
-        ].join("\n\n")
-      );
-      return;
-    }
-    setRunError(null);
-    const nextInputs: Record<string, unknown> = {};
-    for (const inputDefinition of publicInputs) {
-      const value = runInputs[inputDefinition.key];
-      if (!validateWorkbenchInputValue(inputDefinition, value)) {
+    setRunPending(true);
+    try {
+      const saved = await persistDraft();
+      if (!saved) {
         setRunError(
-          `Flow input "${inputDefinition.label}" must match the ${inputDefinition.kind} type.`
+          "Forge could not save the latest flow changes before running. Fix the save error and try again."
         );
         return;
       }
-      if (
-        value !== undefined &&
-        value !== null &&
-        !(typeof value === "string" && value.trim().length === 0)
-      ) {
-        nextInputs[inputDefinition.key] = value;
+      const graphIssue = validateWorkbenchGraphBeforeRun(nodes, edges);
+      if (graphIssue) {
+        setRunError(graphIssue);
+        return;
       }
-    }
-    try {
+      if (hasAiNodes && modelConnections.length === 0) {
+        setRunError(
+          [
+            "This flow includes an AI node, but no model is configured in Forge yet.",
+            "Open Settings > Models, add a model connection, then try again."
+          ].join("\n\n")
+        );
+        return;
+      }
+      setRunError(null);
+      const nextInputs: Record<string, unknown> = {};
+      for (const inputDefinition of publicInputs) {
+        const value = runInputs[inputDefinition.key];
+        if (!validateWorkbenchInputValue(inputDefinition, value)) {
+          setRunError(
+            `Flow input "${inputDefinition.label}" must match the ${inputDefinition.kind} type.`
+          );
+          return;
+        }
+        if (
+          value !== undefined &&
+          value !== null &&
+          !(typeof value === "string" && value.trim().length === 0)
+        ) {
+          nextInputs[inputDefinition.key] = value;
+        }
+      }
       if (mode === "run") {
         await onRun({
           userInput: shouldShowLegacyUserInput ? userInput : "",
@@ -941,6 +950,8 @@ export function WorkbenchFlowEditor({
       setRunOpen(false);
     } catch (error) {
       setRunError(formatWorkbenchRunError(error));
+    } finally {
+      setRunPending(false);
     }
   }
 
@@ -994,6 +1005,7 @@ export function WorkbenchFlowEditor({
           <Button
             type="button"
             variant="secondary"
+            disabled={runPending}
             onClick={() => setRunOpen(true)}
           >
             <Play className="size-4" />
@@ -1098,6 +1110,7 @@ export function WorkbenchFlowEditor({
             <button
               type="button"
               className={workbenchCanvasButtonClassName}
+              disabled={runPending}
               onClick={() => setRunOpen(true)}
             >
               <Play className="size-4" />
@@ -1555,8 +1568,74 @@ export function WorkbenchFlowEditor({
         onPublicInputsChange={setPublicInputs}
         nodes={nodes}
         flowId={flow.id}
-        onDelete={onDelete}
+        onDeleteRequest={() => {
+          setSettingsOpen(false);
+          setDeleteConfirmation("");
+          setDeleteError(null);
+          setDeleteConfirmOpen(true);
+        }}
         onSave={handleSave}
+      />
+
+      <QuestionFlowDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) {
+            setDeleteConfirmation("");
+            setDeleteError(null);
+          }
+        }}
+        eyebrow="Workbench flow"
+        title="Delete flow"
+        description="This removes the saved flow. Confirm the exact flow title before continuing."
+        value={{ confirmation: deleteConfirmation }}
+        onChange={(value) => setDeleteConfirmation(value.confirmation)}
+        steps={[
+          {
+            id: "confirm",
+            eyebrow: "Confirmation",
+            title: `Delete ${title}?`,
+            description:
+              "Type the exact title to protect the graph from an accidental delete.",
+            render: (value, setValue) => (
+              <FlowField label={`Type "${title}" to confirm`}>
+                <input
+                  value={value.confirmation}
+                  onChange={(event) =>
+                    setValue({ confirmation: event.target.value })
+                  }
+                  autoComplete="off"
+                  className={WORKBENCH_FIELD_CLASS}
+                />
+              </FlowField>
+            )
+          }
+        ]}
+        submitLabel="Delete flow"
+        pending={deletePending}
+        pendingLabel="Deleting"
+        error={deleteError}
+        onSubmit={async () => {
+          if (deleteConfirmation !== title) {
+            setDeleteError(`Type "${title}" exactly to delete this flow.`);
+            return;
+          }
+          setDeletePending(true);
+          setDeleteError(null);
+          try {
+            await onDelete();
+            setDeleteConfirmOpen(false);
+          } catch (error) {
+            setDeleteError(
+              error instanceof Error
+                ? error.message
+                : "Forge could not delete the flow. Try again."
+            );
+          } finally {
+            setDeletePending(false);
+          }
+        }}
       />
 
       <WorkbenchRunFlowDialog
@@ -1586,6 +1665,7 @@ export function WorkbenchFlowEditor({
         onDebugEnabledChange={setDebugEnabled}
         onRun={() => void handleRunAction("run")}
         onChat={() => void handleRunAction("chat")}
+        pending={runPending}
         runs={runs}
       />
 

@@ -45,7 +45,8 @@ import { normalizeWorkbenchPortDefinition } from "@/lib/workbench/nodes.js";
 
 const execFile = promisify(execFileCallback);
 const MAX_TOOL_STEPS = 6;
-const MAX_RUN_HISTORY = 20;
+export const DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT = 20;
+export const MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT = 100;
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 
 type AiConnectorRow = {
@@ -417,13 +418,51 @@ function mapConnector(row: AiConnectorRow): AiConnector {
   });
 }
 
-export function listAiConnectorRuns(connectorId: string) {
+export function listAiConnectorRunsPage(
+  connectorId: string,
+  input: { limit?: number; offset?: number } = {}
+) {
+  const limit = Math.min(
+    MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT,
+    Math.max(
+      1,
+      Math.trunc(input.limit ?? DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT)
+    )
+  );
+  const offset = Math.max(0, Math.trunc(input.offset ?? 0));
+  const total = (
+    getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM ai_connector_runs
+         WHERE connector_id = ?`
+      )
+      .get(connectorId) as { count: number }
+  ).count;
   const rows = getDatabase()
     .prepare(
-      `SELECT * FROM ai_connector_runs WHERE connector_id = ? ORDER BY created_at DESC LIMIT ?`
+      `SELECT *
+       FROM ai_connector_runs
+       WHERE connector_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`
     )
-    .all(connectorId, MAX_RUN_HISTORY) as AiConnectorRunRow[];
-  return rows.map(mapRun);
+    .all(connectorId, limit, offset) as AiConnectorRunRow[];
+  const runs = rows.map(mapRun);
+  return {
+    runs,
+    total,
+    limit,
+    offset,
+    hasMore: offset + runs.length < total
+  };
+}
+
+export function listAiConnectorRuns(
+  connectorId: string,
+  input: { limit?: number; offset?: number } = {}
+) {
+  return listAiConnectorRunsPage(connectorId, input).runs;
 }
 
 export function getAiConnectorRunById(connectorId: string, runId: string) {

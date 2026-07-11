@@ -78,7 +78,10 @@ struct CompanionDiagnosticsSheet: View {
                     overviewMetricRow("Movement", appModel.movementAccessLabel)
                     overviewMetricRow("Watch", appModel.watchSyncLabel)
                     overviewMetricRow("Last sync", appModel.latestImportSummary)
-                    overviewMetricRow("Last message", appModel.lastSyncMessage)
+                        overviewMetricRow(
+                            "Last message",
+                            companionRedactDiagnosticMessage(appModel.lastSyncMessage)
+                        )
                 }
             }
 
@@ -205,7 +208,7 @@ struct CompanionDiagnosticsSheet: View {
                 CompanionSectionCard {
                     VStack(alignment: .leading, spacing: 10) {
                         sectionTitle("Latest error")
-                        Text(latestError)
+                        Text(companionRedactDiagnosticMessage(latestError))
                             .font(.system(size: 13, weight: .medium, design: .rounded))
                             .foregroundStyle(CompanionStyle.destructive)
                             .textSelection(.enabled)
@@ -278,7 +281,7 @@ struct CompanionDiagnosticsSheet: View {
                     sectionTitle("General logs")
                     overviewMetricRow("Visible", "\(filteredLogEntries.count)")
                     overviewMetricRow("Stored", "\(logStore.entries.count)")
-                    mutedBody("Logs are persisted on-device for release and TestFlight builds. Normal logs auto-expire after \(logStore.retentionSettings.regularDays) day(s) by default, and errors after \(logStore.retentionSettings.errorDays) day(s).")
+                    mutedBody("Logs are persisted on-device with credentials redacted. Normal logs auto-expire after \(logStore.retentionSettings.regularDays) day(s) by default, and errors after \(logStore.retentionSettings.errorDays) day(s).")
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Message types")
                             .font(.system(size: 12, weight: .bold, design: .rounded))

@@ -227,7 +227,7 @@ export function KanbanPage() {
       {
         value: `${OWNER_FILTER_PREFIX.kind}bot`,
         label: "Bots",
-        description: `${bots.length} bot owner${bots.length === 1 ? "" : "s"}`,
+        description: `${bots.length} available bot collaborator${bots.length === 1 ? "" : "s"}`,
         searchText: `bots bot ai agents assistants ${bots.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
           <Badge className="border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--ui-info-soft)] text-[var(--ui-ink-strong)]">
@@ -243,7 +243,7 @@ export function KanbanPage() {
       {
         value: `${OWNER_FILTER_PREFIX.kind}human`,
         label: "Humans",
-        description: `${humans.length} human owner${humans.length === 1 ? "" : "s"}`,
+        description: `${humans.length} available human collaborator${humans.length === 1 ? "" : "s"}`,
         searchText: `humans human people operators ${humans.map((user) => `${user.displayName} ${user.handle}`).join(" ")}`,
         badge: (
           <Badge className="border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] text-[var(--ui-ink-strong)]">
@@ -340,6 +340,10 @@ export function KanbanPage() {
       ),
     [shell.snapshot.dashboard.projects]
   );
+  const tagById = useMemo(
+    () => new Map(shell.snapshot.tags.map((tag) => [tag.id, tag] as const)),
+    [shell.snapshot.tags]
+  );
 
   const filteredTasks = boardWorkItems.filter((task) => {
     if (!selectedLevels.includes(task.level)) {
@@ -358,6 +362,10 @@ export function KanbanPage() {
           task.executionMode ?? "",
           project?.title ?? "",
           project?.goalTitle ?? "",
+          ...task.tagIds.flatMap((tagId) => {
+            const tag = tagById.get(tagId);
+            return tag ? [tag.name, tag.description ?? ""] : [];
+          }),
           task.user?.displayName ?? "",
           ...(task.assignees ?? []).map((user) => user.displayName)
         ].join(" ")
@@ -740,7 +748,7 @@ export function KanbanPage() {
             </div>
             <div className="grid gap-2">
               <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-                Owner filters
+                Owner or assignee filters
               </div>
               <EntityLinkMultiSelect
                 options={ownerFilterOptions}

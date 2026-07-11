@@ -41,6 +41,8 @@ import {
   updateInsight
 } from "./repositories/collaboration.js";
 import {
+  DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT,
+  MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT,
   createAiConnector,
   deleteAiConnector,
   getAiConnectorById,
@@ -50,7 +52,7 @@ import {
   getLatestAiConnectorNodeOutput,
   getAiConnectorBySlug,
   getAiConnectorConversationForConnector,
-  listAiConnectorRuns,
+  listAiConnectorRunsPage,
   listAiConnectors,
   runAiConnector,
   updateAiConnector
@@ -390,6 +392,7 @@ import {
 import {
   artifactEnrichmentRequestSchema,
   artifactEncryptRequestSchema,
+  artifactHistoryQuerySchema,
   artifactListQuerySchema,
   artifactMetadataPatchSchema,
   artifactPasswordDownloadSchema,
@@ -400,8 +403,8 @@ import {
   encryptExistingArtifact,
   enrichArtifactWithLlm,
   getArtifactById,
-  listArtifactAuditEvents,
-  listArtifactVersions,
+  listArtifactAuditEventsPage,
+  listArtifactVersionsPage,
   listArtifactsPage,
   patchArtifactTrust,
   readArtifactDownload,
@@ -10375,9 +10378,24 @@ export async function buildServer(
       { route: "/api/v1/artifacts/:id" }
     );
     const { id } = request.params as { id: string };
+    const rawBody = request.body;
+    if (
+      rawBody &&
+      typeof rawBody === "object" &&
+      !Array.isArray(rawBody) &&
+      (Object.hasOwn(rawBody, "artifactState") ||
+        Object.hasOwn(rawBody, "downloadPolicy"))
+    ) {
+      throw new HttpError(
+        400,
+        "artifact_trust_route_required",
+        "artifactState and downloadPolicy can only be changed through POST /api/v1/artifacts/:id/trust with artifact trust access and a reason.",
+        { route: "/api/v1/artifacts/:id/trust" }
+      );
+    }
     const artifact = updateArtifactMetadata(
       id,
-      artifactMetadataPatchSchema.parse(request.body ?? {}),
+      artifactMetadataPatchSchema.parse(rawBody ?? {}),
       auth
     );
     if (!artifact) {
@@ -10392,7 +10410,7 @@ export async function buildServer(
       { route: "/api/v1/artifacts/:id/download" }
     );
     const { id } = request.params as { id: string };
-    const result = await readArtifactDownload(id);
+    const result = await readArtifactDownload(id, "", auth);
     if (!result) {
       reply.code(404);
       return { error: "Artifact not found" };
@@ -10428,7 +10446,7 @@ export async function buildServer(
     );
     const { id } = request.params as { id: string };
     const body = artifactPasswordDownloadSchema.parse(request.body ?? {});
-    const result = await readArtifactDownload(id, body.password);
+    const result = await readArtifactDownload(id, body.password, auth);
     if (!result) {
       reply.code(404);
       return { error: "Artifact not found" };
@@ -10560,7 +10578,10 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { versions: listArtifactVersions(id) };
+    return listArtifactVersionsPage(
+      id,
+      artifactHistoryQuerySchema.parse(request.query ?? {})
+    );
   });
   app.get("/api/v1/artifacts/:id/audit", async (request, reply) => {
     requireArtifactReadAccess(request.headers as Record<string, unknown>, {
@@ -10571,7 +10592,10 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { events: listArtifactAuditEvents(id) };
+    return listArtifactAuditEventsPage(
+      id,
+      artifactHistoryQuerySchema.parse(request.query ?? {})
+    );
   });
 
   app.get("/api/health", async () => buildHealthPayload(taskRunWatchdog));
@@ -17006,6 +17030,16 @@ export async function buildServer(
       { trigger: "route" }
     );
   });
+  const workbenchRunHistoryQuerySchema = z.object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_AI_CONNECTOR_RUN_HISTORY_LIMIT)
+      .optional()
+      .default(DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT),
+    offset: z.coerce.number().int().min(0).optional().default(0)
+  });
   const registerFlowApiRoutes = (
     basePath: string,
     noun: string,
@@ -17082,9 +17116,13 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
+      const runPage = listAiConnectorRunsPage(
+        connector.id,
+        workbenchRunHistoryQuerySchema.parse(request.query ?? {})
+      );
       return {
         [singularKey]: connector,
-        runs: listAiConnectorRuns(connector.id),
+        ...runPage,
         conversation: getAiConnectorConversationForConnector(connector.id)
       };
     });
@@ -17218,9 +17256,10 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      return {
-        runs: listAiConnectorRuns(connector.id)
-      };
+      return listAiConnectorRunsPage(
+        connector.id,
+        workbenchRunHistoryQuerySchema.parse(request.query ?? {})
+      );
     });
     app.get(`${basePath}/:id/runs/:runId`, async (request, reply) => {
       requireScopedAccess(
