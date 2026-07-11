@@ -19,17 +19,73 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export const SETTINGS_SECTIONS = [
-  { to: "/settings", label: "General", icon: Settings2 },
-  { to: "/settings/data", label: "Data", icon: Database },
-  { to: "/settings/users", label: "Users", icon: Users },
-  { to: "/settings/calendar", label: "Calendar", icon: CalendarDays },
-  { to: "/settings/mobile", label: "Mobile", icon: Smartphone },
-  { to: "/settings/models", label: "Models", icon: Cpu },
-  { to: "/settings/agents", label: "Agents", icon: Bot },
-  { to: "/settings/wiki", label: "KarpaWiki", icon: BookCopy },
-  { to: "/settings/logs", label: "Logs", icon: ScrollText },
-  { to: "/settings/rewards", label: "Rewards", icon: Trophy },
-  { to: "/settings/bin", label: "Bin", icon: ArchiveRestore }
+  {
+    to: "/settings",
+    label: "Runtime",
+    description:
+      "Operator session, execution policy, appearance, and Doctor checks.",
+    icon: Settings2
+  },
+  {
+    to: "/settings/data",
+    label: "Data",
+    description: "Active data root, backups, exports, and recovery candidates.",
+    icon: Database
+  },
+  {
+    to: "/settings/users",
+    label: "Users",
+    description: "Human and bot identities, ownership, and directional access.",
+    icon: Users
+  },
+  {
+    to: "/settings/calendar",
+    label: "Calendar",
+    description: "Calendar providers, connection state, and sync defaults.",
+    icon: CalendarDays
+  },
+  {
+    to: "/settings/mobile",
+    label: "Mobile",
+    description: "iPhone and watch pairing, permissions, sync, and recovery.",
+    icon: Smartphone
+  },
+  {
+    to: "/settings/models",
+    label: "Models",
+    description: "Model providers, credentials, defaults, and health checks.",
+    icon: Cpu
+  },
+  {
+    to: "/settings/agents",
+    label: "Agents",
+    description: "Agent identities, sessions, scopes, tokens, and approvals.",
+    icon: Bot
+  },
+  {
+    to: "/settings/wiki",
+    label: "KarpaWiki",
+    description: "Wiki spaces, retrieval profiles, and ingest configuration.",
+    icon: BookCopy
+  },
+  {
+    to: "/settings/logs",
+    label: "Logs",
+    description: "Bounded runtime diagnostics and recovery evidence.",
+    icon: ScrollText
+  },
+  {
+    to: "/settings/rewards",
+    label: "Rewards",
+    description: "Progression rules, assets, and reward controls.",
+    icon: Trophy
+  },
+  {
+    to: "/settings/bin",
+    label: "Bin",
+    description: "Soft-deleted records available for deliberate recovery.",
+    icon: ArchiveRestore
+  }
 ] as const;
 
 function sectionMatches(pathname: string, to: string) {
@@ -80,13 +136,17 @@ export function SettingsSectionNav({ className }: { className?: string }) {
       <Card
         className={cn("surface-shell-panel overflow-hidden p-2", className)}
       >
-        <div className="hidden items-center gap-3 lg:flex">
+        <nav
+          aria-label="Settings sections"
+          className="hidden items-center gap-3 lg:flex"
+        >
           <div className="flex flex-wrap gap-2">
             {SETTINGS_SECTIONS.map((section) => (
               <NavLink
                 key={section.to}
                 to={section.to}
                 end={section.to === "/settings"}
+                title={section.description}
                 className={({ isActive }) =>
                   cn(
                     "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition",
@@ -101,7 +161,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
               </NavLink>
             ))}
           </div>
-        </div>
+        </nav>
 
         <div className="flex items-center justify-between gap-3 lg:hidden">
           <button
@@ -173,8 +233,8 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                           </span>
                         </div>
                         <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
-                          Jump between users, calendar, models, rewards, and
-                          more.
+                          Every operator control stays reachable from this
+                          index.
                         </div>
                       </div>
                       <button
@@ -224,8 +284,8 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                                 <span className="block truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                                   {section.label}
                                 </span>
-                                <span className="mt-0.5 block text-[10px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                                  Forge settings
+                                <span className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-faint)]">
+                                  {section.description}
                                 </span>
                               </span>
                             </span>

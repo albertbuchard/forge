@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createInsightSchema, type CreateInsightInput } from "@/lib/schemas";
 import type { EntityKind } from "@/lib/entity-visuals";
+import type { Insight } from "@/lib/types";
 
 type InsightTargetKind =
   | "general"
@@ -30,6 +31,66 @@ export type InsightEntityCandidate = {
   label: string;
   description?: string;
 };
+
+const INSIGHT_CANDIDATE_LIMIT = 12;
+
+function normalizeInsightDedupValue(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+export function findDuplicateInsight(
+  input: CreateInsightInput,
+  candidates: Insight[]
+) {
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.status !== "dismissed" &&
+        candidate.status !== "expired" &&
+        normalizeInsightDedupValue(candidate.title) ===
+          normalizeInsightDedupValue(input.title) &&
+        normalizeInsightDedupValue(candidate.summary) ===
+          normalizeInsightDedupValue(input.summary) &&
+        normalizeInsightDedupValue(candidate.recommendation) ===
+          normalizeInsightDedupValue(input.recommendation) &&
+        normalizeInsightDedupValue(candidate.timeframeLabel) ===
+          normalizeInsightDedupValue(input.timeframeLabel) &&
+        normalizeInsightDedupValue(candidate.entityType) ===
+          normalizeInsightDedupValue(input.entityType) &&
+        normalizeInsightDedupValue(candidate.entityId) ===
+          normalizeInsightDedupValue(input.entityId)
+    ) ?? null
+  );
+}
+
+export function getVisibleInsightCandidates(
+  candidates: InsightEntityCandidate[],
+  targetKind: InsightTargetKind,
+  query: string
+) {
+  const normalizedQuery = normalizeInsightDedupValue(query);
+  const matching = candidates.filter(
+    (candidate) =>
+      candidate.entityType === targetKind &&
+      (!normalizedQuery ||
+        normalizeInsightDedupValue(
+          `${candidate.label} ${candidate.description ?? ""}`
+        ).includes(normalizedQuery))
+  );
+  return {
+    total: matching.length,
+    visible: matching.slice(0, INSIGHT_CANDIDATE_LIMIT)
+  };
+}
+
+export function getInsightTargetValidationError(
+  targetKind: InsightTargetKind,
+  entityId: string
+) {
+  return targetKind !== "general" && !entityId.trim()
+    ? "Choose the specific record this insight explains, or store it as a general insight."
+    : null;
+}
 
 function buildInitialValue(
   initialValue: Partial<CreateInsightInput> | undefined,
@@ -66,6 +127,7 @@ export function InsightFlowDialog({
   initialValue,
   lockedEntity,
   entityCandidates = [],
+  existingInsights = [],
   onSubmit
 }: {
   open: boolean;
@@ -78,17 +140,20 @@ export function InsightFlowDialog({
   initialValue?: Partial<CreateInsightInput>;
   lockedEntity?: InsightEntityCandidate;
   entityCandidates?: InsightEntityCandidate[];
+  existingInsights?: Insight[];
   onSubmit: (value: CreateInsightInput) => Promise<void>;
 }) {
   const [value, setValue] = useState<InsightFlowValue>(() =>
     buildInitialValue(initialValue, lockedEntity)
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [candidateSearch, setCandidateSearch] = useState("");
 
   useEffect(() => {
     if (open) {
       setValue(buildInitialValue(initialValue, lockedEntity));
       setSubmitError(null);
+      setCandidateSearch("");
     }
   }, [initialValue, lockedEntity, open]);
 
@@ -101,8 +166,10 @@ export function InsightFlowDialog({
     return Array.from(set);
   }, [entityCandidates, lockedEntity]);
 
-  const visibleCandidates = entityCandidates.filter(
-    (candidate) => candidate.entityType === value.targetKind
+  const candidateMatches = getVisibleInsightCandidates(
+    entityCandidates,
+    value.targetKind,
+    candidateSearch
   );
 
   const steps: Array<QuestionFlowStep<InsightFlowValue>> = [
@@ -157,13 +224,14 @@ export function InsightFlowDialog({
               <>
                 <FlowChoiceGrid
                   value={draft.targetKind}
-                  onChange={(nextKind) =>
+                  onChange={(nextKind) => {
+                    setCandidateSearch("");
                     patch({
                       targetKind: nextKind as InsightTargetKind,
                       entityType: nextKind === "general" ? "" : nextKind,
-                      entityId: nextKind === "general" ? "" : ""
-                    })
-                  }
+                      entityId: ""
+                    });
+                  }}
                   options={availableKinds.map((kind) => ({
                     value: kind,
                     label:
@@ -180,37 +248,59 @@ export function InsightFlowDialog({
                   columns={availableKinds.length >= 3 ? 3 : 2}
                 />
                 {draft.targetKind !== "general" ? (
-                  visibleCandidates.length > 0 ? (
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      {visibleCandidates.map((candidate) => {
-                        const selected =
-                          draft.entityType === candidate.entityType &&
-                          draft.entityId === candidate.entityId;
-                        return (
-                          <button
-                            key={`${candidate.entityType}:${candidate.entityId}`}
-                            type="button"
-                            className={`rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"}`}
-                            onClick={() =>
-                              patch({
-                                entityType: candidate.entityType,
-                                entityId: candidate.entityId
-                              })
-                            }
-                          >
-                            <EntityBadge
-                              kind={candidate.kind}
-                              label={candidate.label}
-                              compact
-                            />
-                            {candidate.description ? (
-                              <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-faint)]">
-                                {candidate.description}
-                              </div>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+                  candidateMatches.total > 0 || candidateSearch ? (
+                    <div className="mt-4 grid gap-3">
+                      <Input
+                        type="search"
+                        value={candidateSearch}
+                        onChange={(event) =>
+                          setCandidateSearch(event.target.value)
+                        }
+                        aria-label={`Search ${draft.targetKind === "trigger_report" ? "reports" : `${draft.targetKind}s`}`}
+                        placeholder="Search linked records"
+                      />
+                      <FieldHint>
+                        Showing {candidateMatches.visible.length} of{" "}
+                        {candidateMatches.total} matching records.
+                      </FieldHint>
+                      {candidateMatches.visible.length > 0 ? (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {candidateMatches.visible.map((candidate) => {
+                            const selected =
+                              draft.entityType === candidate.entityType &&
+                              draft.entityId === candidate.entityId;
+                            return (
+                              <button
+                                key={`${candidate.entityType}:${candidate.entityId}`}
+                                type="button"
+                                aria-pressed={selected}
+                                className={`rounded-[22px] border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--primary)_45%,transparent)] ${selected ? "border-[color-mix(in_srgb,var(--primary)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]" : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)]"}`}
+                                onClick={() =>
+                                  patch({
+                                    entityType: candidate.entityType,
+                                    entityId: candidate.entityId
+                                  })
+                                }
+                              >
+                                <EntityBadge
+                                  kind={candidate.kind}
+                                  label={candidate.label}
+                                  compact
+                                />
+                                {candidate.description ? (
+                                  <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-faint)]">
+                                    {candidate.description}
+                                  </div>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <FieldHint>
+                          No linked record matches this search.
+                        </FieldHint>
+                      )}
                     </div>
                   ) : (
                     <FieldHint className="mt-4">
@@ -347,6 +437,23 @@ export function InsightFlowDialog({
         if (!payload.success) {
           setSubmitError(
             "This insight still needs a title, a summary, and a recommendation before it can be stored."
+          );
+          return;
+        }
+
+        const targetError = getInsightTargetValidationError(
+          value.targetKind,
+          value.entityId
+        );
+        if (targetError) {
+          setSubmitError(targetError);
+          return;
+        }
+
+        const duplicate = findDuplicateInsight(payload.data, existingInsights);
+        if (duplicate) {
+          setSubmitError(
+            `A matching ${duplicate.status} insight already exists: ${duplicate.title}`
           );
           return;
         }

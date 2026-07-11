@@ -313,7 +313,7 @@ export const mergePreferenceContextsSchema = z.object({
   targetContextId: nonEmptyTrimmedString
 });
 
-export const createPreferenceItemSchema = z.object({
+const preferenceItemMutationFieldsSchema = z.object({
   userId: nonEmptyTrimmedString,
   domain: preferenceDomainSchema,
   label: nonEmptyTrimmedString,
@@ -321,12 +321,23 @@ export const createPreferenceItemSchema = z.object({
   tags: z.array(nonEmptyTrimmedString).default([]),
   featureWeights: preferenceDimensionVectorSchema.default({}),
   sourceEntityType: crudEntityTypeSchema.nullable().optional(),
-  sourceEntityId: z.string().nullable().optional(),
+  sourceEntityId: nonEmptyTrimmedString.nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
   queueForCompare: z.boolean().default(true)
 });
 
-export const updatePreferenceItemSchema = createPreferenceItemSchema
+export const createPreferenceItemSchema =
+  preferenceItemMutationFieldsSchema.superRefine((value, context) => {
+    if (Boolean(value.sourceEntityType) !== Boolean(value.sourceEntityId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [value.sourceEntityType ? "sourceEntityId" : "sourceEntityType"],
+        message: "sourceEntityType and sourceEntityId must be provided together"
+      });
+    }
+  });
+
+export const updatePreferenceItemSchema = preferenceItemMutationFieldsSchema
   .omit({ userId: true, domain: true })
   .partial();
 
@@ -352,9 +363,7 @@ export const createPreferenceCatalogItemSchema = z.object({
 });
 
 export const updatePreferenceCatalogItemSchema =
-  createPreferenceCatalogItemSchema
-    .omit({ catalogId: true })
-    .partial();
+  createPreferenceCatalogItemSchema.omit({ catalogId: true }).partial();
 
 export const enqueueEntityPreferenceItemSchema = z.object({
   userId: nonEmptyTrimmedString,
@@ -414,12 +423,8 @@ export type PreferenceJudgmentOutcome = z.infer<
   typeof preferenceJudgmentOutcomeSchema
 >;
 export type PreferenceSignalType = z.infer<typeof preferenceSignalTypeSchema>;
-export type PreferenceDimensionId = z.infer<
-  typeof preferenceDimensionIdSchema
->;
-export type PreferenceItemStatus = z.infer<
-  typeof preferenceItemStatusSchema
->;
+export type PreferenceDimensionId = z.infer<typeof preferenceDimensionIdSchema>;
+export type PreferenceItemStatus = z.infer<typeof preferenceItemStatusSchema>;
 export type PreferenceDimensionVector = z.infer<
   typeof preferenceDimensionVectorSchema
 >;

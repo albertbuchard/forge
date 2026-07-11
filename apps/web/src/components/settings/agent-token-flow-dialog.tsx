@@ -20,7 +20,13 @@ const FULL_OPERATOR_SCOPES = [
   "psyche.write",
   "psyche.note",
   "psyche.insight",
-  "psyche.mode"
+  "psyche.mode",
+  "artifact.readMetadata",
+  "artifact.create",
+  "artifact.uploadBytes",
+  "artifact.updateMetadata",
+  "artifact.link",
+  "artifact.enrichWithLlm"
 ] as const;
 
 const TOKEN_SCOPE_OPTIONS = [
@@ -68,8 +74,45 @@ const TOKEN_SCOPE_OPTIONS = [
     value: "psyche.mode",
     label: "Psyche mode",
     description: "Name, refine, and map mode profiles and guided mode results."
+  },
+  {
+    value: "artifact.readMetadata",
+    label: "Artifact metadata",
+    description: "Inspect trusted artifact metadata without downloading bytes."
+  },
+  {
+    value: "artifact.create",
+    label: "Artifact create",
+    description: "Create trusted Artifact Store records."
+  },
+  {
+    value: "artifact.uploadBytes",
+    label: "Artifact upload",
+    description: "Upload trusted file bytes into content-addressed storage."
+  },
+  {
+    value: "artifact.updateMetadata",
+    label: "Artifact update",
+    description: "Update artifact labels, descriptions, and trust metadata."
+  },
+  {
+    value: "artifact.link",
+    label: "Artifact links",
+    description: "Link artifacts to other Forge records."
+  },
+  {
+    value: "artifact.enrichWithLlm",
+    label: "Artifact enrichment",
+    description:
+      "Request bounded metadata enrichment through an approved model."
   }
 ] as const;
+
+const REVIEW_FIRST_SCOPES = new Set([
+  "read",
+  "psyche.read",
+  "artifact.readMetadata"
+]);
 
 const DEFAULT_BOOTSTRAP_POLICY = {
   mode: "active_only" as const,
@@ -161,19 +204,30 @@ function parseIdList(raw: string) {
   );
 }
 
+function resolveRecommendedScopes(scopes: readonly string[]) {
+  return scopes.length > 0 ? scopes : FULL_OPERATOR_SCOPES;
+}
+
+function reviewFirstScopes(scopes: readonly string[]) {
+  const safeScopes = scopes.filter((scope) => REVIEW_FIRST_SCOPES.has(scope));
+  return safeScopes.length > 0 ? safeScopes : ["read"];
+}
+
 function applyPreset(
   draft: TokenDraft,
   preset: TokenPreset,
   recommendedScopes: readonly string[]
 ): TokenDraft {
+  const effectiveRecommendedScopes =
+    resolveRecommendedScopes(recommendedScopes);
   if (preset === "review") {
     return {
       ...draft,
       preset,
-      trustLevel: "trusted",
+      trustLevel: "standard",
       autonomyMode: "approval_required",
       approvalMode: "approval_by_default",
-      scopes: [...recommendedScopes],
+      scopes: reviewFirstScopes(effectiveRecommendedScopes),
       bootstrapPolicy: bootstrapPolicyForPreset(preset),
       scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
@@ -185,7 +239,7 @@ function applyPreset(
       trustLevel: "trusted",
       autonomyMode: "scoped_write",
       approvalMode: "high_impact_only",
-      scopes: [...FULL_OPERATOR_SCOPES],
+      scopes: [...effectiveRecommendedScopes],
       bootstrapPolicy: bootstrapPolicyForPreset(preset),
       scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
@@ -197,7 +251,7 @@ function applyPreset(
       trustLevel: "autonomous",
       autonomyMode: "autonomous",
       approvalMode: "none",
-      scopes: [...FULL_OPERATOR_SCOPES],
+      scopes: [...effectiveRecommendedScopes],
       bootstrapPolicy: bootstrapPolicyForPreset(preset),
       scopePolicy: { ...DEFAULT_SCOPE_POLICY }
     };
@@ -243,19 +297,42 @@ export function AgentTokenFlowDialog({
   recommendedScopes?: readonly string[];
   onSubmit: (input: CreateAgentTokenInput) => Promise<void>;
 }) {
+  const effectiveRecommendedScopes =
+    resolveRecommendedScopes(recommendedScopes);
   const [draft, setDraft] = useState<TokenDraft>(() =>
-    buildInitialDraft(initialPreset, defaultAgentLabel, recommendedScopes)
+    buildInitialDraft(
+      initialPreset,
+      defaultAgentLabel,
+      effectiveRecommendedScopes
+    )
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const knownScopeValues = new Set(
+    TOKEN_SCOPE_OPTIONS.map((scope) => scope.value as string)
+  );
+  const scopeOptions = [
+    ...TOKEN_SCOPE_OPTIONS,
+    ...effectiveRecommendedScopes
+      .filter((scope) => !knownScopeValues.has(scope))
+      .map((scope) => ({
+        value: scope,
+        label: scope,
+        description: "Capability published by live Forge onboarding."
+      }))
+  ];
 
   useEffect(() => {
     if (open) {
       setDraft(
-        buildInitialDraft(initialPreset, defaultAgentLabel, recommendedScopes)
+        buildInitialDraft(
+          initialPreset,
+          defaultAgentLabel,
+          effectiveRecommendedScopes
+        )
       );
       setSubmitError(null);
     }
-  }, [open, initialPreset, defaultAgentLabel, recommendedScopes]);
+  }, [open, initialPreset, defaultAgentLabel, effectiveRecommendedScopes]);
 
   const steps: Array<QuestionFlowStep<TokenDraft>> = [
     {
@@ -269,14 +346,20 @@ export function AgentTokenFlowDialog({
           columns={3}
           value={value.preset}
           onChange={(next) =>
-            setValue(applyPreset(value, next as TokenPreset, recommendedScopes))
+            setValue(
+              applyPreset(
+                value,
+                next as TokenPreset,
+                effectiveRecommendedScopes
+              )
+            )
           }
           options={[
             {
               value: "review",
               label: "Review-first",
               description:
-                "Every action waits for your approval. Safe starting point for a new agent you have not yet trusted."
+                "Read-only access for a new agent. Direct mutation and artifact-changing scopes stay unavailable because those routes do not all use the central approval queue."
             },
             {
               value: "operator",
@@ -397,7 +480,7 @@ export function AgentTokenFlowDialog({
           </FlowField>
           <FlowField
             label="Autonomy mode"
-            labelHelp="Approval-required means every mutation is held for review. Scoped write lets the agent act within its scopes. Autonomous skips all gates."
+            labelHelp="Approval-required holds centrally managed agent actions for review. Direct API mutation scopes execute under their route policy, so Review-first withholds them instead."
           >
             <FlowChoiceGrid
               columns={3}
@@ -409,7 +492,8 @@ export function AgentTokenFlowDialog({
                 {
                   value: "approval_required",
                   label: "Approval required",
-                  description: "Every write action queues for your review."
+                  description:
+                    "Centrally managed agent actions queue for your review."
                 },
                 {
                   value: "scoped_write",
@@ -471,18 +555,25 @@ export function AgentTokenFlowDialog({
           labelHelp="Read lets the agent inspect the system. Write lets it create and update work. Rewards and Psyche scopes unlock more sensitive subsystems."
         >
           <div className="grid gap-3 md:grid-cols-3">
-            {TOKEN_SCOPE_OPTIONS.map((scope) => {
+            {scopeOptions.map((scope) => {
               const selected = value.scopes.includes(scope.value);
+              const blockedByReviewFirst =
+                value.preset === "review" &&
+                !REVIEW_FIRST_SCOPES.has(scope.value);
               return (
                 <button
                   key={scope.value}
                   type="button"
+                  disabled={blockedByReviewFirst}
                   className={`rounded-[18px] border px-4 py-4 text-left transition ${
-                    selected
-                      ? "border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
-                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)] hover:bg-[var(--ui-surface-2)]"
+                    blockedByReviewFirst
+                      ? "cursor-not-allowed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-faint)] opacity-55"
+                      : selected
+                        ? "border-[color-mix(in_srgb,var(--primary)_28%,transparent)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)] hover:bg-[var(--ui-surface-2)]"
                   }`}
                   onClick={() => {
+                    if (blockedByReviewFirst) return;
                     if (selected) {
                       if (value.scopes.length === 1) return;
                       setValue({
@@ -505,6 +596,13 @@ export function AgentTokenFlowDialog({
             {value.scopes.length} scope{value.scopes.length !== 1 ? "s" : ""}{" "}
             selected
           </div>
+          {value.preset === "review" ? (
+            <div className="mt-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Review-first is read-only. Use the central agent-action approval
+              workflow for proposed changes; this token cannot call direct
+              mutation or artifact-changing routes.
+            </div>
+          ) : null}
         </FlowField>
       )
     },
@@ -593,7 +691,7 @@ export function AgentTokenFlowDialog({
         <>
           <FlowField
             label="Bootstrap mode"
-              labelHelp="Disabled injects nothing. Active-only keeps a compact current-work snapshot. Scoped keeps budgets but not status filters. Full mirrors the legacy broad bootstrap."
+            labelHelp="Disabled injects nothing. Active-only keeps a compact current-work snapshot. Scoped keeps budgets but not status filters. Full mirrors the legacy broad bootstrap."
           >
             <FlowChoiceGrid
               columns={3}
@@ -615,12 +713,14 @@ export function AgentTokenFlowDialog({
                 {
                   value: "active_only",
                   label: "Active only",
-                  description: "Only active projects, focus tasks, due habits, and bounded summaries."
+                  description:
+                    "Only active projects, focus tasks, due habits, and bounded summaries."
                 },
                 {
                   value: "scoped",
                   label: "Scoped",
-                  description: "Bounded lists without forcing only active items."
+                  description:
+                    "Bounded lists without forcing only active items."
                 },
                 {
                   value: "full",
@@ -706,7 +806,10 @@ export function AgentTokenFlowDialog({
           trustLevel: draft.trustLevel,
           autonomyMode: draft.autonomyMode,
           approvalMode: draft.approvalMode,
-          scopes: draft.scopes,
+          scopes:
+            draft.preset === "review"
+              ? reviewFirstScopes(draft.scopes)
+              : draft.scopes,
           bootstrapPolicy: draft.bootstrapPolicy,
           scopePolicy: draft.scopePolicy
         });

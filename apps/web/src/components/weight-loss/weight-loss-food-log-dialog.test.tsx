@@ -4,6 +4,7 @@ import {
   buildFoodDraftFromInput,
   buildFoodLogInput,
   buildInitialCustomFoodDraft,
+  deduplicateFoodResults,
   WeightLossFoodLogDialog,
   type WeightLossFoodDraft
 } from "./weight-loss-food-log-dialog";
@@ -54,6 +55,17 @@ function draftWithFood(
 }
 
 describe("buildFoodLogInput", () => {
+  it("merges duplicate catalog candidates and keeps the more complete record", () => {
+    const base = draftWithFood("1", "serving").selectedItems[0]!.food;
+    const results = deduplicateFoodResults([
+      { ...base, id: "first", sourceId: "shared", fatGrams: null },
+      { ...base, id: "second", sourceId: "shared", confidence: 0.95 }
+    ]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe("second");
+  });
+
   it("scales grams by eaten grams divided by base grams", () => {
     const input = buildFoodLogInput(draftWithFood("2", "grams"));
     expect(input.notes).toBe("");
@@ -263,6 +275,27 @@ describe("buildFoodLogInput", () => {
 });
 
 describe("WeightLossFoodLogDialog", () => {
+  it("keeps a failed save visible so the guided draft can be retried", () => {
+    render(
+      <WeightLossFoodLogDialog
+        open
+        onOpenChange={() => undefined}
+        value={draftWithFood("1", "serving")}
+        onChange={() => undefined}
+        foodResults={[]}
+        searchPending={false}
+        logPending={false}
+        saveError="Network unavailable; meal was not saved."
+        onSearch={() => undefined}
+        onSubmit={async () => undefined}
+      />
+    );
+
+    expect(
+      screen.getByText("Network unavailable; meal was not saved.")
+    ).toBeInTheDocument();
+  });
+
   it("shows animated parser state while ChatGPT parsing is running", () => {
     render(
       <WeightLossFoodLogDialog

@@ -222,7 +222,9 @@ describe("VitalsPage", () => {
   it("renders the vitals dashboard with spotlight and metric detail cards", async () => {
     renderPage();
 
-    expect(await screen.findByText("5 live metrics")).toBeInTheDocument();
+    expect(await screen.findByText("5 tracked metrics")).toBeInTheDocument();
+    expect(screen.getAllByText("Stale evidence").length).toBeGreaterThan(0);
+    expect(screen.getByText("Source quality")).toBeInTheDocument();
     expect(screen.getByText("Recovery pulse")).toBeInTheDocument();
     expect(screen.getAllByText("53.0 bpm").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Resting heart rate").length).toBeGreaterThan(0);
@@ -234,6 +236,34 @@ describe("VitalsPage", () => {
     expect(
       screen.getByText("12 tracked days across 5 metrics")
     ).toBeInTheDocument();
+  });
+
+  it("does not render physiological interpretation when no vital evidence exists", async () => {
+    getVitalsViewMock.mockResolvedValueOnce({
+      vitals: {
+        summary: {
+          trackedDays: 0,
+          metricCount: 0,
+          latestDateKey: null,
+          latestMetricCount: 0,
+          categoryBreakdown: []
+        },
+        metrics: []
+      }
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText("No body signals synced")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("No evidence").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Recovery pulse")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Body signals should feel operational, not medical-chart dead."
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("renders Psyche metrics inside vitals when stored history exists", async () => {

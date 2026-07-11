@@ -38,6 +38,7 @@ import type {
   MacOSLocalCalendarDiscoveryPayload,
   MacOSCalendarAccessStatus,
   CalendarEvent,
+  CalendarProjectionResult,
   GoogleCalendarOauthSession,
   MicrosoftCalendarOauthSession,
   CalendarOverviewPayload,
@@ -107,6 +108,7 @@ import type {
   GamificationEquipment,
   ForgeDoctorReport,
   DoctorFixResult,
+  DeletedEntityRecord,
   SettingsPayload,
   SettingsBinPayload,
   MovementAllTimeData,
@@ -666,6 +668,7 @@ export function createFatigueSignal(
 export function getLifeEventsTimeline(input?: {
   from?: string;
   to?: string;
+  q?: string;
   limit?: number;
   offset?: number;
   eventTypes?: string[];
@@ -676,6 +679,9 @@ export function getLifeEventsTimeline(input?: {
   }
   if (input?.to) {
     search.set("to", input.to);
+  }
+  if (input?.q) {
+    search.set("q", input.q);
   }
   if (typeof input?.limit === "number") {
     search.set("limit", String(input.limit));
@@ -1986,6 +1992,7 @@ export function patchWikiPage(
     tags?: string[];
     spaceId?: string;
     frontmatter?: Record<string, unknown>;
+    expectedRevisionHash?: string;
     links?: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -2213,7 +2220,7 @@ export function listWikiIngestJobs(
   if (typeof input.limit === "number") {
     search.set("limit", String(input.limit));
   }
-  return request<{ jobs: WikiIngestJobPayload[] }>(
+  return request<{ jobs: WikiIngestJobPayload[]; total: number }>(
     `/api/v1/wiki/ingest-jobs${search.size > 0 ? `?${search.toString()}` : ""}`
   );
 }
@@ -2353,13 +2360,25 @@ export function submitInsightFeedback(
   );
 }
 
-export function getWeeklyReview() {
-  return request<{ review: WeeklyReviewPayload }>("/api/v1/reviews/weekly");
+export function getWeeklyReview(timeZone?: string) {
+  const search = new URLSearchParams();
+  if (timeZone) {
+    search.set("timeZone", timeZone);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ review: WeeklyReviewPayload }>(
+    `/api/v1/reviews/weekly${suffix}`
+  );
 }
 
-export function finalizeWeeklyReview() {
+export function finalizeWeeklyReview(timeZone?: string) {
+  const search = new URLSearchParams();
+  if (timeZone) {
+    search.set("timeZone", timeZone);
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<FinalizeWeeklyReviewResult>(
-    "/api/v1/reviews/weekly/finalize",
+    `/api/v1/reviews/weekly/finalize${suffix}`,
     {
       method: "POST"
     }
@@ -2720,6 +2739,7 @@ export function createWorkBlockTemplate(input: {
   endMinute: number;
   startsOn?: string | null;
   endsOn?: string | null;
+  exclusionDates?: string[];
   blockingState: WorkBlockTemplate["blockingState"];
   activityPresetKey?: string | null;
   customSustainRateApPerHour?: number | null;
@@ -2746,6 +2766,7 @@ export function patchWorkBlockTemplate(
     endMinute: number;
     startsOn: string | null;
     endsOn: string | null;
+    exclusionDates: string[];
     blockingState: WorkBlockTemplate["blockingState"];
     activityPresetKey: string | null;
     customSustainRateApPerHour: number | null;
@@ -2821,7 +2842,10 @@ export function createCalendarEvent(input: {
     relationshipType?: string;
   }>;
 }) {
-  return request<{ event: CalendarEvent }>("/api/v1/calendar/events", {
+  return request<{
+    event: CalendarEvent;
+    projection: CalendarProjectionResult;
+  }>("/api/v1/calendar/events", {
     method: "POST",
     body: JSON.stringify(input)
   }).then((response) => ({
@@ -2855,6 +2879,7 @@ export function patchCalendarEvent(
     activityPresetKey: string | null;
     customSustainRateApPerHour: number | null;
     preferredCalendarId: string | null;
+    recurrenceEditScope: "single" | "series";
     userId: string | null;
     links: Array<{
       entityType: CrudEntityType;
@@ -2863,13 +2888,13 @@ export function patchCalendarEvent(
     }>;
   }>
 ) {
-  return request<{ event: CalendarEvent }>(
-    `/api/v1/calendar/events/${eventId}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch)
-    }
-  ).then((response) => ({
+  return request<{
+    event: CalendarEvent;
+    projection: CalendarProjectionResult;
+  }>(`/api/v1/calendar/events/${eventId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  }).then((response) => ({
     ...response,
     event: normalizeCalendarEventPlace(response.event)
   }));
@@ -2969,6 +2994,7 @@ export function listHabits(
       | "updated_at";
     limit?: number;
     userIds?: string[];
+    timezone?: string;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -2987,6 +3013,9 @@ export function listHabits(
   }
   if (input.limit) {
     search.set("limit", String(input.limit));
+  }
+  if (input.timezone) {
+    search.set("timezone", input.timezone);
   }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ habits: Habit[] }>(`/api/v1/habits${suffix}`);
@@ -3029,6 +3058,7 @@ export function createHabitCheckIn(
     status: "done" | "missed";
     note?: string;
     description?: string;
+    timezone?: string;
   }
 ) {
   return request<{ habit: Habit; metrics: XpMetricsPayload }>(
@@ -3462,7 +3492,11 @@ export function createWorkbenchFlow(input: {
 export function getWorkbenchFlow(connectorId: string) {
   return request<{
     flow: import("./types").AiConnector;
-    runs: import("./types").AiConnectorRun[];
+    runs: import("./types").AiConnectorRunSummary[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
     conversation: import("./types").AiConnectorConversation | null;
   }>(`/api/v1/workbench/flows/${connectorId}`);
 }
@@ -3508,12 +3542,14 @@ export function runWorkbenchFlow(
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
+    retryOfRunId?: string | null;
     debug?: boolean;
   }
 ) {
   return request<{
     flow: import("./types").AiConnector;
     run: import("./types").AiConnectorRun;
+    readMetadata: import("./types").WorkbenchReadMetadata | null;
     conversation: import("./types").AiConnectorConversation | null;
   }>(`/api/v1/workbench/flows/${connectorId}/run`, {
     method: "POST",
@@ -3529,12 +3565,14 @@ export function chatWorkbenchFlow(
     context?: Record<string, unknown>;
     boxSnapshots?: Record<string, unknown>;
     conversationId?: string | null;
+    retryOfRunId?: string | null;
     debug?: boolean;
   }
 ) {
   return request<{
     flow: import("./types").AiConnector;
     run: import("./types").AiConnectorRun;
+    readMetadata: import("./types").WorkbenchReadMetadata | null;
     conversation: import("./types").AiConnectorConversation | null;
   }>(`/api/v1/workbench/flows/${connectorId}/chat`, {
     method: "POST",
@@ -3545,27 +3583,48 @@ export function chatWorkbenchFlow(
 export function getWorkbenchFlowOutput(connectorId: string) {
   return request<{
     flow: import("./types").AiConnector;
+    state: "no_output" | "current" | "stale";
+    stale: boolean;
+    latestRun: import("./types").AiConnectorRunSummary | null;
+    sourceRun: import("./types").AiConnectorRunSummary | null;
     output: import("./types").AiConnectorRunResult | null;
+    readMetadata: import("./types").WorkbenchReadMetadata | null;
   }>(`/api/v1/workbench/flows/${connectorId}/output`);
 }
 
-export function getWorkbenchFlowRuns(connectorId: string) {
-  return request<{ runs: import("./types").AiConnectorRun[] }>(
-    `/api/v1/workbench/flows/${connectorId}/runs`
-  );
+export function getWorkbenchFlowRuns(
+  connectorId: string,
+  input: { limit?: number; offset?: number } = {}
+) {
+  const search = new URLSearchParams();
+  if (typeof input.limit === "number") {
+    search.set("limit", String(input.limit));
+  }
+  if (typeof input.offset === "number") {
+    search.set("offset", String(input.offset));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{
+    runs: import("./types").AiConnectorRunSummary[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  }>(`/api/v1/workbench/flows/${connectorId}/runs${suffix}`);
 }
 
 export function getWorkbenchFlowRun(connectorId: string, runId: string) {
   return request<{
     flow: import("./types").AiConnector;
     run: import("./types").AiConnectorRun;
+    readMetadata: import("./types").WorkbenchReadMetadata;
   }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}`);
 }
 
 export function getWorkbenchFlowRunNodes(connectorId: string, runId: string) {
   return request<{
     flow: import("./types").AiConnector;
-    nodeResults: import("./types").AiConnectorRunResult["nodeResults"];
+    nodeResults: import("./types").AiConnectorNodeResultSummary[];
   }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes`);
 }
 
@@ -3577,6 +3636,7 @@ export function getWorkbenchFlowRunNode(
   return request<{
     flow: import("./types").AiConnector;
     nodeResult: import("./types").AiConnectorRunResult["nodeResults"][number];
+    readMetadata: import("./types").WorkbenchReadMetadata;
   }>(`/api/v1/workbench/flows/${connectorId}/runs/${runId}/nodes/${nodeId}`);
 }
 
@@ -3586,8 +3646,15 @@ export function getWorkbenchFlowNodeOutput(
 ) {
   return request<{
     flow: import("./types").AiConnector;
-    run: import("./types").AiConnectorRun;
-    nodeResult: import("./types").AiConnectorRunResult["nodeResults"][number];
+    state: "no_output" | "available" | "stale";
+    stale: boolean;
+    nodeExistsInCurrentFlow: boolean;
+    latestRun: import("./types").AiConnectorRunSummary | null;
+    run: import("./types").AiConnectorRunSummary | null;
+    nodeResult:
+      | import("./types").AiConnectorRunResult["nodeResults"][number]
+      | null;
+    readMetadata: import("./types").WorkbenchReadMetadata | null;
   }>(`/api/v1/workbench/flows/${connectorId}/nodes/${nodeId}/output`);
 }
 
@@ -3644,9 +3711,15 @@ export function getFitnessView(
   );
 }
 
-export function getWorkoutSession(workoutId: string) {
+export function getWorkoutSession(
+  workoutId: string,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ workout: import("./types").WorkoutSessionRecord }>(
-    `/api/v1/health/workouts/${encodeURIComponent(workoutId)}`
+    `/api/v1/health/workouts/${encodeURIComponent(workoutId)}${suffix}`
   );
 }
 
@@ -3661,11 +3734,13 @@ export function getTrainingLoadView(userIds?: string[] | unknown) {
 
 export function getWorkoutDetail(
   workoutId: string,
-  resolution: "adaptive" | "raw" = "adaptive"
+  resolution: "adaptive" | "raw" = "adaptive",
+  userIds?: string[] | unknown
 ) {
   const search = new URLSearchParams({ resolution });
+  appendUserIds(search, coerceUserIds(userIds));
   return request<WorkoutSessionDetailPayload>(
-    `/api/v1/health/workouts/${workoutId}/detail?${search.toString()}`
+    `/api/v1/health/workouts/${encodeURIComponent(workoutId)}/detail?${search.toString()}`
   );
 }
 
@@ -3871,7 +3946,8 @@ export function parseNutritionFoodLogWithChatGpt(input: {
 
 export function createNutritionBodyCheckin(
   input: NutritionCheckinInput,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  idempotencyKey?: string
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -3880,14 +3956,26 @@ export function createNutritionBodyCheckin(
     `/api/v1/health/weight-loss/body-checkins${suffix}`,
     {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input)
     }
   );
 }
 
+export function createNutritionCheckinMutationKey() {
+  const suffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `weight-loss-checkin-${suffix}`;
+}
+
 export function createNutritionAppearanceCheckin(
   input: NutritionAppearanceInput,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  idempotencyKey?: string
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -3896,6 +3984,9 @@ export function createNutritionAppearanceCheckin(
     `/api/v1/health/weight-loss/appearance-checkins${suffix}`,
     {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input)
     }
   );
@@ -3903,7 +3994,8 @@ export function createNutritionAppearanceCheckin(
 
 export function createNutritionSubjectiveCheckin(
   input: NutritionSubjectiveInput,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  idempotencyKey?: string
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -3912,6 +4004,9 @@ export function createNutritionSubjectiveCheckin(
     `/api/v1/health/weight-loss/subjective-checkins${suffix}`,
     {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input)
     }
   );
@@ -3919,7 +4014,8 @@ export function createNutritionSubjectiveCheckin(
 
 export function createNutritionGutCheckin(
   input: NutritionGutInput,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  idempotencyKey?: string
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -3928,6 +4024,9 @@ export function createNutritionGutCheckin(
     `/api/v1/health/weight-loss/gut-checkins${suffix}`,
     {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input)
     }
   );
@@ -4952,13 +5051,24 @@ export function restoreEntities(input: {
   }>;
   atomic?: boolean;
 }) {
-  return request<{ results: Array<Record<string, unknown>> }>(
-    "/api/v1/entities/restore",
-    {
-      method: "POST",
-      body: JSON.stringify(input)
+  return request<{
+    results: Array<{
+      ok?: boolean;
+      error?: { message?: string };
+      [key: string]: unknown;
+    }>;
+  }>("/api/v1/entities/restore", {
+    method: "POST",
+    body: JSON.stringify(input)
+  }).then((response) => {
+    const failed = response.results.find((result) => result.ok !== true);
+    if (failed) {
+      throw new Error(
+        failed.error?.message || "Forge could not restore the selected record."
+      );
     }
-  );
+    return response;
+  });
 }
 
 export function searchEntities(input: {
@@ -4980,6 +5090,43 @@ export function searchEntities(input: {
       method: "POST",
       body: JSON.stringify(input)
     }
+  );
+}
+
+export async function getDeletedPlanningRecord(
+  entityType: Extract<CrudEntityType, "goal" | "project" | "task">,
+  entityId: string
+): Promise<DeletedEntityRecord | null> {
+  const response = await searchEntities({
+    searches: [
+      {
+        entityTypes: [entityType],
+        ids: [entityId],
+        includeDeleted: true,
+        limit: 1
+      }
+    ]
+  });
+  const operation = response.results[0] as
+    | {
+        ok?: boolean;
+        error?: { message?: string };
+        matches?: Array<{
+          deleted?: boolean;
+          deletedRecord?: DeletedEntityRecord;
+        }>;
+      }
+    | undefined;
+  if (operation?.ok !== true) {
+    throw new Error(
+      operation?.error?.message ||
+        "Forge could not inspect the deleted planning record."
+    );
+  }
+  return (
+    operation.matches?.find(
+      (match) => match.deleted === true && match.deletedRecord
+    )?.deletedRecord ?? null
   );
 }
 
@@ -5034,6 +5181,9 @@ export function listActivity(
     limit?: number;
     entityType?: string;
     entityId?: string;
+    source?: "ui" | "openclaw" | "agent" | "system";
+    from?: string;
+    to?: string;
     includeCorrected?: boolean;
     userIds?: string[] | unknown;
   } = {}
@@ -5045,6 +5195,15 @@ export function listActivity(
   }
   if (input.entityId) {
     search.set("entityId", input.entityId);
+  }
+  if (input.source) {
+    search.set("source", input.source);
+  }
+  if (input.from) {
+    search.set("from", input.from);
+  }
+  if (input.to) {
+    search.set("to", input.to);
   }
   if (input.includeCorrected) {
     search.set("includeCorrected", "true");

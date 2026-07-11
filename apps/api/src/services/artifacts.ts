@@ -196,13 +196,13 @@ export const artifactHistoryQuerySchema = z.object({
 });
 
 export const artifactListQuerySchema = z.object({
-  query: trimmedString.optional(),
+  query: trimmedString.max(200).optional(),
   artifactState: artifactStateSchema.optional(),
   dangerLevel: artifactDangerLevelSchema.optional(),
   formatFamily: artifactFormatFamilySchema.optional(),
   linkedEntityType: z.string().trim().optional(),
   linkedEntityId: z.string().trim().optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(100),
   offset: z.coerce.number().int().min(0).optional().default(0)
 });
 
@@ -339,6 +339,27 @@ export type Artifact = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type ArtifactSummary = Pick<
+  Artifact,
+  | "id"
+  | "title"
+  | "shortDescription"
+  | "originalFileName"
+  | "byteSize"
+  | "contentProtection"
+  | "detectedExtension"
+  | "formatFamily"
+  | "sourceKind"
+  | "sourceLabel"
+  | "artifactState"
+  | "dangerScore"
+  | "dangerLevel"
+  | "downloadPolicy"
+  | "links"
+  | "createdAt"
+  | "updatedAt"
+>;
 
 type ArtifactContext = {
   source: ActivitySource;
@@ -1290,6 +1311,36 @@ function mapArtifact(row: ArtifactRow, links: EntityLink[] = []): Artifact {
   };
 }
 
+function mapArtifactSummary(
+  row: ArtifactRow,
+  links: EntityLink[] = []
+): ArtifactSummary {
+  return {
+    id: row.id,
+    title: row.title,
+    shortDescription: row.short_description,
+    originalFileName: row.original_file_name,
+    byteSize: row.byte_size,
+    contentProtection: safeContentProtection({
+      mode: row.content_protection_mode,
+      encryptedAt: row.encrypted_at,
+      encryptionJson: row.content_encryption_json,
+      passwordHint: row.content_password_hint
+    }),
+    detectedExtension: row.detected_extension,
+    formatFamily: row.format_family,
+    sourceKind: row.source_kind,
+    sourceLabel: row.source_label,
+    artifactState: row.artifact_state,
+    dangerScore: row.danger_score,
+    dangerLevel: row.danger_level,
+    downloadPolicy: row.download_policy,
+    links,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 const ARTIFACT_SELECT_COLUMNS = `id, title, short_description, description, original_file_name,
               storage_key, storage_path, content_sha256, byte_size,
               stored_content_sha256, stored_byte_size, content_protection_mode,
@@ -1300,6 +1351,19 @@ const ARTIFACT_SELECT_COLUMNS = `id, title, short_description, description, orig
               uploaded_by_agent_id, acting_for_user_id, artifact_state,
               danger_score, danger_level, download_policy, scan_results_json,
               enrichment_results_json, metadata_json, created_at, updated_at`;
+
+const ARTIFACT_SUMMARY_SELECT_COLUMNS = `id, title, short_description, '' AS description,
+              original_file_name, '' AS storage_key, '' AS storage_path,
+              '' AS content_sha256, byte_size, '' AS stored_content_sha256,
+              byte_size AS stored_byte_size, content_protection_mode,
+              content_encryption_json, encrypted_at, NULL AS encrypted_by_actor,
+              '' AS encrypted_source, content_password_hint, detected_extension,
+              '' AS declared_mime_type, '' AS detected_mime_type, format_family,
+              source_kind, source_label, NULL AS uploaded_by_user_id,
+              NULL AS uploaded_by_agent_id, NULL AS acting_for_user_id,
+              artifact_state, danger_score, danger_level, download_policy,
+              '{}' AS scan_results_json, '{}' AS enrichment_results_json,
+              '{}' AS metadata_json, created_at, updated_at`;
 
 function getArtifactRow(id: string): ArtifactRow | undefined {
   return getDatabase()
@@ -1337,16 +1401,24 @@ function buildArtifactListWhere(
     params.push(parsed.formatFamily);
   }
   if (parsed.query) {
-    const needle = `%${parsed.query.toLowerCase()}%`;
-    clauses.push(`(
-      LOWER(COALESCE(artifacts.title, '')) LIKE ?
-      OR LOWER(COALESCE(artifacts.short_description, '')) LIKE ?
-      OR LOWER(COALESCE(artifacts.description, '')) LIKE ?
-      OR LOWER(COALESCE(artifacts.original_file_name, '')) LIKE ?
-      OR LOWER(COALESCE(artifacts.source_label, '')) LIKE ?
-      OR LOWER(COALESCE(artifacts.metadata_json, '')) LIKE ?
-    )`);
-    params.push(needle, needle, needle, needle, needle, needle);
+    const terms = parsed.query
+      .normalize("NFKC")
+      .toLocaleLowerCase("en-US")
+      .match(/[\p{L}\p{N}_]+/gu);
+    if (!terms || terms.length === 0) {
+      clauses.push("0 = 1");
+    } else {
+      const ftsQuery = terms
+        .slice(0, 12)
+        .map((term) => `"${term.replaceAll('"', '""')}"*`)
+        .join(" AND ");
+      clauses.push(`artifacts.rowid IN (
+        SELECT rowid
+        FROM artifact_search
+        WHERE artifact_search MATCH ?
+      )`);
+      params.push(ftsQuery);
+    }
   }
   if (parsed.linkedEntityType && parsed.linkedEntityId) {
     clauses.push(`EXISTS (
@@ -1705,7 +1777,7 @@ export function listArtifactsPage(
     .get(...where.params) as { total: number } | undefined;
   const rows = getDatabase()
     .prepare(
-      `SELECT ${ARTIFACT_SELECT_COLUMNS}
+      `SELECT ${ARTIFACT_SUMMARY_SELECT_COLUMNS}
        FROM artifacts
        WHERE ${where.sql}
        ORDER BY updated_at DESC, id ASC
@@ -1722,7 +1794,7 @@ export function listArtifactsPage(
     linksByArtifactId.set(linkRow.sourceEntityId, current);
   }
   const artifacts = rows.map((row) =>
-    mapArtifact(row, linksByArtifactId.get(row.id) ?? [])
+    mapArtifactSummary(row, linksByArtifactId.get(row.id) ?? [])
   );
   const total = totalRow?.total ?? 0;
   return {
@@ -1737,7 +1809,29 @@ export function listArtifactsPage(
 export function listArtifacts(
   input: z.input<typeof artifactListQuerySchema> = {}
 ) {
-  return listArtifactsPage(input).artifacts;
+  const parsed = artifactListQuerySchema.parse(input);
+  const where = buildArtifactListWhere(parsed);
+  const rows = getDatabase()
+    .prepare(
+      `SELECT ${ARTIFACT_SELECT_COLUMNS}
+       FROM artifacts
+       WHERE ${where.sql}
+       ORDER BY updated_at DESC, id ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...where.params, parsed.limit, parsed.offset) as ArtifactRow[];
+  const linksByArtifactId = new Map<string, EntityLink[]>();
+  for (const linkRow of listEntityLinksForSources(
+    "artifact",
+    rows.map((row) => row.id)
+  )) {
+    const current = linksByArtifactId.get(linkRow.sourceEntityId) ?? [];
+    current.push(mapLink(linkRow));
+    linksByArtifactId.set(linkRow.sourceEntityId, current);
+  }
+  return rows.map((row) =>
+    mapArtifact(row, linksByArtifactId.get(row.id) ?? [])
+  );
 }
 
 export function getArtifactById(id: string): Artifact | undefined {

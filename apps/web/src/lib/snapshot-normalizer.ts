@@ -9,6 +9,7 @@ import type {
   Task,
   UserSummary
 } from "./types";
+import { formatLocalDateKey, getRuntimeTimeZone } from "./date-keys";
 
 const EMPTY_CALENDAR_RULES: CalendarSchedulingRules = {
   allowWorkBlockKinds: [],
@@ -233,6 +234,7 @@ function normalizeProject(
 }
 
 function normalizeHabit(habit: Partial<Habit> | undefined): Habit {
+  const timezone = habit?.timezone?.trim() || getRuntimeTimeZone();
   return {
     id: habit?.id ?? "",
     title: habit?.title ?? "",
@@ -240,6 +242,10 @@ function normalizeHabit(habit: Partial<Habit> | undefined): Habit {
     status: habit?.status ?? "active",
     polarity: habit?.polarity ?? "positive",
     frequency: habit?.frequency ?? "daily",
+    timezone,
+    dayBoundaryMode: habit?.dayBoundaryMode ?? "fixed",
+    effectiveTimezone: habit?.effectiveTimezone?.trim() || timezone,
+    currentDateKey: habit?.currentDateKey ?? formatLocalDateKey(),
     targetCount: habit?.targetCount ?? 1,
     weekDays: habit?.weekDays ?? [],
     linkedGoalIds: habit?.linkedGoalIds ?? [],

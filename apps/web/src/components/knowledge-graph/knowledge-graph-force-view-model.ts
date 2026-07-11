@@ -11,6 +11,105 @@ const SIGMA_OVERVIEW_RATIO_SCALE = 0.24;
 const SIGMA_OVERVIEW_RATIO_MIN = 0.58;
 const SIGMA_OVERVIEW_RATIO_MAX = 0.78;
 
+export function resolveKnowledgeGraphKeyboardTarget({
+  key,
+  nodeIds,
+  focusNodeId,
+  nodePositions
+}: {
+  key: string;
+  nodeIds: string[];
+  focusNodeId: string | null;
+  nodePositions?: ReadonlyMap<string, { x: number; y: number }>;
+}): { handled: boolean; targetNodeId: string | null } {
+  if (nodeIds.length === 0) {
+    return { handled: false, targetNodeId: null };
+  }
+  const currentIndex = focusNodeId ? nodeIds.indexOf(focusNodeId) : -1;
+  if (key === "Escape") {
+    return { handled: true, targetNodeId: null };
+  }
+  if (key === "Enter" || key === " ") {
+    return {
+      handled: true,
+      targetNodeId: nodeIds[Math.max(currentIndex, 0)] ?? null
+    };
+  }
+  if (key === "Home") {
+    return { handled: true, targetNodeId: nodeIds[0] ?? null };
+  }
+  if (key === "End") {
+    return {
+      handled: true,
+      targetNodeId: nodeIds[nodeIds.length - 1] ?? null
+    };
+  }
+  const direction =
+    key === "ArrowRight"
+      ? { x: 1, y: 0 }
+      : key === "ArrowLeft"
+        ? { x: -1, y: 0 }
+        : key === "ArrowDown"
+          ? { x: 0, y: 1 }
+          : key === "ArrowUp"
+            ? { x: 0, y: -1 }
+            : null;
+  if (direction) {
+    if (currentIndex < 0) {
+      return { handled: true, targetNodeId: nodeIds[0] ?? null };
+    }
+    const currentPosition = focusNodeId
+      ? nodePositions?.get(focusNodeId)
+      : undefined;
+    if (currentPosition && nodePositions) {
+      const spatialTarget = nodeIds
+        .filter((nodeId) => nodeId !== focusNodeId)
+        .map((nodeId) => {
+          const position = nodePositions.get(nodeId);
+          if (!position) {
+            return null;
+          }
+          const deltaX = position.x - currentPosition.x;
+          const deltaY = position.y - currentPosition.y;
+          const projection = deltaX * direction.x + deltaY * direction.y;
+          if (projection <= 0) {
+            return null;
+          }
+          const perpendicular = Math.abs(
+            deltaX * direction.y - deltaY * direction.x
+          );
+          const distance = Math.hypot(deltaX, deltaY);
+          return {
+            nodeId,
+            score: distance * (1 + (perpendicular / projection) * 2)
+          };
+        })
+        .filter(
+          (candidate): candidate is { nodeId: string; score: number } =>
+            candidate !== null
+        )
+        .sort(
+          (left, right) =>
+            left.score - right.score || left.nodeId.localeCompare(right.nodeId)
+        )[0];
+      return {
+        handled: true,
+        targetNodeId: spatialTarget?.nodeId ?? focusNodeId
+      };
+    }
+    return {
+      handled: true,
+      targetNodeId:
+        nodeIds[
+          key === "ArrowRight" || key === "ArrowDown"
+            ? (currentIndex + 1) % nodeIds.length
+            : (currentIndex - 1 + nodeIds.length) % nodeIds.length
+        ] ?? null
+    };
+  }
+  return { handled: false, targetNodeId: focusNodeId };
+}
+
 export type SigmaNodeDisplayAttributesLike = {
   x: number;
   y: number;
@@ -90,8 +189,16 @@ export function buildKnowledgeGraphFramedGraphPosition({
   const safeSpanY = spanY || 1;
 
   return {
-    x: clamp(((point.x - minX) / safeSpanX) * (spanX / dominantSpan) + insetX, 0, 1),
-    y: clamp(((point.y - minY) / safeSpanY) * (spanY / dominantSpan) + insetY, 0, 1)
+    x: clamp(
+      ((point.x - minX) / safeSpanX) * (spanX / dominantSpan) + insetX,
+      0,
+      1
+    ),
+    y: clamp(
+      ((point.y - minY) / safeSpanY) * (spanY / dominantSpan) + insetY,
+      0,
+      1
+    )
   };
 }
 
@@ -217,14 +324,14 @@ export function reduceKnowledgeGraphSigmaNodeAttributes({
     size: dragged
       ? attributes.size * 2
       : focused
-      ? attributes.size * 1.8
-      : hovered
-        ? attributes.size * 1.35
-        : detailed
-          ? attributes.size * 1.16
-          : related
-            ? attributes.size * 1.06
-          : attributes.size,
+        ? attributes.size * 1.8
+        : hovered
+          ? attributes.size * 1.35
+          : detailed
+            ? attributes.size * 1.16
+            : related
+              ? attributes.size * 1.06
+              : attributes.size,
     zIndex: dragged ? 4 : focused ? 3 : detailed || hovered ? 2 : 1
   };
 }
@@ -422,10 +529,19 @@ export function buildKnowledgeGraphFocusCameraTarget({
   }
 
   const localSpan = Math.max(maxX - minX, maxY - minY, 0.75);
-  const globalSpan = Math.max(globalMaxX - globalMinX, globalMaxY - globalMinY, localSpan);
-  const ratio = neighborhoodPositions.length <= 1
-    ? clamp(Math.max(currentRatio, 0.48), 0.38, 0.6)
-    : clamp((localSpan / globalSpan) * 3.2, 0.42, Math.max(currentRatio, 1.12));
+  const globalSpan = Math.max(
+    globalMaxX - globalMinX,
+    globalMaxY - globalMinY,
+    localSpan
+  );
+  const ratio =
+    neighborhoodPositions.length <= 1
+      ? clamp(Math.max(currentRatio, 0.48), 0.38, 0.6)
+      : clamp(
+          (localSpan / globalSpan) * 3.2,
+          0.42,
+          Math.max(currentRatio, 1.12)
+        );
 
   return {
     x: focusPosition.x,

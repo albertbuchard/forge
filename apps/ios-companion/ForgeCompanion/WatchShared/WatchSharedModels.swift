@@ -239,6 +239,10 @@ struct ForgeWatchHabitSummary: Codable, Identifiable, Hashable {
     let frequency: String
     let targetCount: Int
     let weekDays: [Int]
+    var timezone: String? = nil
+    var dayBoundaryMode: String? = nil
+    var effectiveTimezone: String? = nil
+    var currentDateKey: String? = nil
     var streakCount: Int
     var dueToday: Bool
     let cadenceLabel: String
@@ -596,6 +600,7 @@ struct ForgeWatchHabitCheckInAction: Codable, Hashable {
     let dateKey: String
     let status: String
     let note: String
+    var timezone: String? = nil
 }
 
 struct ForgeWatchCaptureEventAction: Codable, Hashable {

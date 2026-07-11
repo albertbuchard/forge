@@ -29,6 +29,10 @@ import { recordDiagnosticLog } from "./diagnostic-logs.js";
 import { getUserById } from "./users.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import type { LlmManager } from "../managers/platform/llm-manager.js";
+import {
+  fetchWikiIngestUrl,
+  resolveWikiIngestUrlTarget
+} from "../services/wiki-url-fetch.js";
 
 const MAX_WIKI_INGEST_TEXT_CHUNK_CHARS = 220_000;
 const WIKI_INGEST_TEXT_CHUNK_OVERLAP_CHARS = 2_000;
@@ -1163,18 +1167,20 @@ async function getFetchedContent(
   if (!sourceUrl) {
     throw new Error("sourceUrl is required for url ingest.");
   }
-  const response = await fetch(sourceUrl);
-  if (!response.ok) {
-    throw new Error(`Could not fetch ${sourceUrl}: ${response.status}`);
-  }
-  const mimeType =
-    options.mimeType?.trim() ||
-    response.headers.get("content-type")?.split(";")[0]?.trim() ||
-    "application/octet-stream";
-  const arrayBuffer = await response.arrayBuffer();
-  const binary = Buffer.from(arrayBuffer);
-  const fileName =
-    sourceUrl.split("/").pop()?.split("?")[0]?.trim() || "remote-source.bin";
+  const fetched = await fetchWikiIngestUrl(sourceUrl);
+  const mimeType = fetched.mimeType;
+  const binary = fetched.payload;
+  const fileName = (() => {
+    const segment = fetched.url.pathname.split("/").pop()?.trim();
+    if (!segment) {
+      return "remote-source.bin";
+    }
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  })();
   return {
     locator: sourceUrl,
     contentText:
@@ -3568,7 +3574,10 @@ export async function ingestWikiSource(
     fileName = path.basename(sourcePath);
     mimeType = parsed.mimeType || inferMimeTypeFromPath(sourcePath);
   } else {
-    sourceLocator = parsed.sourceUrl?.trim() || "";
+    const validatedTarget = await resolveWikiIngestUrlTarget(
+      parsed.sourceUrl?.trim() || ""
+    );
+    sourceLocator = validatedTarget.url.href;
     fileName =
       sourceLocator.split("/").pop()?.split("?")[0]?.trim() ||
       "remote-source.bin";
@@ -3864,6 +3873,7 @@ export async function processWikiIngestJob(
     const counts = refreshCounts();
     return counts.pageCount + counts.entityCount > 0;
   })();
+  let lastFailureMessage = "";
 
   while (assetQueue().length > 0) {
     const nextAsset = assetQueue().find((asset) =>
@@ -4226,6 +4236,8 @@ export async function processWikiIngestJob(
       currentAssetContext = null;
       currentPollCount = 0;
     } catch (error) {
+      lastFailureMessage =
+        error instanceof Error ? error.message : "Source ingest failed.";
       processedFiles += 1;
       updateWikiIngestAsset(nextAsset.id, { status: "failed" });
       updateCurrentAssetMetadata({
@@ -4237,12 +4249,11 @@ export async function processWikiIngestJob(
         processedFiles,
         totalFiles,
         progressPercent: calculateProgress(totalFiles, processedFiles),
-        latestMessage:
-          error instanceof Error ? error.message : "Source ingest failed."
+        latestMessage: lastFailureMessage
       });
       createWikiIngestLog(
         jobId,
-        error instanceof Error ? error.message : "Source ingest failed.",
+        lastFailureMessage,
         "error",
         {
           fileName: currentAssetContext?.fileName ?? null,
@@ -4257,6 +4268,9 @@ export async function processWikiIngestJob(
   }
 
   const counts = refreshCounts();
+  const failedSourceCount = listWikiIngestJobAssetsInternal(jobId).filter(
+    (asset) => asset.status === "failed"
+  ).length;
   updateWikiIngestJob(jobId, {
     status: hadSuccess ? "completed" : "failed",
     phase: hadSuccess ? "review" : "failed",
@@ -4266,9 +4280,18 @@ export async function processWikiIngestJob(
     createdPageCount: counts.pageCount,
     createdEntityCount: counts.entityCount,
     latestMessage: hadSuccess
-      ? "Ingest finished. Review the proposed pages and entities."
-      : "Ingest failed before any candidates could be prepared.",
-    errorMessage: hadSuccess ? "" : "No candidates were produced.",
+      ? failedSourceCount > 0
+        ? `Ingest prepared candidates, but ${failedSourceCount} source${failedSourceCount === 1 ? "" : "s"} failed. Review the candidates and failure details.`
+        : "Ingest finished. Review the proposed pages and entities."
+      : lastFailureMessage ||
+        "Ingest failed before any candidates could be prepared.",
+    errorMessage:
+      failedSourceCount > 0
+        ? lastFailureMessage ||
+          `${failedSourceCount} source${failedSourceCount === 1 ? "" : "s"} failed during ingest.`
+        : hadSuccess
+          ? ""
+          : "No candidates were produced.",
     completedAt: nowIso()
   });
   createWikiIngestLog(
@@ -4303,6 +4326,21 @@ export function listWikiIngestJobs(
   return rows
     .map((row) => getWikiIngestJob(row.id))
     .filter((job): job is WikiIngestJobPayload => job !== null);
+}
+
+export function countWikiIngestJobs(input: { spaceId?: string } = {}) {
+  const parsed = listWikiIngestJobsQuerySchema.parse({
+    ...input,
+    limit: 1
+  });
+  const row = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM wiki_ingest_jobs
+       WHERE (? IS NULL OR space_id = ?)`
+    )
+    .get(parsed.spaceId ?? null, parsed.spaceId ?? null) as { count: number };
+  return row.count;
 }
 
 export async function rerunWikiIngestJob(

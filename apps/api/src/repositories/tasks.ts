@@ -91,6 +91,11 @@ type TaskRow = {
 type ActivityContext = {
   source: ActivitySource;
   actor?: string | null;
+  lifecycleCause?: {
+    kind: "project_completion";
+    projectId: string;
+    previousProjectStatus: "active" | "paused";
+  };
 };
 
 type TaskBaseShape = { id: string; time: TaskTimeSummary } & Record<
@@ -786,20 +791,24 @@ function updateTaskRecord(
             ? `Task moved to ${updated.status.replaceAll("_", " ")}: ${updated.title}`
             : `Task updated: ${updated.title}`;
 
+    const lifecycleCause = activity.lifecycleCause ?? null;
     recordActivityEvent({
       entityType: "task",
       entityId: updated.id,
       eventType,
       title,
-      description: goalChanged
-        ? `Goal link updated${updated.goalId ? ` to ${updated.goalId}` : ""}.`
-        : projectChanged
-          ? `Project link updated${updated.projectId ? ` to ${updated.projectId}` : ""}.`
-          : ownerChanged
-            ? `Ownership changed to ${updated.owner}.`
-            : statusChanged
-              ? `Status changed from ${current.status} to ${updated.status}.`
-              : "Task details were edited.",
+      description:
+        eventType === "task_completed" && lifecycleCause
+          ? `Auto-completed when project ${lifecycleCause.projectId} moved from ${lifecycleCause.previousProjectStatus} to completed.`
+          : goalChanged
+            ? `Goal link updated${updated.goalId ? ` to ${updated.goalId}` : ""}.`
+            : projectChanged
+              ? `Project link updated${updated.projectId ? ` to ${updated.projectId}` : ""}.`
+              : ownerChanged
+                ? `Ownership changed to ${updated.owner}.`
+                : statusChanged
+                  ? `Status changed from ${current.status} to ${updated.status}.`
+                  : "Task details were edited.",
       actor: activity.actor ?? null,
       source: activity.source,
       metadata: {
@@ -813,7 +822,8 @@ function updateTaskRecord(
         previousProjectId: current.projectId,
         points: updated.points,
         previousPoints: current.points,
-        pointsChanged
+        pointsChanged,
+        ...(lifecycleCause ? { lifecycleCause } : {})
       }
     });
     if (

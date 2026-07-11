@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FlaskConical, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,11 +59,15 @@ export function WeightLossHypothesesPanel({
 
 export function WeightLossExperimentsPanel({
   experiments,
-  onCreate
+  onCreate,
+  onReview
 }: {
   experiments: WeightLossViewData["experiments"];
   onCreate: () => void;
+  onReview: (experiment: WeightLossViewData["experiments"][number]) => void;
 }) {
+  const [visibleCount, setVisibleCount] = useState(4);
+  const visibleExperiments = experiments.slice(0, visibleCount);
   return (
     <Card className="grid content-start gap-4 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -85,7 +90,7 @@ export function WeightLossExperimentsPanel({
         </Button>
       </div>
       <div className="grid gap-3">
-        {experiments.slice(0, 4).map((experiment, index) => (
+        {visibleExperiments.map((experiment, index) => (
           <SurfacePanel key={String(experiment.id ?? index)}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
@@ -108,6 +113,14 @@ export function WeightLossExperimentsPanel({
                   {experiment.experimentEnd ?? "open"}
                 </Badge>
               ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => onReview(experiment)}
+              >
+                Review
+              </Button>
             </div>
           </SurfacePanel>
         ))}
@@ -116,6 +129,19 @@ export function WeightLossExperimentsPanel({
             No experiment yet. Define one change and one primary outcome so the
             result stays interpretable.
           </WeightLossEmptyState>
+        ) : null}
+        {visibleCount < experiments.length ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setVisibleCount((current) =>
+                Math.min(experiments.length, current + 4)
+              )
+            }
+          >
+            Show next experiments
+          </Button>
         ) : null}
       </div>
     </Card>

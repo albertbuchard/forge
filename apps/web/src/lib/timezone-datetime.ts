@@ -1,6 +1,9 @@
-function validTimeZone(timeZone?: string | null) {
+export function validTimeZone(timeZone?: string | null) {
   const candidate = timeZone?.trim();
   if (!candidate) {
+    return undefined;
+  }
+  if (candidate !== "UTC" && !candidate.includes("/")) {
     return undefined;
   }
   try {
@@ -71,15 +74,57 @@ export function formatDateTimeInputInTimeZone(
 
 export function parseDateTimeInputInTimeZone(
   value: string,
-  timeZone?: string | null
+  timeZone?: string | null,
+  options: {
+    disambiguation?: "earlier" | "later" | "reject";
+    preferredInstant?: string | null;
+  } = {}
 ) {
+  const resolution = resolveDateTimeInputInTimeZone(value, timeZone);
+  if (resolution.kind !== "exact" && resolution.kind !== "ambiguous") {
+    return null;
+  }
+  if (resolution.kind === "exact") {
+    return resolution.instants[0];
+  }
+  const preferredDate = options.preferredInstant
+    ? new Date(options.preferredInstant)
+    : null;
+  const preferredInstant =
+    preferredDate && !Number.isNaN(preferredDate.getTime())
+      ? preferredDate.toISOString()
+      : null;
+  if (preferredInstant && resolution.instants.includes(preferredInstant)) {
+    return preferredInstant;
+  }
+  if (options.disambiguation === "reject") {
+    return null;
+  }
+  return options.disambiguation === "later"
+    ? (resolution.instants.at(-1) ?? null)
+    : resolution.instants[0];
+}
+
+export type DateTimeInputResolution =
+  | { kind: "exact"; instants: [string] }
+  | { kind: "ambiguous"; instants: [string, string, ...string[]] }
+  | { kind: "nonexistent"; instants: [] }
+  | { kind: "invalid"; instants: [] }
+  | { kind: "invalid_timezone"; instants: [] };
+
+export function resolveDateTimeInputInTimeZone(
+  value: string,
+  timeZone?: string | null
+): DateTimeInputResolution {
   const match = value
     .trim()
-    .match(
-      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
-    );
+    .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!match) {
-    return null;
+    return { kind: "invalid", instants: [] };
+  }
+  const resolvedTimeZone = validTimeZone(timeZone);
+  if (!resolvedTimeZone) {
+    return { kind: "invalid_timezone", instants: [] };
   }
   const [, year, month, day, hour, minute, second = "00"] = match;
   const localAsUtc = new Date(
@@ -92,16 +137,49 @@ export function parseDateTimeInputInTimeZone(
       Number(second)
     )
   );
-  if (Number.isNaN(localAsUtc.getTime())) {
-    return null;
+  if (
+    Number.isNaN(localAsUtc.getTime()) ||
+    localAsUtc.getUTCFullYear() !== Number(year) ||
+    localAsUtc.getUTCMonth() + 1 !== Number(month) ||
+    localAsUtc.getUTCDate() !== Number(day) ||
+    localAsUtc.getUTCHours() !== Number(hour) ||
+    localAsUtc.getUTCMinutes() !== Number(minute) ||
+    localAsUtc.getUTCSeconds() !== Number(second)
+  ) {
+    return { kind: "invalid", instants: [] };
   }
-  let instant = new Date(
-    localAsUtc.getTime() - timeZoneOffsetMs(localAsUtc, timeZone)
-  );
-  instant = new Date(
-    localAsUtc.getTime() - timeZoneOffsetMs(instant, timeZone)
-  );
-  return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
+  const offsets = new Set<number>();
+  for (
+    let hoursFromWallTime = -36;
+    hoursFromWallTime <= 36;
+    hoursFromWallTime += 1
+  ) {
+    offsets.add(
+      timeZoneOffsetMs(
+        new Date(localAsUtc.getTime() + hoursFromWallTime * 60 * 60 * 1000),
+        resolvedTimeZone
+      )
+    );
+  }
+  const expected = `${year}-${month}-${day}T${hour}:${minute}`;
+  const instants = Array.from(offsets)
+    .map((offset) => new Date(localAsUtc.getTime() - offset).toISOString())
+    .filter(
+      (instant) =>
+        formatDateTimeInputInTimeZone(instant, resolvedTimeZone) === expected
+    )
+    .filter((instant, index, values) => values.indexOf(instant) === index)
+    .sort();
+  if (instants.length === 0) {
+    return { kind: "nonexistent", instants: [] };
+  }
+  if (instants.length === 1) {
+    return { kind: "exact", instants: [instants[0]!] };
+  }
+  return {
+    kind: "ambiguous",
+    instants: instants as [string, string, ...string[]]
+  };
 }
 
 export function isSameDateInTimeZone(
@@ -117,9 +195,10 @@ export function isSameDateInTimeZone(
 
 export function formatDateInTimeZone(
   value: string,
-  timeZone?: string | null
+  timeZone?: string | null,
+  locale?: string
 ) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: validTimeZone(timeZone),
     weekday: "short",
     day: "numeric",
@@ -130,9 +209,10 @@ export function formatDateInTimeZone(
 
 export function formatShortDateInTimeZone(
   value: string,
-  timeZone?: string | null
+  timeZone?: string | null,
+  locale?: string
 ) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: validTimeZone(timeZone),
     day: "numeric",
     month: "short",
@@ -142,9 +222,10 @@ export function formatShortDateInTimeZone(
 
 export function formatTimeInTimeZone(
   value: string,
-  timeZone?: string | null
+  timeZone?: string | null,
+  locale?: string
 ) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: validTimeZone(timeZone),
     hour: "2-digit",
     minute: "2-digit",

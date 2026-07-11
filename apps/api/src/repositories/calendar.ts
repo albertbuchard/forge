@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import {
   decorateOwnedEntity,
@@ -47,6 +48,7 @@ import {
   type WorkBlockInstance,
   type WorkBlockTemplate
 } from "../types.js";
+import { resolveZonedDateTime } from "../services/calendar-time.js";
 
 type ActivityContext = {
   source: ActivitySource;
@@ -138,7 +140,13 @@ type CalendarEventSourceRow = {
   is_master_recurring: number;
   remote_href: string | null;
   remote_etag: string | null;
-  sync_state: "pending_create" | "pending_update" | "pending_delete" | "synced" | "error" | "deleted";
+  sync_state:
+    | "pending_create"
+    | "pending_update"
+    | "pending_delete"
+    | "synced"
+    | "error"
+    | "deleted";
   raw_payload_json: string;
   last_synced_at: string | null;
   created_at: string;
@@ -166,6 +174,7 @@ type WorkBlockTemplateRow = {
   end_minute: number;
   starts_on: string | null;
   ends_on: string | null;
+  exclusion_dates_json: string;
   blocking_state: "allowed" | "blocked";
   created_at: string;
   updated_at: string;
@@ -225,6 +234,7 @@ export type CalendarSyncEventInput = {
   location?: string;
   startAt: string;
   endAt: string;
+  timezone?: string;
   isAllDay?: boolean;
   availability?: "busy" | "free";
   eventType?: string;
@@ -233,6 +243,40 @@ export type CalendarSyncEventInput = {
   remoteUpdatedAt?: string | null;
   deletedAt?: string | null;
 };
+
+function readRecurrenceInstanceId(
+  rawPayload: Record<string, unknown> | undefined
+) {
+  if (!rawPayload) {
+    return null;
+  }
+  for (const key of ["recurrenceid", "occurrenceDate"]) {
+    const value = rawPayload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString();
+    }
+  }
+  const originalStart = rawPayload.originalStartTime;
+  if (typeof originalStart === "object" && originalStart !== null) {
+    const record = originalStart as Record<string, unknown>;
+    for (const key of ["dateTime", "date"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+  return null;
+}
+
+function isMasterRecurringProviderRecord(
+  rawPayload: Record<string, unknown> | undefined
+) {
+  return Boolean(rawPayload?.rrule);
+}
 
 export type CalendarAgendaQuery = {
   from: string;
@@ -275,7 +319,78 @@ function dateOnly(value: Date) {
 
 function dateOnlyToUtcDate(value: string) {
   const [yearText, monthText, dayText] = value.split("-");
-  return new Date(Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)));
+  return new Date(
+    Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText))
+  );
+}
+
+function addCalendarDays(value: string, days: number) {
+  const date = dateOnlyToUtcDate(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return dateOnly(date);
+}
+
+function localDateKeyForInstant(value: string, timeZone: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(
+      400,
+      "calendar_range_invalid",
+      "Calendar ranges must use valid timestamps."
+    );
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const fields = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+  return `${fields.year}-${fields.month}-${fields.day}`;
+}
+
+function recurrenceEndDateForQuery(value: string, timeZone: string) {
+  const date = new Date(value);
+  if (
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  ) {
+    return addCalendarDays(dateOnly(date), -1);
+  }
+  return localDateKeyForInstant(value, timeZone);
+}
+
+function localMinuteToInstant(
+  dateKey: string,
+  minute: number,
+  timeZone: string
+) {
+  const normalizedDateKey =
+    minute === 1440 ? addCalendarDays(dateKey, 1) : dateKey;
+  const normalizedMinute = minute === 1440 ? 0 : minute;
+  const hour = Math.floor(normalizedMinute / 60);
+  const minuteOfHour = normalizedMinute % 60;
+  const resolution = resolveZonedDateTime(
+    `${normalizedDateKey}T${String(hour).padStart(2, "0")}:${String(minuteOfHour).padStart(2, "0")}`,
+    timeZone
+  );
+  if (resolution.kind === "exact") {
+    return resolution.instants[0];
+  }
+  if (resolution.kind === "ambiguous") {
+    return resolution.instants[0];
+  }
+  return null;
+}
+
+function normalizeExclusionDates(values: string[] | undefined) {
+  return [...new Set(values ?? [])].sort();
 }
 
 function normalizeTimezone(value: string | null | undefined) {
@@ -391,7 +506,8 @@ function mapEvent(row: CalendarEventRow) {
   const primarySource = sourceMappings[0] ?? null;
   return calendarEventSchema.parse({
     id: row.id,
-    connectionId: row.preferred_connection_id ?? primarySource?.connectionId ?? null,
+    connectionId:
+      row.preferred_connection_id ?? primarySource?.connectionId ?? null,
     calendarId: row.preferred_calendar_id ?? primarySource?.calendarId ?? null,
     remoteId: primarySource?.remoteEventId ?? null,
     ownership: row.ownership,
@@ -442,6 +558,9 @@ function mapWorkBlockTemplate(row: WorkBlockTemplateRow) {
     endMinute: row.end_minute,
     startsOn: row.starts_on,
     endsOn: row.ends_on,
+    exclusionDates: normalizeExclusionDates(
+      JSON.parse(row.exclusion_dates_json || "[]") as string[]
+    ),
     blockingState: row.blocking_state,
     actionProfile: readEntityActionProfile("work_block_template", row.id, {
       profileKey: `work_block_template_${row.id}`,
@@ -530,7 +649,11 @@ function normalizeRules(rules: CalendarSchedulingRules | null | undefined) {
   return calendarSchedulingRulesSchema.parse(rules ?? DEFAULT_SCHEDULING_RULES);
 }
 
-export function storeEncryptedSecret(secretId: string, cipherText: string, description = "") {
+export function storeEncryptedSecret(
+  secretId: string,
+  cipherText: string,
+  description = ""
+) {
   const now = nowIso();
   getDatabase()
     .prepare(
@@ -549,7 +672,9 @@ export function readEncryptedSecret(secretId: string) {
 }
 
 export function deleteEncryptedSecret(secretId: string) {
-  getDatabase().prepare(`DELETE FROM stored_secrets WHERE id = ?`).run(secretId);
+  getDatabase()
+    .prepare(`DELETE FROM stored_secrets WHERE id = ?`)
+    .run(secretId);
 }
 
 export function isSupersededCalendarConnection(connectionId: string) {
@@ -587,7 +712,9 @@ function activeConnectionIds() {
   );
 }
 
-export function getCalendarConnectionById(connectionId: string): CalendarConnectionRecord | undefined {
+export function getCalendarConnectionById(
+  connectionId: string
+): CalendarConnectionRecord | undefined {
   const row = getDatabase()
     .prepare(
       `SELECT id, provider, label, account_label, status, config_json, credentials_secret_id, forge_calendar_id,
@@ -650,11 +777,17 @@ export function updateCalendarConnectionRecord(
     status: patch.status ?? current.status,
     config: patch.config ?? current.config,
     forgeCalendarId:
-      patch.forgeCalendarId === undefined ? current.forgeCalendarId : patch.forgeCalendarId,
+      patch.forgeCalendarId === undefined
+        ? current.forgeCalendarId
+        : patch.forgeCalendarId,
     lastSyncedAt:
-      patch.lastSyncedAt === undefined ? current.lastSyncedAt : patch.lastSyncedAt,
+      patch.lastSyncedAt === undefined
+        ? current.lastSyncedAt
+        : patch.lastSyncedAt,
     lastSyncError:
-      patch.lastSyncError === undefined ? current.lastSyncError : patch.lastSyncError,
+      patch.lastSyncError === undefined
+        ? current.lastSyncError
+        : patch.lastSyncError,
     updatedAt: nowIso()
   };
 
@@ -691,7 +824,9 @@ export function deleteCalendarConnectionRecord(connectionId: string) {
        WHERE id = ?`
     )
     .run(nowIso(), connectionId);
-  getDatabase().prepare(`DELETE FROM calendar_connections WHERE id = ?`).run(connectionId);
+  getDatabase()
+    .prepare(`DELETE FROM calendar_connections WHERE id = ?`)
+    .run(connectionId);
   return current;
 }
 
@@ -765,7 +900,9 @@ export function rehomeCalendarConnectionReferences(input: {
 
     for (const row of forgeEventRows) {
       const nextCalendarId = row.preferred_calendar_id
-        ? (mappedCalendarIds.get(row.preferred_calendar_id) ?? toForgeCalendar?.id ?? null)
+        ? (mappedCalendarIds.get(row.preferred_calendar_id) ??
+          toForgeCalendar?.id ??
+          null)
         : (toForgeCalendar?.id ?? null);
       updateForgeEvent.run(
         nextCalendarId ? input.toConnectionId : null,
@@ -794,7 +931,9 @@ export function rehomeCalendarConnectionReferences(input: {
 
     for (const row of timeboxRows) {
       const nextCalendarId = row.calendar_id
-        ? (mappedCalendarIds.get(row.calendar_id) ?? toForgeCalendar?.id ?? null)
+        ? (mappedCalendarIds.get(row.calendar_id) ??
+          toForgeCalendar?.id ??
+          null)
         : (toForgeCalendar?.id ?? null);
       updateTimebox.run(
         nextCalendarId ? input.toConnectionId : null,
@@ -908,7 +1047,10 @@ export function getCalendarByRemoteId(connectionId: string, remoteId: string) {
   return row ? mapCalendar(row) : undefined;
 }
 
-export function upsertCalendarRecord(connectionId: string, input: CalendarSyncCalendarInput) {
+export function upsertCalendarRecord(
+  connectionId: string,
+  input: CalendarSyncCalendarInput
+) {
   const existing = getCalendarByRemoteId(connectionId, input.remoteId);
   const now = nowIso();
 
@@ -940,7 +1082,7 @@ export function upsertCalendarRecord(connectionId: string, input: CalendarSyncCa
         now,
         existing.id
       );
-      return getCalendarById(existing.id)!;
+    return getCalendarById(existing.id)!;
   }
 
   const id = `calendar_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -1064,7 +1206,11 @@ export function getCalendarEventStorageRecord(eventId: string) {
     .get(eventId) as CalendarEventRow | undefined;
 }
 
-export function getCalendarEventByRemoteId(connectionId: string, calendarId: string, remoteId: string) {
+export function getCalendarEventByRemoteId(
+  connectionId: string,
+  calendarId: string,
+  remoteId: string
+) {
   const row = getDatabase()
     .prepare(
       `SELECT forge_events.id, forge_events.preferred_connection_id, forge_events.preferred_calendar_id, forge_events.ownership,
@@ -1211,9 +1357,15 @@ export function markCalendarEventSourcesSyncState(
 
 function replaceEventLinks(
   forgeEventId: string,
-  links: Array<{ entityType: CalendarEventLink["entityType"]; entityId: string; relationshipType?: string }>
+  links: Array<{
+    entityType: CalendarEventLink["entityType"];
+    entityId: string;
+    relationshipType?: string;
+  }>
 ) {
-  getDatabase().prepare(`DELETE FROM forge_event_links WHERE forge_event_id = ?`).run(forgeEventId);
+  getDatabase()
+    .prepare(`DELETE FROM forge_event_links WHERE forge_event_id = ?`)
+    .run(forgeEventId);
   const now = nowIso();
   const insert = getDatabase().prepare(
     `INSERT INTO forge_event_links (id, forge_event_id, entity_type, entity_id, relationship_type, created_at, updated_at)
@@ -1232,16 +1384,25 @@ function replaceEventLinks(
   }
 }
 
-export function upsertCalendarEventRecord(connectionId: string, input: CalendarSyncEventInput) {
+export function upsertCalendarEventRecord(
+  connectionId: string,
+  input: CalendarSyncEventInput
+) {
   const calendar = getCalendarByRemoteId(connectionId, input.calendarRemoteId);
   if (!calendar) {
-    throw new Error(`Calendar ${input.calendarRemoteId} is not registered for connection ${connectionId}`);
+    throw new Error(
+      `Calendar ${input.calendarRemoteId} is not registered for connection ${connectionId}`
+    );
   }
   const connection = getCalendarConnectionById(connectionId);
   if (!connection) {
     throw new Error(`Calendar connection ${connectionId} is not registered`);
   }
-  const existing = getCalendarEventByRemoteId(connectionId, calendar.id, input.remoteId);
+  const existing = getCalendarEventByRemoteId(
+    connectionId,
+    calendar.id,
+    input.remoteId
+  );
   const now = nowIso();
 
   if (existing) {
@@ -1271,7 +1432,7 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
         "",
         input.startAt,
         input.endAt,
-        calendar.timezone,
+        normalizeTimezone(input.timezone ?? calendar.timezone),
         input.isAllDay ? 1 : 0,
         input.availability ?? existing.availability,
         input.eventType ?? "",
@@ -1297,13 +1458,8 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
               : typeof input.rawPayload?.iCalUId === "string"
                 ? String(input.rawPayload.iCalUId)
                 : null,
-      recurrenceInstanceId:
-        typeof input.rawPayload?.recurrenceid === "string"
-          ? String(input.rawPayload.recurrenceid)
-          : typeof input.rawPayload?.occurrenceDate === "string"
-            ? String(input.rawPayload.occurrenceDate)
-          : null,
-      isMasterRecurring: Boolean(input.rawPayload?.rrule),
+      recurrenceInstanceId: readRecurrenceInstanceId(input.rawPayload),
+      isMasterRecurring: isMasterRecurringProviderRecord(input.rawPayload),
       remoteHref: input.remoteHref ?? null,
       remoteEtag: input.remoteEtag ?? null,
       syncState: input.deletedAt ? "deleted" : "synced",
@@ -1342,7 +1498,7 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
       "",
       input.startAt,
       input.endAt,
-      calendar.timezone,
+      normalizeTimezone(input.timezone ?? calendar.timezone),
       input.isAllDay ? 1 : 0,
       input.availability ?? "busy",
       input.eventType ?? "",
@@ -1368,13 +1524,8 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
             : typeof input.rawPayload?.iCalUId === "string"
               ? String(input.rawPayload.iCalUId)
               : null,
-    recurrenceInstanceId:
-      typeof input.rawPayload?.recurrenceid === "string"
-        ? String(input.rawPayload.recurrenceid)
-        : typeof input.rawPayload?.occurrenceDate === "string"
-          ? String(input.rawPayload.occurrenceDate)
-        : null,
-    isMasterRecurring: Boolean(input.rawPayload?.rrule),
+    recurrenceInstanceId: readRecurrenceInstanceId(input.rawPayload),
+    isMasterRecurring: isMasterRecurringProviderRecord(input.rawPayload),
     remoteHref: input.remoteHref ?? null,
     remoteEtag: input.remoteEtag ?? null,
     syncState: input.deletedAt ? "deleted" : "synced",
@@ -1387,6 +1538,8 @@ export function upsertCalendarEventRecord(connectionId: string, input: CalendarS
 export function createCalendarEvent(input: CreateCalendarEventInput) {
   const now = nowIso();
   const id = `calevent_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const startAt = new Date(input.startAt).toISOString();
+  const endAt = new Date(input.endAt).toISOString();
   const place = input.place ?? {
     label: "",
     address: "",
@@ -1398,10 +1551,25 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
   };
   const preferredCalendar =
     input.preferredCalendarId === undefined
-      ? getDefaultWritableCalendar() ?? null
+      ? (getDefaultWritableCalendar() ?? null)
       : input.preferredCalendarId
         ? getCalendarById(input.preferredCalendarId)
         : null;
+  if (input.preferredCalendarId && !preferredCalendar) {
+    throw new HttpError(
+      404,
+      "calendar_not_found",
+      `Calendar ${input.preferredCalendarId} does not exist.`
+    );
+  }
+  if (preferredCalendar && !preferredCalendar.canWrite) {
+    throw new HttpError(
+      409,
+      "calendar_provider_read_only",
+      "The selected provider calendar is read-only. Choose a writable calendar or keep the event in Forge only.",
+      { calendarId: preferredCalendar.id }
+    );
+  }
 
   getDatabase()
     .prepare(
@@ -1429,8 +1597,8 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
       place.longitude,
       place.source,
       place.externalPlaceId,
-      input.startAt,
-      input.endAt,
+      startAt,
+      endAt,
       normalizeTimezone(input.timezone),
       input.isAllDay ? 1 : 0,
       input.availability,
@@ -1449,17 +1617,13 @@ export function createCalendarEvent(input: CreateCalendarEventInput) {
       title: input.title,
       eventType: input.eventType,
       availability: input.availability,
-      startAt: input.startAt,
-      endAt: input.endAt,
+      startAt,
+      endAt,
       activityPresetKey: input.activityPresetKey ?? null,
       customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
     })
   });
-  setEntityOwner(
-    "calendar_event",
-    id,
-    inferCalendarEventOwnerId(input)
-  );
+  setEntityOwner("calendar_event", id, inferCalendarEventOwnerId(input));
   return getCalendarEventById(id)!;
 }
 
@@ -1472,6 +1636,49 @@ export function updateCalendarEvent(
     return undefined;
   }
 
+  const recurringSource = current.sourceMappings.find(
+    (source) => source.recurrenceInstanceId || source.isMasterRecurring
+  );
+  if (recurringSource && patch.recurrenceEditScope === undefined) {
+    throw new HttpError(
+      409,
+      "calendar_recurring_edit_scope_required",
+      "Choose whether this recurring change applies to one occurrence or the series.",
+      {
+        eventId,
+        recurrenceInstanceId: recurringSource.recurrenceInstanceId,
+        allowedScopes: ["single", "series"]
+      }
+    );
+  }
+  if (recurringSource && patch.recurrenceEditScope === "series") {
+    throw new HttpError(
+      409,
+      "calendar_recurring_series_edit_unsupported",
+      "Forge cannot safely edit the whole provider series from an expanded occurrence yet. Open the provider calendar or copy the occurrence into a Forge-owned event.",
+      {
+        eventId,
+        recurrenceInstanceId: recurringSource.recurrenceInstanceId,
+        supportedScope: "single"
+      }
+    );
+  }
+  if (current.ownership === "external") {
+    throw new HttpError(
+      409,
+      "calendar_provider_event_read_only",
+      recurringSource
+        ? "This provider occurrence is mirrored read-only. Copy it to create a Forge-owned event before changing it."
+        : "This provider event is mirrored read-only. Copy it to create a Forge-owned event before changing it.",
+      {
+        eventId,
+        provider: current.originType,
+        recurrenceInstanceId: recurringSource?.recurrenceInstanceId ?? null,
+        permittedAction: "copy_as_forge_event"
+      }
+    );
+  }
+
   const preferredCalendar =
     patch.preferredCalendarId === undefined
       ? current.calendarId
@@ -1480,6 +1687,21 @@ export function updateCalendarEvent(
       : patch.preferredCalendarId
         ? getCalendarById(patch.preferredCalendarId)
         : null;
+  if (patch.preferredCalendarId && !preferredCalendar) {
+    throw new HttpError(
+      404,
+      "calendar_not_found",
+      `Calendar ${patch.preferredCalendarId} does not exist.`
+    );
+  }
+  if (preferredCalendar && !preferredCalendar.canWrite) {
+    throw new HttpError(
+      409,
+      "calendar_provider_read_only",
+      "The selected provider calendar is read-only. Choose a writable calendar or keep the event in Forge only.",
+      { calendarId: preferredCalendar.id }
+    );
+  }
 
   const next = {
     preferredConnectionId: preferredCalendar?.connectionId ?? null,
@@ -1506,8 +1728,10 @@ export function updateCalendarEvent(
       externalPlaceId:
         patch.place?.externalPlaceId ?? current.place.externalPlaceId
     },
-    startAt: patch.startAt ?? current.startAt,
-    endAt: patch.endAt ?? current.endAt,
+    startAt: patch.startAt
+      ? new Date(patch.startAt).toISOString()
+      : current.startAt,
+    endAt: patch.endAt ? new Date(patch.endAt).toISOString() : current.endAt,
     timezone: normalizeTimezone(patch.timezone ?? current.timezone),
     isAllDay: patch.isAllDay ?? current.isAllDay,
     availability: patch.availability ?? current.availability,
@@ -1573,13 +1797,17 @@ export function updateCalendarEvent(
         endAt: next.endAt,
         activityPresetKey:
           patch.activityPresetKey === undefined
-            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            ? (current.actionProfile?.metadata?.activityPresetKey as
+                | string
+                | null
+                | undefined)
             : patch.activityPresetKey,
         customSustainRateApPerHour:
           patch.customSustainRateApPerHour === undefined
-            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
-                ? current.actionProfile.metadata.customSustainRateApPerHour
-                : null)
+            ? typeof current.actionProfile?.metadata
+                ?.customSustainRateApPerHour === "number"
+              ? current.actionProfile.metadata.customSustainRateApPerHour
+              : null
             : patch.customSustainRateApPerHour
       })
     });
@@ -1600,7 +1828,11 @@ export function updateCalendarEvent(
 
   if (current.sourceMappings.length > 0) {
     const nextSyncState =
-      current.deletedAt !== null ? "deleted" : current.originType === "native" ? "pending_update" : "synced";
+      current.deletedAt !== null
+        ? "deleted"
+        : current.originType === "native"
+          ? "pending_update"
+          : "synced";
     getDatabase()
       .prepare(
         `UPDATE forge_event_sources
@@ -1637,18 +1869,16 @@ export function deleteCalendarEvent(eventId: string) {
   return getCalendarEventById(eventId)!;
 }
 
-export function createWorkBlockTemplate(
-  input: CreateWorkBlockTemplateInput
-) {
+export function createWorkBlockTemplate(input: CreateWorkBlockTemplateInput) {
   return runInTransaction(() => {
     const now = nowIso();
     const id = `wbtpl_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     getDatabase()
       .prepare(
         `INSERT INTO work_block_templates (
-           id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, blocking_state, created_at, updated_at
+           id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, exclusion_dates_json, blocking_state, created_at, updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -1661,6 +1891,7 @@ export function createWorkBlockTemplate(
         input.endMinute,
         input.startsOn ?? null,
         input.endsOn ?? null,
+        JSON.stringify(normalizeExclusionDates(input.exclusionDates)),
         input.blockingState,
         now,
         now
@@ -1686,7 +1917,7 @@ export function createWorkBlockTemplate(
 export function listWorkBlockTemplates(filters: { userIds?: string[] } = {}) {
   const rows = getDatabase()
     .prepare(
-      `SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, blocking_state, created_at, updated_at
+      `SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, exclusion_dates_json, blocking_state, created_at, updated_at
        FROM work_block_templates
        ORDER BY COALESCE(starts_on, ''), start_minute ASC, title ASC`
     )
@@ -1701,7 +1932,7 @@ export function listWorkBlockTemplates(filters: { userIds?: string[] } = {}) {
 export function getWorkBlockTemplateById(templateId: string) {
   const row = getDatabase()
     .prepare(
-      `SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, blocking_state, created_at, updated_at
+      `SELECT id, title, kind, color, timezone, weekdays_json, start_minute, end_minute, starts_on, ends_on, exclusion_dates_json, blocking_state, created_at, updated_at
        FROM work_block_templates
        WHERE id = ?`
     )
@@ -1729,14 +1960,33 @@ export function updateWorkBlockTemplate(
     endMinute: patch.endMinute ?? current.endMinute,
     startsOn: patch.startsOn === undefined ? current.startsOn : patch.startsOn,
     endsOn: patch.endsOn === undefined ? current.endsOn : patch.endsOn,
+    exclusionDates:
+      patch.exclusionDates === undefined
+        ? current.exclusionDates
+        : normalizeExclusionDates(patch.exclusionDates),
     blockingState: patch.blockingState ?? current.blockingState,
     updatedAt: nowIso()
   };
 
+  if (next.endMinute === next.startMinute) {
+    throw new HttpError(
+      400,
+      "work_block_duration_invalid",
+      "A recurring work block must have a non-zero duration. Use an earlier end minute for an overnight block."
+    );
+  }
+  if (next.startsOn && next.endsOn && next.endsOn < next.startsOn) {
+    throw new HttpError(
+      400,
+      "work_block_date_range_invalid",
+      "The work block end date must be on or after its start date."
+    );
+  }
+
   getDatabase()
     .prepare(
       `UPDATE work_block_templates
-       SET title = ?, kind = ?, color = ?, timezone = ?, weekdays_json = ?, start_minute = ?, end_minute = ?, starts_on = ?, ends_on = ?, blocking_state = ?, updated_at = ?
+       SET title = ?, kind = ?, color = ?, timezone = ?, weekdays_json = ?, start_minute = ?, end_minute = ?, starts_on = ?, ends_on = ?, exclusion_dates_json = ?, blocking_state = ?, updated_at = ?
        WHERE id = ?`
     )
     .run(
@@ -1749,6 +1999,7 @@ export function updateWorkBlockTemplate(
       next.endMinute,
       next.startsOn,
       next.endsOn,
+      JSON.stringify(next.exclusionDates),
       next.blockingState,
       next.updatedAt,
       templateId
@@ -1772,13 +2023,17 @@ export function updateWorkBlockTemplate(
         endMinute: next.endMinute,
         activityPresetKey:
           patch.activityPresetKey === undefined
-            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            ? (current.actionProfile?.metadata?.activityPresetKey as
+                | string
+                | null
+                | undefined)
             : patch.activityPresetKey,
         customSustainRateApPerHour:
           patch.customSustainRateApPerHour === undefined
-            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
-                ? current.actionProfile.metadata.customSustainRateApPerHour
-                : null)
+            ? typeof current.actionProfile?.metadata
+                ?.customSustainRateApPerHour === "number"
+              ? current.actionProfile.metadata.customSustainRateApPerHour
+              : null
             : patch.customSustainRateApPerHour
       })
     });
@@ -1794,46 +2049,108 @@ export function deleteWorkBlockTemplate(templateId: string) {
   if (!current) {
     return undefined;
   }
-  getDatabase().prepare(`DELETE FROM work_block_templates WHERE id = ?`).run(templateId);
+  getDatabase()
+    .prepare(`DELETE FROM work_block_templates WHERE id = ?`)
+    .run(templateId);
   return current;
 }
+
+const MAX_WORK_BLOCK_EXPANSION_DAYS = 732;
+const MAX_WORK_BLOCK_INSTANCES = 10_000;
 
 function deriveWorkBlockInstances(
   template: WorkBlockTemplate,
   query: CalendarAgendaQuery
 ) {
-  const queryStart = new Date(query.from);
-  const queryEnd = new Date(query.to);
-  const start = new Date(Date.UTC(queryStart.getUTCFullYear(), queryStart.getUTCMonth(), queryStart.getUTCDate()));
-  const end = new Date(Date.UTC(queryEnd.getUTCFullYear(), queryEnd.getUTCMonth(), queryEnd.getUTCDate()));
-  const templateStart = template.startsOn ? dateOnlyToUtcDate(template.startsOn) : null;
-  const templateEnd = template.endsOn ? dateOnlyToUtcDate(template.endsOn) : null;
-  const firstDay =
-    templateStart && templateStart.getTime() > start.getTime() ? templateStart : start;
-  const lastDay =
-    templateEnd && templateEnd.getTime() < end.getTime() ? templateEnd : end;
+  const queryStartMs = Date.parse(query.from);
+  const queryEndMs = Date.parse(query.to);
+  if (
+    !Number.isFinite(queryStartMs) ||
+    !Number.isFinite(queryEndMs) ||
+    queryEndMs <= queryStartMs
+  ) {
+    throw new HttpError(
+      400,
+      "calendar_range_invalid",
+      "Calendar range end must be after its start."
+    );
+  }
 
-  if (firstDay.getTime() > lastDay.getTime()) {
+  const queryStartDate = addCalendarDays(
+    localDateKeyForInstant(query.from, template.timezone),
+    -1
+  );
+  const queryEndDate = recurrenceEndDateForQuery(query.to, template.timezone);
+  const firstDate =
+    template.startsOn && template.startsOn > queryStartDate
+      ? template.startsOn
+      : queryStartDate;
+  const lastDate =
+    template.endsOn && template.endsOn < queryEndDate
+      ? template.endsOn
+      : queryEndDate;
+
+  if (firstDate > lastDate) {
     return [];
   }
 
+  const expansionDays =
+    Math.round(
+      (dateOnlyToUtcDate(lastDate).getTime() -
+        dateOnlyToUtcDate(firstDate).getTime()) /
+        (24 * 60 * 60 * 1000)
+    ) + 1;
+  if (expansionDays > MAX_WORK_BLOCK_EXPANSION_DAYS) {
+    throw new HttpError(
+      400,
+      "calendar_range_too_large",
+      `Recurring work blocks can be expanded across at most ${MAX_WORK_BLOCK_EXPANSION_DAYS} local calendar days per request.`
+    );
+  }
+
   const rows: WorkBlockInstance[] = [];
-  for (let cursor = new Date(firstDay); cursor <= lastDay; cursor = addMinutes(cursor, 24 * 60)) {
-    if (!template.weekDays.includes(cursor.getUTCDay())) {
+  const exclusions = new Set(template.exclusionDates);
+  for (
+    let cursorDate = firstDate;
+    cursorDate <= lastDate;
+    cursorDate = addCalendarDays(cursorDate, 1)
+  ) {
+    if (
+      exclusions.has(cursorDate) ||
+      !template.weekDays.includes(dateOnlyToUtcDate(cursorDate).getUTCDay())
+    ) {
       continue;
     }
-    const blockStart = addMinutes(new Date(cursor), template.startMinute);
-    const blockEnd = addMinutes(new Date(cursor), template.endMinute);
-    if (blockEnd.toISOString() <= query.from || blockStart.toISOString() >= query.to) {
+    const endDate =
+      template.endMinute < template.startMinute
+        ? addCalendarDays(cursorDate, 1)
+        : cursorDate;
+    const blockStart = localMinuteToInstant(
+      cursorDate,
+      template.startMinute,
+      template.timezone
+    );
+    const blockEnd = localMinuteToInstant(
+      endDate,
+      template.endMinute,
+      template.timezone
+    );
+    if (!blockStart || !blockEnd) {
+      continue;
+    }
+    if (
+      Date.parse(blockEnd) <= queryStartMs ||
+      Date.parse(blockStart) >= queryEndMs
+    ) {
       continue;
     }
     rows.push(
       workBlockInstanceSchema.parse({
-        id: `wbinst_${template.id}_${dateOnly(cursor)}`,
+        id: `wbinst_${template.id}_${cursorDate}`,
         templateId: template.id,
-        dateKey: dateOnly(cursor),
-        startAt: blockStart.toISOString(),
-        endAt: blockEnd.toISOString(),
+        dateKey: cursorDate,
+        startAt: blockStart,
+        endAt: blockEnd,
         title: template.title,
         kind: template.kind,
         color: template.color,
@@ -1855,9 +2172,22 @@ export function ensureWorkBlockInstancesInRange(_query: CalendarAgendaQuery) {
 export function listWorkBlockInstances(
   query: CalendarAgendaQuery & { userIds?: string[] }
 ) {
-  return listWorkBlockTemplates({ userIds: query.userIds })
-    .flatMap((template) => deriveWorkBlockInstances(template, query))
-    .sort((left, right) => left.startAt.localeCompare(right.startAt) || left.title.localeCompare(right.title));
+  const instances: WorkBlockInstance[] = [];
+  for (const template of listWorkBlockTemplates({ userIds: query.userIds })) {
+    instances.push(...deriveWorkBlockInstances(template, query));
+    if (instances.length > MAX_WORK_BLOCK_INSTANCES) {
+      throw new HttpError(
+        400,
+        "calendar_instance_limit_exceeded",
+        `The requested range produces more than ${MAX_WORK_BLOCK_INSTANCES} recurring work-block instances. Request a shorter range.`
+      );
+    }
+  }
+  return instances.sort(
+    (left, right) =>
+      left.startAt.localeCompare(right.startAt) ||
+      left.title.localeCompare(right.title)
+  );
 }
 
 export function listTaskTimeboxes(
@@ -1985,18 +2315,29 @@ export function updateTaskTimebox(
     return undefined;
   }
   const next = {
-    connectionId: patch.connectionId === undefined ? current.connectionId : patch.connectionId,
-    calendarId: patch.calendarId === undefined ? current.calendarId : patch.calendarId,
-    remoteEventId: patch.remoteEventId === undefined ? current.remoteEventId : patch.remoteEventId,
+    connectionId:
+      patch.connectionId === undefined
+        ? current.connectionId
+        : patch.connectionId,
+    calendarId:
+      patch.calendarId === undefined ? current.calendarId : patch.calendarId,
+    remoteEventId:
+      patch.remoteEventId === undefined
+        ? current.remoteEventId
+        : patch.remoteEventId,
     linkedTaskRunId:
-      patch.linkedTaskRunId === undefined ? current.linkedTaskRunId : patch.linkedTaskRunId,
+      patch.linkedTaskRunId === undefined
+        ? current.linkedTaskRunId
+        : patch.linkedTaskRunId,
     status: patch.status ?? current.status,
     source: patch.source ?? current.source,
     title: patch.title ?? current.title,
     startsAt: patch.startsAt ?? current.startsAt,
     endsAt: patch.endsAt ?? current.endsAt,
     overrideReason:
-      patch.overrideReason === undefined ? current.overrideReason : patch.overrideReason,
+      patch.overrideReason === undefined
+        ? current.overrideReason
+        : patch.overrideReason,
     updatedAt: nowIso()
   };
 
@@ -2042,13 +2383,17 @@ export function updateTaskTimebox(
         endsAt: next.endsAt,
         activityPresetKey:
           patch.activityPresetKey === undefined
-            ? current.actionProfile?.metadata?.activityPresetKey as string | null | undefined
+            ? (current.actionProfile?.metadata?.activityPresetKey as
+                | string
+                | null
+                | undefined)
             : patch.activityPresetKey,
         customSustainRateApPerHour:
           patch.customSustainRateApPerHour === undefined
-            ? (typeof current.actionProfile?.metadata?.customSustainRateApPerHour === "number"
-                ? current.actionProfile.metadata.customSustainRateApPerHour
-                : null)
+            ? typeof current.actionProfile?.metadata
+                ?.customSustainRateApPerHour === "number"
+              ? current.actionProfile.metadata.customSustainRateApPerHour
+              : null
             : patch.customSustainRateApPerHour
       })
     });
@@ -2064,7 +2409,9 @@ export function deleteTaskTimebox(timeboxId: string) {
   if (!current) {
     return undefined;
   }
-  getDatabase().prepare(`DELETE FROM task_timeboxes WHERE id = ?`).run(timeboxId);
+  getDatabase()
+    .prepare(`DELETE FROM task_timeboxes WHERE id = ?`)
+    .run(timeboxId);
   return current;
 }
 
@@ -2078,7 +2425,9 @@ export function findCoveringTimeboxForTask(taskId: string, at: Date) {
        ORDER BY starts_at DESC
        LIMIT 1`
     )
-    .get(taskId, at.toISOString(), at.toISOString()) as TaskTimeboxRow | undefined;
+    .get(taskId, at.toISOString(), at.toISOString()) as
+    | TaskTimeboxRow
+    | undefined;
   return row ? mapTimebox(row) : undefined;
 }
 
@@ -2096,7 +2445,10 @@ export function bindTaskRunToTimebox(input: {
     const startsAt = existing?.startsAt ?? input.startedAt.toISOString();
     const endsAt =
       existing?.endsAt ??
-      addMinutes(input.startedAt, Math.max(15, Math.ceil((input.plannedDurationSeconds ?? 30 * 60) / 60))).toISOString();
+      addMinutes(
+        input.startedAt,
+        Math.max(15, Math.ceil((input.plannedDurationSeconds ?? 30 * 60) / 60))
+      ).toISOString();
 
     if (existing) {
       return updateTaskTimebox(existing.id, {
@@ -2179,25 +2531,43 @@ function matchKeywords(keywords: string[], haystack: string) {
   return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
 }
 
-export function evaluateSchedulingForTask(task: Task, at = new Date()): SchedulingEvaluation {
-  const project = task.projectId ? getProjectById(task.projectId) ?? null : null;
-  const effectiveRules = normalizeRules(task.schedulingRules ?? project?.schedulingRules);
+export function evaluateSchedulingForTask(
+  task: Task,
+  at = new Date()
+): SchedulingEvaluation {
+  const project = task.projectId
+    ? (getProjectById(task.projectId) ?? null)
+    : null;
+  const effectiveRules = normalizeRules(
+    task.schedulingRules ?? project?.schedulingRules
+  );
   const currentEvents = listCalendarEvents({
     from: addMinutes(at, -1).toISOString(),
     to: addMinutes(at, 1).toISOString()
-  }).filter((event) => event.startAt <= at.toISOString() && event.endAt >= at.toISOString());
+  }).filter(
+    (event) =>
+      event.startAt <= at.toISOString() && event.endAt >= at.toISOString()
+  );
   const currentBlocks = listWorkBlockInstances({
     from: addMinutes(at, -1).toISOString(),
     to: addMinutes(at, 1).toISOString()
-  }).filter((block) => block.startAt <= at.toISOString() && block.endAt >= at.toISOString());
+  }).filter(
+    (block) =>
+      block.startAt <= at.toISOString() && block.endAt >= at.toISOString()
+  );
 
   const conflicts: SchedulingEvaluation["conflicts"] = [];
   for (const event of currentEvents) {
     if (
-      (event.calendarId ? effectiveRules.blockCalendarIds.includes(event.calendarId) : false) ||
+      (event.calendarId
+        ? effectiveRules.blockCalendarIds.includes(event.calendarId)
+        : false) ||
       effectiveRules.blockEventTypes.includes(event.eventType) ||
       effectiveRules.blockAvailability.includes(event.availability) ||
-      matchKeywords(effectiveRules.blockEventKeywords, `${event.title}\n${event.description}\n${event.location}`)
+      matchKeywords(
+        effectiveRules.blockEventKeywords,
+        `${event.title}\n${event.description}\n${event.location}`
+      )
     ) {
       conflicts.push(
         calendarContextConflictSchema.parse({
@@ -2254,7 +2624,9 @@ export function evaluateSchedulingForTask(task: Task, at = new Date()): Scheduli
       allowSatisfied = currentEvents.some(
         (event) =>
           (effectiveRules.allowCalendarIds.length === 0 ||
-            (event.calendarId ? effectiveRules.allowCalendarIds.includes(event.calendarId) : false)) &&
+            (event.calendarId
+              ? effectiveRules.allowCalendarIds.includes(event.calendarId)
+              : false)) &&
           (effectiveRules.allowEventTypes.length === 0 ||
             effectiveRules.allowEventTypes.includes(event.eventType)) &&
           (effectiveRules.allowAvailability.length === 0 ||
@@ -2272,10 +2644,16 @@ export function evaluateSchedulingForTask(task: Task, at = new Date()): Scheduli
     conflicts.push({
       kind: currentBlocks[0] ? "work_block" : "external_event",
       id: currentBlocks[0]?.id ?? currentEvents[0]?.id ?? "calendar_now",
-      title: currentBlocks[0]?.title ?? currentEvents[0]?.title ?? "Current context",
-      reason: "The current calendar context does not match the allowed rules for this task or project.",
-      startsAt: currentBlocks[0]?.startAt ?? currentEvents[0]?.startAt ?? at.toISOString(),
-      endsAt: currentBlocks[0]?.endAt ?? currentEvents[0]?.endAt ?? at.toISOString()
+      title:
+        currentBlocks[0]?.title ?? currentEvents[0]?.title ?? "Current context",
+      reason:
+        "The current calendar context does not match the allowed rules for this task or project.",
+      startsAt:
+        currentBlocks[0]?.startAt ??
+        currentEvents[0]?.startAt ??
+        at.toISOString(),
+      endsAt:
+        currentBlocks[0]?.endAt ?? currentEvents[0]?.endAt ?? at.toISOString()
     });
   }
 
@@ -2303,7 +2681,9 @@ function collectBusyIntervals(query: CalendarAgendaQuery) {
       busyIntervals.push({ startAt: timebox.startsAt, endAt: timebox.endsAt });
     }
   }
-  return busyIntervals.sort((left, right) => left.startAt.localeCompare(right.startAt));
+  return busyIntervals.sort((left, right) =>
+    left.startAt.localeCompare(right.startAt)
+  );
 }
 
 function hasOverlap(
@@ -2330,20 +2710,43 @@ export function suggestTaskTimeboxes(
   const to = options.to ? new Date(options.to) : addMinutes(from, 14 * 24 * 60);
   const durationMinutes = Math.max(
     15,
-    Math.ceil(((task.plannedDurationSeconds ?? 30 * 60) / 60))
+    Math.ceil((task.plannedDurationSeconds ?? 30 * 60) / 60)
   );
   const query = { from: from.toISOString(), to: to.toISOString() };
   ensureWorkBlockInstancesInRange(query);
   const busyIntervals = collectBusyIntervals(query);
-  const allowedBlocks = listWorkBlockInstances(query).filter((block) => block.blockingState === "allowed");
+  const allowedBlocks = listWorkBlockInstances(query).filter(
+    (block) => block.blockingState === "allowed"
+  );
   const suggestions: TaskTimebox[] = [];
   const candidateWindows =
     allowedBlocks.length > 0
-      ? allowedBlocks.map((block) => ({ start: new Date(block.startAt), end: new Date(block.endAt) }))
+      ? allowedBlocks.map((block) => ({
+          start: new Date(block.startAt),
+          end: new Date(block.endAt)
+        }))
       : Array.from({ length: 14 }, (_, index) => {
           const day = addMinutes(new Date(from), index * 24 * 60);
-          const start = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 8, 0, 0));
-          const end = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 18, 0, 0));
+          const start = new Date(
+            Date.UTC(
+              day.getUTCFullYear(),
+              day.getUTCMonth(),
+              day.getUTCDate(),
+              8,
+              0,
+              0
+            )
+          );
+          const end = new Date(
+            Date.UTC(
+              day.getUTCFullYear(),
+              day.getUTCMonth(),
+              day.getUTCDate(),
+              18,
+              0,
+              0
+            )
+          );
           return { start, end };
         });
 
@@ -2357,7 +2760,10 @@ export function suggestTaskTimeboxes(
       if (hasOverlap(busyIntervals, cursor, slotEnd)) {
         continue;
       }
-      const evaluation = evaluateSchedulingForTask(task, addMinutes(cursor, Math.floor(durationMinutes / 2)));
+      const evaluation = evaluateSchedulingForTask(
+        task,
+        addMinutes(cursor, Math.floor(durationMinutes / 2))
+      );
       if (evaluation.blocked) {
         continue;
       }
@@ -2399,34 +2805,41 @@ export function getCalendarOverview(
         provider: "google",
         label: "Google Calendar",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Forge uses a localhost Authorization Code + PKCE flow. Users sign in with Google from the same machine running Forge, Forge exchanges the code on the backend, and stores a per-user refresh token server-side."
+        connectionHelp:
+          "Forge uses a localhost Authorization Code + PKCE flow. Users sign in with Google from the same machine running Forge, Forge exchanges the code on the backend, and stores a per-user refresh token server-side."
       },
       {
         provider: "apple",
         label: "Apple Calendar",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Use your Apple ID email and an app-specific password. Forge discovers the writable calendars from https://caldav.icloud.com."
+        connectionHelp:
+          "Use your Apple ID email and an app-specific password. Forge discovers the writable calendars from https://caldav.icloud.com."
       },
       {
         provider: "microsoft",
         label: "Exchange Online",
         supportsDedicatedForgeCalendar: false,
-        connectionHelp: "Save the Microsoft client ID and redirect URI in Calendar settings first, then sign in with Microsoft. Forge mirrors the selected calendars in read-only mode."
+        connectionHelp:
+          "Save the Microsoft client ID and redirect URI in Calendar settings first, then sign in with Microsoft. Forge mirrors the selected calendars in read-only mode."
       },
       {
         provider: "caldav",
         label: "Custom CalDAV",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Use an account-level CalDAV base URL, then let Forge discover the calendars before selecting sync and write targets."
+        connectionHelp:
+          "Use an account-level CalDAV base URL, then let Forge discover the calendars before selecting sync and write targets."
       },
       {
         provider: "macos_local",
         label: "Calendars On This Mac",
         supportsDedicatedForgeCalendar: true,
-        connectionHelp: "Use EventKit to access the calendars already configured in Calendar.app on this Mac. Forge replaces overlapping remote account connections instead of showing duplicate copies."
+        connectionHelp:
+          "Use EventKit to access the calendars already configured in Calendar.app on this Mac. Forge replaces overlapping remote account connections instead of showing duplicate copies."
       }
     ],
-    connections: listCalendarConnections().map(({ credentialsSecretId: _secret, ...connection }) => connection),
+    connections: listCalendarConnections().map(
+      ({ credentialsSecretId: _secret, ...connection }) => connection
+    ),
     calendars: listCalendars(),
     events: listCalendarEvents(query),
     workBlockTemplates: listWorkBlockTemplates({ userIds: query.userIds }),
@@ -2437,7 +2850,12 @@ export function getCalendarOverview(
 
 export function recordCalendarActivity(
   eventType: string,
-  entityType: "calendar_connection" | "calendar" | "calendar_event" | "work_block" | "task_timebox",
+  entityType:
+    | "calendar_connection"
+    | "calendar"
+    | "calendar_event"
+    | "work_block"
+    | "task_timebox",
   entityId: string,
   title: string,
   description: string,

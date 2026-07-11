@@ -192,10 +192,46 @@ function buildLifeEvent(overrides: Partial<LifeEvent> = {}): LifeEvent {
 }
 
 function renderPage(
-  timeline: LifeEventTimelinePayload,
+  timeline: Omit<LifeEventTimelinePayload, "total" | "hasMore" | "counts"> &
+    Partial<Pick<LifeEventTimelinePayload, "total" | "hasMore" | "counts">>,
   initialEntry = "/life-events"
 ) {
-  getLifeEventsTimelineMock.mockResolvedValue({ timeline });
+  getLifeEventsTimelineMock.mockImplementation(
+    async (input?: { q?: string; limit?: number; offset?: number }) => {
+      const needle = input?.q?.trim().toLowerCase() ?? "";
+      const events = needle
+        ? timeline.events.filter((event) =>
+            JSON.stringify(event).toLowerCase().includes(needle)
+          )
+        : timeline.events;
+      const now = Date.parse(timeline.now);
+      const counts = events.reduce(
+        (current, event) => {
+          if (Date.parse(event.endsAt) < now) {
+            current.past += 1;
+          } else if (Date.parse(event.startsAt) <= now) {
+            current.current += 1;
+          } else {
+            current.upcoming += 1;
+          }
+          return current;
+        },
+        { past: 0, current: 0, upcoming: 0 }
+      );
+      return {
+        timeline: {
+          ...timeline,
+          events,
+          offset: input?.offset ?? timeline.offset,
+          total: needle
+            ? events.length
+            : (timeline.total ?? timeline.events.length),
+          hasMore: needle ? false : (timeline.hasMore ?? false),
+          counts: needle ? counts : (timeline.counts ?? counts)
+        }
+      };
+    }
+  );
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -334,7 +370,7 @@ describe("LifeEventsPage", () => {
     });
   });
 
-  it("keeps a 500-event chronology bounded while search can reach the full result set", async () => {
+  it("keeps a large chronology bounded and searches beyond the current page", async () => {
     const events = Array.from({ length: 500 }, (_, index) =>
       buildLifeEvent({
         id: `lifeevent_${index}`,
@@ -343,16 +379,57 @@ describe("LifeEventsPage", () => {
         endsAt: new Date(Date.UTC(2026, 0, 1 + index, 12)).toISOString()
       })
     );
-    renderPage({
+    const initialTimeline = {
       events,
       now: "2026-07-01T12:00:00.000Z",
       nextLifeEventId: "lifeevent_181",
       limit: 500,
-      offset: 0
+      offset: 0,
+      total: 10_000,
+      hasMore: true,
+      counts: { past: 8_000, current: 3, upcoming: 1_997 }
+    } satisfies LifeEventTimelinePayload;
+    getLifeEventsTimelineMock.mockImplementation(
+      async (input?: { q?: string; limit?: number; offset?: number }) => ({
+        timeline: input?.q
+          ? {
+              events: [
+                buildLifeEvent({
+                  id: "lifeevent_9999",
+                  title: "Final future milestone"
+                })
+              ],
+              now: initialTimeline.now,
+              nextLifeEventId: "lifeevent_9999",
+              limit: 500,
+              offset: 0,
+              total: 1,
+              hasMore: false,
+              counts: { past: 0, current: 0, upcoming: 1 }
+            }
+          : initialTimeline
+      })
+    );
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false }
+      }
     });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/life-events"]}>
+          <LifeEventsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
 
     expect(await screen.findByText("Life event 0")).toBeInTheDocument();
     expect(screen.getAllByTestId("life-event-card")).toHaveLength(6);
+    expect(screen.getByText("Showing 1-500 of 10000")).toBeInTheDocument();
+    expect(screen.getByText("8000 past")).toBeInTheDocument();
+    expect(screen.getByText("3 now")).toBeInTheDocument();
+    expect(screen.getByText("1997 future")).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText(/search events, places/i), {
       target: { value: "Final future milestone" }
@@ -362,6 +439,65 @@ describe("LifeEventsPage", () => {
       await screen.findByText("Final future milestone")
     ).toBeInTheDocument();
     expect(screen.getAllByTestId("life-event-card")).toHaveLength(1);
+    expect(getLifeEventsTimelineMock).toHaveBeenLastCalledWith({
+      q: "Final future milestone",
+      limit: 500,
+      offset: 0
+    });
+  });
+
+  it("pages through large Life Event histories without loading every card", async () => {
+    getLifeEventsTimelineMock.mockImplementation(
+      async (input?: { q?: string; limit?: number; offset?: number }) => ({
+        timeline: {
+          events: [
+            buildLifeEvent({
+              id: input?.offset === 500 ? "lifeevent_500" : "lifeevent_0",
+              title: input?.offset === 500 ? "Page two event" : "Page one event"
+            })
+          ],
+          now: "2026-07-01T12:00:00.000Z",
+          nextLifeEventId: null,
+          limit: 500,
+          offset: input?.offset ?? 0,
+          total: 1_200,
+          hasMore: (input?.offset ?? 0) < 1_000,
+          counts: { past: 900, current: 0, upcoming: 300 }
+        }
+      })
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } }
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/life-events"]}>
+          <LifeEventsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("Page one event")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Next Life Events page" })
+    );
+    expect(await screen.findByText("Page two event")).toBeInTheDocument();
+    expect(screen.getByText("Showing 501-501 of 1200")).toBeInTheDocument();
+    expect(getLifeEventsTimelineMock).toHaveBeenLastCalledWith({
+      q: undefined,
+      limit: 500,
+      offset: 500
+    });
+
+    fireEvent.change(screen.getByPlaceholderText(/search events, places/i), {
+      target: { value: "Page one" }
+    });
+    expect(await screen.findByText("Page one event")).toBeInTheDocument();
+    expect(getLifeEventsTimelineMock).toHaveBeenLastCalledWith({
+      q: "Page one",
+      limit: 500,
+      offset: 0
+    });
   });
 
   it("opens a guided edit flow and updates through batch life_event CRUD", async () => {

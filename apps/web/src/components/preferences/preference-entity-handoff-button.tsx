@@ -3,6 +3,7 @@ import { Compass } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { enqueuePreferenceEntity } from "@/lib/api";
+import { describeApiError } from "@/lib/api-error";
 import type { CrudEntityType, PreferenceDomain } from "@/lib/types";
 
 export function PreferenceEntityHandoffButton({
@@ -29,7 +30,9 @@ export function PreferenceEntityHandoffButton({
   const handoffMutation = useMutation({
     mutationFn: async () => {
       if (!userId) {
-        throw new Error("Select a single owner before sending entities to Preferences.");
+        throw new Error(
+          "Select a single owner before sending entities to Preferences."
+        );
       }
       return enqueuePreferenceEntity({
         userId,
@@ -49,22 +52,40 @@ export function PreferenceEntityHandoffButton({
     }
   });
 
+  const error = handoffMutation.error
+    ? describeApiError(handoffMutation.error).description
+    : null;
+
   return (
-    <Button
-      variant="secondary"
-      size={size}
-      disabled={!userId}
-      pending={handoffMutation.isPending}
-      pendingLabel="Sending to Preferences"
-      onClick={() => void handoffMutation.mutateAsync()}
-      title={
-        userId
-          ? "Add this entity to the Preferences compare queue."
-          : "Select a single user scope before sending entities to Preferences."
-      }
-    >
-      <Compass className="size-4" />
-      Send to Preferences
-    </Button>
+    <div className="grid gap-2">
+      <Button
+        variant="secondary"
+        size={size}
+        disabled={!userId}
+        pending={handoffMutation.isPending}
+        pendingLabel="Sending to Preferences"
+        aria-describedby={
+          error ? `preference-handoff-error-${entityId}` : undefined
+        }
+        onClick={() => handoffMutation.mutate()}
+        title={
+          userId
+            ? `Link this ${entityType} to the ${domain} preference queue without duplicating its identity.`
+            : "Select a single user scope before sending entities to Preferences."
+        }
+      >
+        <Compass className="size-4" />
+        Send to Preferences
+      </Button>
+      {error ? (
+        <div
+          id={`preference-handoff-error-${entityId}`}
+          role="alert"
+          className="max-w-sm text-sm text-[var(--danger)]"
+        >
+          {error}
+        </div>
+      ) : null}
+    </div>
   );
 }

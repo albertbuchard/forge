@@ -92,12 +92,14 @@ export function UserRelationshipFlowDialog({
   const [draft, setDraft] = useState<RelationshipDraft>(() =>
     buildInitialDraft(grant, Boolean(reverseGrant))
   );
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       return;
     }
     setDraft(buildInitialDraft(grant, Boolean(reverseGrant)));
+    setSubmitError(null);
   }, [grant, open, reverseGrant]);
 
   const rightsEnabledCount = useMemo(
@@ -158,30 +160,15 @@ export function UserRelationshipFlowDialog({
             </div>
 
             {reverseGrant ? (
-              <div className="grid gap-3">
-                <div className={relationshipTitleClass}>Apply scope</div>
-                <FlowChoiceGrid
-                  columns={2}
-                  value={value.applyScope}
-                  onChange={(applyScope) =>
-                    setValue({
-                      applyScope: applyScope as "this_arrow" | "both_arrows"
-                    })
-                  }
-                  options={[
-                    {
-                      value: "this_arrow",
-                      label: "This arrow",
-                      description: "Only change the exact direction you opened."
-                    },
-                    {
-                      value: "both_arrows",
-                      label: "Both arrows",
-                      description:
-                        "Mirror the same contract onto the reverse direction too."
-                    }
-                  ]}
-                />
+              <div className={`${relationshipPanelClass} p-4`}>
+                <div className={relationshipTitleClass}>
+                  One direction per save
+                </div>
+                <div className={`mt-2 ${relationshipBodyClass}`}>
+                  This save changes only the arrow you opened. Open the reverse
+                  arrow separately so a failed second write cannot leave a
+                  half-applied two-direction change.
+                </div>
               </div>
             ) : null}
           </div>
@@ -325,18 +312,11 @@ export function UserRelationshipFlowDialog({
             <div className={`${relationshipPanelClass} p-4`}>
               <div className={relationshipTitleClass}>Save scope</div>
               <div className={`mt-3 ${relationshipBodyClass}`}>
-                {value.applyScope === "both_arrows" && reverseGrant
-                  ? "Forge will apply the same access level and rights to both directions of this pair."
-                  : "Forge will only update the exact arrow you opened."}
+                Forge will only update the exact arrow you opened.
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge tone="meta">access {value.accessLevel}</Badge>
-                <Badge tone="meta">
-                  scope{" "}
-                  {value.applyScope === "both_arrows" && reverseGrant
-                    ? "both arrows"
-                    : "this arrow"}
-                </Badge>
+                <Badge tone="meta">scope this arrow</Badge>
               </div>
               {reverseGrant ? (
                 <div className="mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
@@ -371,22 +351,31 @@ export function UserRelationshipFlowDialog({
       submitLabel="Save relationship"
       pending={pending}
       pendingLabel="Saving relationship"
+      error={submitError}
       contentClassName="lg:w-[min(62rem,calc(100vw-1.5rem))]"
       onSubmit={async () => {
         if (!grant) {
           return;
         }
-        await onSubmit({
-          grantId: grant.id,
-          patch: {
-            accessLevel: draft.accessLevel,
-            rights: draft.rights
-          },
-          reverseGrantId: reverseGrant?.id ?? null,
-          applyToReverse:
-            draft.applyScope === "both_arrows" && reverseGrant !== null
-        });
-        onOpenChange(false);
+        setSubmitError(null);
+        try {
+          await onSubmit({
+            grantId: grant.id,
+            patch: {
+              accessLevel: draft.accessLevel,
+              rights: draft.rights
+            },
+            reverseGrantId: reverseGrant?.id ?? null,
+            applyToReverse: false
+          });
+          onOpenChange(false);
+        } catch (error) {
+          setSubmitError(
+            error instanceof Error
+              ? error.message
+              : "Forge could not save this directional relationship."
+          );
+        }
       }}
     />
   );

@@ -15,6 +15,7 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Activity, ArrowLeft, HeartPulse, MapPinned, Save } from "lucide-react";
 import { PageHero } from "@/components/shell/page-hero";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { ErrorState } from "@/components/ui/page-state";
 import { Card } from "@/components/ui/card";
@@ -97,6 +98,26 @@ function routeBounds(points: WorkoutRoutePointRecord[]) {
     minLon: Math.min(...points.map((point) => point.longitude)),
     maxLon: Math.max(...points.map((point) => point.longitude))
   };
+}
+
+export function describeWorkoutTileSource(tileUrl: string, origin: string) {
+  if (!tileUrl) {
+    return "Private route shape. No map request leaves Forge.";
+  }
+  try {
+    const url = new URL(tileUrl, origin);
+    const localHostnames = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    if (
+      url.origin === origin ||
+      localHostnames.has(url.hostname) ||
+      ["file:", "mbtiles:", "pmtiles:"].includes(url.protocol)
+    ) {
+      return "Local map tiles configured. Route-area requests stay on your configured local source.";
+    }
+    return `External tiles from ${url.hostname}. Tile requests disclose the viewed route area to that provider.`;
+  } catch {
+    return "Custom map tiles configured. Check the tile source before viewing a private route.";
+  }
 }
 
 function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
@@ -222,9 +243,7 @@ function RoutePreview({ points }: { points: WorkoutRoutePointRecord[] }) {
         </svg>
       ) : null}
       <div className="absolute left-3 top-3 max-w-[calc(100%-1.5rem)] rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-3 py-2 text-xs text-[var(--ui-ink-medium)] backdrop-blur">
-        {tileUrl
-          ? "Local-first map tiles configured"
-          : "No tile source configured; showing private route shape only"}
+        {describeWorkoutTileSource(tileUrl, window.location.origin)}
       </div>
     </div>
   );
@@ -261,10 +280,14 @@ function ZoneBars({ zones }: { zones: WorkoutZoneDuration[] }) {
 
 export function WorkoutDetailPage() {
   const { workoutId = "" } = useParams();
+  const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const queryClient = useQueryClient();
   const detailQuery = useQuery({
-    queryKey: ["workout-detail", workoutId],
-    queryFn: () => getWorkoutDetail(workoutId),
+    queryKey: ["workout-detail", workoutId, ...selectedUserIds],
+    queryFn: () => getWorkoutDetail(workoutId, "adaptive", selectedUserIds),
     enabled: workoutId.length > 0
   });
   const detail = detailQuery.data as WorkoutSessionDetailPayload | undefined;
@@ -315,12 +338,32 @@ export function WorkoutDetailPage() {
   const { workout, analytics, evidence } = detail;
   const heartRateSeries = evidence.timeSeries
     .filter((sample) => sample.metricKey === "heart_rate")
-    .map((sample, sampleIndex) => ({
-      // Recharts keys internal area segments from the X value. Keep display
-      // formatting separate so dense same-minute HR samples do not collide.
-      time: Date.parse(sample.startedAt) + sampleIndex / 1000,
-      bpm: sample.value
-    }));
+    .flatMap((sample, sampleIndex) => {
+      const timestamp = Date.parse(sample.startedAt);
+      if (!Number.isFinite(timestamp) || !Number.isFinite(sample.value)) {
+        return [];
+      }
+      return [
+        {
+          // Recharts keys internal area segments from the X value. Keep display
+          // formatting separate so dense same-minute HR samples do not collide.
+          time: timestamp + sampleIndex / 1000,
+          bpm: sample.value
+        }
+      ];
+    });
+  const heartRateEvidenceCount =
+    evidence.summary?.timeSeries.metricCounts.heart_rate ??
+    analytics.dataQuality.heartRateSampleCount ??
+    heartRateSeries.length;
+  const hasHeartRateEvidence = heartRateEvidenceCount > 0;
+  const hasZoneEvidence = analytics.zoneDurations.some(
+    (zone) => zone.seconds > 0
+  );
+  const heartRateEvidenceCaption =
+    heartRateEvidenceCount > heartRateSeries.length
+      ? `${heartRateSeries.length.toLocaleString()} of ${heartRateEvidenceCount.toLocaleString()} stored HR samples shown at adaptive resolution.`
+      : `${heartRateEvidenceCount.toLocaleString()} stored HR samples.`;
   const zoneChartData = analytics.zoneDurations.map((zone) => ({
     zone: zone.label,
     minutes: Math.round(zone.seconds / 60),
@@ -381,10 +424,14 @@ export function WorkoutDetailPage() {
         <Card>
           <div className="text-sm text-[var(--ui-ink-soft)]">HR coverage</div>
           <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
-            {Math.round((analytics.dataQuality.sampleCoverage ?? 0) * 100)}%
+            {hasHeartRateEvidence
+              ? `${Math.round((analytics.dataQuality.sampleCoverage ?? 0) * 100)}%`
+              : "n/a"}
           </div>
           <div className="mt-1 text-sm text-[var(--ui-ink-faint)]">
-            {analytics.dataQuality.heartRateSampleCount ?? 0} samples
+            {hasHeartRateEvidence
+              ? `${heartRateEvidenceCount.toLocaleString()} samples`
+              : "No HR evidence"}
           </div>
         </Card>
       </section>
@@ -454,6 +501,11 @@ export function WorkoutDetailPage() {
               </div>
             )}
           </div>
+          {hasHeartRateEvidence ? (
+            <div className="mt-3 text-xs text-[var(--ui-ink-faint)]">
+              {heartRateEvidenceCaption}
+            </div>
+          ) : null}
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
@@ -461,32 +513,42 @@ export function WorkoutDetailPage() {
             <Activity className="size-4 text-[var(--primary)]" />
             Zone mix
           </div>
-          <div className="mt-4">
-            <ZoneBars zones={analytics.zoneDurations} />
-          </div>
-          <div className="mt-5 h-[180px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={zoneChartData}>
-                <XAxis
-                  dataKey="zone"
-                  tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
-                />
-                <YAxis
-                  tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
-                  width={34}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--surface-glass)",
-                    border: "1px solid var(--ui-border-subtle)",
-                    borderRadius: 8,
-                    color: "var(--ui-ink-strong)"
-                  }}
-                />
-                <Bar dataKey="minutes" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {hasZoneEvidence ? (
+            <>
+              <div className="mt-4">
+                <ZoneBars zones={analytics.zoneDurations} />
+              </div>
+              <div className="mt-5 h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={zoneChartData}>
+                    <XAxis
+                      dataKey="zone"
+                      tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
+                    />
+                    <YAxis
+                      tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
+                      width={34}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--surface-glass)",
+                        border: "1px solid var(--ui-border-subtle)",
+                        borderRadius: 8,
+                        color: "var(--ui-ink-strong)"
+                      }}
+                    />
+                    <Bar dataKey="minutes" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          ) : (
+            <div className="mt-4 grid min-h-[240px] place-items-center rounded-[8px] bg-[var(--ui-surface-1)] p-6 text-center text-sm text-[var(--ui-ink-soft)]">
+              {hasHeartRateEvidence
+                ? "Raw HR is present, but Forge could not calculate zone time with the available profile."
+                : "Zone mix is unavailable because no heart-rate samples were captured."}
+            </div>
+          )}
         </Card>
       </section>
 
@@ -498,7 +560,18 @@ export function WorkoutDetailPage() {
           </div>
           <div className="mt-4">
             {evidence.routePoints.length > 1 ? (
-              <RoutePreview points={evidence.routePoints} />
+              <div className="grid gap-3">
+                <RoutePreview points={evidence.routePoints} />
+                {evidence.summary?.routePoints.truncated ? (
+                  <div className="text-xs text-[var(--ui-ink-faint)]">
+                    {evidence.summary.routePoints.returnedCount.toLocaleString()}{" "}
+                    of{" "}
+                    {evidence.summary.routePoints.totalCount.toLocaleString()}{" "}
+                    stored route points shown; the first and final points are
+                    preserved.
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div className="grid min-h-[240px] place-items-center rounded-[8px] bg-[var(--ui-surface-1)] text-sm text-[var(--ui-ink-soft)]">
                 No route evidence is available for this workout.

@@ -79,10 +79,7 @@ type WorkoutAnalysisListRecord =
 
 type WorkoutLabelRecord = Pick<
   WorkoutAnalysisListRecord,
-  | "workoutType"
-  | "workoutTypeLabel"
-  | "activityFamily"
-  | "activityFamilyLabel"
+  "workoutType" | "workoutTypeLabel" | "activityFamily" | "activityFamilyLabel"
 >;
 
 type WorkoutDraft = {
@@ -1048,9 +1045,10 @@ export function SportsPage() {
       ).fitness
   });
   const activeSessionQuery = useQuery({
-    queryKey: ["forge-workout-session", selectedWorkoutId],
+    queryKey: ["forge-workout-session", selectedWorkoutId, ...selectedUserIds],
     queryFn: async () =>
-      (await getWorkoutSession(selectedWorkoutId as string)).workout,
+      (await getWorkoutSession(selectedWorkoutId as string, selectedUserIds))
+        .workout,
     enabled: Boolean(selectedWorkoutId)
   });
   const valuesQuery = useQuery({

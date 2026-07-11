@@ -77,6 +77,79 @@ const TRAINING_LOAD_HELP = {
 };
 
 type TimeWindow = "recent" | "all";
+type TrainingEvidenceStatus = {
+  label: string;
+  detail: string;
+  tone: "meta" | "signal" | "default";
+  current: boolean;
+  latestDateKey: string | null;
+};
+
+export function getTrainingEvidenceStatus(
+  trainingLoad: TrainingLoadViewData,
+  now = new Date()
+): TrainingEvidenceStatus {
+  const latestDateKey =
+    [
+      ...trainingLoad.sessionSignals.map((entry) => entry.dateKey),
+      ...trainingLoad.dailyLoad.map((entry) => entry.dateKey),
+      ...trainingLoad.vitalsTrend.map((entry) => entry.dateKey)
+    ]
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+  if (!latestDateKey || trainingLoad.summary.sessionCount === 0) {
+    return {
+      label: "Insufficient evidence",
+      detail: "No workout evidence is available for a current load decision.",
+      tone: "default",
+      current: false,
+      latestDateKey
+    };
+  }
+  const latestDay = Date.parse(`${latestDateKey}T12:00:00Z`);
+  if (!Number.isFinite(latestDay)) {
+    return {
+      label: "Invalid evidence date",
+      detail: "The latest training evidence date cannot be interpreted.",
+      tone: "default",
+      current: false,
+      latestDateKey
+    };
+  }
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    12
+  );
+  const ageDays = Math.floor((today - latestDay) / 86_400_000);
+  if (ageDays < 0) {
+    return {
+      label: "Future-dated evidence",
+      detail: `Latest training evidence is dated ${latestDateKey}; check device time and timezone.`,
+      tone: "default",
+      current: false,
+      latestDateKey
+    };
+  }
+  if (ageDays <= 2) {
+    return {
+      label: "Current evidence",
+      detail: `Latest training evidence is ${ageDays === 0 ? "today" : `${ageDays} day${ageDays === 1 ? "" : "s"} old`}.`,
+      tone: "signal",
+      current: true,
+      latestDateKey
+    };
+  }
+  return {
+    label: "Stale training evidence",
+    detail: `Latest workout or vital evidence is ${ageDays} days old. Keep the analysis as history, not a current prescription.`,
+    tone: "default",
+    current: false,
+    latestDateKey
+  };
+}
 
 function pct(value: number | null | undefined, digits = 0) {
   if (value == null || Number.isNaN(value)) {
@@ -437,6 +510,7 @@ export function TrainingLoadPage() {
   }
 
   const { summary } = trainingLoad;
+  const evidenceStatus = getTrainingEvidenceStatus(trainingLoad);
 
   return (
     <div className="grid gap-5">
@@ -448,8 +522,48 @@ export function TrainingLoadPage() {
         description="Forge estimates cardiovascular training stress from workout duration, heart-rate response, adaptive HRR zones, and recent vitals so you can plan the next training block with clearer load and recovery context."
         helpContent={TRAINING_LOAD_HELP.hero}
         badge={`${summary.sessionCount} sessions · ${summary.reliableSessionCount} high-resolution`}
-        actions={<Badge tone={readiness.tone}>{readiness.label}</Badge>}
+        actions={
+          <Badge
+            tone={evidenceStatus.current ? readiness.tone : evidenceStatus.tone}
+          >
+            {evidenceStatus.current ? readiness.label : evidenceStatus.label}
+          </Badge>
+        }
       />
+
+      <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
+            Freshness
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={evidenceStatus.tone}>{evidenceStatus.label}</Badge>
+            <span className="text-sm text-[var(--ui-ink-medium)]">
+              {evidenceStatus.detail}
+            </span>
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
+            Heart-rate coverage
+          </div>
+          <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
+            {pct(summary.averageHeartRateCoverage)} average coverage;{" "}
+            {summary.reliableSessionCount} of {summary.sessionCount} sessions
+            are high-resolution.
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
+            Decision boundary
+          </div>
+          <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
+            {evidenceStatus.current
+              ? "Targets are current estimates, not medical or coaching instructions."
+              : "Targets below remain visible for analysis but should not drive the next workout until fresh evidence arrives."}
+          </div>
+        </div>
+      </Card>
 
       <section
         className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4"
@@ -491,7 +605,10 @@ export function TrainingLoadPage() {
         })}
       </section>
 
-      <ZoneIntelligencePanel trainingLoad={trainingLoad} />
+      <ZoneIntelligencePanel
+        trainingLoad={trainingLoad}
+        evidenceCurrent={evidenceStatus.current}
+      />
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <Card className="overflow-hidden">

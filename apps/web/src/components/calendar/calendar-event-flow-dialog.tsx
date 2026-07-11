@@ -24,6 +24,12 @@ import {
   getCalendarActivityPresetKey,
   getCalendarActivityPresetOptions
 } from "@/lib/life-force-display";
+import {
+  formatDateTimeInputInTimeZone,
+  parseDateTimeInputInTimeZone,
+  resolveDateTimeInputInTimeZone,
+  type DateTimeInputResolution
+} from "@/lib/timezone-datetime";
 import type {
   CalendarAvailability,
   CalendarEvent,
@@ -73,15 +79,22 @@ const CHOICE_ACTIVE_CLASS =
 const CHOICE_INACTIVE_CLASS =
   "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]";
 
-function toSafeIsoOrFallback(value: string, fallback: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
-}
-
-function toLocalInputValue(value: string) {
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+function selectResolvedInstant(
+  resolution: DateTimeInputResolution,
+  preferredInstant?: string | null
+) {
+  if (resolution.kind === "exact") {
+    return resolution.instants[0];
+  }
+  if (resolution.kind !== "ambiguous" || !preferredInstant) {
+    return null;
+  }
+  const preferred = new Date(preferredInstant);
+  if (Number.isNaN(preferred.getTime())) {
+    return null;
+  }
+  const preferredIso = preferred.toISOString();
+  return resolution.instants.includes(preferredIso) ? preferredIso : null;
 }
 
 function createDraft(
@@ -111,6 +124,11 @@ function createDraft(
   const now = new Date();
   const defaultStart = new Date(now.getTime() + 30 * 60_000);
   const defaultEnd = new Date(defaultStart.getTime() + 60 * 60_000);
+  const timezone =
+    seed?.timezone ??
+    event?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone ??
+    "UTC";
   return {
     title: seed?.title ?? event?.title ?? "",
     description: seed?.description ?? event?.description ?? "",
@@ -118,20 +136,16 @@ function createDraft(
     placeAddress: seed?.place?.address ?? event?.place?.address ?? "",
     placeTimezone: seed?.place?.timezone ?? event?.place?.timezone ?? "",
     startAtLocal: event
-      ? toLocalInputValue(event.startAt)
+      ? formatDateTimeInputInTimeZone(event.startAt, timezone)
       : seed?.startAt
-        ? toLocalInputValue(seed.startAt)
-        : toLocalInputValue(defaultStart.toISOString()),
+        ? formatDateTimeInputInTimeZone(seed.startAt, timezone)
+        : formatDateTimeInputInTimeZone(defaultStart.toISOString(), timezone),
     endAtLocal: event
-      ? toLocalInputValue(event.endAt)
+      ? formatDateTimeInputInTimeZone(event.endAt, timezone)
       : seed?.endAt
-        ? toLocalInputValue(seed.endAt)
-        : toLocalInputValue(defaultEnd.toISOString()),
-    timezone:
-      seed?.timezone ??
-      event?.timezone ??
-      Intl.DateTimeFormat().resolvedOptions().timeZone ??
-      "UTC",
+        ? formatDateTimeInputInTimeZone(seed.endAt, timezone)
+        : formatDateTimeInputInTimeZone(defaultEnd.toISOString(), timezone),
+    timezone,
     availability: seed?.availability ?? event?.availability ?? "busy",
     activityPresetKey: getCalendarActivityPresetKey(event?.actionProfile),
     customSustainRateApPerHour: getCalendarActivityCustomRate(
@@ -329,13 +343,23 @@ export function CalendarEventFlowDialog({
               const fallbackEnd = new Date(
                 Date.now() + 60 * 60 * 1000
               ).toISOString();
+              const previewStart =
+                parseDateTimeInputInTimeZone(
+                  value.startAtLocal,
+                  value.timezone
+                ) ?? fallbackStart;
+              const previewEnd =
+                parseDateTimeInputInTimeZone(
+                  value.endAtLocal,
+                  value.timezone
+                ) ?? fallbackEnd;
               const preview = estimateCalendarEventActionPointLoad({
                 title: value.title,
                 availability: value.availability,
                 activityPresetKey: value.activityPresetKey as never,
                 customSustainRateApPerHour: value.customSustainRateApPerHour,
-                startAt: toSafeIsoOrFallback(value.startAtLocal, fallbackStart),
-                endAt: toSafeIsoOrFallback(value.endAtLocal, fallbackEnd)
+                startAt: previewStart,
+                endAt: previewEnd
               });
               return (
                 <div className={`${PANEL_CLASS} p-4`}>
@@ -604,46 +628,97 @@ export function CalendarEventFlowDialog({
           setError("Set both the start and end time before saving.");
           return;
         }
+        const timezone = draft.timezone.trim();
+        const startResolution = resolveDateTimeInputInTimeZone(
+          draft.startAtLocal,
+          timezone
+        );
+        const endResolution = resolveDateTimeInputInTimeZone(
+          draft.endAtLocal,
+          timezone
+        );
         if (
-          new Date(draft.endAtLocal).getTime() <=
-          new Date(draft.startAtLocal).getTime()
+          startResolution.kind === "invalid_timezone" ||
+          endResolution.kind === "invalid_timezone"
         ) {
+          setError(
+            "Use a valid IANA timezone such as Europe/Zurich or America/Los_Angeles."
+          );
+          return;
+        }
+        if (
+          startResolution.kind === "nonexistent" ||
+          endResolution.kind === "nonexistent"
+        ) {
+          setError(
+            `That local time does not exist in ${timezone} because the clock changes there. Choose a time after the skipped interval.`
+          );
+          return;
+        }
+        const startAt = selectResolvedInstant(
+          startResolution,
+          event?.startAt ?? seed?.startAt
+        );
+        const endAt = selectResolvedInstant(
+          endResolution,
+          event?.endAt ?? seed?.endAt
+        );
+        if (!startAt || !endAt) {
+          const ambiguous =
+            startResolution.kind === "ambiguous" ||
+            endResolution.kind === "ambiguous";
+          setError(
+            ambiguous
+              ? `That local time occurs twice in ${timezone} because the clock moves back. Choose a time outside the repeated interval.`
+              : "Set valid start and end times before saving."
+          );
+          return;
+        }
+        if (Date.parse(endAt) <= Date.parse(startAt)) {
           setError("The event end time must be after the start time.");
           return;
         }
-        setError(null);
-        await onSubmit({
-          title: draft.title.trim(),
-          description: draft.description.trim(),
-          location: draft.location.trim(),
-          place: {
-            label: draft.location.trim(),
-            address: draft.placeAddress.trim(),
-            timezone: draft.placeTimezone.trim(),
-            latitude: null,
-            longitude: null,
-            source: draft.placeAddress.trim() ? "manual" : "",
-            externalPlaceId: ""
-          },
-          startAt: new Date(draft.startAtLocal).toISOString(),
-          endAt: new Date(draft.endAtLocal).toISOString(),
-          timezone: draft.timezone.trim() || "UTC",
-          availability: draft.availability,
-          activityPresetKey: draft.activityPresetKey,
-          customSustainRateApPerHour: draft.customSustainRateApPerHour,
-          categories: draft.categoriesText
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean),
-          links: draft.links.map((link) => ({
-            entityType: link.entityType,
-            entityId: link.entityId,
-            relationshipType: link.relationshipType
-          })),
-          ...(draft.preferredCalendarId !== undefined
-            ? { preferredCalendarId: draft.preferredCalendarId }
-            : {})
-        });
+        try {
+          setError(null);
+          await onSubmit({
+            title: draft.title.trim(),
+            description: draft.description.trim(),
+            location: draft.location.trim(),
+            place: {
+              label: draft.location.trim(),
+              address: draft.placeAddress.trim(),
+              timezone: draft.placeTimezone.trim(),
+              latitude: null,
+              longitude: null,
+              source: draft.placeAddress.trim() ? "manual" : "",
+              externalPlaceId: ""
+            },
+            startAt,
+            endAt,
+            timezone,
+            availability: draft.availability,
+            activityPresetKey: draft.activityPresetKey,
+            customSustainRateApPerHour: draft.customSustainRateApPerHour,
+            categories: draft.categoriesText
+              .split(",")
+              .map((value) => value.trim())
+              .filter(Boolean),
+            links: draft.links.map((link) => ({
+              entityType: link.entityType,
+              entityId: link.entityId,
+              relationshipType: link.relationshipType
+            })),
+            ...(draft.preferredCalendarId !== undefined
+              ? { preferredCalendarId: draft.preferredCalendarId }
+              : {})
+          });
+        } catch (error) {
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Forge could not save this calendar event."
+          );
+        }
       }}
       submitLabel={event ? "Save event" : "Create event"}
       pending={pending}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FlowChoiceGrid,
   FlowField,
@@ -74,6 +74,8 @@ export function ProjectDialog({
   const safeUsers = users ?? [];
   const [draft, setDraft] =
     useState<ProjectMutationInput>(defaultProjectValues);
+  const [submitting, setSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, string | undefined>
@@ -98,6 +100,8 @@ export function ProjectDialog({
     }
     setSubmitError(null);
     setFieldErrors({});
+    setSubmitting(false);
+    submitInFlightRef.current = false;
     setDraft(
       editingProject
         ? projectToFormValues(editingProject)
@@ -124,6 +128,16 @@ export function ProjectDialog({
           error={fieldErrors.goalId ?? null}
         >
           <div className="grid min-w-0 max-w-full gap-3">
+            {goals.length === 0 ? (
+              <div
+                role="status"
+                className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]"
+              >
+                Create an active goal before adding a project. Projects need a
+                goal anchor so their outcome, ownership, and execution history
+                stay connected.
+              </div>
+            ) : null}
             {goals.map((goal) => {
               const selected = goal.id === value.goalId;
               return (
@@ -350,6 +364,12 @@ export function ProjectDialog({
       }
       steps={steps}
       initialStepId={initialStepId}
+      pending={submitting}
+      pendingLabel={
+        editingProject
+          ? t("common.dialogs.project.save")
+          : t("common.dialogs.project.create")
+      }
       submitLabel={
         editingProject
           ? t("common.dialogs.project.save")
@@ -357,6 +377,9 @@ export function ProjectDialog({
       }
       error={submitError}
       onSubmit={async () => {
+        if (submitInFlightRef.current) {
+          return;
+        }
         setSubmitError(null);
         const parsed = projectMutationSchema.safeParse(draft);
         if (!parsed.success) {
@@ -368,6 +391,8 @@ export function ProjectDialog({
         }
 
         setFieldErrors({});
+        submitInFlightRef.current = true;
+        setSubmitting(true);
 
         try {
           await onSubmit(parsed.data, editingProject?.id);
@@ -378,6 +403,9 @@ export function ProjectDialog({
               ? error.message
               : t("common.dialogs.project.submitError")
           );
+        } finally {
+          submitInFlightRef.current = false;
+          setSubmitting(false);
         }
       }}
     />

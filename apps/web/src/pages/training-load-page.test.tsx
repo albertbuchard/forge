@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TrainingLoadPage } from "@/pages/training-load-page";
+import {
+  getTrainingEvidenceStatus,
+  TrainingLoadPage
+} from "@/pages/training-load-page";
 import type { TrainingLoadViewData } from "@/lib/types";
 
 const { useForgeShellMock, getTrainingLoadViewMock } = vi.hoisted(() => ({
@@ -432,7 +435,10 @@ describe("TrainingLoadPage", () => {
     expect(
       screen.getByText(/Forge estimates cardiovascular training stress/i)
     ).toBeInTheDocument();
-    expect(screen.getByText("Productive")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Stale training evidence").length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Historical target estimate")).toBeInTheDocument();
     expect(screen.getByTestId("training-load-summary-grid")).toHaveClass(
       "grid-cols-2"
     );
@@ -459,5 +465,33 @@ describe("TrainingLoadPage", () => {
     expect(screen.getByText("Intensity target")).toBeInTheDocument();
     expect(screen.getAllByText("Kickboxing").length).toBeGreaterThan(0);
     expect(getTrainingLoadViewMock).toHaveBeenCalledWith(["user_operator"]);
+  });
+
+  it("separates current, stale, and missing training evidence", () => {
+    const trainingLoad = createTrainingLoad();
+    expect(
+      getTrainingEvidenceStatus(
+        trainingLoad,
+        new Date("2026-05-21T12:00:00.000Z")
+      ).current
+    ).toBe(true);
+    expect(
+      getTrainingEvidenceStatus(
+        trainingLoad,
+        new Date("2026-06-21T12:00:00.000Z")
+      ).label
+    ).toBe("Stale training evidence");
+    expect(
+      getTrainingEvidenceStatus(
+        {
+          ...trainingLoad,
+          summary: { ...trainingLoad.summary, sessionCount: 0 },
+          dailyLoad: [],
+          sessionSignals: [],
+          vitalsTrend: []
+        },
+        new Date("2026-05-21T12:00:00.000Z")
+      ).label
+    ).toBe("Insufficient evidence");
   });
 });

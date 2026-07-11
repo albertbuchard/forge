@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -62,7 +68,8 @@ vi.mock("@/components/shell/app-shell", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  getCompanionOverview: (...args: unknown[]) => getCompanionOverviewMock(...args),
+  getCompanionOverview: (...args: unknown[]) =>
+    getCompanionOverviewMock(...args),
   createCompanionPairingSession: (...args: unknown[]) =>
     createCompanionPairingSessionMock(...args),
   patchCompanionPairingSourceState: (...args: unknown[]) =>
@@ -73,7 +80,9 @@ vi.mock("@/lib/api", () => ({
     revokeCompanionPairingSessionMock(...args)
 }));
 
-function createPairing(overrides: Partial<CompanionPairingSession> = {}): CompanionPairingSession {
+function createPairing(
+  overrides: Partial<CompanionPairingSession> = {}
+): CompanionPairingSession {
   return {
     id: "pairing_1",
     userId: "user_operator",
@@ -181,10 +190,14 @@ describe("SettingsMobilePage", () => {
 
     expect(await screen.findByText("Device sync sources")).toBeInTheDocument();
     expect(screen.getByText("Pending on phone")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Companion Sync Lab" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Companion Sync Lab" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Vitals days")).toBeInTheDocument();
     expect(screen.getByText("18")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open vitals view" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open vitals view" })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Health sync source" }));
 
@@ -228,7 +241,9 @@ describe("SettingsMobilePage", () => {
 
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Generate Forge QR/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Generate Forge QR/i })
+    );
 
     await waitFor(() => {
       expect(createCompanionPairingSessionMock).toHaveBeenCalledWith({
@@ -237,7 +252,10 @@ describe("SettingsMobilePage", () => {
       });
     });
     expect(await screen.findByText("Iroh")).toBeInTheDocument();
-    expect(screen.getByText(/Fallback pairing payload/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manual pairing payload/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/same one-time credential and transport details/i)
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Show payload/i }));
     expect(screen.getByText(/fakednodeid/)).toBeInTheDocument();
@@ -250,5 +268,123 @@ describe("SettingsMobilePage", () => {
         transportMode: "manual-http"
       });
     });
+  });
+
+  it("offers a replacement QR when a pending one-time pairing expires", async () => {
+    getCompanionOverviewMock.mockResolvedValue({
+      overview: {
+        healthState: "disconnected",
+        counts: {
+          sleepSessions: 0,
+          sleepRawRecords: 0,
+          workouts: 0,
+          reflectiveSleepSessions: 0,
+          linkedWorkouts: 0,
+          habitGeneratedWorkouts: 0,
+          reconciledWorkouts: 0
+        },
+        lastSyncAt: null,
+        permissions: {
+          healthKitAuthorized: false,
+          backgroundRefreshEnabled: false,
+          locationReady: false,
+          motionReady: false
+        },
+        pairings: [
+          createPairing({
+            status: "pending",
+            expiresAt: "2020-01-01T00:00:00.000Z",
+            lastSyncAt: null
+          })
+        ],
+        importRuns: []
+      }
+    });
+    createCompanionPairingSessionMock.mockResolvedValue({
+      qrPayload: {
+        kind: "forge-companion-pairing",
+        apiBaseUrl: "forge-iroh://replacement/api/v1",
+        transportMode: "iroh",
+        transport: {
+          protocol: "iroh",
+          provider: "forge-companion-iroh",
+          status: "ready",
+          localBaseUrl: "http://127.0.0.1:4317",
+          notes: []
+        },
+        sessionId: "pairing_replacement",
+        pairingToken: "replacement",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        capabilities: []
+      }
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Pairing code expired")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate replacement QR" })
+    );
+    await waitFor(() =>
+      expect(createCompanionPairingSessionMock).toHaveBeenCalledWith({
+        userId: "user_operator",
+        transportMode: "iroh"
+      })
+    );
+    expect(
+      await screen.findByText(/pending-code revocations were saved together/i)
+    ).toBeInTheDocument();
+  });
+
+  it("does not overclaim pairing preservation when a response is lost", async () => {
+    createCompanionPairingSessionMock.mockRejectedValue(
+      new Error("Injected replacement failure.")
+    );
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Generate Forge QR/i })
+    );
+
+    expect(
+      await screen.findByText(
+        /A rejected save keeps the existing pairing; a lost response may already have revoked its code/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("does not present an unavailable Iroh transport as ready", async () => {
+    createCompanionPairingSessionMock.mockResolvedValue({
+      qrPayload: {
+        kind: "forge-companion-pairing",
+        apiBaseUrl: "forge-iroh://unavailable/api/v1",
+        transportMode: "iroh",
+        transport: {
+          protocol: "iroh",
+          provider: "forge-companion-iroh",
+          status: "unavailable",
+          localBaseUrl: "http://127.0.0.1:4317",
+          lastError: "Iroh host binary is unavailable",
+          recreateCommand: "npx forge-memory pair-ios",
+          notes: []
+        },
+        sessionId: "pairing_unavailable",
+        pairingToken: "token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        capabilities: []
+      }
+    });
+
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Generate Forge QR/i })
+    );
+
+    expect(
+      await screen.findByText("Transport unavailable")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Iroh host binary is unavailable")
+    ).toBeInTheDocument();
   });
 });

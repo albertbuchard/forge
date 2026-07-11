@@ -11,6 +11,7 @@ type JsonSchema = {
   additionalProperties?: boolean;
   default?: number;
   enum?: unknown[];
+  items?: JsonSchema;
   maxItems?: number;
   maxLength?: number;
   maximum?: number;
@@ -56,6 +57,91 @@ test("OpenAPI matches artifact bounds and bounded history response contracts", a
       paths: Record<string, OpenApiPath>;
     };
     const schemas = document.components.schemas;
+
+    assert.equal(
+      schemas.ArtifactListResponse?.properties?.artifacts?.items?.$ref,
+      "#/components/schemas/ArtifactSummary"
+    );
+    assert.equal(schemas.ArtifactSummary?.additionalProperties, false);
+    assert.equal(schemas.ArtifactSummary?.properties?.scanResults, undefined);
+    const artifactListLimit = document.paths[
+      "/api/v1/artifacts"
+    ]?.get?.parameters?.find((parameter) => parameter.name === "limit")?.schema;
+    assert.deepEqual(
+      [
+        artifactListLimit?.minimum,
+        artifactListLimit?.maximum,
+        artifactListLimit?.default
+      ],
+      [1, 100, 100]
+    );
+
+    assert.deepEqual(schemas.LifeEvent?.properties?.eventType?.enum, [
+      "travel_flight",
+      "travel_train",
+      "travel_car",
+      "travel_boat",
+      "travel_trip",
+      "travel_day",
+      "stay",
+      "lodging",
+      "holiday",
+      "vacation",
+      "visit",
+      "move",
+      "festival",
+      "conference",
+      "retreat",
+      "concert",
+      "cinema",
+      "meal",
+      "party",
+      "ceremony",
+      "date",
+      "friends",
+      "family",
+      "work_milestone",
+      "work_phase",
+      "thesis_milestone",
+      "creative_work",
+      "class_course",
+      "exam",
+      "deadline",
+      "medical",
+      "health_episode",
+      "therapy",
+      "administrative",
+      "legal_financial",
+      "errand",
+      "celebration",
+      "memory",
+      "custom"
+    ]);
+    assert.deepEqual(schemas.LifeEventTimelinePayload?.required, [
+      "events",
+      "now",
+      "nextLifeEventId",
+      "limit",
+      "offset",
+      "total",
+      "hasMore",
+      "counts"
+    ]);
+    assert.equal(
+      schemas.LifeEventTimelinePayload?.properties?.total?.minimum,
+      0
+    );
+    assert.deepEqual(
+      schemas.LifeEventTimelinePayload?.properties?.counts?.required,
+      ["past", "current", "upcoming"]
+    );
+    const lifeEventTimelineParameters =
+      document.paths["/api/v1/life-events/timeline"]?.get?.parameters ?? [];
+    assert.equal(
+      lifeEventTimelineParameters.find((parameter) => parameter.name === "q")
+        ?.schema?.maxLength,
+      200
+    );
 
     const metadataPatchProperties =
       schemas.ArtifactMetadataPatchInput?.properties ?? {};

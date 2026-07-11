@@ -60,6 +60,9 @@ const OPERATIONAL_PRESENTATION_DEFAULTS = {
   goals: { descriptionVisible: false }
 } as const;
 
+const REQUIRED_OVERVIEW_WIDGET_IDS = ["hero", "gamification"] as const;
+const OVERVIEW_LAYOUT_MIGRATION_CUTOFF = Date.parse("2026-07-11T00:00:00.000Z");
+
 function startsWithOrder(order: string[], expected: readonly string[]) {
   return expected.every((widgetId, index) => order[index] === widgetId);
 }
@@ -89,12 +92,19 @@ export function normalizeOverviewLayout(
     layout.order,
     REGRESSED_OPERATIONAL_OVERVIEW_CORE_ORDER
   );
-
-  const shouldMigrateOrder =
-    isGeneratedDefault ||
+  const updatedAt = Date.parse(layout.updatedAt);
+  const hasInvalidLegacyTimestamp = !Number.isFinite(updatedAt);
+  const predatesLayoutCutover =
+    Number.isFinite(updatedAt) && updatedAt < OVERVIEW_LAYOUT_MIGRATION_CUTOFF;
+  const usesKnownLegacyOrder =
     usesLegacyCoreOrder ||
     usesPreviousOperationalCoreOrder ||
     usesRegressedOperationalCoreOrder;
+
+  const shouldMigrateOrder =
+    isGeneratedDefault ||
+    ((hasInvalidLegacyTimestamp || predatesLayoutCutover) &&
+      usesKnownLegacyOrder);
   const availableIds = new Set(layout.order);
   const coreIds = new Set<string>(OPERATIONAL_OVERVIEW_CORE_ORDER);
   const nextOrder = shouldMigrateOrder
@@ -129,12 +139,15 @@ export function normalizeOverviewLayout(
     }
   }
 
-  const gamification = nextWidgets.gamification;
-  if (gamification?.hidden) {
+  for (const widgetId of REQUIRED_OVERVIEW_WIDGET_IDS) {
+    const widget = nextWidgets[widgetId];
+    if (!widget?.hidden) {
+      continue;
+    }
     if (nextWidgets === layout.widgets) {
       nextWidgets = { ...layout.widgets };
     }
-    nextWidgets.gamification = { ...gamification, hidden: false };
+    nextWidgets[widgetId] = { ...widget, hidden: false };
   }
 
   return ordersEqual(layout.order, nextOrder) && nextWidgets === layout.widgets

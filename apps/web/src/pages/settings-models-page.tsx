@@ -43,6 +43,11 @@ type EditorState = {
   apiKey: string;
 };
 
+type ConnectionHealthState = {
+  status: "healthy" | "unavailable";
+  detail: string;
+};
+
 const WORKBENCH_MOCK_PROVIDER_ENABLED = import.meta.env.DEV;
 
 const modelPanelClass =
@@ -102,6 +107,18 @@ function editorFromConnection(connection: AiModelConnection): EditorState {
   };
 }
 
+function matchesSavedConnectionBinding(
+  editor: EditorState,
+  connection: AiModelConnection | null | undefined
+) {
+  return Boolean(
+    connection &&
+    editor.provider === connection.provider &&
+    editor.baseUrl.trim() === connection.baseUrl &&
+    editor.model.trim() === connection.model
+  );
+}
+
 export function SettingsModelsPage() {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<EditorState>(() => defaultEditorState());
@@ -122,6 +139,9 @@ export function SettingsModelsPage() {
   const [manualOauthCode, setManualOauthCode] = useState("");
   const [oauthSessionId, setOauthSessionId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [connectionHealth, setConnectionHealth] = useState<
+    Record<string, ConnectionHealthState>
+  >({});
 
   const settingsQuery = useQuery({
     queryKey: ["forge-settings"],
@@ -176,7 +196,17 @@ export function SettingsModelsPage() {
           }
         }
       }),
-    onSuccess: invalidateSettings
+    onSuccess: async () => {
+      setFeedback("Forge Agent defaults saved.");
+      await invalidateSettings();
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not save model defaults."
+      );
+    }
   });
 
   const saveConnectionMutation = useMutation({
@@ -215,7 +245,19 @@ export function SettingsModelsPage() {
 
   const deleteConnectionMutation = useMutation({
     mutationFn: deleteAiModelConnection,
-    onSuccess: invalidateSettings
+    onSuccess: async () => {
+      setFeedback(
+        "Connection removed. Stored credentials for that connection are no longer available to Forge."
+      );
+      await invalidateSettings();
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not remove the connection."
+      );
+    }
   });
 
   const createEmbeddingMutation = useMutation({
@@ -230,28 +272,61 @@ export function SettingsModelsPage() {
       }),
     onSuccess: async () => {
       setEmbeddingApiKey("");
+      setFeedback("Embedding profile saved.");
       await invalidateSettings();
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not save the embedding profile."
+      );
     }
   });
 
   const deleteEmbeddingMutation = useMutation({
     mutationFn: (profileId: string) =>
       deleteWikiProfile("embedding", profileId),
-    onSuccess: invalidateSettings
+    onSuccess: async () => {
+      setFeedback("Embedding profile removed.");
+      await invalidateSettings();
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not remove the embedding profile."
+      );
+    }
   });
 
   const testConnectionMutation = useMutation({
-    mutationFn: async () =>
-      testAiModelConnection({
-        connectionId: editor.id,
-        provider: editor.provider,
-        baseUrl: editor.baseUrl,
-        model: editor.model,
-        apiKey:
-          editor.provider === "openai-codex"
-            ? undefined
-            : editor.apiKey || undefined
-      }),
+    mutationFn: async () => {
+      const savedConnection = editor.id
+        ? settingsQuery.data?.settings.modelSettings.connections.find(
+            (connection) => connection.id === editor.id
+          )
+        : null;
+      const useSavedCredential =
+        !editor.apiKey.trim() &&
+        matchesSavedConnectionBinding(editor, savedConnection);
+      return testAiModelConnection(
+        useSavedCredential
+          ? {
+              connectionId: savedConnection!.id,
+              model: savedConnection!.model
+            }
+          : {
+              provider: editor.provider,
+              baseUrl: editor.baseUrl,
+              model: editor.model,
+              apiKey:
+                editor.provider === "openai-codex"
+                  ? undefined
+                  : editor.apiKey || undefined
+            }
+      );
+    },
     onSuccess: ({ result }) => {
       setFeedback(`Connection test succeeded: ${result.outputPreview}`);
     },
@@ -259,6 +334,39 @@ export function SettingsModelsPage() {
       setFeedback(
         error instanceof Error ? error.message : "Connection test failed."
       );
+    }
+  });
+
+  const savedConnectionTestMutation = useMutation({
+    mutationFn: async (connection: AiModelConnection) => ({
+      connection,
+      result: (
+        await testAiModelConnection({
+          connectionId: connection.id,
+          model: connection.model
+        })
+      ).result
+    }),
+    onSuccess: ({ connection, result }) => {
+      setConnectionHealth((current) => ({
+        ...current,
+        [connection.id]: {
+          status: "healthy",
+          detail: `${result.model} responded: ${result.outputPreview}`
+        }
+      }));
+    },
+    onError: (error, connection) => {
+      setConnectionHealth((current) => ({
+        ...current,
+        [connection.id]: {
+          status: "unavailable",
+          detail:
+            error instanceof Error
+              ? error.message
+              : "The model endpoint did not pass its health check."
+        }
+      }));
     }
   });
 
@@ -270,6 +378,13 @@ export function SettingsModelsPage() {
       if (session.authUrl) {
         window.open(session.authUrl, "_blank", "noopener,noreferrer");
       }
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not start OpenAI Codex OAuth."
+      );
     }
   });
 
@@ -288,6 +403,13 @@ export function SettingsModelsPage() {
         session.status === "authorized"
           ? "OpenAI Codex OAuth authorized."
           : "Manual OAuth code submitted."
+      );
+    },
+    onError: (error) => {
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not submit the OAuth code."
       );
     }
   });
@@ -321,6 +443,9 @@ export function SettingsModelsPage() {
   const editedConnection = editor.id
     ? connections.find((connection) => connection.id === editor.id)
     : null;
+  const selectedBasicChatConnection = connections.find(
+    (connection) => connection.id === basicChatConnectionId
+  );
 
   const canSaveConnection = useMemo(() => {
     if (!editor.label.trim() || !editor.model.trim()) return false;
@@ -335,6 +460,11 @@ export function SettingsModelsPage() {
     }
     return editor.apiKey.trim().length > 0 || Boolean(editor.id);
   }, [editor, editedConnection?.hasStoredCredential, oauthSession?.status]);
+  const canTestConnection =
+    editor.provider === "mock" ||
+    (!editor.apiKey.trim() &&
+      matchesSavedConnectionBinding(editor, editedConnection)) ||
+    (editor.provider !== "openai-codex" && editor.apiKey.trim().length > 0);
 
   if (settingsQuery.isLoading) {
     return (
@@ -396,8 +526,17 @@ export function SettingsModelsPage() {
             >
               <option value="">No external connection</option>
               {connections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
+                <option
+                  key={connection.id}
+                  value={connection.id}
+                  disabled={
+                    !connection.enabled || !connection.hasStoredCredential
+                  }
+                >
                   {connection.label} ({connection.agentLabel})
+                  {!connection.hasStoredCredential
+                    ? " · credential required"
+                    : ""}
                 </option>
               ))}
             </select>
@@ -448,7 +587,7 @@ export function SettingsModelsPage() {
           <Button
             pending={saveDefaultsMutation.isPending}
             pendingLabel="Saving defaults"
-            onClick={() => void saveDefaultsMutation.mutateAsync()}
+            onClick={() => saveDefaultsMutation.mutate()}
           >
             Save Forge Agent defaults
           </Button>
@@ -469,6 +608,13 @@ export function SettingsModelsPage() {
             </Badge>
           ) : null}
         </div>
+        {selectedBasicChatConnection?.status === "needs_attention" ? (
+          <div className={modelDangerPanelClass}>
+            The selected basic-chat connection needs attention. Forge does not
+            silently fall back to another external provider; test or replace
+            this connection before relying on it.
+          </div>
+        ) : null}
       </Card>
 
       <Card className="grid gap-4">
@@ -521,9 +667,7 @@ export function SettingsModelsPage() {
                       variant="secondary"
                       pending={deleteEmbeddingMutation.isPending}
                       pendingLabel="Deleting"
-                      onClick={() =>
-                        void deleteEmbeddingMutation.mutateAsync(profile.id)
-                      }
+                      onClick={() => deleteEmbeddingMutation.mutate(profile.id)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -590,7 +734,7 @@ export function SettingsModelsPage() {
               pending={createEmbeddingMutation.isPending}
               pendingLabel="Saving"
               disabled={!embeddingLabel.trim() || !embeddingModel.trim()}
-              onClick={() => void createEmbeddingMutation.mutateAsync()}
+              onClick={() => createEmbeddingMutation.mutate()}
             >
               Save embedding profile
             </Button>
@@ -729,7 +873,7 @@ export function SettingsModelsPage() {
                     variant="secondary"
                     pending={startOauthMutation.isPending}
                     pendingLabel="Starting OAuth"
-                    onClick={() => void startOauthMutation.mutateAsync()}
+                    onClick={() => startOauthMutation.mutate()}
                   >
                     <Sparkles className="size-4" />
                     Start OAuth
@@ -775,7 +919,7 @@ export function SettingsModelsPage() {
                     disabled={!manualOauthCode.trim() || !oauthSessionId}
                     pending={submitManualCodeMutation.isPending}
                     pendingLabel="Submitting"
-                    onClick={() => void submitManualCodeMutation.mutateAsync()}
+                    onClick={() => submitManualCodeMutation.mutate()}
                   >
                     Submit manual code
                   </Button>
@@ -788,7 +932,7 @@ export function SettingsModelsPage() {
                 pending={saveConnectionMutation.isPending}
                 pendingLabel="Saving connection"
                 disabled={!canSaveConnection}
-                onClick={() => void saveConnectionMutation.mutateAsync()}
+                onClick={() => saveConnectionMutation.mutate()}
               >
                 Save connection
               </Button>
@@ -796,14 +940,8 @@ export function SettingsModelsPage() {
                 variant="secondary"
                 pending={testConnectionMutation.isPending}
                 pendingLabel="Testing"
-                disabled={
-                  editor.provider === "openai-codex"
-                    ? !editor.id
-                    : editor.provider === "mock"
-                      ? false
-                      : !editor.id && !editor.apiKey.trim()
-                }
-                onClick={() => void testConnectionMutation.mutateAsync()}
+                disabled={!canTestConnection}
+                onClick={() => testConnectionMutation.mutate()}
               >
                 <KeyRound className="size-4" />
                 Test connection
@@ -858,6 +996,24 @@ export function SettingsModelsPage() {
                   <div className="flex gap-2">
                     <Button
                       variant="secondary"
+                      pending={
+                        savedConnectionTestMutation.isPending &&
+                        savedConnectionTestMutation.variables?.id ===
+                          connection.id
+                      }
+                      pendingLabel="Testing"
+                      disabled={
+                        !connection.enabled || !connection.hasStoredCredential
+                      }
+                      onClick={() =>
+                        savedConnectionTestMutation.mutate(connection)
+                      }
+                    >
+                      <KeyRound className="size-4" />
+                      Test
+                    </Button>
+                    <Button
+                      variant="secondary"
                       onClick={() => {
                         setEditor(editorFromConnection(connection));
                         setOauthSessionId(null);
@@ -870,9 +1026,15 @@ export function SettingsModelsPage() {
                       variant="secondary"
                       pending={deleteConnectionMutation.isPending}
                       pendingLabel="Deleting"
-                      onClick={() =>
-                        void deleteConnectionMutation.mutateAsync(connection.id)
-                      }
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Remove ${connection.label}? Forge will stop using its stored credential and this cannot be undone from the model settings page.`
+                          )
+                        ) {
+                          deleteConnectionMutation.mutate(connection.id);
+                        }
+                      }}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -885,6 +1047,17 @@ export function SettingsModelsPage() {
                   <Badge className={modelMetaBadgeClass}>
                     {connection.status}
                   </Badge>
+                  <Badge
+                    className={
+                      connection.hasStoredCredential
+                        ? modelMetaBadgeClass
+                        : modelWarningBadgeClass
+                    }
+                  >
+                    {connection.hasStoredCredential
+                      ? "credential stored"
+                      : "credential required"}
+                  </Badge>
                   <Badge className={modelMetaBadgeClass} wrap>
                     {connection.baseUrl}
                   </Badge>
@@ -893,6 +1066,19 @@ export function SettingsModelsPage() {
                       {connection.accountLabel}
                     </Badge>
                   ) : null}
+                </div>
+                <div
+                  className={`rounded-[16px] border border-[var(--ui-border-subtle)] px-3 py-2 text-xs leading-5 ${
+                    connectionHealth[connection.id]?.status === "healthy"
+                      ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
+                      : connectionHealth[connection.id]?.status ===
+                          "unavailable"
+                        ? "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                        : `bg-[var(--ui-surface-1)] ${modelFaintClass}`
+                  }`}
+                >
+                  {connectionHealth[connection.id]?.detail ??
+                    "Not health-checked in this browser session."}
                 </div>
               </div>
             ))}

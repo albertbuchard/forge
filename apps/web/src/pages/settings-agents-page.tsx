@@ -191,6 +191,9 @@ export function SettingsAgentsPage() {
   const [expandedRuntimeSessionId, setExpandedRuntimeSessionId] = useState<
     string | null
   >(null);
+  const [credentialFeedback, setCredentialFeedback] = useState<string | null>(
+    null
+  );
 
   // ── Queries ───────────────────────────────────────────────────────────────
   const operatorSessionQuery = useQuery({
@@ -248,7 +251,12 @@ export function SettingsAgentsPage() {
 
   const tokenMutation = useMutation({
     mutationFn: (input: CreateAgentTokenInput) => createAgentToken(input),
-    onSuccess: invalidateAll
+    onSuccess: invalidateAll,
+    onError: (error) => {
+      setCredentialFeedback(
+        error instanceof Error ? error.message : "Could not issue the token."
+      );
+    }
   });
   const rotateMutation = useMutation({
     mutationFn: (tokenId: string) => rotateAgentToken(tokenId),
@@ -264,11 +272,26 @@ export function SettingsAgentsPage() {
         });
         setRevealDialogOpen(true);
       }
+    },
+    onError: (error) => {
+      setCredentialFeedback(
+        error instanceof Error ? error.message : "Could not rotate the token."
+      );
     }
   });
   const revokeMutation = useMutation({
     mutationFn: (tokenId: string) => revokeAgentToken(tokenId),
-    onSuccess: invalidateAll
+    onSuccess: async () => {
+      setCredentialFeedback(
+        "Token revoked. Existing callers can no longer use it."
+      );
+      await invalidateAll();
+    },
+    onError: (error) => {
+      setCredentialFeedback(
+        error instanceof Error ? error.message : "Could not revoke the token."
+      );
+    }
   });
   const approveMutation = useMutation({
     mutationFn: (id: string) => approveApprovalRequest(id),
@@ -318,9 +341,10 @@ export function SettingsAgentsPage() {
   const activeTokens =
     settings?.agentTokens.filter((t) => t.status === "active") ?? [];
   const recommendedScopes = onboarding?.recommendedScopes ?? [];
-  const hasFullOperatorToken = activeTokens.some((t) =>
-    tokenHasScopes(t, recommendedScopes)
-  );
+  const hasFullOperatorToken =
+    Boolean(onboarding) &&
+    recommendedScopes.length > 0 &&
+    activeTokens.some((t) => tokenHasScopes(t, recommendedScopes));
   const hasRewardManager = activeTokens.some((t) =>
     tokenHasScopes(t, ["rewards.manage"])
   );
@@ -516,17 +540,20 @@ export function SettingsAgentsPage() {
         defaultAgentLabel={onboarding?.defaultActorLabel ?? "OpenClaw"}
         recommendedScopes={recommendedScopes}
         onSubmit={async (input) => {
+          if (!onboarding) {
+            throw new Error(
+              "Live onboarding must load before Forge can issue and reveal a correctly scoped token."
+            );
+          }
           const result = await tokenMutation.mutateAsync(input);
           // Close the wizard and open the reveal dialog
           setTokenDialogOpen(false);
-          if (onboarding) {
-            setRevealState({
-              tokenString: result.token.token,
-              agentLabel: input.agentLabel,
-              onboarding
-            });
-            setRevealDialogOpen(true);
-          }
+          setRevealState({
+            tokenString: result.token.token,
+            agentLabel: input.agentLabel,
+            onboarding
+          });
+          setRevealDialogOpen(true);
         }}
       />
       <TokenRevealDialog
@@ -547,6 +574,26 @@ export function SettingsAgentsPage() {
       />
 
       <div className="grid gap-5">
+        {onboardingQuery.isError ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)]">
+            <div className="text-sm leading-6 text-[var(--danger)]">
+              Live onboarding is unavailable. Token issue and rotation are
+              paused so Forge cannot reveal a credential with stale scopes or
+              incomplete adapter guidance.
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => void onboardingQuery.refetch()}
+            >
+              Retry onboarding
+            </Button>
+          </Card>
+        ) : null}
+        {credentialFeedback ? (
+          <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
+            {credentialFeedback}
+          </div>
+        ) : null}
         {/* ── Operator console overview ── */}
         {operatorContext ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -587,7 +634,9 @@ export function SettingsAgentsPage() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2.5">
-                    <span className="font-medium text-[var(--ui-ink-strong)]">{cap.label}</span>
+                    <span className="font-medium text-[var(--ui-ink-strong)]">
+                      {cap.label}
+                    </span>
                     <Badge
                       className={
                         cap.badgeTone === "emerald"
@@ -607,8 +656,9 @@ export function SettingsAgentsPage() {
                 {cap.action ? (
                   <button
                     type="button"
+                    disabled={!onboarding}
                     onClick={cap.action.onClick}
-                    className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                    className="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {cap.action.label}
                     <ArrowRight className="size-3" />
@@ -626,8 +676,9 @@ export function SettingsAgentsPage() {
                 Runtime sessions
               </div>
               <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
-                Live OpenClaw, Hermes, and Codex sessions registered against
-                this Forge runtime, with stale detection and reconnect guidance.
+                Live OpenClaw, Hermes, Codex, and Claude Code sessions
+                registered against this Forge runtime, with stale detection and
+                reconnect guidance.
               </div>
             </div>
             {runtimeSessionGroups.length > 0 ? (
@@ -696,7 +747,7 @@ export function SettingsAgentsPage() {
                             pending={reconnectSessionMutation.isPending}
                             pendingLabel="Requesting"
                             onClick={() =>
-                              void reconnectSessionMutation.mutateAsync({
+                              reconnectSessionMutation.mutate({
                                 sessionId: session.id
                               })
                             }
@@ -726,7 +777,7 @@ export function SettingsAgentsPage() {
                             pending={disconnectSessionMutation.isPending}
                             pendingLabel="Closing"
                             onClick={() =>
-                              void disconnectSessionMutation.mutateAsync({
+                              disconnectSessionMutation.mutate({
                                 sessionId: session.id,
                                 note: "Marked disconnected from the Forge agents console."
                               })
@@ -911,6 +962,7 @@ export function SettingsAgentsPage() {
             <Button
               size="sm"
               variant="secondary"
+              disabled={!onboarding}
               onClick={() => {
                 setTokenDialogPreset("operator");
                 setTokenDialogOpen(true);
@@ -971,42 +1023,64 @@ export function SettingsAgentsPage() {
                   <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                     Default read scope: {formatScopeSummary(token)}
                   </div>
+                  <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                    Identity: {token.agentId ?? "unlinked"} · Last used:{" "}
+                    {formatDateTime(token.lastUsedAt)}
+                  </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {["write", "rewards.manage", "psyche.write"].map(
-                      (scope) => (
-                        <Badge
-                          key={scope}
-                          className={
-                            token.scopes.includes(scope)
-                              ? "text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
-                              : "text-[var(--ui-ink-muted)]"
+                    {token.scopes.map((scope) => (
+                      <Badge
+                        key={scope}
+                        className="text-[color-mix(in_srgb,var(--success)_78%,var(--ui-ink-strong)_22%)]"
+                      >
+                        {scope}
+                      </Badge>
+                    ))}
+                  </div>
+                  {token.status === "active" ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        pending={rotateMutation.isPending}
+                        pendingLabel="Rotating"
+                        disabled={!onboarding}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Rotate ${token.label}? The current token stops working immediately and the replacement is shown only once.`
+                            )
+                          ) {
+                            rotateMutation.mutate(token.id);
                           }
-                        >
-                          {scope}
-                        </Badge>
-                      )
-                    )}
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      pending={rotateMutation.isPending}
-                      pendingLabel="Rotating"
-                      onClick={() => void rotateMutation.mutateAsync(token.id)}
-                    >
-                      Rotate &amp; reveal new token
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      pending={revokeMutation.isPending}
-                      pendingLabel="Revoking"
-                      onClick={() => void revokeMutation.mutateAsync(token.id)}
-                    >
-                      Revoke
-                    </Button>
-                  </div>
+                        }}
+                      >
+                        Rotate &amp; reveal new token
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        pending={revokeMutation.isPending}
+                        pendingLabel="Revoking"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Revoke ${token.label}? Existing callers using this token will lose access immediately.`
+                            )
+                          ) {
+                            revokeMutation.mutate(token.id);
+                          }
+                        }}
+                      >
+                        Revoke
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-xs text-[var(--ui-ink-muted)]">
+                      Revoked credentials cannot be rotated or reused. Issue a
+                      new token if this agent needs access again.
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -1030,7 +1104,9 @@ export function SettingsAgentsPage() {
                   className="flex min-w-0 flex-col gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <div className="font-medium text-[var(--ui-ink-strong)]">{agent.label}</div>
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
+                      {agent.label}
+                    </div>
                     {agent.description ? (
                       <div className="mt-1 text-sm text-[var(--ui-ink-muted)]">
                         {agent.description}
@@ -1039,7 +1115,10 @@ export function SettingsAgentsPage() {
                     {agent.linkedUsers.length > 0 ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {agent.linkedUsers.map((link) => (
-                          <Badge key={link.userId} className="text-[var(--ui-ink-muted)]">
+                          <Badge
+                            key={link.userId}
+                            className="text-[var(--ui-ink-muted)]"
+                          >
                             {link.user?.displayName ?? link.userId}
                           </Badge>
                         ))}
@@ -1231,9 +1310,7 @@ export function SettingsAgentsPage() {
                         size="sm"
                         pending={approveMutation.isPending}
                         pendingLabel="Approving"
-                        onClick={() =>
-                          void approveMutation.mutateAsync(approval.id)
-                        }
+                        onClick={() => approveMutation.mutate(approval.id)}
                       >
                         Approve
                       </Button>
@@ -1242,9 +1319,7 @@ export function SettingsAgentsPage() {
                         size="sm"
                         pending={rejectMutation.isPending}
                         pendingLabel="Rejecting"
-                        onClick={() =>
-                          void rejectMutation.mutateAsync(approval.id)
-                        }
+                        onClick={() => rejectMutation.mutate(approval.id)}
                       >
                         Reject
                       </Button>
@@ -1393,7 +1468,9 @@ export function SettingsAgentsPage() {
                   <div className="font-medium text-[var(--ui-ink-strong)]">
                     {onboarding.authModes.managedToken.label}
                   </div>
-                  <Badge className="mt-1 text-[var(--ui-ink-muted)]">optional</Badge>
+                  <Badge className="mt-1 text-[var(--ui-ink-muted)]">
+                    optional
+                  </Badge>
                   <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                     {onboarding.authModes.managedToken.summary}
                   </div>
@@ -1573,7 +1650,9 @@ export function SettingsAgentsPage() {
                     key={guide.label}
                     className="rounded-[18px] bg-[var(--ui-surface-2)] p-4"
                   >
-                    <div className="font-medium text-[var(--ui-ink-strong)]">{guide.label}</div>
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
+                      {guide.label}
+                    </div>
                     <div className="mt-3 grid gap-2 text-sm leading-6 text-[var(--ui-ink-medium)]">
                       {guide.installSteps.map((step) => (
                         <div key={step}>{step}</div>
@@ -1627,7 +1706,9 @@ export function SettingsAgentsPage() {
               Could not load the onboarding contract. Check the API bridge.
             </div>
           ) : onboardingExpanded ? (
-            <div className="mt-4 text-sm text-[var(--ui-ink-muted)]">Loading…</div>
+            <div className="mt-4 text-sm text-[var(--ui-ink-muted)]">
+              Loading…
+            </div>
           ) : null}
         </Card>
       </div>

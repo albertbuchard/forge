@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { FlagshipSignalDeck } from "@/components/experience/flagship-signal-deck";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
@@ -16,6 +19,68 @@ const reviewEyebrowClass =
 const reviewPanelClass =
   "overflow-hidden rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]";
 const reviewSoftTextClass = "text-sm leading-6 text-[var(--ui-ink-soft)]";
+
+function parseDateKey(dateKey: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) {
+    return null;
+  }
+  const date = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  );
+  if (
+    date.getUTCFullYear() !== Number(match[1]) ||
+    date.getUTCMonth() !== Number(match[2]) - 1 ||
+    date.getUTCDate() !== Number(match[3])
+  ) {
+    return null;
+  }
+  return date;
+}
+
+export function validateWeeklyReviewBoundary(
+  review: Pick<
+    WeeklyReviewPayload,
+    "weekKey" | "weekStartDate" | "weekEndDate" | "chart"
+  >
+) {
+  const start = parseDateKey(review.weekStartDate);
+  const end = parseDateKey(review.weekEndDate);
+  const issues: string[] = [];
+
+  if (!start || !end) {
+    issues.push("The review returned an invalid calendar date.");
+  } else {
+    const daySpan = Math.round(
+      (end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    if (start.getUTCDay() !== 1 || end.getUTCDay() !== 0 || daySpan !== 6) {
+      issues.push("The review boundary must run from Monday through Sunday.");
+    }
+  }
+  if (review.weekKey !== review.weekStartDate) {
+    issues.push("The review key does not match the displayed week start.");
+  }
+  if (review.chart.length !== 7) {
+    issues.push(
+      "The review must contain exactly seven daily evidence buckets."
+    );
+  }
+
+  return { valid: issues.length === 0, issues };
+}
+
+function formatDateKey(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  return date
+    ? date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC"
+      })
+    : dateKey;
+}
 
 function WeeklyReviewBarChart({
   data
@@ -78,12 +143,17 @@ function WeeklyReviewBarChart({
 export function WeeklyReviewPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [timeZone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  );
   const reviewQuery = useQuery({
-    queryKey: ["forge-weekly-review"],
-    queryFn: getWeeklyReview
+    queryKey: ["forge-weekly-review", timeZone],
+    queryFn: () => getWeeklyReview(timeZone)
   });
   const finalizeMutation = useMutation({
-    mutationFn: finalizeWeeklyReview,
+    mutationFn: () => finalizeWeeklyReview(timeZone),
+    onMutate: () => setFinalizeError(null),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-weekly-review"] }),
@@ -92,6 +162,13 @@ export function WeeklyReviewPage() {
         invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["activity-archive"] })
       ]);
+    },
+    onError: (error) => {
+      setFinalizeError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not finalize this review."
+      );
     }
   });
   const review = reviewQuery.data?.review;
@@ -121,6 +198,7 @@ export function WeeklyReviewPage() {
   }
 
   const strongestWin = review.wins[0] ?? null;
+  const boundary = validateWeeklyReviewBoundary(review);
   const recoveryCalibration =
     review.calibration.find((entry) => entry.mode === "recover") ??
     review.calibration[0] ??
@@ -159,7 +237,13 @@ export function WeeklyReviewPage() {
       label: "Next intent",
       title: accelerationCalibration?.title ?? review.reward.title,
       detail: accelerationCalibration?.note ?? review.reward.summary,
-      badge: `+${review.reward.rewardXp} xp`
+      badge: `+${review.reward.rewardXp} xp`,
+      href: accelerationCalibration
+        ? `/goals/${accelerationCalibration.id}`
+        : "/today",
+      actionLabel: accelerationCalibration
+        ? "Open next-focus goal"
+        : "Plan next week"
     }
   ] as const;
 
@@ -171,13 +255,54 @@ export function WeeklyReviewPage() {
         badge={`${review.momentumSummary.totalXp} xp`}
       />
 
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--ui-ink-soft)]">
+        <span>Evidence window</span>
+        <time
+          dateTime={review.weekStartDate}
+          className="font-medium text-[var(--ui-ink-strong)]"
+        >
+          {formatDateKey(review.weekStartDate)}
+        </time>
+        <span aria-hidden="true">to</span>
+        <time
+          dateTime={review.weekEndDate}
+          className="font-medium text-[var(--ui-ink-strong)]"
+        >
+          {formatDateKey(review.weekEndDate)}
+        </time>
+      </div>
+
+      {!boundary.valid ? (
+        <div
+          role="alert"
+          className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+        >
+          <div className="font-medium">
+            This review cannot be finalized yet.
+          </div>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {boundary.issues.map((issue) => (
+              <li key={issue}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <div className="grid gap-5">
           <Card>
             <div className={reviewEyebrowClass}>
               {t("common.weeklyReview.sectionMomentum")}
             </div>
-            <WeeklyReviewBarChart data={review.chart} />
+            {review.chart.length > 0 ? (
+              <WeeklyReviewBarChart data={review.chart} />
+            ) : (
+              <div
+                className={`mt-4 ${reviewPanelClass} p-4 ${reviewSoftTextClass}`}
+              >
+                No daily momentum evidence is available for this week.
+              </div>
+            )}
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className={`${reviewPanelClass} p-4`}>
                 <div className={reviewEyebrowClass}>XP</div>
@@ -205,21 +330,39 @@ export function WeeklyReviewPage() {
               {t("common.weeklyReview.sectionGoals")}
             </div>
             <div className="mt-4 grid gap-3">
-              {review.calibration.map((entry) => (
-                <div key={entry.id} className={`${reviewPanelClass} p-4`}>
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
-                      {entry.title}
-                    </div>
-                    <Badge className="max-w-[9rem] shrink-0 self-start">
-                      {entry.mode}
-                    </Badge>
-                  </div>
-                  <div className={`mt-3 break-words ${reviewSoftTextClass}`}>
-                    {entry.note}
-                  </div>
+              {review.calibration.length === 0 ? (
+                <div
+                  className={`${reviewPanelClass} p-4 ${reviewSoftTextClass}`}
+                >
+                  No goal calibration is available yet. Pick the next concrete
+                  move from Today instead.
                 </div>
-              ))}
+              ) : (
+                review.calibration.map((entry) => (
+                  <div key={entry.id} className={`${reviewPanelClass} p-4`}>
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
+                        {entry.title}
+                      </div>
+                      <Badge className="max-w-[9rem] shrink-0 self-start">
+                        {entry.mode}
+                      </Badge>
+                    </div>
+                    <div className={`mt-3 break-words ${reviewSoftTextClass}`}>
+                      {entry.note}
+                    </div>
+                    <Link
+                      to={`/goals/${entry.id}`}
+                      className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-[var(--primary)] transition hover:text-[var(--ui-ink-strong)]"
+                    >
+                      {entry.mode === "accelerate"
+                        ? "Use as next focus"
+                        : "Open goal"}
+                      <ArrowRight className="size-3.5" />
+                    </Link>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
         </div>
@@ -230,24 +373,32 @@ export function WeeklyReviewPage() {
               {t("common.weeklyReview.sectionWins")}
             </div>
             <div className="mt-4 grid gap-3">
-              {review.wins.map((win) => (
-                <div key={win.id} className={`${reviewPanelClass} p-4`}>
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
-                      {win.title}
-                    </div>
-                    <Badge
-                      tone="signal"
-                      className="max-w-[8rem] shrink-0 self-start"
-                    >
-                      +{win.rewardXp} xp
-                    </Badge>
-                  </div>
-                  <div className={`mt-2 break-words ${reviewSoftTextClass}`}>
-                    {win.summary}
-                  </div>
+              {review.wins.length === 0 ? (
+                <div
+                  className={`${reviewPanelClass} p-4 ${reviewSoftTextClass}`}
+                >
+                  {t("common.weeklyReview.noWinDetail")}
                 </div>
-              ))}
+              ) : (
+                review.wins.map((win) => (
+                  <div key={win.id} className={`${reviewPanelClass} p-4`}>
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1 break-words font-medium text-[var(--ui-ink-strong)]">
+                        {win.title}
+                      </div>
+                      <Badge
+                        tone="signal"
+                        className="max-w-[8rem] shrink-0 self-start"
+                      >
+                        +{win.rewardXp} xp
+                      </Badge>
+                    </div>
+                    <div className={`mt-2 break-words ${reviewSoftTextClass}`}>
+                      {win.summary}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </Card>
 
@@ -268,17 +419,25 @@ export function WeeklyReviewPage() {
             </div>
             <Button
               className="mt-4 w-full"
-              disabled={review.completion.finalized}
+              disabled={review.completion.finalized || !boundary.valid}
               pending={finalizeMutation.isPending}
               pendingLabel={t("common.weeklyReview.finalizePending")}
               onClick={async () => {
-                await finalizeMutation.mutateAsync();
+                await finalizeMutation.mutateAsync().catch(() => undefined);
               }}
             >
               {review.completion.finalized
                 ? t("common.weeklyReview.finalized")
                 : t("common.weeklyReview.finalize")}
             </Button>
+            {finalizeError ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-[16px] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+              >
+                {finalizeError}
+              </div>
+            ) : null}
             <div className={`mt-3 ${reviewSoftTextClass}`}>
               {review.completion.finalized
                 ? `${t("common.weeklyReview.finalizedDetail")} ${review.completion.finalizedBy ? `By ${review.completion.finalizedBy}. ` : ""}${review.completion.finalizedAt ? new Date(review.completion.finalizedAt).toLocaleString() : ""}`.trim()

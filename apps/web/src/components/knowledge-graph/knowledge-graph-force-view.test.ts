@@ -7,6 +7,7 @@ import {
   buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSeedPositions,
   buildKnowledgeGraphSigmaOverviewRatio,
+  resolveKnowledgeGraphKeyboardTarget,
   reduceKnowledgeGraphSigmaEdgeAttributes,
   reduceKnowledgeGraphSigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
@@ -44,6 +45,82 @@ const baseNode: KnowledgeGraphNode = {
 };
 
 describe("KnowledgeGraphForceView reducers", () => {
+  it("supports bounded keyboard traversal and activation across dense graph nodes", () => {
+    const nodeIds = ["goal:1", "project:1", "task:1"];
+
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowRight",
+        nodeIds,
+        focusNodeId: null
+      }).targetNodeId
+    ).toBe("goal:1");
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowLeft",
+        nodeIds,
+        focusNodeId: "goal:1"
+      }).targetNodeId
+    ).toBe("task:1");
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "End",
+        nodeIds,
+        focusNodeId: "goal:1"
+      }).targetNodeId
+    ).toBe("task:1");
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "Escape",
+        nodeIds,
+        focusNodeId: "project:1"
+      })
+    ).toEqual({ handled: true, targetNodeId: null });
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "Tab",
+        nodeIds,
+        focusNodeId: "project:1"
+      }).handled
+    ).toBe(false);
+  });
+
+  it("uses screen-space direction instead of array order for arrow navigation", () => {
+    const nodeIds = ["center", "far-right", "near-up", "near-right", "left"];
+    const nodePositions = new Map([
+      ["center", { x: 100, y: 100 }],
+      ["far-right", { x: 300, y: 100 }],
+      ["near-up", { x: 100, y: 40 }],
+      ["near-right", { x: 145, y: 105 }],
+      ["left", { x: 20, y: 100 }]
+    ]);
+
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowRight",
+        nodeIds,
+        focusNodeId: "center",
+        nodePositions
+      }).targetNodeId
+    ).toBe("near-right");
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowUp",
+        nodeIds,
+        focusNodeId: "center",
+        nodePositions
+      }).targetNodeId
+    ).toBe("near-up");
+    expect(
+      resolveKnowledgeGraphKeyboardTarget({
+        key: "ArrowLeft",
+        nodeIds,
+        focusNodeId: "left",
+        nodePositions
+      }).targetNodeId
+    ).toBe("left");
+  });
+
   it("seeds fresh graphs with dispersed phyllotaxis positions instead of one frozen circle", () => {
     const nodes: KnowledgeGraphNode[] = [
       baseNode,
@@ -93,13 +170,18 @@ describe("KnowledgeGraphForceView reducers", () => {
   });
 
   it("resolves graph node colors from body theme tokens before root defaults", () => {
-    document.documentElement.style.setProperty("--forge-entity-goal-rgb", "1, 2, 3");
+    document.documentElement.style.setProperty(
+      "--forge-entity-goal-rgb",
+      "1, 2, 3"
+    );
     document.body.style.setProperty("--forge-entity-goal-rgb", "10, 20, 30");
 
     try {
       const graph = createGraphFromData([baseNode], [], new Map());
 
-      expect(graph.getNodeAttribute(baseNode.id, "color")).toBe("rgb(10, 20, 30)");
+      expect(graph.getNodeAttribute(baseNode.id, "color")).toBe(
+        "rgb(10, 20, 30)"
+      );
     } finally {
       document.documentElement.style.removeProperty("--forge-entity-goal-rgb");
       document.body.style.removeProperty("--forge-entity-goal-rgb");

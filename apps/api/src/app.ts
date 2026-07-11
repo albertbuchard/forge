@@ -12,6 +12,7 @@ import {
   runInTransaction
 } from "./db.js";
 import { HttpError, isHttpError, type ValidationIssue } from "./errors.js";
+import { getRuntimeTimeZone } from "@/lib/date-keys.js";
 import {
   listActivityEvents,
   listActivityEventsForTask,
@@ -46,12 +47,13 @@ import {
   createAiConnector,
   deleteAiConnector,
   getAiConnectorById,
-  getAiConnectorRunById,
+  getAiConnectorRunDetail,
   getAiConnectorRunNodeResult,
   getAiConnectorRunNodeResults,
   getLatestAiConnectorNodeOutput,
+  getPublishedAiConnectorOutput,
   getAiConnectorBySlug,
-  getAiConnectorConversationForConnector,
+  getAiConnectorConversationReadModel,
   listAiConnectorRunsPage,
   listAiConnectors,
   runAiConnector,
@@ -125,6 +127,7 @@ import {
   getWikiPageDetailBySlug,
   getWikiSettingsPayload,
   ingestWikiSource,
+  countWikiIngestJobs,
   listWikiIngestJobs,
   listWikiLlmProfiles,
   listWikiPageTree,
@@ -712,13 +715,15 @@ import {
   updateWorkoutMetadataSchema
 } from "./health.js";
 import {
-  createNutritionAppearanceCheckin,
-  createNutritionBodyCheckin,
+  createNutritionAppearanceCheckinWithIdempotency,
+  createNutritionBodyCheckinWithIdempotency,
   createNutritionExperiment,
   createNutritionFoodLog,
-  createNutritionGutCheckin,
-  createNutritionSubjectiveCheckin,
+  createNutritionGutCheckinWithIdempotency,
+  createNutritionSubjectiveCheckinWithIdempotency,
   deleteNutritionFoodLog,
+  getNutritionExperimentOwnerUserId,
+  getNutritionFoodLogById,
   getWeightLossViewData,
   lookupNutritionBarcode,
   nutritionAppearanceCheckinCreateSchema,
@@ -8069,6 +8074,81 @@ function resolveEffectiveUserIdForMutation(
   );
 }
 
+function resolveNutritionMutationUserId(
+  query: Record<string, unknown> | undefined,
+  auth: UserScopeAuth,
+  bodyUserId?: string | null
+) {
+  const queryUserIds = resolveScopedUserIds(query) ?? [];
+  if (queryUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "nutrition_user_selection_ambiguous",
+      "Nutrition mutations require exactly one selected Forge user."
+    );
+  }
+
+  const queryUserId = queryUserIds[0] ?? null;
+  const normalizedBodyUserId = bodyUserId?.trim() || null;
+  if (
+    queryUserId &&
+    normalizedBodyUserId &&
+    queryUserId !== normalizedBodyUserId
+  ) {
+    throw new HttpError(
+      400,
+      "nutrition_user_selection_conflict",
+      "The selected query user and body userId must identify the same Forge user."
+    );
+  }
+
+  const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+  const requestedUserId = normalizedBodyUserId ?? queryUserId;
+  if (
+    requestedUserId &&
+    allowedUserIds.length > 0 &&
+    !allowedUserIds.includes(requestedUserId)
+  ) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The requested user scope is outside this token's allowed users."
+    );
+  }
+
+  if (!requestedUserId && allowedUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "nutrition_user_selection_required",
+      "This token can write for several Forge users; select exactly one user for the nutrition mutation."
+    );
+  }
+
+  const effectiveUserId =
+    requestedUserId ?? allowedUserIds[0] ?? getDefaultUser().id;
+  if (!listUsers().some((user) => user.id === effectiveUserId)) {
+    throw new HttpError(
+      404,
+      "nutrition_user_not_found",
+      `Forge user ${effectiveUserId} does not exist.`
+    );
+  }
+  return effectiveUserId;
+}
+
+function requireNutritionRecordOwner(
+  actualUserId: string | null | undefined,
+  expectedUserId: string
+) {
+  if (actualUserId && actualUserId !== expectedUserId) {
+    throw new HttpError(
+      404,
+      "nutrition_record_not_found",
+      "Nutrition record not found."
+    );
+  }
+}
+
 function hasScopeFilters(
   scope: Pick<EffectiveReadScope, "projectIds" | "tagIds">
 ) {
@@ -10008,6 +10088,7 @@ export async function buildServer(
       entityType?: string;
       id?: string;
       entity?: unknown;
+      projection?: Awaited<ReturnType<typeof pushCalendarEventUpdate>>;
     }>,
     auth: ReturnType<typeof authenticateRequest>,
     action: "create" | "update" | "delete"
@@ -10044,7 +10125,10 @@ export async function buildServer(
           continue;
         }
 
-        await pushCalendarEventUpdate(result.id, managers.secrets);
+        result.projection = await pushCalendarEventUpdate(
+          result.id,
+          managers.secrets
+        );
         const refreshed = getCalendarEventById(result.id);
         if (!refreshed) {
           continue;
@@ -10066,7 +10150,9 @@ export async function buildServer(
           source: auth.source,
           metadata: {
             calendarId: refreshed.calendarId,
-            originType: refreshed.originType
+            originType: refreshed.originType,
+            projectionState: result.projection.state,
+            projectionCode: result.projection.code
           }
         });
         continue;
@@ -10894,25 +10980,23 @@ export async function buildServer(
     }
     return detail;
   });
-  app.get("/api/v1/health/fitness", async (request) => ({
-    fitness: getFitnessViewData(
-      resolveScopedUserIds(request.query as Record<string, unknown>),
-      {
-        compact:
-          (request.query as Record<string, unknown>).compact === "1" ||
-          (request.query as Record<string, unknown>).compact === "true",
-        sessionDetail:
-          (request.query as Record<string, unknown>).sessionDetail === "summary"
-            ? "summary"
-            : "full",
-        analysisDetail:
-          (request.query as Record<string, unknown>).analysisDetail ===
-          "compact"
-            ? "compact"
-            : "full"
-      }
-    )
-  }));
+  app.get("/api/v1/health/fitness", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    return {
+      fitness: getFitnessViewData(
+        resolveEffectiveUserIdsForReads(query, auth),
+        {
+          compact: query.compact === "1" || query.compact === "true",
+          sessionDetail: query.sessionDetail === "summary" ? "summary" : "full",
+          analysisDetail:
+            query.analysisDetail === "compact" ? "compact" : "full"
+        }
+      )
+    };
+  });
   app.get("/api/v1/health/training-load", async (request) => ({
     trainingLoad: getTrainingLoadViewData(
       resolveScopedUserIds(request.query as Record<string, unknown>)
@@ -10954,28 +11038,40 @@ export async function buildServer(
     };
   });
   app.patch("/api/v1/health/weight-loss/target", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/health/weight-loss/target"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/weight-loss/target" }
+    );
+    const input = nutritionTargetUpdateSchema.parse(request.body ?? {});
+    const userId = resolveNutritionMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
     return {
-      target: updateNutritionTarget(
-        nutritionTargetUpdateSchema.parse(request.body ?? {})
-      )
+      target: updateNutritionTarget({ ...input, userId })
     };
   });
   app.patch(
     "/api/v1/health/weight-loss/daily-active-calories",
     async (request) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/daily-active-calories"
         }
       );
-      return updateNutritionDailyActiveCalories(
-        nutritionDailyActiveCaloriesUpdateSchema.parse(request.body ?? {})
+      const input = nutritionDailyActiveCaloriesUpdateSchema.parse(
+        request.body ?? {}
       );
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth,
+        input.userId
+      );
+      return updateNutritionDailyActiveCalories({ ...input, userId });
     }
   );
   app.post("/api/v1/health/weight-loss/foods/search", async (request) => ({
@@ -10989,27 +11085,39 @@ export async function buildServer(
     ))
   }));
   app.post("/api/v1/health/weight-loss/food-logs", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/health/weight-loss/food-logs"
-    });
-    const foodLog = createNutritionFoodLog(
-      nutritionFoodLogCreateSchema.parse(request.body ?? {})
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/weight-loss/food-logs" }
     );
+    const input = nutritionFoodLogCreateSchema.parse(request.body ?? {});
+    const userId = resolveNutritionMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    const foodLog = createNutritionFoodLog({ ...input, userId });
     reply.code(201);
     return { log: foodLog };
   });
   app.patch(
     "/api/v1/health/weight-loss/food-logs/:id",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/food-logs/:id"
         }
       );
+      const id = (request.params as { id: string }).id;
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth
+      );
+      requireNutritionRecordOwner(getNutritionFoodLogById(id)?.userId, userId);
       const foodLog = patchNutritionFoodLog(
-        (request.params as { id: string }).id,
+        id,
         nutritionFoodLogPatchSchema.parse(request.body ?? {})
       );
       if (!foodLog) {
@@ -11022,16 +11130,20 @@ export async function buildServer(
   app.delete(
     "/api/v1/health/weight-loss/food-logs/:id",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/food-logs/:id"
         }
       );
-      const foodLog = deleteNutritionFoodLog(
-        (request.params as { id: string }).id
+      const id = (request.params as { id: string }).id;
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth
       );
+      requireNutritionRecordOwner(getNutritionFoodLogById(id)?.userId, userId);
+      const foodLog = deleteNutritionFoodLog(id);
       if (!foodLog) {
         reply.code(404);
         return { error: "Food log not found" };
@@ -11040,81 +11152,133 @@ export async function buildServer(
     }
   );
   app.post("/api/v1/health/weight-loss/parse", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/health/weight-loss/parse"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/weight-loss/parse" }
+    );
+    const input = nutritionParseRequestSchema.parse(request.body ?? {});
+    const userId = resolveNutritionMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
     reply.code(201);
     return await parseNutritionFoodLogWithChatGpt(
-      nutritionParseRequestSchema.parse(request.body ?? {}),
+      { ...input, userId },
       managers.llm
     );
   });
   app.post(
     "/api/v1/health/weight-loss/body-checkins",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/body-checkins"
         }
       );
-      const bodyCheckin = createNutritionBodyCheckin(
-        nutritionBodyCheckinCreateSchema.parse(request.body ?? {})
+      const input = nutritionBodyCheckinCreateSchema.parse(request.body ?? {});
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth,
+        input.userId
       );
-      reply.code(201);
-      return { checkin: bodyCheckin };
+      const result = createNutritionBodyCheckinWithIdempotency(
+        { ...input, userId },
+        parseIdempotencyKey(request.headers as Record<string, unknown>)
+      );
+      reply.code(result.replayed ? 200 : 201);
+      if (result.replayed) {
+        reply.header("Idempotency-Replayed", "true");
+      }
+      return { checkin: result.checkin };
     }
   );
   app.post(
     "/api/v1/health/weight-loss/appearance-checkins",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/appearance-checkins"
         }
       );
-      const appearanceCheckin = createNutritionAppearanceCheckin(
-        nutritionAppearanceCheckinCreateSchema.parse(request.body ?? {})
+      const input = nutritionAppearanceCheckinCreateSchema.parse(
+        request.body ?? {}
       );
-      reply.code(201);
-      return { checkin: appearanceCheckin };
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth,
+        input.userId
+      );
+      const result = createNutritionAppearanceCheckinWithIdempotency(
+        { ...input, userId },
+        parseIdempotencyKey(request.headers as Record<string, unknown>)
+      );
+      reply.code(result.replayed ? 200 : 201);
+      if (result.replayed) {
+        reply.header("Idempotency-Replayed", "true");
+      }
+      return { checkin: result.checkin };
     }
   );
   app.post(
     "/api/v1/health/weight-loss/subjective-checkins",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/subjective-checkins"
         }
       );
-      const subjectiveCheckin = createNutritionSubjectiveCheckin(
-        nutritionSubjectiveCheckinCreateSchema.parse(request.body ?? {})
+      const input = nutritionSubjectiveCheckinCreateSchema.parse(
+        request.body ?? {}
       );
-      reply.code(201);
-      return { checkin: subjectiveCheckin };
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth,
+        input.userId
+      );
+      const result = createNutritionSubjectiveCheckinWithIdempotency(
+        { ...input, userId },
+        parseIdempotencyKey(request.headers as Record<string, unknown>)
+      );
+      reply.code(result.replayed ? 200 : 201);
+      if (result.replayed) {
+        reply.header("Idempotency-Replayed", "true");
+      }
+      return { checkin: result.checkin };
     }
   );
   app.post(
     "/api/v1/health/weight-loss/gut-checkins",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/gut-checkins"
         }
       );
-      const gutCheckin = createNutritionGutCheckin(
-        nutritionGutCheckinCreateSchema.parse(request.body ?? {})
+      const input = nutritionGutCheckinCreateSchema.parse(request.body ?? {});
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth,
+        input.userId
       );
-      reply.code(201);
-      return { checkin: gutCheckin };
+      const result = createNutritionGutCheckinWithIdempotency(
+        { ...input, userId },
+        parseIdempotencyKey(request.headers as Record<string, unknown>)
+      );
+      reply.code(result.replayed ? 200 : 201);
+      if (result.replayed) {
+        reply.header("Idempotency-Replayed", "true");
+      }
+      return { checkin: result.checkin };
     }
   );
   app.get("/api/v1/health/weight-loss/patterns", async (request) => {
@@ -11127,31 +11291,42 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/health/weight-loss/experiments", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/health/weight-loss/experiments"
-    });
-    const scopedUserId = resolveScopedUserIds(
-      request.query as Record<string, unknown>
-    )?.[0];
-    const input = nutritionExperimentCreateSchema.parse(request.body ?? {});
-    const experiment = createNutritionExperiment(
-      input.userId || !scopedUserId ? input : { ...input, userId: scopedUserId }
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/health/weight-loss/experiments" }
     );
+    const input = nutritionExperimentCreateSchema.parse(request.body ?? {});
+    const userId = resolveNutritionMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    const experiment = createNutritionExperiment({ ...input, userId });
     reply.code(201);
     return { experiment };
   });
   app.patch(
     "/api/v1/health/weight-loss/experiments/:id",
     async (request, reply) => {
-      requireScopedAccess(
+      const auth = requireScopedAccess(
         request.headers as Record<string, unknown>,
         ["write"],
         {
           route: "/api/v1/health/weight-loss/experiments/:id"
         }
       );
+      const id = (request.params as { id: string }).id;
+      const userId = resolveNutritionMutationUserId(
+        request.query as Record<string, unknown>,
+        auth
+      );
+      requireNutritionRecordOwner(
+        getNutritionExperimentOwnerUserId(id),
+        userId
+      );
       const experiment = patchNutritionExperiment(
-        (request.params as { id: string }).id,
+        id,
         nutritionExperimentPatchSchema.parse(request.body ?? {})
       );
       if (!experiment) {
@@ -11202,8 +11377,15 @@ export async function buildServer(
   app.get("/api/v1/health/workouts/:id/detail", async (request, reply) => {
     const { id } = request.params as { id: string };
     const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const resolution = query.resolution === "raw" ? "raw" : "adaptive";
-    const detail = getWorkoutSessionDetailById(id, resolution);
+    const detail = getWorkoutSessionDetailById(
+      id,
+      resolution,
+      resolveEffectiveUserIdsForReads(query, auth)
+    );
     if (!detail) {
       reply.code(404);
       return { error: "Workout session not found" };
@@ -11212,7 +11394,14 @@ export async function buildServer(
   });
   app.get("/api/v1/health/workouts/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const workout = getWorkoutSessionById(id);
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const workout = getWorkoutSessionById(
+      id,
+      resolveEffectiveUserIdsForReads(query, auth)
+    );
     if (!workout) {
       reply.code(404);
       return { error: "Workout session not found" };
@@ -12031,7 +12220,7 @@ export async function buildServer(
     const pairing = requireValidPairing(parsed.sessionId, parsed.pairingToken);
     assertWatchReady(pairing);
     const responseBody = {
-      watch: buildWatchBootstrap(pairing)
+      watch: buildWatchBootstrap(pairing, { timezone: parsed.timezone })
     };
     return {
       ...responseBody,
@@ -12058,25 +12247,55 @@ export async function buildServer(
       );
       assertWatchReady(pairing);
       const { id } = request.params as { id: string };
-      const habit = createHabitCheckIn(
-        id,
-        {
-          dateKey: parsed.dateKey,
-          status: parsed.status,
-          note: parsed.note,
-          description: parsed.description
+      const commandReceipt = ingestWatchCommandBatch(pairing, {
+        sessionId: parsed.sessionId,
+        pairingToken: parsed.pairingToken,
+        timezone: parsed.timezone,
+        device: {
+          name: "Apple Watch",
+          platform: "watchos",
+          appVersion: "",
+          sourceDevice: "Apple Watch"
         },
-        { source: "system", actor: `watch:${parsed.dedupeKey}` }
-      );
+        commands: [
+          {
+            id: parsed.dedupeKey,
+            kind: "habit_check_in",
+            createdAt: new Date().toISOString(),
+            payload: {
+              habitId: id,
+              ...(parsed.dateKey ? { dateKey: parsed.dateKey } : {}),
+              status: parsed.status,
+              note: parsed.note,
+              ...(parsed.description
+                ? { description: parsed.description }
+                : {}),
+              ...(parsed.timezone ? { timezone: parsed.timezone } : {})
+            }
+          }
+        ]
+      });
+      const actionReceipt = commandReceipt.receipts[0];
+      if (actionReceipt?.status === "failed") {
+        const statusCode = Number(actionReceipt.error?.statusCode ?? 400);
+        reply.code(statusCode >= 400 && statusCode < 600 ? statusCode : 400);
+        return {
+          error: actionReceipt.error?.message ?? "Watch habit check-in failed",
+          code: actionReceipt.error?.code ?? "watch_habit_check_in_failed"
+        };
+      }
+      const habit = getHabitById(id, { timezone: parsed.timezone });
       if (!habit) {
         reply.code(404);
         return { error: "Habit not found" };
       }
       return {
         habit,
+        receipt: actionReceipt,
         metrics: buildXpMetricsPayload(),
         watch: buildWatchBootstrap(pairing, {
-          anchorDateKey: parsed.dateKey
+          anchorDateKey: parsed.dateKey,
+          timezone: parsed.timezone
         })
       };
     }
@@ -12089,7 +12308,7 @@ export async function buildServer(
     const receipt = ingestWatchCaptureBatch(pairing, parsed);
     const responseBody = {
       receipt,
-      watch: buildWatchBootstrap(pairing)
+      watch: buildWatchBootstrap(pairing, { timezone: parsed.timezone })
     };
     return {
       ...responseBody,
@@ -12116,7 +12335,7 @@ export async function buildServer(
     const receipt = ingestWatchCommandBatch(pairing, parsed);
     const responseBody = {
       receipt,
-      watch: buildWatchBootstrap(pairing)
+      watch: buildWatchBootstrap(pairing, { timezone: parsed.timezone })
     };
     return {
       ...responseBody,
@@ -14019,6 +14238,16 @@ export async function buildServer(
               "weekly"
                 ? "weekly"
                 : "daily",
+            timezone: readStringField(
+              suggestedFields,
+              "timezone",
+              getRuntimeTimeZone()
+            ),
+            dayBoundaryMode:
+              readStringField(suggestedFields, "dayBoundaryMode", "fixed") ===
+              "travel"
+                ? "travel"
+                : "fixed",
             targetCount: Number(suggestedFields.targetCount ?? 1) || 1,
             weekDays: Array.isArray(suggestedFields.weekDays)
               ? (suggestedFields.weekDays as number[])
@@ -14213,8 +14442,13 @@ export async function buildServer(
       ["read", "write"],
       { route: "/api/v1/wiki/ingest-jobs" }
     );
+    const query = request.query as { spaceId?: string; limit?: string };
     return {
-      jobs: listWikiIngestJobs(request.query ?? {})
+      jobs: listWikiIngestJobs({
+        spaceId: query.spaceId,
+        limit: query.limit ? Number(query.limit) : undefined
+      }),
+      total: countWikiIngestJobs({ spaceId: query.spaceId })
     };
   });
   app.post("/api/v1/wiki/ingest-jobs/uploads", async (request, reply) => {
@@ -14841,14 +15075,32 @@ export async function buildServer(
   );
   app.get("/api/v1/habits", async (request) => {
     const query = habitListQuerySchema.parse(request.query ?? {});
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     return {
-      habits: filterOwnedEntities("habit", listHabits(query), query.userIds)
+      habits: filterOwnedEntities("habit", listHabits(query), userIds)
     };
   });
   app.get("/api/v1/habits/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const habit = getHabitById(id);
+    const query = habitListQuerySchema
+      .pick({ timezone: true })
+      .parse(request.query ?? {});
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const habit = getHabitById(id, { timezone: query.timezone });
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
     if (!habit) {
+      reply.code(404);
+      return { error: "Habit not found" };
+    }
+    if (
+      allowedUserIds.length > 0 &&
+      (!habit.userId || !allowedUserIds.includes(habit.userId))
+    ) {
       reply.code(404);
       return { error: "Habit not found" };
     }
@@ -15926,15 +16178,23 @@ export async function buildServer(
     const query = eventsListQuerySchema.parse(request.query ?? {});
     return { events: listEventLog(query) };
   });
-  app.get("/api/v1/reviews/weekly", async () => ({
-    review: getWeeklyReviewPayload()
-  }));
+  app.get("/api/v1/reviews/weekly", async (request) => {
+    const { timeZone } = request.query as { timeZone?: unknown };
+    return {
+      review: getWeeklyReviewPayload(
+        new Date(),
+        typeof timeZone === "string" ? timeZone : undefined
+      )
+    };
+  });
   app.post("/api/v1/reviews/weekly/finalize", async (request, reply) => {
     const auth = requireAuthenticatedActor(
       request.headers as Record<string, unknown>,
       { route: "/api/v1/reviews/weekly/finalize" }
     );
-    const currentReview = getWeeklyReviewPayload();
+    const { timeZone } = request.query as { timeZone?: unknown };
+    const reviewTimeZone = typeof timeZone === "string" ? timeZone : undefined;
+    const currentReview = getWeeklyReviewPayload(new Date(), reviewTimeZone);
     const finalized = finalizeWeeklyReviewClosure({
       weekKey: currentReview.weekKey,
       weekStartDate: currentReview.weekStartDate,
@@ -15947,7 +16207,7 @@ export async function buildServer(
     const result = finalizeWeeklyReviewResultSchema.parse({
       closure: finalized.closure,
       reward: finalized.reward,
-      review: getWeeklyReviewPayload(),
+      review: getWeeklyReviewPayload(new Date(), reviewTimeZone),
       metrics: buildXpMetricsPayload()
     });
     reply.code(finalized.created ? 201 : 200);
@@ -16439,7 +16699,10 @@ export async function buildServer(
     const event = createCalendarEvent(
       createCalendarEventSchema.parse(request.body ?? {})
     );
-    await pushCalendarEventUpdate(event.id, managers.secrets);
+    const projection = await pushCalendarEventUpdate(
+      event.id,
+      managers.secrets
+    );
     const refreshed = getCalendarEventById(event.id)!;
     recordActivityEvent({
       entityType: "calendar_event",
@@ -16451,11 +16714,13 @@ export async function buildServer(
       source: auth.source,
       metadata: {
         calendarId: refreshed.calendarId,
-        originType: refreshed.originType
+        originType: refreshed.originType,
+        projectionState: projection.state,
+        projectionCode: projection.code
       }
     });
     reply.code(201);
-    return { event: refreshed };
+    return { event: refreshed, projection };
   });
   app.get("/api/v1/calendar/events/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -16481,7 +16746,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Calendar event not found" };
     }
-    await pushCalendarEventUpdate(id, managers.secrets);
+    const projection = await pushCalendarEventUpdate(id, managers.secrets);
     const refreshed = getCalendarEventById(id)!;
     recordActivityEvent({
       entityType: "calendar_event",
@@ -16494,10 +16759,12 @@ export async function buildServer(
       source: auth.source,
       metadata: {
         calendarId: refreshed.calendarId,
-        originType: refreshed.originType
+        originType: refreshed.originType,
+        projectionState: projection.state,
+        projectionCode: projection.code
       }
     });
-    return { event: refreshed };
+    return { event: refreshed, projection };
   });
   app.delete("/api/v1/calendar/events/:id", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -16534,8 +16801,15 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/habits" }
     );
+    const input = parseRequestBody(createHabitSchema, request.body);
+    const scopedUserIds = resolveEffectiveUserIdsForReads(
+      input.userId ? { userId: input.userId } : undefined,
+      auth
+    );
     const habit = createHabit(
-      parseRequestBody(createHabitSchema, request.body),
+      input.userId || !scopedUserIds?.[0]
+        ? input
+        : { ...input, userId: scopedUserIds[0] },
       toActivityContext(auth)
     );
     reply.code(201);
@@ -16619,6 +16893,16 @@ export async function buildServer(
       { route: "/api/v1/habits/:id" }
     );
     const { id } = request.params as { id: string };
+    const currentHabit = getHabitById(id);
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      currentHabit &&
+      allowedUserIds.length > 0 &&
+      (!currentHabit.userId || !allowedUserIds.includes(currentHabit.userId))
+    ) {
+      reply.code(404);
+      return { error: "Habit not found" };
+    }
     const habit = updateHabit(
       id,
       parseRequestBody(updateHabitSchema, request.body),
@@ -16637,6 +16921,16 @@ export async function buildServer(
       { route: "/api/v1/habits/:id" }
     );
     const { id } = request.params as { id: string };
+    const currentHabit = getHabitById(id);
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      currentHabit &&
+      allowedUserIds.length > 0 &&
+      (!currentHabit.userId || !allowedUserIds.includes(currentHabit.userId))
+    ) {
+      reply.code(404);
+      return { error: "Habit not found" };
+    }
     const habit = deleteEntity(
       "habit",
       id,
@@ -16656,6 +16950,16 @@ export async function buildServer(
       { route: "/api/v1/habits/:id/check-ins" }
     );
     const { id } = request.params as { id: string };
+    const currentHabit = getHabitById(id);
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      currentHabit &&
+      allowedUserIds.length > 0 &&
+      (!currentHabit.userId || !allowedUserIds.includes(currentHabit.userId))
+    ) {
+      reply.code(404);
+      return { error: "Habit not found" };
+    }
     const habit = createHabitCheckIn(
       id,
       parseRequestBody(createHabitCheckInSchema, request.body),
@@ -16676,6 +16980,16 @@ export async function buildServer(
         { route: "/api/v1/habits/:id/check-ins/:dateKey" }
       );
       const { id, dateKey } = request.params as { id: string; dateKey: string };
+      const currentHabit = getHabitById(id);
+      const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+      if (
+        currentHabit &&
+        allowedUserIds.length > 0 &&
+        (!currentHabit.userId || !allowedUserIds.includes(currentHabit.userId))
+      ) {
+        reply.code(404);
+        return { error: "Habit not found" };
+      }
       const habit = deleteHabitCheckIn(id, dateKey, toActivityContext(auth));
       if (!habit) {
         reply.code(404);
@@ -16753,20 +17067,45 @@ export async function buildServer(
   app.post(
     "/api/v1/settings/models/connections/test",
     async (request, reply) => {
-      requireScopedAccess(
-        request.headers as Record<string, unknown>,
-        ["write"],
-        { route: "/api/v1/settings/models/connections/test" }
-      );
+      requireOperatorSession(request.headers as Record<string, unknown>, {
+        route: "/api/v1/settings/models/connections/test"
+      });
       const parsed = testAiModelConnectionSchema.parse(request.body ?? {});
       const existing = parsed.connectionId
         ? getAiModelConnectionById(parsed.connectionId)
         : null;
-      const credential = parsed.connectionId
-        ? readModelConnectionCredential(parsed.connectionId, managers.secrets)
+      if (parsed.connectionId && !existing) {
+        throw new HttpError(
+          404,
+          "model_connection_not_found",
+          "Forge could not find the saved model connection to test."
+        );
+      }
+      const provider = parsed.provider ?? existing?.provider ?? "openai-api";
+      const baseUrl =
+        parsed.baseUrl?.trim() ||
+        existing?.baseUrl ||
+        "https://api.openai.com/v1";
+      const model = parsed.model.trim();
+      const usesSavedBinding = Boolean(
+        existing &&
+        provider === existing.provider &&
+        baseUrl === existing.baseUrl &&
+        model === existing.model
+      );
+      const callerApiKey = parsed.apiKey?.trim() || null;
+      if (existing && !usesSavedBinding && !callerApiKey) {
+        throw new HttpError(
+          400,
+          "saved_model_credential_binding_mismatch",
+          "Stored model credentials are bound to the saved provider, base URL, and model. Enter a fresh credential to test changed connection details."
+        );
+      }
+      const credential = usesSavedBinding
+        ? readModelConnectionCredential(existing!.id, managers.secrets)
         : null;
-      const explicitApiKey =
-        parsed.apiKey?.trim() ||
+      const apiKey =
+        callerApiKey ||
         (credential?.kind === "api_key"
           ? credential.apiKey
           : credential?.kind === "oauth"
@@ -16774,17 +17113,14 @@ export async function buildServer(
             : null);
       const result = await managers.llm.testWikiConnection(
         {
-          provider: parsed.provider ?? existing?.provider ?? "openai-api",
-          baseUrl:
-            parsed.baseUrl?.trim() ||
-            existing?.baseUrl ||
-            "https://api.openai.com/v1",
-          model: parsed.model,
+          provider,
+          baseUrl,
+          model,
           systemPrompt: "",
           secretId: null,
           metadata: {}
         },
-        explicitApiKey,
+        apiKey,
         ({ level, message, details = {} }) => {
           recordDiagnosticLog({
             level,
@@ -17123,7 +17459,7 @@ export async function buildServer(
       return {
         [singularKey]: connector,
         ...runPage,
-        conversation: getAiConnectorConversationForConnector(connector.id)
+        conversation: getAiConnectorConversationReadModel(connector.id)
       };
     });
     app.patch(`${basePath}/:id`, async (request, reply) => {
@@ -17185,10 +17521,17 @@ export async function buildServer(
         },
         "run"
       );
+      const detail = getAiConnectorRunDetail(
+        execution.connector.id,
+        execution.run.id
+      );
       return {
         [singularKey]: execution.connector,
-        run: execution.run,
-        conversation: execution.conversation
+        run: detail?.run ?? execution.run,
+        readMetadata: detail?.readMetadata ?? null,
+        conversation: getAiConnectorConversationReadModel(
+          execution.connector.id
+        )
       };
     });
     app.post(`${basePath}/:id/chat`, async (request, reply) => {
@@ -17215,10 +17558,17 @@ export async function buildServer(
         },
         "chat"
       );
+      const detail = getAiConnectorRunDetail(
+        execution.connector.id,
+        execution.run.id
+      );
       return {
         [singularKey]: execution.connector,
-        run: execution.run,
-        conversation: execution.conversation
+        run: detail?.run ?? execution.run,
+        readMetadata: detail?.readMetadata ?? null,
+        conversation: getAiConnectorConversationReadModel(
+          execution.connector.id
+        )
       };
     });
     app.get(`${basePath}/:id/output`, async (request, reply) => {
@@ -17236,9 +17586,14 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
+      const published = getPublishedAiConnectorOutput(connector.id);
+      if (!published) {
+        reply.code(404);
+        return { error: `${noun} not found` };
+      }
       return {
         [singularKey]: connector,
-        output: connector.lastRun?.result ?? null
+        ...published
       };
     });
     app.get(`${basePath}/:id/runs`, async (request, reply) => {
@@ -17275,14 +17630,14 @@ export async function buildServer(
         reply.code(404);
         return { error: `${noun} not found` };
       }
-      const run = getAiConnectorRunById(connector.id, params.runId);
-      if (!run) {
+      const detail = getAiConnectorRunDetail(connector.id, params.runId);
+      if (!detail) {
         reply.code(404);
         return { error: `${noun} run not found` };
       }
       return {
         [singularKey]: connector,
-        run
+        ...detail
       };
     });
     app.get(`${basePath}/:id/runs/:runId/nodes`, async (request, reply) => {
@@ -17332,18 +17687,18 @@ export async function buildServer(
           reply.code(404);
           return { error: `${noun} not found` };
         }
-        const nodeResult = getAiConnectorRunNodeResult(
+        const detail = getAiConnectorRunNodeResult(
           connector.id,
           params.runId,
           params.nodeId
         );
-        if (!nodeResult) {
+        if (!detail) {
           reply.code(404);
           return { error: `${noun} node result not found` };
         }
         return {
           [singularKey]: connector,
-          nodeResult
+          ...detail
         };
       }
     );
@@ -17367,12 +17722,11 @@ export async function buildServer(
       );
       if (!latest) {
         reply.code(404);
-        return { error: `${noun} node output not found` };
+        return { error: `${noun} not found` };
       }
       return {
         [singularKey]: connector,
-        run: latest.run,
-        nodeResult: latest.nodeResult
+        ...latest
       };
     });
   };
@@ -17405,10 +17759,15 @@ export async function buildServer(
       },
       "run"
     );
+    const detail = getAiConnectorRunDetail(
+      execution.connector.id,
+      execution.run.id
+    );
     return {
       flow: execution.connector,
-      run: execution.run,
-      conversation: execution.conversation
+      run: detail?.run ?? execution.run,
+      readMetadata: detail?.readMetadata ?? null,
+      conversation: getAiConnectorConversationReadModel(execution.connector.id)
     };
   });
   app.get("/api/v1/workbench/flows/by-slug/:slug", async (request, reply) => {

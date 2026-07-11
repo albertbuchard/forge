@@ -26,6 +26,7 @@ import {
 } from "@/components/psyche/use-psyche-focus-target";
 import { PageHero } from "@/components/shell/page-hero";
 import { HabitDialog } from "@/components/habit-dialog";
+import { PlanningRecordDeleteDialog } from "@/components/planning/planning-record-delete-dialog";
 import { useForgeShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -54,7 +55,7 @@ import {
 import type { HabitMutationInput } from "@/lib/schemas";
 import type { Habit } from "@/lib/types";
 import { ForgeApiError } from "@/lib/api-error";
-import { formatLocalDateKey } from "@/lib/date-keys";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import {
   coerceSelectedUserIds,
@@ -117,7 +118,10 @@ function formatHabitCadence(habit: Habit) {
 }
 
 function formatDateKey(date: Date) {
-  return formatLocalDateKey(date);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function parseDateKey(dateKey: string) {
@@ -171,7 +175,7 @@ function getCheckInLabel(
 }
 
 function getHabitVisualState(habit: Habit) {
-  const todayKey = formatDateKey(new Date());
+  const todayKey = habit.currentDateKey;
   const todayCheckIn =
     habit.checkIns.find((checkIn) => checkIn.dateKey === todayKey) ?? null;
 
@@ -315,7 +319,7 @@ type HabitHistoryCell = {
 };
 
 function buildHabitHistory(habit: Habit) {
-  const now = new Date();
+  const now = parseDateKey(habit.currentDateKey);
 
   if (habit.frequency === "daily") {
     const today = startOfLocalDay(now);
@@ -374,10 +378,12 @@ function buildHabitHistory(habit: Habit) {
     const entries = weekBuckets.get(weekKey) ?? [];
     const scheduledWeekDay =
       habit.weekDays.length > 0
-        ? [...habit.weekDays].sort((left, right) => right - left)[0]
-        : 0;
+        ? [...habit.weekDays].sort((left, right) => left - right)[0]
+        : 1;
+    const scheduledOffset =
+      scheduledWeekDay === 0 ? 6 : scheduledWeekDay - 1;
     const fallbackDateKey = formatDateKey(
-      addLocalDays(weekStart, scheduledWeekDay)
+      addLocalDays(weekStart, scheduledOffset)
     );
     const targetDateKey = entries[0]?.dateKey ?? fallbackDateKey;
     const alignedCount = entries.filter((entry) =>
@@ -394,10 +400,12 @@ function buildHabitHistory(habit: Habit) {
       state:
         entries.length === 0
           ? "unknown"
-          : alignedCount >= unalignedCount
+          : alignedCount >= habit.targetCount
             ? "aligned"
-            : "unaligned",
-      title: `${formatUtcShortDate(weekStart)} week · ${entries.length === 0 ? "Not informed" : alignedCount >= unalignedCount ? "Mostly aligned" : "Mostly off track"}`
+            : unalignedCount > 0
+              ? "unaligned"
+              : "unknown",
+      title: `${formatUtcShortDate(weekStart)} week · ${entries.length === 0 ? "Not informed" : alignedCount >= habit.targetCount ? "Target met" : unalignedCount > 0 ? "Off track" : `${alignedCount}/${habit.targetCount} aligned`}`
     });
   }
 
@@ -560,7 +568,8 @@ export function HabitsPage() {
       (
         await listHabits({
           userIds: selectedUserIds,
-          orderBy: habitOrderBy
+          orderBy: habitOrderBy,
+          timezone: getRuntimeTimeZone()
         })
       ).habits
   });
@@ -626,7 +635,13 @@ export function HabitsPage() {
       status: "done" | "missed";
       dateKey?: string;
       note?: string;
-    }) => createHabitCheckIn(habitId, { status, dateKey, note }),
+    }) =>
+      createHabitCheckIn(habitId, {
+        status,
+        dateKey,
+        note,
+        timezone: getRuntimeTimeZone()
+      }),
     onSuccess: async () => {
       setErrorMessage(null);
       await refreshHabits();
@@ -995,6 +1010,11 @@ export function HabitsPage() {
                             <CalendarDays className="mr-1 size-3.5" />
                             {formatHabitCadence(habit)}
                           </Badge>
+                          <Badge className={habitNeutralBadgeClass}>
+                            {habit.dayBoundaryMode === "travel"
+                              ? `Travel · ${habit.effectiveTimezone}`
+                              : `Fixed · ${habit.timezone}`}
+                          </Badge>
                           <Badge
                             className={
                               habit.polarity === "positive"
@@ -1296,7 +1316,7 @@ export function HabitsPage() {
                             void checkInMutation.mutateAsync({
                               habitId: habit.id,
                               status: alignedAction.status,
-                              dateKey: formatDateKey(new Date())
+                              dateKey: habit.currentDateKey
                             })
                           }
                         >
@@ -1314,7 +1334,7 @@ export function HabitsPage() {
                             void checkInMutation.mutateAsync({
                               habitId: habit.id,
                               status: unalignedAction.status,
-                              dateKey: formatDateKey(new Date())
+                              dateKey: habit.currentDateKey
                             })
                           }
                         >
@@ -1358,79 +1378,21 @@ export function HabitsPage() {
           }
         }}
       />
-      <Dialog.Root
+      <PlanningRecordDeleteDialog
         open={confirmingDeleteHabit !== null}
+        recordKind="habit"
+        recordTitle={confirmingDeleteHabit?.title ?? "this habit"}
         onOpenChange={(open) => {
           if (!open && !deleteHabitMutation.isPending) {
             setConfirmingDeleteHabit(null);
           }
         }}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="surface-overlay fixed inset-0 z-40 backdrop-blur-xl" />
-          <Dialog.Content className="surface-modal-panel fixed inset-x-4 top-1/2 z-50 mx-auto w-[min(30rem,calc(100vw-2rem))] max-w-[30rem] -translate-y-1/2 overflow-hidden rounded-[30px] border">
-            <div className="border-b border-[var(--ui-border-subtle)] px-5 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-                    Delete habit
-                  </div>
-                  <Dialog.Title className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                    {confirmingDeleteHabit?.title ?? "Delete this habit?"}
-                  </Dialog.Title>
-                  <Dialog.Description className="mt-3 text-sm text-[var(--ui-ink-soft)]">
-                    Remove this habit from Forge. The habit card disappears
-                    immediately after delete succeeds.
-                  </Dialog.Description>
-                </div>
-                <Dialog.Close asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-10 w-10 rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-0 text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                    aria-label="Close delete habit modal"
-                    title="Close"
-                    disabled={deleteHabitMutation.isPending}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </Dialog.Close>
-              </div>
-            </div>
-
-            <div className="grid gap-4 p-5">
-              <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
-                This removes the habit and its check-in history from the habits
-                page.
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={() => setConfirmingDeleteHabit(null)}
-                  disabled={deleteHabitMutation.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="border border-[color-mix(in_srgb,var(--danger)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[color-mix(in_srgb,var(--danger)_22%,var(--ui-surface-hover)_78%)]"
-                  pending={deleteHabitMutation.isPending}
-                  pendingLabel="Deleting"
-                  onClick={() => {
-                    if (!confirmingDeleteHabit) {
-                      return;
-                    }
-                    void deleteHabitMutation.mutateAsync(
-                      confirmingDeleteHabit.id
-                    );
-                  }}
-                >
-                  Delete habit
-                </Button>
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+        onConfirm={async () => {
+          if (confirmingDeleteHabit) {
+            await deleteHabitMutation.mutateAsync(confirmingDeleteHabit.id);
+          }
+        }}
+      />
       <Dialog.Root
         open={historyEditor !== null}
         onOpenChange={(open) => {

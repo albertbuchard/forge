@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
 import { GoalDialog } from "@/components/goal-dialog";
+import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { ProjectDialog } from "@/components/project-dialog";
+import {
+  PlanningRecordDeleteDialog,
+  PlanningRecordDeletedState
+} from "@/components/planning/planning-record-delete-dialog";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { ProjectCollectionFilters } from "@/components/projects/project-collection-filters";
@@ -17,7 +22,11 @@ import { EntityName } from "@/components/ui/entity-name";
 import { EmptyState } from "@/components/ui/page-state";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { UserBadge } from "@/components/ui/user-badge";
-import { deleteGoal } from "@/lib/api";
+import {
+  deleteGoal,
+  getDeletedPlanningRecord,
+  restoreEntities
+} from "@/lib/api";
 import {
   getReadableActivityDescription,
   getReadableActivityTitle
@@ -37,32 +46,56 @@ export function GoalDetailPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
   const params = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletedGoalOverride, setDeletedGoalOverride] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [projectFilter, setProjectFilter] =
     useState<ProjectCollectionStatusFilter>("active");
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const [pendingRestartProjectId, setPendingRestartProjectId] = useState<
     string | null
   >(null);
+  const goal =
+    shell.snapshot.dashboard.goals.find(
+      (entry) => entry.id === params.goalId
+    ) ?? null;
+  const deletedGoalQuery = useQuery({
+    queryKey: ["deleted-planning-record", "goal", params.goalId],
+    queryFn: () => getDeletedPlanningRecord("goal", params.goalId!),
+    enabled: Boolean(params.goalId) && !goal
+  });
+  const deletedGoal =
+    deletedGoalOverride ??
+    (deletedGoalQuery.data
+      ? {
+          id: deletedGoalQuery.data.entityId,
+          title: deletedGoalQuery.data.title
+        }
+      : null);
   const deleteGoalMutation = useMutation({
     mutationFn: () => deleteGoal(params.goalId!),
     onSuccess: async () => {
+      if (goal) {
+        setDeletedGoalOverride({ id: goal.id, title: goal.title });
+      }
       await Promise.all([
         invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({ queryKey: ["project-board"] }),
         queryClient.invalidateQueries({ queryKey: ["task-context"] })
       ]);
-      navigate("/goals");
     }
   });
-
-  const goal =
-    shell.snapshot.dashboard.goals.find(
-      (entry) => entry.id === params.goalId
-    ) ?? null;
+  const restoreGoalMutation = useMutation({
+    mutationFn: (goalId: string) =>
+      restoreEntities({
+        operations: [{ entityType: "goal", id: goalId }]
+      })
+  });
 
   const allProjects = useMemo(
     () =>
@@ -95,6 +128,37 @@ export function GoalDetailPage() {
         typeof event.metadata.taskId === "string" &&
         taskIds.has(event.metadata.taskId))
   );
+
+  if (deletedGoal) {
+    return (
+      <PlanningRecordDeletedState
+        recordKind="goal"
+        recordTitle={deletedGoal.title}
+        backHref="/goals"
+        backLabel="Back to goals"
+        restoring={restoreGoalMutation.isPending}
+        restoreError={restoreGoalMutation.error}
+        onRestore={async () => {
+          await restoreGoalMutation.mutateAsync(deletedGoal.id);
+          setDeletedGoalOverride(null);
+          queryClient.setQueryData(
+            ["deleted-planning-record", "goal", deletedGoal.id],
+            null
+          );
+          await Promise.all([
+            invalidateForgeSnapshot(queryClient),
+            queryClient.invalidateQueries({
+              queryKey: ["deleted-planning-record", "goal", deletedGoal.id]
+            })
+          ]);
+        }}
+      />
+    );
+  }
+
+  if (!goal && deletedGoalQuery.isLoading) {
+    return <SurfaceSkeleton />;
+  }
 
   if (!goal) {
     return (
@@ -129,18 +193,6 @@ export function GoalDetailPage() {
     } finally {
       setPendingRestartProjectId(null);
     }
-  };
-
-  const handleDeleteGoal = async () => {
-    const confirmed = window.confirm(
-      t("common.goalDetail.deleteGoalConfirm", {
-        title: goal.title
-      })
-    );
-    if (!confirmed) {
-      return;
-    }
-    await deleteGoalMutation.mutateAsync();
   };
 
   return (
@@ -206,7 +258,7 @@ export function GoalDetailPage() {
           className="text-[var(--danger)] hover:bg-[var(--ui-danger-soft)]"
           pending={deleteGoalMutation.isPending}
           pendingLabel={t("common.goalDetail.deleting")}
-          onClick={() => void handleDeleteGoal()}
+          onClick={() => setDeleteDialogOpen(true)}
         >
           {t("common.goalDetail.deleteGoal")}
         </Button>
@@ -241,7 +293,9 @@ export function GoalDetailPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <EntityBadge kind="project" compact gradient={false} />
-                      {project.user ? <UserBadge user={project.user} compact /> : null}
+                      {project.user ? (
+                        <UserBadge user={project.user} compact />
+                      ) : null}
                     </div>
                     <Badge>{project.status}</Badge>
                   </div>
@@ -460,6 +514,21 @@ export function GoalDetailPage() {
         onOpenChange={setProjectDialogOpen}
         onSubmit={async (input) => {
           await shell.createProject(input);
+        }}
+      />
+
+      <PlanningRecordDeleteDialog
+        open={deleteDialogOpen}
+        recordKind="goal"
+        recordTitle={goal.title}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            deleteGoalMutation.reset();
+          }
+        }}
+        onConfirm={async () => {
+          await deleteGoalMutation.mutateAsync();
         }}
       />
     </div>

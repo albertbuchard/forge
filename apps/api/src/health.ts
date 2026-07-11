@@ -2456,20 +2456,27 @@ export function getSleepSessionDetailById(sleepId: string) {
   };
 }
 
-export function getWorkoutSessionById(workoutId: string) {
-  const row = getDatabase()
-    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
-    .get(workoutId) as WorkoutSessionRow | undefined;
+function getWorkoutSessionRowById(workoutId: string, userIds?: string[]) {
+  const scopedWhere =
+    userIds && userIds.length > 0
+      ? ` AND user_id IN (${userIds.map(() => "?").join(",")})`
+      : "";
+  return getDatabase()
+    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?${scopedWhere}`)
+    .get(workoutId, ...(userIds ?? [])) as WorkoutSessionRow | undefined;
+}
+
+export function getWorkoutSessionById(workoutId: string, userIds?: string[]) {
+  const row = getWorkoutSessionRowById(workoutId, userIds);
   return row ? mapWorkoutSession(row) : undefined;
 }
 
 export function getWorkoutSessionDetailById(
   workoutId: string,
-  resolution: "adaptive" | "raw" = "adaptive"
+  resolution: "adaptive" | "raw" = "adaptive",
+  userIds?: string[]
 ) {
-  const row = getDatabase()
-    .prepare(`SELECT * FROM health_workout_sessions WHERE id = ?`)
-    .get(workoutId) as WorkoutSessionRow | undefined;
+  const row = getWorkoutSessionRowById(workoutId, userIds);
   if (!row) {
     return undefined;
   }
@@ -2688,24 +2695,25 @@ export function createCompanionPairingSession(
   ).toISOString();
   const id = `pair_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const pairingToken = randomUUID().replaceAll("-", "");
-  const stalePendingRows = getDatabase()
-    .prepare(
-      `SELECT *
-       FROM companion_pairing_sessions
-       WHERE user_id = ?
-         AND label = ?
-         AND capability_flags_json = ?
-         AND status = 'pending'`
-    )
-    .all(userId, parsed.label, serializedCapabilities) as PairingSessionRow[];
-  if (stalePendingRows.length > 0) {
-    revokePairingRows(stalePendingRows, {
-      actor: null,
-      source: "system",
-      reason: "Superseded by a newer pairing QR"
-    });
-  }
-  runInTransaction(() => {
+  const session = runInTransaction(() => {
+    const stalePendingRows = getDatabase()
+      .prepare(
+        `SELECT *
+         FROM companion_pairing_sessions
+         WHERE user_id = ?
+           AND label = ?
+           AND capability_flags_json = ?
+           AND status = 'pending'`
+      )
+      .all(userId, parsed.label, serializedCapabilities) as PairingSessionRow[];
+    if (stalePendingRows.length > 0) {
+      revokePairingRows(stalePendingRows, {
+        actor: null,
+        source: "system",
+        reason: "Superseded by a newer pairing QR"
+      });
+    }
+
     getDatabase()
       .prepare(
         `INSERT INTO companion_pairing_sessions (
@@ -2725,11 +2733,11 @@ export function createCompanionPairingSession(
         now.toISOString(),
         now.toISOString()
       );
-    ensurePairingSourceStates(
-      getDatabase()
-        .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
-        .get(id) as PairingSessionRow
-    );
+    const insertedSession = getDatabase()
+      .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
+      .get(id) as PairingSessionRow;
+    ensurePairingSourceStates(insertedSession);
+    return insertedSession;
   });
 
   const qrPayload = {
@@ -2745,11 +2753,7 @@ export function createCompanionPairingSession(
   };
 
   return {
-    session: mapPairingSession(
-      getDatabase()
-        .prepare(`SELECT * FROM companion_pairing_sessions WHERE id = ?`)
-        .get(id) as PairingSessionRow
-    ),
+    session: mapPairingSession(session),
     qrPayload
   };
 }
@@ -9458,7 +9462,7 @@ export function deleteSleepSession(
 }
 
 export function createWorkoutSession(
-  input: z.infer<typeof createWorkoutSessionSchema>,
+  input: z.input<typeof createWorkoutSessionSchema>,
   activity?: ActivityContext
 ) {
   const parsed = createWorkoutSessionSchema.parse(input);

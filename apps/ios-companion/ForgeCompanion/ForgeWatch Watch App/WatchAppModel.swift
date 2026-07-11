@@ -290,7 +290,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                 streak: 2,
                 due: true,
                 aligned: "Resisted",
-                unaligned: "Indulged"
+                unaligned: "Performed"
             )
         ]
 
@@ -515,6 +515,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     }
 
     func queueHabitCheckIn(for habit: ForgeWatchHabitSummary, status: String, note: String = "") {
+        let deviceTimezone = TimeZone.current.identifier
         let envelope = ForgeWatchOutboundEnvelope(
             id: UUID().uuidString,
             createdAt: ISO8601DateFormatter().string(from: Date()),
@@ -522,9 +523,10 @@ final class WatchAppModel: NSObject, ObservableObject {
             kind: .habitCheckIn,
             habitCheckIn: ForgeWatchHabitCheckInAction(
                 habitId: habit.id,
-                dateKey: Date().ISO8601Format().prefix(10).description,
+                dateKey: habit.currentDateKey ?? Self.localDateKey(),
                 status: status,
-                note: note
+                note: note,
+                timezone: deviceTimezone
             ),
             captureEvent: nil,
             command: nil
@@ -611,6 +613,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     private struct WatchBootstrapRequest: Encodable {
         let sessionId: String
         let pairingToken: String
+        let timezone: String
     }
 
     private struct WatchBootstrapEnvelope: Decodable {
@@ -627,6 +630,7 @@ final class WatchAppModel: NSObject, ObservableObject {
 
         let sessionId: String
         let pairingToken: String
+        let timezone: String
         let device: ForgeWatchDeviceDescriptor
         let commands: [Command]
     }
@@ -777,7 +781,8 @@ final class WatchAppModel: NSObject, ObservableObject {
                 path: "/mobile/watch/bootstrap",
                 body: WatchBootstrapRequest(
                     sessionId: connection.sessionId,
-                    pairingToken: connection.pairingToken
+                    pairingToken: connection.pairingToken,
+                    timezone: TimeZone.current.identifier
                 ),
                 connection: connection,
                 operation: "bootstrap",
@@ -815,6 +820,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                 body: WatchCommandBatchRequest(
                     sessionId: connection.sessionId,
                     pairingToken: connection.pairingToken,
+                    timezone: TimeZone.current.identifier,
                     device: queue.first?.device ?? currentDeviceDescriptor(),
                     commands: commands
                 ),
@@ -942,7 +948,8 @@ final class WatchAppModel: NSObject, ObservableObject {
                         "habitId": habit.habitId,
                         "dateKey": habit.dateKey,
                         "status": habit.status,
-                        "note": habit.note
+                        "note": habit.note,
+                        "timezone": habit.timezone ?? TimeZone.current.identifier
                     ]
                 )
             }
@@ -982,6 +989,21 @@ final class WatchAppModel: NSObject, ObservableObject {
             }
             return nil
         }
+    }
+
+    static func localDateKey(
+        at date: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
     }
 
     private func currentDeviceDescriptor() -> ForgeWatchDeviceDescriptor {

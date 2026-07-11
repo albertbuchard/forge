@@ -45,6 +45,24 @@ type ActivityContext = {
   actor?: string | null;
 };
 
+export type ProjectLifecycleTransitionPlan = {
+  previousStatus: Project["status"];
+  nextStatus: Project["status"];
+  autoCompleteLinkedWorkItems: boolean;
+};
+
+export function planProjectLifecycleTransition(
+  previousStatus: Project["status"],
+  nextStatus: Project["status"]
+): ProjectLifecycleTransitionPlan {
+  return {
+    previousStatus,
+    nextStatus,
+    autoCompleteLinkedWorkItems:
+      previousStatus !== "completed" && nextStatus === "completed"
+  };
+}
+
 function getDefaultProjectTemplate(goal: {
   title: string;
   description: string;
@@ -110,15 +128,29 @@ function mapProject(row: ProjectRow): Project {
 
 function completeLinkedProjectTasks(
   projectId: string,
+  previousProjectStatus: "active" | "paused",
   activity?: ActivityContext
 ) {
   const openTasks = listTasks({ projectId }).filter(
     (task) => task.status !== "done"
   );
   for (const task of openTasks) {
-    updateTaskInTransaction(task.id, { status: "done" }, activity);
+    updateTaskInTransaction(
+      task.id,
+      { status: "done" },
+      activity
+        ? {
+            ...activity,
+            lifecycleCause: {
+              kind: "project_completion",
+              projectId,
+              previousProjectStatus
+            }
+          }
+        : undefined
+    );
   }
-  return openTasks.length;
+  return openTasks.map((task) => task.id);
 }
 
 export function listProjects(filters: ProjectListQuery = {}): Project[] {
@@ -293,10 +325,18 @@ export function updateProject(
       replaceEntityAssignees("project", projectId, parsed.assigneeUserIds);
     }
 
-    const completedLinkedTaskCount =
-      current.status !== "completed" && next.status === "completed"
-        ? completeLinkedProjectTasks(projectId, activity)
-        : 0;
+    const lifecyclePlan = planProjectLifecycleTransition(
+      current.status,
+      next.status
+    );
+    const autoCompletedWorkItemIds = lifecyclePlan.autoCompleteLinkedWorkItems
+      ? completeLinkedProjectTasks(
+          projectId,
+          current.status as "active" | "paused",
+          activity
+        )
+      : [];
+    const completedLinkedTaskCount = autoCompletedWorkItemIds.length;
 
     const project = getProjectById(projectId);
     if (project && activity) {
@@ -321,7 +361,9 @@ export function updateProject(
           previousGoalId: current.goalId,
           status: project.status,
           previousStatus: current.status,
-          completedLinkedTaskCount
+          completedLinkedTaskCount,
+          autoCompletedWorkItemIds,
+          lifecyclePlan
         }
       });
     }

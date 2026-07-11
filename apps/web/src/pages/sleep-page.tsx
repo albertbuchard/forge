@@ -55,6 +55,7 @@ type SleepDraft = {
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const RAW_EVIDENCE_BATCH_SIZE = 40;
 
 const STAGE_META: Record<
   string,
@@ -776,7 +777,9 @@ function LastNightHero({
                     Bedtime drift
                   </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
-                    {latestNight.bedtimeDriftMinutes ?? 0}m
+                    {latestNight.bedtimeDriftMinutes == null
+                      ? "n/a"
+                      : `${latestNight.bedtimeDriftMinutes}m`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
@@ -784,7 +787,9 @@ function LastNightHero({
                     Wake drift
                   </span>
                   <span className="text-sm text-[var(--ui-ink-strong)]">
-                    {latestNight.wakeDriftMinutes ?? 0}m
+                    {latestNight.wakeDriftMinutes == null
+                      ? "n/a"
+                      : `${latestNight.wakeDriftMinutes}m`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[var(--ui-surface-2)] px-4 py-3">
@@ -1048,10 +1053,21 @@ function SleepDetailPanel({
   onSave: () => void;
 }) {
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+  const [visibleSourceRecordCount, setVisibleSourceRecordCount] = useState(
+    RAW_EVIDENCE_BATCH_SIZE
+  );
+  const [visibleSegmentCount, setVisibleSegmentCount] = useState(
+    RAW_EVIDENCE_BATCH_SIZE
+  );
   const normalizedRawDetail = useMemo(
     () => normalizeRawDetail(rawDetail),
     [rawDetail]
   );
+  useEffect(() => {
+    setExpandedRecordId(null);
+    setVisibleSourceRecordCount(RAW_EVIDENCE_BATCH_SIZE);
+    setVisibleSegmentCount(RAW_EVIDENCE_BATCH_SIZE);
+  }, [session.id]);
   const efficiency =
     typeof session.derived.efficiency === "number"
       ? session.derived.efficiency
@@ -1312,85 +1328,104 @@ function SleepDetailPanel({
                     Raw data
                   </div>
                   {normalizedRawDetail.sourceRecords.length ? (
-                    normalizedRawDetail.sourceRecords.map((record) => (
-                      <div
-                        key={record.id}
-                        className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              className={cn(
-                                "border-transparent",
-                                sourceRecordTone(record)
-                              )}
-                            >
-                              {record.qualityKind === "provider_native"
-                                ? "Provider raw"
-                                : "Historical raw"}
-                            </Badge>
-                            <Badge tone="meta" className="capitalize">
-                              {record.rawStage.replaceAll("_", " ")}
-                            </Badge>
-                            <span className="text-sm text-[var(--ui-ink-medium)]">
-                              {formatSleepWindow(
-                                record.startedAt,
-                                record.endedAt,
-                                record.sourceTimezone
-                              )}
-                            </span>
+                    normalizedRawDetail.sourceRecords
+                      .slice(0, visibleSourceRecordCount)
+                      .map((record) => (
+                        <div
+                          key={record.id}
+                          className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge
+                                className={cn(
+                                  "border-transparent",
+                                  sourceRecordTone(record)
+                                )}
+                              >
+                                {record.qualityKind === "provider_native"
+                                  ? "Provider raw"
+                                  : "Historical raw"}
+                              </Badge>
+                              <Badge tone="meta" className="capitalize">
+                                {record.rawStage.replaceAll("_", " ")}
+                              </Badge>
+                              <span className="text-sm text-[var(--ui-ink-medium)]">
+                                {formatSleepWindow(
+                                  record.startedAt,
+                                  record.endedAt,
+                                  record.sourceTimezone
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-[var(--ui-ink-muted)]">
+                                {record.providerRecordType.replaceAll("_", " ")}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="h-8 rounded-full px-3"
+                                onClick={() =>
+                                  setExpandedRecordId((current) =>
+                                    current === record.id ? null : record.id
+                                  )
+                                }
+                              >
+                                {expandedRecordId === record.id
+                                  ? "Hide JSON"
+                                  : "See JSON"}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-[var(--ui-ink-muted)]">
-                              {record.providerRecordType.replaceAll("_", " ")}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="h-8 rounded-full px-3"
-                              onClick={() =>
-                                setExpandedRecordId((current) =>
-                                  current === record.id ? null : record.id
+                          <div className="mt-3 text-sm text-[var(--ui-ink-muted)]">
+                            {formatDurationCompact(
+                              Math.max(
+                                0,
+                                Math.round(
+                                  (new Date(record.endedAt).getTime() -
+                                    new Date(record.startedAt).getTime()) /
+                                    1000
                                 )
-                              }
-                            >
-                              {expandedRecordId === record.id
-                                ? "Hide JSON"
-                                : "See JSON"}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="mt-3 text-sm text-[var(--ui-ink-muted)]">
-                          {formatDurationCompact(
-                            Math.max(
-                              0,
-                              Math.round(
-                                (new Date(record.endedAt).getTime() -
-                                  new Date(record.startedAt).getTime()) /
-                                  1000
                               )
-                            )
-                          )}
-                        </div>
-                        {expandedRecordId === record.id ? (
-                          <pre className="mt-3 overflow-x-auto rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] p-3 text-xs leading-6 text-[var(--ui-ink-medium)]">
-                            {JSON.stringify(
-                              {
-                                payload: record.payload,
-                                metadata: record.metadata
-                              },
-                              null,
-                              2
                             )}
-                          </pre>
-                        ) : null}
-                      </div>
-                    ))
+                          </div>
+                          {expandedRecordId === record.id ? (
+                            <pre className="mt-3 overflow-x-auto rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] p-3 text-xs leading-6 text-[var(--ui-ink-medium)]">
+                              {JSON.stringify(
+                                {
+                                  payload: record.payload,
+                                  metadata: record.metadata
+                                },
+                                null,
+                                2
+                              )}
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))
                   ) : (
                     <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                       No raw data was stored for this night.
                     </div>
                   )}
+                  {normalizedRawDetail.sourceRecords.length >
+                  visibleSourceRecordCount ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        setVisibleSourceRecordCount((current) =>
+                          Math.min(
+                            normalizedRawDetail.sourceRecords.length,
+                            current + RAW_EVIDENCE_BATCH_SIZE
+                          )
+                        )
+                      }
+                    >
+                      Show next raw records
+                    </Button>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-3">
@@ -1398,49 +1433,67 @@ function SleepDetailPanel({
                     Sleep segments
                   </div>
                   {normalizedRawDetail.segments.length ? (
-                    normalizedRawDetail.segments.map((segment) => (
-                      <div
-                        key={segment.id}
-                        className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone="meta" className="capitalize">
-                              {segment.stage.replaceAll("_", " ")}
-                            </Badge>
-                            <Badge tone="meta">
-                              {segment.qualityKind === "provider_native"
-                                ? "provider-backed"
-                                : "historical"}
-                            </Badge>
-                            <span className="text-sm text-[var(--ui-ink-medium)]">
-                              {formatSleepWindow(
-                                segment.startedAt,
-                                segment.endedAt,
-                                segment.sourceTimezone
+                    normalizedRawDetail.segments
+                      .slice(0, visibleSegmentCount)
+                      .map((segment) => (
+                        <div
+                          key={segment.id}
+                          className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone="meta" className="capitalize">
+                                {segment.stage.replaceAll("_", " ")}
+                              </Badge>
+                              <Badge tone="meta">
+                                {segment.qualityKind === "provider_native"
+                                  ? "provider-backed"
+                                  : "historical"}
+                              </Badge>
+                              <span className="text-sm text-[var(--ui-ink-medium)]">
+                                {formatSleepWindow(
+                                  segment.startedAt,
+                                  segment.endedAt,
+                                  segment.sourceTimezone
+                                )}
+                              </span>
+                            </div>
+                            <span className="text-sm text-[var(--ui-ink-muted)]">
+                              {formatDurationCompact(
+                                Math.max(
+                                  0,
+                                  Math.round(
+                                    (new Date(segment.endedAt).getTime() -
+                                      new Date(segment.startedAt).getTime()) /
+                                      1000
+                                  )
+                                )
                               )}
                             </span>
                           </div>
-                          <span className="text-sm text-[var(--ui-ink-muted)]">
-                            {formatDurationCompact(
-                              Math.max(
-                                0,
-                                Math.round(
-                                  (new Date(segment.endedAt).getTime() -
-                                    new Date(segment.startedAt).getTime()) /
-                                    1000
-                                )
-                              )
-                            )}
-                          </span>
                         </div>
-                      </div>
-                    ))
+                      ))
                   ) : (
                     <div className="rounded-[16px] border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-muted)]">
                       No normalized sleep segments were stored for this night.
                     </div>
                   )}
+                  {normalizedRawDetail.segments.length > visibleSegmentCount ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        setVisibleSegmentCount((current) =>
+                          Math.min(
+                            normalizedRawDetail.segments.length,
+                            current + RAW_EVIDENCE_BATCH_SIZE
+                          )
+                        )
+                      }
+                    >
+                      Show next sleep segments
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1457,6 +1510,9 @@ export function SleepPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focusedSleepId = searchParams.get("focus")?.trim() || null;
   const [drafts, setDrafts] = useState<Record<string, SleepDraft>>({});
+  const [dirtyDraftIds, setDirtyDraftIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [selectedSleepId, setSelectedSleepId] = useState<string | null>(
     focusedSleepId
   );
@@ -1504,35 +1560,44 @@ export function SleepPage() {
   });
   const valuesQuery = useQuery({
     queryKey: ["forge-sleep-values", ...selectedUserIds],
-    queryFn: async () => (await listPsycheValues(selectedUserIds)).values
+    queryFn: async () => (await listPsycheValues(selectedUserIds)).values,
+    enabled: detailTab === "reflection"
   });
   const patternsQuery = useQuery({
     queryKey: ["forge-sleep-patterns", ...selectedUserIds],
-    queryFn: async () => (await listBehaviorPatterns(selectedUserIds)).patterns
+    queryFn: async () => (await listBehaviorPatterns(selectedUserIds)).patterns,
+    enabled: detailTab === "reflection"
   });
   const behaviorsQuery = useQuery({
     queryKey: ["forge-sleep-behaviors", ...selectedUserIds],
-    queryFn: async () => (await listBehaviors(selectedUserIds)).behaviors
+    queryFn: async () => (await listBehaviors(selectedUserIds)).behaviors,
+    enabled: detailTab === "reflection"
   });
   const beliefsQuery = useQuery({
     queryKey: ["forge-sleep-beliefs", ...selectedUserIds],
-    queryFn: async () => (await listBeliefs(selectedUserIds)).beliefs
+    queryFn: async () => (await listBeliefs(selectedUserIds)).beliefs,
+    enabled: detailTab === "reflection"
   });
   const reportsQuery = useQuery({
     queryKey: ["forge-sleep-reports", ...selectedUserIds],
-    queryFn: async () => (await listTriggerReports(selectedUserIds)).reports
+    queryFn: async () => (await listTriggerReports(selectedUserIds)).reports,
+    enabled: detailTab === "reflection"
   });
 
   useEffect(() => {
     if (!sleepQuery.data) {
       return;
     }
-    setDrafts(
-      Object.fromEntries(
-        sessions.map((session) => [session.id, buildSleepDraft(session)])
-      )
-    );
-  }, [sessions, sleepQuery.data]);
+    setDrafts((current) => {
+      const next = { ...current };
+      for (const session of sessions) {
+        if (!dirtyDraftIds.has(session.id)) {
+          next[session.id] = buildSleepDraft(session);
+        }
+      }
+      return next;
+    });
+  }, [dirtyDraftIds, sessions, sleepQuery.data]);
 
   useEffect(() => {
     if (!sleepQuery.data || !sessions.length) {
@@ -1587,9 +1652,14 @@ export function SleepPage() {
           .filter(Boolean),
         links: parseHealthLinkValues(input.linkValues)
       }),
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["forge-sleep"] });
       await queryClient.invalidateQueries({ queryKey: ["forge-sleep-raw"] });
+      setDirtyDraftIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.sleepId);
+        return next;
+      });
     }
   });
 
@@ -1639,6 +1709,7 @@ export function SleepPage() {
   });
 
   function patchDraft(sessionId: string, patch: Partial<SleepDraft>) {
+    setDirtyDraftIds((current) => new Set(current).add(sessionId));
     setDrafts((current) => {
       const session = sessions.find((entry) => entry.id === sessionId);
       const base =

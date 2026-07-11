@@ -33,6 +33,8 @@ import {
   buildFoodLogInput,
   buildFoodLogPatchInput,
   buildExperimentInput,
+  buildExperimentReviewDraft,
+  buildExperimentReviewPatch,
   buildInitialCustomFoodDraft,
   buildInitialCheckinDraft,
   buildInitialExperimentDraft,
@@ -41,14 +43,19 @@ import {
   buildTargetPatchFromPlan,
   isWeightLossPlanConfigured,
   validateExperimentDraft,
+  validateExperimentReviewDraft,
+  validateCheckinDraft,
   validateWeightLossPlanDraft,
   WeightLossCheckinDialog,
+  WeightLossDeleteFoodLogDialog,
   WeightLossExperimentDialog,
+  WeightLossExperimentReviewDialog,
   WeightLossFoodLogDialog,
   WeightLossHistoryDialog,
   WeightLossPlanDialog,
   type WeightLossCheckinDraft,
   type WeightLossExperimentDraft,
+  type WeightLossExperimentReviewDraft,
   type WeightLossFoodDraft,
   type WeightLossFoodLogIntent,
   type WeightLossFoodParseFeedback,
@@ -56,6 +63,7 @@ import {
 } from "@/components/weight-loss/weight-loss-dialogs";
 import {
   formatNumber,
+  formatMeasurement,
   formatSigned,
   insightArray,
   scoreLabel
@@ -64,6 +72,7 @@ import { formatLocalDateKey, getRuntimeTimeZone } from "@/lib/date-keys";
 import {
   createNutritionAppearanceCheckin,
   createNutritionBodyCheckin,
+  createNutritionCheckinMutationKey,
   createNutritionFoodLog,
   createNutritionGutCheckin,
   createNutritionExperiment,
@@ -72,14 +81,48 @@ import {
   getWeightLossView,
   patchNutritionFoodLog,
   parseNutritionFoodLogWithChatGpt,
+  patchNutritionExperiment,
   searchNutritionFoods,
   updateNutritionDailyActiveCalories,
   updateNutritionTarget
 } from "@/lib/api";
 import type {
+  NutritionExperiment,
   NutritionFoodLog,
   WeightLossViewData
 } from "@/lib/weight-loss-types";
+
+type CheckinDomain = "body" | "subjective" | "gut" | "appearance";
+
+class PartialCheckinError extends Error {
+  constructor(
+    readonly savedDomains: CheckinDomain[],
+    readonly failedDomains: CheckinDomain[]
+  ) {
+    super(
+      `${savedDomains.length > 0 ? `${savedDomains.join(", ")} saved. ` : ""}${failedDomains.join(", ")} could not be saved; only those fields will be retried.`
+    );
+  }
+}
+
+function keepFailedCheckinDomains(
+  draft: WeightLossCheckinDraft,
+  failedDomains: CheckinDomain[]
+) {
+  const keep = new Set(failedDomains);
+  return {
+    ...draft,
+    weightKg: keep.has("body") ? draft.weightKg : "",
+    waistCm: keep.has("body") ? draft.waistCm : "",
+    bodyFatPercent: keep.has("body") ? draft.bodyFatPercent : "",
+    energy: keep.has("subjective") ? draft.energy : "",
+    hunger: keep.has("subjective") ? draft.hunger : "",
+    cravings: keep.has("subjective") ? draft.cravings : "",
+    bloating: keep.has("gut") ? draft.bloating : "",
+    facePuffiness: keep.has("appearance") ? draft.facePuffiness : "",
+    leanness: keep.has("appearance") ? draft.leanness : ""
+  };
+}
 
 function sourceConfidenceLabel(source: string) {
   switch (source) {
@@ -499,8 +542,16 @@ export function WeightLossPage() {
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [experimentOpen, setExperimentOpen] = useState(false);
+  const [experimentToReview, setExperimentToReview] =
+    useState<NutritionExperiment | null>(null);
+  const [foodLogToDelete, setFoodLogToDelete] =
+    useState<NutritionFoodLog | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [experimentError, setExperimentError] = useState<string | null>(null);
+  const [experimentReviewError, setExperimentReviewError] = useState<
+    string | null
+  >(null);
+  const [checkinError, setCheckinError] = useState<string | null>(null);
   const [activeCaloriesError, setActiveCaloriesError] = useState<string | null>(
     null
   );
@@ -520,8 +571,16 @@ export function WeightLossPage() {
   const [checkinDraft, setCheckinDraft] = useState<WeightLossCheckinDraft>(() =>
     buildInitialCheckinDraft()
   );
+  const [checkinMutationKey, setCheckinMutationKey] = useState(() =>
+    createNutritionCheckinMutationKey()
+  );
   const [experimentDraft, setExperimentDraft] =
     useState<WeightLossExperimentDraft>(() => buildInitialExperimentDraft());
+  const [experimentReviewDraft, setExperimentReviewDraft] =
+    useState<WeightLossExperimentReviewDraft>({
+      status: "planned",
+      conclusion: ""
+    });
 
   const viewQuery = useQuery({
     queryKey,
@@ -672,6 +731,7 @@ export function WeightLossPage() {
     mutationFn: async (meal: NutritionFoodLog) =>
       deleteNutritionFoodLog(meal.id, selectedUserIds),
     onSuccess: () => {
+      setFoodLogToDelete(null);
       void refresh();
     }
   });
@@ -771,36 +831,101 @@ export function WeightLossPage() {
   const checkinMutation = useMutation({
     mutationFn: async (draft: WeightLossCheckinDraft) => {
       const payloads = buildCheckinPayloads(draft);
-      await Promise.all([
+      const writes: Array<{
+        domain: CheckinDomain;
+        run: () => Promise<unknown>;
+      }> = [];
+      if (
         payloads.body.weightKg !== null ||
         payloads.body.waistCm !== null ||
         payloads.body.bodyFatPercent !== null
-          ? createNutritionBodyCheckin(payloads.body, selectedUserIds)
-          : Promise.resolve(),
+      ) {
+        writes.push({
+          domain: "body",
+          run: () =>
+            createNutritionBodyCheckin(
+              payloads.body,
+              selectedUserIds,
+              `${checkinMutationKey}:body`
+            )
+        });
+      }
+      if (
         payloads.subjective.energy !== null ||
         payloads.subjective.hunger !== null ||
         payloads.subjective.cravings !== null
-          ? createNutritionSubjectiveCheckin(
+      ) {
+        writes.push({
+          domain: "subjective",
+          run: () =>
+            createNutritionSubjectiveCheckin(
               payloads.subjective,
-              selectedUserIds
+              selectedUserIds,
+              `${checkinMutationKey}:subjective`
             )
-          : Promise.resolve(),
-        payloads.gut.bloating !== null
-          ? createNutritionGutCheckin(payloads.gut, selectedUserIds)
-          : Promise.resolve(),
+        });
+      }
+      if (payloads.gut.bloating !== null) {
+        writes.push({
+          domain: "gut",
+          run: () =>
+            createNutritionGutCheckin(
+              payloads.gut,
+              selectedUserIds,
+              `${checkinMutationKey}:gut`
+            )
+        });
+      }
+      if (
         payloads.appearance.facePuffiness !== null ||
         payloads.appearance.leanness !== null
-          ? createNutritionAppearanceCheckin(
+      ) {
+        writes.push({
+          domain: "appearance",
+          run: () =>
+            createNutritionAppearanceCheckin(
               payloads.appearance,
-              selectedUserIds
+              selectedUserIds,
+              `${checkinMutationKey}:appearance`
             )
-          : Promise.resolve()
-      ]);
+        });
+      }
+      const results = await Promise.allSettled(
+        writes.map((write) => write.run())
+      );
+      const savedDomains = writes
+        .filter((_, index) => results[index]?.status === "fulfilled")
+        .map((write) => write.domain);
+      const failedDomains = writes
+        .filter((_, index) => results[index]?.status === "rejected")
+        .map((write) => write.domain);
+      if (failedDomains.length > 0) {
+        throw new PartialCheckinError(savedDomains, failedDomains);
+      }
+      return savedDomains;
     },
+    onMutate: () => setCheckinError(null),
     onSuccess: () => {
       setCheckinDraft(buildInitialCheckinDraft());
+      setCheckinMutationKey(createNutritionCheckinMutationKey());
+      setCheckinError(null);
       setCheckinOpen(false);
       void refresh();
+    },
+    onError: (error) => {
+      if (error instanceof PartialCheckinError) {
+        setCheckinDraft((current) =>
+          keepFailedCheckinDomains(current, error.failedDomains)
+        );
+        setCheckinError(error.message);
+        if (error.savedDomains.length > 0) {
+          void refresh();
+        }
+        return;
+      }
+      setCheckinError(
+        error instanceof Error ? error.message : "Could not save the check-in."
+      );
     }
   });
 
@@ -811,6 +936,24 @@ export function WeightLossPage() {
       setExperimentDraft(buildInitialExperimentDraft());
       setExperimentError(null);
       setExperimentOpen(false);
+      void refresh();
+    }
+  });
+
+  const experimentReviewMutation = useMutation({
+    mutationFn: async (draft: WeightLossExperimentReviewDraft) => {
+      if (!experimentToReview) {
+        throw new Error("Select an experiment before saving a review.");
+      }
+      return patchNutritionExperiment(
+        experimentToReview.id,
+        buildExperimentReviewPatch(draft),
+        selectedUserIds
+      );
+    },
+    onSuccess: () => {
+      setExperimentToReview(null);
+      setExperimentReviewError(null);
       void refresh();
     }
   });
@@ -913,6 +1056,13 @@ export function WeightLossPage() {
   const gut = view.gut;
   const hypotheses = insightArray(view.hypotheses);
   const resolvedPlanDraft = planDraft ?? buildInitialPlanDraft(view);
+  const activeFoodMutationError = editingFoodLogId
+    ? patchFoodLogMutation.error
+    : createFoodLogMutation.error;
+  const foodSaveError =
+    activeFoodMutationError instanceof Error
+      ? activeFoodMutationError.message
+      : null;
 
   const openPlan = () => {
     setPlanError(null);
@@ -921,6 +1071,8 @@ export function WeightLossPage() {
   };
 
   const openNewFoodLog = (intent: WeightLossFoodLogIntent = "search") => {
+    createFoodLogMutation.reset();
+    patchFoodLogMutation.reset();
     setEditingFoodLogId(null);
     setFoodParseFeedback(null);
     setFoodDialogIntent(intent);
@@ -938,6 +1090,7 @@ export function WeightLossPage() {
   };
 
   const openEditFoodLog = (meal: NutritionFoodLog) => {
+    patchFoodLogMutation.reset();
     setEditingFoodLogId(meal.id);
     setFoodParseFeedback(null);
     setFoodDialogIntent("search");
@@ -951,15 +1104,9 @@ export function WeightLossPage() {
   };
 
   const deleteFoodLog = (meal: NutritionFoodLog) => {
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Delete ${meal.mealLabel ?? "this meal"} from the food log?`
-      )
-    ) {
-      return;
-    }
-    deleteFoodLogMutation.mutate(meal);
+    deleteFoodLogMutation.reset();
+    setFoodLogToDelete(meal);
+    setHistoryOpen(false);
   };
 
   const saveActiveCalories = () => {
@@ -1111,7 +1258,7 @@ export function WeightLossPage() {
         <WeightLossInsightMetric
           label="Weight trend"
           value={formatSigned(trend.sevenDayRateKg, 2)}
-          detail={`Latest ${formatNumber(trend.latestWeightKg, 1)} kg. Trend uses check-ins, not noisy single weigh-ins.`}
+          detail={`Latest ${formatMeasurement(trend.latestWeightKg, " kg", 1)}. Trend uses check-ins, not noisy single weigh-ins.`}
           icon={Activity}
           tone="green"
           help="Weight trend uses recent body check-ins to estimate direction. Single weigh-ins can jump from water, sodium, gut content, and training inflammation."
@@ -1126,7 +1273,7 @@ export function WeightLossPage() {
         <WeightLossInsightMetric
           label="Food quality"
           value={scoreLabel(foodQuality.qualityScore)}
-          detail={`Fiber density ${formatNumber(foodQuality.fiberPer1000Kcal, 1)}g/1000 kcal, protein density ${formatNumber(foodQuality.proteinPer1000Kcal, 1)}g/1000 kcal, ultra-processed share ${formatNumber(foodQuality.ultraProcessedShare, 0)}%.`}
+          detail={`Fiber density ${formatMeasurement(foodQuality.fiberPer1000Kcal, "g/1000 kcal", 1)}, protein density ${formatMeasurement(foodQuality.proteinPer1000Kcal, "g/1000 kcal", 1)}, ultra-processed share ${formatMeasurement(foodQuality.ultraProcessedShare, "%", 0)}.`}
           icon={Utensils}
           tone="green"
           help="Food quality combines density and exposure signals such as fiber per 1000 kcal, protein per 1000 kcal, ultra-processed share, sodium, sugar, and available micronutrient evidence."
@@ -1134,7 +1281,7 @@ export function WeightLossPage() {
         <WeightLossInsightMetric
           label="Training fuel"
           value={scoreLabel(trainingFuel.fuelingScore)}
-          detail={`Recent workout load ${formatNumber(trainingFuel.recentTrainingLoad)} with ${formatNumber(trainingFuel.carbsPerTrainingLoad, 1)}g carbs per load unit.`}
+          detail={`Recent workout load ${formatNumber(trainingFuel.recentTrainingLoad)} with ${formatMeasurement(trainingFuel.carbsPerTrainingLoad, "g", 1)} carbs per load unit.`}
           icon={Dumbbell}
           tone="amber"
           help="Training fuel relates carbohydrate and protein timing to recent workout load. It is meant to find performance and recovery patterns, not force a fixed carb rule."
@@ -1161,8 +1308,15 @@ export function WeightLossPage() {
         <WeightLossExperimentsPanel
           experiments={view.experiments}
           onCreate={() => {
+            experimentMutation.reset();
             setExperimentError(null);
             setExperimentOpen(true);
+          }}
+          onReview={(experiment) => {
+            experimentReviewMutation.reset();
+            setExperimentToReview(experiment);
+            setExperimentReviewDraft(buildExperimentReviewDraft(experiment));
+            setExperimentReviewError(null);
           }}
         />
       </section>
@@ -1212,6 +1366,7 @@ export function WeightLossPage() {
             : null
         }
         chatGptFeedback={foodParseFeedback}
+        saveError={foodSaveError}
         logPending={
           createFoodLogMutation.isPending || patchFoodLogMutation.isPending
         }
@@ -1235,11 +1390,25 @@ export function WeightLossPage() {
       />
       <WeightLossCheckinDialog
         open={checkinOpen}
-        onOpenChange={setCheckinOpen}
+        onOpenChange={(open) => {
+          setCheckinOpen(open);
+          if (!open) {
+            setCheckinError(null);
+          }
+        }}
         value={checkinDraft}
-        onChange={setCheckinDraft}
+        onChange={(draft) => {
+          setCheckinDraft(draft);
+          setCheckinMutationKey(createNutritionCheckinMutationKey());
+        }}
         pending={checkinMutation.isPending}
+        error={checkinError}
         onSubmit={async () => {
+          const validationError = validateCheckinDraft(checkinDraft);
+          if (validationError) {
+            setCheckinError(validationError);
+            return;
+          }
           await checkinMutation.mutateAsync(checkinDraft);
         }}
       />
@@ -1267,6 +1436,38 @@ export function WeightLossPage() {
           await experimentMutation.mutateAsync(experimentDraft);
         }}
       />
+      <WeightLossExperimentReviewDialog
+        experiment={experimentToReview}
+        open={Boolean(experimentToReview)}
+        onOpenChange={(open) => {
+          if (!open && !experimentReviewMutation.isPending) {
+            setExperimentToReview(null);
+            setExperimentReviewError(null);
+          }
+        }}
+        value={experimentReviewDraft}
+        onChange={(nextDraft) => {
+          setExperimentReviewDraft(nextDraft);
+          setExperimentReviewError(null);
+        }}
+        pending={experimentReviewMutation.isPending}
+        error={
+          experimentReviewError ??
+          (experimentReviewMutation.error instanceof Error
+            ? experimentReviewMutation.error.message
+            : null)
+        }
+        onSubmit={async () => {
+          const validationError = validateExperimentReviewDraft(
+            experimentReviewDraft
+          );
+          if (validationError) {
+            setExperimentReviewError(validationError);
+            return;
+          }
+          await experimentReviewMutation.mutateAsync(experimentReviewDraft);
+        }}
+      />
       <WeightLossHistoryDialog
         open={historyOpen}
         onOpenChange={setHistoryOpen}
@@ -1277,6 +1478,26 @@ export function WeightLossPage() {
         onLogAgain={(meal) => logSavedMealMutation.mutate(meal)}
         onEdit={openEditFoodLog}
         onDelete={deleteFoodLog}
+      />
+      <WeightLossDeleteFoodLogDialog
+        meal={foodLogToDelete}
+        open={Boolean(foodLogToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleteFoodLogMutation.isPending) {
+            setFoodLogToDelete(null);
+          }
+        }}
+        pending={deleteFoodLogMutation.isPending}
+        error={
+          deleteFoodLogMutation.error instanceof Error
+            ? deleteFoodLogMutation.error.message
+            : null
+        }
+        onConfirm={async () => {
+          if (foodLogToDelete) {
+            await deleteFoodLogMutation.mutateAsync(foodLogToDelete);
+          }
+        }}
       />
     </div>
   );

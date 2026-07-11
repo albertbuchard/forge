@@ -153,7 +153,9 @@ test("nutrition experiment contract preserves agent fields across API surfaces",
 
     const patchedResponse = await app.inject({
       method: "PATCH",
-      url: `/api/v1/health/weight-loss/experiments/${String(created.id)}`,
+      url:
+        `/api/v1/health/weight-loss/experiments/${String(created.id)}` +
+        "?userIds=user_forge_bot",
       headers: { cookie: operatorCookie },
       payload: {
         status: "complete",

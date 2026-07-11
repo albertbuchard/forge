@@ -8,6 +8,10 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserBadge } from "@/components/ui/user-badge";
+import {
+  getReadableActivityDescription,
+  getReadableActivityTitle
+} from "@/lib/activity-copy";
 import { getActivityEventHref } from "@/lib/entity-links";
 import { formatDateTime } from "@/lib/utils";
 import type { ActivityEvent } from "@/lib/types";
@@ -24,11 +28,11 @@ const columns = [
           to={href}
           className="font-medium text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
         >
-          {info.getValue()}
+          {getReadableActivityTitle(info.row.original)}
         </Link>
       ) : (
         <div className="font-medium text-[var(--ui-ink-strong)]">
-          {info.getValue()}
+          {getReadableActivityTitle(info.row.original)}
         </div>
       );
     }
@@ -84,10 +88,12 @@ const columns = [
 
 export function ActivityTable({
   rows,
-  onRemove
+  onRemove,
+  removingEventId
 }: {
   rows: ActivityEvent[];
   onRemove?: (eventId: string) => Promise<void>;
+  removingEventId?: string | null;
 }) {
   const actionColumns = onRemove
     ? [
@@ -99,8 +105,10 @@ export function ActivityTable({
             <Button
               variant="ghost"
               className="h-auto px-0 py-0 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
+              pending={removingEventId === info.row.original.id}
+              aria-label={`Remove ${getReadableActivityTitle(info.row.original)} from visible activity`}
               onClick={() => {
-                void onRemove(info.row.original.id);
+                void onRemove(info.row.original.id).catch(() => undefined);
               }}
             >
               Remove log
@@ -167,13 +175,13 @@ export function ActivityTable({
                     {event.source}
                   </div>
                   <div className="mt-2 break-words text-sm font-semibold text-[var(--ui-ink-strong)]">
-                    {event.title}
+                    {getReadableActivityTitle(event)}
                   </div>
                 </div>
                 {event.user ? <UserBadge user={event.user} compact /> : null}
               </div>
               <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                {event.description}
+                {getReadableActivityDescription(event)}
               </div>
               <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 {formatDateTime(event.createdAt)}
@@ -191,8 +199,10 @@ export function ActivityTable({
                   <Button
                     variant="ghost"
                     className="h-auto px-0 py-0 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-soft)]"
+                    pending={removingEventId === event.id}
+                    aria-label={`Remove ${getReadableActivityTitle(event)} from visible activity`}
                     onClick={() => {
-                      void onRemove(event.id);
+                      void onRemove(event.id).catch(() => undefined);
                     }}
                   >
                     Remove log

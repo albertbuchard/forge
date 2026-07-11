@@ -1,6 +1,5 @@
 import React from "react";
-import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
 import "@fontsource-variable/plus-jakarta-sans";
@@ -8,6 +7,10 @@ import "@fontsource-variable/sora";
 import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/700.css";
 import { App } from "./app";
+import {
+  getOrCreateForgeRuntime,
+  type ForgeRuntimeHost
+} from "./lib/app-runtime";
 import { normalizeRouterBasename } from "./lib/runtime-paths";
 import { appStore } from "./store/store";
 import "./styles.css";
@@ -70,16 +73,16 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 20_000,
-      refetchOnWindowFocus: false
-    }
-  }
-});
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Forge could not find its root element.");
+}
+const { queryClient, reactRoot } = getOrCreateForgeRuntime(
+  window as ForgeRuntimeHost,
+  rootElement
+);
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+reactRoot.render(
   <React.StrictMode>
     <RootErrorBoundary>
       <Provider store={appStore}>

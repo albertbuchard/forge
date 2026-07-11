@@ -90,6 +90,9 @@ const FILTERABLE_ENTITY_TYPES = new Set<CrudEntityType>([
   "trigger_report"
 ]);
 
+const NOTES_PAGE_SIZE = 40;
+const NOTES_MAX_VISIBLE = 200;
+
 type EditableNoteDraft = {
   contentMarkdown: string;
   author: string;
@@ -227,6 +230,7 @@ export function NotesPage() {
     noteId: string;
     position: { x: number; y: number };
   } | null>(null);
+  const [notesLimit, setNotesLimit] = useState(NOTES_PAGE_SIZE);
 
   const valuesQuery = useQuery({
     queryKey: ["forge-psyche-values"],
@@ -536,6 +540,19 @@ export function NotesPage() {
     [selectedEntityValues]
   );
 
+  const noteFilterKey = [
+    selectedEntityValues.join("|"),
+    selectedTagValues.join("|"),
+    selectedTextTerms.join("|"),
+    author.trim(),
+    updatedFrom,
+    updatedTo
+  ].join("::");
+
+  useEffect(() => {
+    setNotesLimit(NOTES_PAGE_SIZE);
+  }, [noteFilterKey]);
+
   const notesQuery = useQuery({
     queryKey: [
       "notes-index",
@@ -544,7 +561,9 @@ export function NotesPage() {
       selectedTextTerms.join("|"),
       author.trim(),
       updatedFrom,
-      updatedTo
+      updatedTo,
+      notesLimit,
+      selectedUserIds.join("|")
     ],
     queryFn: () =>
       listNotes({
@@ -552,9 +571,10 @@ export function NotesPage() {
         tags: selectedTagValues,
         textTerms: selectedTextTerms,
         author: author.trim() || undefined,
+        userIds: selectedUserIds,
         updatedFrom: updatedFrom || undefined,
         updatedTo: updatedTo || undefined,
-        limit: 200
+        limit: notesLimit
       })
   });
   const focusedNoteInList = focusedNoteId
@@ -717,6 +737,12 @@ export function NotesPage() {
       }
     ];
   }, [activeMenuHref, activeMenuNote, deleteMutation, navigate]);
+
+  const mutationError =
+    createMutation.error ?? patchMutation.error ?? deleteMutation.error;
+  const canLoadOlderNotes =
+    (notesQuery.data?.notes.length ?? 0) >= notesLimit &&
+    notesLimit < NOTES_MAX_VISIBLE;
 
   if (notesQuery.isError) {
     return (
@@ -994,6 +1020,17 @@ export function NotesPage() {
             </div>
           </Card>
         </NoteComposerBox>
+      ) : null}
+
+      {mutationError ? (
+        <div
+          role="alert"
+          className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+        >
+          {mutationError instanceof Error
+            ? mutationError.message
+            : "Forge could not save the note change."}
+        </div>
       ) : null}
 
       {notesQuery.isLoading ? (
@@ -1287,6 +1324,36 @@ export function NotesPage() {
                 </Card>
               );
             })}
+            <div
+              className="flex flex-col items-center gap-2 py-2 text-center text-xs text-[var(--ui-ink-faint)] sm:flex-row sm:justify-center"
+              aria-live="polite"
+            >
+              <span>
+                Showing the newest {notesQuery.data?.notes.length ?? 0} matching
+                notes.
+              </span>
+              {canLoadOlderNotes ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  pending={notesQuery.isFetching}
+                  pendingLabel="Loading"
+                  onClick={() =>
+                    setNotesLimit((current) =>
+                      Math.min(current + NOTES_PAGE_SIZE, NOTES_MAX_VISIBLE)
+                    )
+                  }
+                >
+                  Load older notes
+                </Button>
+              ) : notesLimit >= NOTES_MAX_VISIBLE &&
+                (notesQuery.data?.notes.length ?? 0) >= NOTES_MAX_VISIBLE ? (
+                <span>
+                  Refine the filters to search beyond the 200-note safety cap.
+                </span>
+              ) : null}
+            </div>
           </div>
         </NotesLibraryBox>
       )}

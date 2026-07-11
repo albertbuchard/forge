@@ -33,7 +33,7 @@ import type {
   AiConnectorKind,
   AiConnectorNodeType,
   AiConnectorPublicInput,
-  AiConnectorRun,
+  AiConnectorRunSummary,
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 
@@ -374,7 +374,7 @@ export function WorkbenchRunFlowDialog({
   onRun: () => void;
   onChat: () => void;
   pending: boolean;
-  runs: AiConnectorRun[];
+  runs: AiConnectorRunSummary[];
 }) {
   return (
     <WorkbenchDialog
@@ -557,7 +557,7 @@ export function WorkbenchRunFlowDialog({
                 <span>{new Date(run.createdAt).toLocaleString()}</span>
               </div>
               <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
-                {run.result?.primaryText ?? run.error ?? "No output yet."}
+                {run.outputPreview || run.error || "No output yet."}
               </div>
             </div>
           ))}

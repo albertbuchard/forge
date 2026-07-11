@@ -42,13 +42,15 @@ import {
   searchWiki
 } from "@/lib/api";
 import { ForgeApiError } from "@/lib/api-error";
-import { getEntityRoute } from "@/lib/note-helpers";
+import { formatEntityTypeLabel, getEntityRoute } from "@/lib/note-helpers";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import type { WikiSpace, WikiTreeNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type WikiSearchMode = "text" | "semantic" | "entity" | "hybrid";
 type WikiDetail = Awaited<ReturnType<typeof getWikiHome>>;
+const WIKI_SEARCH_PAGE_SIZE = 20;
+const WIKI_SEARCH_MAX_VISIBLE = 50;
 
 function formatUpdatedAt(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -138,8 +140,7 @@ function WikiIndexTreeItem({
           <button
             type="button"
             className={cn(
-              "mt-1 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]",
-              depth > 0 && "size-4"
+              "inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35"
             )}
             style={{ marginLeft: `${depth * 0.7}rem` }}
             aria-label={
@@ -158,7 +159,7 @@ function WikiIndexTreeItem({
           </button>
         ) : (
           <span
-            className="mt-1 size-5 shrink-0"
+            className="size-10 shrink-0"
             style={{ marginLeft: `${depth * 0.7}rem` }}
           />
         )}
@@ -171,7 +172,7 @@ function WikiIndexTreeItem({
             search: `?spaceId=${encodeURIComponent(spaceId)}`
           }}
           className={cn(
-            "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-[12px] leading-5 transition",
+            "flex min-h-10 min-w-0 flex-1 items-center rounded-lg px-2 py-1.5 text-[12px] leading-5 transition",
             active
               ? "bg-[var(--ui-surface-2)] text-[var(--ui-ink-strong)]"
               : "text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-1)] hover:text-[var(--ui-ink-strong)]"
@@ -288,6 +289,7 @@ export function WikiPage() {
   const [ingestMenuOpen, setIngestMenuOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<WikiSearchMode>("hybrid");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchLimit, setSearchLimit] = useState(WIKI_SEARCH_PAGE_SIZE);
   const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] =
     useState("");
   const ingestMenuRef = useRef<HTMLDivElement | null>(null);
@@ -316,6 +318,10 @@ export function WikiPage() {
       setSelectedEmbeddingProfileId(embeddingProfiles[0].id);
     }
   }, [embeddingProfiles, selectedEmbeddingProfileId]);
+
+  useEffect(() => {
+    setSearchLimit(WIKI_SEARCH_PAGE_SIZE);
+  }, [activeSpaceId, searchMode, searchQuery, selectedEmbeddingProfileId]);
 
   useEffect(() => {
     if (!selectedSpaceId && settingsQuery.data?.settings.spaces[0]?.id) {
@@ -354,7 +360,8 @@ export function WikiPage() {
       activeSpaceId,
       searchMode,
       searchQuery,
-      selectedEmbeddingProfileId
+      selectedEmbeddingProfileId,
+      searchLimit
     ],
     queryFn: () =>
       searchWiki({
@@ -365,7 +372,7 @@ export function WikiPage() {
           searchMode === "semantic" || searchMode === "hybrid"
             ? selectedEmbeddingProfileId || undefined
             : undefined,
-        limit: 30
+        limit: searchLimit
       }),
     enabled:
       searchOpen && Boolean(activeSpaceId) && searchQuery.trim().length > 0
@@ -430,10 +437,34 @@ export function WikiPage() {
       (selectedPage?.links ?? []).map((link) => ({
         id: `${link.entityType}:${link.entityId}`,
         href: getEntityRoute(link.entityType, link.entityId),
-        label: `${link.entityType} · ${link.entityId}`
+        label: `${formatEntityTypeLabel(link.entityType)} · ${link.entityId}`
       })),
     [selectedPage?.links]
   );
+  const backlinkItems = useMemo(() => {
+    const bySourceId = new Map<
+      string,
+      {
+        id: string;
+        page: WikiDetail["page"] | null;
+        rawTarget: string;
+      }
+    >();
+    for (const edge of detail?.backlinks ?? []) {
+      if (bySourceId.has(edge.sourceNoteId)) {
+        continue;
+      }
+      bySourceId.set(edge.sourceNoteId, {
+        id: edge.sourceNoteId,
+        page: detail?.backlinksBySourceId[edge.sourceNoteId] ?? null,
+        rawTarget: edge.rawTarget
+      });
+    }
+    return Array.from(bySourceId.values());
+  }, [detail?.backlinks, detail?.backlinksBySourceId]);
+  const canLoadMoreSearchResults =
+    (searchResultsQuery.data?.results.length ?? 0) >= searchLimit &&
+    searchLimit < WIKI_SEARCH_MAX_VISIBLE;
 
   const deletePageMutation = useMutation({
     mutationFn: async (pageId: string) => deleteWikiPage(pageId),
@@ -838,49 +869,70 @@ export function WikiPage() {
                       Forge links
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {linkedEntityItems.map((item) => (
-                        <a
-                          key={item.id}
-                          href={
-                            item.href ? resolveForgePath(item.href) : undefined
-                          }
-                          className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
-                        >
-                          {item.label}
-                        </a>
-                      ))}
+                      {linkedEntityItems.map((item) =>
+                        item.href ? (
+                          <a
+                            key={item.id}
+                            href={resolveForgePath(item.href)}
+                            className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-medium)] transition hover:bg-[var(--ui-surface-3)] hover:text-[var(--ui-ink-strong)]"
+                          >
+                            {item.label}
+                          </a>
+                        ) : (
+                          <span
+                            key={item.id}
+                            className="rounded-full border border-dashed border-[var(--ui-border-subtle)] px-3 py-1.5 text-[12px] text-[var(--ui-ink-faint)]"
+                          >
+                            {item.label} · unavailable
+                          </span>
+                        )
+                      )}
                     </div>
                   </section>
                 ) : null}
 
-                {detail?.backlinkSourceNotes.length ? (
+                {backlinkItems.length ? (
                   <section className="mt-8 border-t border-[var(--ui-border-subtle)] pt-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                       Linked here
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {detail.backlinkSourceNotes.map((page) => (
-                        <Link
-                          key={page.id}
-                          to={{
-                            pathname:
-                              page.slug === "index"
-                                ? "/wiki"
-                                : `/wiki/page/${encodeURIComponent(page.slug)}`,
-                            search: `?spaceId=${encodeURIComponent(page.spaceId)}`
-                          }}
-                          className="rounded-xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-2)]"
-                        >
-                          <div className="text-[13px] font-semibold text-[var(--ui-ink-strong)]">
-                            {page.title}
-                          </div>
-                          {page.summary ? (
-                            <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
-                              {page.summary}
+                      {backlinkItems.map((item) =>
+                        item.page ? (
+                          <Link
+                            key={item.id}
+                            to={{
+                              pathname:
+                                item.page.slug === "index"
+                                  ? "/wiki"
+                                  : `/wiki/page/${encodeURIComponent(item.page.slug)}`,
+                              search: `?spaceId=${encodeURIComponent(item.page.spaceId)}`
+                            }}
+                            className="rounded-xl border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 transition hover:bg-[var(--ui-surface-2)]"
+                          >
+                            <div className="text-[13px] font-semibold text-[var(--ui-ink-strong)]">
+                              {item.page.title}
                             </div>
-                          ) : null}
-                        </Link>
-                      ))}
+                            {item.page.summary ? (
+                              <div className="mt-1 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+                                {item.page.summary}
+                              </div>
+                            ) : null}
+                          </Link>
+                        ) : (
+                          <div
+                            key={item.id}
+                            className="rounded-xl border border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3"
+                          >
+                            <div className="text-[13px] font-semibold text-[var(--ui-ink-medium)]">
+                              Source page unavailable
+                            </div>
+                            <div className="mt-1 break-all text-[12px] leading-5 text-[var(--ui-ink-faint)]">
+                              {item.rawTarget || item.id}
+                            </div>
+                          </div>
+                        )
+                      )}
                     </div>
                   </section>
                 ) : null}
@@ -899,6 +951,10 @@ export function WikiPage() {
                 <Dialog.Title className="font-display text-[1.35rem] tracking-[-0.04em] text-[var(--ui-ink-strong)]">
                   Search the wiki
                 </Dialog.Title>
+                <Dialog.Description className="mt-1 text-[13px] leading-5 text-[var(--ui-ink-soft)]">
+                  Search the current space with bounded text, semantic, entity,
+                  or hybrid ranking.
+                </Dialog.Description>
               </div>
               <Dialog.Close asChild>
                 <button
@@ -920,7 +976,11 @@ export function WikiPage() {
                 className="h-11 rounded-2xl border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[14px] text-[var(--ui-ink-strong)] placeholder:text-[var(--ui-ink-faint)]"
               />
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="Wiki search mode"
+              >
                 {(
                   ["text", "hybrid", "semantic", "entity"] as WikiSearchMode[]
                 ).map((mode) => (
@@ -934,6 +994,7 @@ export function WikiPage() {
                         : "bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
                     )}
                     onClick={() => setSearchMode(mode)}
+                    aria-pressed={searchMode === mode}
                   >
                     {mode}
                   </button>
@@ -1009,6 +1070,41 @@ export function WikiPage() {
                       </div>
                     </button>
                   ))}
+                  <div
+                    className="flex flex-col items-center gap-2 py-2 text-center text-xs text-[var(--ui-ink-faint)] sm:flex-row sm:justify-center"
+                    aria-live="polite"
+                  >
+                    <span>
+                      Showing the first {searchResultsQuery.data.results.length}
+                      ranked matches.
+                    </span>
+                    {canLoadMoreSearchResults ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        pending={searchResultsQuery.isFetching}
+                        pendingLabel="Loading"
+                        onClick={() =>
+                          setSearchLimit((current) =>
+                            Math.min(
+                              current + WIKI_SEARCH_PAGE_SIZE,
+                              WIKI_SEARCH_MAX_VISIBLE
+                            )
+                          )
+                        }
+                      >
+                        Load more matches
+                      </Button>
+                    ) : searchLimit >= WIKI_SEARCH_MAX_VISIBLE &&
+                      searchResultsQuery.data.results.length >=
+                        WIKI_SEARCH_MAX_VISIBLE ? (
+                      <span>
+                        Refine the query to search beyond the 50-result safety
+                        cap.
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-[var(--ui-border-subtle)] px-4 py-10 text-center text-[13px] leading-6 text-[var(--ui-ink-faint)]">

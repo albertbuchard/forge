@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { existsSync, writeFileSync } from "node:fs";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile
+} from "node:fs/promises";
 import AdmZip from "adm-zip";
 import {
   closeDatabase,
@@ -52,14 +61,24 @@ function insertGoal(id: string, title: string) {
        )
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, title, `${title} description`, "quarter", "active", 10, "#6aa6ff", now, now);
+    .run(
+      id,
+      title,
+      `${title} description`,
+      "quarter",
+      "active",
+      10,
+      "#6aa6ff",
+      now,
+      now
+    );
 }
 
 function listTagIds() {
   return (
-    getDatabase()
-      .prepare("SELECT id FROM tags ORDER BY id")
-      .all() as Array<{ id: string }>
+    getDatabase().prepare("SELECT id FROM tags ORDER BY id").all() as Array<{
+      id: string;
+    }>
   ).map((row) => row.id);
 }
 
@@ -100,6 +119,19 @@ test("createDataBackup captures the database, schema, ingest artifacts, and secr
     const backups = await listDataBackups();
     const archive = new AdmZip(backup.archivePath);
     const archiveEntries = archive.getEntries().map((entry) => entry.entryName);
+    const manifest = JSON.parse(
+      await readFile(backup.manifestPath, "utf8")
+    ) as {
+      sensitivity: {
+        classification: string;
+        credentialMaterialIncluded: boolean;
+        notice: string;
+      };
+    };
+    const archiveMode = (await stat(backup.archivePath)).mode & 0o777;
+    const manifestMode = (await stat(backup.manifestPath)).mode & 0o777;
+    const backupDirectoryMode =
+      (await stat(path.dirname(backup.archivePath))).mode & 0o777;
 
     assert.equal(backups.length, 1);
     assert.equal(backup.counts.tags, baselineTagCount + 1);
@@ -111,6 +143,59 @@ test("createDataBackup captures the database, schema, ingest artifacts, and secr
     assert.ok(archiveEntries.includes("snapshot-summary.json"));
     assert.ok(archiveEntries.includes("wiki-ingest/source.txt"));
     assert.ok(archiveEntries.includes(".forge-secrets.key"));
+    assert.ok(archiveEntries.includes("BACKUP-SENSITIVITY.txt"));
+    assert.equal(archiveMode, 0o600);
+    assert.equal(manifestMode, 0o600);
+    assert.equal(backupDirectoryMode, 0o700);
+    assert.equal(
+      manifest.sensitivity.classification,
+      "credential-bearing-backup"
+    );
+    assert.equal(manifest.sensitivity.credentialMaterialIncluded, true);
+    assert.match(manifest.sensitivity.notice, /stored provider credentials/i);
+    assert.match(
+      archive
+        .getEntries()
+        .find((entry) => entry.entryName === "BACKUP-SENSITIVITY.txt")
+        ?.getData()
+        .toString("utf8") ?? "",
+      /HIGHLY SENSITIVE/
+    );
+    assert.equal(
+      (await readdir(path.dirname(backup.archivePath))).some((entry) =>
+        entry.startsWith(".forge-backup-stage-")
+      ),
+      false
+    );
+  } finally {
+    await rm(dataRoot, { recursive: true, force: true });
+  }
+});
+
+test("createDataBackup removes staged and catalog artifacts after archive failure", async () => {
+  const dataRoot = await createRuntimeRoot("forge-data-backup-failure-");
+  const backupDirectory = path.join(dataRoot, "backups");
+
+  try {
+    await updateDataManagementSettings({
+      backupDirectory,
+      autoRepairEnabled: true
+    });
+    await assert.rejects(
+      createDataBackup(
+        { note: "Must not publish" },
+        {
+          archiveWriter: (_archive, targetFileName) => {
+            writeFileSync(targetFileName, "partial archive");
+            throw new Error("simulated archive failure");
+          }
+        }
+      ),
+      /simulated archive failure/
+    );
+
+    assert.deepEqual(await readdir(backupDirectory), []);
+    assert.deepEqual(await listDataBackups(), []);
   } finally {
     await rm(dataRoot, { recursive: true, force: true });
   }
@@ -197,12 +282,18 @@ test("maybeRunAutomaticBackup prunes expired automatic backups without deleting 
       { mode: "automatic" }
     );
     const manual = await createDataBackup({ note: "Manual should stay" });
-    const oldCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const oldCreatedAt = new Date(
+      Date.now() - 3 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     for (const backup of [automatic, manual]) {
       const manifest = JSON.parse(await readFile(backup.manifestPath, "utf8"));
       manifest.createdAt = oldCreatedAt;
-      await writeFile(backup.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await writeFile(
+        backup.manifestPath,
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        "utf8"
+      );
     }
     getDatabase()
       .prepare(
@@ -320,7 +411,9 @@ test("scanForDataRecoveryCandidates finds populated newer copies and ignores emp
 
 test("switchDataRoot can both move the current data and adopt an existing data folder", async () => {
   const currentRoot = await createRuntimeRoot("forge-data-switch-current-");
-  const movedRoot = await mkdtemp(path.join(os.tmpdir(), "forge-data-switch-moved-"));
+  const movedRoot = await mkdtemp(
+    path.join(os.tmpdir(), "forge-data-switch-moved-")
+  );
   const adoptedRoot = await createRuntimeRoot("forge-data-switch-adopted-");
   const persistedRoots: string[] = [];
   const syncedRoots: string[] = [];
@@ -357,7 +450,10 @@ test("switchDataRoot can both move the current data and adopt an existing data f
     assert.equal(getEffectiveDataRoot(), movedRoot);
     assert.deepEqual(listTagIds(), expectedMovedTagIds);
     assert.equal(existsSync(path.join(movedRoot, "forge.sqlite")), true);
-    assert.equal(existsSync(path.join(movedRoot, "wiki-ingest", "source.txt")), true);
+    assert.equal(
+      existsSync(path.join(movedRoot, "wiki-ingest", "source.txt")),
+      true
+    );
     assert.equal(
       movedState.settings.backupDirectory,
       path.join(movedRoot, "backups")

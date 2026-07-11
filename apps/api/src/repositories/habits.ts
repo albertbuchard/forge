@@ -45,7 +45,10 @@ import {
   type HabitListQuery,
   type UpdateHabitInput
 } from "../types.js";
-import { formatLocalDateKey } from "@/lib/date-keys.js";
+import {
+  formatDateKeyInTimeZone,
+  getRuntimeTimeZone
+} from "@/lib/date-keys.js";
 
 type HabitRow = {
   id: string;
@@ -54,6 +57,8 @@ type HabitRow = {
   status: Habit["status"];
   polarity: Habit["polarity"];
   frequency: Habit["frequency"];
+  timezone: string;
+  day_boundary_mode: Habit["dayBoundaryMode"];
   target_count: number;
   week_days_json: string;
   linked_goal_ids_json: string;
@@ -89,8 +94,54 @@ type ActivityContext = {
   actor?: string | null;
 };
 
-function todayKey(now = new Date()) {
-  return formatLocalDateKey(now);
+type HabitReadContext = {
+  now?: Date;
+  timezone?: string;
+};
+
+function normalizeTimeZone(value: string | null | undefined) {
+  const candidate = value?.trim() || getRuntimeTimeZone();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(
+      new Date(0)
+    );
+    return candidate;
+  } catch {
+    throw new HttpError(
+      400,
+      "habit_timezone_invalid",
+      `Habit timezone ${candidate} is not a valid IANA timezone`
+    );
+  }
+}
+
+function resolveEffectiveTimeZone(
+  habit: Pick<Habit, "timezone" | "dayBoundaryMode">,
+  requestedTimeZone?: string
+) {
+  const storedTimeZone = normalizeTimeZone(habit.timezone);
+  return habit.dayBoundaryMode === "travel" && requestedTimeZone
+    ? normalizeTimeZone(requestedTimeZone)
+    : storedTimeZone;
+}
+
+function parseDateKeyUtc(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00.000Z`);
+}
+
+function addDateKeyDays(dateKey: string, days: number) {
+  const date = parseDateKeyUtc(dateKey);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function weekdayForDateKey(dateKey: string) {
+  return parseDateKeyUtc(dateKey).getUTCDay();
+}
+
+function startOfWeekDateKey(dateKey: string) {
+  const offset = (weekdayForDateKey(dateKey) + 6) % 7;
+  return addDateKeyDays(dateKey, -offset);
 }
 
 function parseWeekDays(raw: string): number[] {
@@ -199,7 +250,7 @@ function calculateCompletionRate(
 function calculateStreak(
   habit: Pick<Habit, "polarity" | "frequency" | "weekDays" | "targetCount">,
   checkIns: HabitCheckIn[],
-  now = new Date()
+  currentDateKey: string
 ) {
   if (habit.frequency === "weekly" && habit.weekDays.length === 0) {
     return 0;
@@ -212,40 +263,27 @@ function calculateStreak(
     }
   }
 
-  const isScheduledOn = (date: Date) =>
-    habit.frequency === "daily" || habit.weekDays.includes(date.getDay());
-  const toDateKey = (date: Date) => formatLocalDateKey(date);
-  const atLocalDayStart = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const previousScheduledDate = (date: Date) => {
-    const cursor = atLocalDayStart(date);
+  const isScheduledOn = (dateKey: string) =>
+    habit.frequency === "daily" ||
+    habit.weekDays.includes(weekdayForDateKey(dateKey));
+  const previousScheduledDate = (dateKey: string) => {
+    let cursor = dateKey;
     do {
-      cursor.setDate(cursor.getDate() - 1);
+      cursor = addDateKeyDays(cursor, -1);
     } while (!isScheduledOn(cursor));
     return cursor;
   };
-  const startOfLocalWeek = (date: Date) => {
-    const start = atLocalDayStart(date);
-    const offset = (start.getDay() + 6) % 7;
-    start.setDate(start.getDate() - offset);
-    return start;
-  };
-  const previousLocalWeek = (date: Date) => {
-    const start = startOfLocalWeek(date);
-    start.setDate(start.getDate() - 7);
-    return start;
-  };
-  const alignedStatusOn = (date: Date) => {
-    const status = statusByDate.get(toDateKey(date));
+  const previousWeek = (weekStart: string) => addDateKeyDays(weekStart, -7);
+  const alignedStatusOn = (dateKey: string) => {
+    const status = statusByDate.get(dateKey);
     return status ? isAligned(habit, { status }) : false;
   };
 
   if (habit.frequency === "daily") {
-    const today = atLocalDayStart(now);
     let cursor =
-      isScheduledOn(today) && !statusByDate.has(toDateKey(today))
-        ? previousScheduledDate(today)
-        : today;
+      isScheduledOn(currentDateKey) && !statusByDate.has(currentDateKey)
+        ? previousScheduledDate(currentDateKey)
+        : currentDateKey;
 
     let streak = 0;
     while (alignedStatusOn(cursor)) {
@@ -255,11 +293,10 @@ function calculateStreak(
     return streak;
   }
 
-  const alignedCountForWeek = (weekStart: Date) => {
+  const alignedCountForWeek = (weekStart: string) => {
     let count = 0;
     for (let offset = 0; offset < 7; offset += 1) {
-      const day = new Date(weekStart);
-      day.setDate(weekStart.getDate() + offset);
+      const day = addDateKeyDays(weekStart, offset);
       if (isScheduledOn(day) && alignedStatusOn(day)) {
         count += 1;
       }
@@ -267,42 +304,56 @@ function calculateStreak(
     return count;
   };
 
-  const currentWeekStart = startOfLocalWeek(now);
+  const currentWeekStart = startOfWeekDateKey(currentDateKey);
   let cursor =
     alignedCountForWeek(currentWeekStart) >= habit.targetCount
       ? currentWeekStart
-      : previousLocalWeek(currentWeekStart);
+      : previousWeek(currentWeekStart);
   let streak = 0;
 
   while (alignedCountForWeek(cursor) >= habit.targetCount) {
     streak += 1;
-    cursor = previousLocalWeek(cursor);
+    cursor = previousWeek(cursor);
   }
 
   return streak;
 }
 
 function isHabitDueToday(
-  habit: Pick<Habit, "status" | "frequency" | "weekDays">,
-  latestCheckIn: HabitCheckIn | null,
-  now = new Date()
+  habit: Pick<
+    Habit,
+    "status" | "frequency" | "weekDays" | "targetCount" | "polarity"
+  >,
+  checkIns: HabitCheckIn[],
+  currentDateKey: string
 ) {
   if (habit.status !== "active") {
     return false;
   }
-  const key = todayKey(now);
-  if (latestCheckIn?.dateKey === key) {
+  if (checkIns.some((checkIn) => checkIn.dateKey === currentDateKey)) {
     return false;
   }
   if (habit.frequency === "daily") {
     return true;
   }
-  return habit.weekDays.includes(now.getDay());
+  if (!habit.weekDays.includes(weekdayForDateKey(currentDateKey))) {
+    return false;
+  }
+  const weekStart = startOfWeekDateKey(currentDateKey);
+  const weekEnd = addDateKeyDays(weekStart, 6);
+  const alignedThisWeek = checkIns.filter(
+    (checkIn) =>
+      checkIn.dateKey >= weekStart &&
+      checkIn.dateKey <= weekEnd &&
+      isAligned(habit, checkIn)
+  ).length;
+  return alignedThisWeek < habit.targetCount;
 }
 
 function mapHabit(
   row: HabitRow,
-  checkIns = listCheckInsForHabit(row.id)
+  checkIns = listCheckInsForHabit(row.id),
+  context: HabitReadContext = {}
 ): Habit {
   const latestCheckIn = checkIns[0] ?? null;
   const linkedBehaviorIds = normalizeLinkedBehaviorIds({
@@ -315,6 +366,16 @@ function mapHabit(
       (behavior): behavior is NonNullable<typeof behavior> =>
         behavior !== undefined
     );
+  const timezone = normalizeTimeZone(row.timezone);
+  const dayBoundaryMode = row.day_boundary_mode ?? "fixed";
+  const effectiveTimezone = resolveEffectiveTimeZone(
+    { timezone, dayBoundaryMode },
+    context.timezone
+  );
+  const currentDateKey = formatDateKeyInTimeZone(
+    context.now ?? new Date(),
+    effectiveTimezone
+  );
   const draft = {
     id: row.id,
     title: row.title,
@@ -322,6 +383,10 @@ function mapHabit(
     status: row.status,
     polarity: row.polarity,
     frequency: row.frequency,
+    timezone,
+    dayBoundaryMode,
+    effectiveTimezone,
+    currentDateKey,
     targetCount: row.target_count,
     weekDays: parseWeekDays(row.week_days_json),
     linkedGoalIds: filterDeletedIds(
@@ -361,7 +426,8 @@ function mapHabit(
         targetCount: row.target_count,
         weekDays: parseWeekDays(row.week_days_json)
       },
-      checkIns
+      checkIns,
+      currentDateKey
     ),
     completionRate: calculateCompletionRate(
       { polarity: row.polarity },
@@ -375,9 +441,12 @@ function mapHabit(
     {
       status: draft.status,
       frequency: draft.frequency,
-      weekDays: draft.weekDays
+      weekDays: draft.weekDays,
+      targetCount: draft.targetCount,
+      polarity: draft.polarity
     },
-    latestCheckIn
+    checkIns,
+    currentDateKey
   );
   return habitSchema.parse(decorateOwnedEntity("habit", draft));
 }
@@ -387,6 +456,7 @@ function getHabitRow(habitId: string): HabitRow | undefined {
     .prepare(
       `SELECT
          id, title, description, status, polarity, frequency, target_count, week_days_json,
+         timezone, day_boundary_mode,
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
@@ -478,6 +548,7 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
     .prepare(
       `SELECT
          id, title, description, status, polarity, frequency, target_count, week_days_json,
+         timezone, day_boundary_mode,
          linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
          linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
          linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
@@ -492,7 +563,7 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
     .all(...params) as HabitRow[];
   const habits = filterDeletedEntities(
     "habit",
-    rows.map((row) => mapHabit(row))
+    rows.map((row) => mapHabit(row, undefined, { timezone: parsed.timezone }))
   );
   const filteredHabits = parsed.dueToday
     ? habits.filter((habit) => habit.dueToday)
@@ -500,12 +571,15 @@ export function listHabits(filters: HabitListQuery = {}): Habit[] {
   return sortHabits(filteredHabits, parsed.orderBy);
 }
 
-export function getHabitById(habitId: string): Habit | undefined {
+export function getHabitById(
+  habitId: string,
+  context: HabitReadContext = {}
+): Habit | undefined {
   if (isEntityDeleted("habit", habitId)) {
     return undefined;
   }
   const row = getHabitRow(habitId);
-  return row ? mapHabit(row) : undefined;
+  return row ? mapHabit(row, undefined, context) : undefined;
 }
 
 export function createHabit(
@@ -575,11 +649,12 @@ export function createHabit(
       .prepare(
         `INSERT INTO habits (
           id, title, description, status, polarity, frequency, target_count, week_days_json,
+          timezone, day_boundary_mode,
           linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
           linked_value_ids_json, linked_pattern_ids_json, linked_behavior_ids_json,
           linked_belief_ids_json, linked_mode_ids_json, linked_report_ids_json,
           linked_behavior_id, reward_xp, penalty_xp, generated_health_event_template_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -590,6 +665,8 @@ export function createHabit(
         parsed.frequency,
         parsed.targetCount,
         JSON.stringify(parsed.weekDays),
+        normalizeTimeZone(parsed.timezone),
+        parsed.dayBoundaryMode,
         JSON.stringify(parsed.linkedGoalIds),
         JSON.stringify(parsed.linkedProjectIds),
         JSON.stringify(parsed.linkedTaskIds),
@@ -662,6 +739,8 @@ export function updateHabit(
     parsed.status !== undefined ||
     parsed.polarity !== undefined ||
     parsed.frequency !== undefined ||
+    parsed.timezone !== undefined ||
+    parsed.dayBoundaryMode !== undefined ||
     parsed.targetCount !== undefined ||
     parsed.weekDays !== undefined ||
     parsed.linkedGoalIds !== undefined ||
@@ -757,7 +836,7 @@ export function updateHabit(
       .prepare(
         `UPDATE habits
          SET title = ?, description = ?, status = ?, polarity = ?, frequency = ?, target_count = ?,
-             week_days_json = ?, linked_goal_ids_json = ?, linked_project_ids_json = ?, linked_task_ids_json = ?,
+             week_days_json = ?, timezone = ?, day_boundary_mode = ?, linked_goal_ids_json = ?, linked_project_ids_json = ?, linked_task_ids_json = ?,
              linked_value_ids_json = ?, linked_pattern_ids_json = ?, linked_behavior_ids_json = ?,
              linked_belief_ids_json = ?, linked_mode_ids_json = ?, linked_report_ids_json = ?,
              linked_behavior_id = ?, reward_xp = ?, penalty_xp = ?, generated_health_event_template_json = ?, updated_at = ?
@@ -771,6 +850,8 @@ export function updateHabit(
         parsed.frequency ?? current.frequency,
         parsed.targetCount ?? current.targetCount,
         JSON.stringify(parsed.weekDays ?? current.weekDays),
+        normalizeTimeZone(parsed.timezone ?? current.timezone),
+        parsed.dayBoundaryMode ?? current.dayBoundaryMode,
         JSON.stringify(parsed.linkedGoalIds ?? current.linkedGoalIds),
         JSON.stringify(parsed.linkedProjectIds ?? current.linkedProjectIds),
         JSON.stringify(parsed.linkedTaskIds ?? current.linkedTaskIds),
@@ -852,11 +933,35 @@ export function createHabitCheckIn(
   input: CreateHabitCheckInInput,
   activity?: ActivityContext
 ): Habit | undefined {
-  const habit = getHabitById(habitId);
+  const parsed = createHabitCheckInSchema.parse(input);
+  const habit = getHabitById(habitId, { timezone: parsed.timezone });
   if (!habit) {
     return undefined;
   }
-  const parsed = createHabitCheckInSchema.parse(input);
+  const effectiveTimezone = resolveEffectiveTimeZone(habit, parsed.timezone);
+  const currentDateKey = formatDateKeyInTimeZone(
+    new Date(),
+    effectiveTimezone
+  );
+  const dateKey = parsed.dateKey ?? currentDateKey;
+  if (dateKey > currentDateKey) {
+    throw new HttpError(
+      400,
+      "habit_check_in_future_date",
+      `Habit outcomes cannot be logged after ${currentDateKey} in ${effectiveTimezone}`
+    );
+  }
+  if (
+    habit.frequency === "weekly" &&
+    !habit.weekDays.includes(weekdayForDateKey(dateKey))
+  ) {
+    throw new HttpError(
+      400,
+      "habit_check_in_unscheduled_date",
+      `Habit outcomes can only be logged on scheduled weekdays`
+    );
+  }
+
   return runInTransaction(() => {
     const existing = getDatabase()
       .prepare(
@@ -864,13 +969,31 @@ export function createHabitCheckIn(
          FROM habit_check_ins
          WHERE habit_id = ? AND date_key = ?`
       )
-      .get(habitId, parsed.dateKey) as HabitCheckInRow | undefined;
-    const reward = recordHabitCheckInReward(
-      habit,
-      parsed.status,
-      parsed.dateKey,
-      activity ?? { source: "ui", actor: null }
-    );
+      .get(habitId, dateKey) as HabitCheckInRow | undefined;
+    const statusChanged = existing?.status !== parsed.status;
+    const evidenceChanged = existing?.note !== parsed.note;
+    const descriptionChanged =
+      parsed.description !== undefined && parsed.description !== habit.description;
+    if (existing && !statusChanged && !evidenceChanged && !descriptionChanged) {
+      return getHabitById(habitId, { timezone: parsed.timezone });
+    }
+
+    if (existing && statusChanged) {
+      reverseLatestHabitCheckInReward(
+        habit,
+        dateKey,
+        activity ?? { source: "ui", actor: null }
+      );
+    }
+    const reward = statusChanged
+      ? recordHabitCheckInReward(
+          habit,
+          parsed.status,
+          dateKey,
+          activity ?? { source: "ui", actor: null }
+        )
+      : null;
+    const deltaXp = reward?.deltaXp ?? existing?.delta_xp ?? 0;
     const now = new Date().toISOString();
 
     if (existing) {
@@ -880,7 +1003,7 @@ export function createHabitCheckIn(
            SET status = ?, note = ?, delta_xp = ?, updated_at = ?
            WHERE id = ?`
         )
-        .run(parsed.status, parsed.note, reward.deltaXp, now, existing.id);
+        .run(parsed.status, parsed.note, deltaXp, now, existing.id);
     } else {
       getDatabase()
         .prepare(
@@ -890,10 +1013,10 @@ export function createHabitCheckIn(
         .run(
           `hci_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
           habitId,
-          parsed.dateKey,
+          dateKey,
           parsed.status,
           parsed.note,
-          reward.deltaXp,
+          deltaXp,
           now,
           now
         );
@@ -909,11 +1032,19 @@ export function createHabitCheckIn(
         .run(parsed.description, now, habitId);
     }
 
+    const outcomeLabel =
+      habit.polarity === "positive"
+        ? parsed.status === "done"
+          ? "completed"
+          : "missed"
+        : parsed.status === "done"
+          ? "performed"
+          : "resisted";
     recordActivityEvent({
       entityType: "habit",
       entityId: habit.id,
       eventType: parsed.status === "done" ? "habit_done" : "habit_missed",
-      title: `${parsed.status === "done" ? "Habit completed" : "Habit missed"}: ${habit.title}`,
+      title: `Habit ${outcomeLabel}: ${habit.title}`,
       description:
         habit.polarity === "positive"
           ? parsed.status === "done"
@@ -925,15 +1056,17 @@ export function createHabitCheckIn(
       actor: activity?.actor ?? null,
       source: activity?.source ?? "ui",
       metadata: {
-        dateKey: parsed.dateKey,
+        dateKey,
         status: parsed.status,
         polarity: habit.polarity,
-        deltaXp: reward.deltaXp,
+        deltaXp,
+        outcomeLabel,
+        evidenceUpdated: evidenceChanged,
         descriptionReplaced: parsed.description !== undefined
       }
     });
 
-    if (parsed.status === "done") {
+    if (habit.polarity === "positive" && parsed.status === "done") {
       const checkInId = existing?.id
         ? existing.id
         : (
@@ -941,7 +1074,7 @@ export function createHabitCheckIn(
               .prepare(
                 `SELECT id FROM habit_check_ins WHERE habit_id = ? AND date_key = ?`
               )
-              .get(habitId, parsed.dateKey) as { id: string } | undefined
+              .get(habitId, dateKey) as { id: string } | undefined
           )?.id;
       if (checkInId) {
         createGeneratedWorkoutFromHabit({
@@ -949,7 +1082,7 @@ export function createHabitCheckIn(
           checkInId,
           habitTitle: habit.title,
           userId: habit.userId ?? "user_operator",
-          dateKey: parsed.dateKey,
+          dateKey,
           template: habit.generatedHealthEventTemplate,
           linkedEntities: [
             ...habit.linkedGoalIds.map((entityId) => ({
@@ -972,7 +1105,7 @@ export function createHabitCheckIn(
       }
     }
 
-    return getHabitById(habitId);
+    return getHabitById(habitId, { timezone: parsed.timezone });
   });
 }
 

@@ -1292,6 +1292,7 @@ struct ForgeSyncClient {
     private struct WatchBootstrapRequest: Encodable {
         let sessionId: String
         let pairingToken: String
+        let timezone: String
     }
 
     private struct WatchBootstrapEnvelope: Decodable {
@@ -1306,6 +1307,7 @@ struct ForgeSyncClient {
         let dateKey: String
         let status: String
         let note: String
+        let timezone: String?
     }
 
     private struct WatchHabitCheckInEnvelope: Decodable {
@@ -1324,6 +1326,7 @@ struct ForgeSyncClient {
 
         let sessionId: String
         let pairingToken: String
+        let timezone: String
         let device: ForgeWatchDeviceDescriptor
         let events: [Event]
     }
@@ -1343,6 +1346,7 @@ struct ForgeSyncClient {
 
         let sessionId: String
         let pairingToken: String
+        let timezone: String
         let device: ForgeWatchDeviceDescriptor
         let commands: [Command]
     }
@@ -3416,7 +3420,8 @@ struct ForgeSyncClient {
         let startedAt = Date()
         let request = WatchBootstrapRequest(
             sessionId: payload.sessionId,
-            pairingToken: payload.pairingToken
+            pairingToken: payload.pairingToken,
+            timezone: TimeZone.current.identifier
         )
         let requestBytes = (try? JSONEncoder().encode(request).count) ?? 0
         companionDebugLog(
@@ -3708,7 +3713,8 @@ struct ForgeSyncClient {
                 dedupeKey: envelopeId,
                 dateKey: action.dateKey,
                 status: action.status,
-                note: action.note
+                note: action.note,
+                timezone: action.timezone ?? TimeZone.current.identifier
             ),
             transport: pairing.transport
         )
@@ -3729,6 +3735,7 @@ struct ForgeSyncClient {
         let request = WatchCaptureBatchRequest(
             sessionId: pairing.sessionId,
             pairingToken: pairing.pairingToken,
+            timezone: TimeZone.current.identifier,
             device: device,
             events: actions.enumerated().map { index, action in
                 WatchCaptureBatchRequest.Event(
@@ -3780,7 +3787,8 @@ struct ForgeSyncClient {
                         "habitId": habit.habitId,
                         "dateKey": habit.dateKey,
                         "status": habit.status,
-                        "note": habit.note
+                        "note": habit.note,
+                        "timezone": habit.timezone ?? TimeZone.current.identifier
                     ]
                 )
             }
@@ -3824,6 +3832,7 @@ struct ForgeSyncClient {
         let request = WatchCommandBatchRequest(
             sessionId: pairing.sessionId,
             pairingToken: pairing.pairingToken,
+            timezone: TimeZone.current.identifier,
             device: device,
             commands: commands
         )

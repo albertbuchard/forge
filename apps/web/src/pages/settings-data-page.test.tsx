@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,7 +39,15 @@ const {
 const anchorClickMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/shell/page-hero", () => ({
-  PageHero: ({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) => (
+  PageHero: ({
+    title,
+    description,
+    actions
+  }: {
+    title: string;
+    description: string;
+    actions?: ReactNode;
+  }) => (
     <div>
       <h1>{title}</h1>
       <p>{description}</p>
@@ -149,12 +163,14 @@ function makeBackup(overrides: Partial<DataBackupEntry> = {}): DataBackupEntry {
     mode: "manual",
     note: "Golden state",
     sourceDataRoot: "/Users/omarclaw/Documents/aurel-monorepo/data/forge",
-    backupDirectory: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups",
+    backupDirectory:
+      "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups",
     archivePath:
       "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups/forge-backup.zip",
     manifestPath:
       "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups/forge-backup.manifest.json",
-    databasePath: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
+    databasePath:
+      "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
     sizeBytes: 2048,
     includesWiki: false,
     includesSecretsKey: true,
@@ -198,12 +214,15 @@ function makeCandidate(
   };
 }
 
-function makeDataState(overrides: Partial<DataManagementState> = {}): DataManagementState {
+function makeDataState(
+  overrides: Partial<DataManagementState> = {}
+): DataManagementState {
   return {
     generatedAt: "2026-04-11T12:30:00.000Z",
     current: {
       dataRoot: "/Users/omarclaw/Documents/aurel-monorepo/data/forge",
-      databasePath: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
+      databasePath:
+        "/Users/omarclaw/Documents/aurel-monorepo/data/forge/forge.sqlite",
       layout: "flat",
       databaseSizeBytes: 8192,
       databaseLastModifiedAt: "2026-04-11T12:29:00.000Z",
@@ -220,7 +239,8 @@ function makeDataState(overrides: Partial<DataManagementState> = {}): DataManage
     },
     settings: {
       preferredDataRoot: "/Users/omarclaw/Documents/aurel-monorepo/data/forge",
-      backupDirectory: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups",
+      backupDirectory:
+        "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups",
       backupFrequencyHours: 24,
       backupRetentionDays: 30,
       autoRepairEnabled: true,
@@ -326,7 +346,9 @@ describe("SettingsDataPage", () => {
       createObjectURL: vi.fn(() => "blob:forge"),
       revokeObjectURL: vi.fn()
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(anchorClickMock);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      anchorClickMock
+    );
   });
 
   it("renders the live data view after the operator session resolves", async () => {
@@ -351,7 +373,10 @@ describe("SettingsDataPage", () => {
       "/Users/omarclaw/Documents/aurel-monorepo/data/forge/backups"
     )) as HTMLInputElement;
     fireEvent.change(backupFolderInput, {
-      target: { value: "/Users/omarclaw/Documents/aurel-monorepo/data/forge/custom-backups" }
+      target: {
+        value:
+          "/Users/omarclaw/Documents/aurel-monorepo/data/forge/custom-backups"
+      }
     });
 
     fireEvent.change(screen.getAllByRole("combobox")[0], {
@@ -363,7 +388,9 @@ describe("SettingsDataPage", () => {
 
     const checkboxes = await screen.findAllByRole("checkbox");
     fireEvent.click(checkboxes[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Save backup settings" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save backup settings" })
+    );
 
     await waitFor(() =>
       expect(patchDataManagementSettingsMock).toHaveBeenCalledWith({
@@ -380,29 +407,33 @@ describe("SettingsDataPage", () => {
     renderPage();
 
     fireEvent.click(
-      (await screen.findAllByRole("button", {
-        name: "Use existing data folder"
-      }))[0]
+      (
+        await screen.findAllByRole("button", {
+          name: "Look for other Forge copies"
+        })
+      )[0]
+    );
+
+    expect(
+      await screen.findByText(
+        "/Users/omarclaw/Documents/aurel-monorepo/data/forge-recovered"
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Use this folder" }).at(-1)!
     );
     expect(
       await screen.findByText("Use an existing Forge data folder")
     ).toBeInTheDocument();
 
-    const dataFolderInput = screen.getByPlaceholderText(
-      "/absolute/path/to/forge-data"
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Use this folder" }).at(-1)!
     );
-    fireEvent.change(dataFolderInput, {
-      target: {
-        value: "/Users/omarclaw/Documents/aurel-monorepo/data/forge-restored"
-      }
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Use this folder" }));
 
     await waitFor(() =>
       expect(switchRuntimeDataRootMock).toHaveBeenCalledWith({
         targetDataRoot:
-          "/Users/omarclaw/Documents/aurel-monorepo/data/forge-restored",
+          "/Users/omarclaw/Documents/aurel-monorepo/data/forge-recovered",
         mode: "adopt_existing",
         createSafetyBackup: true
       })
@@ -412,10 +443,14 @@ describe("SettingsDataPage", () => {
   it("opens the restore flow from backup history and restores the selected backup", async () => {
     renderPage();
 
-    fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Restore" }))[0]
+    );
 
     expect(await screen.findByText("Restore Forge backup")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restore this backup" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore this backup" })
+    );
 
     await waitFor(() =>
       expect(restoreRuntimeDataBackupMock).toHaveBeenCalledWith("bkp_1", true)
@@ -426,9 +461,11 @@ describe("SettingsDataPage", () => {
     renderPage();
 
     fireEvent.click(
-      (await screen.findAllByRole("button", {
-        name: "Look for other Forge copies"
-      }))[0]
+      (
+        await screen.findAllByRole("button", {
+          name: "Look for other Forge copies"
+        })
+      )[0]
     );
 
     expect(
@@ -442,5 +479,46 @@ describe("SettingsDataPage", () => {
     await waitFor(() =>
       expect(downloadDataExportMock).toHaveBeenCalledWith("schema_sql")
     );
+  });
+
+  it("keeps a failed-integrity recovery candidate out of the adoption flow", async () => {
+    scanDataRecoveryCandidatesMock.mockResolvedValue({
+      candidates: [
+        makeCandidate({
+          integrityOk: false,
+          integrityMessage: "database disk image is malformed"
+        })
+      ]
+    });
+    renderPage();
+
+    fireEvent.click(
+      (
+        await screen.findAllByRole("button", {
+          name: "Look for other Forge copies"
+        })
+      )[0]
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Integrity check failed" })
+    ).toBeDisabled();
+    expect(switchRuntimeDataRootMock).not.toHaveBeenCalled();
+  });
+
+  it("reports an interrupted backup without claiming success", async () => {
+    createRuntimeDataBackupMock.mockRejectedValue(
+      new Error("Disk full while writing backup archive")
+    );
+    renderPage();
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Create backup now" }))[0]
+    );
+
+    expect(
+      await screen.findByText("Disk full while writing backup archive")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Backup created.")).not.toBeInTheDocument();
   });
 });

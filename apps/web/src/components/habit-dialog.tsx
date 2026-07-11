@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSelectField } from "@/components/ui/user-select-field";
 import { formatOwnerSelectDefaultLabel } from "@/lib/user-ownership";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 import { habitMutationSchema, type HabitMutationInput } from "@/lib/schemas";
 import type {
   Behavior,
@@ -34,6 +35,8 @@ export const defaultHabitValues: HabitMutationInput = {
   userId: null,
   polarity: "positive",
   frequency: "daily",
+  timezone: getRuntimeTimeZone(),
+  dayBoundaryMode: "fixed",
   targetCount: 1,
   weekDays: [],
   linkedGoalIds: [],
@@ -78,6 +81,8 @@ function habitToFormValues(habit: Habit): HabitMutationInput {
     userId: habit.userId ?? null,
     polarity: habit.polarity,
     frequency: habit.frequency,
+    timezone: habit.timezone,
+    dayBoundaryMode: habit.dayBoundaryMode,
     targetCount: habit.targetCount,
     weekDays: habit.weekDays,
     linkedGoalIds: habit.linkedGoalIds,
@@ -217,7 +222,16 @@ export function HabitDialog({
             <FlowChoiceGrid
               value={value.polarity}
               onChange={(next) =>
-                setValue({ polarity: next as HabitMutationInput["polarity"] })
+                setValue({
+                  polarity: next as HabitMutationInput["polarity"],
+                  generatedHealthEventTemplate:
+                    next === "negative"
+                      ? {
+                          ...value.generatedHealthEventTemplate,
+                          enabled: false
+                        }
+                      : value.generatedHealthEventTemplate
+                })
               }
               options={[
                 {
@@ -253,6 +267,41 @@ export function HabitDialog({
                 }
               ]}
               columns={2}
+            />
+          </FlowField>
+          <FlowField label="Day boundary">
+            <FlowChoiceGrid
+              value={value.dayBoundaryMode}
+              onChange={(next) =>
+                setValue({
+                  dayBoundaryMode:
+                    next as HabitMutationInput["dayBoundaryMode"]
+                })
+              }
+              options={[
+                {
+                  value: "fixed",
+                  label: "Fixed timezone",
+                  description:
+                    "Keep the same daily boundary while traveling."
+                },
+                {
+                  value: "travel",
+                  label: "Follow device",
+                  description:
+                    "Use the current phone or watch timezone while traveling."
+                }
+              ]}
+              columns={2}
+            />
+          </FlowField>
+          <FlowField label="Home timezone" error={fieldErrors.timezone ?? null}>
+            <Input
+              value={value.timezone}
+              onChange={(event) => setValue({ timezone: event.target.value })}
+              placeholder="Europe/Zurich"
+              autoCapitalize="none"
+              autoCorrect="off"
             />
           </FlowField>
           {value.frequency === "weekly" ? (
@@ -322,38 +371,47 @@ export function HabitDialog({
         "Use this when a completed habit should generate a structured sports or recovery session in Forge, then reconcile with HealthKit later if the same session gets imported.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Generate workout record">
-            <FlowChoiceGrid
-              value={
-                value.generatedHealthEventTemplate.enabled
-                  ? "enabled"
-                  : "disabled"
-              }
-              onChange={(next) =>
-                setValue({
-                  generatedHealthEventTemplate: {
-                    ...value.generatedHealthEventTemplate,
-                    enabled: next === "enabled"
-                  }
-                })
-              }
-              options={[
-                {
-                  value: "disabled",
-                  label: "Disabled",
-                  description: "This habit only affects the habit ledger."
-                },
-                {
-                  value: "enabled",
-                  label: "Enabled",
-                  description:
-                    "A completed check-in creates a workout or recovery session."
+          {value.polarity === "negative" ? (
+            <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
+              Negative-habit outcomes stay in the habit ledger. Resisting is
+              aligned; performing the behavior does not generate a workout.
+            </div>
+          ) : null}
+          {value.polarity === "positive" ? (
+            <FlowField label="Generate workout record">
+              <FlowChoiceGrid
+                value={
+                  value.generatedHealthEventTemplate.enabled
+                    ? "enabled"
+                    : "disabled"
                 }
-              ]}
-              columns={2}
-            />
-          </FlowField>
-          {value.generatedHealthEventTemplate.enabled ? (
+                onChange={(next) =>
+                  setValue({
+                    generatedHealthEventTemplate: {
+                      ...value.generatedHealthEventTemplate,
+                      enabled: next === "enabled"
+                    }
+                  })
+                }
+                options={[
+                  {
+                    value: "disabled",
+                    label: "Disabled",
+                    description: "This habit only affects the habit ledger."
+                  },
+                  {
+                    value: "enabled",
+                    label: "Enabled",
+                    description:
+                      "A completed check-in creates a workout or recovery session."
+                  }
+                ]}
+                columns={2}
+              />
+            </FlowField>
+          ) : null}
+          {value.polarity === "positive" &&
+          value.generatedHealthEventTemplate.enabled ? (
             <>
               <FlowField label="Workout type">
                 <Input

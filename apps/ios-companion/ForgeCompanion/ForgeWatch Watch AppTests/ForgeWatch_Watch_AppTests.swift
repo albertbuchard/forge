@@ -125,6 +125,33 @@ final class ForgeWatch_Watch_AppTests: XCTestCase {
         XCTAssertEqual(habit.last7History.filter(\.current).count, 1)
     }
 
+    func testNegativeHabitPreviewUsesResistedAndPerformedCopy() throws {
+        let model = WatchAppModel(preview: true)
+        let habit = try XCTUnwrap(
+            model.bootstrap.habits.first(where: { $0.polarity == "negative" })
+        )
+
+        XCTAssertEqual(habit.alignedActionLabel, "Resisted")
+        XCTAssertEqual(habit.unalignedActionLabel, "Performed")
+    }
+
+    func testLocalHabitDateKeyUsesTheSuppliedTravelTimezone() throws {
+        let instant = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-01-01T00:30:00Z")
+        )
+        let losAngeles = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let zurich = try XCTUnwrap(TimeZone(identifier: "Europe/Zurich"))
+
+        XCTAssertEqual(
+            WatchAppModel.localDateKey(at: instant, timeZone: losAngeles),
+            "2025-12-31"
+        )
+        XCTAssertEqual(
+            WatchAppModel.localDateKey(at: instant, timeZone: zurich),
+            "2026-01-01"
+        )
+    }
+
     func testTailscaleHttpsConnectionCanUseWatchDirectNetworking() {
         let connection = ForgeWatchConnection(
             apiBaseUrl: "https://macbook-pro--de-francis-lalanne.tail47ba04.ts.net/api/v1",

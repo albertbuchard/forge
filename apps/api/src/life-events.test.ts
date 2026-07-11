@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -92,22 +92,24 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(createResponse.statusCode, 200);
-    const createdResult = (createResponse.json() as {
-      results: Array<{
-        ok: boolean;
-        id: string;
-        entity: {
+    const createdResult = (
+      createResponse.json() as {
+        results: Array<{
+          ok: boolean;
           id: string;
-          title: string;
-          primaryCalendarEventId: string | null;
-          links: Array<{
-            targetEntityType: string;
-            targetEntityId: string;
-            relationship: string;
-          }>;
-        };
-      }>;
-    }).results[0]!;
+          entity: {
+            id: string;
+            title: string;
+            primaryCalendarEventId: string | null;
+            links: Array<{
+              targetEntityType: string;
+              targetEntityId: string;
+              relationship: string;
+            }>;
+          };
+        }>;
+      }
+    ).results[0]!;
     assert.equal(createdResult.ok, true);
     assert.equal(createdResult.entity.title, "Flight to Paris");
     assert.equal(createdResult.entity.primaryCalendarEventId, null);
@@ -147,17 +149,19 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(updateResponse.statusCode, 200);
-    const updated = (updateResponse.json() as {
-      results: Array<{
-        ok: boolean;
-        entity: {
-          title: string;
-          destinationLabel: string;
-          metadata: Record<string, unknown>;
-          links: Array<{ targetEntityType: string; relationship: string }>;
-        };
-      }>;
-    }).results[0]!;
+    const updated = (
+      updateResponse.json() as {
+        results: Array<{
+          ok: boolean;
+          entity: {
+            title: string;
+            destinationLabel: string;
+            metadata: Record<string, unknown>;
+            links: Array<{ targetEntityType: string; relationship: string }>;
+          };
+        }>;
+      }
+    ).results[0]!;
     assert.equal(updated.ok, true);
     assert.equal(updated.entity.title, "Flight to Paris CDG");
     assert.equal(updated.entity.destinationLabel, "CDG Terminal 2");
@@ -196,17 +200,19 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(periodCreateResponse.statusCode, 200);
-    const periodCreated = (periodCreateResponse.json() as {
-      results: Array<{
-        ok: boolean;
-        id: string;
-        entity: {
-          eventType: string;
-          startsAt: string;
-          endsAt: string;
-        };
-      }>;
-    }).results[0]!;
+    const periodCreated = (
+      periodCreateResponse.json() as {
+        results: Array<{
+          ok: boolean;
+          id: string;
+          entity: {
+            eventType: string;
+            startsAt: string;
+            endsAt: string;
+          };
+        }>;
+      }
+    ).results[0]!;
     assert.equal(periodCreated.ok, true);
     assert.equal(periodCreated.entity.eventType, "stay");
     assert.equal(periodCreated.entity.startsAt, "2026-06-01T10:00:00.000Z");
@@ -242,14 +248,11 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }>;
     };
     assert.equal(invalidIntervalBody.results[0]!.ok, false);
-    assert.deepEqual(
-      invalidIntervalBody.results[0]!.error?.issues?.[0],
-      {
-        path: "endsAt",
-        message: "endsAt must be after startsAt",
-        code: "custom"
-      }
-    );
+    assert.deepEqual(invalidIntervalBody.results[0]!.error?.issues?.[0], {
+      path: "endsAt",
+      message: "endsAt must be after startsAt",
+      code: "custom"
+    });
 
     const searchResponse = await app.inject({
       method: "POST",
@@ -266,9 +269,11 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(searchResponse.statusCode, 200);
-    const matches = (searchResponse.json() as {
-      results: Array<{ matches: Array<{ id: string }> }>;
-    }).results[0]!.matches;
+    const matches = (
+      searchResponse.json() as {
+        results: Array<{ matches: Array<{ id: string }> }>;
+      }
+    ).results[0]!.matches;
     assert.ok(matches.some((match) => match.id === createdResult.id));
 
     const syncResponse = await app.inject({
@@ -323,8 +328,14 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       lifeEvent: { calendarSyncState: string };
     };
     assert.equal(periodSyncBody.lifeEvent.calendarSyncState, "created");
-    assert.equal(periodSyncBody.calendarEvent.startAt, "2026-06-01T10:00:00.000Z");
-    assert.equal(periodSyncBody.calendarEvent.endAt, "2026-09-01T09:00:00.000Z");
+    assert.equal(
+      periodSyncBody.calendarEvent.startAt,
+      "2026-06-01T10:00:00.000Z"
+    );
+    assert.equal(
+      periodSyncBody.calendarEvent.endAt,
+      "2026-09-01T09:00:00.000Z"
+    );
 
     const calendarCreated = await app.inject({
       method: "POST",
@@ -338,9 +349,11 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(calendarCreated.statusCode, 201);
-    const calendarEvent = (calendarCreated.json() as {
-      event: { id: string };
-    }).event;
+    const calendarEvent = (
+      calendarCreated.json() as {
+        event: { id: string };
+      }
+    ).event;
     const fromCalendarResponse = await app.inject({
       method: "POST",
       url: "/api/v1/life-events/from-calendar-event",
@@ -357,7 +370,10 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
     };
     assert.equal(fromCalendarBody.action, "created_from_calendar_event");
     assert.equal(fromCalendarBody.lifeEvent.eventType, "cinema");
-    assert.equal(fromCalendarBody.lifeEvent.primaryCalendarEventId, calendarEvent.id);
+    assert.equal(
+      fromCalendarBody.lifeEvent.primaryCalendarEventId,
+      calendarEvent.id
+    );
 
     const uploadResponse = await app.inject({
       method: "POST",
@@ -375,7 +391,8 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       }
     });
     assert.equal(uploadResponse.statusCode, 201);
-    const artifact = (uploadResponse.json() as { artifact: { id: string } }).artifact;
+    const artifact = (uploadResponse.json() as { artifact: { id: string } })
+      .artifact;
     const ticketResponse = await app.inject({
       method: "POST",
       url: "/api/v1/life-events/import-ticket",
@@ -417,6 +434,8 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       timeline: {
         events: Array<{ id: string }>;
         nextLifeEventId: string | null;
+        total: number;
+        counts: { past: number; current: number; upcoming: number };
       };
     };
     assert.ok(
@@ -426,6 +445,131 @@ test("life_event batch create, update, link search, calendar sync, and ticket im
       timeline.timeline.events.some((event) => event.id === periodCreated.id)
     );
     assert.equal(typeof timeline.timeline.nextLifeEventId, "string");
+    assert.equal(
+      timeline.timeline.counts.past +
+        timeline.timeline.counts.current +
+        timeline.timeline.counts.upcoming,
+      timeline.timeline.total
+    );
+
+    const segmentSearchResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/life-events/timeline?q=LX638&limit=10",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(segmentSearchResponse.statusCode, 200);
+    const segmentSearch = segmentSearchResponse.json() as {
+      timeline: { events: Array<{ id: string }>; total: number };
+    };
+    assert.ok(segmentSearch.timeline.total >= 1);
+    assert.ok(
+      segmentSearch.timeline.events.some(
+        (event) => event.id === createdResult.id
+      )
+    );
+
+    const literalWildcardResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/life-events/timeline?q=%25&limit=10",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(literalWildcardResponse.statusCode, 200);
+    assert.equal(
+      (literalWildcardResponse.json() as { timeline: { total: number } })
+        .timeline.total,
+      0
+    );
+
+    const boundedTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/life-events/timeline?limit=1&offset=0",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(boundedTimelineResponse.statusCode, 200);
+    const boundedTimeline = boundedTimelineResponse.json() as {
+      timeline: {
+        events: Array<{ id: string }>;
+        total: number;
+        hasMore: boolean;
+        limit: number;
+        offset: number;
+      };
+    };
+    assert.equal(boundedTimeline.timeline.events.length, 1);
+    assert.ok(boundedTimeline.timeline.total >= 3);
+    assert.equal(boundedTimeline.timeline.hasMore, true);
+    assert.equal(boundedTimeline.timeline.limit, 1);
+    assert.equal(boundedTimeline.timeline.offset, 0);
+
+    const searchedTimelineResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/life-events/timeline?q=Lisbon&limit=1&offset=0",
+      headers: { cookie: operatorCookie }
+    });
+    assert.equal(searchedTimelineResponse.statusCode, 200);
+    const searchedTimeline = searchedTimelineResponse.json() as {
+      timeline: {
+        events: Array<{ id: string; title: string }>;
+        total: number;
+        hasMore: boolean;
+      };
+    };
+    assert.equal(searchedTimeline.timeline.total, 1);
+    assert.equal(searchedTimeline.timeline.hasMore, false);
+    assert.equal(searchedTimeline.timeline.events.length, 1);
+    assert.equal(searchedTimeline.timeline.events[0]?.id, periodCreated.id);
+    assert.equal(
+      searchedTimeline.timeline.events[0]?.title,
+      "Summer stay in Lisbon"
+    );
+
+    const tiedCreateResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        atomic: true,
+        operations: ["A", "B"].map((suffix) => ({
+          entityType: "life_event",
+          data: {
+            title: `Tied event ${suffix}`,
+            eventType: "custom",
+            startsAt: "2027-01-01T10:00:00.000Z",
+            endsAt: "2027-01-01T11:00:00.000Z",
+            calendarProjection: "none"
+          }
+        }))
+      }
+    });
+    assert.equal(tiedCreateResponse.statusCode, 200);
+    const tiedIds = (
+      tiedCreateResponse.json() as { results: Array<{ id: string }> }
+    ).results.map((result) => result.id);
+    getDatabase()
+      .prepare(
+        `UPDATE life_events
+         SET created_at = '2026-07-01T00:00:00.000Z'
+         WHERE id IN (?, ?)`
+      )
+      .run(...tiedIds);
+    const tiedPages = await Promise.all(
+      [0, 1].map((offset) =>
+        app.inject({
+          method: "GET",
+          url: `/api/v1/life-events/timeline?q=Tied%20event&limit=1&offset=${offset}`,
+          headers: { cookie: operatorCookie }
+        })
+      )
+    );
+    const pagedTiedIds = tiedPages.map(
+      (response) =>
+        (
+          response.json() as {
+            timeline: { events: Array<{ id: string }> };
+          }
+        ).timeline.events[0]!.id
+    );
+    assert.deepEqual(pagedTiedIds, [...tiedIds].sort());
   } finally {
     await app.close();
     closeDatabase();

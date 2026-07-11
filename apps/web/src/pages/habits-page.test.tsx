@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HabitsPage } from "@/pages/habits-page";
-import { formatLocalDateKey } from "@/lib/date-keys";
+import { formatLocalDateKey, getRuntimeTimeZone } from "@/lib/date-keys";
 import type { Habit } from "@/lib/types";
 
 const {
@@ -113,13 +113,17 @@ const habitUser = {
 };
 
 function createHabit(overrides: Partial<Habit> = {}): Habit {
-  return {
+  const base: Habit = {
     id: "habit_1",
     title: "Meditation",
     description: "Ten quiet minutes.",
     status: "active",
     polarity: "positive",
     frequency: "daily",
+    timezone: "Europe/Zurich",
+    dayBoundaryMode: "fixed",
+    effectiveTimezone: "Europe/Zurich",
+    currentDateKey: formatLocalDateKey(),
     targetCount: 1,
     weekDays: [],
     linkedGoalIds: [],
@@ -156,7 +160,14 @@ function createHabit(overrides: Partial<Habit> = {}): Habit {
     checkIns: [],
     userId: habitUser.id,
     user: habitUser,
-    ...overrides
+  };
+  return {
+    ...base,
+    ...overrides,
+    timezone: overrides.timezone ?? base.timezone,
+    dayBoundaryMode: overrides.dayBoundaryMode ?? base.dayBoundaryMode,
+    effectiveTimezone: overrides.effectiveTimezone ?? base.effectiveTimezone,
+    currentDateKey: overrides.currentDateKey ?? base.currentDateKey
   };
 }
 
@@ -260,13 +271,11 @@ describe("HabitsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete Meditation" }));
 
     expect(
-      await screen.findByRole("button", { name: "Delete habit" })
+      await screen.findByRole("button", { name: "Move to bin" })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Meditation" })
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Move "Meditation" to the bin/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete habit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move to bin" }));
 
     await waitFor(() => {
       expect(deleteHabitMock).toHaveBeenCalledWith("habit_1");
@@ -305,7 +314,8 @@ describe("HabitsPage", () => {
 
     expect(listHabitsMock).toHaveBeenCalledWith({
       userIds: [],
-      orderBy: "name"
+      orderBy: "name",
+      timezone: getRuntimeTimeZone()
     });
 
     fireEvent.click(screen.getByRole("button", { name: /name a-z/i }));
@@ -314,7 +324,8 @@ describe("HabitsPage", () => {
     await waitFor(() => {
       expect(listHabitsMock).toHaveBeenLastCalledWith({
         userIds: [],
-        orderBy: "needs_attention"
+        orderBy: "needs_attention",
+        timezone: getRuntimeTimeZone()
       });
     });
   });
@@ -441,7 +452,8 @@ describe("HabitsPage", () => {
       expect(createHabitCheckInMock).toHaveBeenCalledWith("habit_negative", {
         status: "missed",
         dateKey: todayKey,
-        note: undefined
+        note: undefined,
+        timezone: getRuntimeTimeZone()
       });
     });
   });
@@ -497,5 +509,75 @@ describe("HabitsPage", () => {
     expect(
       (await screen.findAllByText("72 AP / 210 AP")).length
     ).toBeGreaterThan(0);
+  });
+
+  it("uses the resolved travel day and only negative-habit outcome copy", async () => {
+    const travelDateKey = "2026-07-10";
+    createHabitCheckInMock.mockResolvedValue({
+      habit: createHabit({ polarity: "negative" })
+    });
+    listHabitsMock.mockResolvedValue({
+      habits: [
+        createHabit({
+          id: "habit_travel_negative",
+          title: "Compulsive checking",
+          polarity: "negative",
+          timezone: "America/Los_Angeles",
+          dayBoundaryMode: "travel",
+          effectiveTimezone: "Pacific/Auckland",
+          currentDateKey: travelDateKey
+        })
+      ]
+    });
+    primeSharedMocks();
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: [habitUser.id],
+      refresh: vi.fn().mockResolvedValue(undefined),
+      snapshot: {
+        goals: [],
+        tasks: [],
+        users: [habitUser],
+        dashboard: {
+          goals: [],
+          projects: [],
+          notesSummaryByEntity: {}
+        }
+      }
+    });
+
+    renderWithProviders();
+
+    expect(
+      await screen.findByText("Travel · Pacific/Auckland")
+    ).toBeInTheDocument();
+    const habitTitle = screen.getAllByText("Compulsive checking").at(-1)!;
+    const habitCard = habitTitle.closest(
+      "[data-psyche-focus-id]"
+    ) as HTMLElement;
+    expect(
+      within(habitCard).getByRole("button", { name: "Resisted" })
+    ).toBeInTheDocument();
+    expect(
+      within(habitCard).getByRole("button", { name: "Performed" })
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(habitCard).getByRole("button", { name: "Resisted" })
+    );
+    await waitFor(() => {
+      expect(createHabitCheckInMock).toHaveBeenCalledWith(
+        "habit_travel_negative",
+        {
+          status: "missed",
+          dateKey: travelDateKey,
+          note: undefined,
+          timezone: getRuntimeTimeZone()
+        }
+      );
+    });
+    expect(listHabitsMock).toHaveBeenCalledWith({
+      userIds: [habitUser.id],
+      orderBy: "name",
+      timezone: getRuntimeTimeZone()
+    });
   });
 });

@@ -515,6 +515,7 @@ describe("SleepPage", () => {
       );
     });
     await flushUi();
+    return client;
   }
 
   function requireButton(label: string) {
@@ -639,6 +640,121 @@ describe("SleepPage", () => {
         tags: ["travel", "recovery"],
         links: []
       });
+    });
+  });
+
+  it("loads reflection link catalogs only on demand and preserves an unsaved draft across refetches", async () => {
+    const client = await renderPage();
+
+    expect(listPsycheValuesMock).not.toHaveBeenCalled();
+    expect(listBehaviorPatternsMock).not.toHaveBeenCalled();
+
+    await waitForCondition(() => {
+      expect(container.textContent).toContain("Reflection");
+    });
+    await act(async () => {
+      requireButton("Reflection").click();
+    });
+    await flushUi();
+    await waitForCondition(() => {
+      expect(listPsycheValuesMock).toHaveBeenCalledTimes(1);
+      expect(listTriggerReportsMock).toHaveBeenCalledTimes(1);
+    });
+
+    const qualityInput = requireLabelControl("Quality summary");
+    await act(async () => {
+      setControlValue(qualityInput, "Unsaved local reflection");
+      client.setQueryData(["forge-sleep", "user_operator"], {
+        ...sleepView,
+        sessions: sleepView.sessions.map((session) => ({ ...session }))
+      });
+    });
+    await flushUi();
+
+    expect(requireLabelControl("Quality summary").value).toBe(
+      "Unsaved local reflection"
+    );
+  });
+
+  it("renders missing bedtime and wake drift as unavailable instead of zero", async () => {
+    getSleepViewMock.mockResolvedValueOnce({
+      sleep: {
+        ...sleepView,
+        latestNight: sleepView.latestNight
+          ? {
+              ...sleepView.latestNight,
+              bedtimeDriftMinutes: null,
+              wakeDriftMinutes: null
+            }
+          : null
+      }
+    });
+
+    await renderPage();
+
+    await waitForCondition(() => {
+      const driftLabels = Array.from(container.querySelectorAll("span")).filter(
+        (node) =>
+          node.textContent === "Bedtime drift" ||
+          node.textContent === "Wake drift"
+      );
+      expect(driftLabels).toHaveLength(2);
+      for (const label of driftLabels) {
+        expect(label.parentElement?.textContent).toContain("n/a");
+      }
+    });
+  });
+
+  it("mounts large raw evidence histories in bounded batches", async () => {
+    const olderDetail = rawDetails.get(olderSession.id)!;
+    const baseRecord = olderDetail.sourceRecords[0]!;
+    const baseSegment = olderDetail.segments[0]!;
+    const largeDetail: SleepSessionDetailPayload = {
+      ...olderDetail,
+      sourceRecords: Array.from({ length: 85 }, (_, index) => ({
+        ...baseRecord,
+        id: `source_${index}`,
+        providerRecordUid: `provider_${index}`
+      })),
+      segments: Array.from({ length: 85 }, (_, index) => ({
+        ...baseSegment,
+        id: `segment_${index}`,
+        externalUid: `segment_${index}`
+      }))
+    };
+    getSleepSessionRawDetailMock.mockImplementation(async (sleepId: string) =>
+      sleepId === olderSession.id
+        ? largeDetail
+        : rawDetails.get(latestSession.id)!
+    );
+
+    await renderPage();
+    await waitForCondition(() => {
+      expect(
+        Array.from(container.querySelectorAll("button")).some(
+          (button) =>
+            button.getAttribute("aria-label") ===
+            "Select sleep for 2026-04-13"
+        )
+      ).toBe(true);
+    });
+    await act(async () => {
+      requireButton("Select sleep for 2026-04-13").click();
+    });
+    await flushUi();
+    await act(async () => {
+      requireButton("Show raw data").click();
+    });
+    await flushUi();
+
+    await waitForCondition(() => {
+      expect(
+        Array.from(container.querySelectorAll("button")).filter((button) =>
+          button.textContent?.includes("See JSON")
+        )
+      ).toHaveLength(40);
+      expect(requireButton("Show next raw records")).toBeTruthy();
+      expect(requireButton("Show next sleep segments")).toBeTruthy();
     });
   });
 

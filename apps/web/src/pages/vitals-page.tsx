@@ -19,6 +19,11 @@ import type { PsycheMetricsViewData } from "@/lib/psyche-types";
 import { cn } from "@/lib/utils";
 
 type VitalsMetric = VitalsViewData["metrics"][number];
+type VitalsEvidenceStatus = {
+  label: string;
+  detail: string;
+  tone: "meta" | "signal" | "default";
+};
 
 const spotlightMetricKeys = [
   "restingHeartRate",
@@ -41,6 +46,54 @@ function groupDailyMetrics(
 
 function asDailyMetric(metric: VitalsMetric): DailyMetricRecord {
   return metric;
+}
+
+export function getVitalsEvidenceStatus(
+  vitals: VitalsViewData,
+  now = new Date()
+): VitalsEvidenceStatus {
+  const latestDateKey = vitals.summary.latestDateKey;
+  if (!latestDateKey || vitals.summary.metricCount === 0) {
+    return {
+      label: "No evidence",
+      detail: "No daily HealthKit aggregates are available yet.",
+      tone: "default"
+    };
+  }
+  const latestDay = Date.parse(`${latestDateKey}T12:00:00Z`);
+  if (!Number.isFinite(latestDay)) {
+    return {
+      label: "Invalid evidence date",
+      detail: "The latest aggregate date cannot be interpreted.",
+      tone: "default"
+    };
+  }
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    12
+  );
+  const ageDays = Math.floor((today - latestDay) / 86_400_000);
+  if (ageDays < 0) {
+    return {
+      label: "Future-dated",
+      detail: `Latest aggregate is dated ${latestDateKey}; check device time and timezone before interpreting trends.`,
+      tone: "default"
+    };
+  }
+  if (ageDays <= 1) {
+    return {
+      label: "Current evidence",
+      detail: `Latest aggregate is ${ageDays === 0 ? "today" : "one day old"}.`,
+      tone: "signal"
+    };
+  }
+  return {
+    label: "Stale evidence",
+    detail: `Latest aggregate is ${ageDays} days old. Treat trends as historical until the companion sync catches up.`,
+    tone: "default"
+  };
 }
 
 function PsycheMetricsVitalsSection({
@@ -128,7 +181,10 @@ export function VitalsPage() {
   const shell = useForgeShell();
   const vitalsQuery = useQuery({
     queryKey: ["forge-vitals-view", ...shell.selectedUserIds],
-    queryFn: async () => (await getVitalsView(shell.selectedUserIds)).vitals
+    queryFn: async () => (await getVitalsView(shell.selectedUserIds)).vitals,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+    staleTime: 15_000
   });
   const psycheMetricsQuery = useQuery({
     queryKey: ["forge-psyche-metrics-vitals-view"],
@@ -161,6 +217,7 @@ export function VitalsPage() {
   );
   const categoryBreakdown = vitals.summary.categoryBreakdown;
   const metricsByCategory = groupDailyMetrics(dailyMetrics, categoryBreakdown);
+  const evidenceStatus = getVitalsEvidenceStatus(vitals);
   const psycheMetrics =
     !psycheMetricsQuery.isError && psycheMetricsQuery.data?.summary.hasData
       ? psycheMetricsQuery.data
@@ -171,121 +228,173 @@ export function VitalsPage() {
       <PageHero
         title="Vitals"
         description="Forge now keeps a daily body-signals layer across recovery, cardio fitness, breathing, composition, temperature, and activity. Use this surface to spot drift early, not just admire numbers late."
-        badge={`${vitals.summary.metricCount} live metrics`}
+        badge={`${vitals.summary.metricCount} tracked metrics`}
       />
 
-      <section className="grid gap-4 xl:grid-cols-4">
-        <SpotlightCard
-          title="Recovery pulse"
-          description="Resting heart rate and HRV are the fastest read on load, stress, and whether today needs a gentler edge."
-          metric={spotlightMetrics[0] ?? spotlightMetrics[1]}
-        />
-        <SpotlightCard
-          title="Cardio engine"
-          description="VO2 max and walking heart rate show whether baseline fitness is improving or whether your effort is costing more than usual."
-          metric={spotlightMetrics[2]}
-        />
-        <SpotlightCard
-          title="Breath and oxygen"
-          description="Respiratory rate and oxygen saturation help catch nights or stretches where recovery quality starts to slip."
-          metric={spotlightMetrics[3]}
-        />
-        <SpotlightCard
-          title="Body composition"
-          description="Mass and composition stay close to the daily story so progress is visible without flattening everything into weight alone."
-          metric={spotlightMetrics[4]}
-        />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
-        <Card className="overflow-hidden rounded-[30px] border-[var(--ui-border-subtle)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ui-info-soft)_34%,var(--ui-surface-section)_66%),var(--ui-surface-section))] p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="grid gap-2">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-                Coverage
-              </div>
-              <div className="text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                {vitals.summary.trackedDays} tracked days across{" "}
-                {vitals.summary.metricCount} metrics
-              </div>
-              <div className="max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
-                The companion is compressing HealthKit into daily signal bands,
-                so what you see here is designed for decisions: how your
-                recovery is trending, where your physiology is changing, and
-                which body systems are actually being observed consistently.
-              </div>
-            </div>
-            <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-              Latest snapshot {formatDateKey(vitals.summary.latestDateKey)}
-            </Badge>
+      <Card className="grid gap-3 border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:grid-cols-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+            Freshness
           </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={evidenceStatus.tone}>{evidenceStatus.label}</Badge>
+            <span className="text-sm text-[var(--ui-ink-soft)]">
+              {evidenceStatus.detail}
+            </span>
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+            Latest-day coverage
+          </div>
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            {vitals.summary.latestMetricCount} of {vitals.summary.metricCount}{" "}
+            tracked metrics have a value on{" "}
+            {formatDateKey(vitals.summary.latestDateKey)}.
+          </div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+            Source quality
+          </div>
+          <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            This view exposes daily aggregates, units, sample counts, and sample
+            times. Raw provider identity and duplicate-source decisions are not
+            available here.
+          </div>
+        </div>
+      </Card>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {categoryBreakdown.map((category) => {
-              const tone = metricTone(category.category);
-              return (
-                <div
-                  key={category.category}
-                  className={cn(
-                    "rounded-[22px] border bg-[var(--ui-surface-1)] p-4",
-                    tone.ring
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge className={tone.badge}>{category.category}</Badge>
-                    <div className="text-xs text-[var(--ui-ink-faint)]">
-                      {category.coverageDays} days
-                    </div>
+      {vitals.summary.metricCount === 0 ? (
+        <Card className="border-dashed border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-6">
+          <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
+            No body signals synced
+          </div>
+          <div className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+            Forge has no daily vital aggregates to interpret. Recovery, cardio,
+            breathing, composition, and activity conclusions stay unavailable
+            until HealthKit evidence arrives.
+          </div>
+        </Card>
+      ) : (
+        <>
+          <section className="grid gap-4 xl:grid-cols-4">
+            <SpotlightCard
+              title="Recovery pulse"
+              description="Resting heart rate and HRV are the fastest read on load, stress, and whether today needs a gentler edge."
+              metric={spotlightMetrics[0] ?? spotlightMetrics[1]}
+            />
+            <SpotlightCard
+              title="Cardio engine"
+              description="VO2 max and walking heart rate show whether baseline fitness is improving or whether your effort is costing more than usual."
+              metric={spotlightMetrics[2]}
+            />
+            <SpotlightCard
+              title="Breath and oxygen"
+              description="Respiratory rate and oxygen saturation help catch nights or stretches where recovery quality starts to slip."
+              metric={spotlightMetrics[3]}
+            />
+            <SpotlightCard
+              title="Body composition"
+              description="Mass and composition stay close to the daily story so progress is visible without flattening everything into weight alone."
+              metric={spotlightMetrics[4]}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+            <Card className="overflow-hidden rounded-[30px] border-[var(--ui-border-subtle)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--ui-info-soft)_34%,var(--ui-surface-section)_66%),var(--ui-surface-section))] p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="grid gap-2">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                    Coverage
                   </div>
-                  <div className="mt-3 text-2xl font-semibold text-[var(--ui-ink-strong)]">
-                    {category.metricCount}
+                  <div className="text-2xl font-semibold text-[var(--ui-ink-strong)]">
+                    {vitals.summary.trackedDays} tracked days across{" "}
+                    {vitals.summary.metricCount} metrics
                   </div>
-                  <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                    active metric{category.metricCount === 1 ? "" : "s"}
+                  <div className="max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    The companion is compressing HealthKit into daily signal
+                    bands, so what you see here is designed for decisions: how
+                    your recovery is trending, where your physiology is
+                    changing, and which body systems are actually being observed
+                    consistently.
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card className="rounded-[30px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-6">
-          <div className="grid gap-3">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
-              Daily interpretation
-            </div>
-            <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
-              Body signals should feel operational, not medical-chart dead.
-            </div>
-            <div className="grid gap-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-              <div>
-                Lower resting heart rate paired with stable or rising HRV
-                usually means recovery is holding.
+                <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                  Latest snapshot {formatDateKey(vitals.summary.latestDateKey)}
+                </Badge>
               </div>
-              <div>
-                Rising walking heart rate, falling HRV, or a jump in respiratory
-                rate usually means you are carrying more load than the calendar
-                admits.
-              </div>
-              <div>
-                Composition and temperature metrics move slower, but they make
-                the fast signals easier to trust because you can see the
-                surrounding body context.
-              </div>
-            </div>
-            <div className="mt-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-medium)]">
-              {vitals.summary.latestMetricCount} metrics updated on the latest
-              tracked day.
-            </div>
-          </div>
-        </Card>
-      </section>
 
-      <MetricDetailSections groups={metricsByCategory} />
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {categoryBreakdown.map((category) => {
+                  const tone = metricTone(category.category);
+                  return (
+                    <div
+                      key={category.category}
+                      className={cn(
+                        "rounded-[22px] border bg-[var(--ui-surface-1)] p-4",
+                        tone.ring
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <Badge className={tone.badge}>
+                          {category.category}
+                        </Badge>
+                        <div className="text-xs text-[var(--ui-ink-faint)]">
+                          {category.coverageDays} days
+                        </div>
+                      </div>
+                      <div className="mt-3 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+                        {category.metricCount}
+                      </div>
+                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                        active metric{category.metricCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
 
-      {psycheMetrics ? (
-        <PsycheMetricsVitalsSection metrics={psycheMetrics} />
-      ) : null}
+            <Card className="rounded-[30px] border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-6">
+              <div className="grid gap-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                  Daily interpretation
+                </div>
+                <div className="text-lg font-semibold text-[var(--ui-ink-strong)]">
+                  Body signals should feel operational, not medical-chart dead.
+                </div>
+                <div className="grid gap-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  <div>
+                    Lower resting heart rate paired with stable or rising HRV
+                    usually means recovery is holding.
+                  </div>
+                  <div>
+                    Rising walking heart rate, falling HRV, or a jump in
+                    respiratory rate usually means you are carrying more load
+                    than the calendar admits.
+                  </div>
+                  <div>
+                    Composition and temperature metrics move slower, but they
+                    make the fast signals easier to trust because you can see
+                    the surrounding body context.
+                  </div>
+                </div>
+                <div className="mt-2 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm text-[var(--ui-ink-medium)]">
+                  {vitals.summary.latestMetricCount} metrics updated on the
+                  latest tracked day.
+                </div>
+              </div>
+            </Card>
+          </section>
+
+          <MetricDetailSections groups={metricsByCategory} />
+
+          {psycheMetrics ? (
+            <PsycheMetricsVitalsSection metrics={psycheMetrics} />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

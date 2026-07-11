@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
@@ -11,6 +18,8 @@ import {
   CalendarClock,
   Car,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Clock3,
   FileUp,
@@ -701,15 +710,7 @@ function eventIcon(type: LifeEventType) {
 }
 
 function timelineStats(timeline: LifeEventTimelinePayload | undefined) {
-  const events = timeline?.events ?? [];
-  const now = Date.now();
-  const past = events.filter((event) => Date.parse(event.endsAt) < now).length;
-  const current = events.filter(
-    (event) =>
-      Date.parse(event.startsAt) <= now && Date.parse(event.endsAt) >= now
-  ).length;
-  const upcoming = events.length - past - current;
-  return { past, current, upcoming };
+  return timeline?.counts ?? { past: 0, current: 0, upcoming: 0 };
 }
 
 function buildEventSearchText(event: LifeEvent) {
@@ -1661,6 +1662,8 @@ export function LifeEventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focusedEventId = searchParams.get("focus")?.trim() || null;
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query.trim());
+  const [timelineOffset, setTimelineOffset] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(focusedEventId);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
@@ -1672,8 +1675,16 @@ export function LifeEventsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const timelineQuery = useQuery({
-    queryKey: ["life-events-timeline"],
-    queryFn: async () => (await getLifeEventsTimeline({ limit: 500 })).timeline
+    queryKey: ["life-events-timeline", deferredQuery, timelineOffset],
+    queryFn: async () =>
+      (
+        await getLifeEventsTimeline({
+          q: deferredQuery || undefined,
+          limit: 500,
+          offset: timelineOffset
+        })
+      ).timeline,
+    placeholderData: (previous) => previous
   });
   const timeline = timelineQuery.data;
   const focusedEventInTimeline = focusedEventId
@@ -1701,14 +1712,22 @@ export function LifeEventsPage() {
   }, [focusedEventQuery.data, timeline?.events]);
   const filteredEvents = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) {
+    if (!needle || needle === deferredQuery.toLowerCase()) {
       return timelineEvents;
     }
     return timelineEvents.filter((event) =>
       buildEventSearchText(event).includes(needle)
     );
-  }, [query, timelineEvents]);
+  }, [deferredQuery, query, timelineEvents]);
   const stats = timelineStats(timeline);
+  const totalEvents = timeline?.total ?? timelineEvents.length;
+  const pageOffset = timeline?.offset ?? timelineOffset;
+  const pageStart = totalEvents === 0 ? 0 : pageOffset + 1;
+  const pageEnd = Math.min(
+    pageOffset + (timeline?.events.length ?? 0),
+    totalEvents
+  );
+
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollMargin, setTimelineScrollMargin] = useState(0);
   useLayoutEffect(() => {
@@ -2215,7 +2234,7 @@ export function LifeEventsPage() {
         title="Life Events"
         titleText="Life Events"
         description="A chronological timeline for the important events that should stay connected to calendar, artifacts, and the rest of Forge."
-        badge={`${stats.upcoming} upcoming`}
+        badge={`${totalEvents} ${totalEvents === 1 ? "event" : "events"}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -2244,13 +2263,52 @@ export function LifeEventsPage() {
       <div className="grid gap-3 md:grid-cols-[1fr_auto]">
         <Input
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setTimelineOffset(0);
+          }}
           placeholder="Search events, places, flight numbers, people, or milestones"
         />
         <div className="flex flex-wrap gap-2">
           <Badge tone="meta">{stats.past} past</Badge>
           <Badge tone="signal">{stats.current} now</Badge>
           <Badge tone="meta">{stats.upcoming} future</Badge>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
+        <span>
+          {totalEvents === 0
+            ? query.trim()
+              ? "No matching Life Events"
+              : "No Life Events yet"
+            : `Showing ${pageStart}-${pageEnd} of ${totalEvents}`}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={timelineOffset === 0 || timelineQuery.isFetching}
+            onClick={() =>
+              setTimelineOffset((current) => Math.max(0, current - 500))
+            }
+            aria-label="Previous Life Events page"
+            title="Previous page"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!timeline?.hasMore || timelineQuery.isFetching}
+            onClick={() => setTimelineOffset((current) => current + 500)}
+            aria-label="Next Life Events page"
+            title="Next page"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
         </div>
       </div>
 

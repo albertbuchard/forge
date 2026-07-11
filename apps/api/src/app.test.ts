@@ -3166,8 +3166,7 @@ test("mobile health sync exposes structured apple health workout descriptors and
 
     const summaryFitnessResponse = await app.inject({
       method: "GET",
-      url:
-        "/api/v1/health/fitness?sessionDetail=summary&analysisDetail=compact"
+      url: "/api/v1/health/fitness?sessionDetail=summary&analysisDetail=compact"
     });
     assert.equal(summaryFitnessResponse.statusCode, 200);
     assert.ok(summaryFitnessResponse.body.length < fitnessResponse.body.length);
@@ -3269,7 +3268,8 @@ test("mobile health sync exposes structured apple health workout descriptors and
     });
     assert.equal(legacySummaryFitnessResponse.statusCode, 200);
     assert.ok(
-      summaryFitnessResponse.body.length < legacySummaryFitnessResponse.body.length
+      summaryFitnessResponse.body.length <
+        legacySummaryFitnessResponse.body.length
     );
     const legacyAnalysisSession = (
       legacySummaryFitnessResponse.json() as {
@@ -10237,6 +10237,8 @@ test("watch action batch records idempotent command receipts and replays accepte
       status: "active",
       polarity: "positive",
       frequency: "daily",
+      timezone: "UTC",
+      dayBoundaryMode: "fixed",
       targetCount: 1,
       weekDays: [],
       linkedGoalIds: [],
@@ -10827,6 +10829,82 @@ test("calendar overview accepts timezone offsets and plain dates", async () => {
     };
     assert.equal(typeof dateOnlyBody.calendar.generatedAt, "string");
     assert.ok(Array.isArray(dateOnlyBody.calendar.events));
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("calendar event API preserves offset instants, IANA zones, and date-line dates", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-calendar-time-semantics-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/events",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "New Year on Kiritimati",
+        startAt: "2026-01-01T00:30:00+14:00",
+        endAt: "2026-01-01T01:30:00+14:00",
+        timezone: "Pacific/Kiritimati",
+        preferredCalendarId: null
+      }
+    });
+    assert.equal(created.statusCode, 201);
+    const event = (
+      created.json() as {
+        event: {
+          id: string;
+          startAt: string;
+          endAt: string;
+          timezone: string;
+        };
+      }
+    ).event;
+    assert.equal(event.startAt, "2025-12-31T10:30:00.000Z");
+    assert.equal(event.endAt, "2025-12-31T11:30:00.000Z");
+    assert.equal(event.timezone, "Pacific/Kiritimati");
+
+    const fallbackUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/calendar/events/${event.id}`,
+      headers: { cookie: operatorCookie },
+      payload: {
+        startAt: "2026-11-01T01:30:00-08:00",
+        endAt: "2026-11-01T02:30:00-08:00",
+        timezone: "America/Los_Angeles"
+      }
+    });
+    assert.equal(fallbackUpdate.statusCode, 200);
+    const fallbackEvent = (
+      fallbackUpdate.json() as {
+        event: { startAt: string; endAt: string; timezone: string };
+      }
+    ).event;
+    assert.equal(fallbackEvent.startAt, "2026-11-01T09:30:00.000Z");
+    assert.equal(fallbackEvent.endAt, "2026-11-01T10:30:00.000Z");
+    assert.equal(fallbackEvent.timezone, "America/Los_Angeles");
+
+    const invalidZone = await app.inject({
+      method: "POST",
+      url: "/api/v1/calendar/events",
+      headers: { cookie: operatorCookie },
+      payload: {
+        title: "Ambiguous timezone abbreviation",
+        startAt: "2026-01-01T09:00:00.000Z",
+        endAt: "2026-01-01T10:00:00.000Z",
+        timezone: "PST",
+        preferredCalendarId: null
+      }
+    });
+    assert.equal(invalidZone.statusCode, 400);
+    assert.match(invalidZone.body, /valid IANA timezone/i);
   } finally {
     await app.close();
     closeDatabase();
@@ -13745,6 +13823,8 @@ test("habit soft delete hides the habit from list and direct reads while keeping
       status: "active",
       polarity: "positive",
       frequency: "daily",
+      timezone: "UTC",
+      dayBoundaryMode: "fixed",
       targetCount: 1,
       weekDays: [],
       linkedGoalIds: [],
@@ -24737,6 +24817,8 @@ test("self observation calendar returns observed notes with linked psyche contex
       status: "active",
       polarity: "negative",
       frequency: "daily",
+      timezone: "Europe/Zurich",
+      dayBoundaryMode: "fixed",
       targetCount: 1,
       weekDays: [],
       linkedGoalIds: [],

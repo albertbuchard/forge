@@ -9,7 +9,11 @@ import {
   normalizeMovementCategoryTag,
   updateMovementPlace
 } from "./movement.js";
-import { createHabitCheckIn, listHabits } from "./repositories/habits.js";
+import {
+  createHabitCheckIn,
+  getHabitById,
+  listHabits
+} from "./repositories/habits.js";
 import { listGoals } from "./repositories/goals.js";
 import { createNote } from "./repositories/notes.js";
 import { listAttentionInbox } from "./services/attention-inbox.js";
@@ -87,7 +91,8 @@ const watchCaptureEventSchema = z.object({
 
 export const mobileWatchBootstrapSchema = z.object({
   sessionId: z.string().trim().min(1),
-  pairingToken: z.string().trim().min(1)
+  pairingToken: z.string().trim().min(1),
+  timezone: z.string().trim().min(1).optional()
 });
 
 export const mobileWatchHabitCheckInSchema = z.object({
@@ -98,15 +103,17 @@ export const mobileWatchHabitCheckInSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .default(() => formatLocalDateKey()),
+    .optional(),
   status: z.enum(["done", "missed"]),
   note: z.string().trim().default(""),
-  description: z.string().trim().optional()
+  description: z.string().trim().optional(),
+  timezone: z.string().trim().min(1).optional()
 });
 
 export const mobileWatchCaptureBatchSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
+  timezone: z.string().trim().min(1).optional(),
   device: watchDeviceSchema.default({}),
   events: z.array(watchCaptureEventSchema).max(100).default([])
 });
@@ -114,6 +121,7 @@ export const mobileWatchCaptureBatchSchema = z.object({
 export const mobileWatchCommandBatchSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
+  timezone: z.string().trim().min(1).optional(),
   device: watchDeviceSchema.default({}),
   commands: z
     .array(
@@ -205,6 +213,21 @@ function userScopeFilter(pairing: PairingSessionLike) {
     : { userIds: [pairing.user_id] };
 }
 
+function requirePairingHabitAccess(
+  pairing: PairingSessionLike,
+  habitId: string,
+  timezone?: string
+) {
+  const habit = getHabitById(habitId, { timezone });
+  if (
+    !habit ||
+    (pairing.user_id !== "user_operator" && habit.userId !== pairing.user_id)
+  ) {
+    throw new HttpError(404, "watch_habit_not_found", "Habit not found");
+  }
+  return habit;
+}
+
 function parseDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -262,6 +285,7 @@ function buildHabitHistory(
   habit: {
     frequency: "daily" | "weekly";
     polarity: "positive" | "negative";
+    targetCount: number;
     checkIns: Array<{ dateKey: string; status: "done" | "missed" }>;
   },
   options?: { anchorDateKey?: string }
@@ -315,9 +339,11 @@ function buildHabitHistory(
       state:
         weekEntries.length === 0
           ? "unknown"
-          : alignedCount >= unalignedCount
+          : alignedCount >= habit.targetCount
             ? "aligned"
-            : "unaligned"
+            : unalignedCount > 0
+              ? "unaligned"
+              : "unknown"
     };
   });
 }
@@ -1400,10 +1426,14 @@ function buildWatchSurfaces() {
 
 export function buildWatchBootstrap(
   pairing: PairingSessionLike,
-  options?: { anchorDateKey?: string }
+  options?: { anchorDateKey?: string; timezone?: string }
 ) {
   assertWatchReady(pairing);
-  const habits = listHabits({ status: "active", limit: 64 })
+  const habits = listHabits({
+    status: "active",
+    limit: 64,
+    timezone: options?.timezone
+  })
     .filter(
       (habit) =>
         habit.userId === pairing.user_id || pairing.user_id === "user_operator"
@@ -1430,6 +1460,10 @@ export function buildWatchBootstrap(
         frequency: habit.frequency,
         targetCount: habit.targetCount,
         weekDays: habit.weekDays,
+        timezone: habit.timezone,
+        dayBoundaryMode: habit.dayBoundaryMode,
+        effectiveTimezone: habit.effectiveTimezone,
+        currentDateKey: habit.currentDateKey,
         streakCount: habit.streakCount,
         dueToday: habit.dueToday,
         cadenceLabel: formatCadenceLabel(habit),
@@ -1676,9 +1710,11 @@ const habitCommandPayloadSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .default(() => formatLocalDateKey()),
+    .optional(),
   status: z.enum(["done", "missed"]),
-  note: z.string().trim().default("")
+  note: z.string().trim().default(""),
+  description: z.string().trim().optional(),
+  timezone: z.string().trim().min(1).optional()
 });
 
 const captureCommandPayloadSchema = z.object({
@@ -1745,12 +1781,15 @@ function processWatchCommand(
   switch (command.kind) {
     case "habit_check_in": {
       const payload = habitCommandPayloadSchema.parse(command.payload);
+      requirePairingHabitAccess(pairing, payload.habitId, payload.timezone);
       const habit = createHabitCheckIn(
         payload.habitId,
         {
           dateKey: payload.dateKey,
           status: payload.status,
-          note: payload.note
+          note: payload.note,
+          description: payload.description,
+          timezone: payload.timezone
         },
         { source: "system", actor: `watch:${command.id}` }
       );

@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDatabase, runInTransaction } from "./db.js";
+import { HttpError } from "./errors.js";
 import { getSettings } from "./repositories/settings.js";
 import {
   getDefaultUser,
@@ -1187,6 +1188,99 @@ function resolveWriteUser(userId?: string | null) {
   return resolveUserForMutation(userId ?? null).id;
 }
 
+type NutritionIdempotencyRow = {
+  request_fingerprint: string;
+  response_json: string;
+};
+
+function fingerprintNutritionMutation(input: {
+  operation: string;
+  userId: string;
+  payload: unknown;
+}) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        operation: input.operation,
+        userId: input.userId,
+        payload: input.payload
+      })
+    )
+    .digest("hex");
+}
+
+function runNutritionCreateWithIdempotency<T>(input: {
+  operation: string;
+  userId: string;
+  payload: unknown;
+  idempotencyKey?: string | null;
+  create: () => T;
+}): { value: T; replayed: boolean } {
+  if (!input.idempotencyKey) {
+    return { value: input.create(), replayed: false };
+  }
+  const idempotencyKey = input.idempotencyKey;
+
+  return runInTransaction(() => {
+    const fingerprint = fingerprintNutritionMutation(input);
+    const existing = getDatabase()
+      .prepare(
+        `SELECT request_fingerprint, response_json
+         FROM nutrition_mutation_idempotency
+         WHERE user_id = ? AND operation = ? AND idempotency_key = ?`
+      )
+      .get(input.userId, input.operation, idempotencyKey) as
+      | NutritionIdempotencyRow
+      | undefined;
+
+    if (existing) {
+      if (existing.request_fingerprint !== fingerprint) {
+        throw new HttpError(
+          409,
+          "idempotency_conflict",
+          "Idempotency key was already used for a different nutrition mutation payload."
+        );
+      }
+      return {
+        value: JSON.parse(existing.response_json) as T,
+        replayed: true
+      };
+    }
+
+    const value = input.create();
+    getDatabase()
+      .prepare(
+        `INSERT INTO nutrition_mutation_idempotency (
+           user_id, operation, idempotency_key, request_fingerprint,
+           response_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        input.userId,
+        input.operation,
+        idempotencyKey,
+        fingerprint,
+        JSON.stringify(value),
+        nowIso()
+      );
+    return { value, replayed: false };
+  });
+}
+
+function requireOwnedMealLog(userId: string, mealLogId?: string | null) {
+  if (!mealLogId) {
+    return;
+  }
+  const mealLog = getNutritionFoodLogById(mealLogId);
+  if (!mealLog || mealLog.userId !== userId) {
+    throw new HttpError(
+      400,
+      "nutrition_meal_owner_mismatch",
+      "The linked food log must belong to the same Forge user as the check-in."
+    );
+  }
+}
+
 function resolveReadUser(userIds?: string[]) {
   return userIds?.[0] ?? getDefaultUser().id;
 }
@@ -1984,6 +2078,7 @@ export function createNutritionAppearanceCheckin(input: unknown) {
 export function createNutritionSubjectiveCheckin(input: unknown) {
   const parsed = nutritionSubjectiveCheckinCreateSchema.parse(input);
   const userId = resolveWriteUser(parsed.userId);
+  requireOwnedMealLog(userId, parsed.mealLogId);
   const checkedAt = parsed.checkedAt ?? nowIso();
   const id = newId("subjective");
   const now = nowIso();
@@ -2020,6 +2115,7 @@ export function createNutritionSubjectiveCheckin(input: unknown) {
 export function createNutritionGutCheckin(input: unknown) {
   const parsed = nutritionGutCheckinCreateSchema.parse(input);
   const userId = resolveWriteUser(parsed.userId);
+  requireOwnedMealLog(userId, parsed.mealLogId);
   const checkedAt = parsed.checkedAt ?? nowIso();
   const id = newId("gut");
   const now = nowIso();
@@ -2052,6 +2148,70 @@ export function createNutritionGutCheckin(input: unknown) {
       now
     );
   return listGutCheckins(userId, 1)[0]!;
+}
+
+export function createNutritionBodyCheckinWithIdempotency(
+  input: unknown,
+  idempotencyKey?: string | null
+) {
+  const parsed = nutritionBodyCheckinCreateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const result = runNutritionCreateWithIdempotency({
+    operation: "body_checkin.create",
+    userId,
+    payload: parsed,
+    idempotencyKey,
+    create: () => createNutritionBodyCheckin({ ...parsed, userId })
+  });
+  return { checkin: result.value, replayed: result.replayed };
+}
+
+export function createNutritionAppearanceCheckinWithIdempotency(
+  input: unknown,
+  idempotencyKey?: string | null
+) {
+  const parsed = nutritionAppearanceCheckinCreateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const result = runNutritionCreateWithIdempotency({
+    operation: "appearance_checkin.create",
+    userId,
+    payload: parsed,
+    idempotencyKey,
+    create: () => createNutritionAppearanceCheckin({ ...parsed, userId })
+  });
+  return { checkin: result.value, replayed: result.replayed };
+}
+
+export function createNutritionSubjectiveCheckinWithIdempotency(
+  input: unknown,
+  idempotencyKey?: string | null
+) {
+  const parsed = nutritionSubjectiveCheckinCreateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const result = runNutritionCreateWithIdempotency({
+    operation: "subjective_checkin.create",
+    userId,
+    payload: parsed,
+    idempotencyKey,
+    create: () => createNutritionSubjectiveCheckin({ ...parsed, userId })
+  });
+  return { checkin: result.value, replayed: result.replayed };
+}
+
+export function createNutritionGutCheckinWithIdempotency(
+  input: unknown,
+  idempotencyKey?: string | null
+) {
+  const parsed = nutritionGutCheckinCreateSchema.parse(input);
+  const userId = resolveWriteUser(parsed.userId);
+  const result = runNutritionCreateWithIdempotency({
+    operation: "gut_checkin.create",
+    userId,
+    payload: parsed,
+    idempotencyKey,
+    create: () => createNutritionGutCheckin({ ...parsed, userId })
+  });
+  return { checkin: result.value, replayed: result.replayed };
 }
 
 export function createNutritionExperiment(input: unknown) {
@@ -2103,6 +2263,13 @@ export function createNutritionExperiment(input: unknown) {
       now
     );
   return listExperiments(userId).find((experiment) => experiment.id === id)!;
+}
+
+export function getNutritionExperimentOwnerUserId(experimentId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT user_id FROM nutrition_experiments WHERE id = ?`)
+    .get(experimentId) as { user_id: string } | undefined;
+  return row?.user_id ?? null;
 }
 
 export function patchNutritionExperiment(experimentId: string, input: unknown) {

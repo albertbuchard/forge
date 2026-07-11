@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
+  CalendarDays,
   ClipboardPaste,
   Clock3,
   Copy,
@@ -114,7 +115,7 @@ type CalendarOverviewQueryData = Awaited<
   ReturnType<typeof getCalendarOverview>
 >;
 type EventSyncStatus = {
-  tone: "saving" | "error";
+  tone: "saving" | "warning" | "error";
   message: string;
 };
 
@@ -628,8 +629,17 @@ export function CalendarPage() {
             : "Forge could not sync that event change."
       });
     },
-    onSuccess: ({ event }, _input, context) => {
-      setEventSyncStatus(null);
+    onSuccess: ({ event, projection }, _input, context) => {
+      setEventSyncStatus(
+        projection.state === "error"
+          ? {
+              tone: "warning",
+              message:
+                projection.message ??
+                "Forge saved the event locally, but the provider copy was not updated."
+            }
+          : null
+      );
       setCalendarOverviewData((current) => ({
         ...current,
         calendar: {
@@ -756,8 +766,17 @@ export function CalendarPage() {
             : "Forge could not sync that event change."
       });
     },
-    onSuccess: ({ event }) => {
-      setEventSyncStatus(null);
+    onSuccess: ({ event, projection }) => {
+      setEventSyncStatus(
+        projection.state === "error"
+          ? {
+              tone: "warning",
+              message:
+                projection.message ??
+                "Forge saved the event locally, but the provider copy was not updated."
+            }
+          : null
+      );
       setCalendarOverviewData((current) => ({
         ...current,
         calendar: {
@@ -1157,8 +1176,28 @@ export function CalendarPage() {
     if (!event) {
       return [];
     }
+    const providerManaged = event.ownership === "external";
+    const recurringProviderEvent = event.sourceMappings.some(
+      (source) => source.recurrenceInstanceId || source.isMasterRecurring
+    );
 
     return [
+      ...(providerManaged
+        ? [
+            {
+              id: "provider-managed",
+              label: recurringProviderEvent
+                ? "Provider-managed occurrence"
+                : "Provider-managed event",
+              description: recurringProviderEvent
+                ? "Forge mirrors this occurrence read-only. Copy it before changing it; whole-series edits stay in the provider calendar."
+                : "Forge mirrors this event read-only. Copy it to create an editable Forge-owned event.",
+              icon: CalendarDays,
+              disabled: true,
+              onSelect: () => undefined
+            }
+          ]
+        : []),
       {
         id: "mark-life-event",
         label: "Mark as Life Event",
@@ -1173,6 +1212,7 @@ export function CalendarPage() {
         description:
           "Change the event title without opening the full event flow.",
         icon: PencilLine,
+        disabled: providerManaged,
         onSelect: () => setRenameEvent(event)
       },
       {
@@ -1196,6 +1236,7 @@ export function CalendarPage() {
         label: "Cut",
         description: "Move this event by pasting it into another day.",
         icon: Scissors,
+        disabled: providerManaged,
         onSelect: () =>
           setClipboardEntry({
             id: `clipboard_cut_${event.id}_${Date.now()}`,
@@ -1213,6 +1254,7 @@ export function CalendarPage() {
           "Remove the event from Forge and delete any connected remote projection.",
         icon: Trash2,
         tone: "danger",
+        disabled: providerManaged,
         onSelect: () => {
           if (
             clipboardEntry?.mode === "cut" &&
@@ -1305,7 +1347,9 @@ export function CalendarPage() {
                 className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
                   eventSyncStatus.tone === "error"
                     ? "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
-                    : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
+                    : eventSyncStatus.tone === "warning"
+                      ? "border border-[color-mix(in_srgb,var(--warning)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-warning-soft)] text-[var(--ui-ink-strong)]"
+                      : "border border-[var(--primary)]/18 bg-[var(--primary)]/12 text-[var(--primary)]"
                 }`}
               >
                 {eventSyncStatus.message}
@@ -1551,6 +1595,7 @@ export function CalendarPage() {
                             endMinute: 0,
                             startsOn: null,
                             endsOn: null,
+                            exclusionDates: [],
                             blockingState: block.blockingState,
                             actionProfile: null,
                             createdAt: block.createdAt,
@@ -1565,8 +1610,12 @@ export function CalendarPage() {
                     <div
                       key={event.id}
                       data-calendar-item="true"
-                      draggable
+                      draggable={event.ownership !== "external"}
                       onDragStart={(dragEvent) => {
+                        if (event.ownership === "external") {
+                          dragEvent.preventDefault();
+                          return;
+                        }
                         setDraggedEventId(event.id);
                         dragEvent.dataTransfer.setData(
                           "text/forge-event-id",
@@ -1575,6 +1624,20 @@ export function CalendarPage() {
                       }}
                       onClick={(clickEvent) => {
                         clickEvent.stopPropagation();
+                        if (event.ownership === "external") {
+                          const recurring = event.sourceMappings.some(
+                            (source) =>
+                              source.recurrenceInstanceId ||
+                              source.isMasterRecurring
+                          );
+                          setEventSyncStatus({
+                            tone: "warning",
+                            message: recurring
+                              ? "This provider occurrence is mirrored read-only. Copy it to create an editable Forge-owned event; edit the whole series in the provider calendar."
+                              : "This provider event is mirrored read-only. Copy it to create an editable Forge-owned event."
+                          });
+                          return;
+                        }
                         setSelectedEvent(event);
                         setEventSeed(null);
                         setEventDialogOpen(true);
@@ -2167,21 +2230,19 @@ export function CalendarPage() {
         onSubmit={async (input) => {
           if (selectedEvent) {
             const selectedEventId = selectedEvent.id;
+            await patchEventMutation.mutateAsync({
+              eventId: selectedEventId,
+              patch: input
+            });
             setEventDialogOpen(false);
             setSelectedEvent(null);
             setEventSeed(null);
-            void patchEventMutation
-              .mutateAsync({
-                eventId: selectedEventId,
-                patch: input
-              })
-              .catch(() => undefined);
             return;
           } else {
+            await createEventMutation.mutateAsync(input);
             setEventDialogOpen(false);
             setSelectedEvent(null);
             setEventSeed(null);
-            void createEventMutation.mutateAsync(input).catch(() => undefined);
             return;
           }
         }}

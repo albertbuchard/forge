@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,10 +15,12 @@ import { CalendarEventFlowDialog } from "@/components/calendar/calendar-event-fl
 import { I18nProvider } from "@/lib/i18n";
 import type { Task } from "@/lib/types";
 
-const { getCalendarOverviewMock, recommendTaskTimeboxesMock } = vi.hoisted(() => ({
-  getCalendarOverviewMock: vi.fn(),
-  recommendTaskTimeboxesMock: vi.fn()
-}));
+const { getCalendarOverviewMock, recommendTaskTimeboxesMock } = vi.hoisted(
+  () => ({
+    getCalendarOverviewMock: vi.fn(),
+    recommendTaskTimeboxesMock: vi.fn()
+  })
+);
 
 vi.mock("@/lib/api", () => ({
   getCalendarOverview: getCalendarOverviewMock,
@@ -105,6 +113,33 @@ describe("Life Force calendar flows", () => {
 
     expect(await screen.findByText("7.5 AP/h")).toBeInTheDocument();
     expect(screen.getByText("30 AP / block")).toBeInTheDocument();
+  });
+
+  it("collects local recurrence exclusions in the guided work-block flow", async () => {
+    const onSubmit = vi.fn(async () => {});
+    renderWithProviders(
+      <WorkBlockFlowDialog open onOpenChange={vi.fn()} onSubmit={onSubmit} />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const exclusionInput = await screen.findByPlaceholderText(
+      "2026-03-30, 2026-04-06"
+    );
+    fireEvent.change(exclusionInput, {
+      target: { value: "2026-03-30, 2026-04-06" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save work block" })
+    );
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exclusionDates: ["2026-03-30", "2026-04-06"]
+        })
+      )
+    );
   });
 
   it("shows AP load on suggested timeboxes before scheduling", async () => {
@@ -253,9 +288,13 @@ describe("Life Force calendar flows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Provider events")).toBeInTheDocument();
     expect(await screen.findByText(/Clinic/)).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /Set it manually/i })[1]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /Set it manually/i })[1]
+    );
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByText("Set the exact timebox yourself")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Set the exact timebox yourself")
+    ).toBeInTheDocument();
     expect(screen.getByText("Override reason")).toBeInTheDocument();
     expect(screen.getByText("manual")).toBeInTheDocument();
   });
@@ -300,7 +339,9 @@ describe("Life Force calendar flows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const dayInput = await screen.findByDisplayValue("2026-04-14");
     expect(dayInput).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /Set it manually/i })[1]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /Set it manually/i })[1]
+    );
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       await screen.findByText("Set the exact timebox yourself")
@@ -468,7 +509,9 @@ describe("Life Force calendar flows", () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete timebox" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete timebox" })
+    );
 
     expect(onDeleteTimebox).toHaveBeenCalledWith("timebox_1");
   });
@@ -497,7 +540,9 @@ describe("Life Force calendar flows", () => {
     expect(await screen.findByText("13 AP/h")).toBeInTheDocument();
     expect(screen.getByText("13 AP")).toBeInTheDocument();
     expect(
-      screen.getByText(/availability controls whether the event blocks planning/i)
+      screen.getByText(
+        /availability controls whether the event blocks planning/i
+      )
     ).toBeInTheDocument();
   });
 
@@ -528,5 +573,124 @@ describe("Life Force calendar flows", () => {
     fireEvent.change(customInput, { target: { value: "5.5" } });
     expect(await screen.findByText("5.5 AP/h")).toBeInTheDocument();
     expect(screen.getByText("5.5 AP")).toBeInTheDocument();
+  });
+
+  it("submits date-line wall times as instants in the selected timezone", async () => {
+    const onSubmit = vi.fn(async () => {});
+    renderWithProviders(
+      <CalendarEventFlowDialog
+        open
+        onOpenChange={vi.fn()}
+        writableCalendars={[]}
+        linkOptions={[]}
+        seed={{
+          title: "New Year on Kiritimati",
+          startAt: "2025-12-31T10:30:00.000Z",
+          endAt: "2025-12-31T11:30:00.000Z",
+          timezone: "Pacific/Kiritimati",
+          availability: "busy",
+          categories: [],
+          links: []
+        }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Set the time and visibility");
+    expect(screen.getByDisplayValue("2026-01-01T00:30")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2026-01-01T01:30")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Connect the event to Forge entities");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Choose where this event should live remotely");
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startAt: "2025-12-31T10:30:00.000Z",
+          endAt: "2025-12-31T11:30:00.000Z",
+          timezone: "Pacific/Kiritimati"
+        })
+      )
+    );
+  });
+
+  it("keeps a guided event open when a newly entered wall time is ambiguous", async () => {
+    const onSubmit = vi.fn(async () => {});
+    renderWithProviders(
+      <CalendarEventFlowDialog
+        open
+        onOpenChange={vi.fn()}
+        writableCalendars={[]}
+        linkOptions={[]}
+        seed={{
+          title: "Fallback-hour event",
+          startAt: "2026-11-01T07:30:00.000Z",
+          endAt: "2026-11-01T10:30:00.000Z",
+          timezone: "America/Los_Angeles",
+          availability: "busy",
+          categories: [],
+          links: []
+        }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Set the time and visibility");
+    fireEvent.change(screen.getByDisplayValue("2026-11-01T00:30"), {
+      target: { value: "2026-11-01T01:30" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Connect the event to Forge entities");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByText("Choose where this event should live remotely");
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    expect(
+      await screen.findByText(
+        /local time occurs twice in America\/Los_Angeles/i
+      )
+    ).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the guided event open and surfaces a rejected save", async () => {
+    const onOpenChange = vi.fn();
+    const onSubmit = vi.fn(async () => {
+      throw new Error(
+        "The provider event changed first. Sync and review it before retrying."
+      );
+    });
+    renderWithProviders(
+      <CalendarEventFlowDialog
+        open
+        onOpenChange={onOpenChange}
+        writableCalendars={[]}
+        linkOptions={[]}
+        seed={{
+          title: "Conflicted event",
+          startAt: "2026-04-14T13:00:00.000Z",
+          endAt: "2026-04-14T14:00:00.000Z",
+          timezone: "Europe/Zurich",
+          availability: "busy",
+          categories: [],
+          links: []
+        }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    expect(
+      await screen.findByText(/provider event changed first/i)
+    ).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

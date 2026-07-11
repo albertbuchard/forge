@@ -669,7 +669,7 @@ export function KnowledgeGraphPage() {
     );
   }
 
-  if (graphQuery.isError) {
+  if (graphQuery.isError && !graph) {
     return (
       <ErrorState
         eyebrow="Knowledge Graph"
@@ -799,6 +799,25 @@ export function KnowledgeGraphPage() {
   return (
     <div className="h-[calc(100dvh-var(--forge-mobile-nav-clearance)-5.25rem)] overflow-hidden lg:-mt-3 lg:h-[calc(100dvh-10rem)]">
       <div className="relative h-full bg-[var(--ui-surface-0)]">
+        {graphQuery.isError ? (
+          <div
+            role="alert"
+            className="absolute bottom-3 left-1/2 z-40 flex w-[min(34rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-surface-popover)] px-4 py-3 text-xs text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-floating)] sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span>
+              The latest graph refresh failed. The previous bounded graph is
+              still visible.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void graphQuery.refetch()}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : null}
         <div className="pointer-events-auto absolute right-3 top-3 z-30 hidden md:block">
           <GamificationMiniHud metrics={shell.snapshot.metrics} />
         </div>
@@ -885,7 +904,7 @@ export function KnowledgeGraphPage() {
                 <div className={graphSegmentedControlClass}>
                   <button
                     type="button"
-                    className={`rounded-full px-2 py-1 text-[10px] transition ${
+                    className={`min-h-10 rounded-full px-3 py-2 text-[10px] transition ${
                       selectedView === "graph"
                         ? graphSegmentActiveClass
                         : graphSegmentInactiveClass
@@ -900,7 +919,7 @@ export function KnowledgeGraphPage() {
                   </button>
                   <button
                     type="button"
-                    className={`rounded-full px-2 py-1 text-[10px] transition ${
+                    className={`min-h-10 rounded-full px-3 py-2 text-[10px] transition ${
                       selectedView === "hierarchy"
                         ? graphSegmentActiveClass
                         : graphSegmentInactiveClass
@@ -917,7 +936,7 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className={`h-7 px-2 text-[10px] ${graphFloatingButtonClass}`}
+                  className={`size-10 p-0 ${graphFloatingButtonClass}`}
                   onClick={() => setAppearanceDialogOpen(true)}
                   aria-label="Open graph appearance settings"
                   title="Graph appearance settings"
@@ -927,7 +946,7 @@ export function KnowledgeGraphPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className={`size-7 p-0 ${graphFloatingButtonClass}`}
+                  className={`size-10 p-0 ${graphFloatingButtonClass}`}
                   onClick={() => {
                     setMobilePanelOpen(false);
                     setMobileFiltersOpen(true);

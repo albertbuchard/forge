@@ -20,6 +20,7 @@ export type HabitFrequency = "daily" | "weekly";
 export type HabitPolarity = "positive" | "negative";
 export type HabitStatus = "active" | "paused" | "archived";
 export type HabitCheckInStatus = "done" | "missed";
+export type HabitDayBoundaryMode = "fixed" | "travel";
 export type CalendarProvider =
   | "google"
   | "apple"
@@ -228,8 +229,29 @@ export interface Artifact {
   updatedAt: string;
 }
 
+export type ArtifactSummary = Pick<
+  Artifact,
+  | "id"
+  | "title"
+  | "shortDescription"
+  | "originalFileName"
+  | "byteSize"
+  | "contentProtection"
+  | "detectedExtension"
+  | "formatFamily"
+  | "sourceKind"
+  | "sourceLabel"
+  | "artifactState"
+  | "dangerScore"
+  | "dangerLevel"
+  | "downloadPolicy"
+  | "links"
+  | "createdAt"
+  | "updatedAt"
+>;
+
 export interface ArtifactListResponse {
-  artifacts: Artifact[];
+  artifacts: ArtifactSummary[];
   total: number;
   limit: number;
   offset: number;
@@ -1251,6 +1273,13 @@ export interface CalendarEventSource {
   updatedAt: string;
 }
 
+export interface CalendarProjectionResult {
+  state: "not_requested" | "synced" | "error";
+  code: string | null;
+  message: string | null;
+  retryable: boolean;
+}
+
 export interface CalendarEventLink {
   id: string;
   entityType: CrudEntityType;
@@ -1442,6 +1471,13 @@ export interface LifeEventTimelinePayload {
   nextLifeEventId: string | null;
   limit: number;
   offset: number;
+  total: number;
+  hasMore: boolean;
+  counts: {
+    past: number;
+    current: number;
+    upcoming: number;
+  };
 }
 
 export interface WorkBlockTemplate extends OwnedEntity {
@@ -1455,6 +1491,7 @@ export interface WorkBlockTemplate extends OwnedEntity {
   endMinute: number;
   startsOn: string | null;
   endsOn: string | null;
+  exclusionDates: string[];
   blockingState: "allowed" | "blocked";
   actionProfile: ActionProfile | null;
   createdAt: string;
@@ -1530,6 +1567,10 @@ export interface Habit extends OwnedEntity {
   status: HabitStatus;
   polarity: HabitPolarity;
   frequency: HabitFrequency;
+  timezone: string;
+  dayBoundaryMode: HabitDayBoundaryMode;
+  effectiveTimezone: string;
+  currentDateKey: string;
   targetCount: number;
   weekDays: number[];
   linkedGoalIds: string[];
@@ -2520,6 +2561,20 @@ export interface WorkoutSessionDetailPayload {
   evidence: {
     timeSeries: WorkoutTimeSeriesSampleRecord[];
     routePoints: WorkoutRoutePointRecord[];
+    summary?: {
+      resolution: "adaptive" | "raw";
+      timeSeries: {
+        totalCount: number;
+        returnedCount: number;
+        truncated: boolean;
+        metricCounts: Record<string, number>;
+      };
+      routePoints: {
+        totalCount: number;
+        returnedCount: number;
+        truncated: boolean;
+      };
+    };
   };
   zoneProfile: HealthZoneProfileRecord;
 }
@@ -3557,7 +3612,7 @@ export interface AgentIdentity {
   label: string;
   agentType: string;
   identityKey: string | null;
-  provider: "openclaw" | "hermes" | "codex" | null;
+  provider: "openclaw" | "hermes" | "codex" | "claude" | null;
   machineKey: string | null;
   personaKey: string | null;
   linkedUsers: Array<{
@@ -3598,7 +3653,7 @@ export interface AgentRuntimeSession {
   agentId: string | null;
   agentLabel: string;
   agentType: string;
-  provider: "openclaw" | "hermes" | "codex";
+  provider: "openclaw" | "hermes" | "codex" | "claude";
   sessionKey: string;
   sessionLabel: string;
   actorLabel: string;
@@ -3981,10 +4036,57 @@ export interface AiConnectorRun {
   inputs: Record<string, unknown>;
   context: Record<string, unknown>;
   conversationId: string | null;
+  retryOfRunId: string | null;
+  flowSnapshot: {
+    title: string;
+    updatedAt: string;
+    graph: {
+      nodes: AiConnectorNode[];
+      edges: AiConnectorEdge[];
+    };
+    publicInputs: AiConnectorPublicInput[];
+    publishedOutputs: AiConnectorOutput[];
+  } | null;
   result: AiConnectorRunResult | null;
   error: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface WorkbenchReadMetadata {
+  contentType: "text" | "json" | "mixed";
+  originalBytes: number;
+  returnedBytes: number;
+  redacted: boolean;
+  redactedPaths: string[];
+  truncated: boolean;
+}
+
+export interface AiConnectorRunSummary {
+  id: string;
+  connectorId: string;
+  mode: "run" | "chat";
+  status: "running" | "completed" | "failed";
+  conversationId: string | null;
+  retryOfRunId: string | null;
+  outputPreview: string;
+  result: { primaryText: string } | null;
+  hasResult: boolean;
+  error: string | null;
+  flowUpdatedAt: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface AiConnectorNodeResultSummary {
+  nodeId: string;
+  nodeType: AiConnectorNodeType;
+  label: string;
+  outputKeys: string[];
+  outputPreview: string;
+  hasPayload: boolean;
+  error: string | null;
+  timingMs: number | null;
 }
 
 export interface AiConnectorConversation {

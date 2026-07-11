@@ -110,6 +110,7 @@ checks.
 ## Current References
 
 - [Companion Iroh transport](./reference/companion-iroh.md): iOS pairing, Iroh, manual HTTP, and phone-safe URLs.
+- [Operator settings and recovery](./reference/operator-settings-and-recovery.md): data-root safety, identities, model health, pairing recovery, and preserve-data install contracts.
 - [OpenClaw plugin](./reference/openclaw-plugin.md): advanced OpenClaw adapter setup and runtime behavior.
 - [Hermes plugin](./reference/hermes-plugin.md): advanced Hermes adapter setup and release notes.
 - [Claude Code adapter](./reference/claude-code-adapter.md): advanced Claude MCP setup and recovery.

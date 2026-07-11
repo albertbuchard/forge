@@ -23,14 +23,23 @@ export {
 export {
   buildCheckinPayloads,
   buildInitialCheckinDraft,
+  validateCheckinDraft,
   WeightLossCheckinDialog,
   type WeightLossCheckinDraft
 } from "./weight-loss-checkin-dialog";
-export { WeightLossHistoryDialog } from "./weight-loss-history-dialog";
+export {
+  WeightLossDeleteFoodLogDialog,
+  WeightLossHistoryDialog
+} from "./weight-loss-history-dialog";
 export {
   buildExperimentInput,
   buildInitialExperimentDraft,
+  buildExperimentReviewDraft,
+  buildExperimentReviewPatch,
   validateExperimentDraft,
+  validateExperimentReviewDraft,
   WeightLossExperimentDialog,
-  type WeightLossExperimentDraft
+  WeightLossExperimentReviewDialog,
+  type WeightLossExperimentDraft,
+  type WeightLossExperimentReviewDraft
 } from "./weight-loss-experiment-dialog";

@@ -132,6 +132,7 @@ type ActivityContext = {
 export const lifeEventTimelineQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  q: z.string().trim().max(200).default(""),
   limit: z.coerce.number().int().min(1).max(500).default(200),
   offset: z.coerce.number().int().min(0).default(0),
   eventTypes: z
@@ -169,6 +170,10 @@ export const lifeEventTicketImportInputSchema = z.object({
   useLlm: z.boolean().default(false),
   llmProfileId: z.string().trim().optional()
 });
+
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -616,7 +621,14 @@ export function listLifeEventTimeline(
   input: z.input<typeof lifeEventTimelineQuerySchema>
 ) {
   const query = lifeEventTimelineQuerySchema.parse(input);
-  const clauses = ["deleted_at IS NULL"];
+  const clauses = [
+    "deleted_at IS NULL",
+    `NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE entity_type = 'life_event' AND entity_id = life_events.id
+    )`
+  ];
   const params: Array<string | number> = [];
   if (query.from) {
     clauses.push("ends_at >= ?");
@@ -632,6 +644,82 @@ export function listLifeEventTimeline(
     );
     params.push(...query.eventTypes);
   }
+  if (query.q) {
+    const searchFields = [
+      "title",
+      "short_description",
+      "description",
+      "event_type",
+      "place_label",
+      "place_address",
+      "origin_label",
+      "origin_city",
+      "destination_label",
+      "destination_city"
+    ];
+    const segmentSearchFields = [
+      "title",
+      "carrier_name",
+      "carrier_code",
+      "service_number",
+      "booking_reference",
+      "terminal",
+      "gate",
+      "seat",
+      "origin_label",
+      "origin_iata",
+      "origin_city",
+      "destination_label",
+      "destination_iata",
+      "destination_city"
+    ];
+    const pattern = `%${escapeLikePattern(query.q.toLowerCase())}%`;
+    clauses.push(
+      `(${searchFields
+        .map((field) => `LOWER(COALESCE(${field}, '')) LIKE ? ESCAPE '\\'`)
+        .join(" OR ")} OR EXISTS (
+          SELECT 1
+          FROM life_event_segments
+          WHERE life_event_segments.life_event_id = life_events.id
+            AND (${segmentSearchFields
+              .map(
+                (field) =>
+                  `LOWER(COALESCE(life_event_segments.${field}, '')) LIKE ? ESCAPE '\\'`
+              )
+              .concat(
+                `LOWER(COALESCE(life_event_segments.carrier_code, '') || COALESCE(life_event_segments.service_number, '')) LIKE ? ESCAPE '\\'`
+              )
+              .join(" OR ")})
+        ))`
+    );
+    params.push(
+      ...searchFields.map(() => pattern),
+      ...segmentSearchFields.map(() => pattern),
+      pattern
+    );
+  }
+  const whereClause = clauses.join(" AND ");
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const total = (
+    getDatabase()
+      .prepare(`SELECT COUNT(*) AS count FROM life_events WHERE ${whereClause}`)
+      .get(...params) as { count: number }
+  ).count;
+  const counts = getDatabase()
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN ends_at < ? THEN 1 ELSE 0 END) AS past,
+         SUM(CASE WHEN starts_at <= ? AND ends_at >= ? THEN 1 ELSE 0 END) AS current,
+         SUM(CASE WHEN starts_at > ? THEN 1 ELSE 0 END) AS upcoming
+       FROM life_events
+       WHERE ${whereClause}`
+    )
+    .get(nowIso, nowIso, nowIso, nowIso, ...params) as {
+    past: number | null;
+    current: number | null;
+    upcoming: number | null;
+  };
   const rows = getDatabase()
     .prepare(
       `SELECT id, title, short_description, description, event_type, status, importance,
@@ -643,21 +731,34 @@ export function listLifeEventTimeline(
               source_kind, source_artifact_id, extraction_status, extraction_summary_json,
               travel_details_json, display_style_json, metadata_json, deleted_at, created_at, updated_at
        FROM life_events
-       WHERE ${clauses.join(" AND ")}
-       ORDER BY starts_at ASC, created_at ASC
+       WHERE ${whereClause}
+       ORDER BY starts_at ASC, created_at ASC, id ASC
        LIMIT ? OFFSET ?`
     )
     .all(...params, query.limit, query.offset) as LifeEventRow[];
   const events = filterDeletedEntities("life_event", rows.map(mapLifeEvent));
-  const now = new Date();
-  const next =
-    events.find((event) => Date.parse(event.endsAt) >= now.getTime()) ?? null;
+  const nextRow = getDatabase()
+    .prepare(
+      `SELECT id
+       FROM life_events
+       WHERE ${whereClause} AND ends_at >= ?
+       ORDER BY starts_at ASC, created_at ASC, id ASC
+       LIMIT 1`
+    )
+    .get(...params, now.toISOString()) as { id: string } | undefined;
   return {
     events,
-    now: now.toISOString(),
-    nextLifeEventId: next?.id ?? null,
+    now: nowIso,
+    nextLifeEventId: nextRow?.id ?? null,
     limit: query.limit,
-    offset: query.offset
+    offset: query.offset,
+    total,
+    hasMore: query.offset + events.length < total,
+    counts: {
+      past: counts.past ?? 0,
+      current: counts.current ?? 0,
+      upcoming: counts.upcoming ?? 0
+    }
   };
 }
 

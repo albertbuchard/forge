@@ -10,12 +10,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AiConnector,
   AiConnectorRun,
+  AiConnectorRunSummary,
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 import { WorkbenchFlowEditor } from "@/components/workbench/workbench-flow-editor";
 
 const mockRunNodesQuery = vi.fn();
 const mockRunNodeQuery = vi.fn();
+const mockRunQuery = vi.fn();
+const mockRunsQuery = vi.fn();
 
 vi.mock("@xyflow/react", () => ({
   ReactFlow: ({ children }: { children: React.ReactNode }) => (
@@ -103,7 +106,9 @@ vi.mock("@/store/api/forge-api", () => ({
   useGetWorkbenchFlowRunNodesQuery: (...args: unknown[]) =>
     mockRunNodesQuery(...args),
   useGetWorkbenchFlowRunNodeQuery: (...args: unknown[]) =>
-    mockRunNodeQuery(...args)
+    mockRunNodeQuery(...args),
+  useGetWorkbenchFlowRunQuery: (...args: unknown[]) => mockRunQuery(...args),
+  useGetWorkbenchFlowRunsQuery: (...args: unknown[]) => mockRunsQuery(...args)
 }));
 
 const BASE_FLOW: AiConnector = {
@@ -243,7 +248,7 @@ const BASE_BOXES: ForgeBoxCatalogEntry[] = [
 
 function renderEditor(input?: {
   flow?: AiConnector;
-  runs?: AiConnectorRun[];
+  runs?: AiConnectorRunSummary[];
   onRun?: ReturnType<typeof vi.fn>;
   onChat?: ReturnType<typeof vi.fn>;
   onDelete?: ReturnType<typeof vi.fn>;
@@ -279,14 +284,11 @@ describe("WorkbenchFlowEditor", () => {
             nodeId: "node_box",
             nodeType: "box",
             label: "Project search",
-            outputMap: {
-              summary: {
-                text: "Project summary",
-                json: {
-                  summary: "Project summary"
-                }
-              }
-            }
+            outputKeys: ["summary"],
+            outputPreview: "Project summary",
+            hasPayload: true,
+            error: null,
+            timingMs: 12
           }
         ]
       },
@@ -315,6 +317,8 @@ describe("WorkbenchFlowEditor", () => {
         }
       }
     });
+    mockRunQuery.mockReturnValue({ data: undefined, isFetching: false });
+    mockRunsQuery.mockReturnValue({ data: undefined, isFetching: false });
   });
 
   it("renders typed public inputs in the Run modal and submits them through onRun", async () => {
@@ -355,6 +359,52 @@ describe("WorkbenchFlowEditor", () => {
   });
 
   it("shows stable node results inside the run inspector", async () => {
+    const run: AiConnectorRun = {
+      id: "run_1",
+      connectorId: "flow_test",
+      mode: "run",
+      status: "completed",
+      userInput: "",
+      inputs: { topic: "missed habits" },
+      context: {},
+      conversationId: null,
+      retryOfRunId: null,
+      flowSnapshot: {
+        title: BASE_FLOW.title,
+        updatedAt: BASE_FLOW.updatedAt,
+        graph: BASE_FLOW.graph,
+        publicInputs: BASE_FLOW.publicInputs,
+        publishedOutputs: BASE_FLOW.publishedOutputs
+      },
+      result: {
+        primaryText: "Project summary",
+        outputs: {
+          answer: {
+            label: "Answer",
+            text: "Project summary",
+            json: { summary: "Project summary" }
+          }
+        },
+        nodeResults: []
+      },
+      error: null,
+      createdAt: "2026-04-10T10:05:00.000Z",
+      completedAt: "2026-04-10T10:05:01.000Z"
+    };
+    mockRunQuery.mockReturnValue({
+      data: {
+        run,
+        readMetadata: {
+          contentType: "mixed",
+          originalBytes: 500,
+          returnedBytes: 500,
+          redacted: false,
+          redactedPaths: [],
+          truncated: false
+        }
+      },
+      isFetching: false
+    });
     renderEditor({
       runs: [
         {
@@ -362,49 +412,13 @@ describe("WorkbenchFlowEditor", () => {
           connectorId: "flow_test",
           mode: "run",
           status: "completed",
-          userInput: "",
-          inputs: {
-            topic: "missed habits"
-          },
-          context: {},
           conversationId: null,
-          result: {
-            primaryText: "Project summary",
-            outputs: {
-              answer: {
-                label: "Answer",
-                text: "Project summary",
-                json: {
-                  summary: "Project summary"
-                }
-              }
-            },
-            nodeResults: [
-              {
-                nodeId: "node_box",
-                nodeType: "box",
-                label: "Project search",
-                input: [],
-                primaryText: "Project summary",
-                payload: {
-                  summary: "Project summary"
-                },
-                outputMap: {
-                  summary: {
-                    text: "Project summary",
-                    json: {
-                      summary: "Project summary"
-                    }
-                  }
-                },
-                tools: [],
-                logs: [],
-                error: null,
-                timingMs: 12
-              }
-            ]
-          },
+          retryOfRunId: null,
+          outputPreview: "Project summary",
+          result: { primaryText: "Project summary" },
+          hasResult: true,
           error: null,
+          flowUpdatedAt: BASE_FLOW.updatedAt,
           createdAt: "2026-04-10T10:05:00.000Z",
           completedAt: "2026-04-10T10:05:01.000Z"
         }

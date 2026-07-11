@@ -1,8 +1,12 @@
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { QuestionFlowDialog } from "@/components/flows/question-flow-dialog";
+import { Input } from "@/components/ui/input";
 import { SurfacePanel } from "@/components/ui/surface";
 import type { NutritionFoodLog } from "@/lib/weight-loss-types";
+
+const FOOD_HISTORY_BATCH_SIZE = 20;
 
 function mealDisplayTitle(meal: NutritionFoodLog) {
   const primaryItem = meal.items[0] ?? null;
@@ -32,6 +36,21 @@ function mealDoseSummary(meal: NutritionFoodLog) {
     .join(" · ");
 }
 
+export function filterFoodHistory(meals: NutritionFoodLog[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) {
+    return meals;
+  }
+  return meals.filter((meal) =>
+    [
+      meal.mealLabel,
+      meal.notes,
+      meal.loggedAt.slice(0, 10),
+      ...meal.items.flatMap((item) => [item.name, item.brand])
+    ].some((value) => value?.toLocaleLowerCase().includes(normalized))
+  );
+}
+
 export function WeightLossHistoryDialog({
   open,
   onOpenChange,
@@ -49,6 +68,19 @@ export function WeightLossHistoryDialog({
   onDelete: (meal: NutritionFoodLog) => void;
   pending: boolean;
 }) {
+  const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(FOOD_HISTORY_BATCH_SIZE);
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setVisibleCount(FOOD_HISTORY_BATCH_SIZE);
+    }
+  }, [open]);
+  const filteredMeals = useMemo(
+    () => filterFoodHistory(meals, query),
+    [meals, query]
+  );
+  const visibleMeals = filteredMeals.slice(0, visibleCount);
   return (
     <QuestionFlowDialog
       open={open}
@@ -64,7 +96,22 @@ export function WeightLossHistoryDialog({
           title: "Recent meal history",
           render: () => (
             <div className="grid gap-3">
-              {meals.map((meal) => (
+              <div className="grid gap-2">
+                <Input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setVisibleCount(FOOD_HISTORY_BATCH_SIZE);
+                  }}
+                  placeholder="Search foods, meal labels, notes, or dates"
+                  aria-label="Search food history"
+                />
+                <div className="text-xs text-[var(--ui-ink-faint)]">
+                  Showing {visibleMeals.length} of {filteredMeals.length}{" "}
+                  matching meals
+                </div>
+              </div>
+              {visibleMeals.map((meal) => (
                 <SurfacePanel key={meal.id} className="grid gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -112,12 +159,92 @@ export function WeightLossHistoryDialog({
                   </div>
                 </SurfacePanel>
               ))}
+              {visibleMeals.length === 0 ? (
+                <SurfacePanel className="text-sm text-[var(--ui-ink-soft)]">
+                  No meal history matches this search.
+                </SurfacePanel>
+              ) : null}
+              {visibleCount < filteredMeals.length ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    setVisibleCount((current) =>
+                      Math.min(
+                        filteredMeals.length,
+                        current + FOOD_HISTORY_BATCH_SIZE
+                      )
+                    )
+                  }
+                >
+                  Show next meals
+                </Button>
+              ) : null}
             </div>
           )
         }
       ]}
       onSubmit={async () => onOpenChange(false)}
       submitLabel="Done"
+    />
+  );
+}
+
+export function WeightLossDeleteFoodLogDialog({
+  meal,
+  open,
+  onOpenChange,
+  onConfirm,
+  pending,
+  error
+}: {
+  meal: NutritionFoodLog | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => Promise<void>;
+  pending: boolean;
+  error?: string | null;
+}) {
+  return (
+    <QuestionFlowDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      eyebrow="Food history"
+      title="Delete food log"
+      description="Review the exact entry before removing it from the nutrition ledger."
+      value={{ mealId: meal?.id ?? "" }}
+      onChange={() => undefined}
+      steps={[
+        {
+          id: "confirm",
+          eyebrow: "Confirmation",
+          title: meal
+            ? `Delete ${mealDisplayTitle(meal)}?`
+            : "Select a food log",
+          description:
+            "This removes the stored meal and changes the calories, nutrients, and evidence for that day.",
+          render: () =>
+            meal ? (
+              <SurfacePanel className="grid gap-2">
+                <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
+                  {mealDisplayTitle(meal)}
+                </div>
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  {meal.loggedAt.slice(0, 10)} ·{" "}
+                  {meal.totals.calories.toFixed(0)} kcal
+                </div>
+                <div className="text-xs text-[var(--ui-ink-faint)]">
+                  {mealDoseSummary(meal) || "No quantity recorded"}
+                </div>
+              </SurfacePanel>
+            ) : null
+        }
+      ]}
+      onSubmit={onConfirm}
+      submitLabel="Delete food log"
+      pending={pending}
+      pendingLabel="Deleting food log"
+      error={error}
     />
   );
 }

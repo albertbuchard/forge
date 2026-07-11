@@ -139,6 +139,8 @@ test("life force accounting derives AP from real work and avoids note or habit-g
         status: "active",
         polarity: "positive",
         frequency: "daily",
+        timezone: "UTC",
+        dayBoundaryMode: "fixed",
         targetCount: 1,
         weekDays: [],
         linkedGoalIds: [],

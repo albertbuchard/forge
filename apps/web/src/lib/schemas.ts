@@ -252,6 +252,8 @@ export const habitMutationSchema = z
     userId: z.string().trim().nullable().optional(),
     polarity: z.enum(["positive", "negative"]),
     frequency: z.enum(["daily", "weekly"]),
+    timezone: z.string().trim().min(1, "Timezone is required"),
+    dayBoundaryMode: z.enum(["fixed", "travel"]),
     targetCount: z.coerce.number().int().min(1).max(14),
     weekDays: z.array(z.number().int().min(0).max(6)).max(7),
     linkedGoalIds: z.array(z.string().trim().min(1)),
@@ -284,6 +286,17 @@ export const habitMutationSchema = z
     })
   })
   .superRefine((value, context) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: value.timezone }).format(
+        new Date(0)
+      );
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["timezone"],
+        message: "Use a valid IANA timezone such as Europe/Zurich"
+      });
+    }
     if (value.frequency === "weekly" && value.weekDays.length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

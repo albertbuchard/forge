@@ -32,6 +32,7 @@ type WorkBlockDraft = {
   endMinute: number;
   startsOn: string | null;
   endsOn: string | null;
+  exclusionDates: string[];
   blockingState: "allowed" | "blocked";
   activityPresetKey: string | null;
   customSustainRateApPerHour: number | null;
@@ -49,6 +50,7 @@ function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
       endMinute: template.endMinute,
       startsOn: template.startsOn,
       endsOn: template.endsOn,
+      exclusionDates: template.exclusionDates ?? [],
       blockingState: template.blockingState,
       activityPresetKey: getCalendarActivityPresetKey(template.actionProfile),
       customSustainRateApPerHour: getCalendarActivityCustomRate(
@@ -71,6 +73,7 @@ function buildDraft(template?: WorkBlockTemplate | null): WorkBlockDraft {
     endMinute: preset.endMinute,
     startsOn: null,
     endsOn: null,
+    exclusionDates: [],
     blockingState: preset.blockingState,
     activityPresetKey:
       preset.kind === "main_activity"
@@ -326,6 +329,23 @@ export function WorkBlockFlowDialog({
               still carry AP load because leisure and holiday time are real
               activities.
             </div>
+            <FlowField
+              label="Dates to skip"
+              description="Optional local dates when this block should not occur, such as leave, travel, or a one-off exception."
+            >
+              <Input
+                value={value.exclusionDates.join(", ")}
+                onChange={(event) =>
+                  setValue({
+                    exclusionDates: event.target.value
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter(Boolean)
+                  })
+                }
+                placeholder="2026-03-30, 2026-04-06"
+              />
+            </FlowField>
             <FlowField label="Weekdays">
               <div className="flex flex-wrap gap-2">
                 {WEEKDAY_LABELS.map((label, day) => {
@@ -447,15 +467,24 @@ export function WorkBlockFlowDialog({
           );
           return;
         }
-        if (draft.endMinute <= draft.startMinute) {
+        if (draft.endMinute === draft.startMinute) {
           setSubmitError(
-            "The end minute needs to be later than the start minute."
+            "The start and end minute must differ. An earlier end minute creates an overnight block."
           );
           return;
         }
         if (draft.startsOn && draft.endsOn && draft.endsOn < draft.startsOn) {
           setSubmitError(
             "The end date needs to be on or after the start date."
+          );
+          return;
+        }
+        const invalidExclusion = draft.exclusionDates.find(
+          (date) => !/^\d{4}-\d{2}-\d{2}$/.test(date)
+        );
+        if (invalidExclusion) {
+          setSubmitError(
+            `Use YYYY-MM-DD for skipped dates. ${invalidExclusion} is not valid.`
           );
           return;
         }

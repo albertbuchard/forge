@@ -5,6 +5,10 @@ import { SchedulingRulesEditor } from "@/components/calendar/scheduling-rules-ed
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { ProjectDialog } from "@/components/project-dialog";
+import {
+  PlanningRecordDeleteDialog,
+  PlanningRecordDeletedState
+} from "@/components/planning/planning-record-delete-dialog";
 import { ProjectManagementSectionNav } from "@/components/projects/project-management-section-nav";
 import { TaskDialog } from "@/components/task-dialog";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
@@ -26,8 +30,10 @@ import {
   deleteProject,
   deleteTask,
   getCalendarOverview,
+  getDeletedPlanningRecord,
   getProjectBoard,
   patchProject,
+  restoreEntities,
   uncompleteTask
 } from "@/lib/api";
 import {
@@ -57,6 +63,11 @@ export function ProjectDetailPage() {
   const queryClient = useQueryClient();
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletedProjectOverride, setDeletedProjectOverride] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [calendarWindow] = useState(() => {
     const now = new Date();
@@ -99,11 +110,24 @@ export function ProjectDetailPage() {
       )
     : [];
   const isLegacyProject = isLegacyProjectId(params.projectId);
+  const deletedProjectQuery = useQuery({
+    queryKey: ["deleted-planning-record", "project", params.projectId],
+    queryFn: () => getDeletedPlanningRecord("project", params.projectId!),
+    enabled: Boolean(params.projectId) && !isLegacyProject
+  });
+  const deletedProject =
+    deletedProjectOverride ??
+    (deletedProjectQuery.data
+      ? {
+          id: deletedProjectQuery.data.entityId,
+          title: deletedProjectQuery.data.title
+        }
+      : null);
 
   const projectBoardQuery = useQuery({
     queryKey: ["project-board", params.projectId],
     queryFn: () => getProjectBoard(params.projectId!),
-    enabled: Boolean(params.projectId) && !isLegacyProject
+    enabled: Boolean(params.projectId) && !isLegacyProject && !deletedProject
   });
   const calendarOverviewQuery = useQuery({
     queryKey: [
@@ -118,7 +142,7 @@ export function ProjectDetailPage() {
         ...calendarWindow,
         userIds: selectedUserIds
       }),
-    enabled: Boolean(params.projectId) && !isLegacyProject
+    enabled: Boolean(params.projectId) && !isLegacyProject && !deletedProject
   });
 
   const reopenMutation = useMutation({
@@ -164,14 +188,25 @@ export function ProjectDetailPage() {
   const deleteProjectMutation = useMutation({
     mutationFn: () => deleteProject(params.projectId!),
     onSuccess: async () => {
+      if (payload) {
+        setDeletedProjectOverride({
+          id: payload.project.id,
+          title: payload.project.title
+        });
+      }
       await Promise.all([
         invalidateForgeSnapshot(queryClient),
         queryClient.invalidateQueries({
           queryKey: ["project-board", params.projectId]
         })
       ]);
-      navigate("/projects");
     }
+  });
+  const restoreProjectMutation = useMutation({
+    mutationFn: (projectId: string) =>
+      restoreEntities({
+        operations: [{ entityType: "project", id: projectId }]
+      })
   });
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => deleteTask(taskId),
@@ -200,6 +235,44 @@ export function ProjectDetailPage() {
     shell.snapshot.dashboard.projects.find(
       (project) => project.id === params.projectId
     ) ?? null;
+
+  if (deletedProject) {
+    return (
+      <PlanningRecordDeletedState
+        recordKind="project"
+        recordTitle={deletedProject.title}
+        backHref="/projects"
+        backLabel="Back to projects"
+        restoring={restoreProjectMutation.isPending}
+        restoreError={restoreProjectMutation.error}
+        onRestore={async () => {
+          await restoreProjectMutation.mutateAsync(deletedProject.id);
+          setDeletedProjectOverride(null);
+          queryClient.setQueryData(
+            ["deleted-planning-record", "project", deletedProject.id],
+            null
+          );
+          await Promise.all([
+            invalidateForgeSnapshot(queryClient),
+            queryClient.invalidateQueries({
+              queryKey: ["project-board", params.projectId]
+            }),
+            queryClient.invalidateQueries({
+              queryKey: [
+                "deleted-planning-record",
+                "project",
+                deletedProject.id
+              ]
+            })
+          ]);
+        }}
+      />
+    );
+  }
+
+  if (projectBoardQuery.isError && deletedProjectQuery.isLoading) {
+    return <SurfaceSkeleton />;
+  }
 
   if (projectBoardQuery.isError && !isLegacyProject) {
     return (
@@ -244,18 +317,6 @@ export function ProjectDetailPage() {
 
   const updateProjectStatus = async (status: Project["status"]) => {
     await lifecycleMutation.mutateAsync(status);
-  };
-
-  const handleDeleteProject = async () => {
-    const confirmed = window.confirm(
-      t("common.projectDetail.deleteProjectConfirm", {
-        title: payload.project.title
-      })
-    );
-    if (!confirmed) {
-      return;
-    }
-    await deleteProjectMutation.mutateAsync();
   };
 
   return (
@@ -471,7 +532,7 @@ export function ProjectDetailPage() {
             variant="ghost"
             pending={deleteProjectMutation.isPending}
             pendingLabel={t("common.projectDetail.deleting")}
-            onClick={() => void handleDeleteProject()}
+            onClick={() => setDeleteDialogOpen(true)}
           >
             {t("common.projectDetail.deleteProject")}
           </Button>
@@ -815,6 +876,23 @@ export function ProjectDetailPage() {
           pending={workAdjustmentMutation.isPending}
           onSubmit={async (input) => {
             await workAdjustmentMutation.mutateAsync(input);
+          }}
+        />
+      ) : null}
+
+      {!isLegacyProject ? (
+        <PlanningRecordDeleteDialog
+          open={deleteDialogOpen}
+          recordKind="project"
+          recordTitle={payload.project.title}
+          onOpenChange={(open) => {
+            setDeleteDialogOpen(open);
+            if (!open) {
+              deleteProjectMutation.reset();
+            }
+          }}
+          onConfirm={async () => {
+            await deleteProjectMutation.mutateAsync();
           }}
         />
       ) : null}

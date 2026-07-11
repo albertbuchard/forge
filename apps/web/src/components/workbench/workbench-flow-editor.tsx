@@ -11,8 +11,11 @@ import {
 import {
   ArrowLeft,
   Bug,
+  ChevronLeft,
+  ChevronRight,
   Ellipsis,
   Play,
+  RotateCcw,
   Save,
   Settings2,
   Trash2
@@ -68,13 +71,15 @@ import type {
   AiConnectorKind,
   AiConnectorNode,
   AiConnectorPublicInput,
-  AiConnectorRun,
+  AiConnectorRunSummary,
   AiModelProvider,
   ForgeBoxCatalogEntry
 } from "@/lib/types";
 import {
+  useGetWorkbenchFlowRunQuery,
   useGetWorkbenchFlowRunNodeQuery,
-  useGetWorkbenchFlowRunNodesQuery
+  useGetWorkbenchFlowRunNodesQuery,
+  useGetWorkbenchFlowRunsQuery
 } from "@/store/api/forge-api";
 import { cn } from "@/lib/utils";
 
@@ -128,17 +133,23 @@ export function WorkbenchFlowEditor({
     model: string;
     baseUrl: string;
   }>;
-  runs: AiConnectorRun[];
+  runs: AiConnectorRunSummary[];
   onSave: (patch: Partial<AiConnector>) => Promise<void>;
   onDelete: () => Promise<void>;
   onRun: (input: {
     userInput?: string;
     inputs?: Record<string, unknown>;
+    context?: Record<string, unknown>;
+    conversationId?: string | null;
+    retryOfRunId?: string | null;
     debug?: boolean;
   }) => Promise<void>;
   onChat: (input: {
     userInput?: string;
     inputs?: Record<string, unknown>;
+    context?: Record<string, unknown>;
+    conversationId?: string | null;
+    retryOfRunId?: string | null;
     debug?: boolean;
   }) => Promise<void>;
 }) {
@@ -184,6 +195,9 @@ export function WorkbenchFlowEditor({
   const [selectedResultNodeId, setSelectedResultNodeId] = useState<
     string | null
   >(null);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [retryPending, setRetryPending] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const flowSnapshot = useMemo(
     () =>
@@ -289,8 +303,23 @@ export function WorkbenchFlowEditor({
     [nodes, selectedNodeId]
   );
   const latestRun = runs[0] ?? null;
+  const runHistoryQuery = useGetWorkbenchFlowRunsQuery(
+    { flowId: flow.id, limit: 12, offset: historyOffset },
+    { skip: !traceOpen }
+  );
+  const historyRuns = useMemo(
+    () => runHistoryQuery.data?.runs ?? runs.slice(0, 12),
+    [runHistoryQuery.data?.runs, runs]
+  );
   const selectedRun =
-    runs.find((run) => run.id === selectedRunId) ?? latestRun ?? null;
+    historyRuns.find((run) => run.id === selectedRunId) ??
+    historyRuns[0] ??
+    latestRun ??
+    null;
+  const runDetailQuery = useGetWorkbenchFlowRunQuery(
+    { flowId: flow.id, runId: selectedRunId ?? "" },
+    { skip: !selectedRunId || !traceOpen }
+  );
   const runNodesQuery = useGetWorkbenchFlowRunNodesQuery(
     {
       flowId: flow.id,
@@ -300,10 +329,6 @@ export function WorkbenchFlowEditor({
       skip: !selectedRunId || !traceOpen
     }
   );
-  const selectedNodeResult =
-    runNodesQuery.data?.nodeResults.find(
-      (entry) => entry.nodeId === selectedResultNodeId
-    ) ?? null;
   const selectedNodeResultQuery = useGetWorkbenchFlowRunNodeQuery(
     {
       flowId: flow.id,
@@ -314,6 +339,7 @@ export function WorkbenchFlowEditor({
       skip: !selectedRunId || !selectedResultNodeId || !traceOpen
     }
   );
+  const selectedNodeResult = selectedNodeResultQuery.data?.nodeResult ?? null;
   const graphIssues = useMemo(
     () => collectWorkbenchGraphIssues(nodes, edges),
     [nodes, edges]
@@ -332,6 +358,14 @@ export function WorkbenchFlowEditor({
     const nextNodeId = runNodesQuery.data?.nodeResults[0]?.nodeId ?? null;
     setSelectedResultNodeId(nextNodeId);
   }, [runNodesQuery.data?.nodeResults]);
+  useEffect(() => {
+    if (
+      historyRuns.length > 0 &&
+      !historyRuns.some((run) => run.id === selectedRunId)
+    ) {
+      setSelectedRunId(historyRuns[0]?.id ?? null);
+    }
+  }, [historyRuns, selectedRunId]);
   const selectedNodeSupportsContractEditing = useMemo(
     () =>
       Boolean(
@@ -952,6 +986,34 @@ export function WorkbenchFlowEditor({
       setRunError(formatWorkbenchRunError(error));
     } finally {
       setRunPending(false);
+    }
+  }
+
+  async function handleRetrySelectedChat() {
+    const failedRun = runDetailQuery.data?.run;
+    if (
+      retryPending ||
+      !failedRun ||
+      failedRun.mode !== "chat" ||
+      failedRun.status !== "failed"
+    ) {
+      return;
+    }
+    setRetryPending(true);
+    setRetryError(null);
+    try {
+      await onChat({
+        userInput: failedRun.userInput,
+        inputs: failedRun.inputs,
+        context: failedRun.context,
+        conversationId: failedRun.conversationId,
+        retryOfRunId: failedRun.id,
+        debug: Boolean(failedRun.result?.debugTrace)
+      });
+    } catch (error) {
+      setRetryError(formatWorkbenchRunError(error));
+    } finally {
+      setRetryPending(false);
     }
   }
 
@@ -1683,7 +1745,7 @@ export function WorkbenchFlowEditor({
                   Run history
                 </div>
                 <div className="mt-3 grid gap-2">
-                  {runs.slice(0, 12).map((run) => (
+                  {historyRuns.map((run) => (
                     <button
                       key={run.id}
                       type="button"
@@ -1700,12 +1762,48 @@ export function WorkbenchFlowEditor({
                         <span>{new Date(run.createdAt).toLocaleString()}</span>
                       </div>
                       <div className="mt-2 text-sm text-[var(--ui-ink-medium)]">
-                        {run.result?.primaryText ??
-                          run.error ??
-                          "No output yet."}
+                        {run.outputPreview || run.error || "No output yet."}
                       </div>
                     </button>
                   ))}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={
+                        historyOffset === 0 || runHistoryQuery.isFetching
+                      }
+                      onClick={() =>
+                        setHistoryOffset((current) => Math.max(0, current - 12))
+                      }
+                    >
+                      <ChevronLeft className="size-4" />
+                      Newer
+                    </Button>
+                    <span className="text-[11px] text-[var(--ui-ink-faint)]">
+                      {runHistoryQuery.data
+                        ? `${runHistoryQuery.data.offset + 1}-${
+                            runHistoryQuery.data.offset + historyRuns.length
+                          } of ${runHistoryQuery.data.total}`
+                        : `${historyRuns.length} recent`}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={
+                        !runHistoryQuery.data?.hasMore ||
+                        runHistoryQuery.isFetching
+                      }
+                      onClick={() =>
+                        setHistoryOffset((current) => current + 12)
+                      }
+                    >
+                      Older
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="grid gap-3">
@@ -1717,19 +1815,75 @@ export function WorkbenchFlowEditor({
                     </span>
                   </div>
                   <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
-                    {selectedRun.result?.primaryText ??
-                      selectedRun.error ??
-                      "No output yet."}
+                    {runDetailQuery.isFetching
+                      ? "Loading bounded run detail…"
+                      : runDetailQuery.data?.run.result?.primaryText ||
+                        selectedRun.outputPreview ||
+                        selectedRun.error ||
+                        "No output yet."}
                   </div>
-                  {selectedRun.result?.outputs ? (
+                  {runDetailQuery.data &&
+                  runDetailQuery.data.run.flowSnapshot?.updatedAt !==
+                    flow.updatedAt ? (
+                    <div className="mt-3 rounded-[16px] border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--ui-warning-soft)] px-3 py-2 text-[12px] leading-5 text-[var(--warning)]">
+                      {runDetailQuery.data.run.flowSnapshot
+                        ? "This run used an older saved version of the flow. Its node labels and outputs remain attributed to that version."
+                        : "This legacy run predates flow-version snapshots. Its stored node results remain available, but exact graph attribution is unavailable."}
+                    </div>
+                  ) : null}
+                  {runDetailQuery.data?.readMetadata?.redacted ||
+                  runDetailQuery.data?.readMetadata?.truncated ? (
+                    <div className="mt-3 rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-code-bg)] px-3 py-2 text-[12px] leading-5 text-[var(--ui-ink-soft)]">
+                      {runDetailQuery.data.readMetadata.redacted
+                        ? "Sensitive fields are redacted. "
+                        : ""}
+                      {runDetailQuery.data.readMetadata.truncated
+                        ? "Large values are shown as bounded previews."
+                        : ""}
+                    </div>
+                  ) : null}
+                  {runDetailQuery.data?.run.result?.outputs ? (
                     <details className="mt-3 rounded-[16px] bg-[var(--ui-code-bg)] p-3">
                       <summary className="cursor-pointer text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                         Published outputs
                       </summary>
                       <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
-                        {JSON.stringify(selectedRun.result.outputs, null, 2)}
+                        {JSON.stringify(
+                          runDetailQuery.data.run.result.outputs,
+                          null,
+                          2
+                        )}
                       </pre>
                     </details>
+                  ) : null}
+                  {selectedRun.mode === "chat" &&
+                  selectedRun.status === "failed" ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={retryPending || !runDetailQuery.data?.run}
+                        onClick={() => void handleRetrySelectedChat()}
+                      >
+                        <RotateCcw className="size-4" />
+                        {retryPending ? "Retrying" : "Retry with same context"}
+                      </Button>
+                      <Link
+                        to="/settings/models"
+                        className="text-[12px] text-[var(--secondary)] hover:underline"
+                      >
+                        Check model settings
+                      </Link>
+                    </div>
+                  ) : null}
+                  {retryError ? (
+                    <div
+                      role="alert"
+                      className="mt-2 text-[12px] text-[var(--danger)]"
+                    >
+                      {retryError}
+                    </div>
                   ) : null}
                 </div>
                 {(runNodesQuery.data?.nodeResults ?? []).length > 0 ? (
@@ -1761,7 +1915,7 @@ export function WorkbenchFlowEditor({
                                 </div>
                               </div>
                               <div className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-[11px] text-[var(--ui-ink-soft)]">
-                                {Object.keys(node.outputMap).length} outputs
+                                {node.outputKeys.length} outputs
                               </div>
                             </div>
                           </button>
@@ -1769,44 +1923,20 @@ export function WorkbenchFlowEditor({
                       </div>
                     </div>
                     <div className="rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
-                      {selectedNodeResult ||
-                      selectedNodeResultQuery.data?.nodeResult ? (
+                      {selectedNodeResult ? (
                         <>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
-                                {
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.label
-                                }
+                                {selectedNodeResult.label}
                               </div>
                               <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                                {
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.nodeType
-                                }
+                                {selectedNodeResult.nodeType}
                               </div>
                             </div>
                             <div className="rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-1 text-[11px] text-[var(--ui-ink-soft)]">
-                              {
-                                (
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.tools ?? []
-                                ).length
-                              }{" "}
-                              tool
-                              {(
-                                (
-                                  selectedNodeResultQuery.data?.nodeResult ??
-                                  selectedNodeResult
-                                )?.tools ?? []
-                              ).length === 1
+                              {(selectedNodeResult.tools ?? []).length} tool
+                              {(selectedNodeResult.tools ?? []).length === 1
                                 ? ""
                                 : "s"}
                             </div>
@@ -1818,10 +1948,7 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.input ?? [],
+                                  selectedNodeResult.input ?? [],
                                   null,
                                   2
                                 )}
@@ -1833,10 +1960,7 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.outputMap ?? {},
+                                  selectedNodeResult.outputMap ?? {},
                                   null,
                                   2
                                 )}
@@ -1848,10 +1972,7 @@ export function WorkbenchFlowEditor({
                               </summary>
                               <pre className="mt-3 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[var(--ui-code-text)]">
                                 {JSON.stringify(
-                                  (
-                                    selectedNodeResultQuery.data?.nodeResult ??
-                                    selectedNodeResult
-                                  )?.payload ?? null,
+                                  selectedNodeResult.payload ?? null,
                                   null,
                                   2
                                 )}

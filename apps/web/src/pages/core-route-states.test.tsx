@@ -13,11 +13,12 @@ import { TodayPage } from "@/pages/today-page";
 import type { CalendarSchedulingRules, ForgeSnapshot } from "@/lib/types";
 import { createAppStore } from "@/store/store";
 
-const { useForgeShellMock, useCommandCenterStoreMock, useQueryMock } = vi.hoisted(() => ({
-  useForgeShellMock: vi.fn(),
-  useCommandCenterStoreMock: vi.fn(),
-  useQueryMock: vi.fn()
-}));
+const { useForgeShellMock, useCommandCenterStoreMock, useQueryMock } =
+  vi.hoisted(() => ({
+    useForgeShellMock: vi.fn(),
+    useCommandCenterStoreMock: vi.fn(),
+    useQueryMock: vi.fn()
+  }));
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
@@ -28,7 +29,9 @@ vi.mock("@/store/use-command-center", () => ({
 }));
 
 vi.mock("@tanstack/react-query", async () => {
-  const actual = await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query");
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query"
+  );
   return {
     ...actual,
     useQuery: useQueryMock
@@ -36,7 +39,15 @@ vi.mock("@tanstack/react-query", async () => {
 });
 
 vi.mock("@/components/shell/page-hero", () => ({
-  PageHero: ({ title, description, badge }: { title: string; description: string; badge?: string }) => (
+  PageHero: ({
+    title,
+    description,
+    badge
+  }: {
+    title: string;
+    description: string;
+    badge?: string;
+  }) => (
     <div>
       <div>{title}</div>
       <div>{description}</div>
@@ -50,11 +61,15 @@ vi.mock("@/components/goal-studio", () => ({
 }));
 
 vi.mock("@/components/execution-board", () => ({
-  ExecutionBoard: ({ tasks }: { tasks: Array<{ id: string }> }) => <div>Execution board {tasks.length}</div>
+  ExecutionBoard: ({ tasks }: { tasks: Array<{ id: string }> }) => (
+    <div>Execution board {tasks.length}</div>
+  )
 }));
 
 vi.mock("@/components/daily-runway", () => ({
-  DailyRunway: ({ tasks }: { tasks: Array<{ id: string }> }) => <div>Daily runway {tasks.length}</div>
+  DailyRunway: ({ tasks }: { tasks: Array<{ id: string }> }) => (
+    <div>Daily runway {tasks.length}</div>
+  )
 }));
 
 vi.mock("@/components/task-run-controls", () => ({
@@ -240,37 +255,39 @@ function renderWithProviders(element: React.ReactNode, initialEntry = "/") {
 describe("core route states", () => {
   it("shows the overview shell when only gamification metrics exist", async () => {
     useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
-    useQueryMock.mockImplementation(({ queryKey }: { queryKey?: unknown[] }) => ({
-      data:
-        queryKey?.[0] === "forge-gamification-assets"
-          ? {
-              assets: {
-                version: "test",
-                defaultStyle: "dark-fantasy",
-                styles: [
-                  {
-                    id: "dark-fantasy",
-                    label: "Dark Fantasy",
-                    description: "Obsidian iron and ember gold.",
-                    previewUrl:
-                      "/gamification-previews/dark-fantasy-mascot.webp",
-                    fileName: "forge-gamification-dark-fantasy-test.zip",
-                    downloadUrl: "https://example.test/dark-fantasy.zip",
-                    sha256: "test",
-                    installed: true,
-                    spriteCount: 348,
-                    expectedSpriteCount: 348,
-                    installedAt: "2026-03-24T08:00:00.000Z"
-                  }
-                ]
+    useQueryMock.mockImplementation(
+      ({ queryKey }: { queryKey?: unknown[] }) => ({
+        data:
+          queryKey?.[0] === "forge-gamification-assets"
+            ? {
+                assets: {
+                  version: "test",
+                  defaultStyle: "dark-fantasy",
+                  styles: [
+                    {
+                      id: "dark-fantasy",
+                      label: "Dark Fantasy",
+                      description: "Obsidian iron and ember gold.",
+                      previewUrl:
+                        "/gamification-previews/dark-fantasy-mascot.webp",
+                      fileName: "forge-gamification-dark-fantasy-test.zip",
+                      downloadUrl: "https://example.test/dark-fantasy.zip",
+                      sha256: "test",
+                      installed: true,
+                      spriteCount: 348,
+                      expectedSpriteCount: 348,
+                      installedAt: "2026-03-24T08:00:00.000Z"
+                    }
+                  ]
+                }
               }
-            }
-          : undefined,
-      isLoading: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn()
-    }));
+            : undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn()
+      })
+    );
 
     renderWithProviders(<OverviewPage />);
 
@@ -301,6 +318,13 @@ describe("core route states", () => {
         }
       })
     });
+    useQueryMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
 
     renderWithProviders(
       <Routes>
@@ -309,8 +333,37 @@ describe("core route states", () => {
       "/goals/goal_missing"
     );
 
-    expect(screen.getByText("This life goal is not available")).toBeInTheDocument();
+    expect(
+      screen.getByText("This life goal is not available")
+    ).toBeInTheDocument();
     expect(screen.getByText("Back to goals")).toBeInTheDocument();
+  });
+
+  it("reconstructs a deleted goal state from persisted metadata", () => {
+    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useQueryMock.mockReturnValue({
+      data: {
+        entityType: "goal",
+        entityId: "goal_deleted",
+        title: "Build durable direction",
+        snapshot: { id: "goal_deleted", title: "Build durable direction" }
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/goals/:goalId" element={<GoalDetailPage />} />
+      </Routes>,
+      "/goals/goal_deleted"
+    );
+
+    expect(
+      screen.getByText("Build durable direction is no longer active")
+    ).toBeInTheDocument();
   });
 
   it("shows the kanban empty state when no tasks exist", async () => {
@@ -429,7 +482,9 @@ describe("core route states", () => {
 
     expect(screen.getByText("Today's calendar")).toBeInTheDocument();
     expect(screen.getByText("Creative sync")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open calendar/i })).toHaveAttribute("href", "/calendar");
+    expect(
+      screen.getByRole("link", { name: /Open calendar/i })
+    ).toHaveAttribute("href", "/calendar");
   });
 
   it("defaults the projects page to active projects and supports tokenized goal search", async () => {
@@ -570,23 +625,39 @@ describe("core route states", () => {
 
     renderWithProviders(<ProjectsPage />);
 
-    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(
+      0
+    );
     expect(screen.queryByText("Paused Writing System")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Suspended/i }));
-    expect(screen.getAllByText("Paused Writing System").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Paused Writing System").length).toBeGreaterThan(
+      0
+    );
     expect(screen.queryAllByText("Body Rebuild Sprint")).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: /Active/i }));
-    fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
-      target: { value: "health" }
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Type a project, goal, task, human, bot, user, or tag"
+      ),
+      {
+        target: { value: "health" }
+      }
+    );
     fireEvent.click(screen.getByRole("button", { name: /Deep Health Goal/i }));
     expect(screen.getAllByText("Deep Health Goal").length).toBeGreaterThan(1);
-    fireEvent.change(screen.getByPlaceholderText("Type a project, goal, task, human, bot, user, or tag"), {
-      target: { value: "rebuild" }
-    });
-    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(0);
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Type a project, goal, task, human, bot, user, or tag"
+      ),
+      {
+        target: { value: "rebuild" }
+      }
+    );
+    expect(screen.getAllByText("Body Rebuild Sprint").length).toBeGreaterThan(
+      0
+    );
   });
 
   it("shows restart and delete actions for finished projects on the detail page", async () => {
@@ -661,18 +732,24 @@ describe("core route states", () => {
       patchTaskStatus: vi.fn(),
       patchProject: vi.fn()
     });
-    useQueryMock.mockReturnValue({
-      data: {
-        project,
-        goal,
-        tasks: [],
-        activity: [],
-        notesSummaryByEntity: {}
-      },
-      isError: false,
-      error: null,
-      refetch: vi.fn()
-    });
+    useQueryMock.mockImplementation(
+      ({ queryKey }: { queryKey: unknown[] }) => ({
+        data:
+          queryKey[0] === "deleted-planning-record"
+            ? null
+            : {
+                project,
+                goal,
+                tasks: [],
+                activity: [],
+                notesSummaryByEntity: {}
+              },
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn()
+      })
+    );
 
     renderWithProviders(
       <Routes>
@@ -683,7 +760,51 @@ describe("core route states", () => {
 
     expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Finish" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Suspend" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Finish" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Suspend" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("reconstructs a deleted project state from persisted metadata", () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      createTask: vi.fn(),
+      patchTaskStatus: vi.fn(),
+      patchProject: vi.fn()
+    });
+    useQueryMock.mockImplementation(
+      ({ queryKey }: { queryKey: unknown[] }) => ({
+        data:
+          queryKey[0] === "deleted-planning-record"
+            ? {
+                entityType: "project",
+                entityId: "project_deleted",
+                title: "Restore the roadmap",
+                snapshot: {
+                  id: "project_deleted",
+                  title: "Restore the roadmap"
+                }
+              }
+            : undefined,
+        isLoading: false,
+        isError: queryKey[0] === "project-board",
+        error: new Error("Project not found"),
+        refetch: vi.fn()
+      })
+    );
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+      </Routes>,
+      "/projects/project_deleted"
+    );
+
+    expect(
+      screen.getByText("Restore the roadmap is no longer active")
+    ).toBeInTheDocument();
   });
 });

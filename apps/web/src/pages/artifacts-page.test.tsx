@@ -671,7 +671,7 @@ describe("ArtifactsPage", () => {
     vi.mocked(listArtifacts).mockImplementation(async (options = {}) => {
       const offset = options.offset ?? 0;
       const limit = options.limit ?? 50;
-      const count = offset === 0 ? 50 : 25;
+      const count = 50;
       return {
         artifacts: Array.from({ length: count }, (_, index) => ({
           ...mockArtifact,
@@ -679,15 +679,18 @@ describe("ArtifactsPage", () => {
           title: `Artifact ${offset + index}`,
           originalFileName: `artifact-${offset + index}.xlsx`
         })),
-        total: 75,
+        total: 10_000,
         limit,
         offset,
-        hasMore: offset + count < 75
+        hasMore: offset + count < 10_000
       };
     });
     renderArtifactsPage();
 
-    expect(await screen.findByText("Showing 1-50 of 75")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Showing 1-50 of 10000")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/^Artifact \d+$/)).toHaveLength(50);
     await waitFor(() => {
       expect(listArtifacts).toHaveBeenCalledWith(
         expect.objectContaining({ limit: 50, offset: 0 })
@@ -698,7 +701,10 @@ describe("ArtifactsPage", () => {
       screen.getByRole("button", { name: /next artifact page/i })
     );
 
-    expect(await screen.findByText("Showing 51-75 of 75")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Showing 51-100 of 10000")
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/^Artifact \d+$/)).toHaveLength(50);
     await waitFor(() => {
       expect(listArtifacts).toHaveBeenCalledWith(
         expect.objectContaining({ limit: 50, offset: 50 })

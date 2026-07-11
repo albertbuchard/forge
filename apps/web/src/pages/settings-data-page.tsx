@@ -123,6 +123,12 @@ function safeFormatDateTime(
   return formatDateTime(value);
 }
 
+function mutationErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : fallback;
+}
+
 function FeedbackBanner({
   tone,
   message
@@ -233,18 +239,36 @@ export function SettingsDataPage() {
         message: "Backup settings saved."
       });
       await invalidateData();
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: "warning",
+        message: mutationErrorMessage(
+          error,
+          "Forge could not save the backup settings. No settings were confirmed changed."
+        )
+      });
     }
   });
 
   const backupMutation = useMutation({
     mutationFn: () =>
       createRuntimeDataBackup("Manual backup from Settings → Data"),
-    onSuccess: async () => {
+    onSuccess: async ({ backup }) => {
       setFeedback({
         tone: "success",
-        message: "Backup created."
+        message: `Backup created and cataloged at ${backup.archivePath}.`
       });
       await invalidateData();
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: "warning",
+        message: mutationErrorMessage(
+          error,
+          "Forge could not finish the backup. The live database was not intentionally changed."
+        )
+      });
     }
   });
 
@@ -261,6 +285,15 @@ export function SettingsDataPage() {
             ? `Found ${candidates.length} Forge ${candidates.length === 1 ? "copy" : "copies"} on disk.`
             : "No other Forge data copies were found in the scanned folders."
       });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: "warning",
+        message: mutationErrorMessage(
+          error,
+          "Forge could not complete the recovery scan. No data root was changed."
+        )
+      });
     }
   });
 
@@ -269,7 +302,7 @@ export function SettingsDataPage() {
       switchRuntimeDataRoot({
         targetDataRoot: value.targetDataRoot,
         mode: value.mode,
-        createSafetyBackup: value.createSafetyBackup
+        createSafetyBackup: true
       }),
     onSuccess: async () => {
       setFeedback({
@@ -278,6 +311,15 @@ export function SettingsDataPage() {
       });
       setRootDialogOpen(false);
       await invalidateData();
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: "warning",
+        message: mutationErrorMessage(
+          error,
+          "Forge could not switch the data root. Review the current runtime state before retrying."
+        )
+      });
     }
   });
 
@@ -310,6 +352,15 @@ export function SettingsDataPage() {
       setFeedback({
         tone: "neutral",
         message: `Started download for ${format}.`
+      });
+    },
+    onError: (error) => {
+      setFeedback({
+        tone: "warning",
+        message: mutationErrorMessage(
+          error,
+          "Forge could not prepare the export. The live database was not intentionally changed."
+        )
       });
     }
   });
@@ -379,19 +430,10 @@ export function SettingsDataPage() {
               }
             ]}
           />
-          <label className="flex items-start gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={value.createSafetyBackup}
-              onChange={(event) =>
-                setValue({ createSafetyBackup: event.target.checked })
-              }
-            />
-            <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-              Create one safety backup first.
-            </span>
-          </label>
+          <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            Forge requires a safety backup before changing the active data root.
+            The switch does not start if that backup fails.
+          </div>
         </div>
       )
     },
@@ -442,6 +484,17 @@ export function SettingsDataPage() {
                     Newer than the current copy
                   </Badge>
                 ) : null}
+                <Badge
+                  className={
+                    selectedTargetCandidate.integrityOk
+                      ? "bg-[var(--ui-success-soft)] text-[var(--success)]"
+                      : "bg-[var(--ui-danger-soft)] text-[var(--danger)]"
+                  }
+                >
+                  {selectedTargetCandidate.integrityOk
+                    ? "Integrity check passed"
+                    : "Integrity check failed"}
+                </Badge>
               </div>
             </div>
           ) : (
@@ -463,7 +516,7 @@ export function SettingsDataPage() {
       title: "Review the backup you want to restore",
       description:
         "Restoring replaces the current database with the selected backup.",
-      render: (value, setValue) => (
+      render: () => (
         <div className="grid gap-4">
           <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
             <div className="font-medium text-[var(--ui-ink-strong)]">
@@ -488,19 +541,14 @@ export function SettingsDataPage() {
               ) : null}
             </div>
           </div>
-          <label className="flex items-start gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={value.createSafetyBackup}
-              onChange={(event) =>
-                setValue({ createSafetyBackup: event.target.checked })
-              }
-            />
-            <span className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-              Create one safety backup of the current state first.
-            </span>
-          </label>
+          <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--success)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+            Forge requires a safety backup of the current state before restore.
+            The restore does not start if that backup fails.
+          </div>
+          <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--warning)]">
+            Backup manifests identify the archive and record counts, but the
+            current settings contract does not expose an archive checksum.
+          </div>
         </div>
       )
     },
@@ -512,8 +560,9 @@ export function SettingsDataPage() {
         "Use this only when you are confident this backup is the state you want back.",
       render: () => (
         <div className="rounded-[22px] border border-[color-mix(in_srgb,var(--warning)_26%,var(--ui-border-subtle)_74%)] bg-[var(--ui-warning-soft)] p-4 text-sm leading-6 text-[var(--warning)]">
-          Forge will replace the live database with this backup, then reopen the
-          restored copy.
+          Forge will first create a required safety backup, then replace the
+          live database with this backup and reopen the restored copy. Keep the
+          safety-backup path available until the restored runtime is verified.
         </div>
       )
     }
@@ -569,7 +618,7 @@ export function SettingsDataPage() {
                 variant="secondary"
                 pending={scanMutation.isPending}
                 pendingLabel="Scanning"
-                onClick={() => void scanMutation.mutateAsync()}
+                onClick={() => scanMutation.mutate()}
               >
                 <FolderSearch className="size-4" />
                 Look for other Forge copies
@@ -577,7 +626,7 @@ export function SettingsDataPage() {
               <Button
                 pending={backupMutation.isPending}
                 pendingLabel="Creating backup"
-                onClick={() => void backupMutation.mutateAsync()}
+                onClick={() => backupMutation.mutate()}
               >
                 <Archive className="size-4" />
                 Create backup now
@@ -773,7 +822,7 @@ export function SettingsDataPage() {
                 <Button
                   pending={savePolicyMutation.isPending}
                   pendingLabel="Saving"
-                  onClick={() => void savePolicyMutation.mutateAsync()}
+                  onClick={() => savePolicyMutation.mutate()}
                 >
                   Save backup settings
                 </Button>
@@ -781,7 +830,7 @@ export function SettingsDataPage() {
                   variant="secondary"
                   pending={backupMutation.isPending}
                   pendingLabel="Creating backup"
-                  onClick={() => void backupMutation.mutateAsync()}
+                  onClick={() => backupMutation.mutate()}
                 >
                   Create backup now
                 </Button>
@@ -881,9 +930,7 @@ export function SettingsDataPage() {
                     variant="secondary"
                     pending={exportMutation.isPending}
                     pendingLabel="Preparing"
-                    onClick={() =>
-                      void exportMutation.mutateAsync(option.format)
-                    }
+                    onClick={() => exportMutation.mutate(option.format)}
                   >
                     Download
                   </Button>
@@ -947,6 +994,10 @@ export function SettingsDataPage() {
                     <div className="mt-3 grid gap-2 text-xs text-[var(--ui-ink-faint)] md:grid-cols-2">
                       <div className="break-all">{backup.archivePath}</div>
                       <div>{formatBytes(backup.sizeBytes)}</div>
+                      <div className="break-all">
+                        Manifest: {backup.manifestPath}
+                      </div>
+                      <div>Archive checksum: not exposed</div>
                     </div>
                   </div>
                 ))
@@ -970,7 +1021,7 @@ export function SettingsDataPage() {
                 variant="secondary"
                 pending={scanMutation.isPending}
                 pendingLabel="Scanning"
-                onClick={() => void scanMutation.mutateAsync()}
+                onClick={() => scanMutation.mutate()}
               >
                 <FolderSearch className="size-4" />
                 Scan now
@@ -1021,6 +1072,7 @@ export function SettingsDataPage() {
                       {!candidate.sameAsCurrent ? (
                         <Button
                           variant="secondary"
+                          disabled={!candidate.integrityOk}
                           onClick={() => {
                             setRootFlowValue({
                               mode: "adopt_existing",
@@ -1031,7 +1083,9 @@ export function SettingsDataPage() {
                             setRootDialogOpen(true);
                           }}
                         >
-                          Use this folder
+                          {candidate.integrityOk
+                            ? "Use this folder"
+                            : "Integrity check failed"}
                         </Button>
                       ) : null}
                     </div>
@@ -1106,8 +1160,25 @@ export function SettingsDataPage() {
             setRootDialogError("Choose a data folder first.");
             return;
           }
+          if (rootFlowValue.mode === "adopt_existing") {
+            if (!selectedTargetCandidate) {
+              setRootDialogError(
+                "Scan for Forge copies and choose a scanned folder before adopting existing data."
+              );
+              return;
+            }
+            if (!selectedTargetCandidate.integrityOk) {
+              setRootDialogError(
+                "Forge will not adopt this folder because its database integrity check failed."
+              );
+              return;
+            }
+          }
           setRootDialogError(null);
-          await switchRootMutation.mutateAsync(rootFlowValue);
+          await switchRootMutation.mutateAsync({
+            ...rootFlowValue,
+            createSafetyBackup: true
+          });
         }}
       />
 
@@ -1147,7 +1218,7 @@ export function SettingsDataPage() {
           setRestoreDialogError(null);
           await restoreMutation.mutateAsync({
             backupId: restoreTarget.id,
-            createSafetyBackup: restoreFlowValue.createSafetyBackup
+            createSafetyBackup: true
           });
         }}
       />

@@ -57,10 +57,24 @@ function userToDraft(user: UserSummary | null): UserDraft {
   };
 }
 
+export function findDuplicateUserHandle(
+  users: UserSummary[],
+  handle: string,
+  currentUserId?: string
+) {
+  const normalizedHandle = handle.trim().toLowerCase();
+  return users.find(
+    (candidate) =>
+      candidate.id !== currentUserId &&
+      candidate.handle.trim().toLowerCase() === normalizedHandle
+  );
+}
+
 export function UserSettingsFlowDialog({
   open,
   onOpenChange,
   user,
+  existingUsers,
   grants,
   ownership,
   xp,
@@ -71,6 +85,7 @@ export function UserSettingsFlowDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   user: UserSummary | null;
+  existingUsers: UserSummary[];
   grants: UserAccessGrant[];
   ownership?: UserOwnershipSummary | null;
   xp?: UserXpSummary | null;
@@ -365,17 +380,37 @@ export function UserSettingsFlowDialog({
           return;
         }
 
-        await onSubmit({
-          userId: user?.id,
-          input: {
-            kind: draft.kind,
-            handle: nextHandle,
-            displayName: nextDisplayName,
-            description: draft.description.trim(),
-            accentColor: draft.accentColor.trim() || "#c0c1ff"
-          }
-        });
-        onOpenChange(false);
+        const duplicateHandle = findDuplicateUserHandle(
+          existingUsers,
+          nextHandle,
+          user?.id
+        );
+        if (duplicateHandle) {
+          setSubmitError(
+            `@${duplicateHandle.handle} already identifies ${duplicateHandle.displayName}. Open that user instead or choose a different durable handle.`
+          );
+          return;
+        }
+
+        try {
+          await onSubmit({
+            userId: user?.id,
+            input: {
+              kind: draft.kind,
+              handle: nextHandle,
+              displayName: nextDisplayName,
+              description: draft.description.trim(),
+              accentColor: draft.accentColor.trim() || "#c0c1ff"
+            }
+          });
+          onOpenChange(false);
+        } catch (error) {
+          setSubmitError(
+            error instanceof Error
+              ? error.message
+              : "Forge could not save this user identity."
+          );
+        }
       }}
     />
   );

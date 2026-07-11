@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsAgentsPage } from "@/pages/settings-agents-page";
 
 const {
@@ -127,6 +127,8 @@ function createRuntimeSession(
 }
 
 describe("SettingsAgentsPage", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     vi.clearAllMocks();
     ensureOperatorSessionMock.mockResolvedValue({
@@ -240,5 +242,19 @@ describe("SettingsAgentsPage", () => {
     expect(
       screen.getByText("Session history under this agent")
     ).toBeInTheDocument();
+  });
+
+  it("pauses credential issue when live onboarding is unavailable", async () => {
+    getAgentOnboardingMock.mockRejectedValue(new Error("Onboarding offline"));
+
+    renderPage();
+
+    expect(
+      await screen.findByText(/Live onboarding is unavailable/i)
+    ).toBeInTheDocument();
+    const issueButtons = screen.getAllByRole("button", { name: "Issue token" });
+    expect(
+      issueButtons.every((button) => button.hasAttribute("disabled"))
+    ).toBe(true);
   });
 });

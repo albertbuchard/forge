@@ -1,9 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { NutritionExperiment } from "@/lib/weight-loss-types";
 import {
   buildExperimentInput,
+  buildExperimentReviewDraft,
+  buildExperimentReviewPatch,
   buildInitialExperimentDraft,
   validateExperimentDraft,
+  validateExperimentReviewDraft,
   WeightLossExperimentDialog
 } from "./weight-loss-experiment-dialog";
 
@@ -69,6 +73,26 @@ describe("nutrition experiment draft", () => {
         experimentEnd: "2026-07-08"
       })
     ).toMatch(/experiment end date/i);
+  });
+
+  it("keeps review status separate and requires a conclusion to finish", () => {
+    const draft = buildExperimentReviewDraft({
+      status: "running",
+      conclusion: null
+    } as NutritionExperiment);
+    expect(validateExperimentReviewDraft(draft)).toBeNull();
+    expect(
+      validateExperimentReviewDraft({ ...draft, status: "completed" })
+    ).toMatch(/record a conclusion/i);
+    expect(
+      buildExperimentReviewPatch({
+        status: "completed",
+        conclusion: " Performance improved, but adherence was incomplete. "
+      })
+    ).toEqual({
+      status: "completed",
+      conclusion: "Performance improved, but adherence was incomplete."
+    });
   });
 });
 

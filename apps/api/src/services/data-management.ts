@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, type Dirent } from "node:fs";
 import {
+  chmod,
   cp,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   writeFile
@@ -101,7 +103,8 @@ const EXPORT_OPTIONS = [
   {
     format: "csv_bundle",
     label: "CSV bundle",
-    description: "A zip archive with one CSV per table for spreadsheet workflows.",
+    description:
+      "A zip archive with one CSV per table for spreadsheet workflows.",
     mimeType: "application/zip",
     extension: "zip"
   },
@@ -115,7 +118,8 @@ const EXPORT_OPTIONS = [
   {
     format: "schema_json",
     label: "Schema JSON",
-    description: "Structured database schema metadata for tooling and inspection.",
+    description:
+      "Structured database schema metadata for tooling and inspection.",
     mimeType: "application/json",
     extension: "json"
   }
@@ -130,6 +134,11 @@ const SKIP_SCAN_DIRECTORIES = new Set([
   ".next",
   "backups"
 ]);
+
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+const CREDENTIAL_BACKUP_NOTICE =
+  "HIGHLY SENSITIVE: This Forge backup contains personal data and may contain .forge-secrets.key together with encrypted credential records. Possession of both can permit recovery of stored provider credentials. Keep the archive and manifest owner-only, do not publish or attach them to support requests, and transfer them only through encrypted channels.";
 
 function nowIso() {
   return new Date().toISOString();
@@ -195,7 +204,9 @@ function readDataManagementSettingsRow(): DataManagementSettingsRow {
     .get() as DataManagementSettingsRow;
 }
 
-function writeDataManagementSettingsRow(patch: Partial<DataManagementSettingsRow>) {
+function writeDataManagementSettingsRow(
+  patch: Partial<DataManagementSettingsRow>
+) {
   const current = readDataManagementSettingsRow();
   const next: DataManagementSettingsRow = {
     ...current,
@@ -233,7 +244,8 @@ function writeDataManagementSettingsRow(patch: Partial<DataManagementSettingsRow
 
 function resolveCurrentDataManagementSettings(): DataManagementSettings {
   const row = readDataManagementSettingsRow();
-  const preferredDataRoot = row.preferred_data_root.trim() || getEffectiveDataRoot();
+  const preferredDataRoot =
+    row.preferred_data_root.trim() || getEffectiveDataRoot();
   const backupDirectory =
     row.backup_directory.trim() || getDefaultBackupDirectory(preferredDataRoot);
   return dataManagementSettingsSchema.parse({
@@ -293,9 +305,9 @@ function collectCountsFromDatabase(database: DatabaseSync) {
 
 function checkIntegrity(database: DatabaseSync) {
   try {
-    const row = database
-      .prepare("PRAGMA quick_check;")
-      .get() as Record<string, string> | undefined;
+    const row = database.prepare("PRAGMA quick_check;").get() as
+      | Record<string, string>
+      | undefined;
     const value = row ? Object.values(row)[0] : "ok";
     return {
       integrityOk: value === "ok",
@@ -326,7 +338,9 @@ export async function getCurrentDataRuntimeSnapshot(): Promise<DataRuntimeSnapsh
   return dataRuntimeSnapshotSchema.parse({
     dataRoot,
     databasePath,
-    layout: databaseStat ? detectLayoutForDatabasePath(databasePath) : "missing",
+    layout: databaseStat
+      ? detectLayoutForDatabasePath(databasePath)
+      : "missing",
     databaseSizeBytes: databaseStat?.size ?? 0,
     databaseLastModifiedAt: databaseStat?.mtime.toISOString() ?? null,
     integrityOk: integrity.integrityOk,
@@ -372,7 +386,9 @@ function buildSchemaSql(database: DatabaseSync) {
 function buildSchemaJson(database: DatabaseSync) {
   const tables = listTables(database).map((table) => {
     const columns = (
-      database.prepare(`PRAGMA table_info(${quoteSqlString(table)});`).all() as Array<{
+      database
+        .prepare(`PRAGMA table_info(${quoteSqlString(table)});`)
+        .all() as Array<{
         cid: number;
         name: string;
         type: string;
@@ -389,7 +405,9 @@ function buildSchemaJson(database: DatabaseSync) {
       primaryKeyPosition: column.pk
     }));
     const foreignKeys = (
-      database.prepare(`PRAGMA foreign_key_list(${quoteSqlString(table)});`).all() as Array<{
+      database
+        .prepare(`PRAGMA foreign_key_list(${quoteSqlString(table)});`)
+        .all() as Array<{
         id: number;
         seq: number;
         table: string;
@@ -408,7 +426,9 @@ function buildSchemaJson(database: DatabaseSync) {
       onDelete: foreignKey.on_delete
     }));
     const indexes = (
-      database.prepare(`PRAGMA index_list(${quoteSqlString(table)});`).all() as Array<{
+      database
+        .prepare(`PRAGMA index_list(${quoteSqlString(table)});`)
+        .all() as Array<{
         seq: number;
         name: string;
         unique: number;
@@ -422,7 +442,9 @@ function buildSchemaJson(database: DatabaseSync) {
       origin: index.origin,
       partial: index.partial === 1,
       columns: (
-        database.prepare(`PRAGMA index_info(${quoteSqlString(index.name)});`).all() as Array<{
+        database
+          .prepare(`PRAGMA index_info(${quoteSqlString(index.name)});`)
+          .all() as Array<{
           seqno: number;
           cid: number;
           name: string;
@@ -464,8 +486,7 @@ function csvEscape(value: unknown) {
   if (value === null || value === undefined) {
     return "";
   }
-  const raw =
-    typeof value === "string" ? value : JSON.stringify(value);
+  const raw = typeof value === "string" ? value : JSON.stringify(value);
   if (/[",\n]/.test(raw)) {
     return `"${raw.replaceAll('"', '""')}"`;
   }
@@ -473,25 +494,44 @@ function csvEscape(value: unknown) {
 }
 
 function buildCsvForTable(database: DatabaseSync, table: string) {
-  const rows = database.prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>;
+  const rows = database.prepare(`SELECT * FROM ${table}`).all() as Array<
+    Record<string, unknown>
+  >;
   if (rows.length === 0) {
     return "";
   }
   const headers = Object.keys(rows[0]);
   return [
     headers.join(","),
-    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(","))
+    ...rows.map((row) =>
+      headers.map((header) => csvEscape(row[header])).join(",")
+    )
   ].join("\n");
 }
 
 async function createSqliteSnapshot(database: DatabaseSync) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "forge-sqlite-export-"));
-  const snapshotPath = path.join(tempDir, "forge.sqlite");
-  database.exec(`VACUUM INTO ${quoteSqlString(snapshotPath)};`);
-  return {
-    tempDir,
-    snapshotPath
-  };
+  try {
+    await chmod(tempDir, PRIVATE_DIRECTORY_MODE);
+    const snapshotPath = path.join(tempDir, "forge.sqlite");
+    database.exec(`VACUUM INTO ${quoteSqlString(snapshotPath)};`);
+    await chmod(snapshotPath, PRIVATE_FILE_MODE);
+    return {
+      tempDir,
+      snapshotPath
+    };
+  } catch (error) {
+    await removeIfExists(tempDir);
+    throw error;
+  }
+}
+
+async function ensurePrivateDirectory(directoryPath: string) {
+  await mkdir(directoryPath, {
+    recursive: true,
+    mode: PRIVATE_DIRECTORY_MODE
+  });
+  await chmod(directoryPath, PRIVATE_DIRECTORY_MODE);
 }
 
 async function removeIfExists(targetPath: string) {
@@ -537,7 +577,7 @@ function archivePathForBaseName(backupDirectory: string, baseName: string) {
 
 export async function listDataBackups(): Promise<DataBackupEntry[]> {
   const settings = resolveCurrentDataManagementSettings();
-  await mkdir(settings.backupDirectory, { recursive: true });
+  await ensurePrivateDirectory(settings.backupDirectory);
   const entries = await readdir(settings.backupDirectory);
   const manifests = entries
     .filter((entry) => entry.endsWith(".manifest.json"))
@@ -558,27 +598,45 @@ export async function listDataBackups(): Promise<DataBackupEntry[]> {
 
 export async function createDataBackup(
   input: CreateDataBackupInput = { note: "" },
-  options: { mode?: DataBackupMode } = {}
+  options: {
+    mode?: DataBackupMode;
+    archiveWriter?: (archive: AdmZip, targetPath: string) => void;
+  } = {}
 ): Promise<DataBackupEntry> {
   const parsed = createDataBackupSchema.parse(input);
   const mode = dataBackupModeSchema.parse(options.mode ?? "manual");
   const settings = resolveCurrentDataManagementSettings();
   const snapshot = await getCurrentDataRuntimeSnapshot();
-  await mkdir(settings.backupDirectory, { recursive: true });
+  await ensurePrivateDirectory(settings.backupDirectory);
   const backupId = `bkp_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const createdAt = nowIso();
   const baseName = buildBackupBaseName(createdAt, backupId);
-  const archivePath = archivePathForBaseName(settings.backupDirectory, baseName);
-  const manifestPath = manifestPathForBaseName(settings.backupDirectory, baseName);
+  const archivePath = archivePathForBaseName(
+    settings.backupDirectory,
+    baseName
+  );
+  const manifestPath = manifestPathForBaseName(
+    settings.backupDirectory,
+    baseName
+  );
   const database = getDatabase();
   const sqliteSnapshot = await createSqliteSnapshot(database);
+  let stageDirectory: string | null = null;
+  let archiveFinalized = false;
+  let manifestFinalized = false;
   try {
+    stageDirectory = await mkdtemp(
+      path.join(settings.backupDirectory, ".forge-backup-stage-")
+    );
+    await chmod(stageDirectory, PRIVATE_DIRECTORY_MODE);
+    const stagedArchivePath = path.join(stageDirectory, `${baseName}.zip`);
+    const stagedManifestPath = path.join(
+      stageDirectory,
+      `${baseName}.manifest.json`
+    );
     const zip = new AdmZip();
     zip.addLocalFile(sqliteSnapshot.snapshotPath, "", "forge.sqlite");
-    zip.addFile(
-      "schema.sql",
-      Buffer.from(buildSchemaSql(database), "utf8")
-    );
+    zip.addFile("schema.sql", Buffer.from(buildSchemaSql(database), "utf8"));
     zip.addFile(
       "schema.json",
       Buffer.from(JSON.stringify(buildSchemaJson(database), null, 2), "utf8")
@@ -591,7 +649,11 @@ export async function createDataBackup(
             generatedAt: createdAt,
             mode,
             note: parsed.note,
-            current: snapshot
+            current: snapshot,
+            sensitivity: {
+              classification: "credential-bearing-backup",
+              notice: CREDENTIAL_BACKUP_NOTICE
+            }
           },
           null,
           2
@@ -608,8 +670,17 @@ export async function createDataBackup(
     if (existsSync(secretsKeyPath)) {
       zip.addLocalFile(secretsKeyPath, "", ".forge-secrets.key");
     }
-    zip.writeZip(archivePath);
-    const archiveStat = await stat(archivePath);
+    zip.addFile(
+      "BACKUP-SENSITIVITY.txt",
+      Buffer.from(`${CREDENTIAL_BACKUP_NOTICE}\n`, "utf8")
+    );
+    if (options.archiveWriter) {
+      options.archiveWriter(zip, stagedArchivePath);
+    } else {
+      zip.writeZip(stagedArchivePath);
+    }
+    await chmod(stagedArchivePath, PRIVATE_FILE_MODE);
+    const archiveStat = await stat(stagedArchivePath);
     const backup = dataBackupEntrySchema.parse({
       id: backupId,
       createdAt,
@@ -625,16 +696,46 @@ export async function createDataBackup(
       includesSecretsKey: existsSync(secretsKeyPath),
       counts: snapshot.counts
     });
-    await writeFile(manifestPath, `${JSON.stringify(backup, null, 2)}\n`, "utf8");
+    const manifest = {
+      ...backup,
+      sensitivity: {
+        classification: "credential-bearing-backup",
+        credentialMaterialIncluded: backup.includesSecretsKey,
+        notice: CREDENTIAL_BACKUP_NOTICE
+      }
+    };
+    await writeFile(
+      stagedManifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      { encoding: "utf8", mode: PRIVATE_FILE_MODE }
+    );
+    await chmod(stagedManifestPath, PRIVATE_FILE_MODE);
+
+    await rename(stagedArchivePath, archivePath);
+    archiveFinalized = true;
+    await rename(stagedManifestPath, manifestPath);
+    manifestFinalized = true;
     if (mode === "manual") {
       writeDataManagementSettingsRow({ last_manual_backup_at: createdAt });
     }
     if (mode === "automatic") {
       writeDataManagementSettingsRow({ last_auto_backup_at: createdAt });
-      await pruneExpiredAutomaticBackups(settings.backupDirectory, settings.backupRetentionDays);
+      await pruneExpiredAutomaticBackups(
+        settings.backupDirectory,
+        settings.backupRetentionDays
+      );
     }
     return backup;
   } finally {
+    if (!manifestFinalized && archiveFinalized) {
+      await removeIfExists(archivePath);
+    }
+    if (!manifestFinalized) {
+      await removeIfExists(manifestPath);
+    }
+    if (stageDirectory) {
+      await removeIfExists(stageDirectory);
+    }
     await rm(sqliteSnapshot.tempDir, { recursive: true, force: true });
   }
 }
@@ -652,7 +753,9 @@ async function pruneExpiredAutomaticBackups(
     if (backup.mode !== "automatic") {
       continue;
     }
-    if (path.resolve(backup.backupDirectory) !== path.resolve(backupDirectory)) {
+    if (
+      path.resolve(backup.backupDirectory) !== path.resolve(backupDirectory)
+    ) {
       continue;
     }
     const createdAtMs = new Date(backup.createdAt).getTime();
@@ -670,7 +773,10 @@ async function openDatabaseSnapshot(databasePath: string) {
   return database;
 }
 
-async function inspectDatabaseCandidate(databasePath: string, current: DataRuntimeSnapshot) {
+async function inspectDatabaseCandidate(
+  databasePath: string,
+  current: DataRuntimeSnapshot
+) {
   const dbStat = await statFileIfExists(databasePath);
   if (!dbStat) {
     return null;
@@ -680,7 +786,8 @@ async function inspectDatabaseCandidate(databasePath: string, current: DataRunti
     const integrity = checkIntegrity(database);
     const counts = collectCountsFromDatabase(database);
     const dataRoot = deriveDataRootFromDatabasePath(databasePath);
-    const sameAsCurrent = path.resolve(dataRoot) === path.resolve(current.dataRoot);
+    const sameAsCurrent =
+      path.resolve(dataRoot) === path.resolve(current.dataRoot);
     const sourceHint = dataRoot.includes(`${path.sep}.openclaw${path.sep}`)
       ? "OpenClaw"
       : dataRoot.includes(`${path.sep}.hermes${path.sep}`)
@@ -705,7 +812,8 @@ async function inspectDatabaseCandidate(databasePath: string, current: DataRunti
       counts,
       newerThanCurrent:
         (current.databaseLastModifiedAt
-          ? dbStat.mtime.getTime() > new Date(current.databaseLastModifiedAt).getTime()
+          ? dbStat.mtime.getTime() >
+            new Date(current.databaseLastModifiedAt).getTime()
           : true) && !sameAsCurrent,
       sameAsCurrent
     });
@@ -730,8 +838,8 @@ function gatherScanRoots(explicitRoots?: string[]) {
     path.join(os.homedir(), ".hermes"),
     path.join(os.homedir(), "Documents")
   ];
-  return Array.from(new Set(roots.map((entry) => path.resolve(entry)))).filter((entry) =>
-    existsSync(entry)
+  return Array.from(new Set(roots.map((entry) => path.resolve(entry)))).filter(
+    (entry) => existsSync(entry)
   );
 }
 
@@ -771,12 +879,19 @@ export async function scanForDataRecoveryCandidates(
   const current = await getCurrentDataRuntimeSnapshot();
   const candidates = new Map<string, DataRecoveryCandidate>();
   for (const scanRoot of gatherScanRoots(options.roots)) {
-    for (const databasePath of walkForForgeSqlite(scanRoot, options.maxDepth ?? 5)) {
+    for (const databasePath of walkForForgeSqlite(
+      scanRoot,
+      options.maxDepth ?? 5
+    )) {
       const candidate = await inspectDatabaseCandidate(databasePath, current);
       if (!candidate) {
         continue;
       }
-      if (candidate.counts.notes === 0 && candidate.counts.goals === 0 && candidate.counts.tasks === 0) {
+      if (
+        candidate.counts.notes === 0 &&
+        candidate.counts.goals === 0 &&
+        candidate.counts.tasks === 0
+      ) {
         continue;
       }
       candidates.set(candidate.databasePath, candidate);
@@ -887,9 +1002,15 @@ export async function restoreDataBackup(
   options: { secretsManager?: SecretsManager } = {}
 ): Promise<DataManagementState> {
   const parsed = restoreDataBackupSchema.parse(input);
-  const backup = (await listDataBackups()).find((entry) => entry.id === backupId);
+  const backup = (await listDataBackups()).find(
+    (entry) => entry.id === backupId
+  );
   if (!backup) {
-    throw new HttpError(404, "backup_not_found", `Forge could not find backup ${backupId}.`);
+    throw new HttpError(
+      404,
+      "backup_not_found",
+      `Forge could not find backup ${backupId}.`
+    );
   }
   if (parsed.createSafetyBackup) {
     await createDataBackup(
@@ -921,12 +1042,18 @@ export async function restoreDataBackup(
     if (existsSync(restoredSecretsPath)) {
       await removeIfExists(path.join(currentRoot, ".forge-secrets.key"));
     }
-    await copyIfExists(restoredDatabasePath, path.join(currentRoot, "forge.sqlite"));
+    await copyIfExists(
+      restoredDatabasePath,
+      path.join(currentRoot, "forge.sqlite")
+    );
     await copyIfExists(
       path.join(tempDir, "wiki-ingest"),
       path.join(currentRoot, "wiki-ingest")
     );
-    await copyIfExists(restoredSecretsPath, path.join(currentRoot, ".forge-secrets.key"));
+    await copyIfExists(
+      restoredSecretsPath,
+      path.join(currentRoot, ".forge-secrets.key")
+    );
     await applyRuntimeRootSwitch(currentRoot, options.secretsManager);
     return getDataManagementState();
   } finally {
@@ -968,7 +1095,9 @@ export async function getDataManagementState(): Promise<DataManagementState> {
     current: await getCurrentDataRuntimeSnapshot(),
     settings: resolveCurrentDataManagementSettings(),
     backups: await listDataBackups(),
-    exportOptions: EXPORT_OPTIONS.map((entry) => dataExportOptionSchema.parse(entry))
+    exportOptions: EXPORT_OPTIONS.map((entry) =>
+      dataExportOptionSchema.parse(entry)
+    )
   });
 }
 
@@ -990,7 +1119,9 @@ export async function maybeRunAutomaticBackup(): Promise<DataBackupEntry | null>
   );
 }
 
-export async function exportData(format: DataExportFormat): Promise<ExportPayload> {
+export async function exportData(
+  format: DataExportFormat
+): Promise<ExportPayload> {
   const parsedFormat = dataExportFormatSchema.parse(format);
   const database = getDatabase();
   const stamp = new Date().toISOString().slice(0, 19).replaceAll(":", "-");
@@ -1016,21 +1147,30 @@ export async function exportData(format: DataExportFormat): Promise<ExportPayloa
   }
   if (parsedFormat === "schema_json") {
     return {
-      body: Buffer.from(JSON.stringify(buildSchemaJson(database), null, 2), "utf8"),
+      body: Buffer.from(
+        JSON.stringify(buildSchemaJson(database), null, 2),
+        "utf8"
+      ),
       mimeType: "application/json",
       fileName: `forge-schema-${stamp}.json`
     };
   }
   if (parsedFormat === "json") {
     return {
-      body: Buffer.from(JSON.stringify(buildJsonExport(database), null, 2), "utf8"),
+      body: Buffer.from(
+        JSON.stringify(buildJsonExport(database), null, 2),
+        "utf8"
+      ),
       mimeType: "application/json",
       fileName: `forge-export-${stamp}.json`
     };
   }
   const zip = new AdmZip();
   for (const table of listTables(database)) {
-    zip.addFile(`${table}.csv`, Buffer.from(buildCsvForTable(database, table), "utf8"));
+    zip.addFile(
+      `${table}.csv`,
+      Buffer.from(buildCsvForTable(database, table), "utf8")
+    );
   }
   zip.addFile(
     "schema.json",

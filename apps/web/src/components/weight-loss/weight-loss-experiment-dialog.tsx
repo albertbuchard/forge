@@ -6,7 +6,13 @@ import {
 } from "@/components/flows/question-flow-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { NutritionExperimentInput } from "@/lib/weight-loss-types";
+import { Badge } from "@/components/ui/badge";
+import { SurfacePanel } from "@/components/ui/surface";
+import type {
+  NutritionExperiment,
+  NutritionExperimentInput,
+  NutritionExperimentPatchInput
+} from "@/lib/weight-loss-types";
 
 export type WeightLossExperimentDraft = {
   title: string;
@@ -281,6 +287,199 @@ export function WeightLossExperimentDialog({
       pendingLabel="Saving experiment"
       error={error}
       draftPersistenceKey="weight-loss-experiment"
+    />
+  );
+}
+
+export type WeightLossExperimentReviewDraft = {
+  status: NutritionExperiment["status"];
+  conclusion: string;
+};
+
+export function buildExperimentReviewDraft(
+  experiment: NutritionExperiment
+): WeightLossExperimentReviewDraft {
+  return {
+    status: experiment.status,
+    conclusion: experiment.conclusion ?? ""
+  };
+}
+
+export function buildExperimentReviewPatch(
+  draft: WeightLossExperimentReviewDraft
+): NutritionExperimentPatchInput {
+  return {
+    status: draft.status,
+    conclusion: nullable(draft.conclusion)
+  };
+}
+
+export function validateExperimentReviewDraft(
+  draft: WeightLossExperimentReviewDraft
+) {
+  if (
+    (draft.status === "completed" || draft.status === "abandoned") &&
+    !draft.conclusion.trim()
+  ) {
+    return `Record a ${draft.status === "completed" ? "conclusion" : "reason"} before marking the experiment ${draft.status}.`;
+  }
+  return null;
+}
+
+export function WeightLossExperimentReviewDialog({
+  experiment,
+  open,
+  onOpenChange,
+  value,
+  onChange,
+  onSubmit,
+  pending,
+  error
+}: {
+  experiment: NutritionExperiment | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  value: WeightLossExperimentReviewDraft;
+  onChange: (value: WeightLossExperimentReviewDraft) => void;
+  onSubmit: () => Promise<void>;
+  pending: boolean;
+  error?: string | null;
+}) {
+  const steps: Array<QuestionFlowStep<WeightLossExperimentReviewDraft>> = [
+    {
+      id: "evidence",
+      eyebrow: "Stored method",
+      title: "Review the question before changing its status",
+      description:
+        "Keep the original hypothesis, intervention, outcome, dates, and confounders visible so the conclusion stays tied to the method that was actually stored.",
+      render: () =>
+        experiment ? (
+          <div className="grid gap-3">
+            <SurfacePanel className="grid gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold text-[var(--ui-ink-strong)]">
+                  {experiment.title}
+                </div>
+                <Badge tone="meta">{experiment.status}</Badge>
+              </div>
+              <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                {experiment.hypothesis || "No hypothesis recorded."}
+              </div>
+            </SurfacePanel>
+            <SurfacePanel className="grid gap-2 text-sm text-[var(--ui-ink-soft)]">
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">
+                  Intervention:
+                </span>{" "}
+                {experiment.intervention || "Not recorded"}
+              </div>
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">
+                  Primary outcome:
+                </span>{" "}
+                {experiment.metricKey || "Not recorded"}
+              </div>
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">Success:</span>{" "}
+                {experiment.successCriteria || "Not recorded"}
+              </div>
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">Window:</span>{" "}
+                {experiment.experimentStart || "unscheduled"} to{" "}
+                {experiment.experimentEnd || "open"}
+              </div>
+              <div>
+                <span className="text-[var(--ui-ink-strong)]">
+                  Confounders:
+                </span>{" "}
+                {experiment.confounders.length > 0
+                  ? experiment.confounders.join(", ")
+                  : "None recorded"}
+              </div>
+            </SurfacePanel>
+          </div>
+        ) : null
+    },
+    {
+      id: "decision",
+      eyebrow: "Review decision",
+      title: "What does the evidence support now?",
+      description:
+        "Status and conclusion are separate. Pausing does not imply failure, and completion requires an explicit conclusion.",
+      render: (draft, setDraft) => (
+        <div className="grid gap-5">
+          <FlowField label="Experiment status">
+            <FlowChoiceGrid
+              value={draft.status}
+              onChange={(status) =>
+                setDraft({ status: status as NutritionExperiment["status"] })
+              }
+              options={[
+                {
+                  value: "planned",
+                  label: "Planned",
+                  description: "Method saved; exposure has not started."
+                },
+                {
+                  value: "running",
+                  label: "Running",
+                  description: "Exposure and outcome logging are active."
+                },
+                {
+                  value: "paused",
+                  label: "Paused",
+                  description:
+                    "Temporarily stopped without drawing a conclusion."
+                },
+                {
+                  value: "completed",
+                  label: "Completed",
+                  description: "Evidence is ready for a recorded conclusion."
+                },
+                {
+                  value: "abandoned",
+                  label: "Abandoned",
+                  description:
+                    "Stopped early; record why interpretation is limited."
+                }
+              ]}
+            />
+          </FlowField>
+          <FlowField
+            label="Conclusion or pause note"
+            hint="State what the evidence showed, what remains uncertain, or why the experiment stopped."
+          >
+            <Textarea
+              value={draft.conclusion}
+              onChange={(event) => setDraft({ conclusion: event.target.value })}
+              placeholder="The result, uncertainty, adherence limits, and next decision."
+            />
+          </FlowField>
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <QuestionFlowDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      eyebrow="Nutrition experiment"
+      title="Review experiment"
+      description="Inspect the stored method, then update status and conclusion without rewriting the original question."
+      value={value}
+      onChange={onChange}
+      steps={steps}
+      onSubmit={onSubmit}
+      submitLabel="Save review"
+      pending={pending}
+      pendingLabel="Saving review"
+      error={error}
+      draftPersistenceKey={
+        experiment
+          ? `weight-loss-experiment-review.${experiment.id}`
+          : undefined
+      }
     />
   );
 }

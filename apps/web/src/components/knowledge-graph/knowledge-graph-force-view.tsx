@@ -4,7 +4,8 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
-  useState
+  useState,
+  type KeyboardEvent
 } from "react";
 import type Graph from "graphology";
 import Sigma from "sigma";
@@ -16,6 +17,7 @@ import {
   buildKnowledgeGraphHopLevels,
   buildKnowledgeGraphOverviewCameraTarget,
   buildKnowledgeGraphSigmaOverviewRatio,
+  resolveKnowledgeGraphKeyboardTarget,
   reduceKnowledgeGraphSigmaEdgeAttributes,
   reduceKnowledgeGraphSigmaNodeAttributes
 } from "@/components/knowledge-graph/knowledge-graph-force-view-model";
@@ -1827,13 +1829,67 @@ export const KnowledgeGraphForceView = forwardRef<
     [fallbackProjectedNodes]
   );
 
+  const handleKeyboardNavigation = (event: KeyboardEvent<HTMLDivElement>) => {
+    const nodePositions = new Map<string, { x: number; y: number }>();
+    if (sigmaRef.current && graphRef.current) {
+      graphRef.current.forEachNode((nodeId, attributes) => {
+        nodePositions.set(
+          nodeId,
+          sigmaRef.current!.graphToViewport({
+            x: attributes.x,
+            y: attributes.y
+          })
+        );
+      });
+    } else {
+      for (const node of fallbackProjectedNodes) {
+        nodePositions.set(node.id, {
+          x: node.viewportX,
+          y: node.viewportY
+        });
+      }
+    }
+    const target = resolveKnowledgeGraphKeyboardTarget({
+      key: event.key,
+      nodeIds: nodes.map((node) => node.id),
+      focusNodeId,
+      nodePositions
+    });
+    if (!target.handled) {
+      return;
+    }
+    event.preventDefault();
+    onSelectNodeRef.current(
+      target.targetNodeId
+        ? (nodeMapRef.current.get(target.targetNodeId) ?? null)
+        : null
+    );
+  };
+
+  const focusedNode = focusNodeId
+    ? (nodes.find((node) => node.id === focusNodeId) ?? null)
+    : null;
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-[var(--ui-surface-0)]">
       <div
         ref={containerRef}
-        className="h-full w-full touch-none"
-        aria-label="Knowledge graph canvas"
+        className="h-full w-full touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--primary)]/45"
+        role="application"
+        tabIndex={0}
+        aria-label={`Knowledge graph canvas, ${nodes.length} nodes${focusedNode ? `, focused on ${focusedNode.title}` : ""}`}
+        aria-describedby="knowledge-graph-canvas-help"
+        onKeyDown={handleKeyboardNavigation}
       >
+        <span id="knowledge-graph-canvas-help" className="sr-only">
+          Use arrow keys to move between nodes, Home or End to jump, Enter or
+          Space to inspect the focused node, and Escape to clear focus.
+        </span>
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          {focusedNode
+            ? `${focusedNode.title}. ${focusedNode.subtitle}`
+            : "No graph node focused."}
+        </span>
         {fallbackReason && fallbackSnapshot ? (
           <svg
             className="h-full w-full"

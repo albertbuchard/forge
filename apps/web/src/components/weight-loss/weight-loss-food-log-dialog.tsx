@@ -29,7 +29,7 @@ import type {
   NutritionMealItem,
   NutritionFoodSearchResult
 } from "@/lib/weight-loss-types";
-import { formatNumber } from "./weight-loss-format";
+import { formatMeasurement, formatNumber } from "./weight-loss-format";
 
 type FoodUnit = "serving" | "grams" | "unit" | "tsp" | "tbsp" | "cup";
 export type WeightLossFoodLogIntent = "search" | "custom" | "chatgpt";
@@ -72,6 +72,49 @@ export type WeightLossFoodParseFeedback = {
   summary?: WeightLossFoodParseSummary;
   message?: string;
 };
+
+function foodCandidateKey(food: NutritionFoodSearchResult) {
+  if (food.barcode?.trim()) {
+    return `barcode:${food.barcode.trim()}`;
+  }
+  if (food.sourceId?.trim()) {
+    return `source:${food.source}:${food.sourceId.trim()}`;
+  }
+  return [
+    food.name.trim().toLocaleLowerCase(),
+    food.brand?.trim().toLocaleLowerCase() ?? "",
+    food.servingGrams ?? "",
+    food.servingLabel?.trim().toLocaleLowerCase() ?? ""
+  ].join("|");
+}
+
+function foodCandidateCompleteness(food: NutritionFoodSearchResult) {
+  return [
+    food.calories,
+    food.proteinGrams,
+    food.carbohydrateGrams,
+    food.fatGrams,
+    food.fiberGrams,
+    food.sodiumMg
+  ].filter((value) => value != null && Number.isFinite(value)).length;
+}
+
+export function deduplicateFoodResults(results: NutritionFoodSearchResult[]) {
+  const byKey = new Map<string, NutritionFoodSearchResult>();
+  for (const food of results) {
+    const key = foodCandidateKey(food);
+    const current = byKey.get(key);
+    if (
+      !current ||
+      foodCandidateCompleteness(food) > foodCandidateCompleteness(current) ||
+      (foodCandidateCompleteness(food) === foodCandidateCompleteness(current) &&
+        (food.confidence ?? 0) > (current.confidence ?? 0))
+    ) {
+      byKey.set(key, food);
+    }
+  }
+  return [...byKey.values()];
+}
 
 export function buildInitialFoodDraft(): WeightLossFoodDraft {
   return {
@@ -407,8 +450,8 @@ function ChatGptParseStatusCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ui-ink-strong)]">
           <CheckCircle2 className="size-4 text-[var(--success)]" />
-          {summary.itemCount} food{summary.itemCount === 1 ? "" : "s"} added
-          to the draft
+          {summary.itemCount} food{summary.itemCount === 1 ? "" : "s"} added to
+          the draft
         </div>
         <Badge tone="signal">
           {summary.completeNutritionItemCount}/{summary.itemCount} complete
@@ -446,6 +489,7 @@ export function WeightLossFoodLogDialog({
   chatGptPending = false,
   chatGptError = null,
   chatGptFeedback = null,
+  saveError = null,
   logPending,
   onSearch,
   onParseWithChatGpt,
@@ -463,6 +507,7 @@ export function WeightLossFoodLogDialog({
   chatGptPending?: boolean;
   chatGptError?: string | null;
   chatGptFeedback?: WeightLossFoodParseFeedback | null;
+  saveError?: string | null;
   logPending: boolean;
   onSearch: (query: string) => void;
   onParseWithChatGpt?: (text: string) => Promise<void>;
@@ -479,6 +524,10 @@ export function WeightLossFoodLogDialog({
   const totals = useMemo(
     () => sumSelectedFoods(value.selectedItems),
     [value.selectedItems]
+  );
+  const uniqueFoodResults = useMemo(
+    () => deduplicateFoodResults(foodResults),
+    [foodResults]
   );
   const setDraft = (patch: Partial<WeightLossFoodDraft>) =>
     onChange({ ...value, ...patch });
@@ -657,7 +706,17 @@ export function WeightLossFoodLogDialog({
             <FoodDetail food={detailFood} onAdd={() => addFood(detailFood)} />
           ) : null}
           <div className="grid gap-3">
-            {foodResults.map((food) => (
+            {foodResults.length > uniqueFoodResults.length ? (
+              <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
+                {foodResults.length - uniqueFoodResults.length} duplicate
+                catalog candidate
+                {foodResults.length - uniqueFoodResults.length === 1
+                  ? " was"
+                  : "s were"}{" "}
+                merged before display.
+              </div>
+            ) : null}
+            {uniqueFoodResults.map((food) => (
               <SurfacePanel key={food.id} interactive className="p-0">
                 <button
                   type="button"
@@ -877,12 +936,13 @@ export function WeightLossFoodLogDialog({
       submitLabel={mode === "edit" ? "Update meal" : "Save meal"}
       pending={logPending}
       pendingLabel="Saving meal"
+      error={saveError}
       resolveError={(stepId) =>
         stepId !== "search"
           ? value.selectedItems.length === 0
             ? "Select at least one food before saving."
-            : nutritionError
-          : null
+            : (nutritionError ?? undefined)
+          : undefined
       }
       resolveContinueNudge={(stepId) =>
         stepId === "search" &&
@@ -1152,20 +1212,23 @@ function FoodDetail({
         <SurfaceStat label="Calories" value={formatNumber(food.calories)} />
         <SurfaceStat
           label="Protein"
-          value={`${formatNumber(food.proteinGrams)}g`}
+          value={formatMeasurement(food.proteinGrams, "g")}
         />
         <SurfaceStat
           label="Carbs"
-          value={`${formatNumber(food.carbohydrateGrams)}g`}
+          value={formatMeasurement(food.carbohydrateGrams, "g")}
         />
-        <SurfaceStat label="Fat" value={`${formatNumber(food.fatGrams)}g`} />
+        <SurfaceStat
+          label="Fat"
+          value={formatMeasurement(food.fatGrams, "g")}
+        />
         <SurfaceStat
           label="Fiber"
-          value={`${formatNumber(food.fiberGrams)}g`}
+          value={formatMeasurement(food.fiberGrams, "g")}
         />
         <SurfaceStat
           label="Sugar"
-          value={`${formatNumber(food.sugarGrams)}g`}
+          value={formatMeasurement(food.sugarGrams, "g")}
         />
         <SurfaceStat
           label="Sodium"

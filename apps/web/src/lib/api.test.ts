@@ -5,13 +5,18 @@ import {
   createGoal,
   createProject,
   createTask,
+  finalizeWeeklyReview,
   getCalendarOverview,
+  getDeletedPlanningRecord,
   getLifeEvent,
   getNote,
   getSleepSession,
   getSleepSessionRawDetail,
+  getWeeklyReview,
+  listActivity,
   listWikiPages,
-  patchTask
+  patchTask,
+  restoreEntities
 } from "./api";
 
 function mockJsonResponse(body: unknown) {
@@ -398,5 +403,140 @@ describe("create entity payload normalization", () => {
       "/api/v1/health/sleep/record%2Fwith%20spaces%3Fand%3Dreserved/raw",
       "/api/v1/life-events/record%2Fwith%20spaces%3Fand%3Dreserved"
     ]);
+  });
+});
+
+describe("activity archive requests", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends bounded source, entity, date, correction, and user filters", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockJsonResponse({ activity: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listActivity({
+      limit: 100,
+      entityType: "task",
+      entityId: "task_alpha",
+      source: "agent",
+      from: "2026-07-01",
+      to: "2026-07-08",
+      includeCorrected: true,
+      userIds: ["user_operator"]
+    });
+
+    const [requestUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const query = new URLSearchParams(requestUrl.split("?")[1]);
+
+    expect(Object.fromEntries(query)).toMatchObject({
+      limit: "100",
+      entityType: "task",
+      entityId: "task_alpha",
+      source: "agent",
+      from: "2026-07-01",
+      to: "2026-07-08",
+      includeCorrected: "true",
+      userIds: "user_operator"
+    });
+  });
+});
+
+describe("weekly review and planning recovery requests", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes the browser calendar timezone through review and finalize calls", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse({ review: {} }))
+      .mockResolvedValueOnce(mockJsonResponse({ review: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getWeeklyReview("Europe/Zurich");
+    await finalizeWeeklyReview("Europe/Zurich");
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      "/api/v1/reviews/weekly?timeZone=Europe%2FZurich",
+      "/api/v1/reviews/weekly/finalize?timeZone=Europe%2FZurich"
+    ]);
+  });
+
+  it("rejects an HTTP 200 restore response whose operation failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockJsonResponse({
+          results: [
+            {
+              ok: false,
+              entityType: "goal",
+              id: "goal_deleted",
+              error: {
+                code: "not_found",
+                message: "goal goal_deleted was not found in the bin."
+              }
+            }
+          ]
+        })
+      )
+    );
+
+    await expect(
+      restoreEntities({
+        operations: [{ entityType: "goal", id: "goal_deleted" }]
+      })
+    ).rejects.toThrow("goal goal_deleted was not found in the bin.");
+  });
+
+  it("loads exact deleted planning metadata for a reloaded detail route", async () => {
+    const deletedRecord = {
+      entityType: "task" as const,
+      entityId: "task_deleted",
+      title: "Recover the plan",
+      subtitle: "",
+      deletedAt: "2026-07-11T08:00:00.000Z",
+      deletedByActor: "Albert",
+      deletedSource: "ui" as const,
+      deleteReason: "",
+      snapshot: { id: "task_deleted", level: "task", projectId: "project_1" }
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        results: [
+          {
+            ok: true,
+            matches: [
+              {
+                deleted: true,
+                entityType: "task",
+                id: "task_deleted",
+                entity: deletedRecord.snapshot,
+                deletedRecord
+              }
+            ]
+          }
+        ]
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getDeletedPlanningRecord("task", "task_deleted")
+    ).resolves.toEqual(deletedRecord);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      searches: [
+        {
+          entityTypes: ["task"],
+          ids: ["task_deleted"],
+          includeDeleted: true,
+          limit: 1
+        }
+      ]
+    });
   });
 });

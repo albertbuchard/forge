@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getDatabase } from "../db.js";
+import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import {
@@ -756,57 +757,84 @@ export function updateNote(
       : patch.lastSyncedAt;
   const updatedAt = new Date().toISOString();
 
-  getDatabase()
-    .prepare(
-      `UPDATE notes
-       SET kind = ?, title = ?, slug = ?, space_id = ?, parent_slug = ?, index_order = ?, show_in_index = ?, aliases_json = ?, summary = ?, content_markdown = ?, content_plain = ?, author = ?,
-           tags_json = ?, destroy_at = ?, source_path = ?, frontmatter_json = ?, revision_hash = ?, last_synced_at = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      wikiFields.kind,
-      wikiFields.title,
-      wikiFields.slug,
-      wikiFields.spaceId,
-      wikiFields.parentSlug,
-      wikiFields.indexOrder,
-      wikiFields.showInIndex ? 1 : 0,
-      JSON.stringify(wikiFields.aliases),
-      wikiFields.summary,
-      nextMarkdown,
-      nextPlain,
-      nextAuthor,
-      JSON.stringify(nextTags),
-      nextDestroyAt,
-      nextSourcePath,
-      JSON.stringify(nextFrontmatter),
-      nextRevisionHash,
-      nextLastSyncedAt,
-      updatedAt,
-      noteId
-    );
+  return runInTransaction(() => {
+    const result = getDatabase()
+      .prepare(
+        `UPDATE notes
+         SET kind = ?, title = ?, slug = ?, space_id = ?, parent_slug = ?, index_order = ?, show_in_index = ?, aliases_json = ?, summary = ?, content_markdown = ?, content_plain = ?, author = ?,
+             tags_json = ?, destroy_at = ?, source_path = ?, frontmatter_json = ?, revision_hash = ?, last_synced_at = ?, updated_at = ?
+         WHERE id = ?
+           AND (? IS NULL OR revision_hash = ?)`
+      )
+      .run(
+        wikiFields.kind,
+        wikiFields.title,
+        wikiFields.slug,
+        wikiFields.spaceId,
+        wikiFields.parentSlug,
+        wikiFields.indexOrder,
+        wikiFields.showInIndex ? 1 : 0,
+        JSON.stringify(wikiFields.aliases),
+        wikiFields.summary,
+        nextMarkdown,
+        nextPlain,
+        nextAuthor,
+        JSON.stringify(nextTags),
+        nextDestroyAt,
+        nextSourcePath,
+        JSON.stringify(nextFrontmatter),
+        nextRevisionHash,
+        nextLastSyncedAt,
+        updatedAt,
+        noteId,
+        patch.expectedRevisionHash ?? null,
+        patch.expectedRevisionHash ?? null
+      );
 
-  if (patch.links) {
-    replaceLinks(noteId, patch.links, updatedAt);
-  }
-  if (patch.userId !== undefined) {
-    setEntityOwner("note", noteId, patch.userId, nextAuthor ?? context.actor ?? null);
-  }
+    if (result.changes === 0) {
+      const current = getNoteByIdIncludingDeleted(noteId, {
+        skipCleanup: true
+      });
+      if (!current) {
+        return undefined;
+      }
+      throw new HttpError(
+        409,
+        "note_revision_conflict",
+        "This note changed after it was opened. Reload the latest revision before saving; the submitted draft was not applied."
+      );
+    }
 
-  const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;
-  clearDeletedEntityRecord("note", noteId);
-  upsertSearchRow(noteId, nextPlain, nextAuthor);
-  if (nextDestroyAt && Date.parse(nextDestroyAt) <= Date.now()) {
-    deleteNoteInternal(
-      noteId,
-      { source: "system", actor: null },
-      "Ephemeral note expired"
-    );
-    return undefined;
-  }
-  syncNoteWikiArtifacts(note);
-  recordNoteActivity(note, "note.updated", "Note updated", context);
-  return getNoteById(noteId);
+    if (patch.links) {
+      replaceLinks(noteId, patch.links, updatedAt);
+    }
+    if (patch.userId !== undefined) {
+      setEntityOwner(
+        "note",
+        noteId,
+        patch.userId,
+        nextAuthor ?? context.actor ?? null
+      );
+    }
+
+    const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true })!;
+    clearDeletedEntityRecord("note", noteId);
+    upsertSearchRow(noteId, nextPlain, nextAuthor);
+    if (nextDestroyAt && Date.parse(nextDestroyAt) <= Date.now()) {
+      deleteNoteInternal(
+        noteId,
+        { source: "system", actor: null },
+        "Ephemeral note expired"
+      );
+      return undefined;
+    }
+    syncNoteWikiArtifacts(note);
+    const updated = getNoteById(noteId);
+    if (updated) {
+      recordNoteActivity(updated, "note.updated", "Note updated", context);
+    }
+    return updated;
+  });
 }
 
 function deleteNoteInternal(

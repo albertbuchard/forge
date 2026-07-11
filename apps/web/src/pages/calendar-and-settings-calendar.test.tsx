@@ -1192,6 +1192,7 @@ describe("calendar routing surfaces", () => {
         endMinute: 1440,
         startsOn: "2026-04-13",
         endsOn: "2026-04-20",
+        exclusionDates: [],
         blockingState: "blocked",
         activityPresetKey: null,
         customSustainRateApPerHour: null

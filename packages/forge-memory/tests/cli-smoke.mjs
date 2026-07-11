@@ -9,14 +9,24 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
 const cliSource = fs.readFileSync(bin, "utf8");
-if (!cliSource.includes('path.join(repoRoot, "apps", "api", "src", "index.ts")')) {
-  throw new Error("Forge Memory dev runtime must prefer the current apps/api entry");
+if (
+  !cliSource.includes('path.join(repoRoot, "apps", "api", "src", "index.ts")')
+) {
+  throw new Error(
+    "Forge Memory dev runtime must prefer the current apps/api entry"
+  );
 }
 if (!cliSource.includes("isForgeDevWebServer(config.webPort, config.repo)")) {
-  throw new Error("Forge Memory dev runtime must validate reusable Vite servers");
+  throw new Error(
+    "Forge Memory dev runtime must validate reusable Vite servers"
+  );
 }
-if (!cliSource.includes("FORGE_API_ORIGIN: `http://127.0.0.1:${config.port}`")) {
-  throw new Error("Forge Memory dev Vite must proxy to the configured API port");
+if (
+  !cliSource.includes("FORGE_API_ORIGIN: `http://127.0.0.1:${config.port}`")
+) {
+  throw new Error(
+    "Forge Memory dev Vite must proxy to the configured API port"
+  );
 }
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "forge-memory-home-"));
 const dataRoot = path.join(tempHome, "data");
@@ -511,6 +521,10 @@ run([
   "0",
   "--json"
 ]);
+fs.writeFileSync(
+  path.join(dataRoot, "install-preserved.txt"),
+  "preserve across reinstall\n"
+);
 await withFakeForgeServer(
   async (request) => {
     if (request.url === "/api/v1/health")
@@ -543,6 +557,11 @@ await withFakeForgeServer(
       if (payload.config.webPort !== webPort) {
         throw new Error(
           `Expected install to preserve requested dev web port ${webPort}, got ${payload.config.webPort}`
+        );
+      }
+      if (!fs.existsSync(path.join(dataRoot, "install-preserved.txt"))) {
+        throw new Error(
+          "Expected a repeated install to preserve existing Forge data-root files"
         );
       }
     });
@@ -702,7 +721,12 @@ if (
   );
 }
 const claudeConfigPath = path.join(tempHome, ".claude.json");
-const claudeRulesPath = path.join(tempHome, ".claude", "rules", "forge-memory.md");
+const claudeRulesPath = path.join(
+  tempHome,
+  ".claude",
+  "rules",
+  "forge-memory.md"
+);
 fs.mkdirSync(path.dirname(claudeRulesPath), { recursive: true });
 fs.writeFileSync(
   claudeRulesPath,
@@ -1400,6 +1424,11 @@ const safeUpdatePayload = JSON.parse(safeUpdate.stdout);
 if (!safeUpdatePayload.dataPreserved) {
   throw new Error("Expected update to report preserved data");
 }
+if (safeUpdatePayload.backup.sourceDataRoot !== dataRoot) {
+  throw new Error(
+    `Expected update backup to use the configured data root ${dataRoot}, got ${safeUpdatePayload.backup.sourceDataRoot}`
+  );
+}
 if (!fs.existsSync(safeUpdatePayload.backup.outputPath)) {
   throw new Error(
     `Expected update to create backup archive ${safeUpdatePayload.backup.outputPath}`
@@ -1679,6 +1708,13 @@ if (!fs.existsSync(dataRoot)) {
   throw new Error(
     "Expected forge-memory uninstall to keep the data folder by default"
   );
+}
+for (const marker of ["update-preserved.txt"]) {
+  if (!fs.existsSync(path.join(dataRoot, marker))) {
+    throw new Error(
+      `Expected forge-memory uninstall to preserve data marker ${marker}`
+    );
+  }
 }
 
 console.log("forge-memory smoke tests passed");

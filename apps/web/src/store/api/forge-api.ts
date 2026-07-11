@@ -31,6 +31,7 @@ import {
   getWorkbenchFlowRun,
   getWorkbenchFlowRunNode,
   getWorkbenchFlowRunNodes,
+  getWorkbenchFlowRuns,
   listWorkbenchFlows,
   heartbeatTaskRun,
   listBehaviorPatterns,
@@ -86,7 +87,10 @@ export const forgeApi = createApi({
     "WorkbenchFlows"
   ],
   endpoints: (builder) => ({
-    getOperatorSession: builder.query<AsyncResult<typeof ensureOperatorSession>, void>({
+    getOperatorSession: builder.query<
+      AsyncResult<typeof ensureOperatorSession>,
+      void
+    >({
       queryFn: () => resolveResult(ensureOperatorSession),
       providesTags: ["OperatorSession"]
     }),
@@ -105,11 +109,17 @@ export const forgeApi = createApi({
       queryFn: (input) => resolveResult(() => applyForgeDoctorFixes(input)),
       invalidatesTags: ["Doctor", "Settings"]
     }),
-    listWorkbenchFlows: builder.query<AsyncResult<typeof listWorkbenchFlows>, void>({
+    listWorkbenchFlows: builder.query<
+      AsyncResult<typeof listWorkbenchFlows>,
+      void
+    >({
       queryFn: () => resolveResult(() => listWorkbenchFlows()),
       providesTags: ["WorkbenchFlows"]
     }),
-    getWorkbenchFlow: builder.query<AsyncResult<typeof getWorkbenchFlow>, string>({
+    getWorkbenchFlow: builder.query<
+      AsyncResult<typeof getWorkbenchFlow>,
+      string
+    >({
       queryFn: (flowId) => resolveResult(() => getWorkbenchFlow(flowId)),
       providesTags: (_result, _error, flowId) => [
         { type: "WorkbenchFlow", id: flowId },
@@ -120,7 +130,18 @@ export const forgeApi = createApi({
       AsyncResult<typeof getWorkbenchFlowRun>,
       { flowId: string; runId: string }
     >({
-      queryFn: ({ flowId, runId }) => resolveResult(() => getWorkbenchFlowRun(flowId, runId)),
+      queryFn: ({ flowId, runId }) =>
+        resolveResult(() => getWorkbenchFlowRun(flowId, runId)),
+      providesTags: (_result, _error, { flowId }) => [
+        { type: "WorkbenchFlow", id: flowId }
+      ]
+    }),
+    getWorkbenchFlowRuns: builder.query<
+      AsyncResult<typeof getWorkbenchFlowRuns>,
+      { flowId: string; limit?: number; offset?: number }
+    >({
+      queryFn: ({ flowId, limit, offset }) =>
+        resolveResult(() => getWorkbenchFlowRuns(flowId, { limit, offset })),
       providesTags: (_result, _error, { flowId }) => [
         { type: "WorkbenchFlow", id: flowId }
       ]
@@ -159,7 +180,10 @@ export const forgeApi = createApi({
       queryFn: (userIds) => resolveResult(() => getForgeSnapshot(userIds)),
       providesTags: ["Snapshot"]
     }),
-    getXpMetrics: builder.query<AsyncResult<typeof getXpMetrics>, string[] | void>({
+    getXpMetrics: builder.query<
+      AsyncResult<typeof getXpMetrics>,
+      string[] | void
+    >({
       queryFn: (userIds) => resolveResult(() => getXpMetrics(userIds)),
       providesTags: ["Gamification"]
     }),
@@ -187,15 +211,24 @@ export const forgeApi = createApi({
       queryFn: () => resolveResult(() => listWikiIngestJobs()),
       providesTags: ["WikiIngestJobs"]
     }),
-    createTask: builder.mutation<AsyncResult<typeof createTask>, QuickTaskInput>({
+    createTask: builder.mutation<
+      AsyncResult<typeof createTask>,
+      QuickTaskInput
+    >({
       queryFn: (input) => resolveResult(() => createTask(input)),
       invalidatesTags: ["Snapshot"]
     }),
-    createGoal: builder.mutation<AsyncResult<typeof createGoal>, GoalMutationInput>({
+    createGoal: builder.mutation<
+      AsyncResult<typeof createGoal>,
+      GoalMutationInput
+    >({
       queryFn: (input) => resolveResult(() => createGoal(input)),
       invalidatesTags: ["Snapshot"]
     }),
-    createProject: builder.mutation<AsyncResult<typeof createProject>, ProjectMutationInput>({
+    createProject: builder.mutation<
+      AsyncResult<typeof createProject>,
+      ProjectMutationInput
+    >({
       queryFn: (input) => resolveResult(() => createProject(input)),
       invalidatesTags: ["Snapshot"]
     }),
@@ -297,7 +330,10 @@ export const forgeApi = createApi({
         resolveResult(() => completeTaskRun(runId, input)),
       invalidatesTags: ["Snapshot"]
     }),
-    getSleepView: builder.query<AsyncResult<typeof getSleepView>, string[] | void>({
+    getSleepView: builder.query<
+      AsyncResult<typeof getSleepView>,
+      string[] | void
+    >({
       queryFn: (userIds) => resolveResult(() => getSleepView(userIds)),
       providesTags: ["Sleep"]
     }),
@@ -309,8 +345,7 @@ export const forgeApi = createApi({
       { patterns: BehaviorPattern[] },
       string[] | void
     >({
-      queryFn: (userIds) =>
-        resolveResult(() => listBehaviorPatterns(userIds)),
+      queryFn: (userIds) => resolveResult(() => listBehaviorPatterns(userIds)),
       providesTags: ["Psyche"]
     }),
     getBehaviors: builder.query<{ behaviors: Behavior[] }, string[] | void>({
@@ -353,7 +388,10 @@ export const forgeApi = createApi({
         "WorkbenchFlows"
       ]
     }),
-    deleteWorkbenchFlow: builder.mutation<AsyncResult<typeof deleteWorkbenchFlow>, string>({
+    deleteWorkbenchFlow: builder.mutation<
+      AsyncResult<typeof deleteWorkbenchFlow>,
+      string
+    >({
       queryFn: (flowId) => resolveResult(() => deleteWorkbenchFlow(flowId)),
       invalidatesTags: (_result, _error, flowId) => [
         { type: "WorkbenchFlow", id: flowId },
@@ -412,6 +450,7 @@ export const {
   useGetWorkbenchFlowRunNodeQuery,
   useGetWorkbenchFlowRunNodesQuery,
   useGetWorkbenchFlowRunQuery,
+  useGetWorkbenchFlowRunsQuery,
   useListWikiIngestJobsQuery,
   useListWorkbenchFlowsQuery,
   useHeartbeatTaskRunMutation,

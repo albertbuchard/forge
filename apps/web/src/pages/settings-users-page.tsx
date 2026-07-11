@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ErrorState, LoadingState } from "@/components/ui/page-state";
 import { useForgeShell } from "@/components/shell/app-shell";
 import {
   createUser,
@@ -146,6 +147,29 @@ export function SettingsUsersPage() {
     editingGrant?.subjectUserId ?? editingUser?.id ?? null;
   const highlightedGrantId = editingGrant?.id ?? null;
 
+  if (directoryQuery.isLoading) {
+    return (
+      <LoadingState
+        eyebrow="Settings · Users"
+        title="Loading identity directory"
+        description="Reading human and bot identities, ownership counts, and directional access."
+      />
+    );
+  }
+
+  if (directoryQuery.isError || !directory) {
+    return (
+      <ErrorState
+        eyebrow="Settings · Users"
+        error={
+          directoryQuery.error ??
+          new Error("Forge returned an empty user directory.")
+        }
+        onRetry={() => void directoryQuery.refetch()}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto grid w-full max-w-[1440px] gap-5">
       <PageHero
@@ -160,7 +184,8 @@ export function SettingsUsersPage() {
         open={userDialogOpen}
         onOpenChange={setUserDialogOpen}
         user={editingUser}
-        grants={directory?.grants ?? []}
+        existingUsers={directory.users}
+        grants={directory.grants}
         ownership={
           editingUser ? (ownershipByUserId.get(editingUser.id) ?? null) : null
         }
@@ -180,19 +205,13 @@ export function SettingsUsersPage() {
         open={relationshipDialogOpen}
         onOpenChange={setRelationshipDialogOpen}
         grant={editingGrant}
-        grants={directory?.grants ?? []}
+        grants={directory.grants}
         pending={updateGrantMutation.isPending}
         onSubmit={async (payload) => {
           await updateGrantMutation.mutateAsync({
             grantId: payload.grantId,
             patch: payload.patch
           });
-          if (payload.applyToReverse && payload.reverseGrantId) {
-            await updateGrantMutation.mutateAsync({
-              grantId: payload.reverseGrantId,
-              patch: payload.patch
-            });
-          }
         }}
       />
 
@@ -208,6 +227,11 @@ export function SettingsUsersPage() {
           <Badge tone="meta">
             {directory?.posture.accessModel ?? "permissive"}
           </Badge>
+        </div>
+        <div className={`${usersPanelClass} px-4 py-3 ${usersFaintTextClass}`}>
+          This directory currently exposes active identities and their owned
+          record counts. Inactive-user review and ownership transfer require a
+          separate verified workflow and are not performed from this page.
         </div>
         <div className={`flex items-center gap-3 ${usersPanelClass} px-4 py-3`}>
           <Input

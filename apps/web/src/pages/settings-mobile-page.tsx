@@ -33,6 +33,7 @@ import {
   revokeCompanionPairingSession
 } from "@/lib/api";
 import type {
+  CompanionPairingSession,
   CompanionPairingQrPayload,
   CompanionPairingTransportMode
 } from "@/lib/types";
@@ -105,7 +106,47 @@ function formatTransportLabel(payload: CompanionPairingQrPayload) {
 }
 
 function transportTone(payload: CompanionPairingQrPayload) {
-  return payload.transportMode === "iroh" ? "signal" : "meta";
+  return payload.transportMode === "iroh" &&
+    payload.transport?.status === "ready"
+    ? "signal"
+    : "meta";
+}
+
+function pairingRecoverySummary(pairings: CompanionPairingSession[]) {
+  const issue = pairings.find((pairing) =>
+    ["error", "stale", "permission_denied"].includes(pairing.status)
+  );
+  if (issue) {
+    return {
+      pairing: issue,
+      title:
+        issue.status === "permission_denied"
+          ? "Phone permissions need attention"
+          : issue.status === "stale"
+            ? "Companion connection is stale"
+            : "Companion connection failed",
+      detail:
+        issue.lastSyncError ??
+        "Refresh once after checking the iPhone. Generate a replacement pairing only if the existing connection cannot recover."
+    };
+  }
+
+  const expiredPending = pairings.find(
+    (pairing) =>
+      pairing.status === "pending" &&
+      Number.isFinite(Date.parse(pairing.expiresAt)) &&
+      Date.parse(pairing.expiresAt) <= Date.now()
+  );
+  if (expiredPending) {
+    return {
+      pairing: expiredPending,
+      title: "Pairing code expired",
+      detail:
+        "The raw one-time token cannot be recovered. Generate a replacement QR and scan that new code instead."
+    };
+  }
+
+  return null;
 }
 
 const mobileEyebrowClass =
@@ -135,6 +176,7 @@ export function SettingsMobilePage() {
   const [latestPairing, setLatestPairing] = useState<{
     qrPayload: CompanionPairingQrPayload;
   } | null>(null);
+  const [pairingFeedback, setPairingFeedback] = useState<string | null>(null);
 
   const overviewQuery = useQuery({
     queryKey: ["forge-companion-overview", ...selectedUserIds],
@@ -149,7 +191,22 @@ export function SettingsMobilePage() {
       }),
     onSuccess: async (result) => {
       setLatestPairing({ qrPayload: result.qrPayload });
+      setPairingFeedback(
+        "New pairing code created. Its source settings and any matching pending-code revocations were saved together."
+      );
       setQrPanelOpen(true);
+      await queryClient.invalidateQueries({
+        queryKey: ["forge-companion-overview"]
+      });
+    },
+    onError: async (error) => {
+      const detail =
+        error instanceof Error
+          ? error.message
+          : "Forge could not generate a replacement pairing.";
+      setPairingFeedback(
+        `${detail} Forge could not confirm the new code. Generate a fresh code before scanning. A rejected save keeps the existing pairing; a lost response may already have revoked its code.`
+      );
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
       });
@@ -160,9 +217,17 @@ export function SettingsMobilePage() {
     mutationFn: async (pairingSessionId: string) =>
       revokeCompanionPairingSession(pairingSessionId),
     onSuccess: async () => {
+      setPairingFeedback("Pairing revoked.");
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
       });
+    },
+    onError: (error) => {
+      setPairingFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not revoke this pairing."
+      );
     }
   });
 
@@ -173,9 +238,19 @@ export function SettingsMobilePage() {
         includeRevoked: false
       }),
     onSuccess: async () => {
+      setPairingFeedback(
+        "All active pairings in the selected user scope were revoked."
+      );
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
       });
+    },
+    onError: (error) => {
+      setPairingFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not revoke all pairings."
+      );
     }
   });
 
@@ -191,9 +266,19 @@ export function SettingsMobilePage() {
         input.desiredEnabled
       ),
     onSuccess: async () => {
+      setPairingFeedback(
+        "Sync preference saved. The phone must apply it before the source becomes eligible."
+      );
       await queryClient.invalidateQueries({
         queryKey: ["forge-companion-overview"]
       });
+    },
+    onError: (error) => {
+      setPairingFeedback(
+        error instanceof Error
+          ? error.message
+          : "Could not update the device sync preference."
+      );
     }
   });
 
@@ -242,11 +327,12 @@ export function SettingsMobilePage() {
     (pairing) => pairing.status !== "revoked"
   );
   const revokedPairingsCount = overview.pairings.length - activePairings.length;
+  const recovery = pairingRecoverySummary(activePairings);
   const pairingPayloadText = latestPairing
     ? JSON.stringify(latestPairing.qrPayload, null, 2)
     : "";
 
-  const handleQrAction = async () => {
+  const handleQrAction = () => {
     if (latestPairing && qrPanelOpen) {
       setQrPanelOpen(false);
       return;
@@ -255,11 +341,11 @@ export function SettingsMobilePage() {
       setQrPanelOpen(true);
       return;
     }
-    await pairingMutation.mutateAsync("iroh");
+    pairingMutation.mutate("iroh");
   };
 
-  const handleManualHttpPairing = async () => {
-    await pairingMutation.mutateAsync("manual-http");
+  const handleManualHttpPairing = () => {
+    pairingMutation.mutate("manual-http");
   };
 
   const handleCopyPairingPayload = async () => {
@@ -288,6 +374,43 @@ export function SettingsMobilePage() {
       />
 
       <SettingsSectionNav />
+
+      {pairingFeedback ? (
+        <div className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]">
+          {pairingFeedback}
+        </div>
+      ) : null}
+
+      {recovery ? (
+        <Card className="grid gap-3 border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div>
+            <div className={mobileEyebrowClass}>Pairing recovery</div>
+            <div className="mt-1 font-medium text-[var(--ui-ink-strong)]">
+              {recovery.title}
+            </div>
+            <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              {recovery.detail}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="secondary"
+              onClick={() => void overviewQuery.refetch()}
+            >
+              <RefreshCcw className="size-4" />
+              Refresh status
+            </Button>
+            <Button
+              pending={pairingMutation.isPending}
+              pendingLabel="Generating"
+              onClick={() => pairingMutation.mutate("iroh")}
+            >
+              <QrCode className="size-4" />
+              Generate replacement QR
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <section className="grid min-w-0 gap-4">
         {import.meta.env.DEV ? (
@@ -327,7 +450,7 @@ export function SettingsMobilePage() {
               <Button
                 variant="secondary"
                 className="w-full sm:w-auto"
-                onClick={() => void handleManualHttpPairing()}
+                onClick={handleManualHttpPairing}
                 pending={
                   pairingMutation.isPending &&
                   pairingMutation.variables === "manual-http"
@@ -339,7 +462,7 @@ export function SettingsMobilePage() {
               </Button>
               <Button
                 className="w-full sm:w-auto"
-                onClick={() => void handleQrAction()}
+                onClick={handleQrAction}
                 pending={
                   pairingMutation.isPending &&
                   pairingMutation.variables !== "manual-http"
@@ -395,6 +518,17 @@ export function SettingsMobilePage() {
                         {formatTransportLabel(latestPairing.qrPayload)}
                       </Badge>
                     ) : null}
+                    {latestPairing?.qrPayload.transport ? (
+                      <Badge
+                        tone={
+                          latestPairing.qrPayload.transport.status === "ready"
+                            ? "signal"
+                            : "meta"
+                        }
+                      >
+                        Transport {latestPairing.qrPayload.transport.status}
+                      </Badge>
+                    ) : null}
                     <Badge tone="meta">
                       <LockKeyhole className="size-3" />
                       One-time token
@@ -404,6 +538,18 @@ export function SettingsMobilePage() {
                   <div
                     className={`grid gap-3 text-sm leading-6 ${mobileBodyClass}`}
                   >
+                    {latestPairing?.qrPayload.transport &&
+                    latestPairing.qrPayload.transport.status !== "ready" ? (
+                      <div className="rounded-[16px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-[var(--danger)]">
+                        {latestPairing.qrPayload.transport.lastError ??
+                          "The Iroh transport is not ready. Do not rely on this QR until a replacement reports ready."}
+                        {latestPairing.qrPayload.transport.recreateCommand ? (
+                          <div className="mt-2 break-all font-mono text-xs">
+                            {latestPairing.qrPayload.transport.recreateCommand}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="flex gap-3">
                       <ScanLine
                         className={`mt-1 size-4 shrink-0 ${mobileFaintClass}`}
@@ -453,7 +599,7 @@ export function SettingsMobilePage() {
                         variant="secondary"
                         pending={pairingMutation.isPending}
                         pendingLabel="Generating"
-                        onClick={() => void pairingMutation.mutateAsync("iroh")}
+                        onClick={() => pairingMutation.mutate("iroh")}
                       >
                         <RefreshCcw className="size-4" />
                         Regenerate QR
@@ -470,14 +616,16 @@ export function SettingsMobilePage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="max-w-2xl">
                       <div className="text-[var(--ui-ink-strong)]">
-                        Fallback pairing payload
+                        Manual pairing payload
                       </div>
                       <div
                         className={`mt-1 text-xs leading-5 ${mobileFaintClass}`}
                       >
-                        Use this only when the iPhone camera cannot scan the QR.
-                        The payload contains the same Forge Iroh connection
-                        recipe.
+                        Paste this into the iPhone app only when its camera
+                        cannot scan the QR. It contains the same one-time
+                        credential and transport details, so it works only
+                        before the displayed expiry and while that transport is
+                        ready.
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -657,7 +805,15 @@ export function SettingsMobilePage() {
                   variant="secondary"
                   pending={revokeAllMutation.isPending}
                   pendingLabel="Revoking all"
-                  onClick={() => void revokeAllMutation.mutateAsync()}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Revoke ${activePairings.length} active pairing${activePairings.length === 1 ? "" : "s"}? Each iPhone or watch bridge must pair again.`
+                      )
+                    ) {
+                      revokeAllMutation.mutate();
+                    }
+                  }}
                 >
                   <ShieldOff className="size-4" />
                   Revoke all
@@ -722,7 +878,15 @@ export function SettingsMobilePage() {
                     }
                     pendingLabel="Revoking"
                     disabled={pairing.status === "revoked"}
-                    onClick={() => void revokeMutation.mutateAsync(pairing.id)}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Revoke ${pairing.deviceName ?? pairing.label}? This device must pair again before it can sync.`
+                        )
+                      ) {
+                        revokeMutation.mutate(pairing.id);
+                      }
+                    }}
                   >
                     <ShieldOff className="size-4" />
                     {pairing.status === "revoked" ? "Revoked" : "Revoke"}
@@ -793,7 +957,7 @@ export function SettingsMobilePage() {
                           aria-label={`${label} sync source`}
                           disabled={loading}
                           onClick={() =>
-                            void sourceToggleMutation.mutateAsync({
+                            sourceToggleMutation.mutate({
                               pairingSessionId: pairing.id,
                               source: sourceKey,
                               desiredEnabled: !source.desiredEnabled

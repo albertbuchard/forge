@@ -39,8 +39,8 @@ import {
   submitPairwisePreferenceJudgment,
   submitPreferenceSignal
 } from "@/lib/api";
+import { describeApiError } from "@/lib/api-error";
 import type {
-  PreferenceContext,
   PreferenceDimensionId,
   PreferenceDomain,
   PreferenceItemStatus,
@@ -53,6 +53,7 @@ import {
   DIMENSION_LABELS,
   DimensionBar,
   FORGE_GAME_DOMAINS,
+  SIGNAL_MODEL_EFFECTS,
   STATUS_CLASSES,
   buildCandidateEntities,
   buildGameHeadline,
@@ -70,6 +71,12 @@ import {
   PreferenceWorkspaceControls,
   PreferenceWorkspaceTabNav
 } from "@/components/preferences/preference-workspace-chrome";
+import {
+  PreferenceGuidedFlowDialog,
+  type PreferenceGuidedFlow,
+  type PreferenceGuidedSubmit
+} from "@/components/preferences/preference-guided-flow-dialog";
+import { PreferenceEvidencePanel } from "@/components/preferences/preference-evidence-panel";
 
 export function PreferencesPage() {
   const shell = useForgeShell();
@@ -78,8 +85,9 @@ export function PreferencesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [entitySearchQuery, setEntitySearchQuery] = useState("");
   const [conceptSearchQuery, setConceptSearchQuery] = useState("");
-  const [mergeSourceContextId, setMergeSourceContextId] = useState("");
-  const [mergeTargetContextId, setMergeTargetContextId] = useState("");
+  const [guidedFlow, setGuidedFlow] = useState<PreferenceGuidedFlow | null>(
+    null
+  );
   const [gameState, setGameState] = useState<PreferenceGameState>({
     open: false,
     phase: "domain",
@@ -87,6 +95,7 @@ export function PreferencesPage() {
       "projects") as PreferenceDomain
   });
   const [gameError, setGameError] = useState<string | null>(null);
+  const [gameNotice, setGameNotice] = useState<string | null>(null);
   const [gameLoading, setGameLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [itemEditor, setItemEditor] = useState<{
@@ -121,24 +130,6 @@ export function PreferencesPage() {
       surprise: "0"
     }
   });
-  const [customItemForm, setCustomItemForm] = useState({
-    label: "",
-    description: "",
-    tags: ""
-  });
-  const [newContextForm, setNewContextForm] = useState({
-    name: "",
-    description: "",
-    shareMode: "blended" as PreferenceContext["shareMode"],
-    decayDays: "90"
-  });
-  const [catalogForm, setCatalogForm] = useState({
-    title: "",
-    description: ""
-  });
-  const [newConceptByCatalogId, setNewConceptByCatalogId] = useState<
-    Record<string, { label: string; description: string; tags: string }>
-  >({});
   const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
   const [editingCatalogDraft, setEditingCatalogDraft] = useState({
     title: "",
@@ -308,21 +299,21 @@ export function PreferencesPage() {
     });
   }, [selectedScore]);
 
-  const filteredEntities = useMemo(() => {
+  const matchingEntities = useMemo(() => {
     const normalized = normalizeText(entitySearchQuery);
     return candidateEntities
       .filter((entry) => entry.domain === selectedDomain)
       .filter((entry) =>
         normalized ? entry.searchText.includes(normalized) : true
-      )
-      .slice(0, 12);
+      );
   }, [candidateEntities, entitySearchQuery, selectedDomain]);
+  const filteredEntities = matchingEntities.slice(0, 12);
 
   const filteredCatalogs = useMemo(() => {
     const sourceWorkspace =
-      selectedTab === "concepts"
-        ? workspace
-        : (activeGameWorkspace ?? workspace);
+      gameState.open && gameState.phase === "catalog"
+        ? (activeGameWorkspace ?? workspace)
+        : workspace;
     const catalogs = sourceWorkspace?.catalogs ?? [];
     const normalized = normalizeText(conceptSearchQuery);
     if (!normalized) {
@@ -343,7 +334,13 @@ export function PreferencesPage() {
         .toLowerCase()
         .includes(normalized)
     );
-  }, [activeGameWorkspace, conceptSearchQuery, selectedTab, workspace]);
+  }, [
+    activeGameWorkspace,
+    conceptSearchQuery,
+    gameState.open,
+    gameState.phase,
+    workspace
+  ]);
 
   const refreshWorkspace = async () => {
     await queryClient.invalidateQueries({ queryKey: ["forge-preferences"] });
@@ -361,7 +358,6 @@ export function PreferencesPage() {
     mutationFn: createPreferenceItem,
     onSuccess: async ({ item }) => {
       await refreshWorkspace();
-      setCustomItemForm({ label: "", description: "", tags: "" });
       setSelectedItemId(item.id);
     }
   });
@@ -370,7 +366,6 @@ export function PreferencesPage() {
     mutationFn: createPreferenceCatalog,
     onSuccess: async () => {
       await refreshWorkspace();
-      setCatalogForm({ title: "", description: "" });
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.set("tab", "concepts");
@@ -447,6 +442,40 @@ export function PreferencesPage() {
       if (!selectedScore?.item || !selectedUserId || !workspace) {
         return;
       }
+      const manualScore =
+        itemEditor.manualScore.trim().length > 0
+          ? Number(itemEditor.manualScore)
+          : null;
+      const confidenceLock =
+        itemEditor.confidenceLock.trim().length > 0
+          ? Number(itemEditor.confidenceLock)
+          : null;
+      const featureWeights = Object.fromEntries(
+        (Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]).map(
+          (dimensionId) => [
+            dimensionId,
+            Number(itemEditor.featureWeights[dimensionId])
+          ]
+        )
+      ) as Record<PreferenceDimensionId, number>;
+      if (manualScore !== null && !Number.isFinite(manualScore)) {
+        throw new Error("Manual score must be a valid number.");
+      }
+      if (
+        confidenceLock !== null &&
+        (!Number.isFinite(confidenceLock) ||
+          confidenceLock < 0 ||
+          confidenceLock > 1)
+      ) {
+        throw new Error("Confidence lock must be between 0 and 1.");
+      }
+      if (
+        Object.values(featureWeights).some(
+          (weight) => !Number.isFinite(weight) || weight < -1 || weight > 1
+        )
+      ) {
+        throw new Error("Every dimension weight must be between -1 and 1.");
+      }
       await patchPreferenceItem(selectedScore.item.id, {
         label: itemEditor.label,
         description: itemEditor.description,
@@ -454,28 +483,15 @@ export function PreferencesPage() {
           .split(",")
           .map((entry) => entry.trim())
           .filter(Boolean),
-        featureWeights: Object.fromEntries(
-          (Object.keys(DEFAULT_DIMENSIONS) as PreferenceDimensionId[]).map(
-            (dimensionId) => [
-              dimensionId,
-              Number(itemEditor.featureWeights[dimensionId] || 0)
-            ]
-          )
-        )
+        featureWeights
       });
       await patchPreferenceScore(selectedScore.item.id, {
         userId: selectedUserId,
         domain: selectedDomain,
         contextId: workspace.selectedContext.id,
         manualStatus: itemEditor.manualStatus || null,
-        manualScore:
-          itemEditor.manualScore.trim().length > 0
-            ? Number(itemEditor.manualScore)
-            : null,
-        confidenceLock:
-          itemEditor.confidenceLock.trim().length > 0
-            ? Number(itemEditor.confidenceLock)
-            : null,
+        manualScore,
+        confidenceLock,
         bookmarked: itemEditor.bookmarked,
         compareLater: itemEditor.compareLater,
         frozen: itemEditor.frozen
@@ -488,12 +504,6 @@ export function PreferencesPage() {
     mutationFn: createPreferenceContext,
     onSuccess: async ({ context }) => {
       await refreshWorkspace();
-      setNewContextForm({
-        name: "",
-        description: "",
-        shareMode: "blended",
-        decayDays: "90"
-      });
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.set("contextId", context.id);
@@ -505,11 +515,7 @@ export function PreferencesPage() {
 
   const mergeContextMutation = useMutation({
     mutationFn: mergePreferenceContexts,
-    onSuccess: async () => {
-      await refreshWorkspace();
-      setMergeSourceContextId("");
-      setMergeTargetContextId("");
-    }
+    onSuccess: refreshWorkspace
   });
 
   const updateContextMutation = useMutation({
@@ -539,6 +545,7 @@ export function PreferencesPage() {
 
   const openGame = (domain = selectedDomain) => {
     setGameError(null);
+    setGameNotice(null);
     setGameState({
       open: true,
       phase: "domain",
@@ -613,6 +620,7 @@ export function PreferencesPage() {
       return;
     }
     setGameError(null);
+    setGameNotice(null);
     updateSearchParams({
       domain,
       tab: "overview",
@@ -641,6 +649,7 @@ export function PreferencesPage() {
   };
 
   const handleGameDomainSelection = async (domain: PreferenceDomain) => {
+    setGameNotice(null);
     if (FORGE_GAME_DOMAINS.has(domain)) {
       await launchForgeDomainGame(domain);
       return;
@@ -670,6 +679,13 @@ export function PreferencesPage() {
       outcome,
       strength
     });
+    const effect =
+      outcome === "tie"
+        ? "Tie recorded"
+        : outcome === "skip"
+          ? "Pair skipped"
+          : `${outcome === "left" ? pair.left.label : pair.right.label} preferred${strength > 1 ? " strongly" : ""}`;
+    setGameNotice(`${effect} in ${activeGameWorkspace.selectedContext.name}.`);
   };
 
   const handleGameSignal = async (
@@ -687,7 +703,125 @@ export function PreferencesPage() {
       signalType,
       strength: 1
     });
+    const item = activeGameWorkspace.scores.find(
+      (score) => score.itemId === itemId
+    )?.item;
+    setGameNotice(
+      `${signalType.replaceAll("_", " ")} recorded for ${item?.label ?? itemId} in ${activeGameWorkspace.selectedContext.name}.`
+    );
   };
+
+  const handleGuidedSubmit = async (input: PreferenceGuidedSubmit) => {
+    if (!selectedUserId) {
+      throw new Error("Select one user before changing a preference model.");
+    }
+    if (input.kind === "catalog") {
+      await createCatalogMutation.mutateAsync({
+        userId: selectedUserId,
+        domain: selectedDomain,
+        title: input.title,
+        description: input.description
+      });
+      return;
+    }
+    if (input.kind === "catalog-item") {
+      await createCatalogItemMutation.mutateAsync({
+        catalogId: input.catalogId,
+        label: input.label,
+        description: input.description,
+        tags: input.tags,
+        featureWeights: DEFAULT_DIMENSIONS
+      });
+      return;
+    }
+    if (input.kind === "item") {
+      await createItemMutation.mutateAsync({
+        userId: selectedUserId,
+        domain: selectedDomain,
+        label: input.label,
+        description: input.description,
+        tags: input.tags,
+        featureWeights: DEFAULT_DIMENSIONS,
+        queueForCompare: input.queueForCompare
+      });
+      return;
+    }
+    if (input.kind === "context") {
+      if (input.contextId) {
+        await updateContextMutation.mutateAsync({
+          contextId: input.contextId,
+          patch: {
+            name: input.name,
+            description: input.description,
+            shareMode: input.shareMode,
+            decayDays: input.decayDays
+          }
+        });
+      } else {
+        await createContextMutation.mutateAsync({
+          userId: selectedUserId,
+          domain: selectedDomain,
+          name: input.name,
+          description: input.description,
+          shareMode: input.shareMode,
+          decayDays: input.decayDays,
+          active: true,
+          isDefault: false
+        });
+      }
+      return;
+    }
+    if (input.kind === "merge") {
+      await mergeContextMutation.mutateAsync({
+        sourceContextId: input.sourceContextId,
+        targetContextId: input.targetContextId
+      });
+      updateSearchParams({
+        contextId: input.targetContextId,
+        tab: "contexts",
+        focusItem: null
+      });
+      return;
+    }
+    const { candidate } = input;
+    const { item } = await enqueueMutation.mutateAsync({
+      userId: selectedUserId,
+      domain: selectedDomain,
+      entityType: candidate.entityType,
+      entityId: candidate.entityId,
+      label: candidate.label,
+      description: candidate.description,
+      tags: []
+    });
+    setSelectedItemId(item.id);
+    updateSearchParams({ focusItem: item.id });
+  };
+
+  const guidedFlowPending =
+    guidedFlow?.kind === "catalog"
+      ? createCatalogMutation.isPending
+      : guidedFlow?.kind === "catalog-item"
+        ? createCatalogItemMutation.isPending
+        : guidedFlow?.kind === "item"
+          ? createItemMutation.isPending
+          : guidedFlow?.kind === "context"
+            ? createContextMutation.isPending || updateContextMutation.isPending
+            : guidedFlow?.kind === "merge"
+              ? mergeContextMutation.isPending
+              : guidedFlow?.kind === "entity"
+                ? enqueueMutation.isPending
+                : false;
+  const mutationError = [
+    updateCatalogMutation.error,
+    deleteCatalogMutation.error,
+    updateCatalogItemMutation.error,
+    deleteCatalogItemMutation.error,
+    saveItemMutation.error,
+    updateContextMutation.error
+  ].find(Boolean);
+  const mutationErrorDescription = mutationError
+    ? describeApiError(mutationError).description
+    : null;
 
   if (!selectedUserId) {
     return (
@@ -741,6 +875,9 @@ export function PreferencesPage() {
     selectedScore?.item?.sourceEntityType ?? null,
     selectedScore?.item?.sourceEntityId ?? null
   );
+  const visibleScores = filteredScores.slice(0, 50);
+  const visibleCatalogs = filteredCatalogs.slice(0, 12);
+  const visibleContexts = workspace.contexts.slice(0, 16);
   return (
     <>
       <div className="grid gap-5">
@@ -763,6 +900,16 @@ export function PreferencesPage() {
             </div>
           }
         />
+
+        {mutationErrorDescription ? (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+          >
+            {mutationErrorDescription}
+          </div>
+        ) : null}
 
         <PsycheSectionNav />
 
@@ -991,7 +1138,7 @@ export function PreferencesPage() {
                   </div>
                 </div>
                 <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-                  {filteredEntities.length} visible
+                  Showing {filteredEntities.length} of {matchingEntities.length}
                 </Badge>
               </div>
               <div className="flex items-center gap-3">
@@ -1003,57 +1150,63 @@ export function PreferencesPage() {
                 />
               </div>
               <div className="grid gap-2">
-                {filteredEntities.map((entry) => (
-                  <div
-                    key={`${entry.entityType}-${entry.entityId}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-[var(--ui-ink-strong)]">
-                          {entry.label}
-                        </span>
-                        <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-                          {entry.entityType}
-                        </Badge>
-                        {entry.user ? (
-                          <UserBadge user={entry.user} compact />
+                {filteredEntities.map((entry) => {
+                  const existingItem = workspace.scores.find(
+                    (score) =>
+                      score.item?.sourceEntityType === entry.entityType &&
+                      score.item?.sourceEntityId === entry.entityId
+                  )?.item;
+                  return (
+                    <div
+                      key={`${entry.entityType}-${entry.entityId}`}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-[var(--ui-ink-strong)]">
+                            {entry.label}
+                          </span>
+                          <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                            {entry.entityType}
+                          </Badge>
+                          {entry.user ? (
+                            <UserBadge user={entry.user} compact />
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                          {entry.description || "No description yet."}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {entry.href ? (
+                          <Link to={entry.href}>
+                            <Button variant="ghost" size="sm">
+                              Open
+                            </Button>
+                          </Link>
                         ) : null}
-                      </div>
-                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                        {entry.description || "No description yet."}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            setGuidedFlow({
+                              kind: "entity",
+                              candidate: entry,
+                              existingItemId: existingItem?.id
+                            })
+                          }
+                        >
+                          {existingItem ? "Review linked item" : "Add to model"}
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {entry.href ? (
-                        <Link to={entry.href}>
-                          <Button variant="ghost" size="sm">
-                            Open
-                          </Button>
-                        </Link>
-                      ) : null}
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        pending={enqueueMutation.isPending}
-                        pendingLabel="Adding"
-                        onClick={() =>
-                          void enqueueMutation.mutateAsync({
-                            userId: selectedUserId,
-                            domain: selectedDomain,
-                            entityType: entry.entityType,
-                            entityId: entry.entityId,
-                            label: entry.label,
-                            description: entry.description,
-                            tags: []
-                          })
-                        }
-                      >
-                        Add to model
-                      </Button>
-                    </div>
+                  );
+                })}
+                {matchingEntities.length === 0 ? (
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
+                    No supported Forge record matches this domain and search.
                   </div>
-                ))}
+                ) : null}
               </div>
             </Card>
           </div>
@@ -1117,6 +1270,11 @@ export function PreferencesPage() {
                   placeholder="Search learned items, explanations, tags, or dominant dimensions"
                 />
               </div>
+              <div className="text-xs text-[var(--ui-ink-faint)]">
+                Showing {visibleScores.length} of {filteredScores.length}{" "}
+                matching items. Refine the search to inspect results beyond this
+                bounded view.
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)]">
@@ -1129,7 +1287,7 @@ export function PreferencesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredScores.map((score) => (
+                    {visibleScores.map((score) => (
                       <tr
                         key={score.itemId}
                         data-psyche-focus-id={score.itemId}
@@ -1241,6 +1399,8 @@ export function PreferencesPage() {
                       ))}
                     </select>
                     <Input
+                      type="number"
+                      step="0.05"
                       value={itemEditor.manualScore}
                       onChange={(event) =>
                         setItemEditor((current) => ({
@@ -1251,6 +1411,10 @@ export function PreferencesPage() {
                       placeholder="Manual score"
                     />
                     <Input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step="0.05"
                       value={itemEditor.confidenceLock}
                       onChange={(event) =>
                         setItemEditor((current) => ({
@@ -1273,6 +1437,10 @@ export function PreferencesPage() {
                           {DIMENSION_LABELS[dimensionId]}
                         </div>
                         <Input
+                          type="number"
+                          min={-1}
+                          max={1}
+                          step="0.05"
                           value={itemEditor.featureWeights[dimensionId]}
                           onChange={(event) =>
                             setItemEditor((current) => ({
@@ -1312,6 +1480,11 @@ export function PreferencesPage() {
                       </label>
                     ))}
                   </div>
+                  <PreferenceEvidencePanel
+                    score={selectedScore}
+                    contextName={workspace.selectedContext.name}
+                    modelVersion={workspace.profile.modelVersion}
+                  />
                   <Button
                     pending={saveItemMutation.isPending}
                     pendingLabel="Saving item"
@@ -1334,64 +1507,20 @@ export function PreferencesPage() {
                 </div>
               )}
 
-              <div className="mt-3 border-t border-[var(--ui-border-subtle)] pt-3">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                  Add custom item
+              <div className="mt-3 grid gap-3 border-t border-[var(--ui-border-subtle)] pt-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+                    Direct item
+                  </div>
+                  <div className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    Create a concrete scored item here. Reusable concepts belong
+                    in a catalog instead.
+                  </div>
                 </div>
-                <div className="mt-3 grid gap-3">
-                  <Input
-                    value={customItemForm.label}
-                    onChange={(event) =>
-                      setCustomItemForm((current) => ({
-                        ...current,
-                        label: event.target.value
-                      }))
-                    }
-                    placeholder="Custom item label"
-                  />
-                  <Textarea
-                    value={customItemForm.description}
-                    onChange={(event) =>
-                      setCustomItemForm((current) => ({
-                        ...current,
-                        description: event.target.value
-                      }))
-                    }
-                    className="min-h-24"
-                    placeholder="What is this preference item?"
-                  />
-                  <Input
-                    value={customItemForm.tags}
-                    onChange={(event) =>
-                      setCustomItemForm((current) => ({
-                        ...current,
-                        tags: event.target.value
-                      }))
-                    }
-                    placeholder="comma, separated, tags"
-                  />
-                  <Button
-                    disabled={!customItemForm.label.trim()}
-                    pending={createItemMutation.isPending}
-                    pendingLabel="Creating item"
-                    onClick={() =>
-                      void createItemMutation.mutateAsync({
-                        userId: selectedUserId,
-                        domain: selectedDomain,
-                        label: customItemForm.label,
-                        description: customItemForm.description,
-                        tags: customItemForm.tags
-                          .split(",")
-                          .map((entry) => entry.trim())
-                          .filter(Boolean),
-                        featureWeights: DEFAULT_DIMENSIONS,
-                        queueForCompare: true
-                      })
-                    }
-                  >
-                    Create custom item
-                  </Button>
-                </div>
+                <Button onClick={() => setGuidedFlow({ kind: "item" })}>
+                  <Plus className="size-4" />
+                  Add direct item
+                </Button>
               </div>
             </Card>
           </div>
@@ -1402,6 +1531,12 @@ export function PreferencesPage() {
             <Card className="grid gap-3 xl:col-span-2">
               <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Recent pairwise judgments
+              </div>
+              <div className="text-xs text-[var(--ui-ink-faint)]">
+                Showing latest{" "}
+                {Math.min(12, workspace.history.judgments.length)} of{" "}
+                {workspace.history.judgments.length} in{" "}
+                {workspace.selectedContext.name}.
               </div>
               <div className="grid gap-2">
                 {workspace.history.judgments.slice(0, 12).map((judgment) => {
@@ -1426,9 +1561,18 @@ export function PreferencesPage() {
                         {judgment.strength} ·{" "}
                         {new Date(judgment.createdAt).toLocaleString()}
                       </div>
+                      <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                        Context {workspace.selectedContext.name} · source{" "}
+                        {judgment.source}
+                      </div>
                     </div>
                   );
                 })}
+                {workspace.history.judgments.length === 0 ? (
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-soft)]">
+                    No pairwise evidence exists in this context yet.
+                  </div>
+                ) : null}
               </div>
             </Card>
             <Card className="grid gap-3">
@@ -1446,11 +1590,25 @@ export function PreferencesPage() {
                       key={signal.id}
                       className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-soft)]"
                     >
-                      {item} · {signal.signalType} ·{" "}
-                      {new Date(signal.createdAt).toLocaleString()}
+                      <div className="font-medium text-[var(--ui-ink-strong)]">
+                        {item} · {signal.signalType.replaceAll("_", " ")}
+                      </div>
+                      <div className="mt-1">
+                        {SIGNAL_MODEL_EFFECTS[signal.signalType]}
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                        Context {workspace.selectedContext.name} · source{" "}
+                        {signal.source} ·{" "}
+                        {new Date(signal.createdAt).toLocaleString()}
+                      </div>
                     </div>
                   );
                 })}
+                {workspace.history.signals.length === 0 ? (
+                  <div className="rounded-[18px] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-soft)]">
+                    No direct signals exist in this context yet.
+                  </div>
+                ) : null}
               </div>
               <div className="grid gap-2">
                 {workspace.history.snapshots.slice(0, 5).map((snapshot) => (
@@ -1473,7 +1631,7 @@ export function PreferencesPage() {
         {selectedTab === "contexts" ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_360px]">
             <div className="grid gap-4">
-              {workspace.contexts.map((context) => (
+              {visibleContexts.map((context) => (
                 <Card
                   key={context.id}
                   data-psyche-focus-id={context.id}
@@ -1510,44 +1668,35 @@ export function PreferencesPage() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <Input
-                      value={context.name}
-                      onChange={(event) =>
-                        void updateContextMutation.mutateAsync({
-                          contextId: context.id,
-                          patch: { name: event.target.value }
-                        })
-                      }
-                      placeholder="Context name"
-                    />
-                    <select
-                      value={context.shareMode}
-                      onChange={(event) =>
-                        void updateContextMutation.mutateAsync({
-                          contextId: context.id,
-                          patch: {
-                            shareMode: event.target
-                              .value as PreferenceContext["shareMode"]
-                          }
-                        })
-                      }
-                      className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
-                    >
-                      <option value="shared">shared</option>
-                      <option value="blended">blended</option>
-                      <option value="isolated">isolated</option>
-                    </select>
-                    <Input
-                      value={String(context.decayDays)}
-                      onChange={(event) =>
-                        void updateContextMutation.mutateAsync({
-                          contextId: context.id,
-                          patch: { decayDays: Number(event.target.value || 90) }
-                        })
-                      }
-                      placeholder="Decay days"
-                    />
+                  <div className="grid gap-3 rounded-[18px] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)] md:grid-cols-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                        Evidence sharing
+                      </div>
+                      <div className="mt-1">
+                        {context.shareMode === "shared"
+                          ? "All active contexts contribute at full weight."
+                          : context.shareMode === "blended"
+                            ? "This context is full weight; other active contexts contribute at 45%."
+                            : "Only evidence recorded in this context contributes."}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                        Evidence decay
+                      </div>
+                      <div className="mt-1">{context.decayDays} days</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                        Provenance
+                      </div>
+                      <div className="mt-1">
+                        {user?.displayName ?? selectedUserId} · {selectedDomain}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
                       onClick={() =>
@@ -1559,22 +1708,18 @@ export function PreferencesPage() {
                     >
                       Open context
                     </Button>
-                  </div>
-                  <Textarea
-                    value={context.description}
-                    onChange={(event) =>
-                      void updateContextMutation.mutateAsync({
-                        contextId: context.id,
-                        patch: { description: event.target.value }
-                      })
-                    }
-                    className="min-h-20"
-                  />
-                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        void updateContextMutation.mutateAsync({
+                        setGuidedFlow({ kind: "context", context })
+                      }
+                    >
+                      Edit context
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        updateContextMutation.mutate({
                           contextId: context.id,
                           patch: { active: !context.active }
                         })
@@ -1586,7 +1731,7 @@ export function PreferencesPage() {
                       <Button
                         variant="secondary"
                         onClick={() =>
-                          void updateContextMutation.mutateAsync({
+                          updateContextMutation.mutate({
                             contextId: context.id,
                             patch: { isDefault: true }
                           })
@@ -1598,6 +1743,14 @@ export function PreferencesPage() {
                   </div>
                 </Card>
               ))}
+              {workspace.contexts.length > visibleContexts.length ? (
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Showing {visibleContexts.length} of{" "}
+                  {workspace.contexts.length}
+                  contexts. Open a context directly from its canonical link to
+                  inspect records beyond this bounded view.
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-4">
@@ -1605,69 +1758,12 @@ export function PreferencesPage() {
                 <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Create context
                 </div>
-                <Input
-                  value={newContextForm.name}
-                  onChange={(event) =>
-                    setNewContextForm((current) => ({
-                      ...current,
-                      name: event.target.value
-                    }))
-                  }
-                  placeholder="Context name"
-                />
-                <Textarea
-                  value={newContextForm.description}
-                  onChange={(event) =>
-                    setNewContextForm((current) => ({
-                      ...current,
-                      description: event.target.value
-                    }))
-                  }
-                  className="min-h-24"
-                  placeholder="What changes in this context?"
-                />
-                <select
-                  value={newContextForm.shareMode}
-                  onChange={(event) =>
-                    setNewContextForm((current) => ({
-                      ...current,
-                      shareMode: event.target
-                        .value as PreferenceContext["shareMode"]
-                    }))
-                  }
-                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
-                >
-                  <option value="blended">blended</option>
-                  <option value="shared">shared</option>
-                  <option value="isolated">isolated</option>
-                </select>
-                <Input
-                  value={newContextForm.decayDays}
-                  onChange={(event) =>
-                    setNewContextForm((current) => ({
-                      ...current,
-                      decayDays: event.target.value
-                    }))
-                  }
-                  placeholder="Decay days"
-                />
-                <Button
-                  disabled={!newContextForm.name.trim()}
-                  pending={createContextMutation.isPending}
-                  pendingLabel="Creating context"
-                  onClick={() =>
-                    void createContextMutation.mutateAsync({
-                      userId: selectedUserId,
-                      domain: selectedDomain,
-                      name: newContextForm.name,
-                      description: newContextForm.description,
-                      shareMode: newContextForm.shareMode,
-                      decayDays: Number(newContextForm.decayDays || 90),
-                      active: true,
-                      isDefault: false
-                    })
-                  }
-                >
+                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Define a situational boundary, evidence-sharing policy, and
+                  decay window in a guided review flow.
+                </div>
+                <Button onClick={() => setGuidedFlow({ kind: "context" })}>
+                  <Plus className="size-4" />
                   Create context
                 </Button>
               </Card>
@@ -1676,50 +1772,16 @@ export function PreferencesPage() {
                 <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Merge contexts
                 </div>
-                <select
-                  value={mergeSourceContextId}
-                  onChange={(event) =>
-                    setMergeSourceContextId(event.target.value)
-                  }
-                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
-                >
-                  <option value="">Source context</option>
-                  {workspace.contexts.map((context) => (
-                    <option key={context.id} value={context.id}>
-                      {context.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={mergeTargetContextId}
-                  onChange={(event) =>
-                    setMergeTargetContextId(event.target.value)
-                  }
-                  className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none"
-                >
-                  <option value="">Target context</option>
-                  {workspace.contexts.map((context) => (
-                    <option key={context.id} value={context.id}>
-                      {context.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Move judgments and signals into one target, retain the source
+                  as inactive provenance, and recalculate target scores.
+                </div>
                 <Button
-                  pending={mergeContextMutation.isPending}
-                  pendingLabel="Merging"
-                  disabled={
-                    !mergeSourceContextId ||
-                    !mergeTargetContextId ||
-                    mergeSourceContextId === mergeTargetContextId
-                  }
-                  onClick={() =>
-                    void mergeContextMutation.mutateAsync({
-                      sourceContextId: mergeSourceContextId,
-                      targetContextId: mergeTargetContextId
-                    })
-                  }
+                  variant="secondary"
+                  disabled={workspace.contexts.length < 2}
+                  onClick={() => setGuidedFlow({ kind: "merge" })}
                 >
-                  Merge into target
+                  Review context merge
                 </Button>
               </Card>
             </div>
@@ -1776,53 +1838,20 @@ export function PreferencesPage() {
                 <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                   Create concept list
                 </div>
-                <Input
-                  value={catalogForm.title}
-                  onChange={(event) =>
-                    setCatalogForm((current) => ({
-                      ...current,
-                      title: event.target.value
-                    }))
-                  }
-                  placeholder="List title"
-                />
-                <Textarea
-                  value={catalogForm.description}
-                  onChange={(event) =>
-                    setCatalogForm((current) => ({
-                      ...current,
-                      description: event.target.value
-                    }))
-                  }
-                  className="min-h-24"
-                  placeholder="What should this list help compare?"
-                />
-                <Button
-                  disabled={!catalogForm.title.trim()}
-                  pending={createCatalogMutation.isPending}
-                  pendingLabel="Creating list"
-                  onClick={() =>
-                    void createCatalogMutation.mutateAsync({
-                      userId: selectedUserId,
-                      domain: selectedDomain,
-                      title: catalogForm.title,
-                      description: catalogForm.description
-                    })
-                  }
-                >
-                  Create list
+                <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+                  Define its decision purpose, owner, domain, and custom
+                  provenance before adding reusable concepts.
+                </div>
+                <Button onClick={() => setGuidedFlow({ kind: "catalog" })}>
+                  <Plus className="size-4" />
+                  Create concept list
                 </Button>
               </Card>
             </div>
 
             <div className="grid gap-4">
-              {filteredCatalogs.map((catalog) => {
-                const conceptForm = newConceptByCatalogId[catalog.id] ?? {
-                  label: "",
-                  description: "",
-                  tags: ""
-                };
-                const visibleItems = catalog.items.filter((item) =>
+              {visibleCatalogs.map((catalog) => {
+                const matchingItems = catalog.items.filter((item) =>
                   conceptSearchQuery.trim()
                     ? [item.label, item.description, item.tags.join(" ")]
                         .join(" ")
@@ -1830,6 +1859,7 @@ export function PreferencesPage() {
                         .includes(normalizeText(conceptSearchQuery))
                     : true
                 );
+                const visibleItems = matchingItems.slice(0, 24);
                 return (
                   <Card
                     key={catalog.id}
@@ -1876,11 +1906,20 @@ export function PreferencesPage() {
                                 {catalog.source}
                               </Badge>
                               <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                                {catalog.domain}
+                              </Badge>
+                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                                 {catalog.items.length} items
                               </Badge>
                             </div>
                             <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
                               {catalog.description || "No description yet."}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
+                              Owner {user?.displayName ?? selectedUserId} ·{" "}
+                              {catalog.source === "seeded"
+                                ? "Forge seed provenance"
+                                : "User-created provenance"}
                             </div>
                           </>
                         )}
@@ -1940,12 +1979,19 @@ export function PreferencesPage() {
                           variant="ghost"
                           size="sm"
                           pending={deleteCatalogMutation.isPending}
-                          pendingLabel="Deleting"
-                          onClick={() =>
-                            void deleteCatalogMutation.mutateAsync(catalog.id)
-                          }
+                          pendingLabel="Archiving"
+                          title="Archive this catalog and its reusable concepts. Concrete scored items already created from it remain in the preference model."
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Archive ${catalog.title}? Its reusable concepts leave the catalog, but existing scored items and evidence remain.`
+                              )
+                            ) {
+                              deleteCatalogMutation.mutate(catalog.id);
+                            }
+                          }}
                         >
-                          Delete list
+                          Archive list
                         </Button>
                       </div>
                     </div>
@@ -2066,21 +2112,34 @@ export function PreferencesPage() {
                                   variant="ghost"
                                   size="sm"
                                   pending={deleteCatalogItemMutation.isPending}
-                                  pendingLabel="Deleting"
-                                  onClick={() =>
-                                    void deleteCatalogItemMutation.mutateAsync(
-                                      item.id
-                                    )
-                                  }
+                                  pendingLabel="Archiving"
+                                  title="Archive this reusable concept without deleting concrete scored items already created from it."
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Archive ${item.label}? Existing scored items and evidence remain.`
+                                      )
+                                    ) {
+                                      deleteCatalogItemMutation.mutate(item.id);
+                                    }
+                                  }}
                                 >
                                   <Trash2 className="mr-1 size-4" />
-                                  Delete
+                                  Archive
                                 </Button>
                               </div>
                             </div>
                           )}
                         </div>
                       ))}
+                      {matchingItems.length > visibleItems.length ? (
+                        <div className="text-xs text-[var(--ui-ink-faint)]">
+                          Showing {visibleItems.length} of{" "}
+                          {matchingItems.length}
+                          matching concepts. Refine the search to narrow this
+                          bounded list.
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4">
@@ -2088,72 +2147,9 @@ export function PreferencesPage() {
                         <Plus className="size-4" />
                         Add concept to {catalog.title}
                       </div>
-                      <Input
-                        value={conceptForm.label}
-                        onChange={(event) =>
-                          setNewConceptByCatalogId((current) => ({
-                            ...current,
-                            [catalog.id]: {
-                              ...conceptForm,
-                              label: event.target.value
-                            }
-                          }))
-                        }
-                        placeholder="Concept label"
-                      />
-                      <Textarea
-                        value={conceptForm.description}
-                        onChange={(event) =>
-                          setNewConceptByCatalogId((current) => ({
-                            ...current,
-                            [catalog.id]: {
-                              ...conceptForm,
-                              description: event.target.value
-                            }
-                          }))
-                        }
-                        className="min-h-20"
-                        placeholder="Short description"
-                      />
-                      <Input
-                        value={conceptForm.tags}
-                        onChange={(event) =>
-                          setNewConceptByCatalogId((current) => ({
-                            ...current,
-                            [catalog.id]: {
-                              ...conceptForm,
-                              tags: event.target.value
-                            }
-                          }))
-                        }
-                        placeholder="comma, separated, tags"
-                      />
                       <Button
-                        disabled={!conceptForm.label.trim()}
-                        pending={createCatalogItemMutation.isPending}
-                        pendingLabel="Adding"
                         onClick={() =>
-                          void createCatalogItemMutation
-                            .mutateAsync({
-                              catalogId: catalog.id,
-                              label: conceptForm.label,
-                              description: conceptForm.description,
-                              tags: conceptForm.tags
-                                .split(",")
-                                .map((entry) => entry.trim())
-                                .filter(Boolean),
-                              featureWeights: DEFAULT_DIMENSIONS
-                            })
-                            .then(() =>
-                              setNewConceptByCatalogId((current) => ({
-                                ...current,
-                                [catalog.id]: {
-                                  label: "",
-                                  description: "",
-                                  tags: ""
-                                }
-                              }))
-                            )
+                          setGuidedFlow({ kind: "catalog-item", catalog })
                         }
                       >
                         Add concept
@@ -2162,6 +2158,13 @@ export function PreferencesPage() {
                   </Card>
                 );
               })}
+              {filteredCatalogs.length > visibleCatalogs.length ? (
+                <div className="text-sm text-[var(--ui-ink-soft)]">
+                  Showing {visibleCatalogs.length} of {filteredCatalogs.length}
+                  matching catalogs. Refine the search to narrow this bounded
+                  view.
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -2178,23 +2181,49 @@ export function PreferencesPage() {
             open
           }));
         }}
-        error={gameError}
+        error={
+          gameError ??
+          (gameWorkspaceQuery.error
+            ? describeApiError(gameWorkspaceQuery.error).description
+            : null)
+        }
+        notice={gameNotice}
         loading={gameLoading}
+        submitting={judgmentMutation.isPending || signalMutation.isPending}
         workspaceLoading={gameWorkspaceQuery.isLoading}
         activeWorkspace={activeGameWorkspace}
         conceptSearchQuery={conceptSearchQuery}
         onConceptSearchQueryChange={setConceptSearchQuery}
-        filteredCatalogs={filteredCatalogs}
+        filteredCatalogs={visibleCatalogs}
         onSelectDomain={(domain) => void handleGameDomainSelection(domain)}
         onStartCatalogGame={(domain, catalogId) =>
           void startCatalogGame(domain, catalogId)
         }
-        onJudge={(outcome, strength) =>
-          void handleGameJudgment(outcome, strength)
-        }
-        onSignal={(itemId, signalType) =>
-          void handleGameSignal(itemId, signalType)
-        }
+        onJudge={(outcome, strength) => {
+          setGameError(null);
+          void handleGameJudgment(outcome, strength).catch((error) =>
+            setGameError(describeApiError(error).description)
+          );
+        }}
+        onSignal={(itemId, signalType) => {
+          setGameError(null);
+          void handleGameSignal(itemId, signalType).catch((error) =>
+            setGameError(describeApiError(error).description)
+          );
+        }}
+      />
+      <PreferenceGuidedFlowDialog
+        flow={guidedFlow}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGuidedFlow(null);
+          }
+        }}
+        pending={guidedFlowPending}
+        user={user}
+        domain={selectedDomain}
+        workspace={workspace}
+        onSubmit={handleGuidedSubmit}
       />
     </>
   );

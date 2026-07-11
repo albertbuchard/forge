@@ -2634,37 +2634,63 @@ export function createPreferenceItem(
   input: CreatePreferenceItemInput
 ): PreferenceItem {
   const parsed = createPreferenceItemSchema.parse(input);
-  const profile = ensureProfile(parsed.userId, parsed.domain);
-  const itemId = `pref_item_${randomUUID().slice(0, 10)}`;
-  const timestamp = nowIso();
-  getDatabase()
-    .prepare(
-      `INSERT INTO preference_items (id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      itemId,
-      profile.id,
-      parsed.label,
-      parsed.description,
-      JSON.stringify(parsed.tags),
-      JSON.stringify(normalizeDimensionVector(parsed.featureWeights)),
-      parsed.sourceEntityType ?? null,
-      parsed.sourceEntityId ?? null,
-      JSON.stringify(parsed.metadata ?? {}),
-      timestamp,
-      timestamp
-    );
-  const created = getItemById(itemId)!;
-  const selectedContext = resolveContext(profile, null);
-  if (parsed.queueForCompare) {
-    upsertPreferenceScoreState(itemId, selectedContext.id, {
-      compareLater: true,
-      bookmarked: true
-    });
-  }
-  recomputeContext(profile, selectedContext);
-  return created;
+  return runInTransaction(() => {
+    const profile = ensureProfile(parsed.userId, parsed.domain);
+    const itemId = `pref_item_${randomUUID().slice(0, 10)}`;
+    const timestamp = nowIso();
+    const linkedIdentity =
+      parsed.sourceEntityType && parsed.sourceEntityId
+        ? {
+            entityType: parsed.sourceEntityType,
+            entityId: parsed.sourceEntityId
+          }
+        : null;
+    getDatabase()
+      .prepare(
+        `INSERT INTO preference_items (id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (profile_id, source_entity_type, source_entity_id)
+         WHERE source_entity_type IS NOT NULL AND source_entity_id IS NOT NULL
+         DO UPDATE SET updated_at = excluded.updated_at`
+      )
+      .run(
+        itemId,
+        profile.id,
+        parsed.label,
+        parsed.description,
+        JSON.stringify(parsed.tags),
+        JSON.stringify(normalizeDimensionVector(parsed.featureWeights)),
+        linkedIdentity?.entityType ?? null,
+        linkedIdentity?.entityId ?? null,
+        JSON.stringify(parsed.metadata ?? {}),
+        timestamp,
+        timestamp
+      );
+    const storedItem = linkedIdentity
+      ? (getDatabase()
+          .prepare(
+            `SELECT id
+             FROM preference_items
+             WHERE profile_id = ?
+               AND source_entity_type = ?
+               AND source_entity_id = ?`
+          )
+          .get(
+            profile.id,
+            linkedIdentity.entityType,
+            linkedIdentity.entityId
+          ) as { id: string })
+      : { id: itemId };
+    const selectedContext = resolveContext(profile, null);
+    if (parsed.queueForCompare) {
+      upsertPreferenceScoreState(storedItem.id, selectedContext.id, {
+        compareLater: true,
+        bookmarked: true
+      });
+    }
+    recomputeContext(profile, selectedContext);
+    return getItemById(storedItem.id)!;
+  });
 }
 
 function upsertPreferenceScoreState(
@@ -2776,6 +2802,37 @@ export function updatePreferenceItem(
         ? (parsed.metadata as Record<string, unknown>)
         : item.metadata
   };
+  if (Boolean(next.sourceEntityType) !== Boolean(next.sourceEntityId)) {
+    throw new HttpError(
+      400,
+      "preferences_invalid_linked_identity",
+      "A preference linked identity requires both sourceEntityType and sourceEntityId."
+    );
+  }
+  if (next.sourceEntityType && next.sourceEntityId) {
+    const identityOwner = getDatabase()
+      .prepare(
+        `SELECT id
+         FROM preference_items
+         WHERE profile_id = ?
+           AND source_entity_type = ?
+           AND source_entity_id = ?
+           AND id <> ?`
+      )
+      .get(
+        item.profileId,
+        next.sourceEntityType,
+        next.sourceEntityId,
+        itemId
+      ) as { id: string } | undefined;
+    if (identityOwner) {
+      throw new HttpError(
+        409,
+        "preferences_linked_identity_conflict",
+        "This Forge entity is already represented by another preference item in the selected profile."
+      );
+    }
+  }
   const timestamp = nowIso();
   getDatabase()
     .prepare(
@@ -2847,12 +2904,6 @@ export function createPreferenceItemFromEntity(
   input: EnqueueEntityPreferenceItemInput
 ): PreferenceItem {
   const parsed = enqueueEntityPreferenceItemSchema.parse(input);
-  const profile = ensureProfile(parsed.userId, parsed.domain);
-  const existing = listItems(profile.id).find(
-    (item) =>
-      item.sourceEntityType === parsed.entityType &&
-      item.sourceEntityId === parsed.entityId
-  );
   const source = resolveSourceEntity(parsed.entityType, parsed.entityId);
   if (!source) {
     throw new HttpError(
@@ -2861,27 +2912,18 @@ export function createPreferenceItemFromEntity(
       `${parsed.entityType} ${parsed.entityId} was not found.`
     );
   }
-  const item =
-    existing ??
-    createPreferenceItem({
-      userId: parsed.userId,
-      domain: parsed.domain,
-      label: parsed.label?.trim() || source.label,
-      description: parsed.description?.trim() || source.description,
-      tags: parsed.tags,
-      sourceEntityType: parsed.entityType,
-      sourceEntityId: parsed.entityId,
-      metadata: { seededFromEntity: true },
-      queueForCompare: true,
-      featureWeights: DEFAULT_DIMENSIONS
-    });
-  const selectedContext = resolveContext(profile, null);
-  upsertPreferenceScoreState(item.id, selectedContext.id, {
-    bookmarked: true,
-    compareLater: true
+  return createPreferenceItem({
+    userId: parsed.userId,
+    domain: parsed.domain,
+    label: parsed.label?.trim() || source.label,
+    description: parsed.description?.trim() || source.description,
+    tags: parsed.tags,
+    sourceEntityType: parsed.entityType,
+    sourceEntityId: parsed.entityId,
+    metadata: { seededFromEntity: true },
+    queueForCompare: true,
+    featureWeights: DEFAULT_DIMENSIONS
   });
-  recomputeContext(profile, selectedContext);
-  return item;
 }
 
 export function submitPairwiseJudgment(

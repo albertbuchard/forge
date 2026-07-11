@@ -50,7 +50,13 @@ describe("TaskDialog", () => {
   });
 
   it("defaults new tasks to one day and standard AP, then preserves edited values on submit", async () => {
-    const onSubmit = vi.fn(async () => {});
+    let finishSubmit: (() => void) | undefined;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSubmit = resolve;
+        })
+    );
     const goal = {
       id: "goal_1",
       title: "Ship Forge",
@@ -156,9 +162,12 @@ describe("TaskDialog", () => {
     fireEvent.click(screen.getByText("Heavy"));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Create task" }));
+    const submit = await screen.findByRole("button", { name: "Create task" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
 
     await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Tune Life Force completion flow",
@@ -169,6 +178,8 @@ describe("TaskDialog", () => {
         undefined
       );
     });
+    finishSubmit?.();
+    await waitFor(() => expect(submit).toBeEnabled());
   });
 
   it("lets the edit flow change tracked minutes without starting a live run", async () => {
@@ -327,9 +338,7 @@ describe("TaskDialog", () => {
   });
 
   it("prevents duplicate anchor creation while the first request is pending", async () => {
-    apiMocks.createGoal.mockImplementation(
-      () => new Promise(() => undefined)
-    );
+    apiMocks.createGoal.mockImplementation(() => new Promise(() => undefined));
 
     render(
       <I18nProvider locale="en">

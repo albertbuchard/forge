@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   ArrowUpRight,
   BriefcaseBusiness,
@@ -23,6 +23,10 @@ import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { TaskDialog } from "@/components/task-dialog";
+import {
+  PlanningRecordDeleteDialog,
+  PlanningRecordDeletedState
+} from "@/components/planning/planning-record-delete-dialog";
 import { TaskRunControls } from "@/components/task-run-controls";
 import { WorkAdjustmentDialog } from "@/components/work-adjustment-dialog";
 import { GamificationMiniHud } from "@/components/gamification/gamification-widgets";
@@ -43,6 +47,7 @@ import {
   deleteTaskTimebox,
   focusTaskRun,
   getCalendarOverview,
+  getDeletedPlanningRecord,
   getLifeForce,
   getTaskContext,
   heartbeatTaskRun,
@@ -50,6 +55,7 @@ import {
   patchTask,
   releaseTaskRun,
   removeActivityLog,
+  restoreEntities,
   uncompleteTask
 } from "@/lib/api";
 import {
@@ -95,10 +101,16 @@ export function TaskDetailPage() {
     ? shell.selectedUserIds
     : [];
   const params = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletedTaskOverride, setDeletedTaskOverride] = useState<{
+    id: string;
+    title: string;
+    level: "issue" | "task" | "subtask";
+    backHref: string;
+  } | null>(null);
   const [workAdjustmentOpen, setWorkAdjustmentOpen] = useState(false);
   const [timeboxDialogOpen, setTimeboxDialogOpen] = useState(false);
   const [taskSchedulingDialogOpen, setTaskSchedulingDialogOpen] =
@@ -154,10 +166,42 @@ export function TaskDetailPage() {
     return () => mediaQuery.removeListener(sync);
   }, []);
 
+  const deletedTaskQuery = useQuery({
+    queryKey: ["deleted-planning-record", "task", params.taskId],
+    queryFn: () => getDeletedPlanningRecord("task", params.taskId!),
+    enabled: Boolean(params.taskId)
+  });
+  const deletedTaskFromQuery = (() => {
+    const record = deletedTaskQuery.data;
+    if (!record) {
+      return null;
+    }
+    const snapshot = record.snapshot;
+    const level: keyof typeof WORK_ITEM_LEVEL_META =
+      snapshot.level === "issue" ||
+      snapshot.level === "task" ||
+      snapshot.level === "subtask"
+        ? snapshot.level
+        : "task";
+    const projectId =
+      typeof snapshot.projectId === "string" ? snapshot.projectId : null;
+    const goalId = typeof snapshot.goalId === "string" ? snapshot.goalId : null;
+    return {
+      id: record.entityId,
+      title: record.title,
+      level,
+      backHref: projectId
+        ? `/projects/${projectId}`
+        : goalId
+          ? `/goals/${goalId}`
+          : "/kanban"
+    };
+  })();
+  const deletedTask = deletedTaskOverride ?? deletedTaskFromQuery;
   const taskContextQuery = useQuery({
     queryKey: ["task-context", params.taskId],
     queryFn: () => getTaskContext(params.taskId!),
-    enabled: Boolean(params.taskId)
+    enabled: Boolean(params.taskId) && !deletedTask
   });
   const calendarOverviewQuery = useQuery({
     queryKey: [
@@ -284,8 +328,13 @@ export function TaskDetailPage() {
     onSuccess: invalidateAll
   });
   const deleteTaskMutation = useMutation({
-    mutationFn: (taskId: string) => deleteTask(taskId),
-    onSuccess: invalidateAll
+    mutationFn: (taskId: string) => deleteTask(taskId)
+  });
+  const restoreTaskMutation = useMutation({
+    mutationFn: (taskId: string) =>
+      restoreEntities({
+        operations: [{ entityType: "task", id: taskId }]
+      })
   });
   const createTimeboxMutation = useMutation({
     mutationFn: createTaskTimebox,
@@ -307,6 +356,38 @@ export function TaskDetailPage() {
   });
 
   const payload = taskContextQuery.data;
+
+  if (deletedTask) {
+    const deletedMeta = WORK_ITEM_LEVEL_META[deletedTask.level];
+    return (
+      <PlanningRecordDeletedState
+        recordKind={deletedMeta.noun}
+        recordTitle={deletedTask.title}
+        backHref={deletedTask.backHref}
+        backLabel="Back to planning"
+        restoring={restoreTaskMutation.isPending}
+        restoreError={restoreTaskMutation.error}
+        onRestore={async () => {
+          await restoreTaskMutation.mutateAsync(deletedTask.id);
+          setDeletedTaskOverride(null);
+          queryClient.setQueryData(
+            ["deleted-planning-record", "task", deletedTask.id],
+            null
+          );
+          await Promise.all([
+            invalidateAll(),
+            queryClient.invalidateQueries({
+              queryKey: ["deleted-planning-record", "task", deletedTask.id]
+            })
+          ]);
+        }}
+      />
+    );
+  }
+
+  if (taskContextQuery.isError && deletedTaskQuery.isLoading) {
+    return <SurfaceSkeleton />;
+  }
 
   if (taskContextQuery.isLoading) {
     return <SurfaceSkeleton />;
@@ -413,20 +494,18 @@ export function TaskDetailPage() {
   };
 
   const handleDeleteTask = async () => {
-    const confirmed = window.confirm(
-      `Delete ${workItemMeta.noun} "${payload.task.title}"?`
-    );
-    if (!confirmed) {
-      return;
-    }
     await deleteTaskMutation.mutateAsync(payload.task.id);
-    navigate(
-      payload.project
+    setDeletedTaskOverride({
+      id: payload.task.id,
+      title: payload.task.title,
+      level: taskLevel,
+      backHref: payload.project
         ? `/projects/${payload.project.id}`
         : payload.goal
           ? `/goals/${payload.goal.id}`
           : "/kanban"
-    );
+    });
+    await invalidateAll();
   };
 
   return (
@@ -610,7 +689,7 @@ export function TaskDetailPage() {
                 variant="ghost"
                 pending={deleteTaskMutation.isPending}
                 pendingLabel={t("common.taskDetail.deleting")}
-                onClick={() => void handleDeleteTask()}
+                onClick={() => setDeleteDialogOpen(true)}
               >
                 Delete {workItemMeta.noun}
               </Button>
@@ -1606,6 +1685,19 @@ export function TaskDetailPage() {
           })}
         </div>
       </SheetScaffold>
+
+      <PlanningRecordDeleteDialog
+        open={deleteDialogOpen}
+        recordKind={workItemMeta.noun}
+        recordTitle={payload.task.title}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            deleteTaskMutation.reset();
+          }
+        }}
+        onConfirm={handleDeleteTask}
+      />
     </div>
   );
 }

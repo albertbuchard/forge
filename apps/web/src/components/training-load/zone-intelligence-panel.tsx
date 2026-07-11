@@ -169,9 +169,11 @@ function ModeNarrative({ mode }: { mode: TrainingIntelligenceMode }) {
 }
 
 export function ZoneIntelligencePanel({
-  trainingLoad
+  trainingLoad,
+  evidenceCurrent = true
 }: {
   trainingLoad: TrainingLoadViewData;
+  evidenceCurrent?: boolean;
 }) {
   const [modeKey, setModeKey] = useState(
     trainingLoad.trainingIntelligence.defaultMode
@@ -334,7 +336,9 @@ export function ZoneIntelligencePanel({
               key={bucket.bucketKey}
               className="grid min-w-[760px] grid-cols-[96px_72px_72px_repeat(6,64px)_72px_80px] border-t border-[var(--ui-border-subtle)] px-3 py-2 text-[12px] text-[var(--ui-ink-medium)]"
             >
-              <div className="text-[var(--ui-ink-strong)]">{bucket.bucketKey}</div>
+              <div className="text-[var(--ui-ink-strong)]">
+                {bucket.bucketKey}
+              </div>
               <div>{bucket.trainingLoad}</div>
               <div>{bucket.loadPerMinute}</div>
               {ZONE_ORDER.map((zone) => (
@@ -360,7 +364,9 @@ export function ZoneIntelligencePanel({
                 content={ZONE_INTELLIGENCE_HELP.smartMode}
               />
             </div>
-            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">{selectedMode.label}</div>
+            <div className="mt-2 text-lg text-[var(--ui-ink-strong)]">
+              {selectedMode.label}
+            </div>
           </div>
           <Badge tone={scoreTone(selectedMode.score)}>
             {selectedMode.score}/100
@@ -417,7 +423,7 @@ export function ZoneIntelligencePanel({
         <div className="mt-4 grid gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-3">
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-muted)]">
             <Target className="size-3.5" />
-            Next targets
+            {evidenceCurrent ? "Next targets" : "Historical target estimate"}
             <InfoTooltip
               label="Explain next training targets"
               title="Next targets"
@@ -425,6 +431,12 @@ export function ZoneIntelligencePanel({
             />
           </div>
           <div className="grid gap-2 text-[12px] leading-5 text-[var(--ui-ink-medium)]">
+            {!evidenceCurrent ? (
+              <div className="rounded-[6px] bg-[var(--ui-warning-soft)] px-2 py-1 text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
+                Evidence is stale or incomplete. These targets describe the
+                stored model state and are not a current workout recommendation.
+              </div>
+            ) : null}
             <div>
               Next week: {selectedMode.nextWeekTargets.totalMinutesRange[0]}-
               {selectedMode.nextWeekTargets.totalMinutesRange[1]} min · max{" "}

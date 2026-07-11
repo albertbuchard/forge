@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -25,6 +25,9 @@ const HISTORY_TAGS = [
   { value: "review", label: "Review" },
   { value: "reviewed", label: "Reviewed" }
 ] as const;
+
+const INGEST_HISTORY_PAGE_SIZE = 40;
+const INGEST_HISTORY_MAX_VISIBLE = 200;
 
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -54,6 +57,11 @@ export function WikiIngestHistoryPage() {
   const toDate = searchParams.get("to") || "";
   const ingestOpen = searchParams.get("ingest") === "1";
   const selectedJobId = searchParams.get("ingestJobId");
+  const [historyLimit, setHistoryLimit] = useState(INGEST_HISTORY_PAGE_SIZE);
+
+  useEffect(() => {
+    setHistoryLimit(INGEST_HISTORY_PAGE_SIZE);
+  }, [selectedSpaceId]);
 
   const settingsQuery = useQuery({
     queryKey: ["forge-wiki-settings"],
@@ -61,13 +69,19 @@ export function WikiIngestHistoryPage() {
   });
 
   const jobsQuery = useQuery({
-    queryKey: ["forge-wiki-ingest-history", selectedSpaceId],
+    queryKey: ["forge-wiki-ingest-history", selectedSpaceId, historyLimit],
     queryFn: () =>
       listWikiIngestJobs({
         spaceId: selectedSpaceId || undefined,
-        limit: 200
+        limit: historyLimit
       }),
-    enabled: settingsQuery.isSuccess
+    enabled: settingsQuery.isSuccess,
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some((entry) =>
+        ["queued", "processing"].includes(entry.job.status)
+      )
+        ? 2_000
+        : false
   });
 
   const deleteMutation = useMutation({
@@ -131,6 +145,9 @@ export function WikiIngestHistoryPage() {
 
   const initialSpaceId =
     selectedSpaceId || settingsQuery.data?.settings.spaces[0]?.id || "";
+  const canLoadOlderJobs =
+    (jobsQuery.data?.jobs.length ?? 0) < (jobsQuery.data?.total ?? 0) &&
+    historyLimit < INGEST_HISTORY_MAX_VISIBLE;
 
   const openModal = (jobId?: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -182,8 +199,29 @@ export function WikiIngestHistoryPage() {
           <PageHero
             title="KarpaWiki Ingest History"
             description="Search prior ingests, reopen a review, or clear ingest records without touching pages and entities that were already published."
-            badge={`${filteredJobs.length} matching jobs`}
+            badge={`${filteredJobs.length} matching loaded · ${jobsQuery.data?.jobs.length ?? 0} of ${jobsQuery.data?.total ?? 0} jobs loaded`}
           />
+
+          {jobsQuery.isRefetchError ? (
+            <div
+              role="alert"
+              className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+            >
+              Forge could not refresh ingest statuses. The loaded history may be
+              stale.
+            </div>
+          ) : null}
+
+          {deleteMutation.isError ? (
+            <div
+              role="alert"
+              className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+            >
+              {deleteMutation.error instanceof Error
+                ? deleteMutation.error.message
+                : "Forge could not delete the ingest history entry."}
+            </div>
+          ) : null}
 
           <Card className="grid gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -281,8 +319,8 @@ export function WikiIngestHistoryPage() {
           {filteredJobs.length === 0 ? (
             <EmptyState
               eyebrow="KarpaWiki ingest"
-              title="No ingest jobs match these filters"
-              description="Try widening the dates or clearing a status tag."
+              title="No loaded ingest jobs match these filters"
+              description="Try widening the dates, clearing a status tag, or load older history."
             />
           ) : (
             <div className="grid gap-3">
@@ -387,6 +425,44 @@ export function WikiIngestHistoryPage() {
               })}
             </div>
           )}
+
+          <div
+            className="flex flex-col items-center gap-2 text-center text-xs text-[var(--ui-ink-faint)] sm:flex-row sm:justify-center"
+            aria-live="polite"
+          >
+            <span>
+              Filters apply to the newest {jobsQuery.data?.jobs.length ?? 0}
+              ingest jobs currently loaded.
+            </span>
+            {canLoadOlderJobs ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                pending={jobsQuery.isFetching}
+                pendingLabel="Loading"
+                onClick={() =>
+                  setHistoryLimit((current) =>
+                    Math.min(
+                      current + INGEST_HISTORY_PAGE_SIZE,
+                      INGEST_HISTORY_MAX_VISIBLE
+                    )
+                  )
+                }
+              >
+                Load older jobs
+              </Button>
+            ) : historyLimit >= INGEST_HISTORY_MAX_VISIBLE &&
+              (jobsQuery.data?.jobs.length ?? 0) <
+                (jobsQuery.data?.total ?? 0) ? (
+              <span>
+                {jobsQuery.data?.total ?? 0} jobs are stored for this space;
+                only the newest {INGEST_HISTORY_MAX_VISIBLE} are shown here.
+              </span>
+            ) : (jobsQuery.data?.total ?? 0) > 0 ? (
+              <span>All stored jobs for this space are loaded.</span>
+            ) : null}
+          </div>
         </div>
       </div>
 

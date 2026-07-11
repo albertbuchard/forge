@@ -21,6 +21,7 @@ import {
   isGoogleCalendarLoopbackOrigin,
   resolveGoogleCalendarOauthPrivateConfig
 } from "./google-calendar-oauth-config.js";
+import { providerDateToInstant } from "./calendar-time.js";
 import {
   createDAVClient,
   DAVNamespaceShort,
@@ -265,7 +266,10 @@ type MacOSLocalProviderState = {
   credentials: MacOSLocalCredentials;
 };
 
-type ProviderState = DavProviderState | MicrosoftProviderState | MacOSLocalProviderState;
+type ProviderState =
+  | DavProviderState
+  | MicrosoftProviderState
+  | MacOSLocalProviderState;
 
 function isWritableCalendarCredentials(
   credentials: StoredCalendarCredentials
@@ -282,7 +286,8 @@ function normalizeOptionalUrl(value: string | null | undefined) {
 }
 
 const GOOGLE_CALDAV_URL = "https://apidata.googleusercontent.com/caldav/v2/";
-const GOOGLE_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_OAUTH_AUTHORIZE_URL =
+  "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
 const GOOGLE_CALENDAR_LIST_URL =
@@ -299,7 +304,11 @@ const APPLE_CALDAV_URL = "https://caldav.icloud.com";
 const MICROSOFT_GRAPH_URL = "https://graph.microsoft.com/v1.0";
 const MICROSOFT_LOGIN_URL = "https://login.microsoftonline.com";
 const MICROSOFT_CALLBACK_PATH = "/api/v1/calendar/oauth/microsoft/callback";
-const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Calendars.Read", "offline_access"];
+const MICROSOFT_GRAPH_SCOPES = [
+  "User.Read",
+  "Calendars.Read",
+  "offline_access"
+];
 const MICROSOFT_CLIENT_ID_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const FORGE_CALENDAR_NAME = "Forge";
@@ -345,7 +354,10 @@ type GoogleOauthPendingSession = {
   accountLabel: string | null;
   error: string | null;
   discovery: CalendarDiscoveryPayload | null;
-  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl"> | null;
+  credentials: Omit<
+    GoogleCredentials,
+    "selectedCalendarUrls" | "forgeCalendarUrl"
+  > | null;
 };
 
 const googleOauthSessions = new Map<string, GoogleOauthPendingSession>();
@@ -447,10 +459,14 @@ function resolveStoredMicrosoftOAuthSettings() {
 }
 
 function resolveMicrosoftOAuthConfig(
-  override?: Pick<TestMicrosoftCalendarOauthConfigurationInput, "clientId" | "tenantId" | "redirectUri">
+  override?: Pick<
+    TestMicrosoftCalendarOauthConfigurationInput,
+    "clientId" | "tenantId" | "redirectUri"
+  >
 ) {
   const fromSettings = resolveStoredMicrosoftOAuthSettings();
-  const rawSettingsClientId = override?.clientId?.trim() ?? fromSettings.clientId.trim();
+  const rawSettingsClientId =
+    override?.clientId?.trim() ?? fromSettings.clientId.trim();
   const settingsTenantId = normalizeMicrosoftTenantId(
     override?.tenantId ?? fromSettings.tenantId
   );
@@ -470,8 +486,12 @@ function resolveMicrosoftOAuthConfig(
   }
 
   const envClientId = process.env.FORGE_MICROSOFT_CLIENT_ID?.trim() ?? "";
-  const envTenantId = normalizeMicrosoftTenantId(process.env.FORGE_MICROSOFT_TENANT_ID);
-  const envRedirectUri = normalizeMicrosoftRedirectUri(process.env.FORGE_MICROSOFT_REDIRECT_URI);
+  const envTenantId = normalizeMicrosoftTenantId(
+    process.env.FORGE_MICROSOFT_TENANT_ID
+  );
+  const envRedirectUri = normalizeMicrosoftRedirectUri(
+    process.env.FORGE_MICROSOFT_REDIRECT_URI
+  );
   if (envClientId.length > 0) {
     const normalizedEnvClientId = validateMicrosoftClientId(envClientId);
     return {
@@ -488,7 +508,9 @@ function resolveMicrosoftOAuthConfig(
   );
 }
 
-function createMicrosoftPublicClient(config: Pick<MicrosoftOauthConfig, "clientId" | "authority">) {
+function createMicrosoftPublicClient(
+  config: Pick<MicrosoftOauthConfig, "clientId" | "authority">
+) {
   return new PublicClientApplication({
     auth: {
       clientId: config.clientId,
@@ -574,11 +596,14 @@ function normalizeRequestOrigin(value: string | null | undefined) {
   }
 }
 
-function googleOauthStartRejectionMessage(config: {
-  appBaseUrl: string;
-  redirectUri: string;
-  allowedOrigins: string[];
-}, browserOrigin: string | null) {
+function googleOauthStartRejectionMessage(
+  config: {
+    appBaseUrl: string;
+    redirectUri: string;
+    allowedOrigins: string[];
+  },
+  browserOrigin: string | null
+) {
   const allowed = config.allowedOrigins.join(", ");
   if (browserOrigin && !isGoogleCalendarLoopbackOrigin(browserOrigin)) {
     return `Google Calendar sign-in cannot start from ${browserOrigin}. Forge is running as a localhost app and Google redirects back to ${config.redirectUri}, so the browser must also be on localhost on the same machine running Forge. Open Forge locally on one of these origins: ${allowed}.`;
@@ -608,7 +633,8 @@ function ensureGoogleOauthStartAllowed(input: {
   const browserOrigin =
     normalizeRequestOrigin(input.browserOrigin) ??
     normalizeRequestOrigin(input.openerOrigin);
-  const openerOrigin = normalizeRequestOrigin(input.openerOrigin) ?? browserOrigin;
+  const openerOrigin =
+    normalizeRequestOrigin(input.openerOrigin) ?? browserOrigin;
   const requestBaseOrigin = normalizeRequestOrigin(input.requestBaseOrigin);
   const browserOriginAllowed =
     browserOrigin !== null &&
@@ -679,7 +705,8 @@ function explainGoogleOauthError(input: {
   redirectUri: string;
   appBaseUrl: string;
 }) {
-  const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+  const raw =
+    `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
 
   if (raw.includes("redirect_uri_mismatch")) {
     return `Google rejected the redirect URI. Register exactly ${input.redirectUri} on the local Google OAuth client and reopen Forge on localhost on the same machine running Forge.`;
@@ -693,7 +720,11 @@ function explainGoogleOauthError(input: {
   if (raw.includes("client_secret is missing")) {
     return "Google rejected this OAuth client because it still requires a client secret. Set GOOGLE_CLIENT_SECRET on the Forge server for this install, or replace the client with a Google Desktop app client that supports the local PKCE flow.";
   }
-  return input.errorDescription?.trim() || input.error?.trim() || "Google sign-in could not be completed.";
+  return (
+    input.errorDescription?.trim() ||
+    input.error?.trim() ||
+    "Google sign-in could not be completed."
+  );
 }
 
 function mapGoogleRuntimeError(error: unknown) {
@@ -720,7 +751,10 @@ function mapGoogleRuntimeError(error: unknown) {
 }
 
 async function refreshGoogleCaldavAccessToken(
-  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
+  credentials: Omit<
+    GoogleCredentials,
+    "selectedCalendarUrls" | "forgeCalendarUrl"
+  >
 ) {
   const config = resolveStoredGoogleOauthConfig();
   logForgeDebug(
@@ -771,8 +805,7 @@ async function refreshGoogleCaldavAccessToken(
     Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
       ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
       : credentials.accessTokenExpiresAt;
-  const scopeText =
-    typeof payload.scope === "string" ? payload.scope : "";
+  const scopeText = typeof payload.scope === "string" ? payload.scope : "";
   const grantedScopes = scopeText
     .split(/\s+/)
     .map((entry) => entry.trim())
@@ -816,7 +849,10 @@ function accountIdentityKeyForMacOSSource(input: {
 
 function buildGoogleCalendarCollectionUrl(calendarId: string) {
   return normalizeUrl(
-    new URL(`${encodeURIComponent(calendarId)}/events`, GOOGLE_CALDAV_URL).toString()
+    new URL(
+      `${encodeURIComponent(calendarId)}/events`,
+      GOOGLE_CALDAV_URL
+    ).toString()
   );
 }
 
@@ -824,7 +860,9 @@ function extractGoogleCalendarIdFromCollectionUrl(calendarUrl: string) {
   const url = new URL(calendarUrl);
   const match = /^\/caldav\/v2\/(.+)\/events\/$/.exec(url.pathname);
   if (!match?.[1]) {
-    throw new Error(`Forge could not derive the Google calendar ID from ${calendarUrl}.`);
+    throw new Error(
+      `Forge could not derive the Google calendar ID from ${calendarUrl}.`
+    );
   }
   return decodeURIComponent(match[1]);
 }
@@ -836,7 +874,10 @@ function buildGoogleCalendarEventApiUrl(calendarId: string, eventId: string) {
 function buildGoogleDavAccount(email: string): DAVAccount {
   const normalizedEmail = normalizeAccountIdentity(email);
   const principalUrl = normalizeUrl(
-    new URL(`${encodeURIComponent(normalizedEmail)}/user`, GOOGLE_CALDAV_URL).toString()
+    new URL(
+      `${encodeURIComponent(normalizedEmail)}/user`,
+      GOOGLE_CALDAV_URL
+    ).toString()
   );
   return {
     accountType: "caldav",
@@ -844,13 +885,19 @@ function buildGoogleDavAccount(email: string): DAVAccount {
     rootUrl: GOOGLE_CALDAV_URL,
     principalUrl,
     homeUrl: normalizeUrl(
-      new URL(`${encodeURIComponent(normalizedEmail)}/`, GOOGLE_CALDAV_URL).toString()
+      new URL(
+        `${encodeURIComponent(normalizedEmail)}/`,
+        GOOGLE_CALDAV_URL
+      ).toString()
     )
   } as DAVAccount;
 }
 
 async function fetchGoogleCalendarList(
-  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
+  credentials: Omit<
+    GoogleCredentials,
+    "selectedCalendarUrls" | "forgeCalendarUrl"
+  >
 ) {
   const refreshed = await refreshGoogleCaldavAccessToken(credentials);
   const calendars: DAVCalendar[] = [];
@@ -899,7 +946,8 @@ async function fetchGoogleCalendarList(
           safeDisplayName(item.description, "") ||
           (item.primary ? "Primary Google calendar" : ""),
         calendarColor:
-          typeof item.backgroundColor === "string" && item.backgroundColor.trim().length > 0
+          typeof item.backgroundColor === "string" &&
+          item.backgroundColor.trim().length > 0
             ? item.backgroundColor.trim()
             : FORGE_CALENDAR_COLOR,
         timezone: normalizeTimezone(item.timeZone),
@@ -924,12 +972,14 @@ async function fetchGoogleCalendarList(
       if (!canWrite) {
         const last = calendars[calendars.length - 1];
         if (last) {
-          (last as DAVCalendar & { _forgeCanWrite?: boolean })._forgeCanWrite = false;
+          (last as DAVCalendar & { _forgeCanWrite?: boolean })._forgeCanWrite =
+            false;
         }
       }
     }
     pageToken =
-      typeof payload.nextPageToken === "string" && payload.nextPageToken.trim().length > 0
+      typeof payload.nextPageToken === "string" &&
+      payload.nextPageToken.trim().length > 0
         ? payload.nextPageToken.trim()
         : null;
   } while (pageToken);
@@ -938,7 +988,10 @@ async function fetchGoogleCalendarList(
 }
 
 async function createGoogleForgeCalendar(
-  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">
+  credentials: Omit<
+    GoogleCredentials,
+    "selectedCalendarUrls" | "forgeCalendarUrl"
+  >
 ) {
   const refreshed = await refreshGoogleCaldavAccessToken(credentials);
   const response = await fetch(GOOGLE_CALENDAR_CREATE_URL, {
@@ -983,30 +1036,22 @@ function parseGoogleCalendarEventDate(
       }
     | null
     | undefined,
-  fallbackToEndOfDay = false
+  fallbackTimeZone: string
 ) {
-  if (!value) {
-    return null;
-  }
-  if (typeof value.dateTime === "string" && value.dateTime.trim().length > 0) {
-    const candidate = new Date(value.dateTime);
-    return Number.isNaN(candidate.getTime()) ? null : candidate.toISOString();
-  }
-  if (typeof value.date === "string" && value.date.trim().length > 0) {
-    const suffix = fallbackToEndOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
-    const candidate = new Date(`${value.date}${suffix}`);
-    return Number.isNaN(candidate.getTime()) ? null : candidate.toISOString();
-  }
-  return null;
+  return providerDateToInstant(value, fallbackTimeZone);
 }
 
 function mapGoogleCalendarEventToSyncInput(
   calendarUrl: string,
+  calendarTimezone: string,
   event: GoogleCalendarEvent
 ): CalendarSyncEventInput | null {
   const calendarId = extractGoogleCalendarIdFromCollectionUrl(calendarUrl);
-  const startAt = parseGoogleCalendarEventDate(event.start, false);
-  const endAt = parseGoogleCalendarEventDate(event.end, true);
+  const timezone = normalizeTimezone(
+    event.start?.timeZone ?? event.end?.timeZone ?? calendarTimezone
+  );
+  const startAt = parseGoogleCalendarEventDate(event.start, timezone);
+  const endAt = parseGoogleCalendarEventDate(event.end, timezone);
   if (!startAt || !endAt) {
     return null;
   }
@@ -1038,13 +1083,14 @@ function mapGoogleCalendarEventToSyncInput(
       typeof event.summary === "string" && event.summary.trim().length > 0
         ? event.summary.trim()
         : "(untitled event)",
-    description:
-      typeof event.description === "string" ? event.description : "",
+    description: typeof event.description === "string" ? event.description : "",
     location: typeof event.location === "string" ? event.location : "",
     startAt,
     endAt,
+    timezone,
     isAllDay:
-      typeof event.start?.date === "string" && event.start.date.trim().length > 0,
+      typeof event.start?.date === "string" &&
+      event.start.date.trim().length > 0,
     availability: event.transparency === "transparent" ? "free" : "busy",
     eventType: "",
     categories: [],
@@ -1058,8 +1104,12 @@ function mapGoogleCalendarEventToSyncInput(
 }
 
 async function fetchGoogleCalendarEvents(
-  credentials: Omit<GoogleCredentials, "selectedCalendarUrls" | "forgeCalendarUrl">,
+  credentials: Omit<
+    GoogleCredentials,
+    "selectedCalendarUrls" | "forgeCalendarUrl"
+  >,
   calendarUrl: string,
+  calendarTimezone: string,
   range: { start: string; end: string }
 ) {
   const refreshed = await refreshGoogleCaldavAccessToken(credentials);
@@ -1089,7 +1139,9 @@ async function fetchGoogleCalendarEvents(
     );
   }
   return (payload.items ?? [])
-    .map((event) => mapGoogleCalendarEventToSyncInput(calendarUrl, event))
+    .map((event) =>
+      mapGoogleCalendarEventToSyncInput(calendarUrl, calendarTimezone, event)
+    )
     .filter((event): event is CalendarSyncEventInput => event !== null);
 }
 
@@ -1110,7 +1162,10 @@ function normalizeTimezone(value: string | null | undefined) {
 }
 
 function canWriteDavCalendar(calendar: DAVCalendar) {
-  return (calendar as DAVCalendar & { _forgeCanWrite?: boolean })._forgeCanWrite ?? true;
+  return (
+    (calendar as DAVCalendar & { _forgeCanWrite?: boolean })._forgeCanWrite ??
+    true
+  );
 }
 
 function buildEventIcs(payload: {
@@ -1210,18 +1265,30 @@ async function fetchMicrosoftCollection<T>(
     });
     const payload = (await response.json()) as Record<string, unknown>;
     if (!response.ok) {
-      throw microsoftGraphError(response.status, payload, "Microsoft Graph request failed");
+      throw microsoftGraphError(
+        response.status,
+        payload,
+        "Microsoft Graph request failed"
+      );
     }
-    const pageValues = Array.isArray(payload.value) ? (payload.value as T[]) : [];
+    const pageValues = Array.isArray(payload.value)
+      ? (payload.value as T[])
+      : [];
     values.push(...pageValues);
-    nextUrl = typeof payload["@odata.nextLink"] === "string" ? payload["@odata.nextLink"] : null;
+    nextUrl =
+      typeof payload["@odata.nextLink"] === "string"
+        ? payload["@odata.nextLink"]
+        : null;
   }
 
   return values;
 }
 
 function parseMicrosoftDateTime(
-  value: { dateTime?: string | null; timeZone?: string | null } | null | undefined
+  value:
+    | { dateTime?: string | null; timeZone?: string | null }
+    | null
+    | undefined
 ) {
   if (!value?.dateTime || value.dateTime.trim().length === 0) {
     return null;
@@ -1254,19 +1321,24 @@ function mapMicrosoftEventToSyncInput(
       typeof event.subject === "string" && event.subject.trim().length > 0
         ? event.subject
         : "(untitled event)",
-    description:
-      typeof event.bodyPreview === "string" ? event.bodyPreview : "",
+    description: typeof event.bodyPreview === "string" ? event.bodyPreview : "",
     location:
-      typeof event.location?.displayName === "string" ? event.location.displayName : "",
+      typeof event.location?.displayName === "string"
+        ? event.location.displayName
+        : "",
     startAt,
     endAt,
     isAllDay: Boolean(event.isAllDay),
     availability: event.showAs === "free" ? "free" : "busy",
     eventType: "",
-    categories: Array.isArray(event.categories) ? event.categories.filter((value) => typeof value === "string") : [],
+    categories: Array.isArray(event.categories)
+      ? event.categories.filter((value) => typeof value === "string")
+      : [],
     rawPayload: event as Record<string, unknown>,
     remoteUpdatedAt:
-      typeof event.lastModifiedDateTime === "string" ? event.lastModifiedDateTime : null,
+      typeof event.lastModifiedDateTime === "string"
+        ? event.lastModifiedDateTime
+        : null,
     deletedAt: event.isCancelled ? new Date().toISOString() : null
   };
 }
@@ -1310,7 +1382,9 @@ async function createProviderClient(
     });
     await client.getTokenCache().deserialize(credentials.tokenCache);
     const account =
-      (await client.getTokenCache().getAccountByHomeId(credentials.homeAccountId)) ??
+      (await client
+        .getTokenCache()
+        .getAccountByHomeId(credentials.homeAccountId)) ??
       (await client.getTokenCache().getAllAccounts())[0] ??
       null;
     if (!account) {
@@ -1328,12 +1402,15 @@ async function createProviderClient(
       );
     }
     const [profileResponse, primaryResponse] = await Promise.all([
-      fetch(`${MICROSOFT_GRAPH_URL}/me?$select=mail,userPrincipalName,displayName`, {
-        headers: {
-          Authorization: `Bearer ${token.accessToken}`,
-          Accept: "application/json"
+      fetch(
+        `${MICROSOFT_GRAPH_URL}/me?$select=mail,userPrincipalName,displayName`,
+        {
+          headers: {
+            Authorization: `Bearer ${token.accessToken}`,
+            Accept: "application/json"
+          }
         }
-      }),
+      ),
       fetch(`${MICROSOFT_GRAPH_URL}/me/calendar?$select=id`, {
         headers: {
           Authorization: `Bearer ${token.accessToken}`,
@@ -1342,13 +1419,27 @@ async function createProviderClient(
       })
     ]);
 
-    const profilePayload = (await profileResponse.json()) as Record<string, unknown>;
+    const profilePayload = (await profileResponse.json()) as Record<
+      string,
+      unknown
+    >;
     if (!profileResponse.ok) {
-      throw microsoftGraphError(profileResponse.status, profilePayload, "Microsoft Graph profile lookup failed");
+      throw microsoftGraphError(
+        profileResponse.status,
+        profilePayload,
+        "Microsoft Graph profile lookup failed"
+      );
     }
-    const primaryPayload = (await primaryResponse.json()) as Record<string, unknown>;
+    const primaryPayload = (await primaryResponse.json()) as Record<
+      string,
+      unknown
+    >;
     if (!primaryResponse.ok) {
-      throw microsoftGraphError(primaryResponse.status, primaryPayload, "Microsoft Graph primary calendar lookup failed");
+      throw microsoftGraphError(
+        primaryResponse.status,
+        primaryPayload,
+        "Microsoft Graph primary calendar lookup failed"
+      );
     }
 
     const calendars = await fetchMicrosoftCollection<MicrosoftGraphCalendar>(
@@ -1368,7 +1459,8 @@ async function createProviderClient(
       homeUrl: null,
       calendars,
       primaryCalendarId:
-        typeof primaryPayload.id === "string" && primaryPayload.id.trim().length > 0
+        typeof primaryPayload.id === "string" &&
+        primaryPayload.id.trim().length > 0
           ? primaryPayload.id
           : null,
       credentials: {
@@ -1487,7 +1579,8 @@ function mapDiscoveryPayload(
         url: microsoftCalendarUrl(calendar.id),
         displayName: safeDisplayName(calendar.name, "Calendar"),
         description:
-          typeof calendar.owner?.name === "string" && calendar.owner.name.trim().length > 0
+          typeof calendar.owner?.name === "string" &&
+          calendar.owner.name.trim().length > 0
             ? `Owned by ${calendar.owner.name}`
             : "Exchange Online calendar",
         color: microsoftColorToHex(calendar.color),
@@ -1513,7 +1606,10 @@ function mapDiscoveryPayload(
     principalUrl: state.account.principalUrl ?? null,
     homeUrl: state.account.homeUrl ?? null,
     calendars: state.calendars.map((calendar, index) => {
-      const displayName = safeDisplayName(calendar.displayName, `Calendar ${index + 1}`);
+      const displayName = safeDisplayName(
+        calendar.displayName,
+        `Calendar ${index + 1}`
+      );
       return {
         url: normalizeUrl(calendar.url),
         displayName,
@@ -1553,7 +1649,8 @@ function explainMicrosoftOauthError(input: {
   error?: string | null;
   errorDescription?: string | null;
 }) {
-  const raw = `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
+  const raw =
+    `${input.error ?? ""} ${input.errorDescription ?? ""}`.toLowerCase();
 
   if (raw.includes("aadsts50011") || raw.includes("redirect_uri")) {
     return "Microsoft rejected the redirect URI. Add the exact Forge callback URI shown in Settings -> Calendar to your app registration, save the settings again, and retry sign-in.";
@@ -1561,13 +1658,24 @@ function explainMicrosoftOauthError(input: {
   if (raw.includes("access_denied") || raw.includes("consent")) {
     return "Microsoft consent was denied or cancelled. Review the requested Graph permissions, then retry the guided sign-in.";
   }
-  if (raw.includes("aadsts700016") || raw.includes("application") && raw.includes("not found")) {
+  if (
+    raw.includes("aadsts700016") ||
+    (raw.includes("application") && raw.includes("not found"))
+  ) {
     return "Microsoft could not find this client ID in the selected tenant. Check the client ID, supported account type, and tenant setting in Settings -> Calendar.";
   }
-  if (raw.includes("aadsts50020") || raw.includes("aadsts50194") || raw.includes("tenant")) {
+  if (
+    raw.includes("aadsts50020") ||
+    raw.includes("aadsts50194") ||
+    raw.includes("tenant")
+  ) {
     return "This account cannot sign in with the current tenant or supported-account setup. Use `common` for a broad self-hosted flow, or change the app registration to match this account type.";
   }
-  return input.errorDescription?.trim() || input.error?.trim() || "Microsoft sign-in could not be completed.";
+  return (
+    input.errorDescription?.trim() ||
+    input.error?.trim() ||
+    "Microsoft sign-in could not be completed."
+  );
 }
 
 export async function testMicrosoftCalendarOauthConfiguration(
@@ -1642,7 +1750,9 @@ export async function startMicrosoftCalendarOauth(
     credentials: null
   });
   return {
-    session: toMicrosoftOauthSessionPayload(microsoftOauthSessions.get(sessionId)!)
+    session: toMicrosoftOauthSessionPayload(
+      microsoftOauthSessions.get(sessionId)!
+    )
   };
 }
 
@@ -1671,7 +1781,8 @@ export async function completeMicrosoftCalendarOauth(input: {
   }
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
     session.status = "expired";
-    session.error = "The Microsoft sign-in session expired. Start the guided sign-in again.";
+    session.error =
+      "The Microsoft sign-in session expired. Start the guided sign-in again.";
     return { session: toMicrosoftOauthSessionPayload(session) };
   }
   if (input.error) {
@@ -1691,7 +1802,9 @@ export async function completeMicrosoftCalendarOauth(input: {
       authority: session.authority
     });
     if (!session.codeVerifier) {
-      throw new Error("The Microsoft sign-in session is missing its PKCE verifier. Start the sign-in again.");
+      throw new Error(
+        "The Microsoft sign-in session is missing its PKCE verifier. Start the sign-in again."
+      );
     }
     const result = await client.acquireTokenByCode({
       code: input.code,
@@ -1701,7 +1814,9 @@ export async function completeMicrosoftCalendarOauth(input: {
     });
     const account = result?.account;
     if (!account) {
-      throw new Error("Microsoft sign-in completed without an account profile.");
+      throw new Error(
+        "Microsoft sign-in completed without an account profile."
+      );
     }
 
     const provisionalCredentials: MicrosoftCredentials = {
@@ -1717,7 +1832,9 @@ export async function completeMicrosoftCalendarOauth(input: {
     };
     const state = await createProviderClient(provisionalCredentials);
     if (state.mode !== "microsoft") {
-      throw new Error("Forge resolved a DAV provider state for a Microsoft calendar session.");
+      throw new Error(
+        "Forge resolved a DAV provider state for a Microsoft calendar session."
+      );
     }
     const discovery = mapDiscoveryPayload("microsoft", state);
     session.status = "authorized";
@@ -1736,7 +1853,10 @@ export async function completeMicrosoftCalendarOauth(input: {
       error instanceof Error ? error.message : "Microsoft sign-in failed.";
   }
 
-  return { session: toMicrosoftOauthSessionPayload(session), openerOrigin: session.origin };
+  return {
+    session: toMicrosoftOauthSessionPayload(session),
+    openerOrigin: session.origin
+  };
 }
 
 export async function startGoogleCalendarOauth(
@@ -1823,7 +1943,8 @@ export async function completeGoogleCalendarOauth(input: {
   };
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
     session.status = "expired";
-    session.error = "The Google sign-in session expired. Start the guided sign-in again.";
+    session.error =
+      "The Google sign-in session expired. Start the guided sign-in again.";
     finalizeGoogleOauthSession(session);
     logGoogleOauthCompletion();
     return { session: toGoogleOauthSessionPayload(session) };
@@ -1838,14 +1959,20 @@ export async function completeGoogleCalendarOauth(input: {
     });
     finalizeGoogleOauthSession(session);
     logGoogleOauthCompletion();
-    return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+    return {
+      session: toGoogleOauthSessionPayload(session),
+      openerOrigin: session.openerOrigin
+    };
   }
   if (!input.code) {
     session.status = "error";
     session.error = "Google did not return an authorization code.";
     finalizeGoogleOauthSession(session);
     logGoogleOauthCompletion();
-    return { session: toGoogleOauthSessionPayload(session), openerOrigin: session.openerOrigin };
+    return {
+      session: toGoogleOauthSessionPayload(session),
+      openerOrigin: session.openerOrigin
+    };
   }
   if (!session.codeVerifier) {
     session.status = "error";
@@ -1882,7 +2009,10 @@ export async function completeGoogleCalendarOauth(input: {
       },
       body: tokenRequestBody.toString()
     });
-    const tokenPayload = (await tokenResponse.json()) as Record<string, unknown>;
+    const tokenPayload = (await tokenResponse.json()) as Record<
+      string,
+      unknown
+    >;
     if (!tokenResponse.ok) {
       throw new Error(
         explainGoogleOauthError({
@@ -1936,12 +2066,18 @@ export async function completeGoogleCalendarOauth(input: {
         Accept: "application/json"
       }
     });
-    const profilePayload = (await profileResponse.json()) as Record<string, unknown>;
+    const profilePayload = (await profileResponse.json()) as Record<
+      string,
+      unknown
+    >;
     if (!profileResponse.ok) {
-      throw new Error("Google sign-in completed, but Forge could not read the account profile.");
+      throw new Error(
+        "Google sign-in completed, but Forge could not read the account profile."
+      );
     }
     const email =
-      typeof profilePayload.email === "string" && profilePayload.email.trim().length > 0
+      typeof profilePayload.email === "string" &&
+      profilePayload.email.trim().length > 0
         ? profilePayload.email.trim()
         : "";
     if (!email) {
@@ -1985,7 +2121,9 @@ async function ensureForgeCalendar(
   state: ProviderState
 ): Promise<{ forgeCalendarUrl: string; calendars: DAVCalendar[] }> {
   if (state.mode !== "dav") {
-    throw new Error("This calendar provider is read-only, so Forge cannot create a dedicated write calendar there.");
+    throw new Error(
+      "This calendar provider is read-only, so Forge cannot create a dedicated write calendar there."
+    );
   }
   if (state.credentials.provider === "google") {
     const existingForge = state.calendars.find((calendar) =>
@@ -2021,13 +2159,19 @@ async function ensureForgeCalendar(
     );
   }
 
-  const existingUrls = new Set(state.calendars.map((calendar) => normalizeUrl(calendar.url)));
+  const existingUrls = new Set(
+    state.calendars.map((calendar) => normalizeUrl(calendar.url))
+  );
   let slug = "forge";
   let attempt = 2;
-  let nextUrl = normalizeUrl(new URL(`${slug}/`, state.account.homeUrl).toString());
+  let nextUrl = normalizeUrl(
+    new URL(`${slug}/`, state.account.homeUrl).toString()
+  );
   while (existingUrls.has(nextUrl)) {
     slug = `forge-${attempt++}`;
-    nextUrl = normalizeUrl(new URL(`${slug}/`, state.account.homeUrl).toString());
+    nextUrl = normalizeUrl(
+      new URL(`${slug}/`, state.account.homeUrl).toString()
+    );
   }
 
   await state.client.makeCalendar({
@@ -2045,14 +2189,19 @@ async function ensureForgeCalendar(
     }
   });
 
-  const calendars = await state.client.fetchCalendars({ account: state.account as never });
+  const calendars = await state.client.fetchCalendars({
+    account: state.account as never
+  });
   return {
     forgeCalendarUrl: nextUrl,
     calendars
   };
 }
 
-function inferRemoteId(object: DAVCalendarObject, parsed: Record<string, unknown>) {
+function inferRemoteId(
+  object: DAVCalendarObject,
+  parsed: Record<string, unknown>
+) {
   const uid = typeof parsed.uid === "string" ? parsed.uid : null;
   if (uid) {
     return uid;
@@ -2066,14 +2215,18 @@ function mapDavObjectToEvents(
   ownership: "external" | "forge"
 ) {
   const payload = typeof object.data === "string" ? object.data : "";
-  const parsed = ical.sync.parseICS(payload) as Record<string, Record<string, unknown>>;
+  const parsed = ical.sync.parseICS(payload) as Record<
+    string,
+    Record<string, unknown>
+  >;
   const events: CalendarSyncEventInput[] = [];
 
   for (const entry of Object.values(parsed)) {
     if (entry.type !== "VEVENT") {
       continue;
     }
-    const start = entry.start instanceof Date ? entry.start.toISOString() : null;
+    const start =
+      entry.start instanceof Date ? entry.start.toISOString() : null;
     const end = entry.end instanceof Date ? entry.end.toISOString() : null;
     if (!start || !end) {
       continue;
@@ -2153,7 +2306,9 @@ function mapCalendarRecord(
   }
 
   if ("url" in calendar) {
-    const forgeCalendarUrl = options.forgeCalendarUrl ? normalizeUrl(options.forgeCalendarUrl) : null;
+    const forgeCalendarUrl = options.forgeCalendarUrl
+      ? normalizeUrl(options.forgeCalendarUrl)
+      : null;
     const title = safeDisplayName(calendar.displayName, "Calendar");
     const remoteUrl = normalizeUrl(calendar.url);
     return {
@@ -2180,7 +2335,8 @@ function mapCalendarRecord(
     remoteId: microsoftCalendarUrl(calendar.id),
     title: safeDisplayName(calendar.name, "Calendar"),
     description:
-      typeof calendar.owner?.name === "string" && calendar.owner.name.trim().length > 0
+      typeof calendar.owner?.name === "string" &&
+      calendar.owner.name.trim().length > 0
         ? `Owned by ${calendar.owner.name}`
         : "Exchange Online calendar",
     color: microsoftColorToHex(calendar.color),
@@ -2239,7 +2395,8 @@ async function publishTaskTimeboxes(
 
   if (state.mode === "macos_local") {
     const forgeCalendar = state.calendars.find(
-      (calendar) => normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
+      (calendar) =>
+        normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
     );
     if (!forgeCalendar || !forgeCalendar.canWrite) {
       return;
@@ -2260,7 +2417,8 @@ async function publishTaskTimeboxes(
         notes: timebox.overrideReason ?? ""
       });
       const localForgeCalendar = listCalendars(connectionId).find(
-        (entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
+        (entry) =>
+          normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
       );
       updateTaskTimebox(timebox.id, {
         connectionId,
@@ -2313,7 +2471,8 @@ async function publishTaskTimeboxes(
     }
 
     const localForgeCalendar = listCalendars(connectionId).find(
-      (entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
+      (entry) =>
+        normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
     );
     updateTaskTimebox(timebox.id, {
       connectionId,
@@ -2330,7 +2489,9 @@ async function syncDiscoveredState(
   const state = await createProviderClient(credentials);
   if (state.mode === "macos_local") {
     if (credentials.provider !== "macos_local") {
-      throw new Error("Forge expected macOS-local credentials for this provider state.");
+      throw new Error(
+        "Forge expected macOS-local credentials for this provider state."
+      );
     }
     const selected = new Set(
       credentials.selectedCalendarUrls.map((value) => normalizeUrl(value))
@@ -2339,16 +2500,13 @@ async function syncDiscoveredState(
 
     for (const calendar of state.calendars) {
       const normalized = normalizeUrl(calendar.url);
-      upsertCalendarRecord(
-        connectionId,
-        {
-          ...mapCalendarRecord(calendar, {
-            forgeCalendarUrl,
-            accountIdentityKey: state.accountIdentityKey
-          }),
-          selectedForSync: selected.has(normalized)
-        }
-      );
+      upsertCalendarRecord(connectionId, {
+        ...mapCalendarRecord(calendar, {
+          forgeCalendarUrl,
+          accountIdentityKey: state.accountIdentityKey
+        }),
+        selectedForSync: selected.has(normalized)
+      });
       if (!selected.has(normalized) && normalized !== forgeCalendarUrl) {
         continue;
       }
@@ -2357,10 +2515,7 @@ async function syncDiscoveredState(
     const calendarIds = state.calendars
       .filter((calendar) => {
         const normalized = normalizeUrl(calendar.url);
-        return (
-          selected.has(normalized) ||
-          normalized === forgeCalendarUrl
-        );
+        return selected.has(normalized) || normalized === forgeCalendarUrl;
       })
       .map((calendar) => calendar.calendarId);
 
@@ -2404,7 +2559,9 @@ async function syncDiscoveredState(
 
   if (!isWritableCalendarCredentials(credentials)) {
     if (state.mode !== "microsoft") {
-      throw new Error("Forge expected a Microsoft provider state for this calendar connection.");
+      throw new Error(
+        "Forge expected a Microsoft provider state for this calendar connection."
+      );
     }
     const selected = new Set(
       credentials.selectedCalendarUrls.map((value) => normalizeUrl(value))
@@ -2412,18 +2569,21 @@ async function syncDiscoveredState(
 
     for (const calendar of state.calendars) {
       const remoteId = normalizeUrl(microsoftCalendarUrl(calendar.id));
-      upsertCalendarRecord(
-        connectionId,
-        {
-          ...mapCalendarRecord(calendar, { primaryCalendarId: state.primaryCalendarId }),
-          selectedForSync: selected.has(remoteId)
-        }
-      );
+      upsertCalendarRecord(connectionId, {
+        ...mapCalendarRecord(calendar, {
+          primaryCalendarId: state.primaryCalendarId
+        }),
+        selectedForSync: selected.has(remoteId)
+      });
     }
 
     const now = new Date();
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
+    const start = new Date(
+      now.getTime() - 30 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const end = new Date(
+      now.getTime() + 180 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const selectedCalendars = state.calendars.filter((calendar) =>
       selected.has(normalizeUrl(microsoftCalendarUrl(calendar.id)))
@@ -2451,7 +2611,9 @@ async function syncDiscoveredState(
   }
 
   if (state.mode !== "dav") {
-    throw new Error("Forge expected a DAV provider state for this writable calendar connection.");
+    throw new Error(
+      "Forge expected a DAV provider state for this writable calendar connection."
+    );
   }
 
   const selected = new Set(
@@ -2478,17 +2640,16 @@ async function syncDiscoveredState(
 
   for (const calendar of state.calendars) {
     const normalized = normalizeUrl(calendar.url);
-    upsertCalendarRecord(
-      connectionId,
-      {
-        ...mapCalendarRecord(calendar, { forgeCalendarUrl }),
-        selectedForSync: selected.has(normalized)
-      }
-    );
+    upsertCalendarRecord(connectionId, {
+      ...mapCalendarRecord(calendar, { forgeCalendarUrl }),
+      selectedForSync: selected.has(normalized)
+    });
   }
 
   const now = new Date();
-  const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const start = new Date(
+    now.getTime() - 30 * 24 * 60 * 60 * 1000
+  ).toISOString();
   const end = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString();
 
   for (const calendar of calendarsToSync) {
@@ -2501,10 +2662,12 @@ async function syncDiscoveredState(
       `[forge-calendar-sync] fetch_calendar_objects_start connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} ownership=${JSON.stringify(ownership)}`
     );
     if (credentials.provider === "google") {
-      const events = await fetchGoogleCalendarEvents(credentials, calendarUrl, {
-        start,
-        end
-      });
+      const events = await fetchGoogleCalendarEvents(
+        credentials,
+        calendarUrl,
+        normalizeTimezone(calendar.timezone),
+        { start, end }
+      );
       logForgeDebug(
         `[forge-calendar-sync] fetch_calendar_objects_complete connectionId=${JSON.stringify(connectionId)} provider=${JSON.stringify(credentials.provider)} calendarUrl=${JSON.stringify(calendarUrl)} objectCount=${JSON.stringify(events.length)}`
       );
@@ -2524,7 +2687,11 @@ async function syncDiscoveredState(
       );
 
       for (const object of objects) {
-        const mapped = mapDavObjectToEvents(normalizeUrl(calendar.url), object, ownership);
+        const mapped = mapDavObjectToEvents(
+          normalizeUrl(calendar.url),
+          object,
+          ownership
+        );
         for (const event of mapped) {
           upsertCalendarEventRecord(connectionId, event);
         }
@@ -2548,7 +2715,9 @@ function toStoredCredentials(
     );
   }
   if (input.provider === "macos_local") {
-    throw new Error("macOS local calendar connections use the dedicated creation path.");
+    throw new Error(
+      "macOS local calendar connections use the dedicated creation path."
+    );
   }
 
   if (input.provider === "apple") {
@@ -2582,18 +2751,23 @@ function credentialsMatch(
 
   if (existing.provider === "google" && incoming.provider === "google") {
     return (
-      normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username) &&
+      normalizeAccountIdentity(existing.username) ===
+        normalizeAccountIdentity(incoming.username) &&
       normalizeUrl(existing.serverUrl) === normalizeUrl(incoming.serverUrl)
     );
   }
 
   if (existing.provider === "apple" && incoming.provider === "apple") {
-    return normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username);
+    return (
+      normalizeAccountIdentity(existing.username) ===
+      normalizeAccountIdentity(incoming.username)
+    );
   }
 
   if (existing.provider === "caldav" && incoming.provider === "caldav") {
     return (
-      normalizeAccountIdentity(existing.username) === normalizeAccountIdentity(incoming.username) &&
+      normalizeAccountIdentity(existing.username) ===
+        normalizeAccountIdentity(incoming.username) &&
       normalizeUrl(existing.serverUrl) === normalizeUrl(incoming.serverUrl)
     );
   }
@@ -2678,11 +2852,13 @@ function findExistingForgeWriteTarget(options?: {
     ) {
       return false;
     }
-    return normalizeOptionalUrl(
-      typeof connection.config.forgeCalendarUrl === "string"
-        ? connection.config.forgeCalendarUrl
-        : null
-    ) !== null;
+    return (
+      normalizeOptionalUrl(
+        typeof connection.config.forgeCalendarUrl === "string"
+          ? connection.config.forgeCalendarUrl
+          : null
+      ) !== null
+    );
   });
 }
 
@@ -2723,7 +2899,9 @@ function toDiscoveryCredentials(
     );
   }
   if (input.provider === "macos_local") {
-    throw new Error("macOS local calendars are discovered from the dedicated local calendar flow.");
+    throw new Error(
+      "macOS local calendars are discovered from the dedicated local calendar flow."
+    );
   }
 
   if (input.provider === "apple") {
@@ -2867,9 +3045,13 @@ export async function createCalendarConnection(
       );
     }
 
-    const source = discovery.sources.find((entry) => entry.sourceId === input.sourceId);
+    const source = discovery.sources.find(
+      (entry) => entry.sourceId === input.sourceId
+    );
     if (!source) {
-      throw new Error("Forge could not find that macOS calendar source anymore. Discover again and retry.");
+      throw new Error(
+        "Forge could not find that macOS calendar source anymore. Discover again and retry."
+      );
     }
 
     const accountIdentityKey = accountIdentityKeyForMacOSSource({
@@ -2902,7 +3084,8 @@ export async function createCalendarConnection(
     let forgeCalendarUrl =
       input.forgeCalendarUrl?.trim() ||
       (!sharedWriteTarget
-        ? discoveredCalendars.find((calendar) => isForgeName(calendar.title))?.url
+        ? discoveredCalendars.find((calendar) => isForgeName(calendar.title))
+            ?.url
         : null) ||
       null;
     if (!forgeCalendarUrl && input.createForgeCalendar && !sharedWriteTarget) {
@@ -2982,7 +3165,12 @@ export async function createCalendarConnection(
   if (input.provider === "google") {
     pruneGoogleOauthSessions();
     const session = googleOauthSessions.get(input.authSessionId);
-    if (!session || session.status !== "authorized" || !session.discovery || !session.credentials) {
+    if (
+      !session ||
+      session.status !== "authorized" ||
+      !session.discovery ||
+      !session.credentials
+    ) {
       throw new Error(
         "Complete the Google sign-in flow before saving this Google Calendar connection."
       );
@@ -3012,14 +3200,18 @@ export async function createCalendarConnection(
 
     const state = await createProviderClient(session.credentials);
     if (state.mode !== "dav") {
-      throw new Error("Forge expected a writable DAV provider state for this Google Calendar connection.");
+      throw new Error(
+        "Forge expected a writable DAV provider state for this Google Calendar connection."
+      );
     }
     const sharedWriteTarget = findExistingForgeWriteTarget();
 
     let forgeCalendarUrl: string | null =
       input.forgeCalendarUrl?.trim() ||
       (!sharedWriteTarget
-        ? session.discovery.calendars.find((calendar) => calendar.isForgeCandidate)?.url
+        ? session.discovery.calendars.find(
+            (calendar) => calendar.isForgeCandidate
+          )?.url
         : null) ||
       null;
 
@@ -3055,7 +3247,9 @@ export async function createCalendarConnection(
       config: {
         serverUrl: session.discovery.serverUrl,
         selectedCalendarCount: storedCredentials.selectedCalendarUrls.length,
-        forgeCalendarUrl: normalizeOptionalUrl(storedCredentials.forgeCalendarUrl)
+        forgeCalendarUrl: normalizeOptionalUrl(
+          storedCredentials.forgeCalendarUrl
+        )
       },
       credentialsSecretId: secretId
     });
@@ -3084,7 +3278,12 @@ export async function createCalendarConnection(
   if (input.provider === "microsoft") {
     pruneMicrosoftOauthSessions();
     const session = microsoftOauthSessions.get(input.authSessionId);
-    if (!session || session.status !== "authorized" || !session.discovery || !session.credentials) {
+    if (
+      !session ||
+      session.status !== "authorized" ||
+      !session.discovery ||
+      !session.credentials
+    ) {
       throw new Error(
         "Complete the Microsoft sign-in flow before saving this Exchange Online connection."
       );
@@ -3158,7 +3357,10 @@ export async function createCalendarConnection(
   }
 
   const discoveryCredentials = toDiscoveryCredentials(input);
-  const existingConnection = findExistingCalendarConnection(discoveryCredentials, secrets);
+  const existingConnection = findExistingCalendarConnection(
+    discoveryCredentials,
+    secrets
+  );
   if (existingConnection) {
     throw new CalendarConnectionConflictError(
       `${existingConnection.label} is already connected for ${existingConnection.accountLabel || "this account"}. Remove it first if you want to reconnect with different settings.`,
@@ -3167,7 +3369,9 @@ export async function createCalendarConnection(
   }
   const state = await createProviderClient(discoveryCredentials);
   if (state.mode !== "dav") {
-    throw new Error("Forge expected a writable DAV provider state for this calendar connection.");
+    throw new Error(
+      "Forge expected a writable DAV provider state for this calendar connection."
+    );
   }
   const discovery = mapDiscoveryPayload(input.provider, state);
   const sharedWriteTarget = findExistingForgeWriteTarget();
@@ -3289,7 +3493,8 @@ export async function syncCalendarConnection(
     }
     const forgeCalendar = forgeCalendarUrl
       ? listCalendars(connectionId).find(
-          (entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendarUrl)
+          (entry) =>
+            normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendarUrl)
         )
       : null;
 
@@ -3315,10 +3520,14 @@ export async function syncCalendarConnection(
                 sourceId: credentials.sourceId,
                 sourceType: credentials.sourceType,
                 accountIdentityKey: credentials.accountIdentityKey,
-                forgeCalendarUrl: normalizeOptionalUrl(credentials.forgeCalendarUrl)
+                forgeCalendarUrl: normalizeOptionalUrl(
+                  credentials.forgeCalendarUrl
+                )
               }
             : {
-                forgeCalendarUrl: normalizeOptionalUrl(credentials.forgeCalendarUrl)
+                forgeCalendarUrl: normalizeOptionalUrl(
+                  credentials.forgeCalendarUrl
+                )
               })
       },
       lastSyncedAt: new Date().toISOString(),
@@ -3375,7 +3584,9 @@ export async function updateCalendarConnectionSelection(
     const state = await createProviderClient(credentials);
     const discoveredUrls = new Set(
       state.mode === "microsoft"
-        ? state.calendars.map((calendar) => normalizeUrl(microsoftCalendarUrl(calendar.id)))
+        ? state.calendars.map((calendar) =>
+            normalizeUrl(microsoftCalendarUrl(calendar.id))
+          )
         : state.calendars.map((calendar) => normalizeUrl(calendar.url))
     );
     const nextSelectedCalendarUrls = Array.from(
@@ -3383,7 +3594,9 @@ export async function updateCalendarConnectionSelection(
     );
     for (const url of nextSelectedCalendarUrls) {
       if (!discoveredUrls.has(url)) {
-        throw new Error(`Calendar ${url} is not available for this connection.`);
+        throw new Error(
+          `Calendar ${url} is not available for this connection.`
+        );
       }
     }
     credentials.selectedCalendarUrls = nextSelectedCalendarUrls;
@@ -3414,7 +3627,8 @@ export async function updateCalendarConnectionSelection(
     {
       provider: connection.provider,
       selectedCalendarCount:
-        input.selectedCalendarUrls?.length ?? credentials.selectedCalendarUrls.length
+        input.selectedCalendarUrls?.length ??
+        credentials.selectedCalendarUrls.length
     }
   );
 
@@ -3462,7 +3676,8 @@ function resolveDavCalendarFromLocalId(
   }
   return (
     state.calendars.find(
-      (entry) => normalizeUrl(entry.url) === normalizeUrl(localCalendar.remoteId)
+      (entry) =>
+        normalizeUrl(entry.url) === normalizeUrl(localCalendar.remoteId)
     ) ?? null
   );
 }
@@ -3477,7 +3692,8 @@ export async function syncForgeCalendarEvent(
   }
 
   const sourceMappings = listCalendarEventSources(eventId).filter(
-    (source) => source.connectionId && source.calendarId && source.syncState !== "deleted"
+    (source) =>
+      source.connectionId && source.calendarId && source.syncState !== "deleted"
   );
 
   if (sourceMappings.length > 0) {
@@ -3512,7 +3728,8 @@ export async function syncForgeCalendarEvent(
           provider: connection.provider,
           connectionId: connection.id,
           calendarId: source.calendarId,
-          remoteCalendarId: getCalendarById(source.calendarId!)?.remoteId ?? null,
+          remoteCalendarId:
+            getCalendarById(source.calendarId!)?.remoteId ?? null,
           remoteEventId: remoteEvent.eventId,
           remoteUid: remoteEvent.externalId,
           recurrenceInstanceId: remoteEvent.occurrenceDate,
@@ -3604,7 +3821,8 @@ export async function syncForgeCalendarEvent(
       provider: connection.provider,
       connectionId: connection.id,
       calendarId: event.preferred_calendar_id,
-      remoteCalendarId: getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
+      remoteCalendarId:
+        getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
       remoteEventId: remoteEvent.eventId,
       remoteUid: remoteEvent.externalId,
       recurrenceInstanceId: remoteEvent.occurrenceDate,
@@ -3618,7 +3836,9 @@ export async function syncForgeCalendarEvent(
     return;
   }
   if (state.mode !== "dav") {
-    throw new Error(`Connection ${connection.id} is read-only, so Forge cannot publish this event there.`);
+    throw new Error(
+      `Connection ${connection.id} is read-only, so Forge cannot publish this event there.`
+    );
   }
   const calendar = resolveDavCalendarFromLocalId(
     state,
@@ -3648,7 +3868,8 @@ export async function syncForgeCalendarEvent(
     provider: connection.provider,
     connectionId: connection.id,
     calendarId: event.preferred_calendar_id,
-    remoteCalendarId: getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
+    remoteCalendarId:
+      getCalendarById(event.preferred_calendar_id)?.remoteId ?? null,
     remoteEventId: event.id,
     remoteUid: event.id,
     remoteHref: remoteUrl,
@@ -3658,11 +3879,111 @@ export async function syncForgeCalendarEvent(
   });
 }
 
+export type CalendarProjectionResult = {
+  state: "not_requested" | "synced" | "error";
+  code: string | null;
+  message: string | null;
+  retryable: boolean;
+};
+
+function readProviderErrorStatus(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+  const record = error as Record<string, unknown>;
+  if (typeof record.status === "number") {
+    return record.status;
+  }
+  if (typeof record.statusCode === "number") {
+    return record.statusCode;
+  }
+  if (typeof record.response === "object" && record.response !== null) {
+    const responseStatus = (record.response as Record<string, unknown>).status;
+    return typeof responseStatus === "number" ? responseStatus : null;
+  }
+  return null;
+}
+
+export function classifyCalendarProjectionError(
+  error: unknown
+): CalendarProjectionResult {
+  const status = readProviderErrorStatus(error);
+  const rawMessage =
+    error instanceof Error ? error.message : "Calendar provider update failed.";
+  const normalizedMessage = rawMessage.toLowerCase();
+  if (status === 409 || status === 412 || normalizedMessage.includes("etag")) {
+    return {
+      state: "error",
+      code: "calendar_provider_conflict",
+      message:
+        "Forge saved the local event, but the provider copy changed first. Sync the calendar, review the latest provider version, and retry.",
+      retryable: false
+    };
+  }
+  if (
+    status === 401 ||
+    status === 403 ||
+    normalizedMessage.includes("reconnect") ||
+    normalizedMessage.includes("unauthorized")
+  ) {
+    return {
+      state: "error",
+      code: "calendar_provider_auth_required",
+      message:
+        "Forge saved the local event, but the provider connection needs attention. Reconnect it in Calendar settings before retrying the projection.",
+      retryable: false
+    };
+  }
+  if (
+    normalizedMessage.includes("read-only") ||
+    normalizedMessage.includes("cannot publish")
+  ) {
+    return {
+      state: "error",
+      code: "calendar_provider_read_only",
+      message:
+        "Forge saved the local event, but the selected provider calendar is read-only. Choose a writable calendar or keep the event in Forge only.",
+      retryable: false
+    };
+  }
+  return {
+    state: "error",
+    code: "calendar_provider_unavailable",
+    message:
+      "Forge saved the local event, but could not update the provider copy. The local record is intact; retry after the provider connection is available.",
+    retryable: true
+  };
+}
+
 export async function pushCalendarEventUpdate(
   eventId: string,
   secrets: SecretsManager
-) {
-  await syncForgeCalendarEvent(eventId, secrets);
+): Promise<CalendarProjectionResult> {
+  const event = getCalendarEventStorageRecord(eventId);
+  const providerRequested = Boolean(
+    event?.preferred_connection_id ||
+    listCalendarEventSources(eventId).length > 0
+  );
+  if (!providerRequested) {
+    return {
+      state: "not_requested",
+      code: null,
+      message: null,
+      retryable: false
+    };
+  }
+  try {
+    await syncForgeCalendarEvent(eventId, secrets);
+    return {
+      state: "synced",
+      code: null,
+      message: null,
+      retryable: false
+    };
+  } catch (error) {
+    markCalendarEventSourcesSyncState(eventId, "error");
+    return classifyCalendarProjectionError(error);
+  }
 }
 
 export async function deleteCalendarEventProjection(
@@ -3670,7 +3991,8 @@ export async function deleteCalendarEventProjection(
   secrets: SecretsManager
 ) {
   const sources = listCalendarEventSources(eventId).filter(
-    (source) => source.connectionId && source.calendarId && source.syncState !== "deleted"
+    (source) =>
+      source.connectionId && source.calendarId && source.syncState !== "deleted"
   );
   for (const source of sources) {
     if (!source.calendarId) {
@@ -3692,7 +4014,9 @@ export async function deleteCalendarEventProjection(
       source.calendarId,
       connection.id
     );
-    const localCalendar = source.calendarId ? getCalendarById(source.calendarId) : null;
+    const localCalendar = source.calendarId
+      ? getCalendarById(source.calendarId)
+      : null;
     if (!calendar || localCalendar?.canWrite === false) {
       continue;
     }

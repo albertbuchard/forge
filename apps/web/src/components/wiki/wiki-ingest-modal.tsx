@@ -43,6 +43,46 @@ import {
 import { cn } from "@/lib/utils";
 
 type IngestMode = "files" | "url" | "text";
+export const MAX_WIKI_INGEST_FILES = 25;
+
+export function validateWikiIngestUrlInput(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return "Enter a valid HTTP or HTTPS URL.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "Wiki URL ingest accepts only HTTP or HTTPS URLs.";
+  }
+  if (url.username || url.password) {
+    return "Remove embedded credentials from the URL before ingesting it.";
+  }
+  return null;
+}
+
+export function mergeWikiIngestFiles(current: File[], incoming: File[]) {
+  const files = [...current];
+  const seen = new Set(
+    current.map((file) => `${file.name}:${file.size}:${file.lastModified}`)
+  );
+  let duplicateCount = 0;
+  let overflowCount = 0;
+  for (const file of incoming) {
+    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    if (seen.has(key)) {
+      duplicateCount += 1;
+      continue;
+    }
+    if (files.length >= MAX_WIKI_INGEST_FILES) {
+      overflowCount += 1;
+      continue;
+    }
+    seen.add(key);
+    files.push(file);
+  }
+  return { files, duplicateCount, overflowCount };
+}
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "processing"]);
 const STALE_INGEST_RESUME_THRESHOLD_MS = 15_000;
@@ -840,6 +880,26 @@ export function WikiIngestModal({
     usableLlmProfiles.find((profile) => profile.id === llmProfileId) ??
     usableLlmProfiles[0] ??
     null;
+  const totalFileBytes = useMemo(
+    () => files.reduce((total, file) => total + file.size, 0),
+    [files]
+  );
+
+  const addFiles = (incoming: File[], replace = false) => {
+    const merged = mergeWikiIngestFiles(replace ? [] : files, incoming);
+    setFiles(merged.files);
+    if (merged.overflowCount > 0) {
+      setFormError(
+        `This batch is limited to ${MAX_WIKI_INGEST_FILES} files. ${merged.overflowCount} file${merged.overflowCount === 1 ? " was" : "s were"} not added.`
+      );
+    } else if (merged.duplicateCount > 0) {
+      setFormError(
+        `${merged.duplicateCount} duplicate file${merged.duplicateCount === 1 ? " was" : "s were"} not added.`
+      );
+    } else {
+      setFormError(null);
+    }
+  };
 
   const jobQuery = useQuery({
     queryKey: ["forge-wiki-ingest-job", selectedJobId],
@@ -923,37 +983,38 @@ export function WikiIngestModal({
 
   const createJobMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedLlmProfile) {
-        throw new Error(
-          "Set up an OpenAI wiki ingest profile first. Forge now requires an LLM profile before auto-ingest can turn source material into draft pages and entities."
-        );
-      }
       if (mode === "files") {
         if (files.length === 0) {
           throw new Error("Select at least one file to ingest.");
+        }
+        if (files.length > MAX_WIKI_INGEST_FILES) {
+          throw new Error(
+            `Select at most ${MAX_WIKI_INGEST_FILES} files per ingest batch.`
+          );
         }
         return createWikiIngestUploadJob({
           files,
           spaceId: selectedSpaceId || undefined,
           titleHint: titleHint.trim() || undefined,
-          llmProfileId: selectedLlmProfile.id,
-          parseStrategy,
+          llmProfileId: selectedLlmProfile?.id,
+          parseStrategy: selectedLlmProfile ? parseStrategy : "text_only",
           createAsKind: "wiki",
           linkedEntityHints
         });
       }
 
       if (mode === "url") {
-        if (!urlValue.trim()) {
-          throw new Error("Enter a URL to ingest.");
+        const urlError = validateWikiIngestUrlInput(urlValue);
+        if (urlError) {
+          throw new Error(urlError);
         }
         return createWikiIngestJob({
           spaceId: selectedSpaceId || undefined,
           titleHint: titleHint.trim() || undefined,
           sourceKind: "url",
           sourceUrl: urlValue.trim(),
-          llmProfileId: selectedLlmProfile.id,
-          parseStrategy,
+          llmProfileId: selectedLlmProfile?.id,
+          parseStrategy: selectedLlmProfile ? parseStrategy : "text_only",
           createAsKind: "wiki",
           linkedEntityHints
         });
@@ -968,8 +1029,8 @@ export function WikiIngestModal({
         sourceKind: "raw_text",
         sourceText: rawTextValue,
         mimeType: "text/plain",
-        llmProfileId: selectedLlmProfile.id,
-        parseStrategy,
+        llmProfileId: selectedLlmProfile?.id,
+        parseStrategy: selectedLlmProfile ? parseStrategy : "text_only",
         createAsKind: "wiki",
         linkedEntityHints
       });
@@ -1283,7 +1344,7 @@ export function WikiIngestModal({
                             const dropped = Array.from(
                               event.dataTransfer.files
                             );
-                            setFiles((current) => [...current, ...dropped]);
+                            addFiles(dropped);
                           }}
                         >
                           <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)]">
@@ -1303,20 +1364,32 @@ export function WikiIngestModal({
                               type="file"
                               multiple
                               className="hidden"
-                              onChange={(event) =>
-                                setFiles(Array.from(event.target.files ?? []))
-                              }
+                              onChange={(event) => {
+                                addFiles(
+                                  Array.from(event.target.files ?? []),
+                                  true
+                                );
+                                event.currentTarget.value = "";
+                              }}
                             />
                           </label>
                           {files.length > 0 ? (
                             <div className="mt-5 grid gap-2 text-left">
+                              <div
+                                className="text-xs text-[var(--ui-ink-faint)]"
+                                aria-live="polite"
+                              >
+                                {files.length}/{MAX_WIKI_INGEST_FILES} files ·{" "}
+                                {Math.max(1, Math.round(totalFileBytes / 1024))}{" "}
+                                KB total
+                              </div>
                               {files.map((file) => (
                                 <div
                                   key={`${file.name}-${file.size}-${file.lastModified}`}
                                   className="flex items-center justify-between gap-3 rounded-[18px] border ${INGEST_PANEL_CLASS} px-4 py-3 text-sm text-[var(--ui-ink-medium)]"
                                 >
                                   <span className="truncate">{file.name}</span>
-                                  <span className="shrink-0 text-xs text-[var(--ui-ink-faint)]">
+                                  <span className="ml-auto shrink-0 text-xs text-[var(--ui-ink-faint)]">
                                     {file.name
                                       .toLowerCase()
                                       .endsWith(".zip") ? (
@@ -1328,6 +1401,26 @@ export function WikiIngestModal({
                                       `${Math.max(1, Math.round(file.size / 1024))} KB`
                                     )}
                                   </span>
+                                  <button
+                                    type="button"
+                                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
+                                    aria-label={`Remove ${file.name}`}
+                                    onClick={() =>
+                                      setFiles((current) =>
+                                        current.filter(
+                                          (entry) =>
+                                            !(
+                                              entry.name === file.name &&
+                                              entry.size === file.size &&
+                                              entry.lastModified ===
+                                                file.lastModified
+                                            )
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <X className="size-3.5" />
+                                  </button>
                                 </div>
                               ))}
                             </div>
@@ -1337,6 +1430,7 @@ export function WikiIngestModal({
 
                       {mode === "url" ? (
                         <Input
+                          type="url"
                           value={urlValue}
                           onChange={(event) => setUrlValue(event.target.value)}
                           placeholder="https://example.com/source"
@@ -1366,10 +1460,10 @@ export function WikiIngestModal({
                         </div>
                         <div className="min-w-0">
                           <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--warning)]">
-                            OpenAI setup required for smart ingest
+                            Optional model processing is unavailable
                           </div>
                           <div className="mt-2 text-lg font-semibold text-[var(--ui-ink-strong)]">
-                            Forge can only do a raw import without OpenAI
+                            Forge will preserve a direct source import
                           </div>
                           <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-medium)]">
                             Without an OpenAI ingest profile, Forge cannot
@@ -1379,9 +1473,9 @@ export function WikiIngestModal({
                             no structured synthesis.
                           </div>
                           <div className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                            Set up the API key, model, thinking, and verbosity
-                            first, then come back here to build real draft pages
-                            and reviewable entity proposals.
+                            Set up a model profile when you want generated page
+                            splits and reviewable entity proposals. Direct
+                            source ingest remains available now.
                           </div>
                         </div>
                       </div>
@@ -1547,7 +1641,6 @@ export function WikiIngestModal({
                     className="min-h-12"
                     pending={createJobMutation.isPending}
                     pendingLabel="Starting ingest"
-                    disabled={!selectedLlmProfile}
                     onClick={() => void createJobMutation.mutateAsync()}
                   >
                     <Sparkles className="size-4" />

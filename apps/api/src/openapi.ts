@@ -1159,6 +1159,21 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const calendarProjectionResult = {
+    type: "object",
+    additionalProperties: false,
+    required: ["state", "code", "message", "retryable"],
+    properties: {
+      state: {
+        type: "string",
+        enum: ["not_requested", "synced", "error"]
+      },
+      code: nullable({ type: "string" }),
+      message: nullable({ type: "string" }),
+      retryable: { type: "boolean" }
+    }
+  };
+
   const workBlockTemplate = {
     type: "object",
     additionalProperties: false,
@@ -1173,6 +1188,7 @@ export function buildOpenApiDocument() {
       "endMinute",
       "startsOn",
       "endsOn",
+      "exclusionDates",
       "blockingState",
       "createdAt",
       "updatedAt"
@@ -1198,6 +1214,7 @@ export function buildOpenApiDocument() {
       endMinute: { type: "integer" },
       startsOn: nullable({ type: "string", format: "date" }),
       endsOn: nullable({ type: "string", format: "date" }),
+      exclusionDates: arrayOf({ type: "string", format: "date" }),
       blockingState: { type: "string", enum: ["allowed", "blocked"] },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
@@ -1368,6 +1385,10 @@ export function buildOpenApiDocument() {
       "status",
       "polarity",
       "frequency",
+      "timezone",
+      "dayBoundaryMode",
+      "effectiveTimezone",
+      "currentDateKey",
       "targetCount",
       "weekDays",
       "linkedGoalIds",
@@ -1400,6 +1421,18 @@ export function buildOpenApiDocument() {
       status: { type: "string", enum: ["active", "paused", "archived"] },
       polarity: { type: "string", enum: ["positive", "negative"] },
       frequency: { type: "string", enum: ["daily", "weekly"] },
+      timezone: {
+        type: "string",
+        description: "IANA timezone used as the habit's home day boundary."
+      },
+      dayBoundaryMode: {
+        type: "string",
+        enum: ["fixed", "travel"],
+        description:
+          "Fixed keeps the home timezone while traveling; travel follows a valid client timezone."
+      },
+      effectiveTimezone: { type: "string" },
+      currentDateKey: { type: "string", format: "date" },
       targetCount: { type: "integer" },
       weekDays: arrayOf({ type: "integer" }),
       linkedGoalIds: arrayOf({ type: "string" }),
@@ -2337,6 +2370,11 @@ export function buildOpenApiDocument() {
     required: ["status"],
     properties: {
       dateKey: { type: "string", format: "date", default: "2026-04-16" },
+      timezone: {
+        type: "string",
+        description:
+          "Current IANA device timezone. Used only by habits configured to follow travel."
+      },
       status: { type: "string", enum: ["done", "missed"] },
       note: { type: "string", default: "" },
       description: {
@@ -6654,16 +6692,39 @@ export function buildOpenApiDocument() {
           "travel_car",
           "travel_boat",
           "travel_trip",
+          "travel_day",
+          "stay",
+          "lodging",
+          "holiday",
+          "vacation",
+          "visit",
+          "move",
+          "festival",
+          "conference",
+          "retreat",
           "concert",
           "cinema",
+          "meal",
+          "party",
+          "ceremony",
           "date",
           "friends",
           "family",
           "work_milestone",
+          "work_phase",
           "thesis_milestone",
+          "creative_work",
+          "class_course",
+          "exam",
+          "deadline",
           "medical",
+          "health_episode",
+          "therapy",
           "administrative",
+          "legal_financial",
+          "errand",
           "celebration",
+          "memory",
           "custom"
         ]
       },
@@ -6755,13 +6816,34 @@ export function buildOpenApiDocument() {
   const lifeEventTimelinePayload = {
     type: "object",
     additionalProperties: false,
-    required: ["events", "now", "nextLifeEventId", "limit", "offset"],
+    required: [
+      "events",
+      "now",
+      "nextLifeEventId",
+      "limit",
+      "offset",
+      "total",
+      "hasMore",
+      "counts"
+    ],
     properties: {
       events: arrayOf({ $ref: "#/components/schemas/LifeEvent" }),
       now: { type: "string", format: "date-time" },
       nextLifeEventId: nullable({ type: "string" }),
       limit: { type: "integer", minimum: 1, maximum: 500 },
-      offset: { type: "integer", minimum: 0 }
+      offset: { type: "integer", minimum: 0 },
+      total: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" },
+      counts: {
+        type: "object",
+        additionalProperties: false,
+        required: ["past", "current", "upcoming"],
+        properties: {
+          past: { type: "integer", minimum: 0 },
+          current: { type: "integer", minimum: 0 },
+          upcoming: { type: "integer", minimum: 0 }
+        }
+      }
     }
   };
 
@@ -6967,13 +7049,58 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const artifactSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "title",
+      "shortDescription",
+      "originalFileName",
+      "byteSize",
+      "contentProtection",
+      "detectedExtension",
+      "formatFamily",
+      "sourceKind",
+      "sourceLabel",
+      "artifactState",
+      "dangerScore",
+      "dangerLevel",
+      "downloadPolicy",
+      "links",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: artifact.properties.id,
+      title: artifact.properties.title,
+      shortDescription: artifact.properties.shortDescription,
+      originalFileName: artifact.properties.originalFileName,
+      byteSize: artifact.properties.byteSize,
+      contentProtection: artifactContentProtection,
+      detectedExtension: artifact.properties.detectedExtension,
+      formatFamily: artifact.properties.formatFamily,
+      sourceKind: artifact.properties.sourceKind,
+      sourceLabel: artifact.properties.sourceLabel,
+      artifactState: artifact.properties.artifactState,
+      dangerScore: artifact.properties.dangerScore,
+      dangerLevel: artifact.properties.dangerLevel,
+      downloadPolicy: artifact.properties.downloadPolicy,
+      links: artifact.properties.links,
+      createdAt: artifact.properties.createdAt,
+      updatedAt: artifact.properties.updatedAt
+    },
+    description:
+      "Compact artifact metadata for bounded list responses. Read /api/v1/artifacts/{id} for full hashes, storage metadata, scanner evidence, enrichment, and user metadata."
+  };
+
   const artifactListResponse = {
     type: "object",
     required: ["artifacts", "total", "limit", "offset", "hasMore"],
     properties: {
-      artifacts: arrayOf({ $ref: "#/components/schemas/Artifact" }),
+      artifacts: arrayOf({ $ref: "#/components/schemas/ArtifactSummary" }),
       total: { type: "integer", minimum: 0 },
-      limit: { type: "integer", minimum: 1, maximum: 500 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
       offset: { type: "integer", minimum: 0 },
       hasMore: { type: "boolean" }
     }
@@ -7206,6 +7333,8 @@ export function buildOpenApiDocument() {
       "inputs",
       "context",
       "conversationId",
+      "retryOfRunId",
+      "flowSnapshot",
       "result",
       "error",
       "createdAt",
@@ -7220,6 +7349,28 @@ export function buildOpenApiDocument() {
       inputs: { type: "object", additionalProperties: true },
       context: { type: "object", additionalProperties: true },
       conversationId: nullable({ type: "string" }),
+      retryOfRunId: nullable({ type: "string" }),
+      flowSnapshot: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "title",
+          "updatedAt",
+          "graph",
+          "publicInputs",
+          "publishedOutputs"
+        ],
+        properties: {
+          title: { type: "string" },
+          updatedAt: { type: "string", format: "date-time" },
+          graph: { type: "object", additionalProperties: true },
+          publicInputs: arrayOf({ type: "object", additionalProperties: true }),
+          publishedOutputs: arrayOf({
+            type: "object",
+            additionalProperties: true
+          })
+        }
+      }),
       result: nullable({ type: "object", additionalProperties: true }),
       error: nullable({ type: "string" }),
       createdAt: { type: "string", format: "date-time" },
@@ -7227,11 +7378,99 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workbenchRunSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "connectorId",
+      "mode",
+      "status",
+      "conversationId",
+      "retryOfRunId",
+      "outputPreview",
+      "result",
+      "hasResult",
+      "error",
+      "flowUpdatedAt",
+      "createdAt",
+      "completedAt"
+    ],
+    properties: {
+      id: { type: "string", minLength: 1 },
+      connectorId: { type: "string", minLength: 1 },
+      mode: { type: "string", enum: ["run", "chat"] },
+      status: { type: "string", enum: ["running", "completed", "failed"] },
+      conversationId: nullable({ type: "string" }),
+      retryOfRunId: nullable({ type: "string" }),
+      outputPreview: { type: "string", maxLength: 332 },
+      result: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: ["primaryText"],
+        properties: {
+          primaryText: { type: "string", maxLength: 332 }
+        }
+      }),
+      hasResult: { type: "boolean" },
+      error: nullable({ type: "string", maxLength: 512 }),
+      flowUpdatedAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      completedAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
+  const workbenchReadMetadata = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "contentType",
+      "originalBytes",
+      "returnedBytes",
+      "redacted",
+      "redactedPaths",
+      "truncated"
+    ],
+    properties: {
+      contentType: { type: "string", enum: ["text", "json", "mixed"] },
+      originalBytes: { type: "integer", minimum: 0 },
+      returnedBytes: { type: "integer", minimum: 0 },
+      redacted: { type: "boolean" },
+      redactedPaths: arrayOf({ type: "string" }),
+      truncated: { type: "boolean" }
+    }
+  };
+
+  const workbenchNodeResultSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "nodeId",
+      "nodeType",
+      "label",
+      "outputKeys",
+      "outputPreview",
+      "hasPayload",
+      "error",
+      "timingMs"
+    ],
+    properties: {
+      nodeId: { type: "string" },
+      nodeType: { type: "string" },
+      label: { type: "string" },
+      outputKeys: arrayOf({ type: "string" }),
+      outputPreview: { type: "string", maxLength: 332 },
+      hasPayload: { type: "boolean" },
+      error: nullable({ type: "string" }),
+      timingMs: nullable({ type: "integer", minimum: 0 })
+    }
+  };
+
   const workbenchRunPage = {
     type: "object",
     required: ["runs", "total", "limit", "offset", "hasMore"],
     properties: {
-      runs: arrayOf({ $ref: "#/components/schemas/WorkbenchRun" }),
+      runs: arrayOf({ $ref: "#/components/schemas/WorkbenchRunSummary" }),
       total: { type: "integer", minimum: 0 },
       limit: { type: "integer", minimum: 1, maximum: 100 },
       offset: { type: "integer", minimum: 0 },
@@ -7247,6 +7486,25 @@ export function buildOpenApiDocument() {
     explode: true,
     description:
       "Optional repeated user scope. Mutations use the first selected user. Single-record reads use the first selected user when present and otherwise retain unrestricted operator lookup. A record-owner mismatch returns 404; a scoped token requesting users outside its policy returns 403."
+  };
+
+  const nutritionMutationUserIdsParameter = {
+    name: "userIds",
+    in: "query",
+    schema: { type: "array", items: { type: "string" } },
+    style: "form",
+    explode: true,
+    description:
+      "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+  };
+
+  const nutritionIdempotencyKeyParameter = {
+    name: "Idempotency-Key",
+    in: "header",
+    required: false,
+    schema: { type: "string", minLength: 1, maxLength: 128 },
+    description:
+      "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
   };
 
   const movementIdParameter = {
@@ -7302,6 +7560,7 @@ export function buildOpenApiDocument() {
         CalendarEventSource: calendarEventSource,
         CalendarEventLink: calendarEventLink,
         CalendarEvent: calendarEvent,
+        CalendarProjectionResult: calendarProjectionResult,
         WorkBlockTemplate: workBlockTemplate,
         WorkBlockInstance: workBlockInstance,
         TaskTimebox: taskTimebox,
@@ -7383,6 +7642,7 @@ export function buildOpenApiDocument() {
         ArtifactScanResult: artifactScanResult,
         ArtifactContentProtection: artifactContentProtection,
         Artifact: artifact,
+        ArtifactSummary: artifactSummary,
         ArtifactListResponse: artifactListResponse,
         ArtifactUploadInput: artifactUploadInput,
         ArtifactPasswordDownloadInput: artifactPasswordDownloadInput,
@@ -7395,7 +7655,10 @@ export function buildOpenApiDocument() {
         ArtifactVersionPage: artifactVersionPage,
         ArtifactAuditEventPage: artifactAuditEventPage,
         WorkbenchRun: workbenchRun,
+        WorkbenchRunSummary: workbenchRunSummary,
         WorkbenchRunPage: workbenchRunPage,
+        WorkbenchReadMetadata: workbenchReadMetadata,
+        WorkbenchNodeResultSummary: workbenchNodeResultSummary,
         HealthLink: healthLink,
         SleepSession: sleepSession,
         WorkoutSession: workoutSession,
@@ -7456,9 +7719,13 @@ export function buildOpenApiDocument() {
         get: {
           summary: "List artifact metadata",
           description:
-            "Lists stored file artifacts and their metadata, scan state, danger score, and generic entity links. This route does not return file bytes.",
+            "Lists compact artifact metadata, danger state, and generic entity links. Read one artifact for full scanner, enrichment, hash, storage, provenance, and user metadata. This route does not return file bytes.",
           parameters: [
-            { name: "query", in: "query", schema: { type: "string" } },
+            {
+              name: "query",
+              in: "query",
+              schema: { type: "string", maxLength: 200 }
+            },
             {
               name: "artifactState",
               in: "query",
@@ -7506,7 +7773,12 @@ export function buildOpenApiDocument() {
             {
               name: "limit",
               in: "query",
-              schema: { type: "integer", minimum: 1, maximum: 500 }
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 100
+              }
             },
             {
               name: "offset",
@@ -7936,6 +8208,13 @@ export function buildOpenApiDocument() {
               name: "to",
               in: "query",
               schema: { type: "string", format: "date-time" }
+            },
+            {
+              name: "q",
+              in: "query",
+              schema: { type: "string", maxLength: 200 },
+              description:
+                "Search titles, descriptions, event types, places, origins, and destinations before pagination."
             },
             {
               name: "eventTypes",
@@ -8551,6 +8830,7 @@ export function buildOpenApiDocument() {
         patch: {
           tags: ["Health"],
           summary: "Update nutrition and weight-loss targets",
+          parameters: [nutritionMutationUserIdsParameter],
           requestBody: {
             content: {
               "application/json": {
@@ -8577,6 +8857,7 @@ export function buildOpenApiDocument() {
           tags: ["Health"],
           summary:
             "Set or clear the user-edited active calorie allowance for one weight-loss day",
+          parameters: [nutritionMutationUserIdsParameter],
           requestBody: {
             content: {
               "application/json": {
@@ -8695,6 +8976,7 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a nutrition food log",
+          parameters: [nutritionMutationUserIdsParameter],
           requestBody: {
             content: {
               "application/json": {
@@ -8720,6 +9002,15 @@ export function buildOpenApiDocument() {
         patch: {
           tags: ["Health"],
           summary: "Patch a nutrition food log",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            nutritionMutationUserIdsParameter
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -8736,6 +9027,15 @@ export function buildOpenApiDocument() {
         delete: {
           tags: ["Health"],
           summary: "Delete a nutrition food log",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            nutritionMutationUserIdsParameter
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -8753,6 +9053,7 @@ export function buildOpenApiDocument() {
           tags: ["Health"],
           summary:
             "Parse a food log through Forge's openai-codex ChatGPT subscription connection",
+          parameters: [nutritionMutationUserIdsParameter],
           requestBody: {
             content: {
               "application/json": {
@@ -8822,6 +9123,10 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a body-composition check-in",
+          parameters: [
+            nutritionMutationUserIdsParameter,
+            nutritionIdempotencyKeyParameter
+          ],
           responses: {
             "201": jsonResponse(
               {
@@ -8840,6 +9145,10 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create an aesthetic appearance check-in",
+          parameters: [
+            nutritionMutationUserIdsParameter,
+            nutritionIdempotencyKeyParameter
+          ],
           responses: {
             "201": jsonResponse(
               {
@@ -8858,6 +9167,10 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a subjective food-effect check-in",
+          parameters: [
+            nutritionMutationUserIdsParameter,
+            nutritionIdempotencyKeyParameter
+          ],
           responses: {
             "201": jsonResponse(
               {
@@ -8876,6 +9189,10 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a gut-health food-effect check-in",
+          parameters: [
+            nutritionMutationUserIdsParameter,
+            nutritionIdempotencyKeyParameter
+          ],
           responses: {
             "201": jsonResponse(
               {
@@ -8929,7 +9246,7 @@ export function buildOpenApiDocument() {
               style: "form",
               explode: true,
               description:
-                "Optional selected-user scope. The first selected user owns the new experiment unless userId is provided in the body."
+                "Select exactly one Forge user. A body userId must match this selection, and scoped tokens may select only an allowed user."
             }
           ],
           requestBody: {
@@ -8968,7 +9285,8 @@ export function buildOpenApiDocument() {
               in: "path",
               required: true,
               schema: { type: "string" }
-            }
+            },
+            nutritionMutationUserIdsParameter
           ],
           requestBody: {
             required: true,
@@ -12824,14 +13142,17 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Create a native Forge calendar event",
           description:
-            "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
+            "Forge stores the event canonically first, then projects it to a connected writable calendar when selected. Provider failures do not discard the local record; inspect projection for the exact outcome.",
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
-                required: ["event"],
+                required: ["event", "projection"],
                 properties: {
-                  event: { $ref: "#/components/schemas/CalendarEvent" }
+                  event: { $ref: "#/components/schemas/CalendarEvent" },
+                  projection: {
+                    $ref: "#/components/schemas/CalendarProjectionResult"
+                  }
                 }
               },
               "Created calendar event"
@@ -12859,13 +13180,18 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update a Forge calendar event and sync remote projections",
+          description:
+            "Mirrored provider events are read-only. Recurring provider records require an explicit recurrenceEditScope; whole-series edits from an expanded occurrence are rejected. Forge-owned event changes return a projection outcome so provider conflicts and outages are not reported as lost local saves.",
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["event"],
+                required: ["event", "projection"],
                 properties: {
-                  event: { $ref: "#/components/schemas/CalendarEvent" }
+                  event: { $ref: "#/components/schemas/CalendarEvent" },
+                  projection: {
+                    $ref: "#/components/schemas/CalendarProjectionResult"
+                  }
                 }
               },
               "Updated calendar event"
@@ -13066,6 +13392,16 @@ export function buildOpenApiDocument() {
       "/api/v1/habits": {
         get: {
           summary: "List habits with current streak and due-today state",
+          parameters: [
+            {
+              in: "query",
+              name: "timezone",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Current IANA device timezone for habits that follow travel."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -14692,6 +15028,15 @@ export function buildOpenApiDocument() {
       "/api/v1/reviews/weekly": {
         get: {
           summary: "Get the weekly review payload",
+          parameters: [
+            {
+              in: "query",
+              name: "timeZone",
+              schema: { type: "string" },
+              description:
+                "IANA timezone used to derive the local Monday-through-Sunday review window."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -14709,6 +15054,15 @@ export function buildOpenApiDocument() {
       "/api/v1/reviews/weekly/finalize": {
         post: {
           summary: "Finalize the current weekly review cycle",
+          parameters: [
+            {
+              in: "query",
+              name: "timeZone",
+              schema: { type: "string" },
+              description:
+                "IANA timezone used to select the local review cycle being finalized."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {

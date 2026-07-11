@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FlowChoiceGrid,
   FlowField,
@@ -64,6 +64,8 @@ export function GoalDialog({
   const defaultUser =
     safeUsers.find((user) => user.id === defaultUserId) ?? null;
   const [draft, setDraft] = useState<GoalMutationInput>(defaultGoalValues);
+  const [submitting, setSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, string | undefined>
@@ -83,6 +85,8 @@ export function GoalDialog({
     }
     setSubmitError(null);
     setFieldErrors({});
+    setSubmitting(false);
+    submitInFlightRef.current = false;
     setDraft(
       editingGoal
         ? goalToFormValues(editingGoal)
@@ -293,7 +297,7 @@ export function GoalDialog({
       onChange={setDraft}
       draftPersistenceKey={editingGoal ? `goal.${editingGoal.id}` : "goal.new"}
       steps={steps}
-      pending={pending}
+      pending={pending || submitting}
       pendingLabel={
         editingGoal
           ? t("common.dialogs.goal.save")
@@ -306,6 +310,9 @@ export function GoalDialog({
       }
       error={submitError}
       onSubmit={async () => {
+        if (submitInFlightRef.current) {
+          return;
+        }
         setSubmitError(null);
         const parsed = goalMutationSchema.safeParse(draft);
         if (!parsed.success) {
@@ -317,6 +324,8 @@ export function GoalDialog({
         }
 
         setFieldErrors({});
+        submitInFlightRef.current = true;
+        setSubmitting(true);
 
         try {
           await onSubmit(parsed.data, editingGoal?.id);
@@ -328,6 +337,9 @@ export function GoalDialog({
               ? error.message
               : t("common.dialogs.goal.submitError")
           );
+        } finally {
+          submitInFlightRef.current = false;
+          setSubmitting(false);
         }
       }}
     />

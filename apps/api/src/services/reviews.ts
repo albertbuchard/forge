@@ -4,59 +4,119 @@ import { listHabits } from "../repositories/habits.js";
 import { listTasks } from "../repositories/tasks.js";
 import { getWeeklyReviewClosure } from "../repositories/weekly-reviews.js";
 import { buildGamificationProfile } from "./gamification.js";
-import { weeklyReviewPayloadSchema, type Task, type WeeklyReviewPayload } from "../types.js";
+import {
+  weeklyReviewPayloadSchema,
+  type Task,
+  type WeeklyReviewPayload
+} from "../types.js";
 
-export function startOfWeek(date: Date): Date {
-  const clone = new Date(date);
-  const day = clone.getDay();
-  const delta = day === 0 ? -6 : 1 - day;
-  clone.setDate(clone.getDate() + delta);
-  clone.setHours(0, 0, 0, 0);
-  return clone;
+function resolveTimeZone(timeZone?: string): string {
+  const candidate = timeZone?.trim();
+  if (!candidate) {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(0);
+    return candidate;
+  } catch {
+    return "UTC";
+  }
 }
 
-function addDays(date: Date, days: number) {
-  const clone = new Date(date);
-  clone.setDate(clone.getDate() + days);
-  return clone;
+function toTimeZoneDateKey(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value])
+  );
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
-function formatRange(start: Date, end: Date) {
-  return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-}
-
-function toDateOnly(date: Date) {
+function addDateKeyDays(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
-function dailyBuckets(tasks: Task[], start: Date) {
+function formatDateKey(dateKey: string): string {
+  return new Date(`${dateKey}T12:00:00.000Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+}
+
+function formatRange(startDateKey: string, endDateKey: string) {
+  return `${formatDateKey(startDateKey)} - ${formatDateKey(endDateKey)}`;
+}
+
+export function getWeeklyReviewDateRange(now: Date, timeZone?: string) {
+  const resolvedTimeZone = resolveTimeZone(timeZone);
+  const localDateKey = toTimeZoneDateKey(now, resolvedTimeZone);
+  const localDay = new Date(`${localDateKey}T12:00:00.000Z`).getUTCDay();
+  const daysSinceMonday = localDay === 0 ? 6 : localDay - 1;
+  const weekStartDate = addDateKeyDays(localDateKey, -daysSinceMonday);
+  return {
+    timeZone: resolvedTimeZone,
+    weekStartDate,
+    weekEndDate: addDateKeyDays(weekStartDate, 6)
+  };
+}
+
+function dailyBuckets(tasks: Task[], startDateKey: string, timeZone: string) {
+  const labels = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   return Array.from({ length: 7 }, (_, index) => {
-    const current = addDays(start, index);
-    const dayLabel = current.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-    const dayIso = current.toISOString().slice(0, 10);
-    const completed = tasks.filter((task) => task.completedAt?.slice(0, 10) === dayIso);
+    const dayIso = addDateKeyDays(startDateKey, index);
+    const completed = tasks.filter(
+      (task) =>
+        task.completedAt !== null &&
+        toTimeZoneDateKey(new Date(task.completedAt), timeZone) === dayIso
+    );
     const totalXp = completed.reduce((sum, task) => sum + task.points, 0);
     return {
-      label: dayLabel,
+      label: labels[index]!,
       xp: totalXp,
-      focusHours: completed.length * 2 + completed.filter((task) => task.effort !== "light").length
+      focusHours:
+        completed.length * 2 +
+        completed.filter((task) => task.effort !== "light").length
     };
   });
 }
 
-export function getWeeklyReviewPayload(now = new Date()): WeeklyReviewPayload {
+export function getWeeklyReviewPayload(
+  now = new Date(),
+  timeZone?: string
+): WeeklyReviewPayload {
   const goals = listGoals();
   const tasks = listTasks();
-  const gamification = buildGamificationProfile(goals, tasks, listHabits(), now);
-  const weekStart = startOfWeek(now);
-  const weekEnd = addDays(weekStart, 6);
-  const weekKey = toDateOnly(weekStart);
+  const gamification = buildGamificationProfile(
+    goals,
+    tasks,
+    listHabits(),
+    now
+  );
+  const range = getWeeklyReviewDateRange(now, timeZone);
+  const weekKey = range.weekStartDate;
   const closure = getWeeklyReviewClosure(weekKey);
-  const weekTasks = tasks.filter((task) => task.updatedAt >= weekStart.toISOString() && task.updatedAt <= addDays(weekEnd, 1).toISOString());
+  const weekTasks = tasks.filter((task) => {
+    const updatedDateKey = toTimeZoneDateKey(
+      new Date(task.updatedAt),
+      range.timeZone
+    );
+    return (
+      updatedDateKey >= range.weekStartDate &&
+      updatedDateKey <= range.weekEndDate
+    );
+  });
   const completedTasks = weekTasks.filter((task) => task.completedAt !== null);
-  const buckets = dailyBuckets(tasks, weekStart);
+  const buckets = dailyBuckets(tasks, range.weekStartDate, range.timeZone);
   const totalXp = completedTasks.reduce((sum, task) => sum + task.points, 0);
-  const peakBucket = [...buckets].sort((left, right) => right.xp - left.xp)[0] ?? buckets[0]!;
+  const peakBucket =
+    [...buckets].sort((left, right) => right.xp - left.xp)[0] ?? buckets[0]!;
   const activity = listActivityEvents({ limit: 20 }).slice(0, 4);
   const wins =
     activity.length > 0
@@ -64,25 +124,32 @@ export function getWeeklyReviewPayload(now = new Date()): WeeklyReviewPayload {
           id: event.id,
           title: event.title,
           summary: event.description || "Structured proof of movement.",
-          rewardXp: typeof event.metadata.points === "number" ? event.metadata.points : 40
+          rewardXp:
+            typeof event.metadata.points === "number"
+              ? event.metadata.points
+              : 40
         }))
       : completedTasks.slice(0, 3).map((task) => ({
           id: task.id,
           title: task.title,
-          summary: task.description || "Completed work converted into evidence.",
+          summary:
+            task.description || "Completed work converted into evidence.",
           rewardXp: task.points
         }));
 
   return weeklyReviewPayloadSchema.parse({
     generatedAt: now.toISOString(),
-    windowLabel: formatRange(weekStart, weekEnd),
+    windowLabel: formatRange(range.weekStartDate, range.weekEndDate),
     weekKey,
-    weekStartDate: weekKey,
-    weekEndDate: toDateOnly(weekEnd),
+    weekStartDate: range.weekStartDate,
+    weekEndDate: range.weekEndDate,
     momentumSummary: {
       totalXp,
       focusHours: buckets.reduce((sum, bucket) => sum + bucket.focusHours, 0),
-      efficiencyScore: Math.min(100, gamification.momentumScore + completedTasks.length * 3),
+      efficiencyScore: Math.min(
+        100,
+        gamification.momentumScore + completedTasks.length * 3
+      ),
       peakWindow: peakBucket.label
     },
     chart: buckets,

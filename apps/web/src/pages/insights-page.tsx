@@ -153,8 +153,10 @@ export function InsightsPage() {
   const { snapshot } = shell;
   const [flowOpen, setFlowOpen] = useState(false);
   const [applyingInsight, setApplyingInsight] = useState<Insight | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const insightsQueryKey = ["forge-insights", ...selectedUserIds] as const;
   const insightsQuery = useQuery({
-    queryKey: ["forge-insights", ...selectedUserIds],
+    queryKey: insightsQueryKey,
     queryFn: () => getInsights(selectedUserIds)
   });
 
@@ -173,8 +175,16 @@ export function InsightsPage() {
       insightId: string;
       feedbackType: "accepted" | "dismissed" | "applied" | "snoozed";
     }) => submitInsightFeedback(insightId, feedbackType),
+    onMutate: () => setActionError(null),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["forge-insights"] });
+    },
+    onError: (error) => {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not update that insight."
+      );
     }
   });
 
@@ -182,17 +192,18 @@ export function InsightsPage() {
     mutationFn: ({ insightId }: { insightId: string }) =>
       deleteInsight(insightId),
     onMutate: async ({ insightId }) => {
+      setActionError(null);
       await queryClient.cancelQueries({ queryKey: ["forge-insights"] });
-      const previous = queryClient.getQueryData<{ insights: InsightsPayload }>([
-        "forge-insights"
-      ]);
+      const previous = queryClient.getQueryData<{ insights: InsightsPayload }>(
+        insightsQueryKey
+      );
 
       if (previous) {
         const removedInsight = previous.insights.feed.find(
           (insight) => insight.id === insightId
         );
         queryClient.setQueryData<{ insights: InsightsPayload }>(
-          ["forge-insights"],
+          insightsQueryKey,
           {
             insights: {
               ...previous.insights,
@@ -211,8 +222,13 @@ export function InsightsPage() {
       return { previous };
     },
     onError: (_error, _variables, context) => {
+      setActionError(
+        _error instanceof Error
+          ? _error.message
+          : "Forge could not dismiss that insight."
+      );
       if (context?.previous) {
-        queryClient.setQueryData(["forge-insights"], context.previous);
+        queryClient.setQueryData(insightsQueryKey, context.previous);
       }
     },
     onSettled: async () => {
@@ -261,6 +277,7 @@ export function InsightsPage() {
       await submitInsightFeedback(insight.id, "applied", feedbackNote);
       return { href };
     },
+    onMutate: () => setActionError(null),
     onSuccess: async ({ href }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-insights"] }),
@@ -273,27 +290,34 @@ export function InsightsPage() {
       if (href) {
         navigate(href);
       }
+    },
+    onError: (error) => {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not apply that insight."
+      );
     }
   });
 
   const insights = insightsQuery.data?.insights;
   const entityCandidates = useMemo<InsightEntityCandidate[]>(
     () => [
-      ...snapshot.goals.slice(0, 8).map((goal) => ({
+      ...snapshot.goals.map((goal) => ({
         entityType: "goal" as const,
         entityId: goal.id,
         kind: "goal" as const,
         label: goal.title,
         description: goal.description
       })),
-      ...snapshot.projects.slice(0, 8).map((project) => ({
+      ...snapshot.projects.map((project) => ({
         entityType: "project" as const,
         entityId: project.id,
         kind: "project" as const,
         label: project.title,
         description: project.goalTitle
       })),
-      ...snapshot.tasks.slice(0, 10).map((task) => ({
+      ...snapshot.tasks.map((task) => ({
         entityType: "task" as const,
         entityId: task.id,
         kind: "task" as const,
@@ -477,6 +501,14 @@ export function InsightsPage() {
 
           <Card>
             <div className={insightEyebrowClass}>Stored insights</div>
+            {actionError ? (
+              <div
+                role="alert"
+                className="mt-4 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+              >
+                {actionError}
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-3">
               {insights.feed.length === 0 ? (
                 <div
@@ -531,7 +563,7 @@ export function InsightsPage() {
                               variant="secondary"
                               pending={feedbackPendingInsightId === insight.id}
                               onClick={() =>
-                                void feedbackMutation.mutateAsync({
+                                feedbackMutation.mutate({
                                   insightId: insight.id,
                                   feedbackType: "accepted"
                                 })
@@ -550,7 +582,7 @@ export function InsightsPage() {
                             variant="ghost"
                             pending={dismissPendingInsightId === insight.id}
                             onClick={() =>
-                              void dismissMutation.mutateAsync({
+                              dismissMutation.mutate({
                                 insightId: insight.id
                               })
                             }
@@ -572,6 +604,7 @@ export function InsightsPage() {
         open={flowOpen}
         onOpenChange={setFlowOpen}
         entityCandidates={entityCandidates}
+        existingInsights={insights.feed}
         pending={createMutation.isPending}
         onSubmit={async (value) => {
           await createMutation.mutateAsync(value);

@@ -116,7 +116,8 @@ test("workbench flows can be created, run, and expose published outputs", async 
               data: {
                 label: "Summarize",
                 description: "Summarize the linked box",
-                prompt: "Summarize the linked Forge context and return one line.",
+                prompt:
+                  "Summarize the linked Forge context and return one line.",
                 systemPrompt: "",
                 enabledToolKeys: [],
                 modelConfig: {
@@ -163,7 +164,11 @@ test("workbench flows can be created, run, and expose published outputs", async 
     });
     assert.equal(connectorResponse.statusCode, 201);
     const connectorBody = connectorResponse.json() as {
-      flow: { id: string; slug: string; publishedOutputs: Array<{ id: string }> };
+      flow: {
+        id: string;
+        slug: string;
+        publishedOutputs: Array<{ id: string }>;
+      };
     };
     const connectorId = connectorBody.flow.id;
     const connectorSlug = connectorBody.flow.slug;
@@ -181,7 +186,9 @@ test("workbench flows can be created, run, and expose published outputs", async 
     const workbenchListBody = workbenchListResponse.json() as {
       flows: Array<{ id: string }>;
     };
-    assert.ok(workbenchListBody.flows.some((entry) => entry.id === connectorId));
+    assert.ok(
+      workbenchListBody.flows.some((entry) => entry.id === connectorId)
+    );
 
     const workbenchCatalogResponse = await app.inject({
       method: "GET",
@@ -193,7 +200,10 @@ test("workbench flows can be created, run, and expose published outputs", async 
     });
     assert.equal(workbenchCatalogResponse.statusCode, 200);
     const workbenchCatalogBody = workbenchCatalogResponse.json() as {
-      boxes: Array<{ id: string; output?: Array<{ key: string; kind: string }> }>;
+      boxes: Array<{
+        id: string;
+        output?: Array<{ key: string; kind: string }>;
+      }>;
     };
     assert.ok(
       workbenchCatalogBody.boxes.some(
@@ -225,11 +235,18 @@ test("workbench flows can be created, run, and expose published outputs", async 
     assert.equal(runResponse.statusCode, 200);
     const runBody = runResponse.json() as {
       flow: { id: string };
-      run: { id: string; result: { primaryText: string; nodeResults: Array<{ nodeId: string }> } };
+      run: {
+        id: string;
+        result: { primaryText: string; nodeResults: Array<{ nodeId: string }> };
+      };
     };
     assert.equal(runBody.flow.id, connectorId);
     assert.match(runBody.run.result.primaryText, /Mock consumed linked inputs/);
-    assert.ok(runBody.run.result.nodeResults.some((entry) => entry.nodeId === "node_functor"));
+    assert.ok(
+      runBody.run.result.nodeResults.some(
+        (entry) => entry.nodeId === "node_functor"
+      )
+    );
 
     const workbenchRunResponse = await app.inject({
       method: "POST",
@@ -254,12 +271,18 @@ test("workbench flows can be created, run, and expose published outputs", async 
         result: {
           primaryText: string;
           debugTrace?: { nodes: Array<{ nodeId: string }> };
-          nodeResults: Array<{ nodeId: string; outputMap: Record<string, { text: string }> }>;
+          nodeResults: Array<{
+            nodeId: string;
+            outputMap: Record<string, { text: string }>;
+          }>;
         };
       };
     };
     assert.equal(workbenchRunBody.flow.id, connectorId);
-    assert.match(workbenchRunBody.run.result.primaryText, /Mock consumed linked inputs/);
+    assert.match(
+      workbenchRunBody.run.result.primaryText,
+      /Mock consumed linked inputs/
+    );
     assert.ok((workbenchRunBody.run.result.debugTrace?.nodes.length ?? 0) >= 1);
     assert.ok(workbenchRunBody.run.result.nodeResults.length >= 2);
 
@@ -288,9 +311,14 @@ test("workbench flows can be created, run, and expose published outputs", async 
     });
     assert.equal(runNodesResponse.statusCode, 200);
     const runNodesBody = runNodesResponse.json() as {
-      nodeResults: Array<{ nodeId: string; input: Array<{ targetHandle: string | null }> }>;
+      nodeResults: Array<{
+        nodeId: string;
+        input: Array<{ targetHandle: string | null }>;
+      }>;
     };
-    assert.ok(runNodesBody.nodeResults.some((entry) => entry.nodeId === "node_functor"));
+    assert.ok(
+      runNodesBody.nodeResults.some((entry) => entry.nodeId === "node_functor")
+    );
 
     const functorNodeResponse = await app.inject({
       method: "GET",
@@ -334,7 +362,12 @@ test("workbench flows can be created, run, and expose published outputs", async 
     });
     assert.equal(workbenchFlowResponse.statusCode, 200);
     const workbenchFlowBody = workbenchFlowResponse.json() as {
-      flow: { id: string; graph?: { nodes?: Array<{ type: string; data: { outputKey?: string } }> } };
+      flow: {
+        id: string;
+        graph?: {
+          nodes?: Array<{ type: string; data: { outputKey?: string } }>;
+        };
+      };
       runs: Array<{ status: string }>;
     };
     assert.equal(workbenchFlowBody.flow.id, connectorId);
@@ -355,7 +388,13 @@ test("workbench flows can be created, run, and expose published outputs", async 
     assert.equal(outputResponse.statusCode, 200);
     const outputBody = outputResponse.json() as {
       flow: { slug: string };
-      output: { primaryText: string; outputs?: Record<string, { text: string; json: Record<string, unknown> | null }> };
+      output: {
+        primaryText: string;
+        outputs?: Record<
+          string,
+          { text: string; json: Record<string, unknown> | null }
+        >;
+      };
     };
     assert.equal(outputBody.flow.slug, connectorSlug);
     assert.match(outputBody.output.primaryText, /Mock consumed linked inputs/);
@@ -415,7 +454,9 @@ test("workbench flows can be created, run, and expose published outputs", async 
 });
 
 test("workbench mock chat flows keep conversation continuity and validate required inputs", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-workbench-chat-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-workbench-chat-")
+  );
   const previousMockEnv = process.env.FORGE_ENABLE_DEV_MOCKS;
   process.env.FORGE_ENABLE_DEV_MOCKS = "1";
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -551,7 +592,10 @@ test("workbench mock chat flows keep conversation continuity and validate requir
       run: { result: { primaryText: string } };
     };
     assert.ok(firstChatBody.conversation?.id);
-    assert.match(firstChatBody.run.result.primaryText, /Starting a fresh conversation/);
+    assert.match(
+      firstChatBody.run.result.primaryText,
+      /Starting a fresh conversation/
+    );
 
     const secondChatResponse = await app.inject({
       method: "POST",
@@ -572,7 +616,10 @@ test("workbench mock chat flows keep conversation continuity and validate requir
     const secondChatBody = secondChatResponse.json() as {
       run: { result: { primaryText: string } };
     };
-    assert.match(secondChatBody.run.result.primaryText, /remember our earlier exchange/);
+    assert.match(
+      secondChatBody.run.result.primaryText,
+      /remember our earlier exchange/
+    );
   } finally {
     if (previousMockEnv === undefined) {
       delete process.env.FORGE_ENABLE_DEV_MOCKS;
@@ -585,7 +632,9 @@ test("workbench mock chat flows keep conversation continuity and validate requir
 });
 
 test("workbench mock tool flows expose stable node results", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-workbench-tools-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-workbench-tools-")
+  );
   const previousMockEnv = process.env.FORGE_ENABLE_DEV_MOCKS;
   process.env.FORGE_ENABLE_DEV_MOCKS = "1";
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -704,15 +753,25 @@ test("workbench mock tool flows expose stable node results", async () => {
         id: string;
         result: {
           primaryText: string;
-          nodeResults: Array<{ nodeId: string; tools: string[]; logs: string[] }>;
+          nodeResults: Array<{
+            nodeId: string;
+            tools: string[];
+            logs: string[];
+          }>;
         };
       };
     };
     assert.match(runBody.run.result.primaryText, /Created a mock note/);
-    const toolNode = runBody.run.result.nodeResults.find((entry) => entry.nodeId === "tool_node");
+    const toolNode = runBody.run.result.nodeResults.find(
+      (entry) => entry.nodeId === "tool_node"
+    );
     assert.ok(toolNode);
     assert.deepEqual(toolNode?.tools, ["forge.create_note"]);
-    assert.ok(toolNode?.logs.some((entry) => entry.includes("Tool call forge.create_note")));
+    assert.ok(
+      toolNode?.logs.some((entry) =>
+        entry.includes("Tool call forge.create_note")
+      )
+    );
   } finally {
     if (previousMockEnv === undefined) {
       delete process.env.FORGE_ENABLE_DEV_MOCKS;
@@ -725,7 +784,9 @@ test("workbench mock tool flows expose stable node results", async () => {
 });
 
 test("surface layouts round-trip through the surface layout routes", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-surface-layout-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-surface-layout-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -800,7 +861,9 @@ test("surface layouts round-trip through the surface layout routes", async () =>
 });
 
 test("legacy workbench flow contracts normalize stale primary handles and content kinds", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-workbench-legacy-"));
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-workbench-legacy-")
+  );
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
@@ -908,13 +971,28 @@ test("legacy workbench flow contracts normalize stale primary handles and conten
     const flowBody = getResponse.json() as {
       flow: {
         graph: {
-          nodes: Array<{ id: string; type: string; data: { outputs?: Array<{ key: string; kind: string }>; outputKey?: string; inputs?: Array<{ key: string; kind: string }> } }>;
-          edges: Array<{ sourceHandle: string | null; targetHandle: string | null }>;
+          nodes: Array<{
+            id: string;
+            type: string;
+            data: {
+              outputs?: Array<{ key: string; kind: string }>;
+              outputKey?: string;
+              inputs?: Array<{ key: string; kind: string }>;
+            };
+          }>;
+          edges: Array<{
+            sourceHandle: string | null;
+            targetHandle: string | null;
+          }>;
         };
       };
     };
-    const functorNode = flowBody.flow.graph.nodes.find((node) => node.id === "node_functor");
-    const outputNode = flowBody.flow.graph.nodes.find((node) => node.id === "node_output");
+    const functorNode = flowBody.flow.graph.nodes.find(
+      (node) => node.id === "node_functor"
+    );
+    const outputNode = flowBody.flow.graph.nodes.find(
+      (node) => node.id === "node_output"
+    );
     assert.equal(functorNode?.data.outputs?.[0]?.key, "answer");
     assert.equal(functorNode?.data.outputs?.[0]?.kind, "markdown");
     assert.equal(outputNode?.data.outputKey, "result");

@@ -503,6 +503,8 @@ export function TaskDialog({
   const safeTags = tags ?? [];
   const safeUsers = useMemo(() => users ?? [], [users]);
   const [draft, setDraft] = useState<QuickTaskInput>(defaultTaskValues);
+  const [submitting, setSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<
     Record<string, string | undefined>
@@ -532,6 +534,8 @@ export function TaskDialog({
 
     setSubmitError(null);
     setFieldErrors({});
+    setSubmitting(false);
+    submitInFlightRef.current = false;
     setAnchorQuery("");
     setAnchorOpen(false);
     setAnchorHighlightedIndex(0);
@@ -1551,6 +1555,12 @@ export function TaskDialog({
       draftPersistenceKey={editingTask ? `task.${editingTask.id}` : "task.new"}
       steps={steps}
       initialStepId={initialStepId}
+      pending={submitting}
+      pendingLabel={
+        editingTask
+          ? t("common.dialogs.task.save")
+          : t("common.dialogs.task.create")
+      }
       submitLabel={
         editingTask
           ? t("common.dialogs.task.save")
@@ -1558,6 +1568,9 @@ export function TaskDialog({
       }
       error={submitError}
       onSubmit={async () => {
+        if (submitInFlightRef.current) {
+          return;
+        }
         setSubmitError(null);
         if (editingTask && trackedMinutesDraft < 0) {
           setSubmitError("Tracked minutes cannot be negative.");
@@ -1573,6 +1586,8 @@ export function TaskDialog({
         }
 
         setFieldErrors({});
+        submitInFlightRef.current = true;
+        setSubmitting(true);
 
         try {
           await onSubmit(parsed.data, editingTask?.id);
@@ -1591,6 +1606,9 @@ export function TaskDialog({
               ? error.message
               : "Unable to save this task right now."
           );
+        } finally {
+          submitInFlightRef.current = false;
+          setSubmitting(false);
         }
       }}
     />

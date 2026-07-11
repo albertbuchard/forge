@@ -1,5 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Search, X } from "lucide-react";
+import { useEffect } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,9 @@ export function PreferenceGameDialog({
   state,
   onOpenChange,
   error,
+  notice,
   loading,
+  submitting,
   workspaceLoading,
   activeWorkspace,
   conceptSearchQuery,
@@ -42,7 +45,9 @@ export function PreferenceGameDialog({
   state: PreferenceGameState;
   onOpenChange: (open: boolean) => void;
   error: string | null;
+  notice: string | null;
   loading: boolean;
+  submitting: boolean;
   workspaceLoading: boolean;
   activeWorkspace: PreferenceWorkspacePayload | null;
   conceptSearchQuery: string;
@@ -93,6 +98,15 @@ export function PreferenceGameDialog({
                 {error}
               </div>
             ) : null}
+            {notice ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-medium)]"
+              >
+                {notice}
+              </div>
+            ) : null}
 
             {state.phase === "domain" ? (
               <PreferenceGameDomainStep onSelectDomain={onSelectDomain} />
@@ -112,6 +126,7 @@ export function PreferenceGameDialog({
               <PreferenceGamePlayStep
                 domain={state.domain}
                 loading={loading || workspaceLoading}
+                submitting={submitting}
                 activeWorkspace={activeWorkspace}
                 onJudge={onJudge}
                 onSignal={onSignal}
@@ -217,17 +232,52 @@ function PreferenceGameCatalogStep({
 function PreferenceGamePlayStep({
   domain,
   loading,
+  submitting,
   activeWorkspace,
   onJudge,
   onSignal
 }: {
   domain: PreferenceDomain;
   loading: boolean;
+  submitting: boolean;
   activeWorkspace: PreferenceWorkspacePayload | null;
   onJudge: (outcome: PreferenceJudgmentOutcome, strength?: number) => void;
   onSignal: (itemId: string, signalType: PreferenceSignalType) => void;
 }) {
   const nextPair = activeWorkspace?.compare.nextPair ?? null;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (submitting || event.defaultPrevented) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
+      const key = event.key.toLocaleLowerCase();
+      if (key === "1") {
+        event.preventDefault();
+        onJudge("left", 1);
+      } else if (key === "2") {
+        event.preventDefault();
+        onJudge("right", 1);
+      } else if (key === "t") {
+        event.preventDefault();
+        onJudge("tie", 1);
+      } else if (key === "s") {
+        event.preventDefault();
+        onJudge("skip", 1);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onJudge, submitting]);
 
   if (loading) {
     return (
@@ -263,36 +313,85 @@ function PreferenceGamePlayStep({
         </span>
       </div>
 
+      <div className="rounded-[18px] bg-[var(--ui-surface-1)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
+          Why this pair
+        </div>
+        <div className="mt-1">
+          {nextPair.rationale.length > 0
+            ? nextPair.rationale.slice(0, 3).join(" · ")
+            : "Both items need more evidence in the active context."}
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <ComparisonCard
           title={nextPair.left.label}
           description={nextPair.left.description}
           sideLabel="Left"
+          disabled={submitting}
           onClick={() => onJudge("left", 1)}
         />
         <ComparisonCard
           title={nextPair.right.label}
           description={nextPair.right.description}
           sideLabel="Right"
+          disabled={submitting}
           onClick={() => onJudge("right", 1)}
         />
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => onJudge("left", 1)}>Left</Button>
-        <Button onClick={() => onJudge("right", 1)}>Right</Button>
-        <Button variant="secondary" onClick={() => onJudge("left", 1.75)}>
+        <Button
+          disabled={submitting}
+          aria-keyshortcuts="1"
+          onClick={() => onJudge("left", 1)}
+        >
+          Left · 1
+        </Button>
+        <Button
+          disabled={submitting}
+          aria-keyshortcuts="2"
+          onClick={() => onJudge("right", 1)}
+        >
+          Right · 2
+        </Button>
+        <Button
+          disabled={submitting}
+          variant="secondary"
+          onClick={() => onJudge("left", 1.75)}
+        >
           Strong left
         </Button>
-        <Button variant="secondary" onClick={() => onJudge("right", 1.75)}>
+        <Button
+          disabled={submitting}
+          variant="secondary"
+          onClick={() => onJudge("right", 1.75)}
+        >
           Strong right
         </Button>
-        <Button variant="secondary" onClick={() => onJudge("tie", 1)}>
-          Tie
+        <Button
+          disabled={submitting}
+          aria-keyshortcuts="T"
+          variant="secondary"
+          onClick={() => onJudge("tie", 1)}
+        >
+          Tie · T
         </Button>
-        <Button variant="secondary" onClick={() => onJudge("skip", 1)}>
-          Skip
+        <Button
+          disabled={submitting}
+          aria-keyshortcuts="S"
+          variant="secondary"
+          onClick={() => onJudge("skip", 1)}
+        >
+          Skip · S
         </Button>
+      </div>
+
+      <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
+        A left or right choice adds one context-specific win and loss. A tie
+        adds tie evidence to both items. Skip advances without adding score
+        evidence.
       </div>
 
       <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 lg:grid-cols-2">
@@ -302,7 +401,9 @@ function PreferenceGamePlayStep({
               {item.label}
             </div>
             <div className="text-sm text-[var(--ui-ink-soft)]">
-              Quick signals
+              Quick signals · favorite and must-have push up, veto pushes down,
+              bookmark/later add light positive weight, and neutral records zero
+              score weight in this context.
             </div>
             <div className="flex flex-wrap gap-2">
               {SIGNAL_OPTIONS.map((signal) => (
@@ -310,6 +411,7 @@ function PreferenceGamePlayStep({
                   key={`${item.id}-${signal.signalType}`}
                   variant="secondary"
                   size="sm"
+                  disabled={submitting}
                   onClick={() => onSignal(item.id, signal.signalType)}
                 >
                   {signal.label}

@@ -98,6 +98,10 @@ cannot create a backup first.
 
 `export` writes a portable backup of the real Forge data folder. `uninstall` removes the Forge Memory runtime manager and cache while keeping the data folder by default; pass `--remove-data` only when you intentionally want the data deleted too.
 
+The public [operator settings and recovery reference](../../docs/reference/operator-settings-and-recovery.md)
+documents the matching web controls, data-root checks, token recovery, model
+health, and mobile pairing recovery contract.
+
 Typical first run:
 
 1. Run `npx forge-memory`.

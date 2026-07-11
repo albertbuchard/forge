@@ -47,6 +47,12 @@ import {
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import type { CrudEntityType, Note } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  buildWikiEditorDraftStorageKey,
+  readWikiEditorDraft,
+  removeWikiEditorDraft,
+  writeWikiEditorDraft
+} from "@/pages/wiki-editor-draft";
 
 type WikiPageDraft = {
   pageId: string | null;
@@ -121,17 +127,27 @@ function parseCsvList(value: string) {
   );
 }
 
-function safeParseFrontmatter(value: string) {
+function parseFrontmatter(value: string) {
   if (!value.trim()) {
-    return {};
+    return { value: {} as Record<string, unknown>, error: null };
   }
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        value: null,
+        error: "Frontmatter must be a JSON object."
+      };
+    }
+    return {
+      value: parsed as Record<string, unknown>,
+      error: null
+    };
   } catch {
-    return {};
+    return {
+      value: null,
+      error: "Frontmatter contains invalid JSON."
+    };
   }
 }
 
@@ -315,7 +331,13 @@ export function WikiEditorPage() {
   const [wikiLinkQuery, setWikiLinkQuery] = useState("");
   const [forgeLinkQuery, setForgeLinkQuery] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const prefillAppliedRef = useRef(false);
+  const hydratedDraftKeyRef = useRef<string | null>(null);
+  const baselineDraftRef = useRef<{
+    key: string;
+    serializedDraft: string | null;
+  } | null>(null);
+  const [baseRevisionHash, setBaseRevisionHash] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<string | null>(null);
   const seededPage =
     (location.state as { initialPage?: Note } | null)?.initialPage ?? null;
   const linkedTitlePrefill = searchParams.get("title")?.trim() ?? "";
@@ -342,43 +364,130 @@ export function WikiEditorPage() {
     settingsQuery.data?.settings.spaces.find(
       (space) => space.id === activeSpaceId
     )?.label ?? "Current space";
+  const draftStorageKey = activeSpaceId
+    ? buildWikiEditorDraftStorageKey(
+        activeSpaceId,
+        pageId ??
+          (linkedSlugPrefill
+            ? `new:${linkedSlugPrefill}`
+            : linkedTitlePrefill
+              ? `new:${slugifyTitle(linkedTitlePrefill)}`
+              : null)
+      )
+    : null;
 
   const pagesQuery = useQuery({
     queryKey: ["forge-wiki-pages", activeSpaceId],
     queryFn: () =>
       listWikiPages({
         spaceId: activeSpaceId || undefined,
-        limit: 500
+        limit: 200
       }),
     enabled: Boolean(activeSpaceId)
   });
 
   useEffect(() => {
-    if (seededPage && (!pageId || seededPage.id === pageId)) {
-      setDraft(toDraft(seededPage));
+    if (!draftStorageKey || hydratedDraftKeyRef.current === draftStorageKey) {
+      return;
     }
-  }, [pageId, seededPage]);
+    const sourcePage = pageQuery.data?.page ?? seededPage;
+    if (pageId && !sourcePage) {
+      return;
+    }
+
+    const stored = readWikiEditorDraft<WikiPageDraft>(
+      window.localStorage,
+      draftStorageKey
+    );
+    if (stored) {
+      setDraft(stored.draft);
+      baselineDraftRef.current = {
+        key: draftStorageKey,
+        serializedDraft: null
+      };
+      setBaseRevisionHash(
+        stored.baseRevisionHash ?? sourcePage?.revisionHash ?? null
+      );
+      setDraftStatus(
+        `Recovered local draft from ${new Date(stored.savedAt).toLocaleString()}.`
+      );
+    } else if (sourcePage) {
+      const sourceDraft = toDraft(sourcePage);
+      setDraft(sourceDraft);
+      baselineDraftRef.current = {
+        key: draftStorageKey,
+        serializedDraft: JSON.stringify(sourceDraft)
+      };
+      setBaseRevisionHash(sourcePage.revisionHash);
+      setDraftStatus(null);
+    } else if (linkedTitlePrefill) {
+      const linkedDraft = createDraftFromLinkedTitle(
+        linkedTitlePrefill,
+        linkedSlugPrefill
+      );
+      setDraft(linkedDraft);
+      baselineDraftRef.current = {
+        key: draftStorageKey,
+        serializedDraft: null
+      };
+      setBaseRevisionHash(null);
+      setDraftStatus(null);
+    } else {
+      const blankDraft = createBlankDraft();
+      setDraft(blankDraft);
+      baselineDraftRef.current = {
+        key: draftStorageKey,
+        serializedDraft: JSON.stringify(blankDraft)
+      };
+      setBaseRevisionHash(null);
+      setDraftStatus(null);
+    }
+    hydratedDraftKeyRef.current = draftStorageKey;
+  }, [
+    draftStorageKey,
+    linkedSlugPrefill,
+    linkedTitlePrefill,
+    pageId,
+    pageQuery.data?.page,
+    seededPage
+  ]);
 
   useEffect(() => {
+    if (!draftStorageKey || hydratedDraftKeyRef.current !== draftStorageKey) {
+      return;
+    }
     if (
-      pageId ||
-      seededPage ||
-      prefillAppliedRef.current ||
-      !linkedTitlePrefill
+      baselineDraftRef.current?.key === draftStorageKey &&
+      baselineDraftRef.current.serializedDraft === JSON.stringify(draft)
     ) {
+      try {
+        removeWikiEditorDraft(window.localStorage, draftStorageKey);
+      } catch {
+        // A clean server-backed draft does not require local persistence.
+      }
+      setDraftStatus(null);
       return;
     }
-
-    prefillAppliedRef.current = true;
-    setDraft(createDraftFromLinkedTitle(linkedTitlePrefill, linkedSlugPrefill));
-  }, [linkedSlugPrefill, linkedTitlePrefill, pageId, seededPage]);
-
-  useEffect(() => {
-    if (!pageQuery.data?.page) {
-      return;
-    }
-    setDraft(toDraft(pageQuery.data.page));
-  }, [pageQuery.data]);
+    const timeout = window.setTimeout(() => {
+      try {
+        const savedAt = new Date().toISOString();
+        writeWikiEditorDraft(window.localStorage, draftStorageKey, {
+          version: 1,
+          savedAt,
+          baseRevisionHash,
+          draft
+        });
+        setDraftStatus(
+          `Draft saved locally at ${new Date(savedAt).toLocaleTimeString()}.`
+        );
+      } catch {
+        setDraftStatus(
+          "Local draft backup is unavailable. Save the page before leaving."
+        );
+      }
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [baseRevisionHash, draft, draftStorageKey]);
 
   const wikiPageOptions = useMemo(
     () =>
@@ -386,6 +495,20 @@ export function WikiEditorPage() {
         .filter((page) => page.id !== draft.pageId)
         .sort((left, right) => left.title.localeCompare(right.title)),
     [draft.pageId, pagesQuery.data?.pages]
+  );
+  const normalizedDraftSlug = draft.slug.trim() || slugifyTitle(draft.title);
+  const slugCollision = useMemo(
+    () =>
+      (pagesQuery.data?.pages ?? []).find(
+        (page) =>
+          page.id !== draft.pageId &&
+          page.slug.toLowerCase() === normalizedDraftSlug.toLowerCase()
+      ) ?? null,
+    [draft.pageId, normalizedDraftSlug, pagesQuery.data?.pages]
+  );
+  const frontmatterResult = useMemo(
+    () => parseFrontmatter(draft.frontmatterText),
+    [draft.frontmatterText]
   );
 
   const aliasOptions = useMemo(() => {
@@ -574,6 +697,17 @@ export function WikiEditorPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (current: WikiPageDraft) => {
+      const parsedFrontmatter = parseFrontmatter(current.frontmatterText);
+      if (parsedFrontmatter.error || !parsedFrontmatter.value) {
+        throw new Error(
+          parsedFrontmatter.error ?? "Frontmatter could not be parsed."
+        );
+      }
+      if (slugCollision) {
+        throw new Error(
+          `The slug "${normalizedDraftSlug}" is already used by ${slugCollision.title}.`
+        );
+      }
       const payload = {
         kind: current.kind,
         title: current.title.trim(),
@@ -590,7 +724,10 @@ export function WikiEditorPage() {
         author: current.author.trim() || null,
         tags: parseCsvList(current.tagsText),
         spaceId: activeSpaceId,
-        frontmatter: safeParseFrontmatter(current.frontmatterText),
+        frontmatter: parsedFrontmatter.value,
+        expectedRevisionHash: current.pageId
+          ? (baseRevisionHash ?? undefined)
+          : undefined,
         links: current.linkedValues
           .map((value) => decodeLinkedValue(value))
           .filter(
@@ -606,6 +743,10 @@ export function WikiEditorPage() {
         : createWikiPage(payload);
     },
     onSuccess: async (payload) => {
+      if (draftStorageKey) {
+        removeWikiEditorDraft(window.localStorage, draftStorageKey);
+      }
+      setDraftStatus(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["forge-wiki-pages"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-wiki-page"] }),
@@ -713,7 +854,10 @@ export function WikiEditorPage() {
                   pending={saveMutation.isPending}
                   pendingLabel="Saving"
                   disabled={
-                    !draft.title.trim() || !draft.contentMarkdown.trim()
+                    !draft.title.trim() ||
+                    !draft.contentMarkdown.trim() ||
+                    Boolean(frontmatterResult.error) ||
+                    Boolean(slugCollision)
                   }
                   onClick={() => void saveMutation.mutateAsync(draft)}
                 >
@@ -723,6 +867,24 @@ export function WikiEditorPage() {
               </div>
             </div>
           </section>
+
+          <div className="grid gap-2" aria-live="polite">
+            {draftStatus ? (
+              <div className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-2 text-xs text-[var(--ui-ink-soft)]">
+                {draftStatus}
+              </div>
+            ) : null}
+            {saveMutation.isError ? (
+              <div
+                role="alert"
+                className="rounded-[16px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+              >
+                {saveMutation.error instanceof Error
+                  ? saveMutation.error.message
+                  : "Forge could not save this wiki page."}
+              </div>
+            ) : null}
+          </div>
 
           <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(19rem,23rem)_minmax(0,1fr)] xl:items-start">
             <aside
@@ -787,6 +949,14 @@ export function WikiEditorPage() {
                       }
                       placeholder="page-slug"
                     />
+                    {slugCollision ? (
+                      <span
+                        role="alert"
+                        className="text-xs text-[var(--danger)]"
+                      >
+                        This slug is already used by {slugCollision.title}.
+                      </span>
+                    ) : null}
                   </label>
 
                   <label className="grid gap-1.5">
@@ -903,6 +1073,35 @@ export function WikiEditorPage() {
                       }
                       placeholder="Optional author"
                     />
+                  </label>
+
+                  <label className="grid gap-1.5">
+                    <span className={WIKI_EYEBROW_CLASS}>Frontmatter JSON</span>
+                    <Textarea
+                      value={draft.frontmatterText}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          frontmatterText: event.target.value
+                        }))
+                      }
+                      rows={5}
+                      aria-invalid={Boolean(frontmatterResult.error)}
+                      aria-describedby={
+                        frontmatterResult.error
+                          ? "wiki-frontmatter-error"
+                          : undefined
+                      }
+                    />
+                    {frontmatterResult.error ? (
+                      <span
+                        id="wiki-frontmatter-error"
+                        role="alert"
+                        className="text-xs text-[var(--danger)]"
+                      >
+                        {frontmatterResult.error}
+                      </span>
+                    ) : null}
                   </label>
 
                   <div className="grid gap-3">

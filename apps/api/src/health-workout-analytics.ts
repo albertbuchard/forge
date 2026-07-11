@@ -44,7 +44,13 @@ const customZoneSchema = z.object({
 });
 
 export const healthZoneProfilePatchSchema = z.object({
-  birthYear: z.number().int().min(1900).max(new Date().getFullYear()).nullable().optional(),
+  birthYear: z
+    .number()
+    .int()
+    .min(1900)
+    .max(new Date().getFullYear())
+    .nullable()
+    .optional(),
   sexAtBirth: z.string().trim().max(40).nullable().optional(),
   knownMaxHr: z.number().min(80).max(240).nullable().optional(),
   thresholdHr: z.number().min(80).max(240).nullable().optional(),
@@ -201,7 +207,11 @@ function dayKey(value: string) {
   return value.slice(0, 10);
 }
 
-function getLatestVitalMetric(userId: string, metricKey: string, beforeDateKey: string) {
+function getLatestVitalMetric(
+  userId: string,
+  metricKey: string,
+  beforeDateKey: string
+) {
   const rows = getDatabase()
     .prepare(
       `SELECT metrics_json
@@ -213,10 +223,9 @@ function getLatestVitalMetric(userId: string, metricKey: string, beforeDateKey: 
     )
     .all(userId, beforeDateKey) as Array<{ metrics_json: string }>;
   for (const row of rows) {
-    const metrics = parseJson<Record<string, { latest?: number; average?: number }>>(
-      row.metrics_json,
-      {}
-    );
+    const metrics = parseJson<
+      Record<string, { latest?: number; average?: number }>
+    >(row.metrics_json, {});
     const metric = metrics[metricKey];
     const value = metric?.latest ?? metric?.average;
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -279,7 +288,11 @@ function resolveZoneProfile(userId: string, workoutStartedAt: string) {
 
   const restingHr =
     profile.resting_hr_override ??
-    getLatestVitalMetric(userId, "restingHeartRate", dayKey(workoutStartedAt)) ??
+    getLatestVitalMetric(
+      userId,
+      "restingHeartRate",
+      dayKey(workoutStartedAt)
+    ) ??
     60;
   const observedMax = getObservedMaxHr(userId);
   const ageMax = ageEstimatedMaxHr(profile);
@@ -319,7 +332,14 @@ function resolveZoneProfile(userId: string, workoutStartedAt: string) {
      SET inferred_max_hr = ?, inferred_resting_hr = ?, confidence = ?,
          thresholds_json = ?, updated_at = ?
      WHERE id = ?`
-  ).run(maxHr, restingHr, confidence, JSON.stringify(thresholds), now, profile.id);
+  ).run(
+    maxHr,
+    restingHr,
+    confidence,
+    JSON.stringify(thresholds),
+    now,
+    profile.id
+  );
 
   return {
     ...profile,
@@ -330,14 +350,19 @@ function resolveZoneProfile(userId: string, workoutStartedAt: string) {
   };
 }
 
-function zoneForHr(hr: number, thresholds: Array<{ key: string; lowerBpm: number; upperBpm: number | null }>) {
+function zoneForHr(
+  hr: number,
+  thresholds: Array<{ key: string; lowerBpm: number; upperBpm: number | null }>
+) {
   const match = thresholds.find((zone) => {
     return hr >= zone.lowerBpm && (zone.upperBpm == null || hr < zone.upperBpm);
   });
   return (match?.key ?? "zone_5") as WorkoutZoneKey;
 }
 
-function initializeZoneDurations(thresholds: Array<{ key: string; label: string }>) {
+function initializeZoneDurations(
+  thresholds: Array<{ key: string; label: string }>
+) {
   return thresholds.map((zone) => ({
     key: zone.key,
     label: zone.label,
@@ -380,16 +405,27 @@ function computeRouteSummary(points: RoutePointRow[]) {
   };
 }
 
-function computeAnalytics(workout: WorkoutLike, samples: TimeSeriesRow[], routes: RoutePointRow[]) {
+function computeAnalytics(
+  workout: WorkoutLike,
+  samples: TimeSeriesRow[],
+  routes: RoutePointRow[]
+) {
   const profile = resolveZoneProfile(workout.user_id, workout.started_at);
-  const thresholds = parseJson<Array<{ key: string; label: string; lowerBpm: number; upperBpm: number | null }>>(
-    profile.thresholds_json,
-    []
-  );
+  const thresholds = parseJson<
+    Array<{
+      key: string;
+      label: string;
+      lowerBpm: number;
+      upperBpm: number | null;
+    }>
+  >(profile.thresholds_json, []);
   const zoneDurations = initializeZoneDurations(thresholds);
   const hrSamples = samples
     .filter((sample) => sample.metric_key === "heart_rate")
-    .sort((left, right) => Date.parse(left.started_at) - Date.parse(right.started_at));
+    .sort(
+      (left, right) =>
+        Date.parse(left.started_at) - Date.parse(right.started_at)
+    );
   const workoutStart = Date.parse(workout.started_at);
   const workoutEnd = Date.parse(workout.ended_at);
   const durationSeconds = Math.max(0, (workoutEnd - workoutStart) / 1000);
@@ -439,17 +475,25 @@ function computeAnalytics(workout: WorkoutLike, samples: TimeSeriesRow[], routes
 
   for (const zone of zoneDurations) {
     zone.seconds = Math.round(zone.seconds);
-    zone.percentage = coveredSeconds > 0 ? Number((zone.seconds / coveredSeconds).toFixed(4)) : 0;
+    zone.percentage =
+      coveredSeconds > 0
+        ? Number((zone.seconds / coveredSeconds).toFixed(4))
+        : 0;
   }
 
-  const averageHr = coveredSeconds > 0 ? weightedHr / coveredSeconds : workout.average_heart_rate;
+  const averageHr =
+    coveredSeconds > 0
+      ? weightedHr / coveredSeconds
+      : workout.average_heart_rate;
   const restingHr = profile.inferred_resting_hr ?? 60;
   const reserve = Math.max(1, (profile.inferred_max_hr ?? 190) - restingHr);
   const intensity =
-    averageHr != null ? Math.max(0, Math.min(1.3, (averageHr - restingHr) / reserve)) : null;
+    averageHr != null
+      ? Math.max(0, Math.min(1.3, (averageHr - restingHr) / reserve))
+      : null;
   const trimp =
     intensity != null
-      ? Number((durationSeconds / 60 * intensity * 1.67).toFixed(1))
+      ? Number(((durationSeconds / 60) * intensity * 1.67).toFixed(1))
       : null;
   const sampleCoverage =
     durationSeconds > 0 ? Math.min(1, coveredSeconds / durationSeconds) : 0;
@@ -684,46 +728,150 @@ export function getStoredWorkoutAnalytics(workout: WorkoutLike) {
   };
 }
 
-export function getWorkoutRawEvidence(workout: WorkoutLike, resolution: "adaptive" | "raw" = "adaptive") {
+function boundedTimeSeriesRows(
+  workoutId: string,
+  totalCount: number,
+  limit: number
+) {
   const db = getDatabase();
-  const samples = db
+  if (totalCount <= limit) {
+    return db
+      .prepare(
+        `SELECT *
+         FROM health_workout_time_series
+         WHERE workout_id = ?
+         ORDER BY started_at ASC, series_index ASC, id ASC`
+      )
+      .all(workoutId) as TimeSeriesRow[];
+  }
+  return db
     .prepare(
-      `SELECT *
-       FROM health_workout_time_series
-       WHERE workout_id = ?
-       ORDER BY started_at ASC, series_index ASC`
-    )
-    .all(workout.id) as TimeSeriesRow[];
-  const routeLimit = resolution === "raw" ? 20000 : 1200;
-  const routePoints = db
-    .prepare(
-      `SELECT *
-       FROM health_workout_routes
-       WHERE workout_id = ?
-       ORDER BY point_index ASC
+      `WITH ranked AS (
+         SELECT *,
+                ROW_NUMBER() OVER (
+                  ORDER BY started_at ASC, series_index ASC, id ASC
+                ) - 1 AS evidence_rank,
+                COUNT(*) OVER () AS evidence_total
+         FROM health_workout_time_series
+         WHERE workout_id = ?
+       )
+       SELECT *
+       FROM ranked
+       WHERE evidence_rank = 0
+          OR evidence_rank = evidence_total - 1
+          OR CAST(evidence_rank * (? - 1) / (evidence_total - 1) AS INTEGER) !=
+             CAST((evidence_rank - 1) * (? - 1) / (evidence_total - 1) AS INTEGER)
+       ORDER BY started_at ASC, series_index ASC, id ASC
        LIMIT ?`
     )
-    .all(workout.id, routeLimit) as RoutePointRow[];
+    .all(workoutId, limit, limit, limit) as TimeSeriesRow[];
+}
+
+function boundedRouteRows(
+  workoutId: string,
+  totalCount: number,
+  limit: number
+) {
+  const db = getDatabase();
+  if (totalCount <= limit) {
+    return db
+      .prepare(
+        `SELECT *
+         FROM health_workout_routes
+         WHERE workout_id = ?
+         ORDER BY point_index ASC, id ASC`
+      )
+      .all(workoutId) as RoutePointRow[];
+  }
+  return db
+    .prepare(
+      `WITH ranked AS (
+         SELECT *,
+                ROW_NUMBER() OVER (
+                  ORDER BY point_index ASC, id ASC
+                ) - 1 AS evidence_rank,
+                COUNT(*) OVER () AS evidence_total
+         FROM health_workout_routes
+         WHERE workout_id = ?
+       )
+       SELECT *
+       FROM ranked
+       WHERE evidence_rank = 0
+          OR evidence_rank = evidence_total - 1
+          OR CAST(evidence_rank * (? - 1) / (evidence_total - 1) AS INTEGER) !=
+             CAST((evidence_rank - 1) * (? - 1) / (evidence_total - 1) AS INTEGER)
+       ORDER BY point_index ASC, id ASC
+       LIMIT ?`
+    )
+    .all(workoutId, limit, limit, limit) as RoutePointRow[];
+}
+
+export function getWorkoutRawEvidence(
+  workout: WorkoutLike,
+  resolution: "adaptive" | "raw" = "adaptive"
+) {
+  const db = getDatabase();
+  const timeSeriesTotalCount = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_workout_time_series
+         WHERE workout_id = ?`
+      )
+      .get(workout.id) as { count: number }
+  ).count;
+  const routePointTotalCount = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM health_workout_routes
+         WHERE workout_id = ?`
+      )
+      .get(workout.id) as { count: number }
+  ).count;
+  const metricCounts = Object.fromEntries(
+    (
+      db
+        .prepare(
+          `SELECT metric_key, COUNT(*) AS count
+           FROM health_workout_time_series
+           WHERE workout_id = ?
+           GROUP BY metric_key
+           ORDER BY metric_key ASC`
+        )
+        .all(workout.id) as Array<{ metric_key: string; count: number }>
+    ).map((row) => [row.metric_key, row.count])
+  );
+  const timeSeriesLimit = resolution === "raw" ? 50_000 : 1_500;
+  const routePointLimit = resolution === "raw" ? 20_000 : 1_200;
+  const samples = boundedTimeSeriesRows(
+    workout.id,
+    timeSeriesTotalCount,
+    timeSeriesLimit
+  );
+  const routePoints = boundedRouteRows(
+    workout.id,
+    routePointTotalCount,
+    routePointLimit
+  );
   return {
-    timeSeries: downsampleSamples(samples, resolution === "raw" ? 50000 : 1500).map(mapSample),
-    routePoints: downsampleRoute(routePoints, resolution === "raw" ? 20000 : 1200).map(mapRoutePoint)
+    timeSeries: samples.map(mapSample),
+    routePoints: routePoints.map(mapRoutePoint),
+    summary: {
+      resolution,
+      timeSeries: {
+        totalCount: timeSeriesTotalCount,
+        returnedCount: samples.length,
+        truncated: samples.length < timeSeriesTotalCount,
+        metricCounts
+      },
+      routePoints: {
+        totalCount: routePointTotalCount,
+        returnedCount: routePoints.length,
+        truncated: routePoints.length < routePointTotalCount
+      }
+    }
   };
-}
-
-function downsampleSamples(samples: TimeSeriesRow[], limit: number) {
-  if (samples.length <= limit) {
-    return samples;
-  }
-  const stride = Math.ceil(samples.length / limit);
-  return samples.filter((_, index) => index % stride === 0);
-}
-
-function downsampleRoute(points: RoutePointRow[], limit: number) {
-  if (points.length <= limit) {
-    return points;
-  }
-  const stride = Math.ceil(points.length / limit);
-  return points.filter((_, index) => index % stride === 0);
 }
 
 function mapSample(row: TimeSeriesRow) {
@@ -805,9 +953,15 @@ export function patchHealthZoneProfile(
     )
     .run(
       parsed.birthYear === undefined ? current.birth_year : parsed.birthYear,
-      parsed.sexAtBirth === undefined ? current.sex_at_birth : parsed.sexAtBirth,
-      parsed.knownMaxHr === undefined ? current.known_max_hr : parsed.knownMaxHr,
-      parsed.thresholdHr === undefined ? current.threshold_hr : parsed.thresholdHr,
+      parsed.sexAtBirth === undefined
+        ? current.sex_at_birth
+        : parsed.sexAtBirth,
+      parsed.knownMaxHr === undefined
+        ? current.known_max_hr
+        : parsed.knownMaxHr,
+      parsed.thresholdHr === undefined
+        ? current.threshold_hr
+        : parsed.thresholdHr,
       parsed.restingHrOverride === undefined
         ? current.resting_hr_override
         : parsed.restingHrOverride,

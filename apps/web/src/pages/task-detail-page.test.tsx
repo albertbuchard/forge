@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -13,6 +19,7 @@ const {
   deleteTaskMock,
   deleteTaskTimeboxMock,
   getCalendarOverviewMock,
+  getDeletedPlanningRecordMock,
   getLifeForceMock,
   getTaskContextMock,
   patchTaskTimeboxMock,
@@ -20,6 +27,7 @@ const {
   recommendTaskTimeboxesMock,
   releaseTaskRunMock,
   removeActivityLogMock,
+  restoreEntitiesMock,
   uncompleteTaskMock,
   useForgeShellMock
 } = vi.hoisted(() => ({
@@ -29,6 +37,7 @@ const {
   deleteTaskMock: vi.fn(),
   deleteTaskTimeboxMock: vi.fn(),
   getCalendarOverviewMock: vi.fn(),
+  getDeletedPlanningRecordMock: vi.fn(),
   getLifeForceMock: vi.fn(),
   getTaskContextMock: vi.fn(),
   patchTaskTimeboxMock: vi.fn(),
@@ -36,6 +45,7 @@ const {
   recommendTaskTimeboxesMock: vi.fn(),
   releaseTaskRunMock: vi.fn(),
   removeActivityLogMock: vi.fn(),
+  restoreEntitiesMock: vi.fn(),
   uncompleteTaskMock: vi.fn(),
   useForgeShellMock: vi.fn()
 }));
@@ -47,6 +57,7 @@ vi.mock("@/lib/api", () => ({
   deleteTask: deleteTaskMock,
   deleteTaskTimebox: deleteTaskTimeboxMock,
   getCalendarOverview: getCalendarOverviewMock,
+  getDeletedPlanningRecord: getDeletedPlanningRecordMock,
   getLifeForce: getLifeForceMock,
   getTaskContext: getTaskContextMock,
   patchTaskTimebox: patchTaskTimeboxMock,
@@ -54,6 +65,7 @@ vi.mock("@/lib/api", () => ({
   recommendTaskTimeboxes: recommendTaskTimeboxesMock,
   releaseTaskRun: releaseTaskRunMock,
   removeActivityLog: removeActivityLogMock,
+  restoreEntities: restoreEntitiesMock,
   uncompleteTask: uncompleteTaskMock
 }));
 
@@ -136,7 +148,22 @@ vi.mock("@/components/ui/user-badge", () => ({
 }));
 
 vi.mock("@/components/ui/page-state", () => ({
-  ErrorState: ({ error }: { error: Error }) => <div>{error.message}</div>
+  ErrorState: ({ error }: { error: Error }) => <div>{error.message}</div>,
+  EmptyState: ({
+    title,
+    description,
+    action
+  }: {
+    title: string;
+    description: string;
+    action?: ReactNode;
+  }) => (
+    <div>
+      <div>{title}</div>
+      <div>{description}</div>
+      {action}
+    </div>
+  )
 }));
 
 vi.mock("@/components/ui/info-tooltip", () => ({
@@ -181,6 +208,7 @@ function renderWithProviders() {
 describe("TaskDetailPage", () => {
   beforeEach(() => {
     mockMatchMedia(false);
+    getDeletedPlanningRecordMock.mockResolvedValue(null);
     useForgeShellMock.mockReturnValue({
       selectedUserIds: ["user_operator"],
       patchTaskStatus: vi.fn().mockResolvedValue(undefined),
@@ -488,6 +516,8 @@ describe("TaskDetailPage", () => {
         id: "timebox_1"
       }
     });
+    deleteTaskMock.mockResolvedValue({ task: { id: "task_1" } });
+    restoreEntitiesMock.mockResolvedValue({ results: [{ id: "task_1" }] });
     recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
     getLifeForceMock.mockResolvedValue({
       lifeForce: {
@@ -707,5 +737,55 @@ describe("TaskDetailPage", () => {
     expect(
       screen.getAllByRole("button", { name: /^Change status$/i }).length
     ).toBeGreaterThan(0);
+  });
+
+  it("keeps a deleted task restorable from its detail route", async () => {
+    renderWithProviders();
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Delete task" }))[0]
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Move to bin" }));
+
+    expect(
+      await screen.findByText("Deep work writeup is no longer active")
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Restore task" }));
+
+    await waitFor(() => {
+      expect(restoreEntitiesMock).toHaveBeenCalledWith({
+        operations: [{ entityType: "task", id: "task_1" }]
+      });
+    });
+    expect(await screen.findByText("Execution profile")).toBeInTheDocument();
+  });
+
+  it("reconstructs a deleted task state after the detail route reloads", async () => {
+    getDeletedPlanningRecordMock.mockResolvedValue({
+      entityType: "task",
+      entityId: "task_1",
+      title: "Deep work writeup",
+      subtitle: "",
+      deletedAt: "2026-07-11T08:00:00.000Z",
+      deletedByActor: "Albert",
+      deletedSource: "ui",
+      deleteReason: "",
+      snapshot: {
+        id: "task_1",
+        title: "Deep work writeup",
+        level: "task",
+        projectId: "project_1"
+      }
+    });
+
+    renderWithProviders();
+
+    expect(
+      await screen.findByText("Deep work writeup is no longer active")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Back to planning" })
+    ).toHaveAttribute("href", "/projects/project_1");
+    expect(getDeletedPlanningRecordMock).toHaveBeenCalledWith("task", "task_1");
   });
 });

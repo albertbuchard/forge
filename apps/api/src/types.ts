@@ -4,7 +4,8 @@ import {
   WORKBENCH_PORT_KINDS,
   normalizeWorkbenchPortKind
 } from "@/lib/workbench/nodes.js";
-import { formatLocalDateKey } from "@/lib/date-keys.js";
+import { getRuntimeTimeZone } from "@/lib/date-keys.js";
+import { isValidTimeZone } from "./services/calendar-time.js";
 
 export const taskStatusSchema = z.enum([
   "backlog",
@@ -48,6 +49,7 @@ export const habitFrequencySchema = z.enum(["daily", "weekly"]);
 export const habitPolaritySchema = z.enum(["positive", "negative"]);
 export const habitStatusSchema = z.enum(["active", "paused", "archived"]);
 export const habitCheckInStatusSchema = z.enum(["done", "missed"]);
+export const habitDayBoundaryModeSchema = z.enum(["fixed", "travel"]);
 export const habitOrderBySchema = z.enum([
   "needs_attention",
   "name",
@@ -428,6 +430,10 @@ export const surfaceWidgetDensitySchema = z.enum([
 
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
+const timeZoneIdentifierSchema = nonEmptyTrimmedString.refine(isValidTimeZone, {
+  message:
+    "Use a valid IANA timezone such as Europe/Zurich or America/Los_Angeles"
+});
 const rewardConfigValueSchema = z.union([
   z.string(),
   z.number(),
@@ -1438,6 +1444,7 @@ export const workBlockTemplateSchema = z
     endMinute: integerMinuteSchema,
     startsOn: dateOnlySchema.nullable().default(null),
     endsOn: dateOnlySchema.nullable().default(null),
+    exclusionDates: z.array(dateOnlySchema).default([]),
     blockingState: z.enum(["allowed", "blocked"]),
     actionProfile: actionProfileSchema.nullable().default(null),
     createdAt: z.string(),
@@ -1445,11 +1452,11 @@ export const workBlockTemplateSchema = z
     ...ownershipShape
   })
   .superRefine((value, context) => {
-    if (value.endMinute <= value.startMinute) {
+    if (value.endMinute === value.startMinute) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endMinute"],
-        message: "endMinute must be greater than startMinute"
+        message: "endMinute must differ from startMinute"
       });
     }
     if (value.startsOn && value.endsOn && value.endsOn < value.startsOn) {
@@ -1533,6 +1540,10 @@ export const habitSchema = z.object({
   status: habitStatusSchema,
   polarity: habitPolaritySchema,
   frequency: habitFrequencySchema,
+  timezone: nonEmptyTrimmedString,
+  dayBoundaryMode: habitDayBoundaryModeSchema,
+  effectiveTimezone: nonEmptyTrimmedString,
+  currentDateKey: dateOnlySchema,
   targetCount: z.number().int().positive(),
   weekDays: z.array(z.number().int().min(0).max(6)).default([]),
   linkedGoalIds: uniqueStringArraySchema.default([]),
@@ -2595,6 +2606,17 @@ export const aiConnectorOutputSchema = z.object({
   apiPath: nonEmptyTrimmedString
 });
 
+export const aiConnectorFlowSnapshotSchema = z.object({
+  title: nonEmptyTrimmedString,
+  updatedAt: z.string(),
+  graph: z.object({
+    nodes: z.array(aiConnectorNodeSchema),
+    edges: z.array(aiConnectorEdgeSchema)
+  }),
+  publicInputs: z.array(aiConnectorPublicInputSchema),
+  publishedOutputs: z.array(aiConnectorOutputSchema)
+});
+
 export const aiConnectorRunResultSchema = z.object({
   primaryText: z.string(),
   outputs: z.record(
@@ -2675,6 +2697,8 @@ export const aiConnectorRunSchema = z.object({
   inputs: z.record(z.string(), z.unknown()).default({}),
   context: z.record(z.string(), z.unknown()).default({}),
   conversationId: trimmedString.nullable(),
+  retryOfRunId: trimmedString.nullable().default(null),
+  flowSnapshot: aiConnectorFlowSnapshotSchema.nullable().default(null),
   result: aiConnectorRunResultSchema.nullable(),
   error: z.string().nullable(),
   createdAt: z.string(),
@@ -3459,6 +3483,7 @@ export const updateNoteSchema = z.object({
   destroyAt: dateTimeSchema.nullable().optional(),
   sourcePath: trimmedString.optional(),
   frontmatter: z.record(z.string(), z.unknown()).optional(),
+  expectedRevisionHash: trimmedString.optional(),
   revisionHash: trimmedString.optional(),
   lastSyncedAt: dateTimeSchema.nullable().optional(),
   userId: nonEmptyTrimmedString.nullable().optional()
@@ -3721,12 +3746,13 @@ const workBlockTemplateMutationShape = {
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default("#60a5fa"),
-  timezone: nonEmptyTrimmedString.default("UTC"),
+  timezone: timeZoneIdentifierSchema.default("UTC"),
   weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
   startMinute: integerMinuteSchema,
   endMinute: integerMinuteSchema,
   startsOn: dateOnlySchema.nullable().optional(),
   endsOn: dateOnlySchema.nullable().optional(),
+  exclusionDates: z.array(dateOnlySchema).max(366).optional(),
   blockingState: z.enum(["allowed", "blocked"]).default("blocked"),
   userId: nonEmptyTrimmedString.nullable().optional()
 };
@@ -3738,11 +3764,11 @@ export const createWorkBlockTemplateSchema = z
     customSustainRateApPerHour: z.number().min(0).nullable().optional()
   })
   .superRefine((value, context) => {
-    if (value.endMinute <= value.startMinute) {
+    if (value.endMinute === value.startMinute) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endMinute"],
-        message: "endMinute must be greater than startMinute"
+        message: "endMinute must differ from startMinute"
       });
     }
     if (value.startsOn && value.endsOn && value.endsOn < value.startsOn) {
@@ -3762,12 +3788,13 @@ export const updateWorkBlockTemplateSchema = z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/)
       .optional(),
-    timezone: nonEmptyTrimmedString.optional(),
+    timezone: timeZoneIdentifierSchema.optional(),
     weekDays: z.array(z.number().int().min(0).max(6)).min(1).max(7).optional(),
     startMinute: integerMinuteSchema.optional(),
     endMinute: integerMinuteSchema.optional(),
     startsOn: dateOnlySchema.nullable().optional(),
     endsOn: dateOnlySchema.nullable().optional(),
+    exclusionDates: z.array(dateOnlySchema).max(366).optional(),
     blockingState: z.enum(["allowed", "blocked"]).optional(),
     activityPresetKey: trimmedString.nullable().optional(),
     customSustainRateApPerHour: z.number().min(0).nullable().optional(),
@@ -3777,12 +3804,12 @@ export const updateWorkBlockTemplateSchema = z
     if (
       value.startMinute !== undefined &&
       value.endMinute !== undefined &&
-      value.endMinute <= value.startMinute
+      value.endMinute === value.startMinute
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endMinute"],
-        message: "endMinute must be greater than startMinute"
+        message: "endMinute must differ from startMinute"
       });
     }
     if (
@@ -3858,9 +3885,9 @@ export const updateCalendarEventSchema = z
         externalPlaceId: trimmedString.optional()
       })
       .optional(),
-    startAt: z.string().datetime().optional(),
-    endAt: z.string().datetime().optional(),
-    timezone: nonEmptyTrimmedString.optional(),
+    startAt: z.string().datetime({ offset: true }).optional(),
+    endAt: z.string().datetime({ offset: true }).optional(),
+    timezone: timeZoneIdentifierSchema.optional(),
     isAllDay: z.boolean().optional(),
     availability: calendarAvailabilitySchema.optional(),
     eventType: trimmedString.optional(),
@@ -3868,6 +3895,7 @@ export const updateCalendarEventSchema = z
     activityPresetKey: trimmedString.nullable().optional(),
     customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     preferredCalendarId: nonEmptyTrimmedString.nullable().optional(),
+    recurrenceEditScope: z.enum(["single", "series"]).optional(),
     userId: nonEmptyTrimmedString.nullable().optional(),
     links: z
       .array(
@@ -3917,9 +3945,9 @@ export const createCalendarEventSchema = z
         source: "",
         externalPlaceId: ""
       }),
-    startAt: z.string().datetime(),
-    endAt: z.string().datetime(),
-    timezone: nonEmptyTrimmedString.default("UTC"),
+    startAt: z.string().datetime({ offset: true }),
+    endAt: z.string().datetime({ offset: true }),
+    timezone: timeZoneIdentifierSchema.default("UTC"),
     isAllDay: z.boolean().default(false),
     availability: calendarAvailabilitySchema.default("busy"),
     eventType: trimmedString.default(""),
@@ -3995,7 +4023,7 @@ export const createLifeEventSchema = z
     importance: lifeEventImportanceSchema.default("meaningful"),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime().optional(),
-    timezone: nonEmptyTrimmedString.default("UTC"),
+    timezone: timeZoneIdentifierSchema.default("UTC"),
     isAllDay: z.boolean().default(false),
     placeLabel: trimmedString.default(""),
     placeAddress: trimmedString.default(""),
@@ -4052,7 +4080,7 @@ export const updateLifeEventSchema = z
     importance: lifeEventImportanceSchema.optional(),
     startsAt: z.string().datetime().optional(),
     endsAt: z.string().datetime().optional(),
-    timezone: nonEmptyTrimmedString.optional(),
+    timezone: timeZoneIdentifierSchema.optional(),
     isAllDay: z.boolean().optional(),
     placeLabel: trimmedString.optional(),
     placeAddress: trimmedString.optional(),
@@ -4105,6 +4133,7 @@ export const habitListQuerySchema = z.object({
   dueToday: z.coerce.boolean().optional(),
   orderBy: habitOrderBySchema.optional(),
   userIds: repeatedTrimmedStringQuerySchema.optional(),
+  timezone: nonEmptyTrimmedString.optional(),
   limit: z.coerce.number().int().positive().max(100).optional()
 });
 
@@ -4216,7 +4245,8 @@ export const taskMutationShape = {
 
 export const createTaskSchema = z.object(taskMutationShape);
 const habitCheckInWriteSchema = z.object({
-  dateKey: dateOnlySchema.default(() => formatLocalDateKey()),
+  dateKey: dateOnlySchema.optional(),
+  timezone: nonEmptyTrimmedString.optional(),
   status: habitCheckInStatusSchema,
   note: trimmedString.default(""),
   description: trimmedString.optional()
@@ -4227,6 +4257,8 @@ const habitMutationShape = {
   status: habitStatusSchema.default("active"),
   polarity: habitPolaritySchema.default("positive"),
   frequency: habitFrequencySchema.default("daily"),
+  timezone: nonEmptyTrimmedString.default(() => getRuntimeTimeZone()),
+  dayBoundaryMode: habitDayBoundaryModeSchema.default("fixed"),
   targetCount: z.number().int().min(1).max(14).default(1),
   weekDays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
   linkedGoalIds: uniqueStringArraySchema.default([]),
@@ -4296,6 +4328,8 @@ export const updateHabitSchema = z
     status: habitStatusSchema.optional(),
     polarity: habitPolaritySchema.optional(),
     frequency: habitFrequencySchema.optional(),
+    timezone: nonEmptyTrimmedString.optional(),
+    dayBoundaryMode: habitDayBoundaryModeSchema.optional(),
     targetCount: z.number().int().min(1).max(14).optional(),
     weekDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     linkedGoalIds: uniqueStringArraySchema.optional(),
@@ -4732,6 +4766,7 @@ export const runAiConnectorSchema = z.object({
   context: z.record(z.string(), z.unknown()).default({}),
   boxSnapshots: z.record(z.string(), z.unknown()).default({}),
   conversationId: trimmedString.nullable().default(null),
+  retryOfRunId: trimmedString.nullable().default(null),
   debug: z.boolean().default(false)
 });
 

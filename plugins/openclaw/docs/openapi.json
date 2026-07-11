@@ -1379,6 +1379,49 @@
           }
         }
       },
+      "CalendarProjectionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "not_requested",
+              "synced",
+              "error"
+            ]
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        }
+      },
       "WorkBlockTemplate": {
         "type": "object",
         "additionalProperties": false,
@@ -1393,6 +1436,7 @@
           "endMinute",
           "startsOn",
           "endsOn",
+          "exclusionDates",
           "blockingState",
           "createdAt",
           "updatedAt"
@@ -1456,6 +1500,13 @@
                 "type": "null"
               }
             ]
+          },
+          "exclusionDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
           },
           "blockingState": {
             "type": "string",
@@ -2255,6 +2306,10 @@
           "status",
           "polarity",
           "frequency",
+          "timezone",
+          "dayBoundaryMode",
+          "effectiveTimezone",
+          "currentDateKey",
           "targetCount",
           "weekDays",
           "linkedGoalIds",
@@ -2311,6 +2366,25 @@
               "daily",
               "weekly"
             ]
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone used as the habit's home day boundary."
+          },
+          "dayBoundaryMode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "travel"
+            ],
+            "description": "Fixed keeps the home timezone while traveling; travel follows a valid client timezone."
+          },
+          "effectiveTimezone": {
+            "type": "string"
+          },
+          "currentDateKey": {
+            "type": "string",
+            "format": "date"
           },
           "targetCount": {
             "type": "integer"
@@ -4447,6 +4521,10 @@
             "type": "string",
             "format": "date",
             "default": "2026-04-16"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Current IANA device timezone. Used only by habits configured to follow travel."
           },
           "status": {
             "type": "string",
@@ -8696,16 +8774,39 @@
               "travel_car",
               "travel_boat",
               "travel_trip",
+              "travel_day",
+              "stay",
+              "lodging",
+              "holiday",
+              "vacation",
+              "visit",
+              "move",
+              "festival",
+              "conference",
+              "retreat",
               "concert",
               "cinema",
+              "meal",
+              "party",
+              "ceremony",
               "date",
               "friends",
               "family",
               "work_milestone",
+              "work_phase",
               "thesis_milestone",
+              "creative_work",
+              "class_course",
+              "exam",
+              "deadline",
               "medical",
+              "health_episode",
+              "therapy",
               "administrative",
+              "legal_financial",
+              "errand",
               "celebration",
+              "memory",
               "custom"
             ]
           },
@@ -8970,7 +9071,10 @@
           "now",
           "nextLifeEventId",
           "limit",
-          "offset"
+          "offset",
+          "total",
+          "hasMore",
+          "counts"
         ],
         "properties": {
           "events": {
@@ -9001,6 +9105,36 @@
           "offset": {
             "type": "integer",
             "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "past",
+              "current",
+              "upcoming"
+            ],
+            "properties": {
+              "past": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "current": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "upcoming": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       },
@@ -9675,6 +9809,270 @@
           }
         }
       },
+      "ArtifactSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "shortDescription",
+          "originalFileName",
+          "byteSize",
+          "contentProtection",
+          "detectedExtension",
+          "formatFamily",
+          "sourceKind",
+          "sourceLabel",
+          "artifactState",
+          "dangerScore",
+          "dangerLevel",
+          "downloadPolicy",
+          "links",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "shortDescription": {
+            "type": "string"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "integer"
+          },
+          "contentProtection": {
+            "type": "object",
+            "required": [
+              "mode",
+              "encryptedAt",
+              "algorithm",
+              "kdf",
+              "kdfParams",
+              "passwordHint"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "plaintext",
+                  "password_encrypted"
+                ]
+              },
+              "encryptedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "algorithm": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "libsodium-secretstream-xchacha20poly1305"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kdf": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "argon2id"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kdfParams": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "memlimit",
+                      "opslimit",
+                      "parallelism"
+                    ],
+                    "properties": {
+                      "memlimit": {
+                        "type": "integer",
+                        "minimum": 19922944
+                      },
+                      "opslimit": {
+                        "type": "integer",
+                        "minimum": 2
+                      },
+                      "parallelism": {
+                        "type": "integer",
+                        "enum": [
+                          1
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "passwordHint": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "description": "Safe content-protection metadata. It never includes password, salt, derived key, ciphertext header, plaintext snippets, or decrypted bytes."
+          },
+          "detectedExtension": {
+            "type": "string"
+          },
+          "formatFamily": {
+            "type": "string",
+            "enum": [
+              "spreadsheet",
+              "document",
+              "presentation",
+              "pdf",
+              "text",
+              "structured_text",
+              "image"
+            ]
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "agent_upload",
+              "wiki_ingest",
+              "external_reference",
+              "manual"
+            ]
+          },
+          "sourceLabel": {
+            "type": "string"
+          },
+          "artifactState": {
+            "type": "string",
+            "enum": [
+              "active",
+              "quarantined",
+              "blocked",
+              "archived",
+              "metadata_only"
+            ]
+          },
+          "dangerScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "dangerLevel": {
+            "type": "string",
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "blocked"
+            ]
+          },
+          "downloadPolicy": {
+            "type": "string",
+            "enum": [
+              "human_only",
+              "disabled"
+            ]
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sourceEntityType",
+                "sourceEntityId",
+                "targetEntityType",
+                "targetEntityId",
+                "anchorKey",
+                "relationship",
+                "createdByActor",
+                "createdAt"
+              ],
+              "properties": {
+                "sourceEntityType": {
+                  "type": "string"
+                },
+                "sourceEntityId": {
+                  "type": "string"
+                },
+                "targetEntityType": {
+                  "type": "string"
+                },
+                "targetEntityId": {
+                  "type": "string"
+                },
+                "anchorKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "relationship": {
+                  "type": "string"
+                },
+                "createdByActor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Compact artifact metadata for bounded list responses. Read /api/v1/artifacts/{id} for full hashes, storage metadata, scanner evidence, enrichment, and user metadata."
+      },
       "ArtifactListResponse": {
         "type": "object",
         "required": [
@@ -9688,7 +10086,7 @@
           "artifacts": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Artifact"
+              "$ref": "#/components/schemas/ArtifactSummary"
             }
           },
           "total": {
@@ -9698,7 +10096,7 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 500
+            "maximum": 100
           },
           "offset": {
             "type": "integer",
@@ -10290,6 +10688,8 @@
           "inputs",
           "context",
           "conversationId",
+          "retryOfRunId",
+          "flowSnapshot",
           "result",
           "error",
           "createdAt",
@@ -10340,6 +10740,61 @@
               }
             ]
           },
+          "retryOfRunId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flowSnapshot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "title",
+                  "updatedAt",
+                  "graph",
+                  "publicInputs",
+                  "publishedOutputs"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "graph": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "publicInputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "publishedOutputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "result": {
             "anyOf": [
               {
@@ -10378,6 +10833,134 @@
           }
         }
       },
+      "WorkbenchRunSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "connectorId",
+          "mode",
+          "status",
+          "conversationId",
+          "retryOfRunId",
+          "outputPreview",
+          "result",
+          "hasResult",
+          "error",
+          "flowUpdatedAt",
+          "createdAt",
+          "completedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "connectorId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "run",
+              "chat"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryOfRunId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputPreview": {
+            "type": "string",
+            "maxLength": 332
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "primaryText"
+                ],
+                "properties": {
+                  "primaryText": {
+                    "type": "string",
+                    "maxLength": 332
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasResult": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flowUpdatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "WorkbenchRunPage": {
         "type": "object",
         "required": [
@@ -10391,7 +10974,7 @@
           "runs": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/WorkbenchRun"
+              "$ref": "#/components/schemas/WorkbenchRunSummary"
             }
           },
           "total": {
@@ -10409,6 +10992,107 @@
           },
           "hasMore": {
             "type": "boolean"
+          }
+        }
+      },
+      "WorkbenchReadMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contentType",
+          "originalBytes",
+          "returnedBytes",
+          "redacted",
+          "redactedPaths",
+          "truncated"
+        ],
+        "properties": {
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "json",
+              "mixed"
+            ]
+          },
+          "originalBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "returnedBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "redacted": {
+            "type": "boolean"
+          },
+          "redactedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkbenchNodeResultSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nodeId",
+          "nodeType",
+          "label",
+          "outputKeys",
+          "outputPreview",
+          "hasPayload",
+          "error",
+          "timingMs"
+        ],
+        "properties": {
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeType": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "outputKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputPreview": {
+            "type": "string",
+            "maxLength": 332
+          },
+          "hasPayload": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timingMs": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -16213,13 +16897,14 @@
     "/api/v1/artifacts": {
       "get": {
         "summary": "List artifact metadata",
-        "description": "Lists stored file artifacts and their metadata, scan state, danger score, and generic entity links. This route does not return file bytes.",
+        "description": "Lists compact artifact metadata, danger state, and generic entity links. Read one artifact for full scanner, enrichment, hash, storage, provenance, and user metadata. This route does not return file bytes.",
         "parameters": [
           {
             "name": "query",
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 200
             }
           },
           {
@@ -16285,7 +16970,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 500
+              "maximum": 100,
+              "default": 100
             }
           },
           {
@@ -16923,6 +17609,15 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Search titles, descriptions, event types, places, origins, and destinations before pagination."
           },
           {
             "name": "eventTypes",
@@ -18126,6 +18821,21 @@
           "Health"
         ],
         "summary": "Update nutrition and weight-loss targets",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18166,6 +18876,21 @@
           "Health"
         ],
         "summary": "Set or clear the user-edited active calorie allowance for one weight-loss day",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18345,6 +19070,21 @@
           "Health"
         ],
         "summary": "Create a nutrition food log",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18383,6 +19123,29 @@
           "Health"
         ],
         "summary": "Patch a nutrition food log",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Updated nutrition food log",
@@ -18410,6 +19173,29 @@
           "Health"
         ],
         "summary": "Delete a nutrition food log",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Deleted nutrition food log",
@@ -18439,6 +19225,21 @@
           "Health"
         ],
         "summary": "Parse a food log through Forge's openai-codex ChatGPT subscription connection",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -18560,6 +19361,32 @@
           "Health"
         ],
         "summary": "Create a body-composition check-in",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+          }
+        ],
         "responses": {
           "201": {
             "description": "Created body check-in",
@@ -18590,6 +19417,32 @@
           "Health"
         ],
         "summary": "Create an aesthetic appearance check-in",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+          }
+        ],
         "responses": {
           "201": {
             "description": "Created appearance check-in",
@@ -18620,6 +19473,32 @@
           "Health"
         ],
         "summary": "Create a subjective food-effect check-in",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+          }
+        ],
         "responses": {
           "201": {
             "description": "Created subjective check-in",
@@ -18650,6 +19529,32 @@
           "Health"
         ],
         "summary": "Create a gut-health food-effect check-in",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable retry key for this check-in domain. An exact replay returns the original check-in with Idempotency-Replayed: true; reuse with a different payload returns 409."
+          }
+        ],
         "responses": {
           "201": {
             "description": "Created gut check-in",
@@ -18734,7 +19639,7 @@
             },
             "style": "form",
             "explode": true,
-            "description": "Optional selected-user scope. The first selected user owns the new experiment unless userId is provided in the body."
+            "description": "Select exactly one Forge user. A body userId must match this selection, and scoped tokens may select only an allowed user."
           }
         ],
         "requestBody": {
@@ -18784,6 +19689,19 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "userIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Select exactly one Forge user for this mutation. A body userId must match this selection. Scoped tokens may select only an allowed user and default to their sole allowed user."
           }
         ],
         "requestBody": {
@@ -25623,7 +26541,7 @@
       },
       "post": {
         "summary": "Create a native Forge calendar event",
-        "description": "Forge stores the event canonically first, then projects it to a connected writable calendar when a preferred calendar is selected.",
+        "description": "Forge stores the event canonically first, then projects it to a connected writable calendar when selected. Provider failures do not discard the local record; inspect projection for the exact outcome.",
         "responses": {
           "201": {
             "description": "Created calendar event",
@@ -25632,11 +26550,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "event"
+                    "event",
+                    "projection"
                   ],
                   "properties": {
                     "event": {
                       "$ref": "#/components/schemas/CalendarEvent"
+                    },
+                    "projection": {
+                      "$ref": "#/components/schemas/CalendarProjectionResult"
                     }
                   }
                 }
@@ -25686,6 +26608,7 @@
       },
       "patch": {
         "summary": "Update a Forge calendar event and sync remote projections",
+        "description": "Mirrored provider events are read-only. Recurring provider records require an explicit recurrenceEditScope; whole-series edits from an expanded occurrence are rejected. Forge-owned event changes return a projection outcome so provider conflicts and outages are not reported as lost local saves.",
         "responses": {
           "200": {
             "description": "Updated calendar event",
@@ -25694,11 +26617,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "event"
+                    "event",
+                    "projection"
                   ],
                   "properties": {
                     "event": {
                       "$ref": "#/components/schemas/CalendarEvent"
+                    },
+                    "projection": {
+                      "$ref": "#/components/schemas/CalendarProjectionResult"
                     }
                   }
                 }
@@ -26062,6 +26989,17 @@
     "/api/v1/habits": {
       "get": {
         "summary": "List habits with current streak and due-today state",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Current IANA device timezone for habits that follow travel."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Habit collection",
@@ -28791,6 +29729,16 @@
     "/api/v1/reviews/weekly": {
       "get": {
         "summary": "Get the weekly review payload",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "timeZone",
+            "schema": {
+              "type": "string"
+            },
+            "description": "IANA timezone used to derive the local Monday-through-Sunday review window."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Weekly review payload",
@@ -28820,6 +29768,16 @@
     "/api/v1/reviews/weekly/finalize": {
       "post": {
         "summary": "Finalize the current weekly review cycle",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "timeZone",
+            "schema": {
+              "type": "string"
+            },
+            "description": "IANA timezone used to select the local review cycle being finalized."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Existing weekly review closure",

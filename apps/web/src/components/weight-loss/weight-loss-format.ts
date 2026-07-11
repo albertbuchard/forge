@@ -11,6 +11,15 @@ export function formatNumber(value: unknown, digits = 0) {
   return number === null ? "n/a" : number.toFixed(digits);
 }
 
+export function formatMeasurement(
+  value: unknown,
+  unit: string,
+  digits = 0
+) {
+  const parsed = numeric(value);
+  return parsed == null ? "n/a" : `${parsed.toFixed(digits)}${unit}`;
+}
+
 export function formatSigned(value: unknown, digits = 0) {
   const number = numeric(value);
   if (number === null) {

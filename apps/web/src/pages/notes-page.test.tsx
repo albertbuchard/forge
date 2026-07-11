@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -128,6 +134,36 @@ function renderWithProviders(initialEntry = "/notes") {
       </MemoryRouter>
     </QueryClientProvider>
   );
+}
+
+function buildNote(index: number) {
+  return {
+    id: `note_${index}`,
+    kind: "evidence" as const,
+    title: `Note ${index}`,
+    slug: `note-${index}`,
+    spaceId: "space_1",
+    parentSlug: null,
+    indexOrder: 0,
+    showInIndex: true,
+    aliases: [],
+    summary: "",
+    contentMarkdown: `Bounded note ${index}`,
+    contentPlain: `Bounded note ${index}`,
+    author: "Albert",
+    source: "ui" as const,
+    sourcePath: "",
+    frontmatter: {},
+    revisionHash: `hash-${index}`,
+    lastSyncedAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    links: [],
+    tags: ["bounded"],
+    destroyAt: null,
+    userId: "user_operator",
+    user: null
+  };
 }
 
 describe("NotesPage", () => {
@@ -291,5 +327,37 @@ describe("NotesPage", () => {
     expect(
       document.getElementById("forge-note-note_outside_window")
     ).toHaveAttribute("aria-current", "true");
+  });
+
+  it("loads notes in bounded user-scoped windows and expands intentionally", async () => {
+    listNotesMock.mockImplementation(
+      async (input: { limit?: number; userIds?: string[] }) => ({
+        notes: Array.from({ length: input.limit ?? 40 }, (_, index) =>
+          buildNote(index)
+        )
+      })
+    );
+
+    renderWithProviders("/notes?textTerms=bounded&tags=capture");
+
+    const loadOlder = await screen.findByRole("button", {
+      name: "Load older notes"
+    });
+    expect(listNotesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 40,
+        textTerms: ["bounded"],
+        tags: ["capture"],
+        userIds: ["user_operator"]
+      })
+    );
+
+    fireEvent.click(loadOlder);
+
+    await waitFor(() =>
+      expect(listNotesMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ limit: 80 })
+      )
+    );
   });
 });

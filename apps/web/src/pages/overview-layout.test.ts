@@ -131,6 +131,22 @@ describe("normalizeOverviewLayout", () => {
     expect(normalizeOverviewLayout(customized)).toBe(customized);
   });
 
+  it("migrates a known legacy order with an invalid stored timestamp", () => {
+    const legacy = layout(
+      ["hero", "signals", "summary", "goals", "pipeline", "weather"],
+      "invalid-legacy-timestamp"
+    );
+
+    expect(normalizeOverviewLayout(legacy).order).toEqual([
+      "hero",
+      "summary",
+      "signals",
+      "pipeline",
+      "goals",
+      "weather"
+    ]);
+  });
+
   it("is idempotent once the operational order is active", () => {
     const current = layout([
       "hero",
@@ -175,11 +191,35 @@ describe("normalizeOverviewLayout", () => {
     ]);
   });
 
-  it("restores the required Forge Smith widget without disturbing custom order", () => {
+  it("preserves a deliberate direct reorder after the migration cutover", () => {
+    const customized = layout(
+      [
+        "hero",
+        "summary",
+        "gamification",
+        "signals",
+        "pipeline",
+        "body-signals",
+        "goals",
+        "life-force"
+      ],
+      "2026-07-11T09:30:00.000Z"
+    );
+
+    expect(normalizeOverviewLayout(customized)).toBe(customized);
+  });
+
+  it("restores required overview widgets without disturbing custom order", () => {
     const customized = layout(
       ["hero", "goals", "gamification", "summary"],
       "2026-07-10T08:00:00.000Z",
       {
+        hero: {
+          hidden: true,
+          fullWidth: false,
+          titleVisible: false,
+          descriptionVisible: false
+        },
         gamification: {
           hidden: true,
           fullWidth: false,
@@ -192,6 +232,9 @@ describe("normalizeOverviewLayout", () => {
     expect(normalizeOverviewLayout(customized)).toMatchObject({
       order: customized.order,
       widgets: {
+        hero: {
+          hidden: false
+        },
         gamification: {
           hidden: false
         }

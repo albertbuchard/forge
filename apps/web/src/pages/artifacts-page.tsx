@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -60,6 +60,8 @@ import type {
   Artifact,
   ArtifactDangerLevel,
   ArtifactFormatFamily,
+  ArtifactState,
+  ArtifactSummary,
   ArtifactScanFinding,
   ArtifactScanResult,
   ArtifactSourceKind,
@@ -84,7 +86,16 @@ const FORMAT_FAMILIES: ArtifactFormatFamily[] = [
   "image"
 ];
 
+const ARTIFACT_STATES: ArtifactState[] = [
+  "active",
+  "quarantined",
+  "blocked",
+  "archived",
+  "metadata_only"
+];
+
 const ARTIFACT_PAGE_SIZE = 50;
+const ARTIFACT_SEARCH_DEBOUNCE_MS = 200;
 const MAX_ARTIFACT_UPLOAD_QUEUE_FILES = 25;
 
 function formatBytes(value: number) {
@@ -232,7 +243,9 @@ function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function isEncryptedArtifact(artifact: Artifact | null | undefined) {
+function isEncryptedArtifact(
+  artifact: Artifact | ArtifactSummary | null | undefined
+) {
   return artifact?.contentProtection.mode === "password_encrypted";
 }
 
@@ -345,7 +358,7 @@ function ArtifactListItem({
   selected,
   onSelect
 }: {
-  artifact: Artifact;
+  artifact: ArtifactSummary;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -354,7 +367,7 @@ function ArtifactListItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full rounded-[var(--radius-card)] border p-3 text-left transition",
+        "min-h-[6.75rem] w-full rounded-[var(--radius-card)] border p-3 text-left transition",
         selected
           ? "border-[color-mix(in_srgb,var(--primary)_45%,var(--ui-border-subtle)_55%)] bg-[var(--ui-accent-soft)]"
           : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] hover:bg-[var(--ui-surface-hover)]"
@@ -434,6 +447,9 @@ export function ArtifactsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [committedQuery, setCommittedQuery] = useState("");
+  const artifactListRef = useRef<HTMLDivElement>(null);
+  const [artifactState, setArtifactState] = useState<ArtifactState | "">("");
   const [dangerLevel, setDangerLevel] = useState<ArtifactDangerLevel | "">("");
   const [formatFamily, setFormatFamily] = useState<ArtifactFormatFamily | "">(
     ""
@@ -478,6 +494,7 @@ export function ArtifactsPage() {
   );
   const hasAnyFilter = Boolean(
     query.trim() ||
+    artifactState ||
     dangerLevel ||
     formatFamily ||
     linkedEntityType.trim() ||
@@ -487,7 +504,8 @@ export function ArtifactsPage() {
   const artifactsQuery = useQuery({
     queryKey: [
       "artifacts",
-      query,
+      committedQuery,
+      artifactState,
       dangerLevel,
       formatFamily,
       linkedEntityType,
@@ -496,7 +514,8 @@ export function ArtifactsPage() {
     ],
     queryFn: () =>
       listArtifacts({
-        query: query || undefined,
+        query: committedQuery || undefined,
+        artifactState: artifactState || undefined,
         dangerLevel: dangerLevel || undefined,
         formatFamily: formatFamily || undefined,
         linkedEntityType: hasCompleteLinkedEntityFilter
@@ -507,7 +526,8 @@ export function ArtifactsPage() {
           : undefined,
         limit: ARTIFACT_PAGE_SIZE,
         offset: pageIndex * ARTIFACT_PAGE_SIZE
-      })
+      }),
+    placeholderData: (previous) => previous
   });
 
   const artifacts = useMemo(
@@ -527,12 +547,20 @@ export function ArtifactsPage() {
     queryFn: () => getArtifact(artifactId!)
   });
   const selectedArtifact = useMemo(
-    () =>
-      artifactId
-        ? (selectedArtifactQuery.data?.artifact ?? null)
-        : (artifacts[0] ?? null),
-    [artifactId, artifacts, selectedArtifactQuery.data?.artifact]
+    () => (artifactId ? (selectedArtifactQuery.data?.artifact ?? null) : null),
+    [artifactId, selectedArtifactQuery.data?.artifact]
   );
+  const artifactListUpdating =
+    query.trim() !== committedQuery ||
+    (artifactsQuery.isFetching && !artifactsQuery.isLoading);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(
+      () => setCommittedQuery(query.trim()),
+      ARTIFACT_SEARCH_DEBOUNCE_MS
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [query]);
 
   const versionsQuery = useQuery({
     queryKey: ["artifact-versions", selectedArtifact?.id],
@@ -547,14 +575,28 @@ export function ArtifactsPage() {
   });
 
   useEffect(() => {
-    if (!artifactId && selectedArtifact && !uploadDialogOpen) {
-      navigate(`/artifacts/${selectedArtifact.id}`, { replace: true });
+    const firstArtifact = artifacts[0];
+    if (!artifactId && firstArtifact && !uploadDialogOpen) {
+      navigate(`/artifacts/${firstArtifact.id}`, { replace: true });
     }
-  }, [artifactId, navigate, selectedArtifact, uploadDialogOpen]);
+  }, [artifactId, artifacts, navigate, uploadDialogOpen]);
 
   useEffect(() => {
     setPageIndex(0);
-  }, [query, dangerLevel, formatFamily, linkedEntityType, linkedEntityId]);
+  }, [
+    committedQuery,
+    artifactState,
+    dangerLevel,
+    formatFamily,
+    linkedEntityType,
+    linkedEntityId
+  ]);
+
+  useEffect(() => {
+    if (typeof artifactListRef.current?.scrollTo === "function") {
+      artifactListRef.current.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, [pageIndex, committedQuery, artifactState, dangerLevel, formatFamily]);
 
   useEffect(() => {
     if (pageIndex > 0 && artifactsQuery.data && artifacts.length === 0) {
@@ -1540,7 +1582,22 @@ export function ArtifactsPage() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search title, file, description, provenance"
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              <select
+                aria-label="Filter by artifact state"
+                value={artifactState}
+                onChange={(event) =>
+                  setArtifactState(event.target.value as ArtifactState | "")
+                }
+                className="interactive-tap min-h-10 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+              >
+                <option value="">Any state</option>
+                {ARTIFACT_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {titleCase(state)}
+                  </option>
+                ))}
+              </select>
               <select
                 aria-label="Filter by danger level"
                 value={dangerLevel}
@@ -1614,11 +1671,18 @@ export function ArtifactsPage() {
           </Card>
 
           <div className="flex items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
-            <span>
-              {totalArtifacts === 0
-                ? "No matching artifacts"
-                : `Showing ${pageStart}-${pageEnd} of ${totalArtifacts}`}
-            </span>
+            <div className="min-w-0">
+              <span>
+                {totalArtifacts === 0
+                  ? "No matching artifacts"
+                  : `Showing ${pageStart}-${pageEnd} of ${totalArtifacts}`}
+              </span>
+              {artifactListUpdating ? (
+                <span className="ml-2" role="status">
+                  Updating results...
+                </span>
+              ) : null}
+            </div>
             <div className="flex items-center gap-1.5">
               <Button
                 type="button"
@@ -1645,7 +1709,11 @@ export function ArtifactsPage() {
             </div>
           </div>
 
-          <div className="max-h-[calc(100vh-23rem)] min-h-[12rem] space-y-2 overflow-y-auto pr-1">
+          <div
+            ref={artifactListRef}
+            aria-busy={artifactListUpdating}
+            className="max-h-[calc(100vh-23rem)] min-h-[12rem] space-y-2 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+          >
             {artifactsQuery.isLoading ? (
               <Card className="text-sm text-[var(--ui-ink-muted)]">
                 Loading artifacts...

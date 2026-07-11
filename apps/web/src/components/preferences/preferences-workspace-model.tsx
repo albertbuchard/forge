@@ -169,6 +169,15 @@ export const SIGNAL_OPTIONS: Array<{
   { signalType: "veto", label: "Veto" }
 ];
 
+export const SIGNAL_MODEL_EFFECTS: Record<PreferenceSignalType, string> = {
+  favorite: "Strong positive evidence; inferred status becomes favorite.",
+  must_have: "Strongest positive evidence; inferred status becomes must-have.",
+  bookmark: "Light positive evidence and a bookmarked inferred status.",
+  compare_later: "Light positive evidence and priority for another comparison.",
+  neutral: "Zero score weight; records an explicit neutral observation.",
+  veto: "Strong negative evidence; inferred status becomes vetoed."
+};
+
 export type PreferencesTab = (typeof TABS)[number]["id"];
 
 export type CandidateEntity = {
@@ -367,16 +376,19 @@ export function ComparisonCard({
   title,
   description,
   sideLabel,
+  disabled = false,
   onClick
 }: {
   title: string;
   description: string;
   sideLabel: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       className="grid min-h-[220px] gap-4 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-5 text-left transition hover:border-[color-mix(in_srgb,var(--primary)_40%,transparent)] hover:bg-[var(--ui-surface-hover)]"
       onClick={onClick}
     >
