@@ -583,10 +583,36 @@ const repairedPayload = JSON.parse(repairedDoctor.stdout);
 const dataRootCheck = repairedPayload.checks.find(
   (check) => check.id === "dataRoot"
 );
-if (!dataRootCheck?.ok || !dataRootCheck.repaired) {
-  throw new Error("Expected doctor --repair --no-start to recreate dataRoot");
+if (
+  !dataRootCheck?.ok ||
+  !dataRootCheck.repaired ||
+  !dataRootCheck.directory ||
+  !dataRootCheck.readable ||
+  !dataRootCheck.writable
+) {
+  throw new Error(
+    `Expected doctor --repair --no-start to recreate a usable dataRoot, got ${JSON.stringify(dataRootCheck)}`
+  );
 }
-run(["doctor", "--json"]);
+const doctorPreservationMarker = path.join(dataRoot, "doctor-preserved.txt");
+fs.writeFileSync(doctorPreservationMarker, "doctor must preserve this\n");
+const readOnlyDoctor = JSON.parse(run(["doctor", "--json"]).stdout);
+const readOnlyDataRootCheck = readOnlyDoctor.checks.find(
+  (check) => check.id === "dataRoot"
+);
+if (!readOnlyDataRootCheck?.ok || readOnlyDataRootCheck.repaired) {
+  throw new Error(
+    `Expected ordinary doctor to inspect the existing dataRoot without repair, got ${JSON.stringify(readOnlyDataRootCheck)}`
+  );
+}
+if (
+  fs.readFileSync(doctorPreservationMarker, "utf8") !==
+  "doctor must preserve this\n"
+) {
+  throw new Error(
+    "Expected doctor to preserve existing data-root files exactly"
+  );
+}
 const pairingFailure = runFailure(["pair-ios", "--json", "--no-start"]);
 if (!pairingFailure.stderr.includes("iOS pairing was not started")) {
   throw new Error(
@@ -1709,7 +1735,7 @@ if (!fs.existsSync(dataRoot)) {
     "Expected forge-memory uninstall to keep the data folder by default"
   );
 }
-for (const marker of ["update-preserved.txt"]) {
+for (const marker of ["doctor-preserved.txt", "update-preserved.txt"]) {
   if (!fs.existsSync(path.join(dataRoot, marker))) {
     throw new Error(
       `Expected forge-memory uninstall to preserve data marker ${marker}`

@@ -43,6 +43,8 @@ include = ["forge_hermes*"]
 [tool.setuptools.package-data]
 "forge_hermes" = [
   "skill.md",
+  "entity_conversation_playbooks.md",
+  "psyche_entity_playbooks.md",
   "scripts/*.mjs",
   "runtime/package.json",
   "runtime/dist/**/*",

@@ -184,6 +184,30 @@ def test_update_entities_tool_description_mentions_habit_checkins():
     assert "official habit outcome logging" in description
 
 
+def test_live_contract_descriptions_prevent_catalog_and_update_drift():
+    specs = {tool["name"]: tool for tool in TOOL_CATALOG}
+    onboarding = specs["forge_get_agent_onboarding"]["description"]
+    create = specs["forge_create_entities"]["description"]
+    update = specs["forge_update_entities"]["description"]
+
+    assert "before the first Forge read or write" in onboarding
+    assert "entityCatalog" in onboarding
+    assert "required fields" in onboarding
+    assert "question flows" in onboarding
+    assert "route keys, methods, paths, and placeholders" in onboarding
+    assert "data.level" in create
+    assert "never entityType issue or subtask" in create
+    assert "after reading the current record" in update
+    assert "Preserve omitted fields" in update
+    assert "patch.level" in update
+
+
+def test_hermes_source_and_packaged_skill_contracts_are_identical():
+    assert (HERMES_PLUGIN_ROOT / "skill.md").read_text() == (
+        HERMES_PLUGIN_ROOT / "forge_hermes" / "skill.md"
+    ).read_text()
+
+
 def test_nutrition_experiment_tools_publish_the_full_api_contract():
     specs = {tool["name"]: tool for tool in TOOL_CATALOG}
     create_properties = specs["forge_start_nutrition_experiment"]["parameters"][

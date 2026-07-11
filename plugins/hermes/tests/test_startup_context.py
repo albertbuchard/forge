@@ -182,3 +182,33 @@ def test_register_skips_hooks_missing_from_current_hermes(monkeypatch: pytest.Mo
         "on_session_finalize",
         "on_session_reset",
     }.issubset(set(registered_hooks))
+
+
+def test_register_publishes_every_bundled_conversation_skill(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    registered_skills: dict[str, object] = {}
+
+    class FakeContext:
+        def register_tool(self, **_kwargs):
+            return None
+
+        def register_hook(self, _hook_name, _handler):
+            return None
+
+        def register_skill(self, skill_name, source):
+            registered_skills[skill_name] = source
+
+    monkeypatch.setattr(forge_hermes, "_hook_is_supported", lambda _name: True)
+    monkeypatch.setattr(tools, "start_gateway_runtime_presence", lambda: None)
+
+    forge_hermes.register(FakeContext())
+
+    assert set(registered_skills) == {
+        "forge-hermes",
+        "entity-conversation-playbooks",
+        "psyche-entity-playbooks",
+    }
+    for source in registered_skills.values():
+        assert source.exists()
+        assert source.stat().st_size > 1_000

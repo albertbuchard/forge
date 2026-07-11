@@ -8,6 +8,31 @@ description: Use Forge's curated MCP tools to read, create, update, link, review
 Use this plugin when you want Codex to work directly with Forge through the curated
 MCP tool surface.
 
+## Live Contract And Missing-Information Gate
+
+Before the first Forge read or write in a session, call
+`forge_get_agent_onboarding`. Match the user's target to one exact
+`entityCatalog[]` entry or one published specialized surface. Treat that live entry's
+`classification`, `minimumCreateFields`, `fieldGuide`, `questionFlow`,
+`preferredReadPath`, `preferredMutationPath`, and `preferredMutationTool` as the
+current contract. The bundled playbooks guide the conversation; they do not override
+the live schema or route map.
+
+Build a private missing-information diff before asking anything:
+
+- remove details the user already supplied
+- remove optional fields and published defaults that do not change meaning,
+  accountability, timing, retrieval, safety, or route selection
+- on update, read the current record first and preserve every field the user did not
+  ask to change
+- ask one Psyche question at a time; for logistical records, one compact question may
+  group inseparable details such as start, end, and timezone
+- act when no blocking ambiguity remains instead of asking a polished extra question
+
+If the target is absent from live onboarding, refresh once. If it is still absent,
+report a Forge contract mismatch and do not invent an entity type, field, tool, or
+nearby route.
+
 Forge has planning, health, preferences, Psyche, questionnaire, self-observation,
 wiki surfaces, the Artifact Store, read-model surfaces, and specialized Movement, Life Events, Life Force, and Workbench domain surfaces.
 The planning side covers goals, projects, strategies, tasks,
@@ -48,6 +73,12 @@ publish, preserve, calendar-sync, ticket-import, or status lanes through their d
 route keys. Psyche entities need
 formulation before storage when the user wants understanding rather than a direct
 save.
+
+In the planning hierarchy, `issue` and `subtask` are not standalone batch entity
+types. Store issues, tasks, and subtasks through `entityType: "task"` with
+`data.level: "issue" | "task" | "subtask"`; use `projectId` and
+`parentWorkItemId` for placement. Never call batch CRUD with `entityType: "issue"`
+or `entityType: "subtask"`.
 
 ## Entity Route Posture
 

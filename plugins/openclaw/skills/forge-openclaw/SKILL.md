@@ -1,9 +1,34 @@
 ---
 name: forge-openclaw-plugin
-description: use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. identify the exact Forge object or specialized surface, keep the main conversation natural, guide psyche intake with active listening before storing it, and for psyche issues that need understanding first usually begin with one exploratory question before any formulation or save suggestion.
+description: Use when the user wants to save, search, update, review, start, stop, reward, explain, compare, or run Forge records, or when the conversation is clearly about a Forge entity or domain surface such as a goal, project, strategy, task, habit, note, wiki_page, artifact, calendar_event, calendar_connection, work_block_template, task_timebox, task_run, work_adjustment, insight, preference item, preference context, preference catalog, preference judgment, preference signal, questionnaire instrument, questionnaire run, self observation, operator_overview, operator_context, calendar_overview, sleep_overview, sports_overview, training_load, weight_loss, movement, life_force, workbench, psyche_value, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, trigger_report, event_type, emotion_definition, sleep_session, or workout_session. Start from live onboarding, use batch CRUD for normal entities and dedicated tools for specialized surfaces, ask only for blocking missing information, and guide exploratory Psyche work with active listening plus one discussable hypothesis after a concrete example.
 ---
 
 Forge is the user's structured system for planning work, doing work, reflecting on patterns, and keeping a truthful record of what is happening. Use it when the user is clearly working inside that system, or when they are describing something that naturally belongs there and would benefit from being stored, updated, reviewed, or acted on in Forge. Keep the conversation natural first. Do not turn every message into intake. When a real Forge entity is clearly present, name the exact entity type plainly, help with the substance of the conversation, and then offer Forge once, lightly, if storing it would genuinely help.
+
+## Live Contract And Missing-Information Gate
+
+Before the first Forge read or write in a session, call
+`forge_get_agent_onboarding`. Match the user's target to one exact
+`entityCatalog[]` entry or one published specialized surface. Treat that live entry's
+`classification`, `minimumCreateFields`, `fieldGuide`, `questionFlow`,
+`preferredReadPath`, `preferredMutationPath`, and `preferredMutationTool` as the
+current contract. The bundled playbooks guide the conversation; they do not override
+the live schema or route map.
+
+Build a private missing-information diff before asking anything:
+
+- remove details the user already supplied
+- remove optional fields and published defaults that do not change meaning,
+  accountability, timing, retrieval, safety, or route selection
+- on update, read the current record first and preserve every field the user did not
+  ask to change
+- ask one Psyche question at a time; for logistical records, one compact question may
+  group inseparable details such as start, end, and timezone
+- act when no blocking ambiguity remains instead of asking a polished extra question
+
+If the target is absent from live onboarding, refresh once. If it is still absent,
+report a Forge contract mismatch and do not invent an entity type, field, tool, or
+nearby route.
 
 ## Project Management Hierarchy Rule
 
@@ -21,6 +46,11 @@ Keep `project` and `strategy` as first-class Forge entities. Treat `issue`,
 `task`, and `subtask` as the execution layer below projects. When the user is
 working on a Forge project-management request, preserve that hierarchy in your
 language and in the records you create.
+
+`issue` and `subtask` are not standalone batch entity types. They are stored through
+`entityType: "task"` with `data.level: "issue" | "task" | "subtask"`. Use
+`projectId` and `parentWorkItemId` for placement. Never call batch CRUD with
+`entityType: "issue"` or `entityType: "subtask"`.
 
 Project-management workflow rule:
 

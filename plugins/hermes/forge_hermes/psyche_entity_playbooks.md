@@ -209,6 +209,25 @@ Name the lived stake you heard, then ask the one question that would change the
 belief, loop, mode, trigger report, flashcard cue, emotion signature, link, or save
 confirmation.
 
+## Therapeutic state checkpoint
+
+Track these privately so the user does not have to repeat or organize the formulation
+for the agent:
+
+- the concrete episode or recurring context already heard
+- the cue, emotion, body signal, thought, behavior, and consequence already heard
+- the possible protection, prediction, relief, payoff, cost, or value conflict
+- the user's accepted wording and any wording they rejected
+- whether the user wants exploration, a direct save, an update, or no storage
+
+Reflect one specific detail from that state before the next question. Ask only for the
+first missing element that can change the primary record or its wording. Once a
+concrete example and a plausible function are visible, do not make the user answer a
+third broad question: offer one grounded hypothesis and ask whether it fits or needs
+correction. A correction replaces the rejected hypothesis; never defend it or stack
+another theory on top. Once wording is accepted, ask for save consent or act on the
+consent already given, then stop the intake.
+
 ## Interpretive Hypotheses
 
 Use hypotheses when reflection alone would leave the user circling around the same
@@ -732,7 +751,7 @@ will preserve the structure best.
 Psyche records are psychologically meaningful, but they are still normal stored Forge
 entities for API purposes. Once the formulation is clear and the user has consented to
 save or update it, use the shared batch entity routes for `psyche_value`,
-  `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
+`behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`,
 `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, and
 `emotion_definition`.
 

@@ -3,6 +3,31 @@
 Use this plugin when Hermes should work directly with Forge through the curated Forge
 tool surface.
 
+## Live Contract And Missing-Information Gate
+
+Before the first Forge read or write in a session, call
+`forge_get_agent_onboarding`. Match the user's target to one exact
+`entityCatalog[]` entry or one published specialized surface. Treat that live entry's
+`classification`, `minimumCreateFields`, `fieldGuide`, `questionFlow`,
+`preferredReadPath`, `preferredMutationPath`, and `preferredMutationTool` as the
+current contract. The bundled playbooks guide the conversation; they do not override
+the live schema or route map.
+
+Build a private missing-information diff before asking anything:
+
+- remove details the user already supplied
+- remove optional fields and published defaults that do not change meaning,
+  accountability, timing, retrieval, safety, or route selection
+- on update, read the current record first and preserve every field the user did not
+  ask to change
+- ask one Psyche question at a time; for logistical records, one compact question may
+  group inseparable details such as start, end, and timezone
+- act when no blocking ambiguity remains instead of asking a polished extra question
+
+If the target is absent from live onboarding, refresh once. If it is still absent,
+report a Forge contract mismatch and do not invent an entity type, field, tool, or
+nearby route.
+
 ## Core model
 
 Forge has four major stored-entity surfaces, read-model surfaces, specialized CRUD surfaces, and four specialized domain surfaces.
@@ -62,6 +87,11 @@ Forge project management is explicit:
 Hermes should preserve that hierarchy in the records it creates or updates. Keep
 `project` and `strategy` first-class. Treat `issue`, `task`, and `subtask` as the
 execution layer below projects.
+
+`issue` and `subtask` are not standalone batch entity types. They are stored through
+`entityType: "task"` with `data.level: "issue" | "task" | "subtask"`. Use
+`projectId` and `parentWorkItemId` for placement. Never call batch CRUD with
+`entityType: "issue"` or `entityType: "subtask"`.
 
 Workflow rule:
 
@@ -208,6 +238,13 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   live onboarding, use the exact `methodRoutes` entry for the selected Movement, Life Events, Life
   Force, or Workbench lane, and cross-check OpenAPI only to confirm the same method
   and path.
+- Before every Movement, Life Events, Life Force, or Workbench call, run a route-contract
+  handshake internally: select the product lane in plain language, verify the matching
+  `routeKey` against live onboarding `routeKeys` and `methodRoutes`, fill any
+  placeholders through `pathParams`, and ask the user only for the missing product
+  noun that fills the placeholder. If the contract is missing a lane the product
+  clearly supports, report a contract bug instead of silently using generic batch
+  CRUD or a nearby route.
 
 Concrete route-key examples for internal use:
 
@@ -329,6 +366,11 @@ write, read, run, or update instead of collecting optional fields. For Movement,
 Events, Life Force, and Workbench, interpret target object or time scope in the
 surface's own nouns: movement span/place/stay/trip, Life Event/calendar match/ticket/travel
 status, weekday/profile/fatigue signal, or Workbench flow/run/node/input/output.
+Run the no-question gate before every follow-up: ask only if the answer can change
+record type, accepted wording, hierarchy placement, owner/accountability, timing,
+route lane, target object, correction, link, verification read, run/publish/preserve
+action, or consent. If the question would only add warmth, completeness, optional
+metadata, or form polish, skip it, summarize what is clear, and act or close.
 Use the user-facing wording guard after openings, reads, writes, and confirmations:
 do not say "that sounds important" unless you name the specific stake; do not ask
 "what would you like to do with this?" when the user's verb or the read result
@@ -631,6 +673,10 @@ For wiki-specific recall:
 - Do not minimize functional analysis, trigger chains, behavior patterns, modes, beliefs, or schema themes. Once at least one concrete example is clear, offer one careful interpretive hypothesis when it would help the user understand the function, protection, cost, belief, mode, or schema theme.
 - Phrase interpretive hypotheses as collaborative and testable, not as verdicts. A good hypothesis says what the reaction may be protecting, predicting, relieving, or costing, then asks whether that lands or needs correction.
 - For Psyche hypotheses, reduce the formulation burden. After one concrete example, offer one tentative function, danger, protection, payoff, or cost hypothesis and ask one fit-or-correction question. Do not make the user prove the experience, list evidence, or design repair before the wording feels held.
+- Use the Psyche hypothesis examples when one concrete episode, belief sentence,
+  behavior, or mode voice is visible and another broad question would make the user do
+  all the interpretation alone. Offer one testable formulation, ask one correction
+  question, and then bridge to the saveable record if it lands.
 - Use the hypothesis-versus-reflection gate: reflect when no concrete cue, sequence,
   belief sentence, behavior, body signal, mode voice, payoff, cost, or consequence is
   visible; offer one discussable hypothesis when the cue, meaning, protection, payoff,
@@ -638,6 +684,7 @@ For wiki-specific recall:
   interpretation alone. The hypothesis must change saveable wording, the primary
   Psyche container, links, flashcard/support action, or the next question; otherwise
   keep listening.
+- Do not keep asking broad exploratory Psyche questions after the cue, meaning, protection, payoff, or cost is already visible. For `behavior_pattern`, `belief_entry`, `mode_profile`, `mode_guide_session`, and `trigger_report`, the next helpful move is usually one active formulation plus one correction question, not another passive reflection.
 - Do not leave the user with interpretation alone. Once the hypothesis lands or is
   corrected, name the primary Forge record it becomes and ask one accuracy or consent
   question that moves toward saving the corrected formulation.

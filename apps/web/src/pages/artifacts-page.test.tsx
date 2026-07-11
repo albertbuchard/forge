@@ -16,6 +16,8 @@ import {
   downloadArtifactWithPassword,
   getArtifact,
   listArtifacts,
+  patchArtifact,
+  patchArtifactTrust,
   replaceArtifactEntityLinks,
   uploadArtifact
 } from "@/lib/api";
@@ -109,7 +111,7 @@ const mockArtifact: Artifact = {
     extractedTextTruncated: false
   },
   enrichmentResults: {},
-  metadata: {},
+  metadata: { department: "Research", retainedBy: "Operator" },
   links: [
     {
       sourceEntityType: "artifact",
@@ -182,7 +184,8 @@ vi.mock("@/lib/api", () => ({
   })),
   encryptArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
   enrichArtifact: vi.fn(),
-  patchArtifact: vi.fn(),
+  patchArtifact: vi.fn(async () => ({ artifact: mockArtifact })),
+  patchArtifactTrust: vi.fn(async () => ({ artifact: mockArtifact })),
   replaceArtifactEntityLinks: vi.fn(),
   rescanArtifact: vi.fn(),
   deleteEntities: vi.fn(async () => ({ results: [{ ok: true }] })),
@@ -247,6 +250,88 @@ describe("ArtifactsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("artifact.created")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Precise metadata")).toBeInTheDocument();
+    expect(
+      screen.getByText("/tmp/forge/artifacts/blobs/aa/bb/hash.bin")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Operator local files")).toBeInTheDocument();
+    expect(screen.getByText("user_operator")).toBeInTheDocument();
+    expect(screen.getByText(/"department": "Research"/)).toBeInTheDocument();
+  });
+
+  it("edits artifact description and provenance through a guided metadata flow", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /edit metadata/i })
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Name and describe this artifact"
+      })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Reviewed thesis budget" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Record where this file came from"
+      })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Source label or provenance note"), {
+      target: { value: "Reviewed finance folder" }
+    });
+    fireEvent.change(screen.getByLabelText("Metadata JSON"), {
+      target: { value: '{"reviewed":true,"owner":"research"}' }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save metadata/i }));
+
+    await waitFor(() => {
+      expect(patchArtifact).toHaveBeenCalledWith("artifact_123", {
+        title: "Reviewed thesis budget",
+        shortDescription: "Budget workbook for thesis planning.",
+        description: "Uploaded from the operator's local files.",
+        sourceLabel: "Reviewed finance folder",
+        metadata: { reviewed: true, owner: "research" }
+      });
+    });
+  });
+
+  it("requires a reason and records trust decisions through the dedicated route", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /trust state/i })
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: "Set the artifact safety state"
+      })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Artifact trust state"), {
+      target: { value: "quarantined" }
+    });
+    fireEvent.change(screen.getByLabelText("Artifact download policy"), {
+      target: { value: "disabled" }
+    });
+    fireEvent.change(screen.getByLabelText("Reason for this trust decision"), {
+      target: { value: "External workbook links need manual review." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /apply trust decision/i })
+    );
+
+    await waitFor(() => {
+      expect(patchArtifactTrust).toHaveBeenCalledWith("artifact_123", {
+        artifactState: "quarantined",
+        downloadPolicy: "disabled",
+        reason: "External workbook links need manual review."
+      });
     });
   });
 

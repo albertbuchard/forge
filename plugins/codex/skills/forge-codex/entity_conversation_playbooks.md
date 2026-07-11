@@ -526,6 +526,25 @@ Most good Forge intake flows follow this sequence:
 
 That sequence is not a script. Skip steps the user already answered.
 
+## Missing-information diff
+
+Before every create or update question, compare the user's words and the current
+record against the matching live onboarding entry.
+
+1. Start with `minimumCreateFields` for a create, or the user's requested correction
+   for an update.
+2. Remove values already stated, values safely derived from context, and optional
+   fields with published defaults.
+3. Keep only unknowns that change meaning, ownership, hierarchy, timing, retrieval,
+   safety, or route selection.
+4. Ask for the first blocking decision. A non-Psyche question may group only
+   inseparable values, such as start/end/timezone or origin/destination/time.
+5. When the diff is empty, act. Do not ask for tags, colors, status, links, notes, or
+   other polish merely because the schema permits them.
+
+For updates, read the current record first. Patch only the accepted correction and
+preserve omitted fields. Do not turn a narrow correction into a new intake.
+
 ## Minimum save-readiness checkpoint
 
 Use this before asking another polished follow-up. The question quality is worse, not

@@ -13,6 +13,7 @@ import {
   Lock,
   Pencil,
   RefreshCw,
+  Settings2,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -51,6 +52,7 @@ import {
   listArtifacts,
   listArtifactVersions,
   patchArtifact,
+  patchArtifactTrust,
   replaceArtifactEntityLinks,
   rescanArtifact,
   uploadArtifact
@@ -60,12 +62,14 @@ import type {
   Artifact,
   ArtifactDangerLevel,
   ArtifactFormatFamily,
+  ArtifactMetadataPatchInput,
   ArtifactState,
   ArtifactSummary,
   ArtifactScanFinding,
   ArtifactScanResult,
   ArtifactSourceKind,
   ArtifactUploadInput,
+  ArtifactTrustPatchInput,
   EntityLinkInput
 } from "@/lib/types";
 
@@ -116,6 +120,30 @@ function titleCase(value: string) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "Not recorded";
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatIdentity(value: string | null | undefined) {
+  return value?.trim() || "Not recorded";
+}
+
+function formatMetadataJson(value: Record<string, unknown>) {
+  return Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : "{}";
+}
+
+function metadataFieldCount(value: string) {
+  try {
+    return Object.keys(parseMetadataText(value)).length;
+  } catch {
+    return null;
+  }
 }
 
 function dangerClass(level: ArtifactDangerLevel) {
@@ -288,6 +316,16 @@ type ArtifactLinkFlowValue = {
   drafts: ArtifactEntityLinkDraft[];
 };
 
+type ArtifactMetadataFlowValue = {
+  title: string;
+  shortDescription: string;
+  description: string;
+  sourceLabel: string;
+  metadataText: string;
+};
+
+type ArtifactTrustFlowValue = ArtifactTrustPatchInput;
+
 type ArtifactUploadResult =
   | {
       itemId: string;
@@ -324,6 +362,20 @@ const EMPTY_ENCRYPT_FLOW_VALUE: EncryptFlowValue = {
 
 const EMPTY_LINK_FLOW_VALUE: ArtifactLinkFlowValue = {
   drafts: []
+};
+
+const EMPTY_METADATA_FLOW_VALUE: ArtifactMetadataFlowValue = {
+  title: "",
+  shortDescription: "",
+  description: "",
+  sourceLabel: "",
+  metadataText: "{}"
+};
+
+const EMPTY_TRUST_FLOW_VALUE: ArtifactTrustFlowValue = {
+  artifactState: "active",
+  downloadPolicy: "human_only",
+  reason: ""
 };
 
 const ARTIFACT_ACCEPT_EXTENSIONS = [
@@ -442,6 +494,32 @@ function UploadResultBadge({
   );
 }
 
+function ArtifactMetadataField({
+  label,
+  value,
+  mono = false
+}: {
+  label: string;
+  value: string | number;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0 border-b border-[var(--ui-border-subtle)] py-3 last:border-b-0">
+      <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "mt-1 break-words text-sm text-[var(--ui-ink-medium)]",
+          mono && "font-mono text-xs"
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 export function ArtifactsPage() {
   const { artifactId } = useParams();
   const navigate = useNavigate();
@@ -458,6 +536,8 @@ export function ArtifactsPage() {
   const [linkedEntityId, setLinkedEntityId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
+  const [trustDialogOpen, setTrustDialogOpen] = useState(false);
   const [linksDialogOpen, setLinksDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [downloadPasswordDialogOpen, setDownloadPasswordDialogOpen] =
@@ -473,6 +553,11 @@ export function ArtifactsPage() {
   const [linkFlowValue, setLinkFlowValue] = useState<ArtifactLinkFlowValue>(
     EMPTY_LINK_FLOW_VALUE
   );
+  const [metadataFlowValue, setMetadataFlowValue] =
+    useState<ArtifactMetadataFlowValue>(EMPTY_METADATA_FLOW_VALUE);
+  const [trustFlowValue, setTrustFlowValue] = useState<ArtifactTrustFlowValue>(
+    EMPTY_TRUST_FLOW_VALUE
+  );
   const [uploadResults, setUploadResults] = useState<ArtifactUploadResult[]>(
     []
   );
@@ -486,6 +571,10 @@ export function ArtifactsPage() {
     null
   );
   const [linksDialogError, setLinksDialogError] = useState<string | null>(null);
+  const [metadataDialogError, setMetadataDialogError] = useState<string | null>(
+    null
+  );
+  const [trustDialogError, setTrustDialogError] = useState<string | null>(null);
   const [uploadedArtifactToOpenId, setUploadedArtifactToOpenId] = useState<
     string | null
   >(null);
@@ -610,6 +699,8 @@ export function ArtifactsPage() {
       setDownloadPasswordDialogOpen(false);
       setEncryptDialogOpen(false);
       setLinksDialogOpen(false);
+      setMetadataDialogOpen(false);
+      setTrustDialogOpen(false);
     }
   }, [selectedArtifact]);
 
@@ -698,12 +789,25 @@ export function ArtifactsPage() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: (
-      patch: Partial<
-        Pick<Artifact, "title" | "shortDescription" | "description">
-      >
-    ) => patchArtifact(selectedArtifact!.id, patch),
-    onSuccess: invalidateArtifacts
+    mutationFn: (patch: ArtifactMetadataPatchInput) =>
+      patchArtifact(selectedArtifact!.id, patch),
+    onSuccess: async () => {
+      setMetadataDialogOpen(false);
+      setMetadataDialogError(null);
+      await invalidateArtifacts();
+    },
+    onError: (error) => setMetadataDialogError(readErrorMessage(error))
+  });
+
+  const trustMutation = useMutation({
+    mutationFn: (input: ArtifactTrustPatchInput) =>
+      patchArtifactTrust(selectedArtifact!.id, input),
+    onSuccess: async () => {
+      setTrustDialogOpen(false);
+      setTrustDialogError(null);
+      await invalidateArtifacts();
+    },
+    onError: (error) => setTrustDialogError(readErrorMessage(error))
   });
 
   const scanMutation = useMutation({
@@ -836,6 +940,7 @@ export function ArtifactsPage() {
     : null;
   const artifactActionError =
     patchMutation.error ??
+    trustMutation.error ??
     scanMutation.error ??
     enrichMutation.error ??
     downloadMutation.error;
@@ -854,6 +959,34 @@ export function ArtifactsPage() {
     setUploadDialogError(null);
     setUploadedArtifactToOpenId(null);
     setUploadDialogOpen(true);
+  };
+
+  const openMetadataDialog = () => {
+    if (!selectedArtifact) {
+      return;
+    }
+    setMetadataFlowValue({
+      title: selectedArtifact.title,
+      shortDescription: selectedArtifact.shortDescription,
+      description: selectedArtifact.description,
+      sourceLabel: selectedArtifact.sourceLabel,
+      metadataText: formatMetadataJson(selectedArtifact.metadata)
+    });
+    setMetadataDialogError(null);
+    setMetadataDialogOpen(true);
+  };
+
+  const openTrustDialog = () => {
+    if (!selectedArtifact) {
+      return;
+    }
+    setTrustFlowValue({
+      artifactState: selectedArtifact.artifactState,
+      downloadPolicy: selectedArtifact.downloadPolicy,
+      reason: ""
+    });
+    setTrustDialogError(null);
+    setTrustDialogOpen(true);
   };
 
   const uploadFlowSteps = useMemo<
@@ -1317,6 +1450,198 @@ export function ArtifactsPage() {
     [uploadResultByItemId, uploadResults]
   );
 
+  const metadataFlowSteps = useMemo<
+    Array<QuestionFlowStep<ArtifactMetadataFlowValue>>
+  >(
+    () => [
+      {
+        id: "describe",
+        eyebrow: "Describe",
+        title: "Name and describe this artifact",
+        description:
+          "Edit human-facing metadata without changing the stored file bytes, scan evidence, checksums, or version history.",
+        render: (value, setValue) => (
+          <div className="grid gap-4">
+            <FlowField label="Title">
+              <Input
+                value={value.title}
+                onChange={(event) =>
+                  setValue({ ...value, title: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Short description">
+              <Input
+                value={value.shortDescription}
+                onChange={(event) =>
+                  setValue({ ...value, shortDescription: event.target.value })
+                }
+              />
+            </FlowField>
+            <FlowField label="Full description">
+              <Textarea
+                value={value.description}
+                onChange={(event) =>
+                  setValue({ ...value, description: event.target.value })
+                }
+                rows={6}
+              />
+            </FlowField>
+          </div>
+        )
+      },
+      {
+        id: "provenance",
+        eyebrow: "Provenance",
+        title: "Record where this file came from",
+        description:
+          "The source label and structured metadata remain inspectable beside immutable upload and scanner facts.",
+        render: (value, setValue) => (
+          <div className="grid gap-4">
+            <FlowField label="Source label or provenance note">
+              <Input
+                value={value.sourceLabel}
+                onChange={(event) =>
+                  setValue({ ...value, sourceLabel: event.target.value })
+                }
+                placeholder="Where, when, or from whom the file was obtained"
+              />
+            </FlowField>
+            <FlowField label="Metadata JSON">
+              <Textarea
+                value={value.metadataText}
+                onChange={(event) =>
+                  setValue({ ...value, metadataText: event.target.value })
+                }
+                rows={9}
+                className="font-mono text-xs"
+              />
+            </FlowField>
+          </div>
+        )
+      },
+      {
+        id: "review",
+        eyebrow: "Review",
+        title: "Save metadata changes",
+        description:
+          "Only the editable description and provenance fields change. File identity, safety evidence, protection, and history remain intact.",
+        render: (value) => (
+          <dl className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4">
+            <ArtifactMetadataField label="Title" value={value.title.trim()} />
+            <ArtifactMetadataField
+              label="Source"
+              value={value.sourceLabel.trim() || "Not recorded"}
+            />
+            <ArtifactMetadataField
+              label="Metadata"
+              value={
+                metadataFieldCount(value.metadataText) === null
+                  ? "Invalid JSON"
+                  : `${metadataFieldCount(value.metadataText)} structured fields`
+              }
+            />
+          </dl>
+        )
+      }
+    ],
+    []
+  );
+
+  const trustFlowSteps = useMemo<
+    Array<QuestionFlowStep<ArtifactTrustFlowValue>>
+  >(
+    () => [
+      {
+        id: "decision",
+        eyebrow: "Trust",
+        title: "Set the artifact safety state",
+        description:
+          "This operator override is separate from the deterministic danger score and always leaves an audit event.",
+        render: (value, setValue) => (
+          <div className="grid gap-4 md:grid-cols-2">
+            <FlowField label="Artifact state">
+              <select
+                aria-label="Artifact trust state"
+                value={value.artifactState}
+                onChange={(event) =>
+                  setValue({
+                    ...value,
+                    artifactState: event.target.value as ArtifactState
+                  })
+                }
+                className="interactive-tap min-h-10 w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+              >
+                {ARTIFACT_STATES.map((state) => (
+                  <option key={state} value={state}>
+                    {titleCase(state)}
+                  </option>
+                ))}
+              </select>
+            </FlowField>
+            <FlowField label="Download policy">
+              <select
+                aria-label="Artifact download policy"
+                value={value.downloadPolicy ?? "human_only"}
+                onChange={(event) =>
+                  setValue({
+                    ...value,
+                    downloadPolicy: event.target.value as
+                      | "human_only"
+                      | "disabled"
+                  })
+                }
+                className="interactive-tap min-h-10 w-full rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+              >
+                <option value="human_only">Human-only download</option>
+                <option value="disabled">Download disabled</option>
+              </select>
+            </FlowField>
+            <div className="md:col-span-2">
+              <FlowField label="Reason for this trust decision">
+                <Textarea
+                  value={value.reason}
+                  onChange={(event) =>
+                    setValue({ ...value, reason: event.target.value })
+                  }
+                  rows={4}
+                  placeholder="Describe the review evidence and why this state is appropriate"
+                />
+              </FlowField>
+            </div>
+          </div>
+        )
+      },
+      {
+        id: "review",
+        eyebrow: "Review",
+        title: "Apply the trust decision",
+        description:
+          "The static scanner evidence and danger score are preserved. This reasoned decision changes access state and is recorded in immutable audit history.",
+        render: (value) => (
+          <dl className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4">
+            <ArtifactMetadataField
+              label="Current danger score"
+              value={`${selectedArtifact?.dangerScore ?? 0}/100 (${titleCase(selectedArtifact?.dangerLevel ?? "low")})`}
+            />
+            <ArtifactMetadataField
+              label="New state"
+              value={titleCase(value.artifactState)}
+            />
+            <ArtifactMetadataField
+              label="Download"
+              value={
+                value.downloadPolicy === "disabled" ? "Disabled" : "Human only"
+              }
+            />
+            <ArtifactMetadataField label="Reason" value={value.reason.trim()} />
+          </dl>
+        )
+      }
+    ],
+    [selectedArtifact?.dangerLevel, selectedArtifact?.dangerScore]
+  );
+
   const linkFlowSteps = useMemo<Array<QuestionFlowStep<ArtifactLinkFlowValue>>>(
     () => [
       {
@@ -1499,6 +1824,43 @@ export function ArtifactsPage() {
     }
     setUploadDialogError(null);
     await uploadMutation.mutateAsync(itemsToUpload);
+  };
+
+  const submitMetadataFlow = async () => {
+    const title = metadataFlowValue.title.trim();
+    if (!title) {
+      setMetadataDialogError("Title is required.");
+      return;
+    }
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = parseMetadataText(metadataFlowValue.metadataText);
+    } catch (error) {
+      setMetadataDialogError(readErrorMessage(error));
+      return;
+    }
+    setMetadataDialogError(null);
+    await patchMutation.mutateAsync({
+      title,
+      shortDescription: metadataFlowValue.shortDescription.trim(),
+      description: metadataFlowValue.description.trim(),
+      sourceLabel: metadataFlowValue.sourceLabel.trim(),
+      metadata
+    });
+  };
+
+  const submitTrustFlow = async () => {
+    const reason = trustFlowValue.reason.trim();
+    if (!reason) {
+      setTrustDialogError("A reason is required for every trust decision.");
+      return;
+    }
+    setTrustDialogError(null);
+    await trustMutation.mutateAsync({
+      artifactState: trustFlowValue.artifactState,
+      downloadPolicy: trustFlowValue.downloadPolicy,
+      reason
+    });
   };
 
   const submitPasswordDownload = async () => {
@@ -1826,6 +2188,22 @@ export function ArtifactsPage() {
                       <Sparkles className="size-4" />
                       Enrich
                     </Button>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={openMetadataDialog}
+                    >
+                      <Pencil className="size-4" />
+                      Edit metadata
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={openTrustDialog}
+                    >
+                      <Settings2 className="size-4" />
+                      Trust state
+                    </Button>
                     {!isEncryptedArtifact(selectedArtifact) ? (
                       <Button
                         variant="secondary"
@@ -1929,39 +2307,145 @@ export function ArtifactsPage() {
                     {scanMutation.error.message}
                   </p>
                 ) : null}
+              </Card>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Input
-                    defaultValue={selectedArtifact.title}
-                    onBlur={(event) => {
-                      const value = event.target.value.trim();
-                      if (value && value !== selectedArtifact.title) {
-                        patchMutation.mutate({ title: value });
-                      }
-                    }}
-                    aria-label="Artifact title"
-                  />
-                  <Input
-                    defaultValue={selectedArtifact.shortDescription}
-                    onBlur={(event) => {
-                      const value = event.target.value.trim();
-                      if (value !== selectedArtifact.shortDescription) {
-                        patchMutation.mutate({ shortDescription: value });
-                      }
-                    }}
-                    aria-label="Artifact short description"
-                  />
+              <Card className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FileSearch className="size-4 text-[var(--primary)]" />
+                      Precise metadata
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--ui-ink-muted)]">
+                      File identity, provenance, ownership, storage, protection,
+                      and timestamps from the canonical artifact record.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={openMetadataDialog}
+                  >
+                    <Pencil className="size-4" />
+                    Edit
+                  </Button>
                 </div>
-                <Textarea
-                  defaultValue={selectedArtifact.description}
-                  onBlur={(event) => {
-                    const value = event.target.value.trim();
-                    if (value !== selectedArtifact.description) {
-                      patchMutation.mutate({ description: value });
-                    }
-                  }}
-                  aria-label="Artifact description"
-                />
+                <div className="grid gap-x-6 lg:grid-cols-2">
+                  <dl className="min-w-0">
+                    <ArtifactMetadataField
+                      label="Artifact ID"
+                      value={selectedArtifact.id}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Original file name"
+                      value={selectedArtifact.originalFileName}
+                    />
+                    <ArtifactMetadataField
+                      label="Format"
+                      value={`${titleCase(selectedArtifact.formatFamily)} · ${selectedArtifact.detectedExtension.toUpperCase()}`}
+                    />
+                    <ArtifactMetadataField
+                      label="Declared MIME type"
+                      value={
+                        selectedArtifact.declaredMimeType || "Not declared"
+                      }
+                    />
+                    <ArtifactMetadataField
+                      label="Detected MIME type"
+                      value={selectedArtifact.detectedMimeType}
+                    />
+                    <ArtifactMetadataField
+                      label="Original content size"
+                      value={formatBytes(selectedArtifact.byteSize)}
+                    />
+                    <ArtifactMetadataField
+                      label="Original SHA-256"
+                      value={selectedArtifact.contentSha256}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Stored SHA-256"
+                      value={selectedArtifact.storedContentSha256}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Stored size"
+                      value={formatBytes(selectedArtifact.storedByteSize)}
+                    />
+                  </dl>
+                  <dl className="min-w-0">
+                    <ArtifactMetadataField
+                      label="Source kind"
+                      value={titleCase(selectedArtifact.sourceKind)}
+                    />
+                    <ArtifactMetadataField
+                      label="Source label"
+                      value={selectedArtifact.sourceLabel || "Not recorded"}
+                    />
+                    <ArtifactMetadataField
+                      label="Uploaded by user"
+                      value={formatIdentity(selectedArtifact.uploadedByUserId)}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Uploaded by agent"
+                      value={formatIdentity(selectedArtifact.uploadedByAgentId)}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Acting for user"
+                      value={formatIdentity(selectedArtifact.actingForUserId)}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Storage key"
+                      value={selectedArtifact.storageKey}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Storage path"
+                      value={selectedArtifact.storagePath}
+                      mono
+                    />
+                    <ArtifactMetadataField
+                      label="Created"
+                      value={formatDateTime(selectedArtifact.createdAt)}
+                    />
+                    <ArtifactMetadataField
+                      label="Updated"
+                      value={formatDateTime(selectedArtifact.updatedAt)}
+                    />
+                  </dl>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                      Content protection
+                    </div>
+                    <div className="mt-2 text-sm font-medium">
+                      {isEncryptedArtifact(selectedArtifact)
+                        ? "Password encrypted"
+                        : "Plaintext"}
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
+                      {selectedArtifact.contentProtection.algorithm ||
+                        "No encryption algorithm"}
+                      {selectedArtifact.contentProtection.encryptedAt
+                        ? ` · ${formatDateTime(selectedArtifact.contentProtection.encryptedAt)}`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+                      Structured metadata
+                    </div>
+                    <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-[var(--ui-ink-muted)]">
+                      {formatMetadataJson(selectedArtifact.metadata)}
+                    </pre>
+                  </div>
+                </div>
               </Card>
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
@@ -2066,6 +2550,24 @@ export function ArtifactsPage() {
                           {formatBytes(version.byteSize)} ·{" "}
                           {version.originalFileName}
                         </div>
+                        <div className="mt-2 grid gap-1 font-mono text-[11px] leading-5 text-[var(--ui-ink-faint)]">
+                          <div className="break-all">
+                            Original SHA-256: {version.contentSha256}
+                          </div>
+                          <div className="break-all">
+                            Stored SHA-256: {version.storedContentSha256}
+                          </div>
+                        </div>
+                        <div className="mt-2 text-xs text-[var(--ui-ink-muted)]">
+                          {formatDateTime(version.createdAt)} ·{" "}
+                          {version.contentProtection.mode ===
+                          "password_encrypted"
+                            ? "Encrypted"
+                            : "Plaintext"}
+                          {version.createdByActor
+                            ? ` · ${version.createdByActor}`
+                            : ""}
+                        </div>
                       </div>
                     ))
                   )}
@@ -2109,7 +2611,13 @@ export function ArtifactsPage() {
                         <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                           {new Date(event.createdAt).toLocaleString()} ·{" "}
                           {event.source}
+                          {event.actor ? ` · ${event.actor}` : ""}
                         </div>
+                        {Object.keys(event.metadata).length > 0 ? (
+                          <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-[12px] bg-[var(--ui-surface-2)] p-2 font-mono text-[11px] leading-5 text-[var(--ui-ink-faint)]">
+                            {formatMetadataJson(event.metadata)}
+                          </pre>
+                        ) : null}
                       </div>
                     ))
                   )}
@@ -2165,6 +2673,63 @@ export function ArtifactsPage() {
           return null;
         }}
         onSubmit={submitUploadFlow}
+      />
+      <QuestionFlowDialog
+        open={metadataDialogOpen}
+        onOpenChange={(open) => {
+          setMetadataDialogOpen(open);
+          if (!open) {
+            setMetadataDialogError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Edit artifact metadata"
+        description="Update human-facing description and provenance fields while preserving immutable file identity and safety evidence."
+        value={metadataFlowValue}
+        onChange={setMetadataFlowValue}
+        steps={metadataFlowSteps}
+        pending={patchMutation.isPending}
+        pendingLabel="Saving"
+        submitLabel="Save metadata"
+        error={metadataDialogError}
+        resolveContinueNudge={(stepId, value) => {
+          if (stepId === "describe" && !value.title.trim()) {
+            return "A title is required.";
+          }
+          if (
+            stepId === "provenance" &&
+            metadataFieldCount(value.metadataText) === null
+          ) {
+            return "Metadata JSON must be a valid object before continuing.";
+          }
+          return null;
+        }}
+        onSubmit={submitMetadataFlow}
+      />
+      <QuestionFlowDialog
+        open={trustDialogOpen}
+        onOpenChange={(open) => {
+          setTrustDialogOpen(open);
+          if (!open) {
+            setTrustDialogError(null);
+          }
+        }}
+        eyebrow="Artifact Store"
+        title="Change trust state"
+        description="Apply a reasoned operator decision without altering the static danger score or scanner evidence."
+        value={trustFlowValue}
+        onChange={setTrustFlowValue}
+        steps={trustFlowSteps}
+        pending={trustMutation.isPending}
+        pendingLabel="Applying"
+        submitLabel="Apply trust decision"
+        error={trustDialogError}
+        resolveContinueNudge={(stepId, value) =>
+          stepId === "decision" && !value.reason.trim()
+            ? "Explain the evidence for this trust decision before continuing."
+            : null
+        }
+        onSubmit={submitTrustFlow}
       />
       <QuestionFlowDialog
         open={linksDialogOpen}

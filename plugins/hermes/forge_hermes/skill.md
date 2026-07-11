@@ -3,6 +3,31 @@
 Use this plugin when Hermes should work directly with Forge through the curated Forge
 tool surface.
 
+## Live Contract And Missing-Information Gate
+
+Before the first Forge read or write in a session, call
+`forge_get_agent_onboarding`. Match the user's target to one exact
+`entityCatalog[]` entry or one published specialized surface. Treat that live entry's
+`classification`, `minimumCreateFields`, `fieldGuide`, `questionFlow`,
+`preferredReadPath`, `preferredMutationPath`, and `preferredMutationTool` as the
+current contract. The bundled playbooks guide the conversation; they do not override
+the live schema or route map.
+
+Build a private missing-information diff before asking anything:
+
+- remove details the user already supplied
+- remove optional fields and published defaults that do not change meaning,
+  accountability, timing, retrieval, safety, or route selection
+- on update, read the current record first and preserve every field the user did not
+  ask to change
+- ask one Psyche question at a time; for logistical records, one compact question may
+  group inseparable details such as start, end, and timezone
+- act when no blocking ambiguity remains instead of asking a polished extra question
+
+If the target is absent from live onboarding, refresh once. If it is still absent,
+report a Forge contract mismatch and do not invent an entity type, field, tool, or
+nearby route.
+
 ## Core model
 
 Forge has four major stored-entity surfaces, read-model surfaces, specialized CRUD surfaces, and four specialized domain surfaces.
@@ -62,6 +87,11 @@ Forge project management is explicit:
 Hermes should preserve that hierarchy in the records it creates or updates. Keep
 `project` and `strategy` first-class. Treat `issue`, `task`, and `subtask` as the
 execution layer below projects.
+
+`issue` and `subtask` are not standalone batch entity types. They are stored through
+`entityType: "task"` with `data.level: "issue" | "task" | "subtask"`. Use
+`projectId` and `parentWorkItemId` for placement. Never call batch CRUD with
+`entityType: "issue"` or `entityType: "subtask"`.
 
 Workflow rule:
 

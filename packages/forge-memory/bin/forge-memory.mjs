@@ -875,7 +875,8 @@ function detectClaude() {
   const config = claudeConfigPath();
   const payload = readJsonSync(config, null);
   const configured = isForgeMemoryMcpServer(payload?.mcpServers?.forge);
-  const installed = commandExists("claude") || configured || fs.existsSync(config);
+  const installed =
+    commandExists("claude") || configured || fs.existsSync(config);
   const version = commandExists("claude")
     ? runCapture("claude", ["--version"])
     : null;
@@ -1123,7 +1124,7 @@ async function isForgeDevWebServer(port, repoRoot) {
     const html = await response.text();
     if (
       !html.includes("<title>Forge</title>") ||
-      !html.includes('/forge/@vite/client')
+      !html.includes("/forge/@vite/client")
     ) {
       return false;
     }
@@ -1505,7 +1506,10 @@ function removeForgeManagedBlock(source) {
     )}`,
     "g"
   );
-  return source.replace(pattern, "").replace(/\n{3,}/g, "\n\n").trim();
+  return source
+    .replace(pattern, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function patchClaudeConfig(config, options) {
@@ -1525,10 +1529,7 @@ async function patchClaudeForgeRules(options = {}) {
   const source = fs.existsSync(filePath)
     ? await fsp.readFile(filePath, "utf8")
     : "";
-  const next = `${upsertForgeManagedBlock(
-    source,
-    CLAUDE_FORGE_RULES_BODY
-  )}\n`;
+  const next = `${upsertForgeManagedBlock(source, CLAUDE_FORGE_RULES_BODY)}\n`;
   if (next === source) return { filePath, changed: false };
   await writeText(filePath, next, options);
   return { filePath, changed: true };
@@ -2061,23 +2062,19 @@ async function startRuntime(config) {
           `Port ${config.webPort} is already in use by a service that is not the Forge Vite dev server.`
         );
       }
-      const server = spawn(
-        process.execPath,
-        [tsx, serverEntry],
-        {
-          cwd: config.repo,
-          detached: true,
-          stdio: ["ignore", out, out],
-          env: {
-            ...process.env,
-            HOST: "127.0.0.1",
-            PORT: String(config.port),
-            FORGE_BASE_PATH: "/forge/",
-            FORGE_DATA_ROOT: config.dataRoot,
-            FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
-          }
+      const server = spawn(process.execPath, [tsx, serverEntry], {
+        cwd: config.repo,
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: {
+          ...process.env,
+          HOST: "127.0.0.1",
+          PORT: String(config.port),
+          FORGE_BASE_PATH: "/forge/",
+          FORGE_DATA_ROOT: config.dataRoot,
+          FORGE_DEV_WEB_ORIGIN: `http://127.0.0.1:${config.webPort}/forge/`
         }
-      );
+      });
       server.unref();
       children.push({ role: "server", pid: server.pid });
       if (webPortAvailable) {
@@ -3867,13 +3864,41 @@ async function runDoctorChecks(parsed, config, options = {}) {
     dataRootExists = true;
     dataRootRepaired = true;
   }
+  let dataRootIsDirectory = false;
+  let dataRootReadable = false;
+  let dataRootWritable = false;
+  let dataRootError = null;
+  if (dataRootExists) {
+    try {
+      dataRootIsDirectory = (await fsp.stat(config.dataRoot)).isDirectory();
+      if (dataRootIsDirectory) {
+        await fsp.access(
+          config.dataRoot,
+          fs.constants.R_OK | fs.constants.W_OK
+        );
+        dataRootReadable = true;
+        dataRootWritable = true;
+      }
+    } catch (error) {
+      dataRootError = error instanceof Error ? error.message : String(error);
+    }
+  }
   checks.push({
     id: "dataRoot",
-    ok: dataRootExists,
+    ok:
+      dataRootExists &&
+      dataRootIsDirectory &&
+      dataRootReadable &&
+      dataRootWritable,
     detail: config.dataRoot,
     repaired: dataRootRepaired,
+    exists: dataRootExists,
+    directory: dataRootIsDirectory,
+    readable: dataRootReadable,
+    writable: dataRootWritable,
+    error: dataRootError,
     guidance:
-      "Forge data is preserved here. Doctor can create the folder, but it will not delete existing data."
+      "Forge data is preserved here. Doctor verifies that this is a readable, writable directory and can create it when missing, but it will not delete existing data."
   });
 
   checks.push(await doctorCheckRuntime(config, options));
@@ -4234,9 +4259,7 @@ async function postMcpRuntimeSessionEvent(config, pathname, body) {
     headers: {
       "content-type": "application/json",
       "x-forge-source": "agent",
-      ...(config.apiToken
-        ? { authorization: `Bearer ${config.apiToken}` }
-        : {})
+      ...(config.apiToken ? { authorization: `Bearer ${config.apiToken}` } : {})
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(config.timeoutMs || 15_000)

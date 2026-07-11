@@ -716,7 +716,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_get_agent_onboarding",
-        "description": "Fetch the live Forge onboarding contract with the exact Forge tool list, batch payload rules, UI handoff rules, and verification guidance.",
+        "description": "Fetch the live Forge onboarding contract. Call this before the first Forge read or write in a session; entityCatalog is the exact source of truth for entity types, required fields, question flows, classifications, and preferred read/mutation paths, while specialized route maps are the exact source of truth for route keys, methods, paths, and placeholders.",
         "parameters": object_schema({}),
         "method": "GET",
         "path": "/api/v1/agents/onboarding",
@@ -1625,7 +1625,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_create_entities",
-        "description": "Create one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType and full data. This is the preferred create path for planning, Psyche, calendar, preferences basic CRUD, and questionnaire_instrument records.",
+        "description": "Create one or more normal stored Forge entities through the ordered batch workflow after checking live onboarding. Pass operations as an array; each operation needs an exact entityCatalog entityType and full data. Issues and subtasks are task records with data.level set to issue or subtask, never entityType issue or subtask. Do not use this tool for specialized domain surfaces.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
@@ -1639,7 +1639,7 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_update_entities",
-        "description": "Update one or more Forge entities through the ordered batch workflow. Pass operations as an array. Each operation must include entityType, id, and patch. This is the preferred update path for calendar_event, work_block_template, task_timebox, preferences basic CRUD entities, questionnaire_instrument, and official habit outcome logging through habit.patch.checkIn.",
+        "description": "Update one or more normal stored Forge entities through the ordered batch workflow after reading the current record. Pass operations as an array; each operation needs an exact entityCatalog entityType, id, and narrow patch. Preserve omitted fields. Issues and subtasks use entityType task with patch.level, never entityType issue or subtask. This is also the official habit outcome logging path through habit.patch.checkIn.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
