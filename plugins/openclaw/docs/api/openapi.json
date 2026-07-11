@@ -10943,6 +10943,158 @@
           }
         }
       },
+      "WorkoutAnalysisSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "workoutType",
+          "workoutTypeLabel",
+          "activityFamily",
+          "activityFamilyLabel",
+          "startedAt",
+          "durationSeconds",
+          "analytics",
+          "detailLevel"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "workoutType": {
+            "type": "string"
+          },
+          "workoutTypeLabel": {
+            "type": "string"
+          },
+          "activityFamily": {
+            "type": "string"
+          },
+          "activityFamilyLabel": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationSeconds": {
+            "type": "number"
+          },
+          "analytics": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "confidence",
+              "dataQuality",
+              "zoneDurations",
+              "hrSummary",
+              "load"
+            ],
+            "properties": {
+              "confidence": {
+                "type": "string"
+              },
+              "dataQuality": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "heartRateSampleCount"
+                ],
+                "properties": {
+                  "heartRateSampleCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "zoneDurations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "key",
+                    "label",
+                    "seconds",
+                    "percentage"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "seconds": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "percentage": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              },
+              "hrSummary": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "restingHr"
+                ],
+                "properties": {
+                  "restingHr": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "load": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "trimp",
+                  "intensity"
+                ],
+                "properties": {
+                  "trimp": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "intensity": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "detailLevel": {
+            "type": "string",
+            "enum": [
+              "analysis"
+            ]
+          }
+        }
+      },
       "SportComparisonEntry": {
         "type": "object",
         "additionalProperties": false,
@@ -11492,6 +11644,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/WorkoutSessionSummary"
+                },
+                {
+                  "$ref": "#/components/schemas/WorkoutAnalysisSession"
                 }
               ]
             }
@@ -17113,6 +17268,19 @@
               "default": "full"
             },
             "description": "Use summary for list rendering; read /api/v1/health/workouts/{id} for complete metadata before editing one workout."
+          },
+          {
+            "name": "analysisDetail",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "full",
+                "compact"
+              ],
+              "default": "full"
+            },
+            "description": "Use compact for chart-ready analysis signals without repeating full workout list metadata. Existing clients keep the full analysis session shape by default."
           }
         ],
         "responses": {

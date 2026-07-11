@@ -64,6 +64,7 @@ import {
 } from "@/lib/health-link-options";
 import type {
   FitnessViewData,
+  WorkoutAnalysisSessionRecord,
   WorkoutSessionRecord,
   WorkoutSessionSummaryRecord
 } from "@/lib/types";
@@ -71,6 +72,18 @@ import type {
 type WorkoutSessionListRecord =
   | WorkoutSessionRecord
   | WorkoutSessionSummaryRecord;
+
+type WorkoutAnalysisListRecord =
+  | WorkoutSessionListRecord
+  | WorkoutAnalysisSessionRecord;
+
+type WorkoutLabelRecord = Pick<
+  WorkoutAnalysisListRecord,
+  | "workoutType"
+  | "workoutTypeLabel"
+  | "activityFamily"
+  | "activityFamilyLabel"
+>;
 
 type WorkoutDraft = {
   subjectiveEffort: string;
@@ -212,11 +225,11 @@ function normalize(text: string) {
   return text.trim().toLowerCase();
 }
 
-function workoutTypeLabel(session: WorkoutSessionListRecord) {
+function workoutTypeLabel(session: WorkoutLabelRecord) {
   return session.workoutTypeLabel?.trim() || humanizeToken(session.workoutType);
 }
 
-function activityFamilyLabel(session: WorkoutSessionListRecord) {
+function activityFamilyLabel(session: WorkoutLabelRecord) {
   return (
     session.activityFamilyLabel?.trim() || humanizeToken(session.activityFamily)
   );
@@ -393,7 +406,7 @@ function getVitalOnOrBefore(
   return exactOrEarlier?.[metric] ?? null;
 }
 
-function isKickboxingSession(session: WorkoutSessionListRecord) {
+function isKickboxingSession(session: WorkoutAnalysisListRecord) {
   return [
     session.workoutType,
     session.workoutTypeLabel,
@@ -407,7 +420,7 @@ function isKickboxingSession(session: WorkoutSessionListRecord) {
 }
 
 function createExerciseTypeOptions(
-  sessions: WorkoutSessionListRecord[]
+  sessions: WorkoutAnalysisListRecord[]
 ): FacetedTokenOption[] {
   const options = new Map<string, FacetedTokenOption>();
   for (const session of sessions) {
@@ -426,7 +439,7 @@ function createExerciseTypeOptions(
 }
 
 function filterAnalysisSessions(
-  sessions: WorkoutSessionListRecord[],
+  sessions: WorkoutAnalysisListRecord[],
   selectedExerciseTypeIds: string[],
   dateMode: AnalysisDateMode,
   startDate: string,
@@ -465,7 +478,7 @@ function filterAnalysisSessions(
     );
 }
 
-function zoneTotalsForSessions(sessions: WorkoutSessionListRecord[]) {
+function zoneTotalsForSessions(sessions: WorkoutAnalysisListRecord[]) {
   const totals = Object.fromEntries(
     ZONE_ORDER.map((zoneKey) => [zoneKey, 0])
   ) as Record<ZoneKey, number>;
@@ -520,7 +533,7 @@ export function formatZoneTrendTooltipValue(
 }
 
 function buildZoneAnalysisView(
-  sessions: WorkoutSessionListRecord[],
+  sessions: WorkoutAnalysisListRecord[],
   vitalsTrend: FitnessViewData["vitalsTrend"] | undefined
 ) {
   const lineData = sessions.map((session, index): ZoneTrendPoint => {
@@ -1029,7 +1042,8 @@ export function SportsPage() {
     queryFn: async () =>
       (
         await getFitnessView(selectedUserIds, {
-          sessionDetail: "summary"
+          sessionDetail: "summary",
+          analysisDetail: "compact"
         })
       ).fitness
   });
@@ -1322,97 +1336,106 @@ export function SportsPage() {
       />
 
       <SportsSummaryBox>
-        <section className="grid gap-4 lg:grid-cols-4">
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+        <section
+          className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4"
+          data-testid="sports-summary-grid"
+        >
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Weekly volume
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--primary)]">
+            <div className="mt-2 font-display text-2xl text-[var(--primary)] sm:mt-3 sm:text-4xl">
               {minutesLabel(summary.weeklyVolumeSeconds)}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Total training time in the recent week.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Exercise minutes
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.exerciseMinutes}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Aggregate exercise minutes from synced sessions.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Energy burned
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.energyBurnedKcal}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Recent weekly kcal.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Training streak
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.streakDays}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Distinct workout days in the recent week.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Average session
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.averageSessionMinutes}m
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Mean duration across recent sessions.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Training load
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.totalTrainingLoad ?? "n/a"}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Forge TRIMP across recent sessions.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               Linked sessions
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {summary.linkedSessionCount}
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Sessions already tied to Forge or Psyche entities.
             </div>
           </Card>
-          <Card>
-            <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+          <Card className="h-full p-3 sm:p-4">
+            <div className="font-label text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
               HR coverage
             </div>
-            <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+            <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:mt-3 sm:text-4xl">
               {Math.round((summary.averageHeartRateCoverage ?? 0) * 100)}%
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1.5 text-xs leading-5 text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Average raw HR sample coverage.
             </div>
           </Card>
         </section>
       </SportsSummaryBox>
+
+      {fitness.sportComparison ? (
+        <SportsCompositionBox>
+          <SportComparisonPanel comparison={fitness.sportComparison} />
+        </SportsCompositionBox>
+      ) : null}
 
       <SportsCompositionBox>
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
@@ -1957,12 +1980,6 @@ export function SportsPage() {
         </section>
       </SportsCompositionBox>
 
-      {fitness.sportComparison ? (
-        <SportsCompositionBox>
-          <SportComparisonPanel comparison={fitness.sportComparison} />
-        </SportsCompositionBox>
-      ) : null}
-
       <SportsCompositionBox>
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
           <Card className="grid gap-4">
@@ -2152,6 +2169,9 @@ export function SportsPage() {
                             <div className="min-w-0">
                               <Link
                                 to={`/sports/workouts/${session.id}`}
+                                onClick={() =>
+                                  window.scrollTo({ top: 0, left: 0 })
+                                }
                                 className="flex min-w-0 items-center gap-2 text-[var(--ui-ink-strong)] transition hover:text-[var(--primary)]"
                               >
                                 <Dumbbell className="size-4 shrink-0 text-[var(--primary)]" />

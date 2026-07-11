@@ -5781,6 +5781,82 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workoutAnalysisSession = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "workoutType",
+      "workoutTypeLabel",
+      "activityFamily",
+      "activityFamilyLabel",
+      "startedAt",
+      "durationSeconds",
+      "analytics",
+      "detailLevel"
+    ],
+    properties: {
+      id: { type: "string" },
+      workoutType: { type: "string" },
+      workoutTypeLabel: { type: "string" },
+      activityFamily: { type: "string" },
+      activityFamilyLabel: { type: "string" },
+      startedAt: { type: "string", format: "date-time" },
+      durationSeconds: { type: "number" },
+      analytics: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "confidence",
+          "dataQuality",
+          "zoneDurations",
+          "hrSummary",
+          "load"
+        ],
+        properties: {
+          confidence: { type: "string" },
+          dataQuality: {
+            type: "object",
+            additionalProperties: false,
+            required: ["heartRateSampleCount"],
+            properties: {
+              heartRateSampleCount: { type: "integer", minimum: 0 }
+            }
+          },
+          zoneDurations: arrayOf({
+            type: "object",
+            additionalProperties: false,
+            required: ["key", "label", "seconds", "percentage"],
+            properties: {
+              key: { type: "string" },
+              label: { type: "string" },
+              seconds: { type: "number", minimum: 0 },
+              percentage: { type: "number", minimum: 0 }
+            }
+          }),
+          hrSummary: {
+            type: "object",
+            additionalProperties: false,
+            required: ["restingHr"],
+            properties: {
+              restingHr: nullable({ type: "number" })
+            }
+          },
+          load: {
+            type: "object",
+            additionalProperties: false,
+            required: ["trimp", "intensity"],
+            properties: {
+              trimp: nullable({ type: "number" }),
+              intensity: nullable({ type: "number" })
+            }
+          }
+        }
+      },
+      detailLevel: { type: "string", enum: ["analysis"] }
+    }
+  };
+
   const sportComparisonEntry = {
     type: "object",
     additionalProperties: false,
@@ -5989,7 +6065,8 @@ export function buildOpenApiDocument() {
       analysisSessions: arrayOf({
         oneOf: [
           { $ref: "#/components/schemas/WorkoutSession" },
-          { $ref: "#/components/schemas/WorkoutSessionSummary" }
+          { $ref: "#/components/schemas/WorkoutSessionSummary" },
+          { $ref: "#/components/schemas/WorkoutAnalysisSession" }
         ]
       }),
       sessions: arrayOf({
@@ -7096,6 +7173,7 @@ export function buildOpenApiDocument() {
         SleepSession: sleepSession,
         WorkoutSession: workoutSession,
         WorkoutSessionSummary: workoutSessionSummary,
+        WorkoutAnalysisSession: workoutAnalysisSession,
         SportComparisonEntry: sportComparisonEntry,
         SportComparisonPeriod: sportComparisonPeriod,
         SportComparison: sportComparison,
@@ -8130,6 +8208,17 @@ export function buildOpenApiDocument() {
               },
               description:
                 "Use summary for list rendering; read /api/v1/health/workouts/{id} for complete metadata before editing one workout."
+            },
+            {
+              name: "analysisDetail",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["full", "compact"],
+                default: "full"
+              },
+              description:
+                "Use compact for chart-ready analysis signals without repeating full workout list metadata. Existing clients keep the full analysis session shape by default."
             }
           ],
           responses: {

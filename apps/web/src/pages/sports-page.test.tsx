@@ -523,6 +523,10 @@ describe("SportsPage", () => {
     expect(screen.getByText("Cardio")).toBeInTheDocument();
     expect(screen.getByText("Sport comparison")).toBeInTheDocument();
     expect(screen.getAllByText("Energy / h").length).toBeGreaterThan(0);
+    expect(getFitnessViewMock).toHaveBeenCalledWith(["user_operator"], {
+      sessionDetail: "summary",
+      analysisDetail: "compact"
+    });
 
     const comparison = within(screen.getByTestId("sport-comparison-panel"));
     fireEvent.click(comparison.getByRole("button", { name: "90 days" }));
@@ -557,6 +561,32 @@ describe("SportsPage", () => {
     renderWithProviders();
 
     expect(await screen.findByText("2084 sessions")).toBeInTheDocument();
+  });
+
+  it("keeps the primary comparison ahead of specialist analysis in a dense mobile summary", async () => {
+    renderWithProviders();
+
+    const summaryGrid = await screen.findByTestId("sports-summary-grid");
+    const comparison = screen.getByTestId("sport-comparison-panel");
+    const zoneAnalysis = screen.getByText("HR zone analysis");
+
+    expect(summaryGrid).toHaveClass("grid-cols-2");
+    expect(
+      comparison.compareDocumentPosition(zoneAnalysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("opens workout detail from the top after browsing deep history", async () => {
+    const scrollToSpy = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => undefined);
+    renderWithProviders();
+
+    const history = await screen.findByTestId("virtual-workout-history");
+    fireEvent.click(within(history).getByRole("link", { name: "Walking" }));
+
+    expect(scrollToSpy).toHaveBeenCalledWith({ top: 0, left: 0 });
   });
 
   it("renders provider events with duplicate timestamps without React key collisions", async () => {

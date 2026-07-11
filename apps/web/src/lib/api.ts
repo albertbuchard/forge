@@ -3623,6 +3623,7 @@ export function getFitnessView(
   options: {
     compact?: boolean;
     sessionDetail?: "full" | "summary";
+    analysisDetail?: "full" | "compact";
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -3632,6 +3633,9 @@ export function getFitnessView(
   }
   if (options.sessionDetail) {
     search.set("sessionDetail", options.sessionDetail);
+  }
+  if (options.analysisDetail) {
+    search.set("analysisDetail", options.analysisDetail);
   }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ fitness: FitnessViewData }>(

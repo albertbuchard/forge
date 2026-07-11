@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-10T20:44:30.687Z",
+  "generatedAt": "2026-07-11T02:04:20.446Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -639,7 +639,7 @@
       "requiredFields": [],
       "notes": [
         "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
-        "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary for bounded list clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata.",
+        "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary&analysisDetail=compact for responsive list-and-chart clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata. Both detail parameters preserve their full legacy shape when omitted.",
         "Habit-generated and imported workouts reconcile into the same workout record model."
       ],
       "example": "{\"userIds\":[\"user_operator\"]}",

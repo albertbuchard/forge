@@ -3166,7 +3166,8 @@ test("mobile health sync exposes structured apple health workout descriptors and
 
     const summaryFitnessResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/health/fitness?sessionDetail=summary"
+      url:
+        "/api/v1/health/fitness?sessionDetail=summary&analysisDetail=compact"
     });
     assert.equal(summaryFitnessResponse.statusCode, 200);
     assert.ok(summaryFitnessResponse.body.length < fitnessResponse.body.length);
@@ -3178,7 +3179,15 @@ test("mobile health sync exposes structured apple health workout descriptors and
             topWorkoutType: string | null;
             averageSessionMinutes: number;
           };
-          analysisSessions: Array<{ id: string }>;
+          analysisSessions: Array<{
+            id: string;
+            detailLevel: string;
+            sourceDevice?: string;
+            analytics: {
+              dataQuality: { heartRateSampleCount: number };
+              routeSummary?: unknown;
+            };
+          }>;
           sessions: Array<{
             id: string;
             detailLevel: string;
@@ -3215,6 +3224,16 @@ test("mobile health sync exposes structured apple health workout descriptors and
     assert.equal(summarySession?.detailLevel, "summary");
     assert.equal(summarySession?.details, undefined);
     assert.equal(summarySession?.provenance, undefined);
+    const compactAnalysisSession = summaryFitness.analysisSessions.find(
+      (candidate) => candidate.id === session.id
+    );
+    assert.equal(compactAnalysisSession?.detailLevel, "analysis");
+    assert.equal(compactAnalysisSession?.sourceDevice, undefined);
+    assert.equal(
+      compactAnalysisSession?.analytics.dataQuality.heartRateSampleCount,
+      5
+    );
+    assert.equal(compactAnalysisSession?.analytics.routeSummary, undefined);
     assert.equal(
       summaryFitness.sportComparison.modelVersion,
       "forge-sport-comparison-v1"
@@ -3243,6 +3262,21 @@ test("mobile health sync exposes structured apple health workout descriptors and
     assert.equal(allTimeComparison?.sports[1]?.workoutType, "cycling");
     assert.equal(allTimeComparison?.sports[1]?.energyCoverage, 0);
     assert.equal(allTimeComparison?.sports[1]?.energyKcalPerHour, null);
+
+    const legacySummaryFitnessResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/health/fitness?sessionDetail=summary"
+    });
+    assert.equal(legacySummaryFitnessResponse.statusCode, 200);
+    assert.ok(
+      summaryFitnessResponse.body.length < legacySummaryFitnessResponse.body.length
+    );
+    const legacyAnalysisSession = (
+      legacySummaryFitnessResponse.json() as {
+        fitness: { analysisSessions: Array<{ sourceDevice?: string }> };
+      }
+    ).fitness.analysisSessions[0];
+    assert.equal(typeof legacyAnalysisSession?.sourceDevice, "string");
 
     const trainingLoadResponse = await app.inject({
       method: "GET",
@@ -12984,12 +13018,28 @@ test("openapi document exposes schema-backed versioned contracts", async () => {
     assert.ok(workoutSessionSummary.properties?.analytics);
     assert.equal(workoutSessionSummary.properties?.details, undefined);
     assert.equal(workoutSessionSummary.properties?.provenance, undefined);
+    const workoutAnalysisSession = body.components?.schemas
+      ?.WorkoutAnalysisSession as {
+      required?: string[];
+      properties?: Record<string, unknown>;
+    };
+    assert.ok(workoutAnalysisSession.required?.includes("detailLevel"));
+    assert.ok(workoutAnalysisSession.properties?.analytics);
+    assert.equal(workoutAnalysisSession.properties?.sourceDevice, undefined);
     assert.ok(body.components?.schemas?.SportComparison);
     assert.ok(body.components?.schemas?.SportComparisonPeriod);
     assert.ok(body.components?.schemas?.SportComparisonEntry);
     assert.ok(body.paths?.["/api/v1/context"]);
     assert.ok(body.paths?.["/api/v1/operator/context"]);
     assert.ok(body.paths?.["/api/v1/operator/overview"]);
+    const fitnessPath = body.paths?.["/api/v1/health/fitness"] as {
+      get?: { parameters?: Array<{ name?: string }> };
+    };
+    assert.ok(
+      fitnessPath.get?.parameters?.some(
+        (parameter) => parameter.name === "analysisDetail"
+      )
+    );
     assert.ok(body.paths?.["/api/v1/agents/sessions"]);
     assert.ok(body.paths?.["/api/v1/agents/sessions/heartbeat"]);
     assert.ok(body.paths?.["/api/v1/agents/sessions/events"]);

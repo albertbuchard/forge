@@ -1632,6 +1632,55 @@ function mapWorkoutSessionSummary(
   };
 }
 
+function mapWorkoutAnalysisSession(row: WorkoutSessionRow) {
+  const provenance = safeJsonParse<Record<string, unknown>>(
+    row.provenance_json,
+    {}
+  );
+  const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
+  const presentation = buildWorkoutSessionPresentation({
+    source: row.source,
+    sourceType: row.source_type,
+    workoutType: row.workout_type,
+    provenance,
+    derived
+  });
+  const analytics = getStoredWorkoutAnalytics(row);
+  const dataQuality = analytics.dataQuality as {
+    heartRateSampleCount?: number;
+  };
+  const hrSummary = analytics.hrSummary as { restingHr?: number | null };
+  const load = analytics.load as {
+    trimp?: number | null;
+    intensity?: number | null;
+  };
+
+  return {
+    id: row.id,
+    workoutType: presentation.workoutType,
+    workoutTypeLabel: presentation.workoutTypeLabel,
+    activityFamily: presentation.activityFamily,
+    activityFamilyLabel: presentation.activityFamilyLabel,
+    startedAt: row.started_at,
+    durationSeconds: row.duration_seconds,
+    analytics: {
+      confidence: analytics.confidence,
+      dataQuality: {
+        heartRateSampleCount: dataQuality.heartRateSampleCount ?? 0
+      },
+      zoneDurations: analytics.zoneDurations,
+      hrSummary: {
+        restingHr: hrSummary.restingHr ?? null
+      },
+      load: {
+        trimp: load.trimp ?? null,
+        intensity: load.intensity ?? null
+      }
+    },
+    detailLevel: "analysis" as const
+  };
+}
+
 function mapHealthImportRun(row: HealthImportRunRow) {
   return {
     id: row.id,
@@ -8536,7 +8585,11 @@ function buildSportComparison(
 
 export function getFitnessViewData(
   userIds?: string[],
-  options: { compact?: boolean; sessionDetail?: "full" | "summary" } = {}
+  options: {
+    compact?: boolean;
+    sessionDetail?: "full" | "summary";
+    analysisDetail?: "full" | "compact";
+  } = {}
 ) {
   const workoutRows = listWorkoutRows(userIds);
   const nowMs = Date.now();
@@ -8560,7 +8613,11 @@ export function getFitnessViewData(
     ? []
     : historicalWorkoutRows
         .slice(0, 500)
-        .map((row) => mapSession(row, { includeAnalytics: true }));
+        .map((row) =>
+          options.analysisDetail === "compact"
+            ? mapWorkoutAnalysisSession(row)
+            : mapSession(row, { includeAnalytics: true })
+        );
   const sportComparison = buildSportComparison(workoutRows, userIds);
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)

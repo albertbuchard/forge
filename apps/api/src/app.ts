@@ -5924,7 +5924,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     requiredFields: [],
     notes: [
       "The API path stays /api/v1/health/fitness even though the UI route is /sports.",
-      "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary for bounded list clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata.",
+      "Use compact=1 for aggregate-only agent reads. Use sessionDetail=summary&analysisDetail=compact for responsive list-and-chart clients, then read /api/v1/health/workouts/:id before editing or inspecting full metadata. Both detail parameters preserve their full legacy shape when omitted.",
       "Habit-generated and imported workouts reconcile into the same workout record model."
     ],
     example: '{"userIds":["user_operator"]}'
@@ -10848,6 +10848,11 @@ export async function buildServer(
         sessionDetail:
           (request.query as Record<string, unknown>).sessionDetail === "summary"
             ? "summary"
+            : "full",
+        analysisDetail:
+          (request.query as Record<string, unknown>).analysisDetail ===
+          "compact"
+            ? "compact"
             : "full"
       }
     )

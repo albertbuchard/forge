@@ -152,6 +152,23 @@ function percentage(value: number) {
   return `${formatNumber(value * 100, value > 0 && value < 0.01 ? 1 : 0)}%`;
 }
 
+function compactChartLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (normalized === "high-intensity interval training") {
+    return "HIIT";
+  }
+  if (normalized === "traditional strength training") {
+    return "Trad. strength";
+  }
+  if (normalized === "functional strength training") {
+    return "Func. strength";
+  }
+  if (label.length <= 20) {
+    return label;
+  }
+  return `${label.slice(0, 19).trimEnd()}…`;
+}
+
 function ComparisonChartViewport({
   height,
   children
@@ -325,6 +342,7 @@ export function SportComparisonPanel({
         .map((entry) => ({
           id: entry.workoutType,
           name: entry.workoutTypeLabel,
+          shortName: compactChartLabel(entry.workoutTypeLabel),
           value: metricValue(entry, metric),
           color: sportColor(entry.workoutType)
         })),
@@ -419,7 +437,7 @@ export function SportComparisonPanel({
             </span>
           </div>
           <div
-            className="mt-3 grid grid-cols-3 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1"
+            className="mt-3 grid grid-cols-3 gap-1 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-1 sm:grid-cols-5"
             aria-label="Comparison metric"
           >
             {METRICS.map((entry) => (
@@ -466,7 +484,7 @@ export function SportComparisonPanel({
                   />
                   <YAxis
                     type="category"
-                    dataKey="name"
+                    dataKey="shortName"
                     width={112}
                     tick={{ fill: "var(--ui-ink-soft)", fontSize: 10 }}
                   />
@@ -475,6 +493,9 @@ export function SportComparisonPanel({
                       formatMetric(Number(value), metric),
                       metricDefinition.label
                     ]}
+                    labelFormatter={(_label, payload) =>
+                      String(payload?.[0]?.payload?.name ?? "")
+                    }
                     contentStyle={{
                       background: "var(--ui-surface-popover)",
                       border: "1px solid var(--ui-border-strong)",

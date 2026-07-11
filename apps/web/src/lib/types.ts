@@ -2124,6 +2124,31 @@ export type WorkoutSessionSummaryRecord = Omit<
   detailLevel?: "summary";
 };
 
+export interface WorkoutAnalysisSessionRecord {
+  id: string;
+  workoutType: string;
+  workoutTypeLabel: string;
+  activityFamily: string;
+  activityFamilyLabel: string;
+  startedAt: string;
+  durationSeconds: number;
+  analytics: {
+    confidence: WorkoutAnalyticsRecord["confidence"];
+    dataQuality: {
+      heartRateSampleCount: number;
+    };
+    zoneDurations: WorkoutZoneDuration[];
+    hrSummary: {
+      restingHr: number | null;
+    };
+    load: {
+      trimp: number | null;
+      intensity: number | null;
+    };
+  };
+  detailLevel: "analysis";
+}
+
 export interface SportComparisonEntry {
   workoutType: string;
   workoutTypeLabel: string;
@@ -2277,7 +2302,11 @@ export interface FitnessViewData {
     restingHeartRate: number | null;
     vo2Max: number | null;
   }>;
-  analysisSessions: Array<WorkoutSessionRecord | WorkoutSessionSummaryRecord>;
+  analysisSessions: Array<
+    | WorkoutSessionRecord
+    | WorkoutSessionSummaryRecord
+    | WorkoutAnalysisSessionRecord
+  >;
   sessions: Array<WorkoutSessionRecord | WorkoutSessionSummaryRecord>;
 }
 
