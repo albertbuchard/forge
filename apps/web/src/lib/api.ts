@@ -4135,10 +4135,14 @@ export function createMovementPlace(
 
 export function patchMovementPlace(
   placeId: string,
-  patch: Partial<MovementKnownPlace>
+  patch: Partial<MovementKnownPlace>,
+  userIds?: string[] | unknown
 ) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ place: MovementKnownPlace }>(
-    `/api/v1/movement/places/${placeId}`,
+    `/api/v1/movement/places/${placeId}${suffix}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch)
@@ -4151,17 +4155,27 @@ export function patchMovementStay(
   patch: {
     placeExternalUid?: string | null;
     placeLabel?: string;
-  }
+  },
+  userIds?: string[] | unknown
 ) {
-  return request(`/api/v1/movement/stays/${stayId}`, {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request(`/api/v1/movement/stays/${stayId}${suffix}`, {
     method: "PATCH",
     body: JSON.stringify(patch)
   });
 }
 
-export function getMovementTripDetail(tripId: string) {
+export function getMovementTripDetail(
+  tripId: string,
+  userIds?: string[] | unknown
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ movement: MovementTripDetailData }>(
-    `/api/v1/movement/trips/${tripId}`
+    `/api/v1/movement/trips/${tripId}${suffix}`
   );
 }
 

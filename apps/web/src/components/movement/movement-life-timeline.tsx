@@ -162,6 +162,7 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
         userIds
       }).then((response) => response.movement),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: dataModalOpen,
     retry: false,
     refetchOnWindowFocus: false
   });
@@ -348,25 +349,6 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     },
     [timelineItemById]
   );
-
-  const fetchNextDataPage = dataTimelineQuery.fetchNextPage;
-  const hasNextDataPage = dataTimelineQuery.hasNextPage;
-  const isFetchingNextDataPage = dataTimelineQuery.isFetchingNextPage;
-
-  useEffect(() => {
-    if (!dataModalOpen) {
-      return;
-    }
-    if (!hasNextDataPage || isFetchingNextDataPage) {
-      return;
-    }
-    void fetchNextDataPage();
-  }, [
-    dataModalOpen,
-    fetchNextDataPage,
-    hasNextDataPage,
-    isFetchingNextDataPage
-  ]);
 
   useEffect(() => {
     const latest = displaySegments.at(-1);
@@ -575,10 +557,14 @@ export function MovementLifeTimeline({ userIds = [] }: MovementLifeTimelineProps
     }
     await Promise.all(
       segment.rawStayIds.map((stayId) =>
-        patchMovementStay(stayId, {
-          placeExternalUid: place.externalUid,
-          placeLabel: place.label
-        })
+        patchMovementStay(
+          stayId,
+          {
+            placeExternalUid: place.externalUid,
+            placeLabel: place.label
+          },
+          userIds
+        )
       )
     );
   };

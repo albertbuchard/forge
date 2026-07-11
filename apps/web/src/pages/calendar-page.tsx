@@ -67,8 +67,12 @@ import {
 import { readCalendarDisplayName } from "@/lib/calendar-name-deduper";
 import {
   addDays,
+  buildDefaultCalendarEventTiming,
   buildWeekDays,
+  calendarEventOverlapsDate,
+  calendarEventTimeLabelForDate,
   formatWeekday,
+  moveCalendarSpanToDate,
   startOfWeek
 } from "@/lib/calendar-ui";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
@@ -84,10 +88,6 @@ import {
   formatUserSummaryLine,
   getSingleSelectedUserId
 } from "@/lib/user-ownership";
-import {
-  formatTimeInTimeZone,
-  localDateKeyInTimeZone
-} from "@/lib/timezone-datetime";
 import {
   useForgeClipboardStore,
   type ForgeClipboardCalendarEventItem
@@ -119,13 +119,14 @@ type EventSyncStatus = {
 };
 
 function buildDefaultEventSeed(day: Date) {
-  const start = new Date(day);
-  start.setUTCHours(9, 0, 0, 0);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  const timing = buildDefaultCalendarEventTiming(
+    day.toISOString().slice(0, 10),
+    timezone
+  );
   return {
-    startAt: start.toISOString(),
-    endAt: end.toISOString(),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
+    ...timing,
+    timezone,
     availability: "busy" as const
   };
 }
@@ -215,24 +216,13 @@ function normalizeCalendarEventPlace(event: CalendarEvent): CalendarEvent {
 }
 
 function moveCalendarItemToDay(
-  item: Pick<ForgeClipboardCalendarEventItem, "startAt" | "endAt">,
+  item: Pick<
+    ForgeClipboardCalendarEventItem,
+    "startAt" | "endAt" | "timezone" | "isAllDay"
+  >,
   day: Date
 ) {
-  const sourceStart = new Date(item.startAt);
-  const sourceEnd = new Date(item.endAt);
-  const duration = sourceEnd.getTime() - sourceStart.getTime();
-  const nextStart = new Date(day);
-  nextStart.setUTCHours(
-    sourceStart.getUTCHours(),
-    sourceStart.getUTCMinutes(),
-    0,
-    0
-  );
-  const nextEnd = new Date(nextStart.getTime() + duration);
-  return {
-    startAt: nextStart.toISOString(),
-    endAt: nextEnd.toISOString()
-  };
+  return moveCalendarSpanToDate(item, day.toISOString().slice(0, 10));
 }
 
 function toClipboardEventItem(
@@ -247,6 +237,7 @@ function toClipboardEventItem(
     startAt: event.startAt,
     endAt: event.endAt,
     timezone: event.timezone,
+    isAllDay: event.isAllDay,
     availability: event.availability,
     preferredCalendarId: event.calendarId,
     categories: event.categories,
@@ -286,10 +277,6 @@ function getEventBadgeLabel(
   return event.originType === "native"
     ? "Forge only"
     : formatProviderBadgeLabel(event.originType);
-}
-
-function calendarEventDateKey(event: CalendarEvent) {
-  return localDateKeyInTimeZone(event.startAt, event.timezone);
 }
 
 function formatWorkBlockKindLabel(kind: WorkBlockKind) {
@@ -420,15 +407,16 @@ export function CalendarPage() {
   ] as const;
 
   const isEventInVisibleRange = (
-    event: Pick<CalendarEvent, "startAt" | "deletedAt">
+    event: Pick<CalendarEvent, "startAt" | "endAt" | "deletedAt">
   ) => {
     if (event.deletedAt) {
       return false;
     }
-    const eventStartsAt = new Date(event.startAt).getTime();
+    const eventStartsAt = Date.parse(event.startAt);
+    const eventEndsAt = Date.parse(event.endAt);
     return (
-      eventStartsAt >= new Date(range.from).getTime() &&
-      eventStartsAt < new Date(range.to).getTime()
+      eventEndsAt > Date.parse(range.from) &&
+      eventStartsAt < Date.parse(range.to)
     );
   };
 
@@ -1034,7 +1022,9 @@ export function CalendarPage() {
     const nextTiming = moveCalendarItemToDay(
       {
         startAt: event.startAt,
-        endAt: event.endAt
+        endAt: event.endAt,
+        timezone: event.timezone,
+        isAllDay: event.isAllDay
       },
       day
     );
@@ -1064,6 +1054,7 @@ export function CalendarPage() {
           startAt: nextTiming.startAt,
           endAt: nextTiming.endAt,
           timezone: item.timezone,
+          isAllDay: item.isAllDay,
           availability: item.availability,
           preferredCalendarId: item.preferredCalendarId,
           categories: item.categories,
@@ -1260,38 +1251,41 @@ export function CalendarPage() {
       />
 
       {lifeForceQuery.data?.lifeForce ? (
-        <Card className="grid gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] p-4 shadow-[var(--ui-shadow-soft)] md:grid-cols-3">
+        <Card
+          className="grid grid-cols-2 gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-1)] p-3 shadow-[var(--ui-shadow-soft)] sm:p-4 md:grid-cols-3"
+          data-testid="calendar-life-force-summary"
+        >
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
               Life Force today
             </div>
-            <div className="mt-2 text-3xl font-semibold text-[var(--ui-ink-strong)]">
+            <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)] sm:text-3xl">
               {Math.round(lifeForceQuery.data.lifeForce.spentTodayAp)}
-              <span className="ml-2 text-lg text-[var(--ui-ink-muted)]">
+              <span className="ml-1 text-sm text-[var(--ui-ink-muted)] sm:ml-2 sm:text-lg">
                 / {Math.round(lifeForceQuery.data.lifeForce.dailyBudgetAp)} AP
               </span>
             </div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
               Instant headroom
             </div>
-            <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
+            <div className="mt-2 text-xl font-semibold text-[var(--primary)] sm:text-2xl">
               {lifeForceQuery.data.lifeForce.instantFreeApPerHour.toFixed(1)}{" "}
               AP/h
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-2 hidden text-sm text-[var(--ui-ink-soft)] sm:block">
               Calendar containers now speak the same AP language as live work.
             </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          <div className="col-span-2 border-t border-[var(--ui-border-subtle)] pt-3 md:col-span-1 md:border-0 md:pt-0">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
               Forecast
             </div>
-            <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+            <div className="mt-1 text-xl font-semibold text-[var(--ui-ink-strong)] sm:mt-2 sm:text-2xl">
               {Math.round(lifeForceQuery.data.lifeForce.forecastAp)} AP
             </div>
-            <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+            <div className="mt-1 text-xs text-[var(--ui-ink-soft)] sm:mt-2 sm:text-sm">
               Planned remaining{" "}
               {formatLifeForceAp(
                 lifeForceQuery.data.lifeForce.plannedRemainingAp
@@ -1345,12 +1339,15 @@ export function CalendarPage() {
           onNext={() => setWeekStart(addDays(weekStart, 7))}
         />
 
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))] 2xl:[grid-template-columns:repeat(7,minmax(0,1fr))]">
+        <div
+          className="grid snap-x snap-mandatory grid-flow-col auto-cols-[minmax(min(84vw,20rem),1fr)] gap-3 overflow-x-auto overscroll-x-contain pb-2 [webkit-overflow-scrolling:touch] md:snap-none md:grid-flow-row md:[grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))] md:overflow-visible md:pb-0 2xl:[grid-template-columns:repeat(7,minmax(0,1fr))]"
+          data-testid="calendar-week-grid"
+        >
           {days.map((day) => {
             const dayKey = day.toISOString().slice(0, 10);
             const dayEvents = overview.events.filter(
               (event) =>
-                calendarEventDateKey(event) === dayKey && !event.deletedAt
+                !event.deletedAt && calendarEventOverlapsDate(event, dayKey)
             );
             const dayBlocks = overview.workBlockInstances.filter(
               (block) => block.dateKey === dayKey
@@ -1408,31 +1405,32 @@ export function CalendarPage() {
                   if (!timebox) {
                     return;
                   }
-                  const sourceStart = new Date(timebox.startsAt);
-                  const sourceEnd = new Date(timebox.endsAt);
-                  const duration = sourceEnd.getTime() - sourceStart.getTime();
-                  const nextStart = new Date(day);
-                  nextStart.setUTCHours(
-                    sourceStart.getUTCHours(),
-                    sourceStart.getUTCMinutes(),
-                    0,
-                    0
+                  const nextTiming = moveCalendarSpanToDate(
+                    {
+                      startAt: timebox.startsAt,
+                      endAt: timebox.endsAt,
+                      timezone:
+                        Intl.DateTimeFormat().resolvedOptions().timeZone ??
+                        "UTC"
+                    },
+                    dayKey
                   );
-                  const nextEnd = new Date(nextStart.getTime() + duration);
                   void moveTimeboxMutation.mutateAsync({
                     timeboxId,
-                    startsAt: nextStart.toISOString(),
-                    endsAt: nextEnd.toISOString()
+                    startsAt: nextTiming.startAt,
+                    endsAt: nextTiming.endAt
                   });
                   setDraggedTimeboxId(null);
                 }}
-                className="min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:!bg-[var(--ui-surface-hover)]"
+                className="min-w-0 snap-start overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:!bg-[var(--ui-surface-hover)]"
               >
                 <div className="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm font-medium text-[var(--ui-ink-strong)]">
-                  <span className="min-w-0 truncate">{formatWeekday(day)}</span>
+                  <span className="min-w-0 truncate">
+                    {formatWeekday(day, "UTC")}
+                  </span>
                   <button
                     type="button"
-                    aria-label={`Open actions for ${formatWeekday(day)}`}
+                    aria-label={`Open actions for ${formatWeekday(day, "UTC")}`}
                     className="rounded-full bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     onClick={(event) => {
                       event.stopPropagation();
@@ -1603,15 +1601,7 @@ export function CalendarPage() {
                                 {event.title}
                               </div>
                               <div className="mt-1 text-[var(--ui-ink-soft)]">
-                                {formatTimeInTimeZone(
-                                  event.startAt,
-                                  event.timezone
-                                )}{" "}
-                                -{" "}
-                                {formatTimeInTimeZone(
-                                  event.endAt,
-                                  event.timezone
-                                )}
+                                {calendarEventTimeLabelForDate(event, dayKey)}
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
@@ -2237,7 +2227,8 @@ export function CalendarPage() {
                     days.find(
                       (entry) =>
                         entry.toISOString().slice(0, 10) === menuState.dayKey
-                    ) ?? weekStart
+                    ) ?? weekStart,
+                    "UTC"
                   )
                 : "Calendar actions"
         }

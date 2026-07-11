@@ -7975,6 +7975,16 @@ type EffectiveReadScope = {
   tagIds: string[];
 };
 
+type UserScopeAuth = {
+  token: {
+    scopePolicy: {
+      userIds: string[];
+      projectIds: string[];
+      tagIds: string[];
+    };
+  } | null;
+};
+
 const EMPTY_SCOPED_USER_IDS = ["__forge_scope_none__"];
 
 function normalizeScopedUserIdsForReads(options: {
@@ -8003,17 +8013,7 @@ function normalizeScopedUserIdsForReads(options: {
 
 function resolveEffectiveReadScope(
   query: Record<string, unknown> | undefined,
-  auth:
-    | ReturnType<typeof parseRequestAuth>
-    | {
-        token: {
-          scopePolicy: {
-            userIds: string[];
-            projectIds: string[];
-            tagIds: string[];
-          };
-        } | null;
-      }
+  auth: UserScopeAuth
 ): EffectiveReadScope {
   const requestedUserIds = resolveScopedUserIds(query);
   const tokenUserIds = auth.token?.scopePolicy.userIds ?? [];
@@ -8032,6 +8032,38 @@ function resolveEffectiveReadScope(
     projectIds: auth.token?.scopePolicy.projectIds ?? [],
     tagIds: auth.token?.scopePolicy.tagIds ?? []
   };
+}
+
+function resolveEffectiveUserIdsForReads(
+  query: Record<string, unknown> | undefined,
+  auth: UserScopeAuth
+) {
+  const scope = resolveEffectiveReadScope(query, auth);
+  const normalized = normalizeScopedUserIdsForReads({
+    scope,
+    validUserIds: listUsers().map((user) => user.id)
+  });
+  if (
+    scope.enforceUserIds &&
+    normalized.validScopedUserIds !== undefined &&
+    normalized.validScopedUserIds.length === 0
+  ) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The requested user scope is outside this token's allowed users."
+    );
+  }
+  return normalized.scopedUserIdsForReads;
+}
+
+function resolveEffectiveUserIdForMutation(
+  query: Record<string, unknown> | undefined,
+  auth: UserScopeAuth
+) {
+  return (
+    resolveEffectiveUserIdsForReads(query, auth)?.[0] ?? getDefaultUser().id
+  );
 }
 
 function hasScopeFilters(
@@ -11165,27 +11197,39 @@ export async function buildServer(
   });
   app.get("/api/v1/movement/day", async (request) => {
     const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     return {
       movement: getMovementDayDetail({
         date: typeof query.date === "string" ? query.date : undefined,
-        userIds: resolveScopedUserIds(query)
+        userIds: resolveEffectiveUserIdsForReads(query, auth)
       })
     };
   });
   app.get("/api/v1/movement/month", async (request) => {
     const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     return {
       movement: getMovementMonthSummary({
         month: typeof query.month === "string" ? query.month : undefined,
-        userIds: resolveScopedUserIds(query)
+        userIds: resolveEffectiveUserIdsForReads(query, auth)
       })
     };
   });
-  app.get("/api/v1/movement/all-time", async (request) => ({
-    movement: getMovementAllTimeSummary(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    )
-  }));
+  app.get("/api/v1/movement/all-time", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    return {
+      movement: getMovementAllTimeSummary(
+        resolveEffectiveUserIdsForReads(query, auth)
+      )
+    };
+  });
   app.get("/api/v1/screen-time/day", async (request) => {
     const query = request.query as Record<string, unknown>;
     return {
@@ -11230,11 +11274,11 @@ export async function buildServer(
   });
   app.get("/api/v1/movement/timeline", async (request) => {
     const parsed = movementTimelineQuerySchema.parse(request.query ?? {});
-    const userIds =
-      parsed.userIds.length > 0
-        ? parsed.userIds
-        : (resolveScopedUserIds(request.query as Record<string, unknown>) ??
-          []);
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth) ?? [];
     const movement = getMovementTimeline({
       ...parsed,
       userIds
@@ -11243,20 +11287,27 @@ export async function buildServer(
       movement: attachMovementTimelineSleepOverlays(movement, userIds)
     };
   });
-  app.get("/api/v1/movement/settings", async (request) => ({
-    settings: getMovementSettings(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    )
-  }));
+  app.get("/api/v1/movement/settings", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    return {
+      settings: getMovementSettings(
+        resolveEffectiveUserIdsForReads(query, auth)
+      )
+    };
+  });
   app.patch("/api/v1/movement/settings", async (request) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/movement/settings" }
     );
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     return {
       settings: updateMovementSettings(
         userId,
@@ -11265,20 +11316,25 @@ export async function buildServer(
       )
     };
   });
-  app.get("/api/v1/movement/places", async (request) => ({
-    places: listMovementPlaces(
-      resolveScopedUserIds(request.query as Record<string, unknown>)
-    )
-  }));
+  app.get("/api/v1/movement/places", async (request) => {
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    return {
+      places: listMovementPlaces(resolveEffectiveUserIdsForReads(query, auth))
+    };
+  });
   app.post("/api/v1/movement/places", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/movement/places" }
     );
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     reply.code(201);
     return {
       place: createMovementPlace(
@@ -11297,11 +11353,16 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/places/:id" }
     );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
     const place = updateMovementPlace(
       id,
       movementPlacePatchSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      toActivityContext(auth),
+      { userId }
     );
     if (!place) {
       reply.code(404);
@@ -11315,9 +11376,10 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/user-boxes" }
     );
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     reply.code(201);
     const created = createMovementUserBox(
       {
@@ -11331,12 +11393,15 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/movement/user-boxes/preflight", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/movement/user-boxes/preflight"
-    });
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/movement/user-boxes/preflight" }
+    );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     return {
       preflight: analyzeMovementUserBoxPreflight({
         ...movementUserBoxPreflightSchema.parse(request.body ?? {}),
@@ -11350,9 +11415,10 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/user-boxes/:id" }
     );
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
     const box = updateMovementUserBox(
       id,
@@ -11374,9 +11440,10 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/user-boxes/:id" }
     );
-    const userId =
-      resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-      getDefaultUser().id;
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
     const result = deleteMovementUserBox(id, toActivityContext(auth), {
       userId
@@ -11395,9 +11462,10 @@ export async function buildServer(
         ["write"],
         { route: "/api/v1/movement/automatic-boxes/:id/invalidate" }
       );
-      const userId =
-        resolveScopedUserIds(request.query as Record<string, unknown>)?.[0] ??
-        getDefaultUser().id;
+      const userId = resolveEffectiveUserIdForMutation(
+        request.query as Record<string, unknown>,
+        auth
+      );
       const { id } = request.params as { id: string };
       const result = invalidateAutomaticMovementBox(
         id,
@@ -11423,11 +11491,16 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/stays/:id" }
     );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
     const stay = updateMovementStay(
       id,
       movementStayPatchSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      toActivityContext(auth),
+      { userId }
     );
     if (!stay) {
       reply.code(404);
@@ -11441,8 +11514,14 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/stays/:id" }
     );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
-    const result = deleteMovementStay(id, toActivityContext(auth));
+    const result = deleteMovementStay(id, toActivityContext(auth), {
+      userId
+    });
     if (!result) {
       reply.code(404);
       return { error: "Movement stay not found" };
@@ -11455,11 +11534,16 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/trips/:id" }
     );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
     const trip = updateMovementTrip(
       id,
       movementTripPatchSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      toActivityContext(auth),
+      { userId }
     );
     if (!trip) {
       reply.code(404);
@@ -11473,8 +11557,14 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/movement/trips/:id" }
     );
+    const userId = resolveEffectiveUserIdForMutation(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const { id } = request.params as { id: string };
-    const result = deleteMovementTrip(id, toActivityContext(auth));
+    const result = deleteMovementTrip(id, toActivityContext(auth), {
+      userId
+    });
     if (!result) {
       reply.code(404);
       return { error: "Movement trip not found" };
@@ -11489,12 +11579,17 @@ export async function buildServer(
         ["write"],
         { route: "/api/v1/movement/trips/:id/points/:pointId" }
       );
+      const userId = resolveEffectiveUserIdForMutation(
+        request.query as Record<string, unknown>,
+        auth
+      );
       const { id, pointId } = request.params as { id: string; pointId: string };
       const result = updateMovementTripPoint(
         id,
         pointId,
         movementTripPointPatchSchema.parse(request.body ?? {}),
-        toActivityContext(auth)
+        toActivityContext(auth),
+        { userId }
       );
       if (!result) {
         reply.code(404);
@@ -11511,11 +11606,16 @@ export async function buildServer(
         ["write"],
         { route: "/api/v1/movement/trips/:id/points/:pointId" }
       );
+      const userId = resolveEffectiveUserIdForMutation(
+        request.query as Record<string, unknown>,
+        auth
+      );
       const { id, pointId } = request.params as { id: string; pointId: string };
       const result = deleteMovementTripPoint(
         id,
         pointId,
-        toActivityContext(auth)
+        toActivityContext(auth),
+        { userId }
       );
       if (!result) {
         reply.code(404);
@@ -11526,7 +11626,14 @@ export async function buildServer(
   );
   app.get("/api/v1/movement/trips/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const movement = getMovementTripDetail(id);
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userId = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
+    )?.[0];
+    const movement = getMovementTripDetail(id, { userId });
     if (!movement) {
       reply.code(404);
       return { error: "Movement trip not found" };
@@ -11535,9 +11642,13 @@ export async function buildServer(
   });
   app.get("/api/v1/movement/boxes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const query = request.query as Record<string, unknown>;
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const movement = getMovementBoxDetail(
       id,
-      resolveScopedUserIds(request.query as Record<string, unknown>) ?? []
+      resolveEffectiveUserIdsForReads(query, auth) ?? []
     );
     if (!movement) {
       reply.code(404);
@@ -11545,11 +11656,22 @@ export async function buildServer(
     }
     return { movement };
   });
-  app.post("/api/v1/movement/selection", async (request) => ({
-    movement: getMovementSelectionAggregate(
-      movementSelectionAggregateSchema.parse(request.body ?? {})
-    )
-  }));
+  app.post("/api/v1/movement/selection", async (request) => {
+    const parsed = movementSelectionAggregateSchema.parse(request.body ?? {});
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(
+      { userIds: parsed.userIds },
+      auth
+    );
+    return {
+      movement: getMovementSelectionAggregate({
+        ...parsed,
+        userIds: userIds ?? []
+      })
+    };
+  });
   app.post("/api/v1/health/pairing-sessions", async (request, reply) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/health/pairing-sessions"

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11T03:25:32.306Z",
+  "generatedAt": "2026-07-11T04:46:12.713Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"

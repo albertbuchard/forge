@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Route,
   PencilLine,
@@ -58,6 +60,8 @@ import type { MovementKnownPlace, MovementTripPointRecord } from "@/lib/types";
 
 type MovementViewMode = "life" | "day" | "month" | "all_time";
 type MonthMetric = "distanceMeters" | "movingSeconds" | "idleSeconds" | "caloriesKcal";
+const DEFAULT_VISIBLE_PLACE_COUNT = 8;
+
 type MovementPointDraft = {
   recordedAt: string;
   latitude: string;
@@ -507,6 +511,7 @@ export function MovementPage() {
   const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
   const [editingPlace, setEditingPlace] = useState<MovementKnownPlace | null>(null);
   const [placeSearch, setPlaceSearch] = useState("");
+  const [showAllPlaces, setShowAllPlaces] = useState(false);
   const [monthMetric, setMonthMetric] = useState<MonthMetric>("distanceMeters");
   const pointListRef = useRef<HTMLDivElement | null>(null);
 
@@ -539,9 +544,11 @@ export function MovementPage() {
     queryFn: async () => (await listMovementPlaces(selectedUserIds)).places
   });
   const selectedTripQuery = useQuery({
-    queryKey: ["forge-movement-trip", selectedTripId],
+    queryKey: ["forge-movement-trip", selectedTripId, ...selectedUserIds],
     queryFn: async () =>
-      selectedTripId ? (await getMovementTripDetail(selectedTripId)).movement : null,
+      selectedTripId
+        ? (await getMovementTripDetail(selectedTripId, selectedUserIds)).movement
+        : null,
     enabled: Boolean(selectedTripId)
   });
   const selectionAggregateQuery = useQuery({
@@ -581,7 +588,7 @@ export function MovementPage() {
       categoryTags: string[];
     }) => {
       if (input.id) {
-        return patchMovementPlace(input.id, input);
+        return patchMovementPlace(input.id, input, selectedUserIds);
       }
       return createMovementPlace(input, selectedUserIds);
     },
@@ -609,6 +616,11 @@ export function MovementPage() {
       return haystack.includes(normalizedSearch);
     });
   }, [placeSearch, placesQuery.data]);
+
+  const visiblePlaces =
+    showAllPlaces || placeSearch.trim().length > 0
+      ? filteredPlaces
+      : filteredPlaces.slice(0, DEFAULT_VISIBLE_PLACE_COUNT);
 
   const pointFilterOptions = useMemo(
     () =>
@@ -782,43 +794,46 @@ export function MovementPage() {
         }
       />
 
-      <Card className="grid gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-4 md:grid-cols-3">
+      <Card
+        className="grid grid-cols-2 gap-3 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[image:var(--ui-surface-section)] p-3 sm:p-4 md:grid-cols-3"
+        data-testid="movement-life-force-summary"
+      >
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
             Movement AP today
           </div>
-          <div className="mt-2 text-3xl font-semibold text-[var(--ui-ink-strong)]">
+          <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)] sm:text-3xl">
             {formatLifeForceAp(movementDayAp)}
           </div>
-          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+          <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
             Trips and transitions now contribute to the same Action Point ledger as work, habits, and notes.
           </div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
             Typical trip drain
           </div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--primary)]">
+          <div className="mt-2 text-xl font-semibold text-[var(--primary)] sm:text-2xl">
             {movementDay.trips[0]
               ? formatLifeForceRate(
                   estimateMovementTripActionPointLoad(movementDay.trips[0]).rateApPerHour
                 )
               : "0 AP/h"}
           </div>
-          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+          <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
             Movement uses a MET-like drain under the hood, translated into Forge Action Points.
           </div>
         </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+        <div className="col-span-2 border-t border-[var(--ui-border-subtle)] pt-3 md:col-span-1 md:border-0 md:pt-0">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[11px] sm:tracking-[0.18em]">
             Life Force sync
           </div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--ui-ink-strong)]">
+          <div className="mt-1 text-xl font-semibold text-[var(--ui-ink-strong)] sm:mt-2 sm:text-2xl">
             {lifeForceQuery.data
               ? `${Math.round(lifeForceQuery.data.spentTodayAp ?? 0)}/${Math.round(lifeForceQuery.data.dailyBudgetAp ?? 0)} AP`
               : "Loading..."}
           </div>
-          <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+          <div className="mt-1 text-xs text-[var(--ui-ink-muted)] sm:mt-2 sm:text-sm">
             {lifeForceQuery.data
               ? `${formatLifeForceRate(lifeForceQuery.data.instantFreeApPerHour)} free right now`
               : "Movement can now be read against today’s live capacity."}
@@ -863,15 +878,15 @@ export function MovementPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Card className="rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Distance today
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {distanceLabel(movementDay.summary.totalDistanceMeters)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 Across trips, stops, and linked place changes.
               </div>
             </Card>
@@ -879,10 +894,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Idle time
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {durationLabel(movementDay.summary.totalIdleSeconds)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 Time spent settled enough to count as a real stay.
               </div>
             </Card>
@@ -890,10 +905,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Estimated phone time
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {durationLabel(movementDay.summary.estimatedScreenTimeSeconds)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 Estimated from hourly Screen Time bins, not exact foreground traces.
               </div>
             </Card>
@@ -901,10 +916,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Known places
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {movementDay.summary.knownPlaceCount}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 Shared between Forge and the iPhone companion.
               </div>
             </Card>
@@ -912,10 +927,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Missing data
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {durationLabel(movementDay.summary.missingDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 {movementDay.summary.missingCount} grey gap{movementDay.summary.missingCount === 1 ? "" : "s"} where Forge had over one hour without enough movement signal.
               </div>
             </Card>
@@ -923,10 +938,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Repaired gaps
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {durationLabel(movementDay.summary.repairedGapDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 {movementDay.summary.repairedGapCount} inferred span{movementDay.summary.repairedGapCount === 1 ? "" : "s"} classified as stay or move instead of leaving blank holes in the day.
               </div>
             </Card>
@@ -934,10 +949,10 @@ export function MovementPage() {
               <div className="font-label text-[11px] uppercase tracking-[0.2em] text-[var(--ui-ink-muted)]">
                 Continued stays
               </div>
-              <div className="mt-3 font-display text-4xl text-[var(--ui-ink-strong)]">
+              <div className="mt-3 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
                 {durationLabel(movementDay.summary.continuedStayDurationSeconds)}
               </div>
-              <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
+              <div className="mt-2 hidden text-sm text-[var(--ui-ink-muted)] sm:block">
                 {movementDay.summary.continuedStayCount} short stationary span{movementDay.summary.continuedStayCount === 1 ? "" : "s"} carried forward so quiet home time stays continuous instead of disappearing.
               </div>
             </Card>
@@ -956,7 +971,7 @@ export function MovementPage() {
           <div className="mt-2 text-sm text-[var(--ui-ink-muted)]">
             Select any combination of stays and trips to sum movement, time, and work evidence.
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
               <div className="text-xs uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
                 Span
@@ -1554,7 +1569,7 @@ export function MovementPage() {
             </div>
           </div>
           <div className="mt-5 grid gap-3">
-            {filteredPlaces.map((place) => (
+            {visiblePlaces.map((place) => (
               <button
                 key={place.id}
                 type="button"
@@ -1580,6 +1595,24 @@ export function MovementPage() {
                 <PencilLine className="mt-1 size-4 text-[var(--ui-ink-muted)]" />
               </button>
             ))}
+            {placeSearch.trim().length === 0 &&
+            filteredPlaces.length > DEFAULT_VISIBLE_PLACE_COUNT ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setShowAllPlaces((current) => !current)}
+              >
+                {showAllPlaces ? (
+                  <ChevronUp className="size-4" />
+                ) : (
+                  <ChevronDown className="size-4" />
+                )}
+                {showAllPlaces
+                  ? "Show fewer places"
+                  : `Show ${filteredPlaces.length - DEFAULT_VISIBLE_PLACE_COUNT} more places`}
+              </Button>
+            ) : null}
           </div>
           </Card>
         </MovementPlacesBox>

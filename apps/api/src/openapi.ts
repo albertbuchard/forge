@@ -7170,6 +7170,30 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const movementUserIdsParameter = {
+    name: "userIds",
+    in: "query",
+    schema: { type: "array", items: { type: "string" } },
+    style: "form",
+    explode: true,
+    description:
+      "Optional repeated user scope. Mutations use the first selected user. Single-record reads use the first selected user when present and otherwise retain unrestricted operator lookup. A record-owner mismatch returns 404; a scoped token requesting users outside its policy returns 403."
+  };
+
+  const movementIdParameter = {
+    name: "id",
+    in: "path",
+    required: true,
+    schema: { type: "string" }
+  };
+
+  const movementPointIdParameter = {
+    name: "pointId",
+    in: "path",
+    required: true,
+    schema: { type: "string" }
+  };
+
   const document = {
     openapi: "3.1.0",
     info: {
@@ -9098,6 +9122,15 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Read one day of movement detail with distance, stays, trips, gaps, and summaries",
+          parameters: [
+            movementUserIdsParameter,
+            {
+              name: "date",
+              in: "query",
+              schema: { type: "string", format: "date" },
+              description: "Local calendar date. Defaults to today."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -9119,6 +9152,15 @@ export function buildOpenApiDocument() {
       "/api/v1/movement/month": {
         get: {
           summary: "Read one month of movement summary",
+          parameters: [
+            movementUserIdsParameter,
+            {
+              name: "month",
+              in: "query",
+              schema: { type: "string", pattern: "^[0-9]{4}-[0-9]{2}$" },
+              description: "Local calendar month in YYYY-MM form."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -9141,6 +9183,7 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Read all-time movement summary including place and trip distribution",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9163,6 +9206,28 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Read the paginated movement timeline with stays, trips, missing spans, and projected boxes",
+          parameters: [
+            movementUserIdsParameter,
+            {
+              name: "before",
+              in: "query",
+              schema: { type: "string" },
+              description:
+                "Opaque cursor returned by the previous timeline page."
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 360, default: 40 }
+            },
+            {
+              name: "includeInvalid",
+              in: "query",
+              schema: { type: "boolean", default: false },
+              description:
+                "Include invalidated automatic boxes for data review."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -9184,6 +9249,7 @@ export function buildOpenApiDocument() {
       "/api/v1/movement/settings": {
         get: {
           summary: "Read movement capture settings",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9203,6 +9269,7 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update movement capture settings",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9224,6 +9291,7 @@ export function buildOpenApiDocument() {
       "/api/v1/movement/places": {
         get: {
           summary: "List known movement places",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9243,6 +9311,7 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary: "Create one user-defined movement place",
+          parameters: [movementUserIdsParameter],
           responses: {
             "201": jsonResponse(
               {
@@ -9262,8 +9331,10 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/places/{id}": {
+        parameters: [movementIdParameter],
         patch: {
           summary: "Update one known movement place",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9286,6 +9357,7 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Create a user-defined movement overlay box such as a manual stay, trip, or missing-data override",
+          parameters: [movementUserIdsParameter],
           responses: {
             "201": jsonResponse(
               {
@@ -9308,6 +9380,7 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Analyze a proposed movement overlay before saving it, especially when replacing a missing gap or overlapping another box",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9327,8 +9400,10 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/user-boxes/{id}": {
+        parameters: [movementIdParameter],
         patch: {
           summary: "Update one user-defined movement overlay box",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9348,6 +9423,7 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete one user-defined movement box",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9361,9 +9437,11 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/automatic-boxes/{id}/invalidate": {
+        parameters: [movementIdParameter],
         post: {
           summary:
             "Hide one automatic movement box and project the resulting user-defined overlay",
+          parameters: [movementUserIdsParameter],
           responses: {
             "201": jsonResponse(
               {
@@ -9383,8 +9461,10 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/stays/{id}": {
+        parameters: [movementIdParameter],
         patch: {
           summary: "Update one recorded movement stay",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9404,6 +9484,7 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete one recorded movement stay",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9417,9 +9498,11 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/boxes/{id}": {
+        parameters: [movementIdParameter],
         get: {
           summary:
             "Read one movement box with projected detail, provenance, and raw linked evidence",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9439,8 +9522,10 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/trips/{id}": {
+        parameters: [movementIdParameter],
         get: {
           summary: "Read one movement trip with its full detail",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9460,6 +9545,7 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update one movement trip",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9479,6 +9565,7 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete one movement trip",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9492,8 +9579,10 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/movement/trips/{id}/points/{pointId}": {
+        parameters: [movementIdParameter, movementPointIdParameter],
         patch: {
           summary: "Update one movement trip datapoint",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {
@@ -9507,6 +9596,7 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete one movement trip datapoint",
+          parameters: [movementUserIdsParameter],
           responses: {
             "200": jsonResponse(
               {

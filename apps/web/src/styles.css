@@ -176,6 +176,11 @@ body,
   overflow-x: clip;
 }
 
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 body {
   --canvas: var(--surface);
   --color-canvas: var(--surface);
@@ -268,6 +273,28 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+}
+
+#root {
+  min-height: 100dvh;
+  background-color: var(--surface);
+  background-image:
+    radial-gradient(
+      circle at top left,
+      var(--forge-body-ambient-primary),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 82% 16%,
+      var(--forge-body-ambient-secondary),
+      transparent 24%
+    ),
+    linear-gradient(
+      180deg,
+      var(--forge-body-gradient-start) 0%,
+      var(--surface) 52%,
+      var(--forge-body-gradient-end) 100%
+    );
 }
 
 .user-relationship-flow .react-flow__controls {

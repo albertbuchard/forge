@@ -2908,7 +2908,8 @@ export function createMovementPlace(
 export function updateMovementPlace(
   placeId: string,
   patch: z.input<typeof movementPlacePatchSchema>,
-  context: ActivityContext
+  context: ActivityContext,
+  options: { userId?: string } = {}
 ) {
   const existing = getDatabase()
     .prepare(
@@ -2918,6 +2919,9 @@ export function updateMovementPlace(
     )
     .get(placeId) as MovementPlaceRow | undefined;
   if (!existing) {
+    return undefined;
+  }
+  if (options.userId && existing.user_id !== options.userId) {
     return undefined;
   }
   const parsed = movementPlacePatchSchema.parse(patch);
@@ -6348,7 +6352,10 @@ function buildStylizedCurve(points: Array<{ latitude: number; longitude: number 
   }));
 }
 
-export function getMovementTripDetail(tripId: string) {
+export function getMovementTripDetail(
+  tripId: string,
+  options: { userId?: string } = {}
+) {
   const tripRow = getDatabase()
     .prepare(
       `SELECT *
@@ -6357,6 +6364,9 @@ export function getMovementTripDetail(tripId: string) {
     )
     .get(tripId) as MovementTripRow | undefined;
   if (!tripRow) {
+    return undefined;
+  }
+  if (options.userId && tripRow.user_id !== options.userId) {
     return undefined;
   }
   const places = listMovementPlaceRows([tripRow.user_id]).map(mapMovementPlace);

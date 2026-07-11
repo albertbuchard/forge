@@ -37,7 +37,7 @@ export function CalendarWeekToolbar({
       <div className="flex min-w-0 flex-wrap gap-2">
         <Badge className="border border-[color-mix(in_srgb,var(--primary)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-accent-soft)] text-[var(--primary)]">
           <CalendarDays className="mr-1 size-3.5" />
-          Week of {formatWeekday(weekStart)}
+          Week of {formatWeekday(weekStart, "UTC")}
         </Badge>
         {badges}
         <Button variant="secondary" onClick={onPrevious}>

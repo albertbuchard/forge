@@ -32,19 +32,24 @@ const {
   importLifeEventTicketMock: vi.fn()
 }));
 
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
+vi.mock("@tanstack/react-virtual", () => {
+  const buildVirtualizer = ({ count }: { count: number }) => ({
     getTotalSize: () => count * 220,
     getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
+      Array.from({ length: Math.min(count, 6) }, (_, index) => ({
         index,
         key: index,
         start: index * 220,
         size: 220
       })),
-    measureElement: vi.fn()
-  })
-}));
+    measureElement: vi.fn(),
+    scrollToIndex: vi.fn()
+  });
+  return {
+    useVirtualizer: buildVirtualizer,
+    useWindowVirtualizer: buildVirtualizer
+  };
+});
 
 vi.mock("maplibre-gl", () => {
   class MockMap {
@@ -327,6 +332,36 @@ describe("LifeEventsPage", () => {
       expect(screen.queryByText("Flight to Paris")).not.toBeInTheDocument();
       expect(screen.getByText("Summer festival stay")).toBeInTheDocument();
     });
+  });
+
+  it("keeps a 500-event chronology bounded while search can reach the full result set", async () => {
+    const events = Array.from({ length: 500 }, (_, index) =>
+      buildLifeEvent({
+        id: `lifeevent_${index}`,
+        title: index === 499 ? "Final future milestone" : `Life event ${index}`,
+        startsAt: new Date(Date.UTC(2026, 0, 1 + index, 10)).toISOString(),
+        endsAt: new Date(Date.UTC(2026, 0, 1 + index, 12)).toISOString()
+      })
+    );
+    renderPage({
+      events,
+      now: "2026-07-01T12:00:00.000Z",
+      nextLifeEventId: "lifeevent_181",
+      limit: 500,
+      offset: 0
+    });
+
+    expect(await screen.findByText("Life event 0")).toBeInTheDocument();
+    expect(screen.getAllByTestId("life-event-card")).toHaveLength(6);
+
+    fireEvent.change(screen.getByPlaceholderText(/search events, places/i), {
+      target: { value: "Final future milestone" }
+    });
+
+    expect(
+      await screen.findByText("Final future milestone")
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("life-event-card")).toHaveLength(1);
   });
 
   it("opens a guided edit flow and updates through batch life_event CRUD", async () => {

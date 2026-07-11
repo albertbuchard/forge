@@ -402,7 +402,7 @@ export function MobileBottomNav({
     <>
       <nav
         data-testid="mobile-bottom-nav"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_96%,transparent)] backdrop-blur-xl lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 isolate border-t border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-panel)_96%,var(--surface-low)_4%)] shadow-[0_-12px_34px_color-mix(in_srgb,var(--surface)_10%,transparent)] [backface-visibility:hidden] [contain:layout_paint_style] [transform:translateZ(0)] [will-change:transform] lg:hidden"
         style={{
           paddingLeft:
             "max(0.75rem, calc(var(--forge-safe-area-left) + 0.75rem))",

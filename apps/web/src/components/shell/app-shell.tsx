@@ -621,7 +621,8 @@ function ShellFrame({
                 data-shell-collapse-header="desktop"
                 className="sticky top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-6"
                 style={{
-                  background:
+                  backgroundColor: "var(--surface-low)",
+                  backgroundImage:
                     "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 98%, var(--primary) 2%), var(--surface-low))",
                   paddingTop: "var(--forge-shell-desktop-header-padding-top)",
                   paddingBottom:
@@ -824,9 +825,10 @@ function ShellFrame({
               <>
                 <header
                   data-shell-collapse-header="mobile"
-                  className="fixed inset-x-0 top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-4"
+                  className="fixed inset-x-0 top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-4 [backface-visibility:hidden] [transform:translateZ(0)] [will-change:transform]"
                   style={{
-                    background:
+                    backgroundColor: "var(--surface-low)",
+                    backgroundImage:
                       "linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 98%, var(--primary) 2%), var(--surface-low))",
                     paddingTop: "var(--forge-shell-mobile-header-padding-top)",
                     paddingBottom:

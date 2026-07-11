@@ -303,6 +303,27 @@ describe("MovementLifeTimeline", () => {
     expect(screen.getAllByText(/Raw stays/i).length).toBeGreaterThan(0);
   });
 
+  it("loads the raw-data timeline only when the data browser opens", async () => {
+    renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
+
+    expect(await screen.findByText("Movement")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getMovementTimelineMock).toHaveBeenCalledTimes(1)
+    );
+    expect(getMovementTimelineMock.mock.calls[0]?.[0]).not.toEqual(
+      expect.objectContaining({ includeInvalid: true })
+    );
+
+    selectMovementAction(/View data/i);
+
+    await waitFor(() =>
+      expect(getMovementTimelineMock).toHaveBeenCalledTimes(2)
+    );
+    expect(getMovementTimelineMock.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({ includeInvalid: true })
+    );
+  });
+
   it("renders explicit canonical missing data from the shared overnight fixture", async () => {
     const fixtureSegments = loadSharedMovementFixture(
       "overnight_gap_before_move"
@@ -321,7 +342,9 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText("Movement")).toBeInTheDocument();
     selectMovementAction(/View data/i);
     expect((await screen.findAllByText("Missing data")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Raw trips 1/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Raw trips 1/i)).length).toBeGreaterThan(
+      0
+    );
     await waitFor(() => {
       expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
     });
@@ -618,10 +641,14 @@ describe("MovementLifeTimeline", () => {
     screen.getByRole("button", { name: /Lausanne Home/i }).click();
 
     await waitFor(() => {
-      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
-        placeExternalUid: "place_home",
-        placeLabel: "Lausanne Home"
-      });
+      expect(patchMovementStayMock).toHaveBeenCalledWith(
+        "stay_home",
+        {
+          placeExternalUid: "place_home",
+          placeLabel: "Lausanne Home"
+        },
+        ["user_operator"]
+      );
     });
     expect(createMovementUserBoxMock).not.toHaveBeenCalled();
   });
@@ -878,10 +905,14 @@ describe("MovementLifeTimeline", () => {
       );
     });
     await waitFor(() => {
-      expect(patchMovementStayMock).toHaveBeenCalledWith("stay_home", {
-        placeExternalUid: "place_home",
-        placeLabel: "Home"
-      });
+      expect(patchMovementStayMock).toHaveBeenCalledWith(
+        "stay_home",
+        {
+          placeExternalUid: "place_home",
+          placeLabel: "Home"
+        },
+        ["user_operator"]
+      );
     });
     expect(createMovementUserBoxMock).not.toHaveBeenCalled();
   });

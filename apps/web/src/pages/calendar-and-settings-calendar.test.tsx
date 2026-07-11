@@ -825,7 +825,9 @@ describe("calendar routing surfaces", () => {
 
     renderWithRouter(<CalendarPage />, "/calendar");
 
-    expect(await screen.findByText("Fly Los Angeles to Geneva")).toBeInTheDocument();
+    expect(
+      await screen.findAllByText("Fly Los Angeles to Geneva")
+    ).toHaveLength(2);
     const saturday = document.querySelector('[data-calendar-day="2026-09-12"]');
     const sunday = document.querySelector('[data-calendar-day="2026-09-13"]');
     expect(saturday).toBeTruthy();
@@ -833,10 +835,15 @@ describe("calendar routing surfaces", () => {
     expect(
       within(saturday as HTMLElement).getByText("Fly Los Angeles to Geneva")
     ).toBeInTheDocument();
-    expect(within(saturday as HTMLElement).getByText(/19:35/)).toBeInTheDocument();
     expect(
-      within(sunday as HTMLElement).queryByText("Fly Los Angeles to Geneva")
-    ).not.toBeInTheDocument();
+      within(saturday as HTMLElement).getByText(/19:35 onward/)
+    ).toBeInTheDocument();
+    expect(
+      within(sunday as HTMLElement).getByText("Fly Los Angeles to Geneva")
+    ).toBeInTheDocument();
+    expect(
+      within(sunday as HTMLElement).getByText(/Until 08:55/)
+    ).toBeInTheDocument();
   });
 
   it("keeps the calendar page display-first and opens guided work-block flows", async () => {
@@ -2724,6 +2731,7 @@ describe("calendar routing surfaces", () => {
           startAt: "2026-03-30T09:00:00.000Z",
           endAt: "2026-03-30T10:00:00.000Z",
           timezone: "Europe/Zurich",
+          isAllDay: false,
           availability: "busy",
           preferredCalendarId: null,
           categories: [],

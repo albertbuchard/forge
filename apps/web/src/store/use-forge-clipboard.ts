@@ -22,6 +22,7 @@ export type ForgeClipboardCalendarEventItem = {
   startAt: string;
   endAt: string;
   timezone: string;
+  isAllDay: boolean;
   availability: CalendarAvailability;
   preferredCalendarId: string | null;
   categories: string[];

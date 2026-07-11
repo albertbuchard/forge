@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useSearchParams } from "react-router-dom";
 import {
   BedDouble,
@@ -1708,6 +1709,20 @@ export function LifeEventsPage() {
     );
   }, [query, timelineEvents]);
   const stats = timelineStats(timeline);
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+  const [timelineScrollMargin, setTimelineScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    setTimelineScrollMargin(timelineRef.current?.offsetTop ?? 0);
+  }, [filteredEvents.length]);
+  const timelineVirtualizer = useWindowVirtualizer({
+    count: filteredEvents.length,
+    estimateSize: () => 248,
+    overscan: 6,
+    scrollMargin: timelineScrollMargin,
+    getItemKey: (index) => filteredEvents[index]?.id ?? index
+  });
+  const virtualEvents = timelineVirtualizer.getVirtualItems();
+  const scrollToTimelineIndex = timelineVirtualizer.scrollToIndex;
 
   useEffect(() => {
     if (
@@ -1718,7 +1733,13 @@ export function LifeEventsPage() {
     }
     setQuery("");
     setExpandedId(focusedEventId);
+    const focusedIndex = filteredEvents.findIndex(
+      (event) => event.id === focusedEventId
+    );
     const frame = window.requestAnimationFrame(() => {
+      if (focusedIndex >= 0) {
+        scrollToTimelineIndex(focusedIndex, { align: "center" });
+      }
       const target = document.getElementById(
         `forge-life-event-${focusedEventId}`
       );
@@ -1727,7 +1748,7 @@ export function LifeEventsPage() {
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusedEventId, timelineEvents]);
+  }, [filteredEvents, focusedEventId, scrollToTimelineIndex, timelineEvents]);
 
   function toggleExpandedEvent(eventId: string) {
     const nextId = expandedId === eventId ? null : eventId;
@@ -2243,17 +2264,31 @@ export function LifeEventsPage() {
           </div>
         </Card>
       ) : (
-        <div className="relative grid gap-3">
+        <div
+          ref={timelineRef}
+          className="relative"
+          data-testid="life-events-virtual-timeline"
+          style={{ height: `${timelineVirtualizer.getTotalSize()}px` }}
+        >
           <div className="absolute bottom-6 left-4 top-6 w-px bg-[var(--ui-border-subtle)]" />
-          {filteredEvents.map((event) => {
+          {virtualEvents.map((virtualEvent) => {
+            const event = filteredEvents[virtualEvent.index];
+            if (!event) {
+              return null;
+            }
             const isNext = event.id === timeline?.nextLifeEventId;
             const isExpanded = expandedId === event.id;
             return (
               <div
-                key={event.id}
+                key={virtualEvent.key}
+                ref={timelineVirtualizer.measureElement}
+                data-index={virtualEvent.index}
                 id={`forge-life-event-${event.id}`}
                 data-life-event-id={event.id}
-                className="relative grid grid-cols-[2rem_1fr] gap-3"
+                className="absolute left-0 top-0 grid w-full grid-cols-[2rem_minmax(0,1fr)] gap-3 pb-3"
+                style={{
+                  transform: `translateY(${virtualEvent.start - timelineScrollMargin}px)`
+                }}
               >
                 <div className="relative flex justify-center">
                   <div
