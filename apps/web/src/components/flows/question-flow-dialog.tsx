@@ -383,6 +383,7 @@ export function QuestionFlowDialog<TValue>({
   const baselineSerializedRef = useRef<string | null>(null);
   const lastPersistedSerializedRef = useRef<string | null>(null);
   const valueRef = useRef(value);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const step = steps[stepIndex];
 
   valueRef.current = value;
@@ -406,6 +407,15 @@ export function QuestionFlowDialog<TValue>({
       setStepIndex(nextStepIndex);
     }
   }, [initialStepId, open, stepIndex, steps]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    canvas.scrollTop = 0;
+    canvas.scrollLeft = 0;
+  }, [stepIndex]);
 
   const setValue = (patch: Partial<TValue>) => {
     onChange({ ...value, ...patch });
@@ -569,6 +579,7 @@ export function QuestionFlowDialog<TValue>({
           </div>
 
           <div
+            ref={canvasRef}
             data-testid="question-flow-canvas"
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6 md:py-5"
           >

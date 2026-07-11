@@ -6237,6 +6237,134 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const nutritionExperimentInputProperties = {
+    userId: { type: "string" },
+    hypothesisId: nullable({ type: "string" }),
+    title: { type: "string", minLength: 1 },
+    status: {
+      type: "string",
+      enum: ["planned", "running", "paused", "completed", "abandoned"]
+    },
+    hypothesis: {
+      type: "string",
+      minLength: 1,
+      description:
+        "Testable expectation that the intervention may support or challenge."
+    },
+    metricKey: {
+      type: "string",
+      minLength: 1,
+      description: "Primary outcome used to interpret the experiment."
+    },
+    intervention: {
+      type: "string",
+      minLength: 1,
+      description: "Specific food, timing, or fueling change being tested."
+    },
+    baselineStart: nullable({ type: "string" }),
+    baselineEnd: nullable({ type: "string" }),
+    interventionStart: nullable({ type: "string" }),
+    interventionEnd: nullable({ type: "string" }),
+    experimentStart: nullable({
+      type: "string",
+      description: "Alias for interventionStart."
+    }),
+    experimentEnd: nullable({
+      type: "string",
+      description: "Alias for interventionEnd."
+    }),
+    successCriteria: nullable({ type: "string" }),
+    confounders: arrayOf({ type: "string" }),
+    trackedOutcomes: arrayOf({ type: "string" }),
+    protocol: { type: "object", additionalProperties: true },
+    adherence: { type: "object", additionalProperties: true },
+    resultSummary: { type: "string" }
+  };
+
+  const nutritionExperimentInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["title"],
+    properties: nutritionExperimentInputProperties
+  };
+
+  const nutritionExperimentPatchInputProperties = Object.fromEntries(
+    Object.entries(nutritionExperimentInputProperties).filter(
+      ([key]) => key !== "userId"
+    )
+  );
+
+  const nutritionExperimentPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ...nutritionExperimentPatchInputProperties,
+      conclusion: nullable({
+        type: "string",
+        description:
+          "Result conclusion. Stored as the experiment result summary."
+      })
+    }
+  };
+
+  const nutritionExperiment = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "userId",
+      "hypothesisId",
+      "title",
+      "status",
+      "hypothesis",
+      "metricKey",
+      "intervention",
+      "baselineStart",
+      "baselineEnd",
+      "interventionStart",
+      "interventionEnd",
+      "experimentStart",
+      "experimentEnd",
+      "successCriteria",
+      "confounders",
+      "trackedOutcomes",
+      "protocol",
+      "adherence",
+      "resultSummary",
+      "conclusion",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      userId: { type: "string" },
+      hypothesisId: nullable({ type: "string" }),
+      title: { type: "string" },
+      status: {
+        type: "string",
+        enum: ["planned", "running", "paused", "completed", "abandoned"]
+      },
+      hypothesis: nullable({ type: "string" }),
+      metricKey: nullable({ type: "string" }),
+      intervention: nullable({ type: "string" }),
+      baselineStart: nullable({ type: "string" }),
+      baselineEnd: nullable({ type: "string" }),
+      interventionStart: nullable({ type: "string" }),
+      interventionEnd: nullable({ type: "string" }),
+      experimentStart: nullable({ type: "string" }),
+      experimentEnd: nullable({ type: "string" }),
+      successCriteria: nullable({ type: "string" }),
+      confounders: arrayOf({ type: "string" }),
+      trackedOutcomes: arrayOf({ type: "string" }),
+      protocol: { type: "object", additionalProperties: true },
+      adherence: { type: "object", additionalProperties: true },
+      resultSummary: { type: "string" },
+      conclusion: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
   const weightLossViewData = {
     type: "object",
     additionalProperties: false,
@@ -6276,7 +6404,9 @@ export function buildOpenApiDocument() {
       subjective: { type: "object", additionalProperties: true },
       gut: { type: "object", additionalProperties: true },
       hypotheses: arrayOf({ type: "object", additionalProperties: true }),
-      experiments: arrayOf({ type: "object", additionalProperties: true }),
+      experiments: arrayOf({
+        $ref: "#/components/schemas/NutritionExperiment"
+      }),
       dataQuality: { type: "object", additionalProperties: true }
     }
   };
@@ -7184,6 +7314,9 @@ export function buildOpenApiDocument() {
         NutritionFoodLogInput: nutritionFoodLogInput,
         NutritionFoodLog: nutritionFoodLog,
         NutritionFoodSearchResult: nutritionFoodSearchResult,
+        NutritionExperimentInput: nutritionExperimentInput,
+        NutritionExperimentPatchInput: nutritionExperimentPatchInput,
+        NutritionExperiment: nutritionExperiment,
         WeightLossViewData: weightLossViewData,
         PsycheMetricsViewData: psycheMetricsViewData,
         PsycheOverviewPayload: psycheOverviewPayload,
@@ -8658,8 +8791,7 @@ export function buildOpenApiDocument() {
                     additionalProperties: true
                   }),
                   experiments: arrayOf({
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/NutritionExperiment"
                   })
                 }
               },
@@ -8672,13 +8804,39 @@ export function buildOpenApiDocument() {
         post: {
           tags: ["Health"],
           summary: "Create a nutrition N-of-1 experiment",
+          description:
+            "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field.",
+          parameters: [
+            {
+              name: "userIds",
+              in: "query",
+              required: false,
+              schema: arrayOf({ type: "string" }),
+              style: "form",
+              explode: true,
+              description:
+                "Optional selected-user scope. The first selected user owns the new experiment unless userId is provided in the body."
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionExperimentInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
                 required: ["experiment"],
                 properties: {
-                  experiment: { type: "object", additionalProperties: true }
+                  experiment: {
+                    $ref: "#/components/schemas/NutritionExperiment"
+                  }
                 }
               },
               "Created nutrition experiment"
@@ -8690,13 +8848,33 @@ export function buildOpenApiDocument() {
         patch: {
           tags: ["Health"],
           summary: "Patch a nutrition N-of-1 experiment",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/NutritionExperimentPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
                 required: ["experiment"],
                 properties: {
-                  experiment: { type: "object", additionalProperties: true }
+                  experiment: {
+                    $ref: "#/components/schemas/NutritionExperiment"
+                  }
                 }
               },
               "Updated nutrition experiment"

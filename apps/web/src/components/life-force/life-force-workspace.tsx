@@ -253,64 +253,67 @@ function getLifeForceMode(lifeForce: LifeForcePayload) {
 
 function LifeForceHeaderCards({ lifeForce }: { lifeForce: LifeForcePayload }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+    <div
+      className="grid grid-cols-2 gap-3 md:grid-cols-2 xl:grid-cols-4"
+      data-testid="life-force-summary-grid"
+    >
+      <Card className="p-3 sm:p-4">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
           Daily AP
         </div>
-        <div className="mt-2 font-display text-4xl text-[var(--primary)]">
+        <div className="mt-2 font-display text-2xl text-[var(--primary)] sm:text-4xl">
           {Math.round(lifeForce.spentTodayAp)}
-          <span className="ml-2 text-lg text-[var(--ui-ink-faint)]">
+          <span className="ml-1 text-sm text-[var(--ui-ink-faint)] sm:ml-2 sm:text-lg">
             / {Math.round(lifeForce.dailyBudgetAp)}
           </span>
         </div>
-        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+        <div className="mt-2 text-[11px] leading-4 text-[var(--ui-ink-soft)] sm:text-sm sm:leading-6">
           Target band {Math.round(lifeForce.targetBandMinAp)}-
           {Math.round(lifeForce.targetBandMaxAp)} AP
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        <div className="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-xs">
           {getLifeForceUsageLabel(lifeForce)}
         </div>
       </Card>
-      <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+      <Card className="p-3 sm:p-4">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
           Instant headroom
         </div>
-        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
+        <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
           {lifeForce.instantFreeApPerHour.toFixed(1)}
         </div>
-        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+        <div className="mt-2 text-[11px] leading-4 text-[var(--ui-ink-soft)] sm:text-sm sm:leading-6">
           {formatRate(lifeForce.instantCapacityApPerHour)} capacity minus{" "}
           {formatRate(lifeForce.currentDrainApPerHour)} load
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        <div className="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-xs">
           {lifeForce.overloadApPerHour > 0
             ? `${formatRate(lifeForce.overloadApPerHour)} overloaded`
             : "No overload right now"}
         </div>
       </Card>
-      <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+      <Card className="p-3 sm:p-4">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
           Fatigue buffer
         </div>
-        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
+        <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
           {lifeForce.fatigueBufferApPerHour.toFixed(1)}
         </div>
-        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+        <div className="mt-2 text-[11px] leading-4 text-[var(--ui-ink-soft)] sm:text-sm sm:leading-6">
           Short-term strain rises with overlap and falls with recovery.
         </div>
       </Card>
-      <Card className="p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+      <Card className="p-3 sm:p-4">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-[11px] sm:tracking-[0.18em]">
           Forecast
         </div>
-        <div className="mt-2 font-display text-4xl text-[var(--ui-ink-strong)]">
+        <div className="mt-2 font-display text-2xl text-[var(--ui-ink-strong)] sm:text-4xl">
           {Math.round(lifeForce.forecastAp)}
         </div>
-        <div className="mt-2 text-sm text-[var(--ui-ink-soft)]">
+        <div className="mt-2 text-[11px] leading-4 text-[var(--ui-ink-soft)] sm:text-sm sm:leading-6">
           Planned remaining {formatAp(lifeForce.plannedRemainingAp)}
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.14em] text-[var(--ui-ink-faint)]">
+        <div className="mt-2 text-[10px] uppercase tracking-[0.14em] text-[var(--ui-ink-faint)] sm:text-xs">
           Remaining {formatAp(lifeForce.remainingAp)}
         </div>
       </Card>
@@ -320,9 +323,9 @@ function LifeForceHeaderCards({ lifeForce }: { lifeForce: LifeForcePayload }) {
 
 function LifeForceStatsStrip({ lifeForce }: { lifeForce: LifeForcePayload }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
       {lifeForce.stats.map((stat) => (
-        <Card key={stat.key} className="p-4">
+        <Card key={stat.key} className="p-3 sm:p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
               {stat.label}

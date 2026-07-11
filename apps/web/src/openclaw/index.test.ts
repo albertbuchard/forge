@@ -909,6 +909,60 @@ describe("forge openclaw plugin", () => {
     );
   });
 
+  it("preserves the full nutrition experiment contract in tool writes", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ experiment: { id: "experiment_1" } }), {
+        status: 201,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tools = collectRegisteredTools({
+      origin: "http://127.0.0.1",
+      port: 4318,
+      apiToken: "forge-test-token"
+    });
+    const startExperiment = tools.find(
+      (tool) => tool.name === "forge_start_nutrition_experiment"
+    );
+
+    await expect(
+      startExperiment?.execute?.("call_nutrition", {
+        userIds: ["user_operator"],
+        title: "Carbohydrates before kickboxing",
+        hypothesis: "Carbohydrates improve performance",
+        metricKey: "workoutPerformance",
+        intervention: "Eat 60 g before training",
+        baselineStart: "2026-07-01",
+        baselineEnd: "2026-07-07",
+        experimentStart: "2026-07-08",
+        experimentEnd: "2026-07-21",
+        status: "running",
+        successCriteria: "Improve by one point",
+        confounders: ["sleep", "training intensity"]
+      })
+    ).resolves.toBeDefined();
+
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      "http://127.0.0.1:4318/api/v1/health/weight-loss/experiments?userIds=user_operator"
+    );
+    expect(JSON.parse(String(init.body))).toEqual({
+      title: "Carbohydrates before kickboxing",
+      hypothesis: "Carbohydrates improve performance",
+      metricKey: "workoutPerformance",
+      intervention: "Eat 60 g before training",
+      baselineStart: "2026-07-01",
+      baselineEnd: "2026-07-07",
+      experimentStart: "2026-07-08",
+      experimentEnd: "2026-07-21",
+      status: "running",
+      successCriteria: "Improve by one point",
+      confounders: ["sleep", "training intensity"]
+    });
+  });
+
   it("rejects planned task runs without a duration before making a network call", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

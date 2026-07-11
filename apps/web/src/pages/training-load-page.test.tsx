@@ -433,6 +433,9 @@ describe("TrainingLoadPage", () => {
       screen.getByText(/Forge estimates cardiovascular training stress/i)
     ).toBeInTheDocument();
     expect(screen.getByText("Productive")).toBeInTheDocument();
+    expect(screen.getByTestId("training-load-summary-grid")).toHaveClass(
+      "grid-cols-2"
+    );
     expect(screen.getByText("Zone intelligence")).toBeInTheDocument();
     expect(screen.getByText("Combat readiness")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Explain Acute load" }));

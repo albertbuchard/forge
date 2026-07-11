@@ -137,20 +137,20 @@ function metricTile({
   icon: typeof Gauge;
 }) {
   return (
-    <Card className="relative min-h-[136px] overflow-hidden">
-      <div className="absolute right-3 top-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-2 text-[var(--ui-ink-muted)]">
+    <Card className="relative min-h-[168px] overflow-hidden p-3 sm:min-h-[136px] sm:p-4">
+      <div className="absolute right-3 top-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-1.5 text-[var(--ui-ink-muted)] sm:p-2">
         <Icon className="size-4" />
       </div>
-      <div className="flex max-w-[80%] items-center gap-1.5">
-        <div className="font-label text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+      <div className="flex max-w-[calc(100%-2.25rem)] items-center gap-1.5">
+        <div className="font-label text-[9px] uppercase tracking-[0.14em] text-[var(--ui-ink-muted)] sm:text-[10px] sm:tracking-[0.18em]">
           {label}
         </div>
         <InfoTooltip label={`Explain ${label}`} title={label} content={help} />
       </div>
-      <div className="mt-4 font-display text-4xl leading-none text-[var(--ui-ink-strong)]">
+      <div className="mt-3 font-display text-3xl leading-none text-[var(--ui-ink-strong)] sm:mt-4 sm:text-4xl">
         {value}
       </div>
-      <div className="mt-3 max-w-[24rem] text-[12px] leading-5 text-[var(--ui-ink-muted)]">
+      <div className="mt-2 max-w-[24rem] text-[11px] leading-4 text-[var(--ui-ink-muted)] sm:mt-3 sm:text-[12px] sm:leading-5">
         {detail}
       </div>
     </Card>
@@ -346,7 +346,9 @@ function SessionSignalTable({
               key={session.id}
               className="grid grid-cols-[88px_minmax(118px,1fr)_64px_72px_72px] border-t border-[var(--ui-border-subtle)] px-3 py-2 text-[12px] text-[var(--ui-ink-medium)]"
             >
-              <div className="text-[var(--ui-ink-strong)]/52">{session.dateKey.slice(5)}</div>
+              <div className="text-[var(--ui-ink-strong)]/52">
+                {session.dateKey.slice(5)}
+              </div>
               <div className="min-w-0">
                 <div className="truncate text-[var(--ui-ink-medium)]">
                   {session.workoutTypeLabel}
@@ -449,7 +451,10 @@ export function TrainingLoadPage() {
         actions={<Badge tone={readiness.tone}>{readiness.label}</Badge>}
       />
 
-      <section className="grid gap-4 lg:grid-cols-4">
+      <section
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4"
+        data-testid="training-load-summary-grid"
+      >
         {metricTile({
           label: "Acute load",
           value: numberLabel(summary.acuteLoad7d, 0),
@@ -654,7 +659,9 @@ export function TrainingLoadPage() {
             {intensityData.map((entry) => (
               <div key={entry.key} className="grid gap-2">
                 <div className="flex items-center justify-between gap-3 text-[12px]">
-                  <span className="text-[var(--ui-ink-medium)]">{entry.label}</span>
+                  <span className="text-[var(--ui-ink-medium)]">
+                    {entry.label}
+                  </span>
                   <span className="text-[var(--ui-ink-strong)]">
                     {entry.percent}% · target {entry.targetLow}-
                     {entry.targetHigh}%

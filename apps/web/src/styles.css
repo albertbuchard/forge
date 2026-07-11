@@ -246,7 +246,8 @@ body {
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
   line-height: 1.6;
-  background:
+  background-color: var(--surface);
+  background-image:
     radial-gradient(
       circle at top left,
       var(--forge-body-ambient-primary),

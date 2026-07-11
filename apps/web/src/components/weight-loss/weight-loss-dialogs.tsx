@@ -27,3 +27,10 @@ export {
   type WeightLossCheckinDraft
 } from "./weight-loss-checkin-dialog";
 export { WeightLossHistoryDialog } from "./weight-loss-history-dialog";
+export {
+  buildExperimentInput,
+  buildInitialExperimentDraft,
+  validateExperimentDraft,
+  WeightLossExperimentDialog,
+  type WeightLossExperimentDraft
+} from "./weight-loss-experiment-dialog";

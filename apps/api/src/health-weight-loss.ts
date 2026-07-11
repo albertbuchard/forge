@@ -487,12 +487,26 @@ export const nutritionExperimentCreateSchema = z.object({
   hypothesisId: z.string().trim().min(1).nullable().optional(),
   title: z.string().trim().min(1),
   status: z
-    .enum(["planned", "running", "complete", "paused"])
+    .enum([
+      "planned",
+      "running",
+      "completed",
+      "abandoned",
+      "complete",
+      "paused"
+    ])
     .default("planned"),
+  hypothesis: z.string().trim().min(1).optional(),
+  metricKey: z.string().trim().min(1).optional(),
+  intervention: z.string().trim().min(1).optional(),
   baselineStart: z.string().trim().nullable().optional(),
   baselineEnd: z.string().trim().nullable().optional(),
   interventionStart: z.string().trim().nullable().optional(),
   interventionEnd: z.string().trim().nullable().optional(),
+  experimentStart: z.string().trim().nullable().optional(),
+  experimentEnd: z.string().trim().nullable().optional(),
+  successCriteria: z.string().trim().nullable().optional(),
+  confounders: tagsSchema,
   trackedOutcomes: tagsSchema,
   protocol: z.record(z.string(), z.unknown()).default({}),
   adherence: z.record(z.string(), z.unknown()).default({}),
@@ -501,7 +515,8 @@ export const nutritionExperimentCreateSchema = z.object({
 
 export const nutritionExperimentPatchSchema = nutritionExperimentCreateSchema
   .omit({ userId: true })
-  .partial();
+  .partial()
+  .extend({ conclusion: z.string().trim().nullable().optional() });
 
 export const nutritionParseRequestSchema = z.object({
   text: z.string().trim().min(1),
@@ -2044,6 +2059,24 @@ export function createNutritionExperiment(input: unknown) {
   const userId = resolveWriteUser(parsed.userId);
   const id = newId("nutrition_experiment");
   const now = nowIso();
+  const trackedOutcomes =
+    parsed.trackedOutcomes.length > 0
+      ? parsed.trackedOutcomes
+      : parsed.metricKey
+        ? [parsed.metricKey]
+        : [];
+  const protocol = {
+    ...parsed.protocol,
+    ...(parsed.hypothesis ? { hypothesis: parsed.hypothesis } : {}),
+    ...(parsed.metricKey ? { metricKey: parsed.metricKey } : {}),
+    ...(parsed.intervention ? { intervention: parsed.intervention } : {}),
+    ...(parsed.successCriteria
+      ? { successCriteria: parsed.successCriteria }
+      : {}),
+    ...(parsed.confounders.length > 0
+      ? { confounders: parsed.confounders }
+      : {})
+  };
   getDatabase()
     .prepare(
       `INSERT INTO nutrition_experiments (
@@ -2057,19 +2090,19 @@ export function createNutritionExperiment(input: unknown) {
       userId,
       parsed.hypothesisId ?? null,
       parsed.title,
-      parsed.status,
+      normalizeExperimentStatus(parsed.status),
       parsed.baselineStart ?? null,
       parsed.baselineEnd ?? null,
-      parsed.interventionStart ?? null,
-      parsed.interventionEnd ?? null,
-      jsonString(parsed.trackedOutcomes),
-      jsonString(parsed.protocol),
+      parsed.interventionStart ?? parsed.experimentStart ?? null,
+      parsed.interventionEnd ?? parsed.experimentEnd ?? null,
+      jsonString(trackedOutcomes),
+      jsonString(protocol),
       jsonString(parsed.adherence),
       parsed.resultSummary,
       now,
       now
     );
-  return listExperiments(userId, 1)[0]!;
+  return listExperiments(userId).find((experiment) => experiment.id === id)!;
 }
 
 export function patchNutritionExperiment(experimentId: string, input: unknown) {
@@ -2080,6 +2113,34 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
   if (!existing) {
     return null;
   }
+  const existingProtocol = parseJson<JsonRecord>(existing.protocol_json, {});
+  const existingTrackedOutcomes = parseJson<string[]>(
+    existing.tracked_outcomes_json,
+    []
+  );
+  const protocol = {
+    ...existingProtocol,
+    ...(parsed.protocol ?? {}),
+    ...(parsed.hypothesis !== undefined
+      ? { hypothesis: parsed.hypothesis }
+      : {}),
+    ...(parsed.metricKey !== undefined ? { metricKey: parsed.metricKey } : {}),
+    ...(parsed.intervention !== undefined
+      ? { intervention: parsed.intervention }
+      : {}),
+    ...(parsed.successCriteria !== undefined
+      ? { successCriteria: parsed.successCriteria }
+      : {}),
+    ...(parsed.confounders !== undefined
+      ? { confounders: parsed.confounders }
+      : {})
+  };
+  const trackedOutcomes =
+    parsed.trackedOutcomes !== undefined
+      ? parsed.trackedOutcomes
+      : parsed.metricKey !== undefined
+        ? [parsed.metricKey]
+        : existingTrackedOutcomes;
   getDatabase()
     .prepare(
       `UPDATE nutrition_experiments
@@ -2094,7 +2155,9 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
         ? parsed.hypothesisId
         : existing.hypothesis_id,
       parsed.title ?? existing.title,
-      parsed.status ?? existing.status,
+      parsed.status !== undefined
+        ? normalizeExperimentStatus(parsed.status)
+        : normalizeExperimentStatus(existing.status),
       parsed.baselineStart !== undefined
         ? parsed.baselineStart
         : existing.baseline_start,
@@ -2103,22 +2166,26 @@ export function patchNutritionExperiment(experimentId: string, input: unknown) {
         : existing.baseline_end,
       parsed.interventionStart !== undefined
         ? parsed.interventionStart
-        : existing.intervention_start,
+        : parsed.experimentStart !== undefined
+          ? parsed.experimentStart
+          : existing.intervention_start,
       parsed.interventionEnd !== undefined
         ? parsed.interventionEnd
-        : existing.intervention_end,
-      parsed.trackedOutcomes
-        ? jsonString(parsed.trackedOutcomes)
-        : existing.tracked_outcomes_json,
-      parsed.protocol ? jsonString(parsed.protocol) : existing.protocol_json,
+        : parsed.experimentEnd !== undefined
+          ? parsed.experimentEnd
+          : existing.intervention_end,
+      jsonString(trackedOutcomes),
+      jsonString(protocol),
       parsed.adherence ? jsonString(parsed.adherence) : existing.adherence_json,
-      parsed.resultSummary ?? existing.result_summary,
+      parsed.conclusion !== undefined
+        ? (parsed.conclusion ?? "")
+        : (parsed.resultSummary ?? existing.result_summary),
       nowIso(),
       experimentId
     );
-  return getDatabase()
-    .prepare(`SELECT * FROM nutrition_experiments WHERE id = ?`)
-    .get(experimentId) as ExperimentRow;
+  return listExperiments(existing.user_id).find(
+    (experiment) => experiment.id === experimentId
+  );
 }
 
 function listBodyCheckins(userId: string, limit = 30) {
@@ -2269,6 +2336,20 @@ function listHypotheses(userId: string, limit = 20) {
   }));
 }
 
+function normalizeExperimentStatus(status: string) {
+  if (status === "complete") {
+    return "completed";
+  }
+  return status;
+}
+
+function protocolString(protocol: JsonRecord, key: string) {
+  const value = protocol[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
 function listExperiments(userId: string, limit = 20) {
   return (
     getDatabase()
@@ -2279,23 +2360,42 @@ function listExperiments(userId: string, limit = 20) {
          LIMIT ?`
       )
       .all(userId, limit) as ExperimentRow[]
-  ).map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    hypothesisId: row.hypothesis_id,
-    title: row.title,
-    status: row.status,
-    baselineStart: row.baseline_start,
-    baselineEnd: row.baseline_end,
-    interventionStart: row.intervention_start,
-    interventionEnd: row.intervention_end,
-    trackedOutcomes: parseJson<string[]>(row.tracked_outcomes_json, []),
-    protocol: parseJson<JsonRecord>(row.protocol_json, {}),
-    adherence: parseJson<JsonRecord>(row.adherence_json, {}),
-    resultSummary: row.result_summary,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  }));
+  ).map((row) => {
+    const trackedOutcomes = parseJson<string[]>(row.tracked_outcomes_json, []);
+    const protocol = parseJson<JsonRecord>(row.protocol_json, {});
+    const confounders = Array.isArray(protocol.confounders)
+      ? protocol.confounders.filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0
+        )
+      : [];
+    return {
+      id: row.id,
+      userId: row.user_id,
+      hypothesisId: row.hypothesis_id,
+      title: row.title,
+      status: normalizeExperimentStatus(row.status),
+      hypothesis: protocolString(protocol, "hypothesis"),
+      metricKey:
+        protocolString(protocol, "metricKey") ?? trackedOutcomes[0] ?? null,
+      intervention: protocolString(protocol, "intervention"),
+      baselineStart: row.baseline_start,
+      baselineEnd: row.baseline_end,
+      interventionStart: row.intervention_start,
+      interventionEnd: row.intervention_end,
+      experimentStart: row.intervention_start,
+      experimentEnd: row.intervention_end,
+      successCriteria: protocolString(protocol, "successCriteria"),
+      confounders,
+      trackedOutcomes,
+      protocol,
+      adherence: parseJson<JsonRecord>(row.adherence_json, {}),
+      resultSummary: row.result_summary,
+      conclusion: row.result_summary || null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  });
 }
 
 function buildTodayLedger(
@@ -3442,7 +3542,9 @@ function estimateCountedFoodGrams(item: ParsedMealItem) {
   const estimate = countedFoodGramEstimates.find(({ tokens }) =>
     tokens.every((token) => text.includes(token))
   );
-  return estimate ? round(item.quantity * estimate.gramsPerUnit, 1) : item.grams;
+  return estimate
+    ? round(item.quantity * estimate.gramsPerUnit, 1)
+    : item.grams;
 }
 
 async function resolveParsedMealItemNutrition(
@@ -3562,7 +3664,11 @@ async function completeMissingParsedMealNutritionWithChatGpt(
   profile: NonNullable<ReturnType<typeof getNutritionCodexProfile>>
 ) {
   const incompleteItems = items
-    .map((item, index) => ({ item, index, missing: missingRequiredNutritionFields(item) }))
+    .map((item, index) => ({
+      item,
+      index,
+      missing: missingRequiredNutritionFields(item)
+    }))
     .filter(({ missing }) => missing.length > 0);
   if (incompleteItems.length === 0) {
     return { items, validationNotes: [], llmCallCount: 0 };
@@ -3624,7 +3730,8 @@ Every returned item must include calories, proteinGrams, carbohydrateGrams, and 
       if (!completed) {
         return item;
       }
-      const reason = completed.reason || "ChatGPT supplied conservative nutrition values.";
+      const reason =
+        completed.reason || "ChatGPT supplied conservative nutrition values.";
       return {
         ...item,
         grams: item.grams ?? completed.grams,
@@ -3729,13 +3836,12 @@ Decompose mixed meals into separate food items. Correct obvious food-brand typos
     items: resolvedItems,
     validationNotes,
     llmCallCount: nutritionCompletionLlmCallCount
-  } =
-    await completeMissingParsedMealNutritionWithChatGpt(
-      parsed.text,
-      initiallyResolvedItems,
-      llm,
-      profile
-    );
+  } = await completeMissingParsedMealNutritionWithChatGpt(
+    parsed.text,
+    initiallyResolvedItems,
+    llm,
+    profile
+  );
   const stillIncompleteItems = resolvedItems
     .map((item) => ({
       name: item.name,
@@ -3746,7 +3852,9 @@ Decompose mixed meals into separate food items. Correct obvious food-brand typos
     throw new Error(
       `ChatGPT could not verify complete nutrition for: ${stillIncompleteItems
         .map((item) => `${item.name} (${item.missing.join(", ")})`)
-        .join("; ")}. Search the catalog or create a custom food with calories, protein, carbs, and fat before logging.`
+        .join(
+          "; "
+        )}. Search the catalog or create a custom food with calories, protein, carbs, and fat before logging.`
     );
   }
   const resolutionNotes = resolvedItems
@@ -3790,10 +3898,12 @@ Decompose mixed meals into separate food items. Correct obvious food-brand typos
       rawText: parsed.text
     },
     links: [],
-    items: resolvedItems.map(({ resolutionNote: _resolutionNote, ...item }) => ({
-      ...item,
-      tags: Array.from(new Set([...item.tags, ...parsedResult.tags]))
-    }))
+    items: resolvedItems.map(
+      ({ resolutionNote: _resolutionNote, ...item }) => ({
+        ...item,
+        tags: Array.from(new Set([...item.tags, ...parsedResult.tags]))
+      })
+    )
   };
   const log = parsed.commitCandidate ? createNutritionFoodLog(candidate) : null;
   return {

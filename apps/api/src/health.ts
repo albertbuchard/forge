@@ -1495,10 +1495,82 @@ function mapSleepRawLog(row: SleepRawLogRow) {
 type MappedSleepSession = ReturnType<typeof mapSleepSession>;
 type MappedSleepSegment = ReturnType<typeof mapSleepSegment>;
 type MappedSleepSourceRecord = ReturnType<typeof mapSleepSourceRecord>;
+type StoredWorkoutAnalytics = ReturnType<typeof getStoredWorkoutAnalytics>;
+
+type StoredWorkoutAnalyticsRow = {
+  workout_id: string;
+  zone_profile_id: string | null;
+  confidence: string;
+  data_quality_json: string;
+  zone_durations_json: string;
+  hr_summary_json: string;
+  load_json: string;
+  route_summary_json: string;
+  computed_at: string;
+};
+
+type WorkoutSessionMapOptions = {
+  includeAnalytics?: boolean;
+  analytics?: StoredWorkoutAnalytics;
+};
+
+function listStoredWorkoutAnalyticsByWorkout(userIds?: string[]) {
+  const params: string[] = [];
+  const userFilter =
+    userIds && userIds.length > 0
+      ? `AND workout.user_id IN (${userIds.map(() => "?").join(",")})`
+      : "";
+  if (userIds) {
+    params.push(...userIds);
+  }
+  const rows = getDatabase()
+    .prepare(
+      `SELECT analytics.workout_id, analytics.zone_profile_id,
+         analytics.confidence, analytics.data_quality_json,
+         analytics.zone_durations_json, analytics.hr_summary_json,
+         analytics.load_json, analytics.route_summary_json,
+         analytics.computed_at
+       FROM health_workout_analytics AS analytics
+       INNER JOIN health_workout_sessions AS workout
+         ON workout.id = analytics.workout_id
+       WHERE analytics.model_version = 'forge-hrr-v1'
+       ${userFilter}`
+    )
+    .all(...params) as StoredWorkoutAnalyticsRow[];
+
+  return new Map<string, StoredWorkoutAnalytics>(
+    rows.map((row) => [
+      row.workout_id,
+      {
+        zoneProfileId: row.zone_profile_id,
+        confidence: row.confidence,
+        dataQuality: safeJsonParse(row.data_quality_json, {}),
+        zoneDurations: safeJsonParse(row.zone_durations_json, []),
+        hrSummary: safeJsonParse(row.hr_summary_json, {}),
+        load: safeJsonParse(row.load_json, {}),
+        routeSummary: safeJsonParse(row.route_summary_json, {}),
+        computedAt: row.computed_at
+      } as StoredWorkoutAnalytics
+    ])
+  );
+}
+
+function resolveStoredWorkoutAnalytics(
+  row: WorkoutSessionRow,
+  analyticsByWorkout: Map<string, StoredWorkoutAnalytics>
+) {
+  const stored = analyticsByWorkout.get(row.id);
+  if (stored) {
+    return stored;
+  }
+  const computed = getStoredWorkoutAnalytics(row);
+  analyticsByWorkout.set(row.id, computed);
+  return computed;
+}
 
 function mapWorkoutSession(
   row: WorkoutSessionRow,
-  options: { includeAnalytics?: boolean } = {}
+  options: WorkoutSessionMapOptions = {}
 ) {
   const provenance = safeJsonParse<Record<string, unknown>>(
     row.provenance_json,
@@ -1507,7 +1579,7 @@ function mapWorkoutSession(
   const derived = safeJsonParse<Record<string, unknown>>(row.derived_json, {});
   const includeAnalytics = options.includeAnalytics ?? true;
   const analytics = includeAnalytics
-    ? getStoredWorkoutAnalytics(row)
+    ? (options.analytics ?? getStoredWorkoutAnalytics(row))
     : undefined;
   const presentation = buildWorkoutSessionPresentation({
     source: row.source,
@@ -1568,7 +1640,7 @@ function mapWorkoutSession(
 
 function mapWorkoutSessionSummary(
   row: WorkoutSessionRow,
-  options: { includeAnalytics?: boolean } = {}
+  options: WorkoutSessionMapOptions = {}
 ) {
   const provenance = safeJsonParse<Record<string, unknown>>(
     row.provenance_json,
@@ -1583,7 +1655,7 @@ function mapWorkoutSessionSummary(
     derived
   });
   const analytics = options.includeAnalytics
-    ? getStoredWorkoutAnalytics(row)
+    ? (options.analytics ?? getStoredWorkoutAnalytics(row))
     : undefined;
 
   return {
@@ -1632,7 +1704,10 @@ function mapWorkoutSessionSummary(
   };
 }
 
-function mapWorkoutAnalysisSession(row: WorkoutSessionRow) {
+function mapWorkoutAnalysisSession(
+  row: WorkoutSessionRow,
+  analytics = getStoredWorkoutAnalytics(row)
+) {
   const provenance = safeJsonParse<Record<string, unknown>>(
     row.provenance_json,
     {}
@@ -1645,7 +1720,6 @@ function mapWorkoutAnalysisSession(row: WorkoutSessionRow) {
     provenance,
     derived
   });
-  const analytics = getStoredWorkoutAnalytics(row);
   const dataQuality = analytics.dataQuality as {
     heartRateSampleCount?: number;
   };
@@ -7880,6 +7954,7 @@ function buildTrainingIntelligence(input: {
 
 export function getTrainingLoadViewData(userIds?: string[]) {
   const workoutRows = listWorkoutRows(userIds);
+  const analyticsByWorkout = listStoredWorkoutAnalyticsByWorkout(userIds);
   const now = new Date();
   const nowMs = now.getTime();
   const sessions = workoutRows
@@ -7888,7 +7963,12 @@ export function getTrainingLoadViewData(userIds?: string[]) {
       return Number.isFinite(startedAtMs) && startedAtMs <= nowMs;
     })
     .slice(0, 2000)
-    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }))
+    .map((row) =>
+      mapWorkoutSession(row, {
+        includeAnalytics: true,
+        analytics: resolveStoredWorkoutAnalytics(row, analyticsByWorkout)
+      })
+    )
     .sort(
       (left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt)
     );
@@ -8271,9 +8351,35 @@ function listWorkoutComparisonAnalytics(userIds?: string[]) {
 
 function buildSportComparison(
   workoutRows: WorkoutSessionRow[],
-  userIds?: string[]
+  userIds?: string[],
+  storedAnalyticsByWorkout?: Map<string, StoredWorkoutAnalytics>
 ) {
-  const analyticsByWorkout = listWorkoutComparisonAnalytics(userIds);
+  const analyticsByWorkout = storedAnalyticsByWorkout
+    ? new Map(
+        [...storedAnalyticsByWorkout.entries()].map(
+          ([workoutId, analytics]) => {
+            const load = analytics.load as { trimp?: number | null };
+            const dataQuality = analytics.dataQuality as {
+              sampleCoverage?: number;
+            };
+            return [
+              workoutId,
+              {
+                trainingLoad:
+                  typeof load.trimp === "number" && Number.isFinite(load.trimp)
+                    ? load.trimp
+                    : null,
+                heartRateCoverage:
+                  typeof dataQuality.sampleCoverage === "number" &&
+                  Number.isFinite(dataQuality.sampleCoverage)
+                    ? dataQuality.sampleCoverage
+                    : null
+              }
+            ] as const;
+          }
+        )
+      )
+    : listWorkoutComparisonAnalytics(userIds);
   const nowMs = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const periods = [
@@ -8281,6 +8387,30 @@ function buildSportComparison(
     { key: "365d", label: "12 months", days: 365 },
     { key: "90d", label: "90 days", days: 90 }
   ] as const;
+  const comparableWorkouts = workoutRows.flatMap((row) => {
+    const startedAtMs = Date.parse(row.started_at);
+    if (!Number.isFinite(startedAtMs) || startedAtMs > nowMs) {
+      return [];
+    }
+    const presentation = buildWorkoutSessionPresentation({
+      source: row.source,
+      sourceType: row.source_type,
+      workoutType: row.workout_type,
+      provenance: safeJsonParse<Record<string, unknown>>(
+        row.provenance_json,
+        {}
+      ),
+      derived: safeJsonParse<Record<string, unknown>>(row.derived_json, {})
+    });
+    return [
+      {
+        row,
+        startedAtMs,
+        presentation,
+        analytics: analyticsByWorkout.get(row.id)
+      }
+    ];
+  });
 
   return {
     modelVersion: "forge-sport-comparison-v1",
@@ -8288,13 +8418,9 @@ function buildSportComparison(
     periods: periods.map((period) => {
       const thresholdMs =
         period.days === null ? null : nowMs - period.days * dayMs;
-      const rows = workoutRows.filter((row) => {
-        const startedAtMs = Date.parse(row.started_at);
-        if (!Number.isFinite(startedAtMs) || startedAtMs > nowMs) {
-          return false;
-        }
-        return thresholdMs === null || startedAtMs >= thresholdMs;
-      });
+      const rows = comparableWorkouts.filter(
+        (workout) => thresholdMs === null || workout.startedAtMs >= thresholdMs
+      );
       const groups = new Map<
         string,
         {
@@ -8324,22 +8450,7 @@ function buildSportComparison(
         }
       >();
 
-      for (const row of rows) {
-        const provenance = safeJsonParse<Record<string, unknown>>(
-          row.provenance_json,
-          {}
-        );
-        const derived = safeJsonParse<Record<string, unknown>>(
-          row.derived_json,
-          {}
-        );
-        const presentation = buildWorkoutSessionPresentation({
-          source: row.source,
-          sourceType: row.source_type,
-          workoutType: row.workout_type,
-          provenance,
-          derived
-        });
+      for (const { row, presentation, analytics } of rows) {
         const current = groups.get(presentation.workoutType) ?? {
           workoutType: presentation.workoutType,
           workoutTypeLabel: presentation.workoutTypeLabel,
@@ -8367,8 +8478,6 @@ function buildSportComparison(
         };
         const durationSeconds = Math.max(0, row.duration_seconds);
         const energyKcal = row.total_energy_kcal ?? row.active_energy_kcal;
-        const analytics = analyticsByWorkout.get(row.id);
-
         current.sessionCount += 1;
         current.totalDurationSeconds += durationSeconds;
         current.activeDays.add(dayKey(row.started_at));
@@ -8441,14 +8550,14 @@ function buildSportComparison(
         (sum, entry) => sum + entry.trainingLoadSessionCount,
         0
       );
-      const activeDays = new Set(rows.map((row) => dayKey(row.started_at)));
+      const activeDays = new Set(rows.map(({ row }) => dayKey(row.started_at)));
       const oldestStartedAt = rows.reduce<string | null>(
-        (oldest, row) =>
+        (oldest, { row }) =>
           oldest === null || row.started_at < oldest ? row.started_at : oldest,
         null
       );
       const newestStartedAt = rows.reduce<string | null>(
-        (newest, row) =>
+        (newest, { row }) =>
           newest === null || row.started_at > newest ? row.started_at : newest,
         null
       );
@@ -8592,6 +8701,7 @@ export function getFitnessViewData(
   } = {}
 ) {
   const workoutRows = listWorkoutRows(userIds);
+  const analyticsByWorkout = listStoredWorkoutAnalyticsByWorkout(userIds);
   const nowMs = Date.now();
   const historicalWorkoutRows = workoutRows.filter((row) => {
     const startedAtMs = Date.parse(row.started_at);
@@ -8601,24 +8711,46 @@ export function getFitnessViewData(
     options.sessionDetail === "summary"
       ? mapWorkoutSessionSummary
       : mapWorkoutSession;
-  const recent = historicalWorkoutRows
-    .slice(0, 40)
-    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+  const recent = historicalWorkoutRows.slice(0, 40).map((row) =>
+    mapWorkoutSession(row, {
+      includeAnalytics: true,
+      analytics: resolveStoredWorkoutAnalytics(row, analyticsByWorkout)
+    })
+  );
   const browserSessions = options.compact
     ? []
-    : workoutRows
-        .slice(0, 2000)
-        .map((row, index) => mapSession(row, { includeAnalytics: index < 40 }));
+    : workoutRows.slice(0, 2000).map((row, index) =>
+        mapSession(
+          row,
+          index < 40
+            ? {
+                includeAnalytics: true,
+                analytics: resolveStoredWorkoutAnalytics(
+                  row,
+                  analyticsByWorkout
+                )
+              }
+            : { includeAnalytics: false }
+        )
+      );
   const analysisSessions = options.compact
     ? []
-    : historicalWorkoutRows
-        .slice(0, 500)
-        .map((row) =>
-          options.analysisDetail === "compact"
-            ? mapWorkoutAnalysisSession(row)
-            : mapSession(row, { includeAnalytics: true })
-        );
-  const sportComparison = buildSportComparison(workoutRows, userIds);
+    : historicalWorkoutRows.slice(0, 500).map((row) =>
+        options.analysisDetail === "compact"
+          ? mapWorkoutAnalysisSession(
+              row,
+              resolveStoredWorkoutAnalytics(row, analyticsByWorkout)
+            )
+          : mapSession(row, {
+              includeAnalytics: true,
+              analytics: resolveStoredWorkoutAnalytics(row, analyticsByWorkout)
+            })
+      );
+  const sportComparison = buildSportComparison(
+    workoutRows,
+    userIds,
+    analyticsByWorkout
+  );
   const vitalsTrend = buildFitnessVitalsTrend(
     listDailySummaryRows("vitals", userIds)
   );
@@ -8628,9 +8760,12 @@ export function getFitnessViewData(
   const weekly = weeklyRows.map((row) =>
     mapWorkoutSession(row, { includeAnalytics: false })
   );
-  const weeklyTrendSessions = weeklyRows
-    .slice(0, 40)
-    .map((row) => mapWorkoutSession(row, { includeAnalytics: true }));
+  const weeklyTrendSessions = weeklyRows.slice(0, 40).map((row) =>
+    mapWorkoutSession(row, {
+      includeAnalytics: true,
+      analytics: resolveStoredWorkoutAnalytics(row, analyticsByWorkout)
+    })
+  );
   const weeklyVolumeSeconds = weekly.reduce(
     (sum, session) => sum + session.durationSeconds,
     0

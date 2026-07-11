@@ -212,14 +212,41 @@ export type NutritionExperimentInput = {
   baselineEnd?: string | null;
   experimentStart?: string | null;
   experimentEnd?: string | null;
-  status?: "planned" | "running" | "completed" | "abandoned";
+  status?: "planned" | "running" | "paused" | "completed" | "abandoned";
   successCriteria?: string | null;
+  confounders?: string[];
 };
 
 export type NutritionExperimentPatchInput =
   Partial<NutritionExperimentInput> & {
     conclusion?: string | null;
   };
+
+export type NutritionExperiment = {
+  id: string;
+  userId: string;
+  hypothesisId: string | null;
+  title: string;
+  status: "planned" | "running" | "paused" | "completed" | "abandoned";
+  hypothesis: string | null;
+  metricKey: string | null;
+  intervention: string | null;
+  baselineStart: string | null;
+  baselineEnd: string | null;
+  experimentStart: string | null;
+  experimentEnd: string | null;
+  interventionStart: string | null;
+  interventionEnd: string | null;
+  successCriteria: string | null;
+  confounders: string[];
+  trackedOutcomes: string[];
+  protocol: Record<string, unknown>;
+  adherence: Record<string, unknown>;
+  resultSummary: string;
+  conclusion: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type WeightLossViewData = {
   userId: string;
@@ -340,7 +367,7 @@ export type WeightLossViewData = {
   subjective: Record<string, unknown>;
   gut: Record<string, unknown>;
   hypotheses: Array<Record<string, unknown>>;
-  experiments: Array<Record<string, unknown>>;
+  experiments: NutritionExperiment[];
   dataQuality: {
     sourceConfidence: string;
     missingHighValueCheckins: string[];

@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FlowField,
@@ -145,5 +151,40 @@ describe("resolveQuestionFlowStepIndex", () => {
     render(<ExampleDialog />);
 
     expect(screen.getByDisplayValue("Restored pattern")).toBeInTheDocument();
+  });
+
+  it("starts every new question at the top of the modal canvas", async () => {
+    render(
+      <QuestionFlowDialog
+        open
+        onOpenChange={() => undefined}
+        eyebrow="Experiment"
+        title="Create experiment"
+        description="Define an experiment."
+        value={{}}
+        onChange={() => undefined}
+        steps={[
+          {
+            id: "long-step",
+            title: "Long step",
+            render: () => <div style={{ height: 1200 }}>Long content</div>
+          },
+          {
+            id: "next-step",
+            title: "Next step",
+            render: () => <div>Next content</div>
+          }
+        ]}
+        submitLabel="Save"
+        onSubmit={async () => undefined}
+      />
+    );
+
+    const canvas = screen.getByTestId("question-flow-canvas");
+    canvas.scrollTop = 420;
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => expect(canvas.scrollTop).toBe(0));
+    expect(await screen.findByText("Next step")).toBeInTheDocument();
   });
 });

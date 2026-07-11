@@ -32,18 +32,23 @@ import {
   buildFoodDraftFromLog,
   buildFoodLogInput,
   buildFoodLogPatchInput,
+  buildExperimentInput,
   buildInitialCustomFoodDraft,
   buildInitialCheckinDraft,
+  buildInitialExperimentDraft,
   buildInitialFoodDraft,
   buildInitialPlanDraft,
   buildTargetPatchFromPlan,
   isWeightLossPlanConfigured,
+  validateExperimentDraft,
   validateWeightLossPlanDraft,
   WeightLossCheckinDialog,
+  WeightLossExperimentDialog,
   WeightLossFoodLogDialog,
   WeightLossHistoryDialog,
   WeightLossPlanDialog,
   type WeightLossCheckinDraft,
+  type WeightLossExperimentDraft,
   type WeightLossFoodDraft,
   type WeightLossFoodLogIntent,
   type WeightLossFoodParseFeedback,
@@ -61,6 +66,7 @@ import {
   createNutritionBodyCheckin,
   createNutritionFoodLog,
   createNutritionGutCheckin,
+  createNutritionExperiment,
   createNutritionSubjectiveCheckin,
   deleteNutritionFoodLog,
   getWeightLossView,
@@ -492,7 +498,9 @@ export function WeightLossPage() {
   const [foodOpen, setFoodOpen] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [experimentOpen, setExperimentOpen] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [experimentError, setExperimentError] = useState<string | null>(null);
   const [activeCaloriesError, setActiveCaloriesError] = useState<string | null>(
     null
   );
@@ -512,6 +520,8 @@ export function WeightLossPage() {
   const [checkinDraft, setCheckinDraft] = useState<WeightLossCheckinDraft>(() =>
     buildInitialCheckinDraft()
   );
+  const [experimentDraft, setExperimentDraft] =
+    useState<WeightLossExperimentDraft>(() => buildInitialExperimentDraft());
 
   const viewQuery = useQuery({
     queryKey,
@@ -794,6 +804,17 @@ export function WeightLossPage() {
     }
   });
 
+  const experimentMutation = useMutation({
+    mutationFn: async (draft: WeightLossExperimentDraft) =>
+      createNutritionExperiment(buildExperimentInput(draft), selectedUserIds),
+    onSuccess: () => {
+      setExperimentDraft(buildInitialExperimentDraft());
+      setExperimentError(null);
+      setExperimentOpen(false);
+      void refresh();
+    }
+  });
+
   const logSavedMealMutation = useMutation({
     mutationFn: async (meal: NutritionFoodLog) =>
       createNutritionFoodLog(
@@ -978,10 +999,14 @@ export function WeightLossPage() {
             active calories, target, and kcal left are scoped to this day.
           </div>
         </div>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,11rem)_auto_auto]">
+        <div
+          className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto_2.75rem] gap-2"
+          data-testid="weight-loss-day-controls"
+        >
           <Button
             type="button"
             variant="secondary"
+            className="size-11 p-0"
             onClick={() =>
               setCurrentDateKey(addDaysToDateKey(currentDateKey, -1))
             }
@@ -1003,6 +1028,7 @@ export function WeightLossPage() {
           <Button
             type="button"
             variant="secondary"
+            className="px-3"
             disabled={isSelectedToday}
             onClick={() => setCurrentDateKey(todayDateKey)}
           >
@@ -1011,6 +1037,7 @@ export function WeightLossPage() {
           <Button
             type="button"
             variant="secondary"
+            className="size-11 p-0"
             onClick={() =>
               setCurrentDateKey(addDaysToDateKey(currentDateKey, 1))
             }
@@ -1131,7 +1158,13 @@ export function WeightLossPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
         <WeightLossHypothesesPanel hypotheses={hypotheses} />
-        <WeightLossExperimentsPanel experiments={view.experiments} />
+        <WeightLossExperimentsPanel
+          experiments={view.experiments}
+          onCreate={() => {
+            setExperimentError(null);
+            setExperimentOpen(true);
+          }}
+        />
       </section>
 
       <WeightLossPlanDialog
@@ -1208,6 +1241,30 @@ export function WeightLossPage() {
         pending={checkinMutation.isPending}
         onSubmit={async () => {
           await checkinMutation.mutateAsync(checkinDraft);
+        }}
+      />
+      <WeightLossExperimentDialog
+        open={experimentOpen}
+        onOpenChange={setExperimentOpen}
+        value={experimentDraft}
+        onChange={(nextDraft) => {
+          setExperimentDraft(nextDraft);
+          setExperimentError(null);
+        }}
+        pending={experimentMutation.isPending}
+        error={
+          experimentError ??
+          (experimentMutation.error instanceof Error
+            ? experimentMutation.error.message
+            : null)
+        }
+        onSubmit={async () => {
+          const validationError = validateExperimentDraft(experimentDraft);
+          if (validationError) {
+            setExperimentError(validationError);
+            return;
+          }
+          await experimentMutation.mutateAsync(experimentDraft);
         }}
       />
       <WeightLossHistoryDialog

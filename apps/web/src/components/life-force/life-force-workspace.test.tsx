@@ -154,7 +154,8 @@ function createLifeForcePayload(): LifeForcePayload {
         id: "lf_split",
         tone: "info",
         title: "A task wants to be split",
-        detail: "One or more tasks have grown beyond a healthy expected duration."
+        detail:
+          "One or more tasks have grown beyond a healthy expected duration."
       }
     ],
     recommendations: ["This is a good moment for deep work."],
@@ -218,6 +219,9 @@ describe("Life Force workspace", () => {
     );
 
     expect(screen.getByText("Daily AP")).toBeInTheDocument();
+    expect(screen.getByTestId("life-force-summary-grid")).toHaveClass(
+      "grid-cols-2"
+    );
     expect(screen.getByText("Current drains")).toBeInTheDocument();
     expect(screen.getByText("Planned drains")).toBeInTheDocument();
     expect(screen.getByText("A task wants to be split")).toBeInTheDocument();
@@ -346,7 +350,9 @@ describe("Life Force workspace", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId("life-force-ghost-handle")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("life-force-ghost-handle")
+      ).not.toBeInTheDocument();
     });
   });
 

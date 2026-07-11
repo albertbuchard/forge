@@ -12510,6 +12510,504 @@
           }
         }
       },
+      "NutritionExperimentInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "hypothesisId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "running",
+              "paused",
+              "completed",
+              "abandoned"
+            ]
+          },
+          "hypothesis": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Testable expectation that the intervention may support or challenge."
+          },
+          "metricKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Primary outcome used to interpret the experiment."
+          },
+          "intervention": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Specific food, timing, or fueling change being tested."
+          },
+          "baselineStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentStart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Alias for interventionStart."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentEnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Alias for interventionEnd."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "successCriteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confounders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trackedOutcomes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocol": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "adherence": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "resultSummary": {
+            "type": "string"
+          }
+        }
+      },
+      "NutritionExperimentPatchInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hypothesisId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "running",
+              "paused",
+              "completed",
+              "abandoned"
+            ]
+          },
+          "hypothesis": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Testable expectation that the intervention may support or challenge."
+          },
+          "metricKey": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Primary outcome used to interpret the experiment."
+          },
+          "intervention": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Specific food, timing, or fueling change being tested."
+          },
+          "baselineStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentStart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Alias for interventionStart."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentEnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Alias for interventionEnd."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "successCriteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confounders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trackedOutcomes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocol": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "adherence": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "resultSummary": {
+            "type": "string"
+          },
+          "conclusion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Result conclusion. Stored as the experiment result summary."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "NutritionExperiment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "userId",
+          "hypothesisId",
+          "title",
+          "status",
+          "hypothesis",
+          "metricKey",
+          "intervention",
+          "baselineStart",
+          "baselineEnd",
+          "interventionStart",
+          "interventionEnd",
+          "experimentStart",
+          "experimentEnd",
+          "successCriteria",
+          "confounders",
+          "trackedOutcomes",
+          "protocol",
+          "adherence",
+          "resultSummary",
+          "conclusion",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "hypothesisId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "running",
+              "paused",
+              "completed",
+              "abandoned"
+            ]
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metricKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interventionEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "experimentEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "successCriteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confounders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trackedOutcomes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocol": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "adherence": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "resultSummary": {
+            "type": "string"
+          },
+          "conclusion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "WeightLossViewData": {
         "type": "object",
         "additionalProperties": false,
@@ -12652,8 +13150,7 @@
           "experiments": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": true
+              "$ref": "#/components/schemas/NutritionExperiment"
             }
           },
           "dataQuality": {
@@ -17983,8 +18480,7 @@
                     "experiments": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "additionalProperties": true
+                        "$ref": "#/components/schemas/NutritionExperiment"
                       }
                     }
                   }
@@ -18002,6 +18498,33 @@
           "Health"
         ],
         "summary": "Create a nutrition N-of-1 experiment",
+        "description": "Creates a structured experiment. Agents should provide a testable hypothesis, one primary metric, and a specific intervention even though title is the only compatibility-required field.",
+        "parameters": [
+          {
+            "name": "userIds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true,
+            "description": "Optional selected-user scope. The first selected user owns the new experiment unless userId is provided in the body."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionExperimentInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created nutrition experiment",
@@ -18014,8 +18537,7 @@
                   ],
                   "properties": {
                     "experiment": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "$ref": "#/components/schemas/NutritionExperiment"
                     }
                   }
                 }
@@ -18032,6 +18554,26 @@
           "Health"
         ],
         "summary": "Patch a nutrition N-of-1 experiment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NutritionExperimentPatchInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Updated nutrition experiment",
@@ -18044,8 +18586,7 @@
                   ],
                   "properties": {
                     "experiment": {
-                      "type": "object",
-                      "additionalProperties": true
+                      "$ref": "#/components/schemas/NutritionExperiment"
                     }
                   }
                 }

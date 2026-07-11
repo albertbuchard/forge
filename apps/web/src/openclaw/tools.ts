@@ -1556,11 +1556,13 @@ export function registerForgePluginTools(
         Type.Union([
           Type.Literal("planned"),
           Type.Literal("running"),
+          Type.Literal("paused"),
           Type.Literal("completed"),
           Type.Literal("abandoned")
         ])
       ),
-      successCriteria: optionalNullableString()
+      successCriteria: optionalNullableString(),
+      confounders: Type.Optional(Type.Array(Type.String()))
     }),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
@@ -1598,11 +1600,13 @@ export function registerForgePluginTools(
         Type.Union([
           Type.Literal("planned"),
           Type.Literal("running"),
+          Type.Literal("paused"),
           Type.Literal("completed"),
           Type.Literal("abandoned")
         ])
       ),
       successCriteria: optionalNullableString(),
+      confounders: Type.Optional(Type.Array(Type.String())),
       conclusion: optionalNullableString()
     }),
     async execute(_toolCallId, params) {

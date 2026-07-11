@@ -198,6 +198,7 @@ import type {
 import type {
   NutritionAppearanceInput,
   NutritionCheckinInput,
+  NutritionExperiment,
   NutritionExperimentInput,
   NutritionExperimentPatchInput,
   NutritionFoodLog,
@@ -3949,7 +3950,7 @@ export function createNutritionExperiment(
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ experiment: Record<string, unknown> }>(
+  return request<{ experiment: NutritionExperiment }>(
     `/api/v1/health/weight-loss/experiments${suffix}`,
     {
       method: "POST",
@@ -3966,7 +3967,7 @@ export function patchNutritionExperiment(
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ experiment: Record<string, unknown> }>(
+  return request<{ experiment: NutritionExperiment }>(
     `/api/v1/health/weight-loss/experiments/${experimentId}${suffix}`,
     {
       method: "PATCH",

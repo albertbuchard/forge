@@ -11074,8 +11074,12 @@ export async function buildServer(
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
       route: "/api/v1/health/weight-loss/experiments"
     });
+    const scopedUserId = resolveScopedUserIds(
+      request.query as Record<string, unknown>
+    )?.[0];
+    const input = nutritionExperimentCreateSchema.parse(request.body ?? {});
     const experiment = createNutritionExperiment(
-      nutritionExperimentCreateSchema.parse(request.body ?? {})
+      input.userId || !scopedUserId ? input : { ...input, userId: scopedUserId }
     );
     reply.code(201);
     return { experiment };

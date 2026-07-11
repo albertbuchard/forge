@@ -178,6 +178,45 @@ def test_update_entities_tool_description_mentions_habit_checkins():
     assert "official habit outcome logging" in description
 
 
+def test_nutrition_experiment_tools_publish_the_full_api_contract():
+    specs = {tool["name"]: tool for tool in TOOL_CATALOG}
+    create_properties = specs["forge_start_nutrition_experiment"]["parameters"][
+        "properties"
+    ]
+    update_properties = specs["forge_update_nutrition_experiment"]["parameters"][
+        "properties"
+    ]
+
+    assert set(
+        specs["forge_start_nutrition_experiment"]["parameters"]["required"]
+    ) == {"title", "hypothesis", "metricKey", "intervention"}
+    assert {
+        "baselineStart",
+        "baselineEnd",
+        "experimentStart",
+        "experimentEnd",
+        "status",
+        "successCriteria",
+        "confounders",
+    } <= set(create_properties)
+    assert {
+        "title",
+        "hypothesis",
+        "metricKey",
+        "intervention",
+        "baselineStart",
+        "baselineEnd",
+        "experimentStart",
+        "experimentEnd",
+        "status",
+        "successCriteria",
+        "confounders",
+        "conclusion",
+    } <= set(update_properties)
+    assert "paused" in create_properties["status"]["enum"]
+    assert "paused" in update_properties["status"]["enum"]
+
+
 def test_specialized_domain_tools_are_explicit_route_key_tools():
     specs = {tool["name"]: tool for tool in TOOL_CATALOG}
 
