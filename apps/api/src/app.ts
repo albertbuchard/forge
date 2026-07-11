@@ -3038,6 +3038,8 @@ const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
   training_load: "/api/v1/health/training-load",
   weightLoss: "/api/v1/health/weight-loss",
   weight_loss: "/api/v1/health/weight-loss",
+  preferencesWorkspace: "/api/v1/preferences/workspace",
+  preferences_workspace: "/api/v1/preferences/workspace",
   selfObservation: "/api/v1/psyche/self-observation/calendar",
   self_observation: "/api/v1/psyche/self-observation/calendar",
   calendarOverview: "/api/v1/calendar/overview",
@@ -3090,6 +3092,12 @@ function buildPreferredMutationPath(entityType: string) {
   if (entityType === "life_event") {
     return "Use shared batch CRUD for ordinary life_event create, search, update, delete, and restore. Use dedicated Life Event routes for chronology and actions: GET /api/v1/life-events/timeline, POST /api/v1/life-events/:id/calendar-sync, POST /api/v1/life-events/from-calendar-event, POST /api/v1/life-events/import-ticket, and GET /api/v1/life-events/:id/travel-status.";
   }
+  if (entityType === "questionnaire_instrument") {
+    return "Use shared batch CRUD for ordinary questionnaire_instrument create, update, delete, restore, and search. Read the library or one instrument through GET /api/v1/psyche/questionnaires and GET /api/v1/psyche/questionnaires/:id. Use POST /api/v1/psyche/questionnaires/:id/clone, /draft, or /publish only for clone and version-state lifecycle.";
+  }
+  if (entityType === "preference_context") {
+    return "Use shared batch CRUD for ordinary preference_context create, update, delete, restore, and search. Read the current contexts through GET /api/v1/preferences/contexts or one exact context through GET /api/v1/preferences/contexts/:id. Use POST /api/v1/preferences/contexts/merge only when the user explicitly wants to consolidate one source context into one target context; do not emulate a merge with batch deletion.";
+  }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
   }
@@ -3130,6 +3138,8 @@ function buildPreferredMutationPath(entityType: string) {
       return "Read-only surface. Use it for cardiovascular load, HR zones, zone-time buckets, smart training modes, acute/chronic stress, VO2max context, next-workout guidance, and target analysis; use batch CRUD for underlying workout_session records.";
     case "weight_loss":
       return "Read-only surface for the nutrition and body-composition overview. Use dedicated nutrition tools for food logs, body check-ins, appearance check-ins, subjective effects, gut check-ins, and N-of-1 experiments.";
+    case "preferences_workspace":
+      return "Read-only Preferences surface. Read inferred scores and their supporting judgments, signals, overrides, and evidence counts first; use dedicated Preferences actions only when the user then chooses a comparison game, context merge, entity enqueue, judgment, signal, or score override.";
     default:
       return "Read-only surface.";
   }
@@ -3138,6 +3148,12 @@ function buildPreferredMutationPath(entityType: string) {
 function buildPreferredMutationTool(entityType: string) {
   if (entityType === "life_event") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_call_life_event_route";
+  }
+  if (entityType === "questionnaire_instrument") {
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_list_questionnaires | forge_get_questionnaire | forge_clone_questionnaire | forge_ensure_questionnaire_draft | forge_publish_questionnaire_draft";
+  }
+  if (entityType === "preference_context") {
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_merge_preferences_contexts";
   }
   if (entityType === "sleep_session") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_sleep_session for reflective enrichment after review";
@@ -3179,6 +3195,8 @@ function buildPreferredMutationTool(entityType: string) {
       return "forge_call_workbench_route";
     case "weight_loss":
       return "forge_get_weight_loss_overview | forge_search_foods | forge_search_nutrition_foods | forge_lookup_nutrition_barcode | forge_log_food | forge_parse_food_log_with_chatgpt | forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin | forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment";
+    case "preferences_workspace":
+      return "forge_get_preferences_workspace | forge_start_preferences_game | forge_merge_preferences_contexts | forge_enqueue_preferences_item_from_entity | forge_submit_preferences_judgment | forge_submit_preferences_signal | forge_update_preferences_score";
     default:
       return null;
   }
@@ -3187,6 +3205,12 @@ function buildPreferredMutationTool(entityType: string) {
 function buildPreferredReadPath(entityType: string) {
   if (entityType === "life_event") {
     return "/api/v1/life-events/timeline | /api/v1/life-events/:id | /api/v1/entities/search";
+  }
+  if (entityType === "questionnaire_instrument") {
+    return "/api/v1/psyche/questionnaires | /api/v1/psyche/questionnaires/:id | /api/v1/entities/search";
+  }
+  if (entityType === "preference_context") {
+    return "/api/v1/preferences/contexts | /api/v1/preferences/contexts/:id | /api/v1/entities/search";
   }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return AGENT_ONBOARDING_BATCH_ROUTE_BASES[
@@ -3605,7 +3629,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     minimumCreateFields: ["userId", "domain", "name"],
     relationshipRules: [
       "Preference contexts are simple entities and should default to batch CRUD.",
-      "Use the merge action only when the operator explicitly wants context consolidation."
+      "Use the merge action only when the operator explicitly wants context consolidation.",
+      "A merge moves judgments and signals from one source context into one target, clears derived source scores and summaries, deactivates the source, and recomputes the target."
     ],
     searchHints: ["Search by name and domain before creating another context."],
     examples: [
@@ -3719,6 +3744,20 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         defaultValue: []
       }
     ]
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "preferences_workspace",
+    purpose:
+      "A read-only explanation surface for inferred preference scores, supporting judgments and signals, explicit overrides, and evidence confidence inside a user, domain, and context.",
+    minimumCreateFields: [],
+    relationshipRules: [
+      "Preferences Workspace is a read model. Read it through GET /api/v1/preferences/workspace or forge_get_preferences_workspace; do not create, update, or delete preferences_workspace through batch CRUD.",
+      "When the user wants to change what the workspace shows, switch only after the read to the dedicated comparison-game, context-merge, enqueue-from-entity, judgment, signal, or score-override action that matches their intent."
+    ],
+    searchHints: [
+      "Ask which ranking, item, domain, context, or evidence question the workspace should explain, and request user scope only when it changes the answer."
+    ],
+    fieldGuide: []
   }),
   enrichOnboardingEntityGuide({
     entityType: "questionnaire_instrument",
@@ -4680,15 +4719,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "preference_context",
     openingQuestion:
-      "In what situation should Forge treat your preferences differently here?",
+      "Are you defining a preference context, changing one, or bringing two contexts together?",
     coachingGoal:
-      "Define a real operating mode for preferences instead of a decorative label.",
+      "Define or revise a real operating mode for preferences, or consolidate contexts without losing the evidence that explains the resulting ranking.",
     askSequence: [
-      "Ask what situation or mode this context is meant to represent.",
-      "Ask what decisions or comparisons should feel different inside that context.",
-      "Ask what should count inside that context and what should stay outside it.",
-      "Ask whether it should be active, default, or kept separate from other evidence.",
-      "Offer a concise name if the mode is clearer than the wording."
+      "First identify the lane: review, create, update, or merge. If the user already made that clear, do not ask them to choose it again.",
+      "For review, update, or merge, read the current matching contexts before asking the user to reconstruct names, boundaries, or ids from memory.",
+      "For create, ask what situation or mode the context represents, which decisions should differ there, and what belongs inside versus outside; search for a near-duplicate before saving.",
+      "For update, ask only what no longer fits and whether the context should remain active, default, or separate from other evidence.",
+      "For merge, reflect why the distinction is no longer useful, identify one exact source and one exact target on the same profile, and explain that judgments and signals move to the target, the source is deactivated, and the target is recomputed.",
+      "Use shared batch CRUD for ordinary definition changes. Use forge_merge_preferences_contexts with sourceContextId and targetContextId for an accepted merge; never imitate it by deleting the source through batch CRUD.",
+      "Offer a concise name only when the context meaning is clearer than its wording."
     ]
   },
   {
@@ -4703,6 +4744,20 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask whether the user is saving a comparison candidate or a direct signal such as favorite, veto, or compare-later.",
       "If the user is saving or editing a candidate, keep it on batch CRUD; if they are recording a comparison outcome or direct mark, switch to the preference judgment or signal route.",
       "Ask what makes the item distinct enough to compare usefully only if it is still a comparison candidate."
+    ]
+  },
+  {
+    focus: "preferences_workspace",
+    openingQuestion:
+      "What preference ranking or decision are you trying to understand?",
+    coachingGoal:
+      "Explain an inferred preference ranking from its actual judgments, signals, overrides, and evidence strength instead of presenting an opaque score.",
+    askSequence: [
+      "Ask what ranking, item, or decision the user is trying to understand; ask for user, domain, or context scope only when it changes the answer.",
+      "Read the Preferences Workspace before asking the user to reconstruct scores, judgments, signals, or overrides from memory.",
+      "Answer the practical question first by naming the leading result and the evidence that supports it, including judgment direction, direct signals, explicit overrides, and evidence count when available.",
+      "Describe sparse, conflicting, or context-mismatched evidence as uncertainty rather than treating the inferred score as a fact; name the one missing comparison or signal that would most change the conclusion when useful.",
+      "Only after explaining the read, ask whether the user wants to compare, merge contexts, add an existing Forge entity, record a judgment or signal, or override a score, and then use that dedicated Preferences action instead of mutating the read model."
     ]
   },
   {
@@ -4735,18 +4790,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "questionnaire_instrument",
     openingQuestion:
-      "What honest moment or decision should this questionnaire help someone notice or track?",
+      "What are you trying to understand, create, revise, or publish about this questionnaire?",
     coachingGoal:
-      "Clarify whether the user is authoring a reusable questionnaire and what honest moment, pattern, or decision the instrument should help someone notice.",
+      "Guide ordinary questionnaire authoring and version lifecycle without treating review, clone, draft, or publish work as a new-instrument form.",
     askSequence: [
-      "Ask what honest moment, pattern, or decision the questionnaire should help someone notice.",
-      "Ask who it is for and when it should be used.",
-      "Ask what the respondent should understand after answering that they might otherwise miss.",
-      "Reflect the practical use case back in plain language before asking for item wording.",
-      "Ask what would make the instrument distinct instead of redundant if a near-duplicate risk is visible.",
-      "Ask about item shape, response scale, scoring, or provenance only after the purpose and use context are steady.",
-      "Use batch CRUD for ordinary questionnaire instrument create or update work; use clone, draft, and publish actions only for version lifecycle.",
-      "Move to draft creation once the purpose is clear."
+      "Identify whether the user wants to review, create, update, clone, ensure an editable draft, or publish; skip this lane question when their verb is already clear.",
+      "For review, update, clone, draft, or publish work, read the existing questionnaire and current version state before asking the user to reconstruct it from memory.",
+      "For a new instrument, ask what honest moment, pattern, or decision it should help someone notice, who it is for, and what the respondent should understand afterward; search for a near-duplicate before creating it through batch CRUD.",
+      "For an ordinary metadata or content update, ask for the smallest newly true change and what published meaning, scoring behavior, provenance, or historical-run interpretation must remain intact, then use batch CRUD.",
+      "For clone, confirm the exact source instrument, destination owner, and what purpose makes a separate copy useful instead of editing the source.",
+      "For draft, confirm the exact instrument and what the editable version is meant to change; ensure the draft through the dedicated action rather than creating another instrument.",
+      "For publish, summarize the current draft's purpose, scoring, provenance, and answer-shape changes, then ask one explicit publish confirmation and optional version label without reopening item-by-item intake.",
+      "Use clone, draft, and publish tools only for version lifecycle, and answer review questions before proposing any mutation."
     ]
   },
   {
@@ -5371,7 +5426,9 @@ function buildPlaybookRouteInfo(focus: string) {
     guide?.preferredMutationPath
       ? `Mutation: ${guide.preferredMutationPath}.`
       : null,
-    preferredReadPath ? `Read: ${preferredReadPath}.` : null,
+    preferredReadPath
+      ? `Read: ${focus === "preferences_workspace" ? "GET " : ""}${preferredReadPath}.`
+      : null,
     guide?.preferredMutationTool
       ? `Tool: ${guide.preferredMutationTool}.`
       : null,
@@ -5456,6 +5513,15 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "artifact") {
     return "Ready to list, read metadata, inspect versions, or read audit history when the practical question and any required filter or exact artifact id are clear. Ready for trusted upload when upload authority, file bytes, original filename, purpose, and provenance or source path are clear without collecting a password. Ready to update metadata, rescan, enrich with an LLM, or change trust state only after a current metadata read identifies the exact artifact, intended change, preservation need, and enrichment authorization when relevant. Ready to replace links only when the complete desired general entity_links set is explicit because replacement is not append. Ready to delete or restore metadata through batch metadata routes when the exact artifact and lifecycle action are clear, with explicit confirmation before hard deletion. Download, password submission, decryption, preview, execution, transformation, and existing-artifact encryption are never ready for an agent call; hand them to the human operator.";
+  }
+  if (guide.entityType === "preferences_workspace") {
+    return "Ready to read before asking write-shaped follow-ups when the practical ranking or explanation question and any user, domain, context, or item scope that changes the answer are clear. After the read, explain inferred score, evidence count, supporting judgments and signals, overrides, and uncertainty before proposing any action. Ready to mutate only when the user chooses one dedicated Preferences action and its exact target is clear; never mutate preferences_workspace through batch CRUD.";
+  }
+  if (guide.entityType === "questionnaire_instrument") {
+    return "Ready on the selected questionnaire lane. Review is ready when the practical question and exact instrument are clear. Ordinary create or update is ready for shared batch CRUD when the purpose, audience or use context, respondent-facing outcome, accepted wording, and duplicate or preservation check are clear. Clone is ready when the exact source, destination owner, and reason for a separate copy are clear. Draft is ready when the exact instrument and intended editable change are clear. Publish is ready only after reading the current draft, summarizing purpose, scoring, provenance, and answer-shape changes, and receiving one explicit publish confirmation plus any desired version label. Never use batch CRUD for clone, draft, or publish lifecycle actions.";
+  }
+  if (guide.entityType === "preference_context") {
+    return "Ready on the selected Preference Context lane. Review is ready when the practical question and matching context scope are clear. Ordinary create or update is ready for shared batch CRUD when the context purpose, decision boundary, accepted wording, and duplicate or preservation check are clear. Merge is ready only after reading both exact contexts, confirming one sourceContextId and one targetContextId on the same profile, explaining that judgments and signals move, the source is deactivated, and the target is recomputed, and receiving explicit merge intent. Never use batch delete to imitate a context merge.";
   }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
@@ -5907,6 +5973,23 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}'
+  },
+  {
+    toolName: "forge_merge_preferences_contexts",
+    summary:
+      "Merge one source preference context into one target context without discarding the source evidence.",
+    whenToUse:
+      "Use only after reading both exact contexts and confirming that their distinction is no longer useful.",
+    inputShape: "{ sourceContextId: string, targetContextId: string }",
+    requiredFields: ["sourceContextId", "targetContextId"],
+    notes: [
+      "The source and target must belong to the same preference profile.",
+      "The merge moves judgments and signals to the target, clears derived source scores and summaries, deactivates the source, and recomputes the target.",
+      "Do not use sourceContextIds; the server accepts exactly one sourceContextId per call.",
+      "Do not emulate a merge by deleting the source through batch CRUD."
+    ],
+    example:
+      '{"sourceContextId":"preference_context_tired_work","targetContextId":"preference_context_deep_work"}'
   },
   {
     toolName: "forge_get_sleep_overview",

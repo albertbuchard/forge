@@ -103,6 +103,30 @@ function beliefToInput(belief: BeliefEntry): BeliefEntryInput {
   };
 }
 
+function getBeliefFormulationSignature(value: BeliefEntryInput) {
+  const normalized = beliefEntrySchema.safeParse(value);
+  const formulation = normalized.success
+    ? normalized.data
+    : {
+        ...value,
+        statement: value.statement.trim(),
+        originNote: value.originNote.trim(),
+        evidenceFor: value.evidenceFor.map((entry) => entry.trim()),
+        evidenceAgainst: value.evidenceAgainst.map((entry) => entry.trim()),
+        flexibleAlternative: value.flexibleAlternative.trim()
+      };
+  return JSON.stringify({
+    schemaId: formulation.schemaId,
+    statement: formulation.statement,
+    beliefType: formulation.beliefType,
+    originNote: formulation.originNote,
+    confidence: formulation.confidence,
+    evidenceFor: formulation.evidenceFor,
+    evidenceAgainst: formulation.evidenceAgainst,
+    flexibleAlternative: formulation.flexibleAlternative
+  });
+}
+
 function countSchemaLinks({
   schema,
   beliefs,
@@ -272,6 +296,8 @@ export function PsycheSchemasBeliefsPage() {
   const [editingBelief, setEditingBelief] = useState<BeliefEntry | null>(null);
   const [draft, setDraft] = useState<BeliefEntryInput>(DEFAULT_BELIEF_INPUT);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [acceptedFormulationSignature, setAcceptedFormulationSignature] =
+    useState<string | null>(null);
   const schemasQuery = useQuery({
     queryKey: ["forge-psyche-schema-catalog"],
     queryFn: listSchemaCatalog
@@ -561,6 +587,7 @@ export function PsycheSchemasBeliefsPage() {
       return;
     }
     setSubmitError(null);
+    setAcceptedFormulationSignature(null);
   }, [dialogOpen]);
 
   const steps: Array<QuestionFlowStep<BeliefEntryInput>> = [
@@ -572,17 +599,6 @@ export function PsycheSchemasBeliefsPage() {
         "Place the belief inside the right schema system, then write the actual inner line that tends to fire there.",
       render: (value, setValue) => (
         <>
-          <UserSelectField
-            value={value.userId ?? null}
-            users={shell.snapshot.users}
-            onChange={(userId) => setValue({ userId })}
-            defaultLabel={formatOwnerSelectDefaultLabel(
-              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                null,
-              "Choose belief owner"
-            )}
-            help="Beliefs can belong to a human or bot user even when they connect to shared behaviors, modes, and reports."
-          />
           <FlowField
             label="Schema"
             description="Choose the schema this belief belongs to, whether it is a recurring old pattern or a healthier pattern you want to strengthen."
@@ -677,12 +693,23 @@ export function PsycheSchemasBeliefsPage() {
     },
     {
       id: "origin",
-      eyebrow: "Origin",
-      title: "Capture the origin and confidence of the script",
+      eyebrow: "Experience",
+      title: "Separate felt grip from mixed evidence",
       description:
-        "This keeps the belief from turning into a generic note divorced from actual history.",
+        "Grip and evidence record your experience and interpretation, not established facts. Evidence can conflict, and the same event can reasonably support more than one reading.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose belief owner"
+            )}
+            help="Choose an owner only when it changes whose formulation this is. Linked records may still cross owners."
+          />
           <FlowField
             label="Origin context"
             description="Capture where this script learned its force or usefulness."
@@ -713,8 +740,8 @@ export function PsycheSchemasBeliefsPage() {
           </FlowField>
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField
-              label="Evidence for"
-              description="Add one supporting memory, sign, or interpretation per line."
+              label="Experiences that support it"
+              description="Add one memory, sign, or interpretation per line. These explain why the belief feels convincing; they are not labeled as facts."
             >
               <Textarea
                 value={value.evidenceFor.join("\n")}
@@ -732,8 +759,8 @@ export function PsycheSchemasBeliefsPage() {
               />
             </FlowField>
             <FlowField
-              label="Evidence against"
-              description="Add one counterexample, nuance, or disconfirming sign per line."
+              label="Experiences that complicate it"
+              description="Add counterexamples, nuances, or competing readings per line. Contradictory evidence is welcome, including a different reading of an event listed on the left."
             >
               <Textarea
                 value={value.evidenceAgainst.join("\n")}
@@ -756,16 +783,16 @@ export function PsycheSchemasBeliefsPage() {
     },
     {
       id: "repair",
-      eyebrow: "Repair",
-      title: "Define the flexible alternative and attach the wider system",
+      eyebrow: "Review",
+      title: "Offer a tentative alternative, then ask for consent",
       description:
-        "The flexible alternative is the repair move; the links keep it attached to behaviors, values, modes, and reports.",
+        "The alternative is an editable possibility, not an imposed interpretation. Review the formulation in your own words before choosing whether to save it.",
       render: (value, setValue) => (
         <>
           <FlowField
-            label="Flexible alternative"
-            description="Write the steadier line you want available when the old script activates."
-            labelHelp="A flexible alternative is not fake positivity. It is a truer, more workable belief that leaves room for uncertainty."
+            label="Tentative flexible alternative"
+            description="Write a possible steadier line, or leave it blank. It should remain open to uncertainty and revision."
+            labelHelp="This is an option to try, not a correction Forge is making for you. You can revise or reject it at any time."
           >
             <Textarea
               value={value.flexibleAlternative}
@@ -775,6 +802,58 @@ export function PsycheSchemasBeliefsPage() {
               placeholder="Silence can mean many things. I can check the facts before deciding I am being left."
             />
           </FlowField>
+          <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+            <div>
+              <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                Your formulation to approve
+              </div>
+              <FieldHint className="mt-1">
+                Forge will save the belief statement exactly as shown after
+                removing surrounding blank space. Grip and evidence remain your
+                current assessment, not verified facts.
+              </FieldHint>
+            </div>
+            <div className="grid gap-1">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                Your words
+              </div>
+              <div className="whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-strong)]">
+                {value.statement.trim() || "No belief statement entered yet."}
+              </div>
+            </div>
+            <div className="grid gap-1">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
+                Possible alternative
+              </div>
+              <div className="whitespace-pre-wrap text-sm leading-6 text-[var(--ui-ink-soft)]">
+                {value.flexibleAlternative.trim() ||
+                  "No alternative offered. You can save the belief without one."}
+              </div>
+            </div>
+            <label className="flex items-start gap-3 rounded-[18px] bg-[var(--ui-surface-2)] p-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 shrink-0 accent-[var(--primary)]"
+                checked={
+                  acceptedFormulationSignature ===
+                  getBeliefFormulationSignature(value)
+                }
+                onChange={(event) => {
+                  setAcceptedFormulationSignature(
+                    event.target.checked
+                      ? getBeliefFormulationSignature(value)
+                      : null
+                  );
+                  setSubmitError(null);
+                }}
+              />
+              <span>
+                I consent to save this as my formulation. The belief statement
+                uses my wording, and the alternative is a tentative option I can
+                revise or reject.
+              </span>
+            </label>
+          </div>
           <FlowField
             label="Linked values"
             description="Choose the valued directions this belief interferes with most."
@@ -1073,6 +1152,16 @@ export function PsycheSchemasBeliefsPage() {
           if (!parsed.success) {
             setSubmitError(
               "This belief still needs a statement before it can be saved."
+            );
+            return;
+          }
+
+          if (
+            acceptedFormulationSignature !==
+            getBeliefFormulationSignature(parsed.data)
+          ) {
+            setSubmitError(
+              "Review the formulation and consent to its current wording before saving."
             );
             return;
           }

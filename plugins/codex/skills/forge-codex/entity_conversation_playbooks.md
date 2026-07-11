@@ -790,6 +790,7 @@ internally before asking questions:
 - `sportsOverview` and `sports_overview`
 - `trainingLoad` and `training_load`
 - `weightLoss` and `weight_loss`
+- `preferencesWorkspace` and `preferences_workspace`
 - `selfObservation` and `self_observation`
 
 Do not ask the user which alias they mean. Ask the practical question the read should
@@ -814,6 +815,11 @@ still knowing the exact write/read family before it acts.
   `preference_item`: normal stored Preferences records. Use shared batch entity
   routes for CRUD; switch to Preferences action routes only for judgments, signals,
   game starts, merges, entity seeding, or explicit score overrides.
+- `preferences_workspace`: read-model-only Preferences explanation surface. Use
+  `forge_get_preferences_workspace` or `GET /api/v1/preferences/workspace` to
+  explain inferred scores from supporting judgments, signals, overrides, and evidence
+  counts before proposing a dedicated Preferences action. Never mutate the workspace
+  through batch CRUD.
 - `questionnaire_instrument`: normal stored questionnaire CRUD for ordinary authoring
   and edits. Use questionnaire action routes only for clone, draft, and publish
   state.
@@ -2393,6 +2399,54 @@ Preferred opening question:
 
 - "What workflow do you want this calendar connection to unlock?"
 
+## Preferences Workspace
+
+Aim: explain an inferred preference ranking from its actual evidence so the user can
+understand the model before deciding whether to change it.
+
+Arc:
+
+1. Ask what ranking, item, or decision the user is trying to understand. Ask for user,
+   domain, or context scope only when it changes the answer.
+2. Read the Preferences Workspace before asking the user to reconstruct scores,
+   judgments, signals, or overrides from memory.
+3. Answer the practical question first: name the leading result and the supporting
+   judgment direction, direct signals, explicit overrides, and evidence count when
+   available.
+4. Treat sparse, conflicting, or context-mismatched evidence as uncertainty, not as
+   proof. When useful, name the one comparison or signal that would most change the
+   conclusion.
+5. Only after explaining the read, ask whether the user wants to compare, merge
+   contexts, add an existing Forge entity, record a judgment or signal, or override a
+   score. Switch to that dedicated Preferences action only when the user chooses it.
+
+Helpful follow-up lanes:
+
+- the ranking, item, or practical decision to explain
+- user, domain, or context scope only when it changes the evidence
+- supporting judgments, direct signals, overrides, evidence count, and uncertainty
+- the one missing comparison or signal that would materially change the conclusion
+- one explicit follow-up action after the explanation, if the user wants a change
+
+Route note:
+
+- `preferences_workspace` is a read-model-only surface. Use
+  `forge_get_preferences_workspace` or `GET /api/v1/preferences/workspace`; do not
+  create, update, or delete it through batch CRUD.
+- Follow-up writes use the dedicated comparison-game, context-merge,
+  enqueue-from-entity, judgment, signal, or score-override tool. Do not mutate the
+  read model or guess a generic Preferences route.
+
+Ready to review when:
+
+- the practical ranking or evidence question is clear
+- any user, domain, context, or item scope that changes the answer is clear
+- no write-shaped detail is requested before the read
+
+Preferred opening question:
+
+- "What preference ranking or decision are you trying to understand?"
+
 ## Preference Judgment
 
 Aim: capture one pairwise preference decision with the right context, not just log a
@@ -3067,36 +3121,58 @@ Preferred opening question:
 
 ## Preference Context
 
-Aim: define a real operating mode for preferences, not a decorative label.
+Aim: define or revise a real operating mode for preferences, or consolidate contexts
+without losing the evidence that explains the resulting ranking.
 
 Arc:
 
-1. Ask what situation or mode this context is meant to represent.
-2. Ask what decisions or comparisons should feel different inside that context.
-3. Ask what should count inside that context and what should stay outside it.
-4. Ask whether it should be active, default, or kept separate from other evidence.
-5. Offer a concise name if the mode is clearer than the wording.
+1. Identify the lane: review, create, update, or merge. If the user already made it
+   clear, do not ask them to choose it again.
+2. For review, update, or merge, read the current matching contexts before asking the
+   user to reconstruct names, boundaries, or ids from memory.
+3. For create, ask what situation or mode the context represents, which decisions
+   should differ there, and what belongs inside versus outside. Search for a
+   near-duplicate before saving.
+4. For update, ask only what no longer fits and whether the context should remain
+   active, default, or separate from other evidence.
+5. For merge, reflect why the distinction is no longer useful, identify one exact
+   source and one exact target on the same profile, and explain the effect before
+   asking for explicit merge intent.
+6. Offer a concise name only when the context meaning is clearer than its wording.
 
 Helpful follow-up lanes:
 
 - what decisions this context should shape
 - what belongs inside versus outside the mode
-- whether it should be default or explicitly separate
+- what one definition change would make the context more truthful
+- why two existing contexts no longer need to stay separate
+- which exact context should survive as the target
 
 Route note:
 
-- `preference_context` is normal stored Preferences CRUD. Use batch entity
-  create/update/search for context definition changes.
+- Ordinary `preference_context` create, update, delete, restore, and search use the
+  shared batch entity tools.
+- Read the current contexts through `GET /api/v1/preferences/contexts` or one exact
+  context through `GET /api/v1/preferences/contexts/:id`.
+- An accepted merge uses `forge_merge_preferences_contexts` or
+  `POST /api/v1/preferences/contexts/merge` with exactly one
+  `sourceContextId` and one `targetContextId`. Never imitate a merge by deleting
+  the source through batch CRUD.
+- A merge moves judgments and signals to the target, clears derived source scores and
+  summaries, deactivates the source, and recomputes the target.
 
-Ready to save when:
+Ready to act when:
 
-- the context has a stable purpose
-- its boundary is clear enough to use consistently
-- any default or sharing choice that matters is clear
+- review has a practical question and matching context scope
+- ordinary create or update has a clear purpose, decision boundary, accepted wording,
+  and duplicate or preservation check
+- merge has two read and verified contexts on the same profile, one exact source and
+  target, an explained preservation effect, and explicit merge intent
 
 Preferred opening question:
 
-- "In what situation should Forge treat your preferences differently here?"
+- "Are you defining a preference context, changing one, or bringing two contexts
+  together?"
 
 ## Preference Item
 
@@ -3137,30 +3213,41 @@ Preferred opening question:
 
 ## Questionnaire Instrument
 
-Aim: clarify whether the user is authoring a reusable questionnaire and what honest
-moment, pattern, or decision the instrument should help someone notice.
+Aim: guide ordinary questionnaire authoring and version lifecycle without treating
+review, clone, draft, or publish work as a new-instrument form.
 
 Arc:
 
-1. Ask what honest moment, pattern, or decision the questionnaire should help someone
-   notice.
-2. Ask who it is for and when it should be used.
-3. Ask what the respondent should understand after answering that they might otherwise
-   miss.
-4. Reflect the practical use case back in plain language before asking for item
-   wording.
-5. Ask what would make the instrument distinct instead of redundant if a
-   near-duplicate risk is visible.
-6. Ask about item shape, response scale, scoring, or provenance only after the purpose
-   and use context are steady.
-7. Move to draft creation once the purpose is clear.
+1. Identify whether the user wants to review, create, update, clone, ensure an
+   editable draft, or publish. Skip this lane question when their verb is already
+   clear.
+2. For review, update, clone, draft, or publish work, read the existing questionnaire
+   and current version state before asking the user to reconstruct it from memory.
+3. For a new instrument, ask what honest moment, pattern, or decision it should help
+   someone notice, who it is for, and what the respondent should understand afterward.
+   Search for a near-duplicate before creating it through batch CRUD.
+4. For an ordinary metadata or content update, ask for the smallest newly true change
+   and what published meaning, scoring behavior, provenance, or historical-run
+   interpretation must remain intact, then use batch CRUD.
+5. For clone, confirm the exact source instrument, destination owner, and what purpose
+   makes a separate copy useful instead of editing the source.
+6. For draft, confirm the exact instrument and what the editable version is meant to
+   change. Ensure the draft through the dedicated action rather than creating another
+   instrument.
+7. For publish, summarize the current draft's purpose, scoring, provenance, and
+   answer-shape changes, then ask one explicit publish confirmation and optional
+   version label without reopening item-by-item intake.
+8. Use clone, draft, and publish tools only for version lifecycle, and answer review
+   questions before proposing any mutation.
 
 Helpful follow-up lanes:
 
-- what honest moment, decision, or review this instrument should support
-- who will answer it and under what circumstances
-- what the answers should help the respondent understand or choose
-- what would make the instrument distinct instead of redundant
+- whether this is review, create, update, clone, draft, or publish work
+- the honest moment, audience, and respondent-facing outcome for a new instrument
+- the smallest update and what published or historical meaning must remain intact
+- the source and destination owner for a clone
+- the exact editable change for a draft
+- purpose, scoring, provenance, answer-shape changes, and consent for publish
 
 Route note:
 
@@ -3168,18 +3255,24 @@ Route note:
   delete, and search work. Use clone, draft, and publish action routes only when the
   user is working with instrument version state. Questionnaire action paths live under
   `/api/v1/psyche/questionnaires`, including `/:id/clone`, `/:id/draft`, and
-  `/:id/publish`.
+  `/:id/publish`. Use `forge_list_questionnaires` and `forge_get_questionnaire` for
+  read-first work, then `forge_clone_questionnaire`,
+  `forge_ensure_questionnaire_draft`, or `forge_publish_questionnaire_draft` only
+  for the matching lifecycle action.
 
 Ready to act when:
 
-- the purpose is clear
-- the audience or use context is clear
-- the respondent-facing insight or decision is clear
-- the instrument is distinct enough to draft
+- review has the practical question and exact instrument
+- ordinary create or update has purpose, audience or use context, respondent-facing
+  outcome, accepted wording, and any duplicate or preservation check
+- clone has the exact source, destination owner, and reason for a separate copy
+- draft has the exact instrument and intended editable change
+- publish has a current draft read, a summary of purpose, scoring, provenance, and
+  answer-shape changes, plus one explicit confirmation and optional version label
 
 Preferred opening question:
 
-- "What honest moment or decision should this questionnaire help someone notice or track?"
+- "What are you trying to understand, create, revise, or publish about this questionnaire?"
 
 ## Questionnaire Run
 

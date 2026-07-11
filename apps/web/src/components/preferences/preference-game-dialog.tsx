@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Search, X } from "lucide-react";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,10 @@ export function PreferenceGameDialog({
   filteredCatalogs: PreferenceCatalog[];
   onSelectDomain: (domain: PreferenceDomain) => void;
   onStartCatalogGame: (domain: PreferenceDomain, catalogId: string) => void;
-  onJudge: (outcome: PreferenceJudgmentOutcome, strength?: number) => void;
+  onJudge: (
+    outcome: PreferenceJudgmentOutcome,
+    strength?: number
+  ) => void | Promise<void>;
   onSignal: (itemId: string, signalType: PreferenceSignalType) => void;
 }) {
   return (
@@ -241,10 +244,57 @@ function PreferenceGamePlayStep({
   loading: boolean;
   submitting: boolean;
   activeWorkspace: PreferenceWorkspacePayload | null;
-  onJudge: (outcome: PreferenceJudgmentOutcome, strength?: number) => void;
+  onJudge: (
+    outcome: PreferenceJudgmentOutcome,
+    strength?: number
+  ) => void | Promise<void>;
   onSignal: (itemId: string, signalType: PreferenceSignalType) => void;
 }) {
   const nextPair = activeWorkspace?.compare.nextPair ?? null;
+  const pairKey = nextPair ? `${nextPair.left.id}:${nextPair.right.id}` : null;
+  const lockedPairKeyRef = useRef<string | null>(null);
+  const [judgmentLocked, setJudgmentLocked] = useState(false);
+
+  const releaseJudgmentLock = useCallback((completedPairKey: string) => {
+    if (lockedPairKeyRef.current !== completedPairKey) {
+      return;
+    }
+    lockedPairKeyRef.current = null;
+    setJudgmentLocked(false);
+  }, []);
+
+  const attemptJudgment = useCallback(
+    (outcome: PreferenceJudgmentOutcome, strength = 1) => {
+      if (
+        loading ||
+        submitting ||
+        !pairKey ||
+        lockedPairKeyRef.current === pairKey
+      ) {
+        return;
+      }
+
+      lockedPairKeyRef.current = pairKey;
+      setJudgmentLocked(true);
+      try {
+        void Promise.resolve(onJudge(outcome, strength)).finally(() =>
+          releaseJudgmentLock(pairKey)
+        );
+      } catch (error) {
+        releaseJudgmentLock(pairKey);
+        throw error;
+      }
+    },
+    [loading, onJudge, pairKey, releaseJudgmentLock, submitting]
+  );
+
+  useEffect(() => {
+    if (lockedPairKeyRef.current === pairKey) {
+      return;
+    }
+    lockedPairKeyRef.current = null;
+    setJudgmentLocked(false);
+  }, [pairKey]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -263,21 +313,21 @@ function PreferenceGamePlayStep({
       const key = event.key.toLocaleLowerCase();
       if (key === "1") {
         event.preventDefault();
-        onJudge("left", 1);
+        attemptJudgment("left", 1);
       } else if (key === "2") {
         event.preventDefault();
-        onJudge("right", 1);
+        attemptJudgment("right", 1);
       } else if (key === "t") {
         event.preventDefault();
-        onJudge("tie", 1);
+        attemptJudgment("tie", 1);
       } else if (key === "s") {
         event.preventDefault();
-        onJudge("skip", 1);
+        attemptJudgment("skip", 1);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onJudge, submitting]);
+  }, [attemptJudgment, submitting]);
 
   if (loading) {
     return (
@@ -299,8 +349,10 @@ function PreferenceGamePlayStep({
     );
   }
 
+  const judgmentDisabled = submitting || judgmentLocked;
+
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-5" aria-busy={judgmentDisabled}>
       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--ui-ink-soft)]">
         <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
           {DOMAIN_OPTIONS.find((entry) => entry.value === domain)?.label ??
@@ -329,60 +381,60 @@ function PreferenceGamePlayStep({
           title={nextPair.left.label}
           description={nextPair.left.description}
           sideLabel="Left"
-          disabled={submitting}
-          onClick={() => onJudge("left", 1)}
+          disabled={judgmentDisabled}
+          onClick={() => attemptJudgment("left", 1)}
         />
         <ComparisonCard
           title={nextPair.right.label}
           description={nextPair.right.description}
           sideLabel="Right"
-          disabled={submitting}
-          onClick={() => onJudge("right", 1)}
+          disabled={judgmentDisabled}
+          onClick={() => attemptJudgment("right", 1)}
         />
       </div>
 
       <div className="flex flex-wrap gap-2">
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           aria-keyshortcuts="1"
-          onClick={() => onJudge("left", 1)}
+          onClick={() => attemptJudgment("left", 1)}
         >
           Left · 1
         </Button>
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           aria-keyshortcuts="2"
-          onClick={() => onJudge("right", 1)}
+          onClick={() => attemptJudgment("right", 1)}
         >
           Right · 2
         </Button>
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           variant="secondary"
-          onClick={() => onJudge("left", 1.75)}
+          onClick={() => attemptJudgment("left", 1.75)}
         >
           Strong left
         </Button>
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           variant="secondary"
-          onClick={() => onJudge("right", 1.75)}
+          onClick={() => attemptJudgment("right", 1.75)}
         >
           Strong right
         </Button>
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           aria-keyshortcuts="T"
           variant="secondary"
-          onClick={() => onJudge("tie", 1)}
+          onClick={() => attemptJudgment("tie", 1)}
         >
           Tie · T
         </Button>
         <Button
-          disabled={submitting}
+          disabled={judgmentDisabled}
           aria-keyshortcuts="S"
           variant="secondary"
-          onClick={() => onJudge("skip", 1)}
+          onClick={() => attemptJudgment("skip", 1)}
         >
           Skip · S
         </Button>

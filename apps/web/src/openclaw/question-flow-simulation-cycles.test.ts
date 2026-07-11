@@ -222,6 +222,7 @@ describe("question flow simulation cycles", () => {
     "Weight Loss",
     "Calendar Overview",
     "Calendar Connection",
+    "Preferences Workspace",
     "Preference Judgment",
     "Preference Signal",
     "Movement",
@@ -299,6 +300,8 @@ describe("question flow simulation cycles", () => {
       "Review this week before deciding whether to create a timebox or event.",
     "Calendar Connection":
       "Connect a calendar so Forge can read commitments and write planning blocks.",
+    "Preferences Workspace":
+      "Explain why Forge currently ranks one writing environment above another before I decide whether to change anything.",
     "Preference Judgment":
       "Record which of two writing environments I prefer for deep work.",
     "Preference Signal": "Mark this cafe as a veto for serious writing.",
@@ -312,7 +315,7 @@ describe("question flow simulation cycles", () => {
     "Preference Catalog Item":
       "Add one cafe candidate without making later comparisons ambiguous.",
     "Preference Context":
-      "Define a context where preferences differ when I am tired.",
+      "Merge my tired-work context into deep work without losing the comparisons that explain the ranking.",
     "Preference Item":
       "Save one preference candidate and decide if it is a signal or comparison item.",
     "Questionnaire Instrument":
@@ -397,6 +400,7 @@ describe("question flow simulation cycles", () => {
     "Weight Loss": ["review", "log", "experiment", "follow-up"],
     "Calendar Overview": ["review", "navigate", "interpret", "follow-up"],
     "Calendar Connection": ["create", "read", "update", "sync"],
+    "Preferences Workspace": ["review", "explain", "qualify", "follow-up"],
     "Preference Judgment": ["compare", "judge", "review", "record"],
     "Preference Signal": ["mark", "update", "review", "record"],
     Movement: ["review", "correct", "repair", "link"],
@@ -407,7 +411,14 @@ describe("question flow simulation cycles", () => {
     "Preference Catalog Item": ["add", "update", "review", "compare"],
     "Preference Context": ["add", "update", "review", "merge"],
     "Preference Item": ["add", "update", "review", "signal"],
-    "Questionnaire Instrument": ["create", "draft", "review", "publish"],
+    "Questionnaire Instrument": [
+      "review",
+      "create",
+      "update",
+      "clone",
+      "draft",
+      "publish"
+    ],
     "Questionnaire Run": ["start", "continue", "review", "complete"],
     Value: ["formulate", "direct-save", "update", "link"],
     "Behavior Pattern": ["formulate", "direct-save", "update", "review"],
@@ -456,6 +467,7 @@ describe("question flow simulation cycles", () => {
     | "specializedCrud"
     | "action"
     | "specializedDomain"
+    | "hybridBatchAndAction"
     | "hybridBatchAndSpecializedDomain"
     | "readModel"
     | "healthWorkflow"
@@ -488,6 +500,7 @@ describe("question flow simulation cycles", () => {
     "Weight Loss": "healthWorkflow",
     "Calendar Overview": "readModel",
     "Calendar Connection": "specializedCrud",
+    "Preferences Workspace": "readModel",
     "Preference Judgment": "action",
     "Preference Signal": "action",
     Movement: "specializedDomain",
@@ -496,7 +509,7 @@ describe("question flow simulation cycles", () => {
     Workbench: "specializedDomain",
     "Preference Catalog": "batch",
     "Preference Catalog Item": "batch",
-    "Preference Context": "batch",
+    "Preference Context": "hybridBatchAndAction",
     "Preference Item": "batch",
     "Questionnaire Instrument": "batch",
     "Questionnaire Run": "action",
@@ -542,6 +555,7 @@ describe("question flow simulation cycles", () => {
     preference_catalog_item: "Preference Catalog Item",
     preference_context: "Preference Context",
     preference_item: "Preference Item",
+    preferences_workspace: "Preferences Workspace",
     preference_judgment: "Preference Judgment",
     preference_signal: "Preference Signal",
     questionnaire_instrument: "Questionnaire Instrument",
@@ -581,6 +595,8 @@ describe("question flow simulation cycles", () => {
     training_load: "Training Load",
     weightLoss: "Weight Loss",
     weight_loss: "Weight Loss",
+    preferencesWorkspace: "Preferences Workspace",
+    preferences_workspace: "Preferences Workspace",
     selfObservation: "Self Observation",
     self_observation: "Self Observation"
   } as const;
@@ -601,6 +617,7 @@ describe("question flow simulation cycles", () => {
     "preference_catalog_item",
     "preference_context",
     "preference_item",
+    "preferences_workspace",
     "questionnaire_instrument",
     "sleep_session",
     "workout_session",
@@ -832,7 +849,9 @@ describe("question flow simulation cycles", () => {
     expect(entityPlaybook).toMatch(
       /For Attention, list as soon as the user asks what needs a next move[\s\S]*stable item id[\s\S]*allowed action[\s\S]*For Entity Navigation[\s\S]*exact in-scope record[\s\S]*Pin and unpin stay human-only/i
     );
-    expect(getSectionSlice(entityPlaybook, "Operation lane checkpoint")).toMatch(
+    expect(
+      getSectionSlice(entityPlaybook, "Operation lane checkpoint")
+    ).toMatch(
       /For Attention[\s\S]*list, snooze, dismiss, or restore[\s\S]*For Entity Navigation[\s\S]*bounded list or exact[\s\S]*touch[\s\S]*never turn pin or unpin into an agent lane/i
     );
     expect(getSectionSlice(entityPlaybook, "Route posture checkpoint")).toMatch(
@@ -1213,6 +1232,54 @@ describe("question flow simulation cycles", () => {
       /Ready to list, read metadata, inspect versions, or read audit history[\s\S]*Ready for trusted upload[\s\S]*without collecting a password[\s\S]*Ready to update metadata, rescan, enrich with an LLM, or change trust state[\s\S]*current metadata read[\s\S]*Ready to replace links[\s\S]*replacement is not append[\s\S]*Ready to delete or restore metadata through batch metadata routes[\s\S]*hard deletion[\s\S]*never ready for an agent call/i
     );
 
+    const preferencesWorkspaceFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preferences_workspace"
+    )?.questionFlow;
+    expect(preferencesWorkspaceFlow?.openingQuestion).toMatch(
+      /preference ranking or decision/i
+    );
+    expect(preferencesWorkspaceFlow?.askSequence.join("\n")).toMatch(
+      /Read the Preferences Workspace[\s\S]*Answer the practical question first[\s\S]*judgment direction[\s\S]*direct signals[\s\S]*explicit overrides[\s\S]*evidence count[\s\S]*sparse, conflicting, or context-mismatched evidence as uncertainty[\s\S]*dedicated Preferences action instead of mutating the read model/i
+    );
+    expect(preferencesWorkspaceFlow?.readinessCheck).toMatch(
+      /Ready to read before asking write-shaped follow-ups[\s\S]*practical ranking or explanation question[\s\S]*supporting judgments and signals[\s\S]*uncertainty[\s\S]*dedicated Preferences action[\s\S]*never mutate preferences_workspace through batch CRUD/i
+    );
+    expect(preferencesWorkspaceFlow?.apiAccessHint).toMatch(
+      /Route posture: read_model_only_surface[\s\S]*GET \/api\/v1\/preferences\/workspace[\s\S]*forge_get_preferences_workspace/i
+    );
+
+    const preferenceContextFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preference_context"
+    )?.questionFlow;
+    expect(preferenceContextFlow?.openingQuestion).toMatch(
+      /defining a preference context, changing one, or bringing two contexts together/i
+    );
+    expect(preferenceContextFlow?.askSequence.join("\n")).toMatch(
+      /review, create, update, or merge[\s\S]*read the current matching contexts[\s\S]*near-duplicate[\s\S]*what no longer fits[\s\S]*one exact source and one exact target[\s\S]*judgments and signals move[\s\S]*source is deactivated[\s\S]*target is recomputed[\s\S]*sourceContextId and targetContextId[\s\S]*never imitate it by deleting/i
+    );
+    expect(preferenceContextFlow?.readinessCheck).toMatch(
+      /Review is ready[\s\S]*Ordinary create or update[\s\S]*shared batch CRUD[\s\S]*Merge is ready only after reading both exact contexts[\s\S]*one sourceContextId and one targetContextId[\s\S]*judgments and signals move[\s\S]*source is deactivated[\s\S]*target is recomputed[\s\S]*Never use batch delete/i
+    );
+    expect(preferenceContextFlow?.apiAccessHint).toMatch(
+      /shared batch CRUD for ordinary preference_context[\s\S]*GET \/api\/v1\/preferences\/contexts\/:id[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*forge_merge_preferences_contexts/i
+    );
+
+    const questionnaireInstrumentFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "questionnaire_instrument"
+    )?.questionFlow;
+    expect(questionnaireInstrumentFlow?.openingQuestion).toMatch(
+      /understand, create, revise, or publish/i
+    );
+    expect(questionnaireInstrumentFlow?.askSequence.join("\n")).toMatch(
+      /review, create, update, clone, ensure an editable draft, or publish[\s\S]*read the existing questionnaire and current version state[\s\S]*near-duplicate[\s\S]*smallest newly true change[\s\S]*destination owner[\s\S]*dedicated action rather than creating another instrument[\s\S]*explicit publish confirmation[\s\S]*answer review questions before proposing any mutation/i
+    );
+    expect(questionnaireInstrumentFlow?.readinessCheck).toMatch(
+      /Review is ready[\s\S]*Ordinary create or update[\s\S]*shared batch CRUD[\s\S]*Clone is ready[\s\S]*Draft is ready[\s\S]*Publish is ready only after reading the current draft[\s\S]*explicit publish confirmation[\s\S]*Never use batch CRUD for clone, draft, or publish/i
+    );
+    expect(questionnaireInstrumentFlow?.apiAccessHint).toMatch(
+      /shared batch CRUD for ordinary questionnaire_instrument[\s\S]*GET \/api\/v1\/psyche\/questionnaires\/:id[\s\S]*POST \/api\/v1\/psyche\/questionnaires\/:id\/clone[\s\S]*forge_clone_questionnaire[\s\S]*forge_ensure_questionnaire_draft[\s\S]*forge_publish_questionnaire_draft/i
+    );
+
     const specializedCapsules = [
       ["attention_inbox", "attention"],
       ["entity_navigation", "entityNavigation"],
@@ -1576,6 +1643,14 @@ describe("question flow simulation cycles", () => {
         expect(sectionSlice).toMatch(/shared batch entity tools/i);
         expect(sectionSlice).toMatch(/dedicated Life Events route family/i);
         expect(sectionSlice).toMatch(/Lane-to-route map:/);
+        continue;
+      }
+      if (posture === "hybridBatchAndAction") {
+        expect(sectionSlice).toMatch(/shared batch entity tools/i);
+        expect(sectionSlice).toMatch(/forge_merge_preferences_contexts/i);
+        expect(sectionSlice).toMatch(
+          /exactly one[\s\S]*`sourceContextId` and one `targetContextId`/i
+        );
         continue;
       }
       if (posture === "action") {

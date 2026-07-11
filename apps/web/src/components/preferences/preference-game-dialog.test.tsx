@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PreferenceGameDialog } from "./preference-game-dialog";
@@ -63,7 +69,7 @@ const baseProps = {
 };
 
 describe("PreferenceGameDialog", () => {
-  it("supports keyboard judgments and explains context-specific model effects", () => {
+  it("supports keyboard judgments and explains context-specific model effects", async () => {
     const onJudge = vi.fn();
     const onSignal = vi.fn();
     render(
@@ -84,6 +90,9 @@ describe("PreferenceGameDialog", () => {
     ).not.toHaveLength(0);
 
     fireEvent.keyDown(window, { key: "1" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Left · 1" })).toBeEnabled()
+    );
     fireEvent.keyDown(window, { key: "T" });
 
     expect(onJudge).toHaveBeenNthCalledWith(1, "left", 1);
@@ -91,6 +100,36 @@ describe("PreferenceGameDialog", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Favorite" })[0]!);
     expect(onSignal).toHaveBeenCalledWith("item_left", "favorite");
+  });
+
+  it("submits at most one judgment for a pair while the request is pending", async () => {
+    let resolveJudgment!: () => void;
+    const onJudge = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveJudgment = resolve;
+        })
+    );
+
+    render(
+      <PreferenceGameDialog
+        {...baseProps}
+        onJudge={onJudge}
+        onSignal={vi.fn()}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: "1" });
+    fireEvent.keyDown(window, { key: "T" });
+    fireEvent.click(screen.getByRole("button", { name: "Left · 1" }));
+
+    expect(onJudge).toHaveBeenCalledTimes(1);
+    expect(onJudge).toHaveBeenCalledWith("left", 1);
+    expect(screen.getByRole("button", { name: "Left · 1" })).toBeDisabled();
+
+    await act(async () => resolveJudgment());
+
+    expect(screen.getByRole("button", { name: "Left · 1" })).toBeEnabled();
   });
 
   it("locks round actions while a judgment or signal is saving", () => {

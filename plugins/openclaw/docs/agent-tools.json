@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11T13:15:27.165Z",
+  "generatedAt": "2026-07-11T20:35:35.746Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -1008,13 +1008,21 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Merge Preferences Contexts",
-      "summary": "Merge one or more preference contexts into a target context.",
-      "whenToUse": "Merge one or more preference contexts into a target context.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Merge one source preference context into one target context without discarding the source evidence.",
+      "whenToUse": "Use only after reading both exact contexts and confirming that their distinction is no longer useful.",
+      "inputShape": "{ sourceContextId: string, targetContextId: string }",
+      "requiredFields": [
+        "sourceContextId",
+        "targetContextId"
+      ],
+      "notes": [
+        "The source and target must belong to the same preference profile.",
+        "The merge moves judgments and signals to the target, clears derived source scores and summaries, deactivates the source, and recomputes the target.",
+        "Do not use sourceContextIds; the server accepts exactly one sourceContextId per call.",
+        "Do not emulate a merge by deleting the source through batch CRUD."
+      ],
+      "example": "{\"sourceContextId\":\"preference_context_tired_work\",\"targetContextId\":\"preference_context_deep_work\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_parse_food_log_with_chatgpt",

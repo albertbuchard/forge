@@ -38,46 +38,157 @@ describe("question flow quality coverage", () => {
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
-      ["Wiki Page", /find, preserve, or improve in the wiki/i, /durable wiki knowledge/i],
-      ["Artifact", /find, verify, preserve, or change about this file/i, /trusted-file lifecycle/i],
+      [
+        "Wiki Page",
+        /find, preserve, or improve in the wiki/i,
+        /durable wiki knowledge/i
+      ],
+      [
+        "Artifact",
+        /find, verify, preserve, or change about this file/i,
+        /trusted-file lifecycle/i
+      ],
       ["Insight", /future-you or the agent/i, /practical recommendation/i],
       ["Calendar Event", /what time should Forge hold/i, /timezone/i],
-      ["Work Block Template", /when should this recurring block repeat/i, /allows or blocks work/i],
-      ["Task Timebox", /reserve focused time/i, /planned work with completed work/i],
-      ["Task Run", /Which task should I start/i, /Start the run instead of turning it into intake/i],
+      [
+        "Work Block Template",
+        /when should this recurring block repeat/i,
+        /allows or blocks work/i
+      ],
+      [
+        "Task Timebox",
+        /reserve focused time/i,
+        /planned work with completed work/i
+      ],
+      [
+        "Task Run",
+        /Which task should I start/i,
+        /Start the run instead of turning it into intake/i
+      ],
       ["Work Adjustment", /time correction belong to/i, /truthfully/i],
-      ["Operator Overview", /understand about Forge overall/i, /read-model-only operator surface/i],
-      ["Operator Context", /current work, risk, or next move/i, /read-model-only operator surface/i],
-      ["Self Observation", /what happened in the situation/i, /whichever parts are actually present/i],
-      ["Sleep Session", /important enough to remember or connect/i, /reflective takeaway/i],
-      ["Workout Session", /most worth remembering or connecting/i, /subjective effort, mood, meaning/i],
-      ["Sleep Overview", /understand from your sleep picture/i, /read-model-only surface/i],
-      ["Sports Overview", /understand from your workout picture/i, /read-model-only surface/i],
+      [
+        "Operator Overview",
+        /understand about Forge overall/i,
+        /read-model-only operator surface/i
+      ],
+      [
+        "Operator Context",
+        /current work, risk, or next move/i,
+        /read-model-only operator surface/i
+      ],
+      [
+        "Self Observation",
+        /what happened in the situation/i,
+        /whichever parts are actually present/i
+      ],
+      [
+        "Sleep Session",
+        /important enough to remember or connect/i,
+        /reflective takeaway/i
+      ],
+      [
+        "Workout Session",
+        /most worth remembering or connecting/i,
+        /subjective effort, mood, meaning/i
+      ],
+      [
+        "Sleep Overview",
+        /understand from your sleep picture/i,
+        /read-model-only surface/i
+      ],
+      [
+        "Sports Overview",
+        /understand from your workout picture/i,
+        /read-model-only surface/i
+      ],
       ["Training Load", /training-load decision/i, /read-model-only/i],
       ["Weight Loss", /food-body link/i, /dedicated nutrition/i],
-      ["Calendar Overview", /understand or decide from your calendar picture/i, /read-model-only calendar surface/i],
-      ["Calendar Connection", /workflow do you want this calendar connection to unlock/i, /provider/i],
-      ["Preference Judgment", /comparison are you actually trying to settle/i, /pairwise preference decision/i],
-      ["Preference Signal", /remember about this item right now/i, /favorite, veto, bookmark,[\s\S]*compare-later/i],
-      ["Movement", /understand, correct, or preserve/i, /timeline[\s\S]*overlay[\s\S]*repair/i],
-      ["Life Events", /place on your life timeline/i, /chronology[\s\S]*calendar[\s\S]*ticket/i],
+      [
+        "Calendar Overview",
+        /understand or decide from your calendar picture/i,
+        /read-model-only calendar surface/i
+      ],
+      [
+        "Calendar Connection",
+        /workflow do you want this calendar connection to unlock/i,
+        /provider/i
+      ],
+      [
+        "Preferences Workspace",
+        /preference ranking or decision/i,
+        /inferred preference ranking/i
+      ],
+      [
+        "Preference Judgment",
+        /comparison are you actually trying to settle/i,
+        /pairwise preference decision/i
+      ],
+      [
+        "Preference Signal",
+        /remember about this item right now/i,
+        /favorite, veto, bookmark,[\s\S]*compare-later/i
+      ],
+      [
+        "Movement",
+        /understand, correct, or preserve/i,
+        /timeline[\s\S]*overlay[\s\S]*repair/i
+      ],
+      [
+        "Life Events",
+        /place on your life timeline/i,
+        /chronology[\s\S]*calendar[\s\S]*ticket/i
+      ],
       ["Life Force", /energy picture right now/i, /dedicated life-force path/i],
-      ["Workbench", /inspect, change, run, or publish/i, /dedicated workbench route family/i],
-      ["Preference Catalog", /decision or taste question should this catalog help with/i, /comparison pool/i],
-      ["Preference Catalog Item", /meaningfully worth comparing/i, /clear and fair/i],
-      ["Preference Context", /treat your preferences differently here/i, /inside versus outside/i],
-      ["Preference Item", /make clearer by saving this item/i, /favorite, veto, or compare-later/i],
-      ["Questionnaire Instrument", /honest moment or decision/i, /reusable questionnaire/i],
-      ["Questionnaire Run", /start, continue, review, or finish this run/i, /next answer or note that matters/i]
+      [
+        "Workbench",
+        /inspect, change, run, or publish/i,
+        /dedicated workbench route family/i
+      ],
+      [
+        "Preference Catalog",
+        /decision or taste question should this catalog help with/i,
+        /comparison pool/i
+      ],
+      [
+        "Preference Catalog Item",
+        /meaningfully worth comparing/i,
+        /clear and fair/i
+      ],
+      [
+        "Preference Context",
+        /defining a preference context, changing one, or bringing two contexts[\s\S]*together/i,
+        /consolidate contexts[\s\S]*without losing the evidence/i
+      ],
+      [
+        "Preference Item",
+        /make clearer by saving this item/i,
+        /favorite, veto, or compare-later/i
+      ],
+      [
+        "Questionnaire Instrument",
+        /understand, create, revise, or publish/i,
+        /version lifecycle/i
+      ],
+      [
+        "Questionnaire Run",
+        /start, continue, review, or finish this run/i,
+        /next answer or note that matters/i
+      ]
     ] as const;
 
     for (const [section, opening, purpose] of scenarios) {
       const sectionSlice = getSectionSlice(entityPlaybook, section);
-      expect(sectionSlice, `${section} should exist`).toContain(`## ${section}`);
-      expect(sectionSlice, `${section} should have an opening question`).toMatch(opening);
-      expect(sectionSlice, `${section} should state the job of the record`).toMatch(
-        purpose
+      expect(sectionSlice, `${section} should exist`).toContain(
+        `## ${section}`
       );
+      expect(
+        sectionSlice,
+        `${section} should have an opening question`
+      ).toMatch(opening);
+      expect(
+        sectionSlice,
+        `${section} should state the job of the record`
+      ).toMatch(purpose);
     }
     const artifactSection = getSectionSlice(entityPlaybook, "Artifact");
     expect(artifactSection).toMatch(
@@ -96,7 +207,9 @@ describe("question flow quality coverage", () => {
       entityPlaybook,
       "Self Observation"
     );
-    expect(selfObservationSection).toMatch(/Psyche-adjacent note-backed workflow/i);
+    expect(selfObservationSection).toMatch(
+      /Psyche-adjacent note-backed workflow/i
+    );
     expect(selfObservationSection).toMatch(
       /observed `note` with\s+`frontmatter\.observedAt`/i
     );
@@ -120,6 +233,16 @@ describe("question flow quality coverage", () => {
     );
     expect(calendarConnectionSection).toMatch(
       /GET \/api\/v1\/calendar\/connections\/:id\/discovery[\s\S]*PATCH \/api\/v1\/calendar\/connections\/:id[\s\S]*DELETE \/api\/v1\/calendar\/connections\/:id/i
+    );
+    const questionnaireInstrumentSection = getSectionSlice(
+      entityPlaybook,
+      "Questionnaire Instrument"
+    );
+    expect(questionnaireInstrumentSection).toMatch(
+      /review, create, update, clone[\s\S]*editable draft[\s\S]*publish[\s\S]*read the existing questionnaire[\s\S]*near-duplicate[\s\S]*historical-run[\s\S]*interpretation[\s\S]*explicit publish confirmation/i
+    );
+    expect(questionnaireInstrumentSection).toMatch(
+      /forge_list_questionnaires[\s\S]*forge_get_questionnaire[\s\S]*forge_clone_questionnaire[\s\S]*forge_ensure_questionnaire_draft[\s\S]*forge_publish_questionnaire_draft/i
     );
   });
 
@@ -213,7 +336,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /Do not put IDs into `routeKey`, hide placeholders in `query` or `body`,\s+or use nearby guessed paths/i
     );
-    expect(entityPlaybook).toMatch(/## Internal action trace, external wording/i);
+    expect(entityPlaybook).toMatch(
+      /## Internal action trace, external wording/i
+    );
     expect(entityPlaybook).toMatch(
       /private action trace:[\s\S]*intent,[\s\S]*entity or dedicated\s+domain lane,[\s\S]*exact read\/write\/run tool/i
     );
@@ -281,9 +406,7 @@ describe("question flow quality coverage", () => {
     );
     expect(psychePlaybook).toMatch(/## Psyche progressive disclosure/i);
     expect(psychePlaybook).toMatch(/## Psyche depth calibration/i);
-    expect(psychePlaybook).toMatch(
-      /## Psyche active-listening turn contract/i
-    );
+    expect(psychePlaybook).toMatch(/## Psyche active-listening turn contract/i);
     expect(psychePlaybook).toMatch(
       /Reflect the specific felt stake or protective move[\s\S]*danger, shame,[\s\S]*protection, relief, cost, or value conflict/i
     );
@@ -370,7 +493,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /formulate the\s+Psyche record first[\s\S]*flashcard, note, value link, task, or habit/i
     );
-    expect(entityPlaybook).toMatch(/## Search-before-write and existing-record disambiguation/i);
+    expect(entityPlaybook).toMatch(
+      /## Search-before-write and existing-record disambiguation/i
+    );
     expect(entityPlaybook).toMatch(
       /search the shared batch route by entity type[\s\S]*title or wording[\s\S]*owner[\s\S]*distinctive content/i
     );
@@ -394,7 +519,9 @@ describe("question flow quality coverage", () => {
 
   it("keeps abstract and reusable records grounded in future use before label wording", () => {
     expect(entityPlaybook).toMatch(/## Abstract And Reusable Record Moves/);
-    expect(entityPlaybook).toMatch(/## Reflection-sensitive non-Psyche records/);
+    expect(entityPlaybook).toMatch(
+      /## Reflection-sensitive non-Psyche records/
+    );
     expect(entityPlaybook).toMatch(
       /questionnaire_instrument[\s\S]*questionnaire_run[\s\S]*self_observation[\s\S]*sleep_session[\s\S]*workout_session/i
     );
@@ -429,9 +556,7 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /future reports to name the same way each time/i
     );
-    expect(entityPlaybook).toMatch(
-      /what workflow they are trying to unlock/i
-    );
+    expect(entityPlaybook).toMatch(/what workflow they are trying to unlock/i);
     expect(entityPlaybook).toMatch(/## Update And Review Shortcuts/i);
     expect(entityPlaybook).toMatch(
       /I can stay narrow here\. What is the one thing that no longer fits/i
@@ -472,7 +597,9 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /overview route key is `overview`[\s\S]*GET \/api\/v1\/life-force[\s\S]*Do not invent `\/api\/v1\/life-force\/overview`/i
     );
-    expect(entityPlaybook).toMatch(/debugging one failed run|debug one failed execution/i);
+    expect(entityPlaybook).toMatch(
+      /debugging one failed run|debug one failed execution/i
+    );
     expect(entityPlaybook).toMatch(/run[\s\S]*summary/i);
     expect(entityPlaybook).toMatch(/latest node output/i);
     expect(entityPlaybook).toMatch(/published output/i);
@@ -523,9 +650,15 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /inspect one already-saved movement correction before editing/i
     );
-    expect(entityPlaybook).toMatch(/DELETE \/api\/v1\/movement\/user-boxes\/:id/i);
-    expect(entityPlaybook).toMatch(/send one follow-up message into a saved flow chat/i);
-    expect(entityPlaybook).toMatch(/POST \/api\/v1\/workbench\/flows\/:id\/chat/);
+    expect(entityPlaybook).toMatch(
+      /DELETE \/api\/v1\/movement\/user-boxes\/:id/i
+    );
+    expect(entityPlaybook).toMatch(
+      /send one follow-up message into a saved flow chat/i
+    );
+    expect(entityPlaybook).toMatch(
+      /POST \/api\/v1\/workbench\/flows\/:id\/chat/
+    );
     expect(entityPlaybook).toMatch(
       /flow chat follow-ups[\s\S]*new flow\s+run, note, or generic entity update/i
     );
@@ -576,7 +709,9 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /schema theme[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile/i
     );
-    expect(psychePlaybook).toMatch(/Hypotheses are not decorative reassurance/i);
+    expect(psychePlaybook).toMatch(
+      /Hypotheses are not decorative reassurance/i
+    );
     expect(psychePlaybook).toMatch(
       /Do not make the user supply every interpretation alone/i
     );
@@ -626,14 +761,18 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /what would make the comparison confusing or unfair if the label stayed as-is/i
     );
-    expect(entityPlaybook).toMatch(
-      /what would make the instrument distinct instead of redundant/i
+    const questionnaireInstrumentSection = getSectionSlice(
+      entityPlaybook,
+      "Questionnaire Instrument"
     );
-    expect(entityPlaybook).toMatch(
-      /what the answers should help the respondent understand or choose/i
+    expect(questionnaireInstrumentSection).toMatch(
+      /near-duplicate before creating it through batch CRUD/i
     );
-    expect(entityPlaybook).toMatch(
-      /item shape, response scale, scoring, or provenance only after the purpose/i
+    expect(questionnaireInstrumentSection).toMatch(
+      /what the respondent should understand afterward/i
+    );
+    expect(questionnaireInstrumentSection).toMatch(
+      /published meaning, scoring behavior, provenance, or historical-run[\s\S]*interpretation/i
     );
     expect(entityPlaybook).toMatch(/## Route posture checkpoint/i);
     expect(entityPlaybook).toMatch(
@@ -711,19 +850,29 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /preference_context[\s\S]*normal stored Preferences CRUD/i
     );
+    const preferenceContextSection = getSectionSlice(
+      entityPlaybook,
+      "Preference Context"
+    );
+    expect(preferenceContextSection).toMatch(
+      /review, create, update, or merge[\s\S]*read the current matching contexts[\s\S]*what no longer fits[\s\S]*why the distinction is no longer useful/i
+    );
+    expect(preferenceContextSection).toMatch(
+      /forge_merge_preferences_contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*exactly one[\s\S]*sourceContextId[\s\S]*targetContextId[\s\S]*Never imitate a merge by deleting/i
+    );
     expect(entityPlaybook).toMatch(
       /preference_item[\s\S]*normal stored Preferences CRUD/i
     );
     expect(entityPlaybook).toMatch(
       /questionnaire_instrument[\s\S]*normal stored CRUD/i
     );
-    expect(entityPlaybook).toMatch(
-      /questionnaire_run[\s\S]*action workflow/i
-    );
+    expect(entityPlaybook).toMatch(/questionnaire_run[\s\S]*action workflow/i);
   });
 
   it("keeps owner and user-scope questions late, purposeful, and multi-user aware", () => {
-    const skill = readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md");
+    const skill = readRepoFile(
+      "plugins/openclaw/skills/forge-openclaw/SKILL.md"
+    );
     const onboardingSource = readRepoFile("apps/api/src/app.ts");
 
     expect(entityPlaybook).toMatch(/## Owner And User-Scope Checkpoint/);
@@ -755,27 +904,59 @@ describe("question flow quality coverage", () => {
 
   it("covers every Psyche entity flow with example-first therapist-like questioning", () => {
     const scenarios = [
-      ["Value", /pull or absence of this value/i, /ordinary behavior would show the value/i],
-      ["Behavior Pattern", /last time this pattern showed up/i, /what the loop protects/i],
-      ["Behavior", /last time this move showed up/i, /what it does for the user in the moment/i],
+      [
+        "Value",
+        /pull or absence of this value/i,
+        /ordinary behavior would show the value/i
+      ],
+      [
+        "Behavior Pattern",
+        /last time this pattern showed up/i,
+        /what the loop protects/i
+      ],
+      [
+        "Behavior",
+        /last time this move showed up/i,
+        /what it does for the user in the moment/i
+      ],
       ["Belief", /what does it start telling you/i, /one explicit sentence/i],
-      ["Mode Profile", /what feels most at risk/i, /protect, prevent, or control/i],
-      ["Mode Guide Session", /what just happened/i, /candidate mode labels only after enough evidence exists/i],
+      [
+        "Mode Profile",
+        /what feels most at risk/i,
+        /protect, prevent, or control/i
+      ],
+      [
+        "Mode Guide Session",
+        /what just happened/i,
+        /candidate mode labels only after enough evidence exists/i
+      ],
       ["Flashcard", /exact urge sentence or situation/i, /one simple message/i],
-      ["Trigger Report", /what happened in that moment/i, /emotionally meaningful episode/i],
-      ["Event Type", /keeps happening/i, /emotionally meaningful kind of moment/i],
+      [
+        "Trigger Report",
+        /what happened in that moment/i,
+        /emotionally meaningful episode/i
+      ],
+      [
+        "Event Type",
+        /keeps happening/i,
+        /emotionally meaningful kind of moment/i
+      ],
       ["Emotion Definition", /not a nearby one/i, /lived signature/i]
     ] as const;
 
     for (const [section, opening, anchor] of scenarios) {
       const sectionSlice = getSectionSlice(psychePlaybook, section);
-      expect(sectionSlice, `${section} should exist`).toContain(`## ${section}`);
-      expect(sectionSlice, `${section} should have its own opening question`).toMatch(
-        opening
+      expect(sectionSlice, `${section} should exist`).toContain(
+        `## ${section}`
       );
-      expect(sectionSlice, `${section} should stay grounded in lived experience`).toMatch(
-        anchor
-      );
+      expect(
+        sectionSlice,
+        `${section} should have its own opening question`
+      ).toMatch(opening);
+      expect(
+        sectionSlice,
+        `${section} should stay grounded in lived experience`
+      ).toMatch(anchor);
     }
   });
 
@@ -815,7 +996,9 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(/evidence in the user's own example/i);
     expect(psychePlaybook).toMatch(/Name the function without blame/i);
     expect(psychePlaybook).toMatch(/Ask for correction/i);
-    expect(psychePlaybook).toMatch(/Does that fit, or is the danger\/need somewhere else/i);
+    expect(psychePlaybook).toMatch(
+      /Does that fit, or is the danger\/need somewhere else/i
+    );
     expect(psychePlaybook).toMatch(/## Hypothesis Without Cross-Examination/i);
     expect(psychePlaybook).toMatch(/reduce the user's burden of formulation/i);
     expect(psychePlaybook).toMatch(
@@ -867,7 +1050,9 @@ describe("question flow quality coverage", () => {
       /accepted formulation is already accurate enough to save[\s\S]*stop deepening/i
     );
     expect(psychePlaybook).toMatch(/## Name, Define, Connect/i);
-    expect(psychePlaybook).toMatch(/Do not make the user prove the experience/i);
+    expect(psychePlaybook).toMatch(
+      /Do not make the user prove the experience/i
+    );
     expect(psychePlaybook).toMatch(
       /Do not widen into adjacent entities until the current one has a working sentence/i
     );
@@ -881,7 +1066,11 @@ describe("question flow quality coverage", () => {
     expect(psychePlaybook).toMatch(
       /clearer[\s\S]*language,[\s\S]*better understanding,[\s\S]*next-step help/i
     );
-    expect(psychePlaybook).toMatch(/If the user says it lands, move toward the write/i);
-    expect(psychePlaybook).toMatch(/name the core meaning in the user's language/i);
+    expect(psychePlaybook).toMatch(
+      /If the user says it lands, move toward the write/i
+    );
+    expect(psychePlaybook).toMatch(
+      /name the core meaning in the user's language/i
+    );
   });
 });

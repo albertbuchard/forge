@@ -53,6 +53,9 @@ submit artifact passwords. Read-model surfaces include `operator_overview`,
 `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`,
 `training_load`, `weight_loss`, and the self-observation calendar; ask what
 practical decision the read should support before adding write-shaped questions.
+Preferences Workspace is also read-model-only. Use it to explain inferred scores from
+judgments, signals, overrides, evidence count, and uncertainty before offering a
+dedicated Preferences action.
 Movement, Life Events, Life Force, and Workbench use dedicated route
 families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
@@ -570,6 +573,11 @@ Surface rule:
    - `preference_catalog`, `preference_catalog_item`, `preference_context`,
      `preference_item`
    - `questionnaire_instrument`, `sleep_session`, `workout_session`
+     Keep context consolidation on its dedicated action: read both exact contexts,
+     then call `forge_merge_preferences_contexts` with one `sourceContextId` and one
+     `targetContextId` after explaining that judgments and signals move, the source is
+     deactivated, and the target is recomputed. Never emulate a merge with batch
+     deletion.
 5. Specialized CRUD entities are `wiki_page` and `calendar_connection`.
    Use wiki pages whenever the user wants durable memory for a book, article, paper,
    source, concept, person, conversation, project reference, recurring explanation,
@@ -578,21 +586,24 @@ Surface rule:
    preferences game and judgment/signal tools, calendar sync/setup flows, work-log
    adjustments, and similar action-heavy operations.
 7. Read-model-only surfaces include operator overview/context, calendar overview,
-   sleep overview, sports overview, training load, weight loss, and the
+   Preferences Workspace, sleep overview, sports overview, training load, weight loss, and the
    self-observation calendar.
    In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`,
-   operator, calendar, self-observation, sleep, sports, training-load, and
+   operator, calendar, Preferences, self-observation, sleep, sports, training-load, and
    weight-loss read models are
    available under camelCase names and entity-style aliases where useful,
    including `operatorOverview`, `operatorContext`, `calendarOverview`,
-   `sleepOverview`, `sportsOverview`, `trainingLoad`, `weightLoss`, `operator_overview`,
+   `sleepOverview`, `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `operator_overview`,
    `operator_context`, `calendar_overview`, `self_observation`,
-   `sleep_overview`, `sports_overview`, `training_load`, and `weight_loss`. Treat those as
+   `sleep_overview`, `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as
    read-only overview surfaces, not batch CRUD entities.
    Use `forge_get_operator_overview` for broad Forge status,
    `forge_get_operator_context` for current work and risk, and
    `forge_get_calendar_overview` before calendar-aware planning or scheduling
    mutations.
+   Use `forge_get_preferences_workspace` before explaining an inferred ranking, and
+   ground it in supporting judgments, signals, overrides, evidence count, and
+   uncertainty before offering a dedicated Preferences action.
 8. Use the task-run tools for truthful live work:
    - `forge_start_task_run`
    - `forge_heartbeat_task_run`
@@ -654,6 +665,9 @@ Surface rule:
 - Preferred mutation path for questionnaires: use batch CRUD for
   `questionnaire_instrument`, and use the run, clone, draft, and publish tools for
   questionnaire workflows.
+  Read first with `forge_list_questionnaires` or `forge_get_questionnaire`; use
+  `forge_clone_questionnaire`, `forge_ensure_questionnaire_draft`, or
+  `forge_publish_questionnaire_draft` only for the matching version action.
 - Self-observation is only for lightweight observed episode notes. When the user
   describes a psychological chain, map situation, cue, emotion/body, thought/meaning,
   behavior/urge, and consequence; use `trigger_report` for one meaningful episode,

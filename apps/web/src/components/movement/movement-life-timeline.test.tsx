@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -48,14 +55,19 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 vi.mock("@/lib/api", () => ({
   getMovementTimeline: (...args: unknown[]) => getMovementTimelineMock(...args),
-  getMovementBoxDetail: (...args: unknown[]) => getMovementBoxDetailMock(...args),
+  getMovementBoxDetail: (...args: unknown[]) =>
+    getMovementBoxDetailMock(...args),
   listMovementPlaces: (...args: unknown[]) => listMovementPlacesMock(...args),
   createMovementPlace: (...args: unknown[]) => createMovementPlaceMock(...args),
   patchMovementStay: (...args: unknown[]) => patchMovementStayMock(...args),
-  createMovementUserBox: (...args: unknown[]) => createMovementUserBoxMock(...args),
-  preflightMovementUserBox: (...args: unknown[]) => preflightMovementUserBoxMock(...args),
-  patchMovementUserBox: (...args: unknown[]) => patchMovementUserBoxMock(...args),
-  deleteMovementUserBox: (...args: unknown[]) => deleteMovementUserBoxMock(...args),
+  createMovementUserBox: (...args: unknown[]) =>
+    createMovementUserBoxMock(...args),
+  preflightMovementUserBox: (...args: unknown[]) =>
+    preflightMovementUserBoxMock(...args),
+  patchMovementUserBox: (...args: unknown[]) =>
+    patchMovementUserBoxMock(...args),
+  deleteMovementUserBox: (...args: unknown[]) =>
+    deleteMovementUserBoxMock(...args),
   invalidateAutomaticMovementBox: (...args: unknown[]) =>
     invalidateAutomaticMovementBoxMock(...args)
 }));
@@ -113,8 +125,8 @@ type SharedMovementFixtureCatalog = {
 
 function loadSharedMovementFixture(id: string) {
   const fixturePath = path.resolve(
-    process.cwd(),
-    "tests/fixtures/movement-canonical-box-fixtures.json"
+    import.meta.dirname,
+    "../../../../../tests/fixtures/movement-canonical-box-fixtures.json"
   );
   const catalog = JSON.parse(
     readFileSync(fixturePath, "utf8")
@@ -135,7 +147,9 @@ function renderTimeline(ui: ReactNode) {
     }
   });
 
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+  );
 }
 
 function selectMovementAction(name: RegExp) {
@@ -341,7 +355,9 @@ describe("MovementLifeTimeline", () => {
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
     selectMovementAction(/View data/i);
-    expect((await screen.findAllByText("Missing data")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Missing data")).length).toBeGreaterThan(
+      0
+    );
     expect((await screen.findAllByText(/Raw trips 1/i)).length).toBeGreaterThan(
       0
     );
@@ -374,9 +390,7 @@ describe("MovementLifeTimeline", () => {
     expect(await screen.findByText("Overlap guidance")).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.getByText(
-          /This box overlaps 1 automatic and 1 manual boxes\./i
-        )
+        screen.getByText(/This box overlaps 1 automatic and 1 manual boxes\./i)
       ).toBeInTheDocument();
     });
     expect(
@@ -437,12 +451,16 @@ describe("MovementLifeTimeline", () => {
 
     expect(await screen.findByText("Movement")).toBeInTheDocument();
     await openFirstTimelineRow();
-    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
     screen.getByRole("button", { name: "Details" }).click();
 
     expect(await screen.findByText(/Home details/i)).toBeInTheDocument();
     expect(await screen.findByText(/Average position:/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
   });
 
   it("keeps selected stay details above overlapping timeline rows so location labels remain clickable", async () => {
@@ -545,11 +563,15 @@ describe("MovementLifeTimeline", () => {
     const stayButton = within(firstRow).getByRole("button");
     fireEvent.click(stayButton);
 
-    const selectedRow = stayButton.closest('[data-testid="movement-timeline-row"]');
+    const selectedRow = stayButton.closest(
+      '[data-testid="movement-timeline-row"]'
+    );
     expect(selectedRow).toHaveAttribute("data-selected", "true");
     expect(selectedRow).toHaveClass("z-40");
 
-    const labelButton = await screen.findByRole("button", { name: /Label location/i });
+    const labelButton = await screen.findByRole("button", {
+      name: /Label location/i
+    });
     expect(labelButton.closest(".z-50")).not.toBeNull();
     fireEvent.click(labelButton);
 
@@ -632,11 +654,15 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     await openFirstTimelineRow();
-    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
 
     expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Lausanne Home/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Lausanne Home/i })
+    ).toBeInTheDocument();
 
     screen.getByRole("button", { name: /Lausanne Home/i }).click();
 
@@ -729,7 +755,9 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     await openFirstTimelineRow();
-    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
     (await screen.findByRole("button", { name: /Distant Office/i })).click();
 
@@ -816,18 +844,26 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     await openFirstTimelineRow();
-    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
     expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
-    const input = await screen.findByPlaceholderText(/Type a location name or create a new one/i);
+    const input = await screen.findByPlaceholderText(
+      /Type a location name or create a new one/i
+    );
     fireEvent.change(input, { target: { value: "workplace" } });
 
     await waitFor(() => {
-      expect(screen.getByText(/No saved place matches this stay yet\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/No saved place matches this stay yet\./i)
+      ).toBeInTheDocument();
     });
 
     fireEvent.change(input, { target: { value: "library" } });
-    expect(await screen.findByRole("button", { name: /City Library/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /City Library/i })
+    ).toBeInTheDocument();
   });
 
   it("opens a seeded new-place form from the stay label dialog", async () => {
@@ -882,7 +918,9 @@ describe("MovementLifeTimeline", () => {
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
     await openFirstTimelineRow();
-    expect(await screen.findByRole("button", { name: /Label location/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Label location/i })
+    ).toBeInTheDocument();
     screen.getByRole("button", { name: /Label location/i }).click();
 
     expect(await screen.findByText(/Label stay location/i)).toBeInTheDocument();
@@ -984,6 +1022,8 @@ describe("MovementLifeTimeline", () => {
 
     renderTimeline(<MovementLifeTimeline userIds={["user_operator"]} />);
 
-    expect(await screen.findByRole("button", { name: /Lausanne Office/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Lausanne Office/i })
+    ).toBeInTheDocument();
   });
 });

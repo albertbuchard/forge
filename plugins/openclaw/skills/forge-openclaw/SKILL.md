@@ -90,6 +90,9 @@ PM surface rule:
 - Guided modal flows handle create, edit, move, link, and closeout actions.
 
 Forge has four major stored-entity surfaces, read-model surfaces, specialized CRUD surfaces, and four specialized domain surfaces. The planning side covers goals, projects, strategies, tasks, habits, notes, calendar events, recurring work blocks, task timeboxes, live work sessions, and agent-authored insights. The Health side covers sleep sessions, sports and workout sessions, the read-only training-load surface for cardiovascular load and HR zone review, the weight-loss and nutrition workflow, companion pairing, and habit-generated workout records that should still stay linked to the broader Forge graph. The Preferences side covers contextual taste modeling, pairwise comparisons, direct signals, editable concept libraries, and preference items that can come from Forge entities or seeded concept domains such as food, activities, places, countries, fashion, people, media, and tools. The Psyche side covers values, patterns, behaviors, beliefs, modes, guided mode sessions, flashcards, trigger reports, event types, reusable emotion definitions, questionnaire instruments, questionnaire runs, and the note-backed self-observation calendar. Read-model surfaces include `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`, `sports_overview`, `training_load`, `weight_loss`, and the self-observation calendar; ask what practical decision the read should support before adding write-shaped questions. The specialized domain surfaces are Movement, Life Events, Life Force, and Workbench; agents must use their dedicated route families for domain actions instead of guessing generic CRUD paths for those actions. Forge also has a SQLite-backed Wiki memory layer with explicit spaces, Markdown content in database rows, backlinks, optional embeddings, and structured links back to Forge entities. The Artifact Store is a specialized CRUD surface for trusted stored files such as spreadsheets, documents, PDFs, text, structured text, and images; artifact relationships use the general `entity_links` model, and agents must not download, decrypt, open, execute, preview, transform stored file bytes, or submit artifact passwords. Forge is also multi-user: every entity can belong to a typed `human` or `bot` user through `userId`, and read routes can scope to one or many users with `userId` or repeated `userIds`. The current access posture is configurable through a directional user graph, but the live default is still permissive: Forge can list users directly, every relationship edge starts open, and a user can read or affect another user's linked records when the route explicitly asks for them. Use `forge_get_user_directory` when owner identity or cross-user access matters. Strategies can also be locked into a contract with `isLocked`; once locked, do not mutate the graph or target structure unless the user explicitly wants the strategy unlocked first. The model should use the real entity names, not vague substitutes. Say `project`, not “initiative”. Say `behavior_pattern`, not “theme”. Say `trigger_report`, not “incident note”.
+Preferences Workspace is a read-model-only explanation surface. Use it to ground an
+inferred ranking in judgments, signals, overrides, evidence count, and uncertainty
+before offering any dedicated Preferences action.
 Habits are a first-class recurring entity in the planning side.
 NEGATIVE HABIT CHECK-IN RULE: for a `negative` habit, the correct aligned/resisted outcome is `missed`. `missed` means the bad habit was resisted, the user stayed aligned, and the habit should award its XP bonus.
 
@@ -367,16 +370,19 @@ Health rule:
   `forge_parse_food_log_with_chatgpt` must use Forge's configured `openai-codex`
   ChatGPT subscription connection, not a metered OpenAI Platform API path.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
-  calendar, self-observation, sleep, sports, training-load, and weight-loss read models are published with
+  calendar, Preferences, self-observation, sleep, sports, training-load, and weight-loss read models are published with
   both camelCase names and entity-style aliases where useful, including
   `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `trainingLoad`, `weightLoss`, `operator_overview`, `operator_context`,
+  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`,
-  `sports_overview`, `training_load`, and `weight_loss`. Treat those as read-only surfaces,
+  `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as read-only surfaces,
   not batch CRUD entities.
 - Use `forge_get_operator_overview` for a broad Forge status read, `forge_get_operator_context`
   for current work and risk, and `forge_get_calendar_overview` before calendar-aware
   planning or scheduling mutations.
+- Use `forge_get_preferences_workspace` before explaining an inferred ranking. Ground
+  the explanation in judgments, signals, overrides, evidence count, and uncertainty;
+  switch to a dedicated Preferences action only after the user chooses a change.
 - Use the shared batch entity tools for ordinary `sleep_session` and `workout_session` create, update, delete, and search work. Do not force agents into a large one-route-per-entity mental model when the batch routes already cover the record cleanly.
 - Use `forge_update_sleep_session` and `forge_update_workout_session` only when the job is reflective enrichment on one existing health record after review, such as attaching notes, tags, mood, meaning, or Forge links.
 - Habit-generated workouts and imported HealthKit workouts belong to the same workout record model, so do not invent a separate storage path for sport sessions.
@@ -1134,6 +1140,7 @@ When the user asks which Forge tools are available, list exactly these tools:
 Additional first-class surfaces:
 
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` all go through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Treat context consolidation as a separate Preferences action. Read both exact contexts first, then call `forge_merge_preferences_contexts` with one `sourceContextId` and one `targetContextId` after explaining that judgments and signals move, the source is deactivated, and the target is recomputed. Never emulate this with batch deletion.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` goes through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` go through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` by default. Keep the dedicated health tools for review surfaces and reflective enrichment on one record.
 - Keep the dedicated Preferences tools only for real preference actions and read models: `forge_get_preferences_workspace`, `forge_start_preferences_game`, `forge_merge_preferences_contexts`, `forge_enqueue_preferences_item_from_entity`, `forge_submit_preferences_judgment`, `forge_submit_preferences_signal`, and `forge_update_preferences_score`.

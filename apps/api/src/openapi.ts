@@ -11025,6 +11025,24 @@ export function buildOpenApiDocument() {
       "/api/v1/preferences/contexts/merge": {
         post: {
           summary: "Merge one Preferences context into another",
+          description:
+            "Moves judgments and signals from one source context into one target context on the same preference profile, clears derived source scores and summaries, deactivates the source, and recomputes the target.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["sourceContextId", "targetContextId"],
+                  properties: {
+                    sourceContextId: { type: "string", minLength: 1 },
+                    targetContextId: { type: "string", minLength: 1 }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

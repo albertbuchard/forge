@@ -1007,7 +1007,7 @@ describe("forge openclaw plugin", () => {
   });
 
   it("avoids deprecated and broad SDK imports in Forge plugin source", () => {
-    const openclawDir = join(process.cwd(), "apps/web/src/openclaw");
+    const openclawDir = import.meta.dirname;
     const sourceFiles = collectTypeScriptFiles(openclawDir);
     expect(sourceFiles.length).toBeGreaterThan(0);
 
@@ -1034,7 +1034,7 @@ describe("forge openclaw plugin", () => {
 
   it("does not bake monorepo-only package metadata paths into the packaged client", () => {
     const apiClientSource = readFileSync(
-      join(process.cwd(), "apps/web/src/openclaw/api-client.ts"),
+      join(import.meta.dirname, "api-client.ts"),
       "utf8"
     );
 

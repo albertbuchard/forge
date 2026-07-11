@@ -1728,10 +1728,11 @@ export function registerForgePluginTools(
   registerWriteTool(api, config, {
     name: "forge_merge_preferences_contexts",
     label: "Forge Merge Preferences Contexts",
-    description: "Merge one or more preference contexts into a target context.",
+    description:
+      "Merge one source preference context into one target context after reviewing both contexts and confirming that their distinction is no longer useful.",
     parameters: Type.Object({
-      targetContextId: Type.String({ minLength: 1 }),
-      sourceContextIds: Type.Array(Type.String({ minLength: 1 }))
+      sourceContextId: Type.String({ minLength: 1 }),
+      targetContextId: Type.String({ minLength: 1 })
     }),
     method: "POST",
     path: "/api/v1/preferences/contexts/merge"

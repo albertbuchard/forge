@@ -51,7 +51,9 @@ file bytes, or submit artifact passwords. Read-model surfaces include
 `operator_overview`, `operator_context`, `calendar_overview`, `sleep_overview`,
 `sports_overview`, `training_load`, `weight_loss`, and the self-observation
 calendar; ask what practical decision the read should support before adding
-write-shaped questions. The specialized domain surfaces are Movement, Life Events,
+write-shaped questions. Preferences Workspace is also read-model-only: explain
+inferred scores from judgments, signals, overrides, evidence count, and uncertainty
+before offering a dedicated Preferences action. The specialized domain surfaces are Movement, Life Events,
 Life Force, and Workbench; Hermes must use their dedicated route families instead of
 forcing them through batch CRUD. Forge is also multi-user: every entity can belong to a
 typed `human` or `bot` user through `userId`, and Hermes can scope reads with `userId`
@@ -552,18 +554,21 @@ For wiki-specific recall:
 - Batch CRUD entities: `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - Specialized CRUD entities: `wiki_page` and `calendar_connection`.
 - Action/workflow entities: `task_run`, `questionnaire_run`, preference game/judgment/signal flows, calendar connection sync/setup, self-observation review, work adjustments, and import/sync jobs.
-- Read-model-only surfaces: operator overview/context, calendar overview, sleep overview, sports overview, training load, weight loss, and the self-observation calendar.
+- Read-model-only surfaces: operator overview/context, calendar overview, Preferences Workspace, sleep overview, sports overview, training load, weight loss, and the self-observation calendar.
 - In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`, operator,
-  calendar, self-observation, sleep, and sports read models are available under
+  calendar, Preferences, self-observation, sleep, and sports read models are available under
   camelCase names and entity-style aliases where useful, including
   `operatorOverview`, `operatorContext`, `calendarOverview`, `sleepOverview`,
-  `sportsOverview`, `trainingLoad`, `weightLoss`, `operator_overview`, `operator_context`,
+  `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `operator_overview`, `operator_context`,
   `calendar_overview`, `self_observation`, `sleep_overview`, and
-  `sports_overview`, `training_load`, and `weight_loss`. Treat those as
+  `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as
   read-only overview surfaces, not batch CRUD entities.
 - Use `forge_get_operator_overview` for broad Forge status, `forge_get_operator_context`
   for current work and risk, and `forge_get_calendar_overview` before calendar-aware
   planning or scheduling mutations.
+- Use `forge_get_preferences_workspace` before explaining an inferred ranking. Ground
+  the explanation in judgments, signals, overrides, evidence count, and uncertainty;
+  switch to a dedicated Preferences action only after the user chooses a change.
 - `task_run` is not a batch entity. Use the live task-run tools instead.
 - `forge_post_insight` is still the preferred write for agent-authored recommendations, even though `insight` also exists in the simple-entity catalog.
 - Sleep and workout sessions are batch entities for normal CRUD. Use the dedicated health tools only for read models and reflective enrichment on one existing record.
@@ -571,7 +576,13 @@ For wiki-specific recall:
 - Habit outcome writes in the shared agent model should go through `forge_update_entities` on `entityType: "habit"` with `patch.checkIn`, not direct raw calls to `/api/v1/habits/:id/check-ins`.
 - `patch.checkIn` accepts `status` plus optional `dateKey`, `note`, and `description`; if `description` is provided, it replaces the habit's stored `description` in the same write.
 - Use the high-level batch routes for basic Preferences CRUD. `preference_catalog`, `preference_catalog_item`, `preference_context`, and `preference_item` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- Treat context consolidation as a separate Preferences action. Read both exact contexts first, then call `forge_merge_preferences_contexts` with one `sourceContextId` and one `targetContextId` after explaining that judgments and signals move, the source is deactivated, and the target is recomputed. Never emulate this with batch deletion.
 - Use the high-level batch routes for basic questionnaire CRUD too. `questionnaire_instrument` should normally flow through `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`.
+- For questionnaire lifecycle, read first with `forge_list_questionnaires` or
+  `forge_get_questionnaire`; use `forge_clone_questionnaire`,
+  `forge_ensure_questionnaire_draft`, or `forge_publish_questionnaire_draft`
+  only for the matching clone, draft, or publish action. Do not represent version
+  transitions as batch updates.
 - Use the high-level batch routes for ordinary health-session CRUD too. `sleep_session` and `workout_session` should normally flow through `forge_search_entities`, `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities`. Keep `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, and `forge_get_weight_loss_overview` for read models; use the dedicated nutrition tools for food/body/gut/appearance/subjective evidence; and keep `forge_update_sleep_session` and `forge_update_workout_session` for reflective enrichment on one already-existing record.
 - Use the dedicated API families for Movement, Life Events, Life Force, and Workbench. Those routes are published in `forge_get_agent_onboarding.entityRouteModel.specializedDomainSurfaces` and are the preferred contract for movement stays, trips, time-in-place and travel-behavior queries, Life Events chronology/calendar/ticket/status, life-force state, and workbench execution/result work. Prefer `forge_call_movement_route`, `forge_call_life_event_route`, `forge_call_life_force_route`, or `forge_call_workbench_route` when those route-key tools are present.
 - Life Events use both paths deliberately: shared batch CRUD for normal `life_event` create, update, search, soft delete, restore, and generic `entity_links`; dedicated `/api/v1/life-events/*` routes for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads.

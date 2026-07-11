@@ -6,7 +6,12 @@ import {
   calendarOverviewQuerySchema,
   createCalendarConnectionSchema
 } from "../../../../apps/api/src/types";
-import { buildServer } from "../../../../apps/api/src/app";
+import {
+  AGENT_ONBOARDING_TOOL_INPUT_CATALOG,
+  buildServer
+} from "../../../../apps/api/src/app";
+import { buildOpenApiDocument } from "../../../../apps/api/src/openapi";
+import { mergePreferenceContextsSchema } from "../../../../apps/api/src/preferences-types";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity";
 import { collectMirroredApiRouteKeys } from "./routes";
 import { registerForgePluginTools } from "./tools";
@@ -283,6 +288,87 @@ describe("openclaw tool contracts", () => {
 
     expect(providerValues).toEqual(backendProviderValues);
     expect(required).toEqual(["label", "provider", "selectedCalendarUrls"]);
+  });
+
+  it("keeps the preference-context merge body aligned across server, OpenAPI, and plugins", () => {
+    const tools = collectRegisteredTools();
+    const mergeContexts = requireTool(
+      tools,
+      "forge_merge_preferences_contexts"
+    );
+    const expectedFields = Object.keys(
+      mergePreferenceContextsSchema.shape
+    ).sort();
+    const toolFields = Object.keys(
+      (mergeContexts.parameters?.properties as Record<string, unknown>) ?? {}
+    ).sort();
+    const toolRequired = Array.isArray(mergeContexts.parameters?.required)
+      ? [...mergeContexts.parameters.required].sort()
+      : [];
+
+    const openApi = buildOpenApiDocument() as {
+      paths: Record<
+        string,
+        {
+          post?: {
+            requestBody?: {
+              content?: Record<
+                string,
+                {
+                  schema?: {
+                    properties?: Record<string, unknown>;
+                    required?: string[];
+                  };
+                }
+              >;
+            };
+          };
+        }
+      >;
+    };
+    const openApiSchema =
+      openApi.paths["/api/v1/preferences/contexts/merge"]?.post?.requestBody
+        ?.content?.["application/json"]?.schema;
+    const openApiFields = Object.keys(openApiSchema?.properties ?? {}).sort();
+
+    expect(toolFields).toEqual(expectedFields);
+    expect(toolRequired).toEqual(expectedFields);
+    expect(openApiFields).toEqual(expectedFields);
+    expect([...(openApiSchema?.required ?? [])].sort()).toEqual(expectedFields);
+    expect(mergeContexts.description).toMatch(/one source[\s\S]*one target/i);
+
+    const toolInputGuide = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+      (entry) => entry.toolName === "forge_merge_preferences_contexts"
+    );
+    expect(toolInputGuide?.inputShape).toBe(
+      "{ sourceContextId: string, targetContextId: string }"
+    );
+    expect(toolInputGuide?.requiredFields).toEqual([
+      "sourceContextId",
+      "targetContextId"
+    ]);
+    expect(toolInputGuide?.notes.join(" ")).toMatch(
+      /judgments and signals[\s\S]*deactivates the source[\s\S]*recomputes the target/i
+    );
+
+    const hermesCatalog = readFileSync(
+      path.join(repoRoot, "plugins/hermes/forge_hermes/catalog.py"),
+      "utf8"
+    );
+    const hermesMergeStart = hermesCatalog.indexOf(
+      '"name": "forge_merge_preferences_contexts"'
+    );
+    const hermesMergeEnd = hermesCatalog.indexOf(
+      '"name": "forge_enqueue_preferences_item_from_entity"',
+      hermesMergeStart
+    );
+    const hermesMergeBlock = hermesCatalog.slice(
+      hermesMergeStart,
+      hermesMergeEnd
+    );
+    expect(hermesMergeBlock).toMatch(/sourceContextId/);
+    expect(hermesMergeBlock).toMatch(/targetContextId/);
+    expect(hermesMergeBlock).not.toMatch(/sourceContextIds/);
   });
 
   it("publishes the Psyche schema catalog as a read-only reference tool", () => {

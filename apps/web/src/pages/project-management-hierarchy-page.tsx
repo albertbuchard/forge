@@ -12,7 +12,11 @@ import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/page-state";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState
+} from "@/components/ui/page-state";
 import { UserBadge } from "@/components/ui/user-badge";
 import { EntityBadge } from "@/components/ui/entity-badge";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -48,7 +52,11 @@ type HierarchyNode = {
   goalId: string | null;
   projectId: string | null;
   tagIds: string[];
-  user: WorkItem["user"] | ProjectSummary["user"] | Goal["user"] | Strategy["user"];
+  user:
+    | WorkItem["user"]
+    | ProjectSummary["user"]
+    | Goal["user"]
+    | Strategy["user"];
   assignees: UserSummary[];
   linkedUserIds: string[];
   progressPercent: number | null;
@@ -210,11 +218,13 @@ function decorateProgress(node: HierarchyNode): HierarchyNode {
     ...node,
     children,
     progressPercent,
-    progressLabel: node.statusLabel ? node.statusLabel.replaceAll("_", " ") : null
+    progressLabel: node.statusLabel
+      ? node.statusLabel.replaceAll("_", " ")
+      : null
   };
 }
 
-function buildHierarchyTree(options: {
+export function buildHierarchyTree(options: {
   goals: Goal[];
   strategies: Strategy[];
   projects: ProjectSummary[];
@@ -242,53 +252,81 @@ function buildHierarchyTree(options: {
     }
   }
 
-  const mapWorkItem = (item: WorkItem): HierarchyNode =>
-    decorateProgress({
-      id: `${item.level}:${item.id}`,
-      entityId: item.id,
-      kind: item.level,
-      label: item.title,
-      description: compactDescription(
-        item.description,
-        item.level === "issue"
-          ? "Vertical slice issue"
-          : item.level === "subtask"
-            ? "Granular child step"
-          : "Focused AI session task"
-      ),
-      searchText: normalize(
-        [
-          item.title,
-          item.description,
-          item.aiInstructions,
-          item.executionMode ?? "",
-          item.status,
-          item.user?.displayName ?? "",
-          ...(item.assignees ?? []).map((user) => user.displayName),
-          ...item.tagIds.map((tagId) => tagNameById.get(tagId) ?? "")
-        ].join(" ")
-      ),
-      href: `/tasks/${item.id}`,
-      statusLabel: item.status,
-      executionMode: item.executionMode,
-      goalId: item.goalId,
-      projectId: item.projectId,
-      tagIds: item.tagIds,
-      user: item.user,
-      assignees: item.assignees ?? [],
-      linkedUserIds: [
-        ...(item.user ? [item.user.id] : []),
-        ...(item.assigneeUserIds ?? [])
-      ],
-      progressPercent: null,
-      progressLabel: null,
-      children: (workItemsByParentId.get(item.id) ?? []).map(mapWorkItem)
-    });
-
   const buildProjectNode = (project: ProjectSummary): HierarchyNode => {
     const lowerStrategies = strategies.filter((strategy) =>
       strategy.targetProjectIds.includes(project.id)
     );
+    const renderedWorkItemIds = new Set<string>();
+    const mapProjectWorkItem = (
+      item: WorkItem,
+      ancestry: Set<string> = new Set()
+    ): HierarchyNode | null => {
+      if (ancestry.has(item.id) || renderedWorkItemIds.has(item.id)) {
+        return null;
+      }
+      renderedWorkItemIds.add(item.id);
+      const nextAncestry = new Set(ancestry);
+      nextAncestry.add(item.id);
+      const children = (workItemsByParentId.get(item.id) ?? [])
+        .filter((child) => child.projectId === project.id)
+        .map((child) => mapProjectWorkItem(child, nextAncestry))
+        .filter((child): child is HierarchyNode => child !== null);
+
+      return decorateProgress({
+        id: `${item.level}:${item.id}`,
+        entityId: item.id,
+        kind: item.level,
+        label: item.title,
+        description: compactDescription(
+          item.description,
+          item.level === "issue"
+            ? "Vertical slice issue"
+            : item.level === "subtask"
+              ? "Granular child step"
+              : "Focused AI session task"
+        ),
+        searchText: normalize(
+          [
+            item.title,
+            item.description,
+            item.aiInstructions,
+            item.executionMode ?? "",
+            item.status,
+            item.user?.displayName ?? "",
+            ...(item.assignees ?? []).map((user) => user.displayName),
+            ...item.tagIds.map((tagId) => tagNameById.get(tagId) ?? "")
+          ].join(" ")
+        ),
+        href: `/tasks/${item.id}`,
+        statusLabel: item.status,
+        executionMode: item.executionMode,
+        goalId: item.goalId,
+        projectId: item.projectId,
+        tagIds: item.tagIds,
+        user: item.user,
+        assignees: item.assignees ?? [],
+        linkedUserIds: [
+          ...(item.user ? [item.user.id] : []),
+          ...(item.assigneeUserIds ?? [])
+        ],
+        progressPercent: null,
+        progressLabel: null,
+        children
+      });
+    };
+    const primaryWorkItemNodes = [
+      ...(issuesByProjectId.get(project.id) ?? []),
+      ...(rootWorkItemsByProjectId.get(project.id) ?? [])
+    ]
+      .map((item) => mapProjectWorkItem(item))
+      .filter((node): node is HierarchyNode => node !== null);
+    const fallbackWorkItemNodes = workItems
+      .filter(
+        (item) =>
+          item.projectId === project.id && !renderedWorkItemIds.has(item.id)
+      )
+      .map((item) => mapProjectWorkItem(item))
+      .filter((node): node is HierarchyNode => node !== null);
 
     return decorateProgress({
       id: `project:${project.id}`,
@@ -359,14 +397,16 @@ function buildHierarchyTree(options: {
             children: []
           })
         ),
-        ...(issuesByProjectId.get(project.id) ?? []).map(mapWorkItem),
-        ...(rootWorkItemsByProjectId.get(project.id) ?? []).map(mapWorkItem)
+        ...primaryWorkItemNodes,
+        ...fallbackWorkItemNodes
       ]
     });
   };
 
   return goals.map((goal) => {
-    const goalProjects = projects.filter((project) => project.goalId === goal.id);
+    const goalProjects = projects.filter(
+      (project) => project.goalId === goal.id
+    );
     const goalStrategies = strategies.filter((strategy) =>
       strategy.targetGoalIds.includes(goal.id)
     );
@@ -433,9 +473,12 @@ function buildHierarchyTree(options: {
       label: goal.title,
       description: compactDescription(goal.description, "Strategic goal"),
       searchText: normalize(
-        [goal.title, goal.description, goal.status, goal.user?.displayName ?? ""].join(
-          " "
-        )
+        [
+          goal.title,
+          goal.description,
+          goal.status,
+          goal.user?.displayName ?? ""
+        ].join(" ")
       ),
       href: `/goals/${goal.id}`,
       statusLabel: goal.status,
@@ -460,10 +503,7 @@ function countVisibleNodes(nodes: HierarchyNode[]): number {
   );
 }
 
-function clauseMatchesNode(
-  node: HierarchyNode,
-  clause: HierarchySearchClause
-) {
+function clauseMatchesNode(node: HierarchyNode, clause: HierarchySearchClause) {
   return (
     node.searchText.includes(normalize(clause.query)) &&
     (clause.kind === "any" || clause.kind === node.kind)
@@ -481,22 +521,17 @@ function filterTree(
   },
   inheritedClauseMatch = false
 ): HierarchyNode | null {
-  const {
-    clauses,
-    statusFilters,
-    ownerUserIds,
-    ownerKinds,
-    selectedUserIds
-  } = options;
+  const { clauses, statusFilters, ownerUserIds, ownerKinds, selectedUserIds } =
+    options;
   const selfClauseMatch =
-    clauses.length === 0 || clauses.some((clause) => clauseMatchesNode(node, clause));
+    clauses.length === 0 ||
+    clauses.some((clause) => clauseMatchesNode(node, clause));
   const statusMatch =
     statusFilters.length === 0 ||
     (node.statusLabel !== null &&
       statusFilters.includes(node.statusLabel as HierarchyStateFilter));
   const explicitUserMatch =
-    ownerUserIds.length === 0 &&
-    selectedUserIds.length === 0
+    ownerUserIds.length === 0 && selectedUserIds.length === 0
       ? true
       : [...ownerUserIds, ...selectedUserIds].some((userId) =>
           node.linkedUserIds.includes(userId)
@@ -630,8 +665,7 @@ function HierarchySearchBar({
   const suggestions = useMemo(
     () =>
       createSearchSuggestions(query).filter(
-        (suggestion) =>
-          !clauses.some((clause) => clause.id === suggestion.id)
+        (suggestion) => !clauses.some((clause) => clause.id === suggestion.id)
       ),
     [clauses, query]
   );
@@ -657,13 +691,9 @@ function HierarchySearchBar({
             </div>
             <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
               Build OR clauses like{" "}
-              <span className="text-[var(--ui-ink-strong)]">
-                Goal + "MD"
-              </span>{" "}
+              <span className="text-[var(--ui-ink-strong)]">Goal + "MD"</span>{" "}
               or{" "}
-              <span className="text-[var(--ui-ink-strong)]">
-                Any + "Happy"
-              </span>
+              <span className="text-[var(--ui-ink-strong)]">Any + "Happy"</span>
               . Matching ancestors keep their branches visible so you can
               explore the hierarchy, not lose it.
             </div>
@@ -724,7 +754,11 @@ function HierarchySearchBar({
                   window.setTimeout(() => setOpen(false), 120);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Backspace" && !query && clauses.length > 0) {
+                  if (
+                    event.key === "Backspace" &&
+                    !query &&
+                    clauses.length > 0
+                  ) {
                     removeClause(clauses[clauses.length - 1]!.id);
                     return;
                   }
@@ -786,7 +820,11 @@ function HierarchySearchBar({
                           </span>
                         </div>
                         <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
-                          Match {suggestion.kind === "any" ? "any visible hierarchy node" : `${suggestion.kind} nodes`} that mention this text.
+                          Match{" "}
+                          {suggestion.kind === "any"
+                            ? "any visible hierarchy node"
+                            : `${suggestion.kind} nodes`}{" "}
+                          that mention this text.
                         </div>
                       </div>
                     </button>
@@ -822,8 +860,9 @@ export function ProjectManagementHierarchyPage() {
   const [selectedStatusFilters, setSelectedStatusFilters] = useState<
     HierarchyStateFilter[]
   >([...DEFAULT_STATUS_FILTERS]);
-  const [visibleLevels, setVisibleLevels] =
-    useState<HierarchyKind[]>(DEFAULT_VISIBLE_LEVELS);
+  const [visibleLevels, setVisibleLevels] = useState<HierarchyKind[]>(
+    DEFAULT_VISIBLE_LEVELS
+  );
 
   const hierarchyQuery = useQuery({
     queryKey: ["work-items-hierarchy", ...shell.selectedUserIds],
@@ -941,65 +980,67 @@ export function ProjectManagementHierarchyPage() {
   );
 
   const statusFilterOptions = useMemo<EntityLinkOption[]>(
-    () => [
-      {
-        value: "active",
-        label: "Active",
-        searchText: "active in progress live"
-      },
-      {
-        value: "paused",
-        label: "Paused",
-        searchText: "paused suspended"
-      },
-      {
-        value: "completed",
-        label: "Completed",
-        searchText: "completed finished"
-      },
-      {
-        value: "backlog",
-        label: "Backlog",
-        searchText: "backlog queued"
-      },
-      {
-        value: "focus",
-        label: "Focus",
-        searchText: "focus ready"
-      },
-      {
-        value: "in_progress",
-        label: "In progress",
-        searchText: "in progress active doing"
-      },
-      {
-        value: "blocked",
-        label: "Blocked",
-        searchText: "blocked stuck"
-      },
-      {
-        value: "done",
-        label: "Done",
-        searchText: "done complete finished"
-      }
-    ].map((option) => ({
-      ...option,
-      badge: (
-        <Badge className={statusBadgeClass(option.value)}>
-          {option.label}
-        </Badge>
-      ),
-      menuBadge: (
-        <Badge className={statusBadgeClass(option.value)}>
-          {option.label}
-        </Badge>
-      )
-    })),
+    () =>
+      [
+        {
+          value: "active",
+          label: "Active",
+          searchText: "active in progress live"
+        },
+        {
+          value: "paused",
+          label: "Paused",
+          searchText: "paused suspended"
+        },
+        {
+          value: "completed",
+          label: "Completed",
+          searchText: "completed finished"
+        },
+        {
+          value: "backlog",
+          label: "Backlog",
+          searchText: "backlog queued"
+        },
+        {
+          value: "focus",
+          label: "Focus",
+          searchText: "focus ready"
+        },
+        {
+          value: "in_progress",
+          label: "In progress",
+          searchText: "in progress active doing"
+        },
+        {
+          value: "blocked",
+          label: "Blocked",
+          searchText: "blocked stuck"
+        },
+        {
+          value: "done",
+          label: "Done",
+          searchText: "done complete finished"
+        }
+      ].map((option) => ({
+        ...option,
+        badge: (
+          <Badge className={statusBadgeClass(option.value)}>
+            {option.label}
+          </Badge>
+        ),
+        menuBadge: (
+          <Badge className={statusBadgeClass(option.value)}>
+            {option.label}
+          </Badge>
+        )
+      })),
     []
   );
 
   const tagNameById = useMemo(
-    () => new Map(shell.snapshot.tags.map((tag) => [tag.id, tag.name] as const)),
+    () =>
+      new Map(shell.snapshot.tags.map((tag) => [tag.id, tag.name] as const)),
     [shell.snapshot.tags]
   );
 
@@ -1068,7 +1109,9 @@ export function ProjectManagementHierarchyPage() {
   );
 
   const resultSummary = `${
-    searchClauses.length > 0 ? `${searchClauses.length} OR clause${searchClauses.length === 1 ? "" : "s"} active` : "Search across the full hierarchy"
+    searchClauses.length > 0
+      ? `${searchClauses.length} OR clause${searchClauses.length === 1 ? "" : "s"} active`
+      : "Search across the full hierarchy"
   } · ${visibleNodeCount} visible node${visibleNodeCount === 1 ? "" : "s"}.`;
 
   if (hierarchyQuery.isLoading && hierarchy.length === 0) {
@@ -1168,9 +1211,7 @@ export function ProjectManagementHierarchyPage() {
             <EntityLinkMultiSelect
               options={levelFilterOptions}
               selectedValues={visibleLevels}
-              onChange={(values) =>
-                setVisibleLevels(values as HierarchyKind[])
-              }
+              onChange={(values) => setVisibleLevels(values as HierarchyKind[])}
               placeholder="Visible levels"
               emptyMessage="No hierarchy levels."
               className="min-w-0"
@@ -1247,7 +1288,12 @@ export function ProjectManagementHierarchyPage() {
                 const visualKind =
                   node.data.kind === "subtask"
                     ? "task"
-                    : (node.data.kind as "goal" | "strategy" | "project" | "issue" | "task");
+                    : (node.data.kind as
+                        | "goal"
+                        | "strategy"
+                        | "project"
+                        | "issue"
+                        | "task");
                 const visual = getEntityVisual(visualKind);
                 const accent = visual.colorToken.rgb.join(", ");
 
@@ -1290,12 +1336,16 @@ export function ProjectManagementHierarchyPage() {
                             visual.subtleBadgeClassName
                           )}
                         >
-                          <visual.icon className={cn("size-4", visual.iconClassName)} />
+                          <visual.icon
+                            className={cn("size-4", visual.iconClassName)}
+                          />
                         </span>
 
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge className={hierarchyBadgeClass(node.data.kind)}>
+                            <Badge
+                              className={hierarchyBadgeClass(node.data.kind)}
+                            >
                               {node.data.kind}
                             </Badge>
                             {node.data.executionMode ? (
@@ -1320,7 +1370,9 @@ export function ProjectManagementHierarchyPage() {
                       </div>
 
                       <div className="hidden lg:flex justify-end">
-                        <Badge className={statusBadgeClass(node.data.statusLabel)}>
+                        <Badge
+                          className={statusBadgeClass(node.data.statusLabel)}
+                        >
                           {node.data.statusLabel
                             ? node.data.statusLabel.replaceAll("_", " ")
                             : "linked"}
@@ -1328,7 +1380,9 @@ export function ProjectManagementHierarchyPage() {
                       </div>
 
                       <div className="hidden xl:flex items-center justify-end gap-2">
-                        {node.data.user ? <UserBadge user={node.data.user} compact /> : null}
+                        {node.data.user ? (
+                          <UserBadge user={node.data.user} compact />
+                        ) : null}
                         {node.data.assignees.length > 0 ? (
                           <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                             +{node.data.assignees.length}

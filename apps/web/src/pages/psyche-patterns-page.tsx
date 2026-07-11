@@ -83,6 +83,43 @@ const DEFAULT_PATTERN_INPUT: BehaviorPatternInput = {
   userId: null
 };
 
+export function resolvePatternContinueBlocker(
+  stepId: string,
+  value: BehaviorPatternInput,
+  allowSparseOptionalFields = false
+) {
+  if (stepId === "context") {
+    if (!value.title.trim()) {
+      return "Give this loop a short, recognizable name before continuing.";
+    }
+    if (
+      !allowSparseOptionalFields &&
+      !value.cueContexts.some((cue) => cue.trim().length > 0)
+    ) {
+      return "Add at least one specific situation or cue. Describe what was happening, not what it says about you.";
+    }
+  }
+
+  if (stepId === "response" && !value.targetBehavior.trim()) {
+    return "Describe one visible response: what you did, said, avoided, or checked. Use observable actions rather than a label or judgment.";
+  }
+
+  if (stepId === "impact") {
+    if (!allowSparseOptionalFields && !value.shortTermPayoff.trim()) {
+      return "Name the immediate relief or protection this response provided. Acknowledging its function is not the same as approving it.";
+    }
+    if (!allowSparseOptionalFields && !value.longTermCost.trim()) {
+      return "Name one later cost without dismissing it or blaming yourself.";
+    }
+  }
+
+  if (stepId === "alternative" && !value.preferredResponse.trim()) {
+    return "Choose one concrete response you could practice the next time this cue appears.";
+  }
+
+  return null;
+}
+
 function patternToInput(pattern: BehaviorPattern): BehaviorPatternInput {
   return {
     title: pattern.title,
@@ -437,11 +474,11 @@ export function PsychePatternsPage() {
 
   const steps: Array<QuestionFlowStep<BehaviorPatternInput>> = [
     {
-      id: "loop",
-      eyebrow: "Loop",
-      title: "Name the pattern and the behavior it keeps producing",
+      id: "context",
+      eyebrow: "Situation",
+      title: "Start with the moment that sets the loop in motion",
       description:
-        "This should feel like a recognizable loop, not a diagnostic label.",
+        "Use a concrete situation or cue, without turning it into a judgment about yourself.",
       render: (value, setValue) => (
         <>
           {sourceObservationNoteId ? (
@@ -461,17 +498,6 @@ export function PsychePatternsPage() {
               </div>
             </div>
           ) : null}
-          <UserSelectField
-            value={value.userId ?? null}
-            users={shell.snapshot.users}
-            onChange={(userId) => setValue({ userId })}
-            defaultLabel={formatOwnerSelectDefaultLabel(
-              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                null,
-              "Choose pattern owner"
-            )}
-            help="Patterns can belong to a human or bot user even when linked values, modes, or beliefs cross owners."
-          />
           <FlowField
             label="Pattern name"
             description="Give the loop a name you will recognize quickly later."
@@ -483,20 +509,61 @@ export function PsychePatternsPage() {
             />
           </FlowField>
           <FlowField
-            label="What happens in the loop"
-            description="Describe the actual sequence of behavior, not the diagnosis."
+            label="Situation or cue"
+            description="Add one concrete context per line: where you were, who was present, or what happened just before the response."
+          >
+            <Textarea
+              value={value.cueContexts.join("\n")}
+              onChange={(event) =>
+                setValue({
+                  cueContexts: event.target.value
+                    .split("\n")
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                })
+              }
+              placeholder={
+                "One line per cue\nSilence after sharing something vulnerable\nReading critical feedback late at night"
+              }
+            />
+          </FlowField>
+        </>
+      )
+    },
+    {
+      id: "response",
+      eyebrow: "Response",
+      title: "Describe what you can see yourself doing",
+      description:
+        "Record the action, words, checking, or avoidance. Observable detail is more useful than a character label.",
+      render: (value, setValue) => (
+        <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose pattern owner"
+            )}
+            help="Choose an owner only when it changes whose reflective record this is. Links may still cross owners."
+          />
+          <FlowField
+            label="Visible response"
+            description="Describe what a camera or another person could notice, without blame or diagnosis."
           >
             <Textarea
               value={value.targetBehavior}
               onChange={(event) =>
                 setValue({ targetBehavior: event.target.value })
               }
-              placeholder="What do you actually do when the trigger hits?"
+              placeholder="I reread the message, ask twice if everything is okay, then stop my own work while I wait."
             />
           </FlowField>
           <FlowField
-            label="Description"
-            description="Write the loop in plain language so it stays usable in the future."
+            label="Sequence notes"
+            description="Optionally add details that help you recognize how the response unfolds."
           >
             <Textarea
               value={value.description}
@@ -510,35 +577,17 @@ export function PsychePatternsPage() {
       )
     },
     {
-      id: "dynamics",
-      eyebrow: "Dynamics",
-      title: "Capture cues, payoff, cost, and the desired response",
-      description: "The goal is to make the action map obvious at a glance.",
+      id: "impact",
+      eyebrow: "Function and impact",
+      title: "Name what the response gives now and costs later",
+      description:
+        "Repeated responses usually protect or relieve something in the moment. Naming that function does not erase the later cost.",
       render: (value, setValue) => (
         <>
-          <FlowField
-            label="Common cues"
-            description="Add one cue per line so the trigger pattern stays easy to scan."
-          >
-            <Textarea
-              value={value.cueContexts.join("\n")}
-              onChange={(event) =>
-                setValue({
-                  cueContexts: event.target.value
-                    .split("\n")
-                    .map((entry) => entry.trim())
-                    .filter(Boolean)
-                })
-              }
-              placeholder={
-                "One line per cue\nSilence after vulnerability\nLate-night social comparison"
-              }
-            />
-          </FlowField>
           <div className="grid gap-4 md:grid-cols-2">
             <FlowField
               label="Short-term payoff"
-              description="What relief, certainty, control, or distance do you get right away?"
+              description="What relief, certainty, control, safety, or distance does the response provide right away?"
             >
               <Textarea
                 value={value.shortTermPayoff}
@@ -550,7 +599,7 @@ export function PsychePatternsPage() {
             </FlowField>
             <FlowField
               label="Long-term cost"
-              description="What does the loop cost you later in closeness, energy, values, or progress?"
+              description="What is harder later in closeness, energy, values, trust, or progress? Name the impact without self-blame."
             >
               <Textarea
                 value={value.longTermCost}
@@ -561,16 +610,27 @@ export function PsychePatternsPage() {
               />
             </FlowField>
           </div>
+        </>
+      )
+    },
+    {
+      id: "alternative",
+      eyebrow: "Alternative",
+      title: "Choose a response you would rather practice",
+      description:
+        "Make it small and observable enough to try when the same cue appears again.",
+      render: (value, setValue) => (
+        <>
           <FlowField
             label="Preferred response"
-            description="Name the return-path response you want to practice instead."
+            description="Name what you will do or say instead, while still respecting the need the old response was trying to meet."
           >
             <Textarea
               value={value.preferredResponse}
               onChange={(event) =>
                 setValue({ preferredResponse: event.target.value })
               }
-              placeholder="What do you want to practice instead?"
+              placeholder="Pause for ten minutes, write down what I know, then ask one direct question if I still need clarity."
             />
           </FlowField>
         </>
@@ -955,6 +1015,9 @@ export function PsychePatternsPage() {
             : `psyche.pattern.new.${sourceObservationNoteId ?? "blank"}`
         }
         steps={steps}
+        resolveContinueBlocker={(stepId, value) =>
+          resolvePatternContinueBlocker(stepId, value, Boolean(editingPattern))
+        }
         submitLabel={editingPattern ? "Save pattern" : "Create pattern"}
         pending={saveMutation.isPending}
         error={submitError}
@@ -963,7 +1026,7 @@ export function PsychePatternsPage() {
           const parsed = behaviorPatternSchema.safeParse(draft);
           if (!parsed.success) {
             setSubmitError(
-              "This pattern still needs a title, a loop description, and a preferred response."
+              "This pattern still needs a name, visible response, and preferred response."
             );
             return;
           }

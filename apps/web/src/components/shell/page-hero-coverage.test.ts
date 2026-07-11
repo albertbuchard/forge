@@ -19,13 +19,13 @@ function pageHeroUsageCount(source: string) {
 
 describe("PageHero clarity coverage", () => {
   it("keeps routed page heroes description-backed so every main view has an explanation affordance", () => {
-    const files = collectTsxFiles(join(process.cwd(), "apps/web/src/pages"));
+    const files = collectTsxFiles(join(import.meta.dirname, "../../pages"));
     const totalUsages = files.reduce(
       (count, file) => count + pageHeroUsageCount(readFileSync(file, "utf8")),
       0
     );
     const pageHeroSource = readFileSync(
-      join(process.cwd(), "apps/web/src/components/shell/page-hero.tsx"),
+      join(import.meta.dirname, "page-hero.tsx"),
       "utf8"
     );
 

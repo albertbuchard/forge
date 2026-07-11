@@ -2201,9 +2201,9 @@ export function PreferencesPage() {
         }
         onJudge={(outcome, strength) => {
           setGameError(null);
-          void handleGameJudgment(outcome, strength).catch((error) =>
-            setGameError(describeApiError(error).description)
-          );
+          return handleGameJudgment(outcome, strength).catch((error) => {
+            setGameError(describeApiError(error).description);
+          });
         }}
         onSignal={(itemId, signalType) => {
           setGameError(null);

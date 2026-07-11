@@ -234,6 +234,7 @@ describe("forge onboarding contract", () => {
       "preference_catalog_item",
       "preference_context",
       "preference_item",
+      "preferences_workspace",
       "preference_judgment",
       "preference_signal",
       "questionnaire_instrument",
@@ -384,6 +385,33 @@ describe("forge onboarding contract", () => {
     );
     expect(readinessByType.get("wiki_page")).toMatch(
       /Ready to list, search, or inspect wiki health[\s\S]*published specialized route[\s\S]*Ready to read, update, or delete[\s\S]*exact page id or slug[\s\S]*Ready to create after a duplicate check[\s\S]*meaningful Markdown body[\s\S]*Ready to ingest, sync, or reindex[\s\S]*without route guessing/i
+    );
+    expect(readinessByType.get("preferences_workspace")).toMatch(
+      /Ready to read before asking write-shaped follow-ups[\s\S]*practical ranking or explanation question[\s\S]*supporting judgments and signals[\s\S]*uncertainty[\s\S]*dedicated Preferences action[\s\S]*never mutate preferences_workspace through batch CRUD/i
+    );
+    const preferencesWorkspaceHint = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preferences_workspace"
+    )?.questionFlow.apiAccessHint;
+    expect(preferencesWorkspaceHint).toMatch(
+      /Route posture: read_model_only_surface[\s\S]*GET \/api\/v1\/preferences\/workspace[\s\S]*forge_get_preferences_workspace/i
+    );
+    expect(readinessByType.get("preference_context")).toMatch(
+      /Review is ready[\s\S]*Ordinary create or update[\s\S]*shared batch CRUD[\s\S]*Merge is ready only after reading both exact contexts[\s\S]*one sourceContextId and one targetContextId[\s\S]*judgments and signals move[\s\S]*source is deactivated[\s\S]*target is recomputed[\s\S]*Never use batch delete/i
+    );
+    const preferenceContextHint = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preference_context"
+    )?.questionFlow.apiAccessHint;
+    expect(preferenceContextHint).toMatch(
+      /shared batch CRUD for ordinary preference_context[\s\S]*GET \/api\/v1\/preferences\/contexts\/:id[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*forge_merge_preferences_contexts/i
+    );
+    expect(readinessByType.get("questionnaire_instrument")).toMatch(
+      /Review is ready[\s\S]*Ordinary create or update[\s\S]*shared batch CRUD[\s\S]*Clone is ready[\s\S]*Draft is ready[\s\S]*Publish is ready only after reading the current draft[\s\S]*explicit publish confirmation[\s\S]*Never use batch CRUD for clone, draft, or publish/i
+    );
+    const questionnaireInstrumentHint = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "questionnaire_instrument"
+    )?.questionFlow.apiAccessHint;
+    expect(questionnaireInstrumentHint).toMatch(
+      /shared batch CRUD for ordinary questionnaire_instrument[\s\S]*GET \/api\/v1\/psyche\/questionnaires\/:id[\s\S]*POST \/api\/v1\/psyche\/questionnaires\/:id\/clone[\s\S]*forge_clone_questionnaire[\s\S]*forge_ensure_questionnaire_draft[\s\S]*forge_publish_questionnaire_draft/i
     );
     expect(readinessByType.get("artifact")).toMatch(
       /Ready to list, read metadata, inspect versions, or read audit history[\s\S]*Ready for trusted upload[\s\S]*without collecting a password[\s\S]*Ready to update metadata, rescan, enrich with an LLM, or change trust state[\s\S]*current metadata read[\s\S]*Ready to replace links[\s\S]*replacement is not append[\s\S]*Ready to delete or restore metadata through batch metadata routes[\s\S]*hard deletion[\s\S]*never ready for an agent call/i
@@ -986,7 +1014,15 @@ describe("forge onboarding contract", () => {
         expect.objectContaining({
           classification: "batch_crud_entity",
           preferredMutationPath:
-            "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
+            entityType === "questionnaire_instrument"
+              ? expect.stringMatching(
+                  /shared batch CRUD[\s\S]*GET \/api\/v1\/psyche\/questionnaires[\s\S]*clone[\s\S]*draft[\s\S]*publish/i
+                )
+              : entityType === "preference_context"
+                ? expect.stringMatching(
+                    /shared batch CRUD[\s\S]*GET \/api\/v1\/preferences\/contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*do not emulate a merge with batch deletion/i
+                  )
+                : "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
         })
       );
     }
@@ -1423,7 +1459,7 @@ describe("forge onboarding contract", () => {
         expect(
           entry.apiAccessHint,
           `${entry.focus} read-model playbook should publish its exact read path`
-        ).toMatch(/Read: \/api\/v1\//);
+        ).toMatch(/Read: (?:GET )?\/api\/v1\//);
       }
     }
 
@@ -1627,14 +1663,14 @@ describe("forge onboarding contract", () => {
     );
     expect(
       playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
-    ).toMatch(/batch CRUD[\s\S]*clone, draft, and publish actions/i);
+    ).toMatch(/batch CRUD[\s\S]*clone, draft, and publish (?:actions|tools)/i);
     expect(
       playbookByFocus.get("questionnaire_instrument")?.openingQuestion
-    ).toMatch(/honest moment or decision/i);
+    ).toMatch(/understand, create, revise, or publish/i);
     expect(
       playbookByFocus.get("questionnaire_instrument")?.askSequence.join(" ")
     ).toMatch(
-      /respondent should understand[\s\S]*item shape, response scale, scoring, or provenance/i
+      /respondent should understand[\s\S]*published meaning, scoring behavior, provenance, or historical-run interpretation/i
     );
     expect(
       playbookByFocus.get("questionnaire_run")?.askSequence.join(" ")
