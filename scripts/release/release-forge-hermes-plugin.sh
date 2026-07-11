@@ -16,6 +16,7 @@ HERMES_TAG_PREFIX="hermes-v"
 CODEX_RUNTIME_DIST_DIR="${FORGE_DIR}/plugins/codex/runtime/dist"
 CODEX_RUNTIME_MIGRATIONS_DIR="${FORGE_DIR}/plugins/codex/runtime/apps/api/migrations"
 OPENCLAW_PLUGIN_PACKAGE_JSON="${FORGE_DIR}/plugins/openclaw/package.json"
+OPENCLAW_PLUGIN_SERVER_ENTRY="plugins/openclaw/server/index.js"
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
 PACKAGING_VENV_DIR=""
@@ -122,6 +123,8 @@ require_git_auth() {
 
 restore_openclaw_build_side_effects() {
   rm -rf "${CODEX_RUNTIME_DIST_DIR}" "${CODEX_RUNTIME_MIGRATIONS_DIR}"
+  git -C "${FORGE_DIR}" restore --source=HEAD --worktree -- \
+    "${OPENCLAW_PLUGIN_SERVER_ENTRY}" >/dev/null 2>&1 || true
   git -C "${FORGE_DIR}" restore --source=HEAD --worktree -- \
     "plugins/codex/runtime/dist" \
     "plugins/codex/runtime/apps/api/migrations" >/dev/null 2>&1 || true
@@ -523,6 +526,7 @@ main() {
   verify_version_alignment "${next_version}"
   run_verification_suite
   run_temp_install_smoke
+  restore_openclaw_build_side_effects
   if ! is_publish_from_tag_mode; then
     create_release_commit "${next_version}"
     push_release "${next_version}"
