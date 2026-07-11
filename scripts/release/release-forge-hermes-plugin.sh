@@ -350,10 +350,10 @@ run_verification_suite() {
     cd "${FORGE_DIR}"
     npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts
   )
-  echo "+ node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts"
+  echo "+ npm run test:server"
   (
     cd "${FORGE_DIR}"
-    node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts
+    npm run test:server
   )
   echo "+ python3 -m py_compile plugins/hermes/__init__.py plugins/hermes/forge_hermes/*.py"
   (

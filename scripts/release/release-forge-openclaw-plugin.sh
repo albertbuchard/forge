@@ -41,7 +41,7 @@ VERIFY_TESTS=(
   "npm run test:forge-memory"
   "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
   "npm run build"
-  "node --import tsx --test --test-concurrency=1 apps/api/src/app.test.ts"
+  "npm run test:server"
   "npm run build:openclaw-plugin"
   "npm run smoke:packed-openclaw-runtime"
 )
