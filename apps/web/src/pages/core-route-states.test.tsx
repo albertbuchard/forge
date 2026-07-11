@@ -366,6 +366,104 @@ describe("core route states", () => {
     ).toBeInTheDocument();
   });
 
+  it("mounts dense goal projects in bounded batches", () => {
+    const goal = {
+      id: "goal_dense",
+      title: "Dense goal",
+      description: "A goal with many concrete paths.",
+      horizon: "year",
+      status: "active",
+      targetPoints: 400,
+      themeColor: "#c8a46b",
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      tagIds: [],
+      progress: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      earnedPoints: 0,
+      momentumLabel: "Needs ignition",
+      tags: [],
+      userId: null,
+      user: null
+    } satisfies ForgeSnapshot["dashboard"]["goals"][number];
+    const projects = Array.from({ length: 12 }, (_, index) => ({
+      id: `project_dense_${index + 1}`,
+      goalId: goal.id,
+      title: `Dense project ${index + 1}`,
+      description: `Project path ${index + 1}`,
+      status: "active" as const,
+      workflowStatus: "backlog" as const,
+      targetPoints: 240,
+      themeColor: "#c0c1ff",
+      productRequirementsDocument: "",
+      schedulingRules: EMPTY_RULES,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+      progress: 0,
+      goalTitle: goal.title,
+      activeTaskCount: 0,
+      completedTaskCount: 0,
+      totalTasks: 0,
+      earnedPoints: 0,
+      nextTaskId: null,
+      nextTaskTitle: null,
+      momentumLabel: "Needs ignition",
+      time: {
+        totalTrackedSeconds: 0,
+        totalCreditedSeconds: 0,
+        liveTrackedSeconds: 0,
+        liveCreditedSeconds: 0,
+        manualAdjustedSeconds: 0,
+        activeRunCount: 0,
+        hasCurrentRun: false,
+        currentRunId: null
+      },
+      userId: null,
+      user: null,
+      assigneeUserIds: [],
+      assignees: []
+    })) satisfies ForgeSnapshot["dashboard"]["projects"];
+    const snapshot = createSnapshot({
+      dashboard: {
+        ...createSnapshot().dashboard,
+        goals: [goal],
+        projects
+      },
+      goals: [goal],
+      projects
+    });
+    useForgeShellMock.mockReturnValue({
+      snapshot,
+      selectedUserIds: [],
+      patchProject: vi.fn()
+    });
+    useQueryMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/goals/:goalId" element={<GoalDetailPage />} />
+      </Routes>,
+      `/goals/${goal.id}`
+    );
+
+    expect(screen.getByText("Showing 8 of 12 projects")).toBeInTheDocument();
+    expect(screen.getByText("Dense project 8")).toBeInTheDocument();
+    expect(screen.queryByText("Dense project 9")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show 4 more projects" })
+    );
+    expect(screen.getByText("Showing 12 of 12 projects")).toBeInTheDocument();
+    expect(screen.getByText("Dense project 12")).toBeInTheDocument();
+  });
+
   it("shows the kanban empty state when no tasks exist", async () => {
     useForgeShellMock.mockReturnValue({
       snapshot: createSnapshot(),

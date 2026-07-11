@@ -17,7 +17,9 @@ import {
 } from "../types.js";
 import { getEntityById } from "./entity-crud.js";
 
-const MAX_ROWS_TO_RESOLVE = 250;
+const MAX_PIN_ROWS_TO_RESOLVE = 250;
+const RECENT_ROW_BATCH_SIZE = 250;
+const MAX_RECENT_ROWS_TO_RESOLVE = 1_000;
 const MAX_VIEW_COUNT = 2_147_483_647;
 
 type EntityNavigationScope = {
@@ -405,7 +407,7 @@ function listPinRows(userIds?: string[]) {
          WHERE owner_user_id = ''
             OR owner_user_id IN (${userIds.map(() => "?").join(", ")})
          ORDER BY pinned_at DESC, id
-         LIMIT ${MAX_ROWS_TO_RESOLVE}`
+         LIMIT ${MAX_PIN_ROWS_TO_RESOLVE}`
       )
       .all(...userIds) as EntityPinRow[];
   }
@@ -414,12 +416,12 @@ function listPinRows(userIds?: string[]) {
       `SELECT id, owner_user_id, entity_type, entity_id, pinned_at, updated_at
        FROM entity_pins
        ORDER BY pinned_at DESC, id
-       LIMIT ${MAX_ROWS_TO_RESOLVE}`
+       LIMIT ${MAX_PIN_ROWS_TO_RESOLVE}`
     )
     .all() as EntityPinRow[];
 }
 
-function listRecentRows(actorKey: string) {
+function listRecentRows(actorKey: string, offset: number) {
   return getDatabase()
     .prepare(
       `SELECT actor_key, entity_type, entity_id, view_count,
@@ -427,9 +429,25 @@ function listRecentRows(actorKey: string) {
        FROM entity_recent_views
        WHERE actor_key = ?
        ORDER BY last_viewed_at DESC, entity_type, entity_id
-       LIMIT ${MAX_ROWS_TO_RESOLVE}`
+       LIMIT ${RECENT_ROW_BATCH_SIZE} OFFSET ?`
     )
-    .all(actorKey) as EntityRecentRow[];
+    .all(actorKey, offset) as EntityRecentRow[];
+}
+
+function listBoundedRecentRows(actorKey: string) {
+  const rows: EntityRecentRow[] = [];
+  for (
+    let offset = 0;
+    offset < MAX_RECENT_ROWS_TO_RESOLVE;
+    offset += RECENT_ROW_BATCH_SIZE
+  ) {
+    const batch = listRecentRows(actorKey, offset);
+    rows.push(...batch);
+    if (batch.length < RECENT_ROW_BATCH_SIZE) {
+      break;
+    }
+  }
+  return rows;
 }
 
 function countRecentRows(actorKey: string) {
@@ -461,7 +479,7 @@ export function listEntityNavigation(
   const pinnedTargetKeys = new Set(
     resolvedPins.map((item) => `${item.entityType}:${item.entityId}`)
   );
-  const recentRows = listRecentRows(actorKey);
+  const recentRows = listBoundedRecentRows(actorKey);
   const recentRowTotal = countRecentRows(actorKey);
   const resolvedRecents = recentRows
     .map((row) => recentRowToItem(row, scope))

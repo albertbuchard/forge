@@ -47,24 +47,32 @@ function buildUserScopeOptions(users: UserSummary[]) {
       token: "ALL",
       icon: Users
     },
-    {
-      id: "humans",
-      label: "Humans",
-      shortLabel: "Humans",
-      description: "Focus only on human-owned work.",
-      userIds: humans.map((user) => user.id),
-      token: "HU",
-      icon: UserRound
-    },
-    {
-      id: "bots",
-      label: "Bots",
-      shortLabel: "Bots",
-      description: "Focus only on bot-owned work.",
-      userIds: bots.map((user) => user.id),
-      token: "AI",
-      icon: Bot
-    },
+    ...(humans.length > 1
+      ? [
+          {
+            id: "humans",
+            label: "Humans",
+            shortLabel: "Humans",
+            description: "Focus only on human-owned work.",
+            userIds: humans.map((user) => user.id),
+            token: "HU",
+            icon: UserRound
+          }
+        ]
+      : []),
+    ...(bots.length > 1
+      ? [
+          {
+            id: "bots",
+            label: "Bots",
+            shortLabel: "Bots",
+            description: "Focus only on bot-owned work.",
+            userIds: bots.map((user) => user.id),
+            token: "AI",
+            icon: Bot
+          }
+        ]
+      : []),
     ...users.map((user) => ({
       id: user.id,
       label: user.displayName,
@@ -126,8 +134,10 @@ export function UserScopeSelector({
       <Dialog.Trigger asChild>
         <button
           type="button"
+          aria-label={`User scope: ${activeOption.label}`}
+          aria-haspopup="dialog"
           className={cn(
-            "shell-scope-trigger inline-flex items-center gap-2",
+            "shell-scope-trigger inline-flex min-h-11 items-center gap-2",
             compact ? "px-2.5 text-[12px]" : "px-3.5 text-[13px]"
           )}
         >
@@ -171,7 +181,11 @@ export function UserScopeSelector({
             </Dialog.Close>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div
+            className="mt-4 grid gap-3 sm:grid-cols-2"
+            role="group"
+            aria-label="Available user scopes"
+          >
             {options.map((option) => {
               const selected = sameUserScope(selectedUserIds, option.userIds);
               const Icon = option.icon;
@@ -179,8 +193,9 @@ export function UserScopeSelector({
                 <button
                   key={option.id}
                   type="button"
+                  aria-pressed={selected}
                   className={cn(
-                    "flex items-center justify-between gap-3 rounded-[24px] border px-4 py-4 text-left transition",
+                    "flex min-h-11 items-center justify-between gap-3 rounded-[24px] border px-4 py-4 text-left transition",
                     selected
                       ? "border-[color-mix(in_srgb,var(--primary)_26%,transparent)] bg-[var(--ui-surface-active)] text-[var(--ui-ink-strong)]"
                       : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"

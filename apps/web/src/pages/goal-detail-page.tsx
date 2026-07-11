@@ -42,6 +42,8 @@ import { useForgeShell } from "@/components/shell/app-shell";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { invalidateForgeSnapshot } from "@/store/api/invalidate-forge-snapshot";
 
+const GOAL_PROJECT_BATCH_SIZE = 8;
+
 export function GoalDetailPage() {
   const { t } = useI18n();
   const shell = useForgeShell();
@@ -56,6 +58,9 @@ export function GoalDetailPage() {
   } | null>(null);
   const [projectFilter, setProjectFilter] =
     useState<ProjectCollectionStatusFilter>("active");
+  const [visibleProjectCount, setVisibleProjectCount] = useState(
+    GOAL_PROJECT_BATCH_SIZE
+  );
   const defaultUserId = getSingleSelectedUserId(shell.selectedUserIds);
   const [pendingRestartProjectId, setPendingRestartProjectId] = useState<
     string | null
@@ -112,6 +117,7 @@ export function GoalDetailPage() {
     () => filterProjectsByCollectionStatus(allProjects, projectFilter),
     [allProjects, projectFilter]
   );
+  const visibleProjects = projects.slice(0, visibleProjectCount);
 
   const projectIds = new Set(allProjects.map((project) => project.id));
   const taskIds = new Set(
@@ -273,7 +279,10 @@ export function GoalDetailPage() {
             <ProjectCollectionFilters
               value={projectFilter}
               counts={projectCounts}
-              onChange={setProjectFilter}
+              onChange={(nextFilter) => {
+                setProjectFilter(nextFilter);
+                setVisibleProjectCount(GOAL_PROJECT_BATCH_SIZE);
+              }}
               className="justify-end"
             />
           </div>
@@ -285,7 +294,7 @@ export function GoalDetailPage() {
             </div>
           ) : (
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <div
                   key={project.id}
                   className="rounded-[22px] bg-[var(--ui-surface-2)] p-5 transition hover:bg-[var(--ui-surface-2)]"
@@ -344,6 +353,35 @@ export function GoalDetailPage() {
                   </div>
                 </div>
               ))}
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:col-span-2">
+                <div
+                  className="text-sm text-[var(--ui-ink-soft)]"
+                  aria-live="polite"
+                >
+                  Showing {visibleProjects.length} of {projects.length} projects
+                </div>
+                {visibleProjects.length < projects.length ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setVisibleProjectCount((current) =>
+                        Math.min(
+                          current + GOAL_PROJECT_BATCH_SIZE,
+                          projects.length
+                        )
+                      )
+                    }
+                  >
+                    Show{" "}
+                    {Math.min(
+                      GOAL_PROJECT_BATCH_SIZE,
+                      projects.length - visibleProjects.length
+                    )}{" "}
+                    more projects
+                  </Button>
+                ) : null}
+              </div>
             </div>
           )}
         </Card>

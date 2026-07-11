@@ -625,6 +625,52 @@ test("entity navigation health pins use the live sleep and workout web routes", 
   });
 });
 
+test("entity navigation finds valid recents behind a stale first batch", async () => {
+  await withTestServer(async (app) => {
+    const cookie = await issueOperatorSessionCookie(app);
+    const touch = await app.inject({
+      method: "POST",
+      url: "/api/v1/entity-navigation/touch",
+      headers: { cookie },
+      payload: { entityType: "goal", entityId: "goal_build_forge" }
+    });
+    assert.equal(touch.statusCode, 200, touch.body);
+
+    const insert = getDatabase().prepare(
+      `INSERT INTO entity_recent_views (
+         actor_key, entity_type, entity_id, view_count,
+         first_viewed_at, last_viewed_at
+       ) VALUES ('operator', 'goal', ?, 1, ?, ?)`
+    );
+    const newerTimestamp = "2030-01-01T00:00:00.000Z";
+    getDatabase().exec("BEGIN IMMEDIATE");
+    try {
+      for (let index = 0; index < 300; index += 1) {
+        insert.run(
+          `missing-newer-goal-${index}`,
+          newerTimestamp,
+          newerTimestamp
+        );
+      }
+      getDatabase().exec("COMMIT");
+    } catch (error) {
+      getDatabase().exec("ROLLBACK");
+      throw error;
+    }
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/entity-navigation?pinnedLimit=0&recentLimit=1",
+      headers: { cookie }
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const payload = response.json() as EntityNavigationPayload;
+    assert.equal(payload.recent[0]?.entityId, "goal_build_forge");
+    assert.equal(payload.recentTotal, 301);
+    assert.equal(payload.hiddenRecentCount, 300);
+  });
+});
+
 test("entity navigation stays bounded with a large stale recent history", async () => {
   await withTestServer(async (app) => {
     const cookie = await issueOperatorSessionCookie(app);

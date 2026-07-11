@@ -143,76 +143,73 @@ export function PsycheValuesPage() {
     {
       id: "direction",
       eyebrow: "Compass",
-      title: "Name the direction you want to protect",
+      title: "Start with the words that feel true",
       description:
-        "Start with the value itself and the life-direction it points toward.",
+        "Your wording can be rough or conflicted. Keep it as yours, then choose the direction you want to move when the tension shows up.",
       render: (value, setValue) => (
         <>
-          <UserSelectField
-            value={value.userId ?? null}
-            users={shell.snapshot.users}
-            onChange={(userId) => setValue({ userId })}
-            defaultLabel={formatOwnerSelectDefaultLabel(
-              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                null,
-              "Choose value owner"
-            )}
-            help="Values can belong to a human or bot user while still linking to goals, projects, and tasks across Forge."
-          />
-          <FlowField label="Value name">
+          <FlowField
+            label="What matters here?"
+            description="Name it in the words you already use. Forge will not rewrite them."
+          >
             <Input
               value={value.title}
               onChange={(event) => setValue({ title: event.target.value })}
-              placeholder="Repair with steadiness"
+              placeholder="Being present with my family"
             />
           </FlowField>
-          <FlowField label="Valued direction">
-            <Input
-              value={value.valuedDirection}
-              onChange={(event) =>
-                setValue({ valuedDirection: event.target.value })
-              }
-              placeholder="Warm, brave, and honest connection"
-            />
-          </FlowField>
-          <FlowField label="Why it matters">
-            <Textarea
-              value={value.whyItMatters}
-              onChange={(event) =>
-                setValue({ whyItMatters: event.target.value })
-              }
-              placeholder="Why is this direction important enough to protect when pressure rises?"
-            />
-          </FlowField>
+          {value.title.trim() ? (
+            <FlowField
+              label="When this gets difficult, which way do you want to move?"
+              description="Describe a direction, not a standard you have to satisfy."
+            >
+              <Textarea
+                value={value.valuedDirection}
+                onChange={(event) =>
+                  setValue({ valuedDirection: event.target.value })
+                }
+                placeholder="Toward warm, brave, and honest connection"
+              />
+            </FlowField>
+          ) : null}
         </>
       )
     },
     {
       id: "shape",
       eyebrow: "Texture",
-      title: "Describe how the value should feel in lived form",
+      title: "Turn that direction into something you can live",
       description:
-        "Keep this concrete enough that later reports and behaviors can map back to it.",
+        "Use a small action that still points the right way when the value competes with fear, comfort, or another important need.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Description">
+          <FlowField label="Why is this direction worth choosing?">
+            <Textarea
+              value={value.whyItMatters}
+              onChange={(event) =>
+                setValue({ whyItMatters: event.target.value })
+              }
+              placeholder="What does this direction protect or make possible?"
+            />
+          </FlowField>
+          <FlowField label="What would moving this way look like in practice?">
             <Textarea
               value={value.description}
               onChange={(event) =>
                 setValue({ description: event.target.value })
               }
-              placeholder="Describe what this value looks like in daily behavior, not just in theory."
+              placeholder="Describe the lived direction in your own words."
             />
           </FlowField>
-          <FlowField label="Committed action ideas">
+          <FlowField
+            label="What is one small action that would point this way?"
+            hint="Add more only when they are already clear. Use one line per action."
+          >
             <Textarea
               value={value.committedActions.join("\n")}
               onChange={(event) =>
                 setValue({
-                  committedActions: event.target.value
-                    .split("\n")
-                    .map((entry) => entry.trim())
-                    .filter(Boolean)
+                  committedActions: event.target.value.split("\n")
                 })
               }
               placeholder={
@@ -231,6 +228,17 @@ export function PsycheValuesPage() {
         "This is where values become graphical anchors across goals, projects, and tasks instead of standalone notes.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose value owner"
+            )}
+            help="Values can belong to a human or bot user while still linking to goals, projects, and tasks across Forge."
+          />
           <FlowField label="Linked goals">
             <div className="flex flex-wrap gap-2">
               {shell.snapshot.goals.map((goal) => {
@@ -569,12 +577,29 @@ export function PsycheValuesPage() {
           editingValue ? `psyche.value.${editingValue.id}` : "psyche.value.new"
         }
         steps={steps}
+        resolveContinueBlocker={(stepId, value) => {
+          if (stepId !== "direction") {
+            return null;
+          }
+          if (!value.title.trim()) {
+            return "Use your own words to name what matters before continuing.";
+          }
+          if (!value.valuedDirection.trim()) {
+            return "Choose the direction you want to move when this gets difficult.";
+          }
+          return null;
+        }}
         submitLabel={editingValue ? "Save value" : "Create value"}
         pending={saveMutation.isPending}
         error={submitError}
         onSubmit={async () => {
           setSubmitError(null);
-          const parsed = psycheValueSchema.safeParse(draft);
+          const parsed = psycheValueSchema.safeParse({
+            ...draft,
+            committedActions: draft.committedActions.filter((action) =>
+              action.trim()
+            )
+          });
           if (!parsed.success) {
             setSubmitError(
               "This value still needs a title and valued direction before it can be saved."
