@@ -314,7 +314,7 @@ describe("OverviewPage", () => {
     getSleepViewMock.mockResolvedValue({
       sleep: {
         summary: {
-          totalSleepSeconds: 0,
+          totalSleepSeconds: 186_480,
           averageSleepSeconds: 7.4 * 3600,
           averageTimeInBedSeconds: 8 * 3600,
           averageSleepScore: 84,
@@ -759,7 +759,7 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("loads trophy metrics immediately while heavier overview feeds stay deferred", async () => {
+  it("loads compact overview context without an artificial delay", async () => {
     useForgeShellMock.mockReturnValue({
       snapshot: createSnapshot(),
       selectedUserIds: [],
@@ -768,11 +768,60 @@ describe("OverviewPage", () => {
 
     renderOverviewPage();
 
-    await waitFor(() => expect(getXpMetricsMock).toHaveBeenCalledTimes(1));
-    expect(getSleepViewMock).not.toHaveBeenCalled();
-    expect(getFitnessViewMock).not.toHaveBeenCalled();
-    expect(getMovementDayMock).not.toHaveBeenCalled();
-    expect(getVitalsViewMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(getXpMetricsMock).toHaveBeenCalledTimes(1);
+      expect(getSleepViewMock).toHaveBeenCalledTimes(1);
+      expect(getFitnessViewMock).toHaveBeenCalledWith([], { compact: true });
+      expect(getMovementDayMock).toHaveBeenCalledTimes(1);
+      expect(getVitalsViewMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("does not present empty health summaries as recorded evidence", async () => {
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: [],
+      refresh: vi.fn()
+    });
+    getSleepViewMock.mockResolvedValue({
+      sleep: {
+        summary: {
+          totalSleepSeconds: 0,
+          averageSleepSeconds: 0,
+          averageSleepScore: 0
+        },
+        sessions: []
+      }
+    });
+    getFitnessViewMock.mockResolvedValue({
+      fitness: {
+        summary: {
+          workoutCount: 0,
+          exerciseMinutes: 0,
+          topWorkoutType: null
+        },
+        sessions: []
+      }
+    });
+    getVitalsViewMock.mockResolvedValue({
+      vitals: {
+        summary: {
+          trackedDays: 0,
+          metricCount: 0,
+          latestDateKey: null,
+          latestMetricCount: 0,
+          categoryBreakdown: []
+        },
+        metrics: []
+      }
+    });
+
+    renderOverviewPage();
+
+    expect(await screen.findByText("No health data yet")).toBeInTheDocument();
+    expect(screen.queryByText("Average sleep")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sleep score")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 metrics")).not.toBeInTheDocument();
   });
 
   it("shows live health and movement metrics when those feeds are available", async () => {

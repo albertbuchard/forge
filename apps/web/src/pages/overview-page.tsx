@@ -1,5 +1,4 @@
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
@@ -143,23 +142,12 @@ export function OverviewPage() {
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
-  const selectedScopeKey = selectedUserIds.join("|");
-  const [enableOverviewSideData, setEnableOverviewSideData] = useState(false);
-
-  useEffect(() => {
-    setEnableOverviewSideData(false);
-    const timer = window.setTimeout(() => {
-      setEnableOverviewSideData(true);
-    }, 650);
-    return () => window.clearTimeout(timer);
-  }, [selectedScopeKey]);
 
   const todayDateKey = localDateKey();
   const sleepQuery =
     useQuery({
       queryKey: ["forge-overview-sleep", ...selectedUserIds],
       queryFn: async () => (await getSleepView(selectedUserIds)).sleep,
-      enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};
   const fitnessQuery =
@@ -167,7 +155,6 @@ export function OverviewPage() {
       queryKey: ["forge-overview-fitness", ...selectedUserIds],
       queryFn: async () =>
         (await getFitnessView(selectedUserIds, { compact: true })).fitness,
-      enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};
   const movementDayQuery =
@@ -184,14 +171,12 @@ export function OverviewPage() {
             userIds: selectedUserIds
           })
         ).movement,
-      enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};
   const vitalsQuery =
     useQuery({
       queryKey: ["forge-overview-vitals", ...selectedUserIds],
       queryFn: async () => (await getVitalsView(selectedUserIds)).vitals,
-      enabled: enableOverviewSideData,
       staleTime: 60_000
     }) ?? {};
   const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds);
@@ -219,8 +204,13 @@ export function OverviewPage() {
     vitalsSummary ?? undefined
   );
   const movementPlaceBreakdown = buildMovementPlaceBreakdown(movementDay);
-  const hasHealthData =
-    sleepSummary !== null || fitnessSummary !== null || vitalsSummary !== null;
+  const hasSleepData =
+    sleepSummary !== null && sleepSummary.totalSleepSeconds > 0;
+  const hasFitnessData =
+    fitnessSummary !== null && fitnessSummary.workoutCount > 0;
+  const hasVitalsData =
+    vitalsSummary !== null && vitalsSummary.summary.metricCount > 0;
+  const hasHealthData = hasSleepData || hasFitnessData || hasVitalsData;
   const hasMovementData =
     movementDay !== undefined &&
     (movementDay.summary.tripCount > 0 ||
@@ -593,7 +583,7 @@ export function OverviewPage() {
                     : "No health data yet"}
                 </div>
               </div>
-              {vitalsSummary ? (
+              {hasVitalsData && vitalsSummary ? (
                 <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
                   {vitalsSummary.summary.metricCount} metrics
                 </Badge>
@@ -607,7 +597,7 @@ export function OverviewPage() {
               </div>
             ) : hasHealthData ? (
               <div className="mt-3 grid gap-2 text-sm text-[var(--ui-ink-soft)]">
-                {sleepSummary ? (
+                {hasSleepData && sleepSummary ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Average sleep</span>
                     <span className="font-medium text-[var(--ui-ink-strong)]">
@@ -615,7 +605,7 @@ export function OverviewPage() {
                     </span>
                   </div>
                 ) : null}
-                {sleepSummary ? (
+                {hasSleepData && sleepSummary ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Sleep score</span>
                     <span className="font-medium text-[var(--ui-ink-strong)]">
@@ -623,7 +613,7 @@ export function OverviewPage() {
                     </span>
                   </div>
                 ) : null}
-                {fitnessSummary && !compact ? (
+                {hasFitnessData && fitnessSummary && !compact ? (
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>Exercise</span>
                     <span className="font-medium text-[var(--ui-ink-strong)]">
@@ -631,7 +621,7 @@ export function OverviewPage() {
                     </span>
                   </div>
                 ) : null}
-                {fitnessSummary && !compact ? (
+                {hasFitnessData && fitnessSummary && !compact ? (
                   <div className="text-xs leading-5 text-[var(--ui-ink-faint)]">
                     {fitnessSummary.topWorkoutType
                       ? `${fitnessSummary.topWorkoutType} is the top workout type right now.`

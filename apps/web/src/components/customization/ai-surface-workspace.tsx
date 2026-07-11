@@ -28,6 +28,8 @@ export function AiSurfaceWorkspace({
           {actions}
           <Link
             to={`/workbench?surface=${encodeURIComponent(surfaceId)}`}
+            aria-label={`Open ${surfaceId} in Workbench`}
+            title="Open in Workbench"
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-2.5 text-[12px] font-medium text-[var(--ui-ink-medium)] backdrop-blur-xl transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
           >
             <Workflow className="size-3.5" />

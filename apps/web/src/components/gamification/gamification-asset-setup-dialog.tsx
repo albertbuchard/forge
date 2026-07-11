@@ -28,10 +28,12 @@ export function GamificationAssetSetupDialog() {
   });
   const [selectedStyle, setSelectedStyle] =
     useState<GamificationThemePreference>(defaultGamificationTheme);
+  const rewardsRoute = location.pathname.startsWith("/rewards");
 
   const assetsQuery = useQuery({
     queryKey: ["forge-gamification-assets"],
     queryFn: getGamificationAssetStatus,
+    enabled: rewardsRoute,
     staleTime: 30_000
   });
 
@@ -40,9 +42,8 @@ export function GamificationAssetSetupDialog() {
     [assetsQuery.data?.assets.styles]
   );
   const installedStyles = styles.filter((style) => style.installed);
-  const settingsRoute = location.pathname.startsWith("/settings");
   const open =
-    !settingsRoute &&
+    rewardsRoute &&
     !dismissed &&
     assetsQuery.isSuccess &&
     installedStyles.length === 0;

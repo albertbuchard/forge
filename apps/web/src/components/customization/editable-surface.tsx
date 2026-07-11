@@ -545,6 +545,8 @@ export function EditableSurface({
                 type="button"
                 size="sm"
                 variant="secondary"
+                aria-label="Reset surface layout"
+                title="Reset layout"
                 className="h-8 rounded-full border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-2.5 text-[12px] text-[var(--ui-ink-medium)] backdrop-blur-xl hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                 onClick={handleReset}
               >
@@ -556,6 +558,10 @@ export function EditableSurface({
               type="button"
               size="sm"
               variant={editing ? "primary" : "secondary"}
+              aria-label={
+                editing ? "Finish editing surface layout" : "Edit surface layout"
+              }
+              title={editing ? "Done" : "Edit layout"}
               className={cn(
                 "h-8 rounded-full px-2 text-[12px] backdrop-blur-xl [&>span]:gap-1.5",
                 editing
