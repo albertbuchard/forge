@@ -11641,7 +11641,7 @@ test("health probe reports the effective database root even when FORGE_DATA_ROOT
     path.join(os.tmpdir(), "forge-health-implicit-root-")
   );
   configureDatabase({ dataRoot: rootDir, seedDemoData: true });
-  const app = await buildServer();
+  const app = await buildServer({ devrageMetricSync: false });
 
   try {
     const response = await app.inject({
