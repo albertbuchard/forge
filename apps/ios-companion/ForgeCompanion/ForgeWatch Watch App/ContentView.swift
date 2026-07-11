@@ -16,22 +16,26 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 header
 
-                WatchSurfacePager(
-                    surface: navigation.selectedSurface,
-                    navigation: navigation,
-                    bootstrap: appModel.bootstrap,
-                    directMetric: appModel.lastDirectSyncMetric,
-                    pendingActionCount: appModel.pendingActionCount,
-                    latestReceipt: appModel.latestReceipt,
-                    onHabitTap: { selectedHabit = $0 },
-                    onCommandTap: { selectedCommand = $0 },
-                    onCommand: appModel.queueCommand,
-                    onCapture: appModel.queueCaptureEvent,
-                    onRefresh: { appModel.requestForgeRefresh(reason: "surface_refresh", force: true) },
-                    onRetry: { appModel.flushPendingActions(forceDirect: true) }
-                )
-                .id(navigation.selectedSurface)
-                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                TimelineView(.periodic(from: Date(), by: 60)) { context in
+                    WatchSurfacePager(
+                        surface: navigation.selectedSurface,
+                        navigation: navigation,
+                        bootstrap: appModel.bootstrap,
+                        snapshotFreshness: appModel.snapshotFreshness(now: context.date),
+                        snapshotSource: appModel.snapshotSource,
+                        directMetric: appModel.lastDirectSyncMetric,
+                        pendingActionCount: appModel.pendingActionCount,
+                        latestReceipt: appModel.latestReceipt,
+                        onHabitTap: { selectedHabit = $0 },
+                        onCommandTap: { selectedCommand = $0 },
+                        onCommand: appModel.queueCommand,
+                        onCapture: appModel.queueCaptureEvent,
+                        onRefresh: { appModel.requestForgeRefresh(reason: "surface_refresh", force: true) },
+                        onRetry: { appModel.flushPendingActions(forceDirect: true) }
+                    )
+                    .id(navigation.selectedSurface)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                }
             }
             .padding(.horizontal, 8)
             .padding(.top, 2)
@@ -166,6 +170,8 @@ private struct WatchSurfacePager: View {
     let surface: WatchSurface
     @ObservedObject var navigation: WatchNavigationModel
     let bootstrap: ForgeWatchBootstrap
+    let snapshotFreshness: ForgeWatchSnapshotFreshness
+    let snapshotSource: ForgeWatchSnapshotSource
     let directMetric: ForgeWatchDirectSyncMetric?
     let pendingActionCount: Int
     let latestReceipt: ForgeWatchStoredReceipt?
@@ -182,6 +188,8 @@ private struct WatchSurfacePager: View {
             case .now:
                 NowSurface(
                     bootstrap: bootstrap,
+                    snapshotFreshness: snapshotFreshness,
+                    snapshotSource: snapshotSource,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCommandTap: onCommandTap,
                     onCommand: onCommand,
@@ -387,6 +395,8 @@ private func runCommandModal(
 
 private struct NowSurface: View {
     let bootstrap: ForgeWatchBootstrap
+    let snapshotFreshness: ForgeWatchSnapshotFreshness
+    let snapshotSource: ForgeWatchSnapshotSource
     @Binding var selection: Int
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
@@ -395,7 +405,21 @@ private struct NowSurface: View {
 
     var body: some View {
         let run = bootstrap.now?.currentRun ?? bootstrap.work?.currentRun
-        SurfaceCarousel(selection: $selection, count: run == nil ? 1 : 2) {
+        let notice = ForgeWatchSnapshotNotice.make(
+            freshness: snapshotFreshness,
+            source: snapshotSource
+        )
+        let noticeOffset = notice == nil ? 0 : 1
+        SurfaceCarousel(selection: $selection, count: (run == nil ? 1 : 2) + noticeOffset) {
+            if let notice {
+                SnapshotNoticeCard(
+                    notice: notice,
+                    state: snapshotFreshness.state,
+                    onRefresh: onRefresh
+                )
+                .tag(0)
+            }
+
             WatchCard {
                 VStack(alignment: .leading, spacing: 9) {
                     Text("Now")
@@ -444,11 +468,44 @@ private struct NowSurface: View {
                     }
                 }
             }
-            .tag(0)
+            .tag(noticeOffset)
 
             if let run {
                 RunCard(run: run, onCommandTap: onCommandTap, onCommand: onCommand)
-                    .tag(1)
+                    .tag(noticeOffset + 1)
+            }
+        }
+    }
+}
+
+private struct SnapshotNoticeCard: View {
+    let notice: ForgeWatchSnapshotNotice
+    let state: ForgeWatchSnapshotFreshness.State
+    let onRefresh: () -> Void
+
+    var body: some View {
+        WatchCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: state == .unavailable ? "icloud.slash" : "exclamationmark.arrow.triangle.2.circlepath")
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundStyle(WatchTheme.accent)
+                Text(notice.title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(notice.message)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    onRefresh()
+                } label: {
+                    Label("Refresh now", systemImage: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WatchTheme.accent)
             }
         }
     }

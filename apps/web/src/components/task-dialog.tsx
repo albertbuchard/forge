@@ -15,6 +15,7 @@ import { EntityBadge } from "@/components/ui/entity-badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSelectField } from "@/components/ui/user-select-field";
+import { UserMultiSelectField } from "@/components/ui/user-multi-select-field";
 import { createGoal, createProject, createWorkItem } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { quickTaskSchema, type QuickTaskInput } from "@/lib/schemas";
@@ -1196,27 +1197,12 @@ export function TaskDialog({
             defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
             help="Tasks can belong to a human or bot user. The linked project owner is suggested first so cross-user task routing stays explicit."
           />
-          <FlowField label="Assignees">
-            <select
-              multiple
-              value={value.assigneeUserIds}
-              onChange={(event) =>
-                setValue({
-                  assigneeUserIds: Array.from(
-                    event.target.selectedOptions,
-                    (option) => option.value
-                  )
-                })
-              }
-              className="min-h-28 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
-            >
-              {safeUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} · {user.kind}
-                </option>
-              ))}
-            </select>
-          </FlowField>
+          <UserMultiSelectField
+            value={value.assigneeUserIds}
+            users={safeUsers}
+            onChange={(assigneeUserIds) => setValue({ assigneeUserIds })}
+            help="Choose every person or agent expected to contribute. This does not change the task owner."
+          />
         </>
       )
     },

@@ -187,4 +187,57 @@ describe("resolveQuestionFlowStepIndex", () => {
     await waitFor(() => expect(canvas.scrollTop).toBe(0));
     expect(await screen.findByText("Next step")).toBeInTheDocument();
   });
+
+  it("keeps required missing information on the current step", async () => {
+    function RequiredDialog() {
+      const [value, setValue] = useState({ title: "" });
+      return (
+        <QuestionFlowDialog
+          open
+          onOpenChange={() => undefined}
+          eyebrow="Goal"
+          title="Create goal"
+          description="Name the goal."
+          value={value}
+          onChange={setValue}
+          steps={[
+            {
+              id: "identity",
+              title: "Identity",
+              render: (draft, setDraft) => (
+                <FlowField label="Title">
+                  <Input
+                    value={draft.title}
+                    onChange={(event) =>
+                      setDraft({ title: event.target.value })
+                    }
+                  />
+                </FlowField>
+              )
+            },
+            { id: "review", title: "Review", render: () => <div>Ready</div> }
+          ]}
+          resolveContinueBlocker={(stepId, draft) =>
+            stepId === "identity" && !draft.title.trim()
+              ? "Name the goal before continuing."
+              : null
+          }
+          submitLabel="Save"
+          onSubmit={async () => undefined}
+        />
+      );
+    }
+
+    render(<RequiredDialog />);
+    const continueButton = screen.getByRole("button", { name: /continue/i });
+    expect(continueButton).toBeDisabled();
+    expect(screen.getByText("Name the goal before continuing.")).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "A clear goal" }
+    });
+    expect(continueButton).toBeEnabled();
+    fireEvent.click(continueButton);
+    expect(await screen.findByText("Review")).toBeInTheDocument();
+  });
 });

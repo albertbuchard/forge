@@ -95,6 +95,36 @@ struct ForgeWatchSnapshotFreshness: Hashable {
     }
 }
 
+struct ForgeWatchSnapshotNotice: Hashable {
+    let title: String
+    let message: String
+
+    nonisolated static func make(
+        freshness: ForgeWatchSnapshotFreshness,
+        source: ForgeWatchSnapshotSource
+    ) -> ForgeWatchSnapshotNotice? {
+        switch freshness.state {
+        case .fresh:
+            return nil
+        case .stale:
+            return ForgeWatchSnapshotNotice(
+                title: "Refresh current context",
+                message: "\(freshness.shortLabel) from \(source.label). Refresh before acting on cached counts or task status."
+            )
+        case .clockSkew:
+            return ForgeWatchSnapshotNotice(
+                title: "Snapshot time mismatch",
+                message: "The snapshot timestamp is ahead of this watch. Refresh before using current task or habit context."
+            )
+        case .unavailable:
+            return ForgeWatchSnapshotNotice(
+                title: "Current context unavailable",
+                message: "Forge has not delivered a usable snapshot yet. Refresh directly or through the paired iPhone."
+            )
+        }
+    }
+}
+
 enum ForgeWatchDirectRoutePolicy {
     nonisolated static let failureFallbackCooldownSeconds: TimeInterval = 3
     nonisolated static let directRetryAfterFailureDelaySeconds: TimeInterval = 3.25

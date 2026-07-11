@@ -9,6 +9,7 @@ import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { EntityName } from "@/components/ui/entity-name";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { UserMultiSelectField } from "@/components/ui/user-multi-select-field";
 import { UserSelectField } from "@/components/ui/user-select-field";
 import { UserBadge } from "@/components/ui/user-badge";
 import { useI18n } from "@/lib/i18n";
@@ -217,27 +218,12 @@ export function ProjectDialog({
             defaultLabel={formatOwnerSelectDefaultLabel(suggestedUser)}
             help="Projects can intentionally cross user boundaries, but the linked goal owner is suggested by default."
           />
-          <FlowField label="Assignees">
-            <select
-              multiple
-              value={value.assigneeUserIds}
-              onChange={(event) =>
-                setValue({
-                  assigneeUserIds: Array.from(
-                    event.target.selectedOptions,
-                    (option) => option.value
-                  )
-                })
-              }
-              className="min-h-28 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 py-2 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[color-mix(in_srgb,var(--primary)_35%,var(--ui-border-strong)_65%)]"
-            >
-              {safeUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} · {user.kind}
-                </option>
-              ))}
-            </select>
-          </FlowField>
+          <UserMultiSelectField
+            value={value.assigneeUserIds}
+            users={safeUsers}
+            onChange={(assigneeUserIds) => setValue({ assigneeUserIds })}
+            help="Choose every person or agent expected to contribute. This does not change the project's owner."
+          />
         </>
       )
     },
@@ -376,6 +362,15 @@ export function ProjectDialog({
           : t("common.dialogs.project.create")
       }
       error={submitError}
+      resolveContinueBlocker={(stepId, value) => {
+        if (stepId === "anchor" && !value.goalId) {
+          return "Choose a life goal before continuing.";
+        }
+        if (stepId === "shape" && !value.title.trim()) {
+          return "Name the project before continuing.";
+        }
+        return null;
+      }}
       onSubmit={async () => {
         if (submitInFlightRef.current) {
           return;

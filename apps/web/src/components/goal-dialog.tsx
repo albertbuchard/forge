@@ -309,6 +309,11 @@ export function GoalDialog({
           : t("common.dialogs.goal.create")
       }
       error={submitError}
+      resolveContinueBlocker={(stepId, value) =>
+        stepId === "intent" && !value.title.trim()
+          ? "Name the goal before continuing."
+          : null
+      }
       onSubmit={async () => {
         if (submitInFlightRef.current) {
           return;

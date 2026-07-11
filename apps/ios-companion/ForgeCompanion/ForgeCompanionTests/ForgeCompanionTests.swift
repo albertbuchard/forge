@@ -1653,6 +1653,49 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
+    func testWatchSnapshotNoticeKeepsFreshNowSurfaceUnobstructed() {
+        XCTAssertNil(
+            ForgeWatchSnapshotNotice.make(
+                freshness: ForgeWatchSnapshotFreshness(state: .fresh, ageSeconds: 120),
+                source: .direct
+            )
+        )
+    }
+
+    func testWatchSnapshotNoticeExplainsStaleCachedContextBeforeActions() throws {
+        let notice = try XCTUnwrap(
+            ForgeWatchSnapshotNotice.make(
+                freshness: ForgeWatchSnapshotFreshness(state: .stale, ageSeconds: 20 * 60),
+                source: .cache
+            )
+        )
+
+        XCTAssertEqual(notice.title, "Refresh current context")
+        XCTAssertTrue(notice.message.contains("Stale 20m"))
+        XCTAssertTrue(notice.message.contains("On-device cache"))
+        XCTAssertTrue(notice.message.contains("task status"))
+    }
+
+    func testWatchSnapshotNoticeProvidesRecoveryForClockSkewAndMissingSnapshot() throws {
+        let clockSkew = try XCTUnwrap(
+            ForgeWatchSnapshotNotice.make(
+                freshness: ForgeWatchSnapshotFreshness(state: .clockSkew, ageSeconds: -600),
+                source: .phone
+            )
+        )
+        let unavailable = try XCTUnwrap(
+            ForgeWatchSnapshotNotice.make(
+                freshness: ForgeWatchSnapshotFreshness(state: .unavailable, ageSeconds: nil),
+                source: .unavailable
+            )
+        )
+
+        XCTAssertEqual(clockSkew.title, "Snapshot time mismatch")
+        XCTAssertTrue(clockSkew.message.contains("Refresh"))
+        XCTAssertEqual(unavailable.title, "Current context unavailable")
+        XCTAssertTrue(unavailable.message.contains("paired iPhone"))
+    }
+
     func testWatchReceiptHistoryIsBoundedAndDeduplicated() {
         let existing = (0..<30).map {
             ForgeWatchStoredReceipt(

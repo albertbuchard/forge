@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -21,6 +21,124 @@ async function issueOperatorSessionCookie(
   assert.ok(cookie);
   return `${cookie.name}=${cookie.value}`;
 }
+
+test("linkedTo search follows general entity links in both directions for ordinary entities", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-general-entity-backlinks-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+
+  try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/create",
+      headers: { cookie: operatorCookie },
+      payload: {
+        operations: [
+          {
+            entityType: "goal",
+            clientRef: "target-goal",
+            data: { title: "General relationship target" }
+          },
+          {
+            entityType: "goal",
+            clientRef: "backlink-goal",
+            data: { title: "General relationship backlink" }
+          },
+          {
+            entityType: "tag",
+            clientRef: "linked-tag",
+            data: { name: "General relationship tag" }
+          }
+        ]
+      }
+    });
+    assert.equal(createResponse.statusCode, 200);
+    const createBody = createResponse.json() as {
+      results: Array<{ clientRef?: string; id?: string; ok: boolean }>;
+    };
+    assert.equal(
+      createBody.results.every((result) => result.ok),
+      true,
+      JSON.stringify(createResponse.json())
+    );
+    const idFor = (clientRef: string) => {
+      const id = createBody.results.find(
+        (result) => result.clientRef === clientRef
+      )?.id;
+      assert.ok(id);
+      return id;
+    };
+    const targetGoalId = idFor("target-goal");
+    const backlinkGoalId = idFor("backlink-goal");
+    const tagId = idFor("linked-tag");
+    const createdAt = new Date().toISOString();
+    const insertLink = getDatabase().prepare(
+      `INSERT INTO entity_links (
+        source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+        anchor_key, relationship, created_by_actor, created_at
+      ) VALUES (?, ?, ?, ?, '', ?, 'test', ?)`
+    );
+    insertLink.run("tag", tagId, "goal", targetGoalId, "supports", createdAt);
+    insertLink.run(
+      "goal",
+      backlinkGoalId,
+      "tag",
+      tagId,
+      "depends_on",
+      createdAt
+    );
+
+    const searchResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/entities/search",
+      headers: { cookie: operatorCookie },
+      payload: {
+        searches: [
+          {
+            clientRef: "tag-backlinks",
+            entityTypes: ["goal"],
+            linkedTo: { entityType: "tag", id: tagId },
+            limit: 10
+          },
+          {
+            clientRef: "goal-links",
+            entityTypes: ["tag"],
+            linkedTo: { entityType: "goal", id: targetGoalId },
+            limit: 10
+          }
+        ]
+      }
+    });
+
+    assert.equal(searchResponse.statusCode, 200);
+    const searchBody = searchResponse.json() as {
+      results: Array<{
+        clientRef?: string;
+        matches?: Array<{ entityType: string; id: string }>;
+      }>;
+    };
+    const tagBacklinks = searchBody.results.find(
+      (result) => result.clientRef === "tag-backlinks"
+    )?.matches;
+    assert.deepEqual(
+      tagBacklinks?.map((match) => match.id).sort(),
+      [backlinkGoalId, targetGoalId].sort()
+    );
+    const goalLinks = searchBody.results.find(
+      (result) => result.clientRef === "goal-links"
+    )?.matches;
+    assert.deepEqual(
+      goalLinks?.map((match) => match.id),
+      [tagId]
+    );
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
 
 test("batch entity routes handle preferences CRUD and questionnaire instrument CRUD", async () => {
   const rootDir = await mkdtemp(
@@ -115,8 +233,18 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
                     required: true,
                     tags: [],
                     options: [
-                      { key: "0", label: "Not at all", value: 0, description: "" },
-                      { key: "1", label: "A little", value: 1, description: "" },
+                      {
+                        key: "0",
+                        label: "Not at all",
+                        value: 0,
+                        description: ""
+                      },
+                      {
+                        key: "1",
+                        label: "A little",
+                        value: 1,
+                        description: ""
+                      },
                       { key: "2", label: "Mostly", value: 2, description: "" },
                       { key: "3", label: "Strongly", value: 3, description: "" }
                     ]
@@ -175,12 +303,23 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
         entity?: { id: string; title?: string; name?: string; label?: string };
       }>;
     };
-    assert.equal(createBody.results.every((result) => result.ok), true);
+    assert.equal(
+      createBody.results.every((result) => result.ok),
+      true
+    );
 
-    const catalogId = createBody.results.find((entry) => entry.clientRef === "catalog-a")?.entity?.id;
-    const contextId = createBody.results.find((entry) => entry.clientRef === "context-a")?.entity?.id;
-    const itemId = createBody.results.find((entry) => entry.clientRef === "item-a")?.entity?.id;
-    const questionnaireId = createBody.results.find((entry) => entry.clientRef === "questionnaire-a")?.entity?.id;
+    const catalogId = createBody.results.find(
+      (entry) => entry.clientRef === "catalog-a"
+    )?.entity?.id;
+    const contextId = createBody.results.find(
+      (entry) => entry.clientRef === "context-a"
+    )?.entity?.id;
+    const itemId = createBody.results.find(
+      (entry) => entry.clientRef === "item-a"
+    )?.entity?.id;
+    const questionnaireId = createBody.results.find(
+      (entry) => entry.clientRef === "questionnaire-a"
+    )?.entity?.id;
     assert.ok(catalogId);
     assert.ok(contextId);
     assert.ok(itemId);
@@ -265,7 +404,10 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
         entity?: { title?: string; name?: string; label?: string };
       }>;
     };
-    assert.equal(updateBody.results.every((result) => result.ok), true);
+    assert.equal(
+      updateBody.results.every((result) => result.ok),
+      true
+    );
     assert.equal(updateBody.results[0]?.entity?.title, "Breakfast shortlist");
     assert.equal(updateBody.results[1]?.entity?.label, "Neighborhood cafe");
     assert.equal(updateBody.results[2]?.entity?.name, "Breakfast work mode");
@@ -335,7 +477,10 @@ test("batch entity routes handle preferences CRUD and questionnaire instrument C
     const deleteBody = deleteResponse.json() as {
       results: Array<{ ok: boolean }>;
     };
-    assert.equal(deleteBody.results.every((result) => result.ok), true);
+    assert.equal(
+      deleteBody.results.every((result) => result.ok),
+      true
+    );
 
     const postDeleteSearch = await app.inject({
       method: "POST",
@@ -442,7 +587,10 @@ test("batch entity routes create, update, search, and delete Psyche flashcards",
 
     assert.equal(updateResponse.statusCode, 200);
     const updateBody = updateResponse.json() as {
-      results: Array<{ ok: boolean; entity?: { message?: string; tags?: string[] } }>;
+      results: Array<{
+        ok: boolean;
+        entity?: { message?: string; tags?: string[] };
+      }>;
     };
     assert.equal(updateBody.results[0]?.ok, true);
     assert.equal(
@@ -482,17 +630,18 @@ test("batch entity routes create, update, search, and delete Psyche flashcards",
         matches?: Array<{ entityType: string; id: string }>;
       }>;
     };
-    assert.equal(searchBody.results.every((result) => result.ok), true);
+    assert.equal(
+      searchBody.results.every((result) => result.ok),
+      true
+    );
     assert.ok(
       searchBody.results[0]?.matches?.some(
-        (match) =>
-          match.entityType === "flashcard" && match.id === flashcard.id
+        (match) => match.entityType === "flashcard" && match.id === flashcard.id
       )
     );
     assert.ok(
       searchBody.results[1]?.matches?.some(
-        (match) =>
-          match.entityType === "flashcard" && match.id === flashcard.id
+        (match) => match.entityType === "flashcard" && match.id === flashcard.id
       )
     );
 
@@ -571,7 +720,10 @@ test("batch entity routes create, update, search, and delete sleep and workout s
         };
       }>;
     };
-    assert.equal(createBody.results.every((result) => result.ok), true);
+    assert.equal(
+      createBody.results.every((result) => result.ok),
+      true
+    );
     const sleepEntity = createBody.results.find(
       (entry) => entry.clientRef === "sleep-a"
     )?.entity;
@@ -622,7 +774,10 @@ test("batch entity routes create, update, search, and delete sleep and workout s
         };
       }>;
     };
-    assert.equal(updateBody.results.every((result) => result.ok), true);
+    assert.equal(
+      updateBody.results.every((result) => result.ok),
+      true
+    );
     assert.equal(
       updateBody.results[0]?.entity?.annotations?.notes,
       "Woke once around 03:00 but settled quickly."
@@ -681,7 +836,10 @@ test("batch entity routes create, update, search, and delete sleep and workout s
     const deleteBody = deleteResponse.json() as {
       results: Array<{ ok: boolean }>;
     };
-    assert.equal(deleteBody.results.every((result) => result.ok), true);
+    assert.equal(
+      deleteBody.results.every((result) => result.ok),
+      true
+    );
 
     const deletedSleep = await app.inject({
       method: "GET",
@@ -784,7 +942,10 @@ test("batch entity validation failures return rich per-operation repair guidance
     assert.equal(sleepError?.clientRef, "sleep-missing");
     assert.equal(sleepError?.routeHint, "/api/v1/entities/create");
     assert.equal(sleepError?.toolHint, "forge_create_entities");
-    assert.match(sleepError?.summary ?? "", /sleep_session create payload failed validation/i);
+    assert.match(
+      sleepError?.summary ?? "",
+      /sleep_session create payload failed validation/i
+    );
     assert.ok(sleepError?.missingRequiredFields?.includes("startedAt"));
     assert.ok(sleepError?.missingRequiredFields?.includes("endedAt"));
     assert.ok(sleepError?.allowedTopLevelFields?.includes("startedAt"));
@@ -816,8 +977,7 @@ test("batch entity validation failures return rich per-operation repair guidance
     assert.ok(
       enumError?.invalidValueGuidance?.some(
         (issue) =>
-          issue.path === "kind" &&
-          issue.allowedValues.includes("main_activity")
+          issue.path === "kind" && issue.allowedValues.includes("main_activity")
       )
     );
     assert.ok(

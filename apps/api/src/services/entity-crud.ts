@@ -61,6 +61,7 @@ import {
   clearEntityOwner,
   filterOwnedEntities
 } from "../repositories/entity-ownership.js";
+import { listEntityLinksForEntity } from "../repositories/entity-links.js";
 import {
   createPreferenceCatalog,
   createPreferenceCatalogItem,
@@ -1513,6 +1514,23 @@ function matchesLinkedTo(
   }
 }
 
+function listGenericLinkedEntityKeys(linkedTo: {
+  entityType: CrudEntityType;
+  id: string;
+}) {
+  return new Set(
+    listEntityLinksForEntity(linkedTo.entityType, linkedTo.id).map((link) => {
+      if (
+        link.sourceEntityType === linkedTo.entityType &&
+        link.sourceEntityId === linkedTo.id
+      ) {
+        return `${link.targetEntityType}:${link.targetEntityId}`;
+      }
+      return `${link.sourceEntityType}:${link.sourceEntityId}`;
+    })
+  );
+}
+
 function matchesQuery(entity: Record<string, unknown>, query?: string) {
   if (!query || query.trim().length === 0) {
     return true;
@@ -1836,6 +1854,9 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
         search.entityTypes && search.entityTypes.length > 0
           ? search.entityTypes
           : defaultEntityTypes;
+      const genericLinkedEntityKeys = search.linkedTo
+        ? listGenericLinkedEntityKeys(search.linkedTo)
+        : null;
       const liveMatches = entityTypes.flatMap((entityType) =>
         filterOwnedEntities(
           entityType,
@@ -1853,7 +1874,8 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
           .filter((entity) => matchesStatus(entity, search.status))
           .filter((entity) =>
             search.linkedTo
-              ? matchesLinkedTo(entityType, entity, search.linkedTo)
+              ? matchesLinkedTo(entityType, entity, search.linkedTo) ||
+                genericLinkedEntityKeys?.has(`${entityType}:${entity.id}`)
               : true
           )
           .slice(0, search.limit)
@@ -1894,6 +1916,9 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
                     item.entityType,
                     item.snapshot,
                     search.linkedTo
+                  ) ||
+                  genericLinkedEntityKeys?.has(
+                    `${item.entityType}:${item.entityId}`
                   )
                 : true
             )

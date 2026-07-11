@@ -87,6 +87,23 @@ export function listEntityLinksForSources(
   return rows.map(mapRow);
 }
 
+export function listEntityLinksForEntity(
+  entityType: string,
+  entityId: string
+): EntityLinkRecord[] {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+              anchor_key, relationship, created_by_actor, created_at
+       FROM entity_links
+       WHERE (source_entity_type = ? AND source_entity_id = ?)
+          OR (target_entity_type = ? AND target_entity_id = ?)
+       ORDER BY created_at ASC`
+    )
+    .all(entityType, entityId, entityType, entityId) as EntityLinkRow[];
+  return rows.map(mapRow);
+}
+
 export function replaceEntityLinksForSource(input: {
   sourceEntityType: string;
   sourceEntityId: string;

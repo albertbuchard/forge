@@ -347,6 +347,7 @@ export function QuestionFlowDialog<TValue>({
   error,
   resolveError,
   resolveContinueNudge,
+  resolveContinueBlocker,
   initialStepId,
   contentClassName,
   draftPersistenceKey
@@ -366,6 +367,10 @@ export function QuestionFlowDialog<TValue>({
   error?: string | null;
   resolveError?: (stepId: string) => string | null | undefined;
   resolveContinueNudge?: (
+    stepId: string,
+    value: TValue
+  ) => string | null | undefined;
+  resolveContinueBlocker?: (
     stepId: string,
     value: TValue
   ) => string | null | undefined;
@@ -428,6 +433,10 @@ export function QuestionFlowDialog<TValue>({
   const continueNudge =
     step && stepIndex < totalSteps - 1
       ? resolveContinueNudge?.(step.id, value)
+      : null;
+  const continueBlocker =
+    step && stepIndex < totalSteps - 1
+      ? resolveContinueBlocker?.(step.id, value)
       : null;
 
   const persistDraft = useCallback(() => {
@@ -621,9 +630,24 @@ export function QuestionFlowDialog<TValue>({
 
           <div className="sticky bottom-0 border-t border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
             <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
-              <div className="hidden min-w-0 shrink text-[12px] text-[var(--ui-ink-faint)] sm:block">
-                <span className="truncate">
-                  {continueNudge || `Step ${stepIndex + 1}/${totalSteps}`}
+              <div
+                id="question-flow-continue-guidance"
+                className={cn(
+                  "min-w-0 text-[12px] sm:block",
+                  continueBlocker
+                    ? "order-first w-full text-[var(--danger)] sm:order-none sm:w-auto"
+                    : "hidden shrink text-[var(--ui-ink-faint)]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "block",
+                    continueBlocker ? "break-words leading-4" : "truncate"
+                  )}
+                >
+                  {continueBlocker ||
+                    continueNudge ||
+                    `Step ${stepIndex + 1}/${totalSteps}`}
                 </span>
               </div>
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
@@ -651,6 +675,12 @@ export function QuestionFlowDialog<TValue>({
                 {stepIndex < totalSteps - 1 ? (
                   <Button
                     type="button"
+                    disabled={Boolean(continueBlocker)}
+                    aria-describedby={
+                      continueBlocker
+                        ? "question-flow-continue-guidance"
+                        : undefined
+                    }
                     className={cn(
                       "min-w-0 px-3 text-[12px]",
                       continueNudge
