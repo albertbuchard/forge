@@ -1436,16 +1436,35 @@ Preferred opening question:
 
 ## Strategy
 
-Aim: turn a vague plan into a deliberate sequence toward a real end state.
+Aim: turn a vague plan into a deliberate sequence, then help the user review or
+renegotiate that execution contract without confusing progress updates with plan
+changes.
 
 Arc:
 
-1. Ask what future state the strategy is trying to make real.
-2. Reflect the destination in plain language so the user can correct it early.
-3. Ask which goals or projects are the true targets.
-4. Ask what the major steps or phases are.
-5. Ask about order, dependencies, and anything that must not be skipped.
-6. Clarify links or ownership once the sequence itself makes sense.
+1. Identify the lane first: create or shape a draft, review execution, make an
+   ordinary status change, lock the agreed plan, or explicitly unlock it to
+   renegotiate.
+2. For any existing strategy, read the exact current record before questioning.
+   Reflect its end state, targets, lock state, and relevant active, blocked,
+   out-of-order, or off-plan evidence so the user can correct the frame.
+3. For review, answer what is progressing, blocked, out of order, or outside the
+   agreed scope before asking at most one question about the decision the evidence
+   does not settle.
+4. For a draft, ask what future state it should make real, which goals or projects
+   are true targets, and which existing project or task nodes form the smallest
+   sufficient plan.
+5. Clarify only the order, branch condition, dependency, or must-not-skip step that
+   remains ambiguous. Keep the graph directed and acyclic, with no missing or
+   duplicate nodes, self-loops, or duplicate edges.
+6. Before locking, summarize the target, end-state or overview, graph sequence, and
+   meaningful linked context as the proposed contract, then ask for explicit lock
+   acceptance.
+7. When a locked strategy needs a core plan change, distinguish execution progress
+   from real renegotiation. Do not unlock it unless the user explicitly chooses to
+   reopen the contract; ordinary status changes do not require an unlock.
+8. Use shared batch CRUD for strategy create, update, delete, restore, and search.
+   Do not invent a specialized Strategy lifecycle route.
 
 Helpful follow-up lanes:
 
@@ -1453,16 +1472,22 @@ Helpful follow-up lanes:
 - what the major phases are
 - which steps must happen before others
 - what is in scope versus out of scope
+- what the metrics say is active, blocked, out of order, or off plan
+- whether the user wants to execute the contract or renegotiate it
 
 Ready to save when:
 
-- the strategy has a stable name
-- the end state is concrete enough to test
-- the directed sequence is sketched clearly enough to build
+- review has read the exact current strategy and answered the practical question
+- a draft has a stable name, meaningful target or end state, and valid directed
+  sequence of existing project or task nodes
+- lock has at least one target, an overview or end-state description, a valid graph,
+  and explicit acceptance of the summarized contract
+- unlock has explicit intent to renegotiate, rather than merely record progress
 
 Preferred opening question:
 
-- "What future state are you actually trying to arrive at with this strategy?"
+- "Are you shaping this strategy, reviewing how execution is going, or deciding
+  whether the plan should be locked or renegotiated?"
 
 ## Task
 
@@ -3176,40 +3201,70 @@ Preferred opening question:
 
 ## Preference Item
 
-Aim: save one concrete preference candidate or signal without losing the context that
-makes it meaningful.
+Aim: preserve one clear preference candidate while distinguishing ordinary item
+CRUD, source-entity enqueue, new evidence, and explicit model correction.
 
 Arc:
 
-1. Ask what preference or taste question this item belongs to.
-2. Ask what domain or context it should live in.
-3. Ask whether the user is saving a comparison candidate or a direct signal such as
-   favorite, veto, or compare-later.
-4. Ask what makes the item distinct enough to compare usefully only if it is still a
-   comparison candidate.
+1. Identify the lane first: review, ordinary standalone create or update, enqueue an
+   existing Forge entity, record a pairwise judgment, record a direct signal, or
+   explicitly override inferred score state. Skip the lane question when the user's
+   verb already makes it clear.
+2. For review or any action on an existing item, read the exact item and Preferences
+   Workspace first. Answer what the current judgments, signals, override, evidence
+   count, and uncertainty imply before asking for a write.
+3. For an ordinary standalone candidate, ask which preference question and domain it
+   belongs to, search for a duplicate, and use shared batch CRUD. Ask what
+   distinguishes it only when nearby candidates would otherwise be ambiguous.
+4. For an existing Forge record, confirm the exact source entity, user, and preference
+   domain; search for the same `sourceEntityType` and `sourceEntityId`, then use
+   `forge_enqueue_preferences_item_from_entity`. Let Forge derive the source label and
+   description unless the user wants a meaningful override.
+5. Treat left, right, tie, or skip as a pairwise judgment and favorite, veto,
+   must-have, bookmark, neutral, or compare-later as a direct signal. Use their
+   dedicated action tools instead of changing the item or score through batch CRUD.
+6. Use `forge_update_preferences_score` only when the user explicitly wants to
+   correct or protect inferred state. Confirm the exact item, user, domain, and
+   context; distinguish a manual status, manual score, confidence lock, bookmark,
+   compare-later flag, or frozen state from new evidence, and preserve unmentioned
+   override fields.
+7. After enqueue, judgment, signal, or score override, read or use the returned
+   Preferences Workspace to verify the item, context, evidence, and resulting state
+   rather than reporting only that the call succeeded.
 
 Helpful follow-up lanes:
 
 - what domain this belongs to
 - what context makes the preference meaningful
-- whether this is a signal or a comparison candidate
+- whether this is a standalone candidate, existing Forge record, new evidence, or
+  explicit correction
 - what distinguishes the item from nearby options
+- which current evidence or inferred state the user wants to correct
 
 Route note:
 
-- `preference_item` is normal stored Preferences CRUD when saving or editing a
-  candidate. Use `preference_judgment` or `preference_signal` routes only when the
-  user is recording a comparison outcome or direct mark.
+- `preference_item` uses normal stored Preferences CRUD for ordinary standalone
+  candidate create, update, delete, restore, and search.
+- Use `forge_enqueue_preferences_item_from_entity` and
+  `POST /api/v1/preferences/items/from-entity` for an existing Forge source entity.
+- Use `forge_submit_preferences_judgment` or
+  `forge_submit_preferences_signal` for new evidence.
+- Use `forge_update_preferences_score` and
+  `PATCH /api/v1/preferences/items/:id/score` only for an explicit correction or
+  protection of inferred score state after reading the workspace.
 
 Ready to act when:
 
-- the item is clear
-- the domain or profile context is clear enough
-- any needed distinguishing detail is captured
+- ordinary CRUD has a clear candidate, domain, accepted wording, and duplicate check
+- enqueue has an exact source entity, user, domain, and source-identity duplicate check
+- judgment or signal has an exact context and truthful pair outcome or direct mark
+- score override has explained evidence, explicit correction intent, exact item,
+  user, domain, context, and at least one intentional override field
 
 Preferred opening question:
 
-- "What preference are you trying to make clearer by saving this item?"
+- "Are you adding a preference candidate, bringing in an existing Forge record,
+  reviewing its evidence, or correcting how it is scored?"
 
 ## Questionnaire Instrument
 

@@ -1163,10 +1163,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       "Strategies can target one or many goals or projects.",
       "Graph nodes must reference existing projects or tasks.",
       "Graph edges must remain directed and acyclic.",
+      "Strategies remain editable drafts until isLocked is true; locking turns the targets, graph, linked context, owner, and descriptive plan into a contract.",
+      "A locked strategy may still change execution status, but changing the contract itself requires an explicit unlock and renegotiation choice from the user.",
       "linkedEntities is for related context that should stay visible without becoming part of the main sequence."
     ],
     searchHints: [
       "Search by title or linked target before creating a duplicate strategy.",
+      "Read the exact current strategy before reviewing execution, locking, unlocking, or editing it; use metrics.activeNodeIds, blockedNodeIds, outOfOrderNodeIds, and off-plan counts to answer review questions before proposing a contract change.",
+      "Do not unlock a strategy merely to record progress or change status. Unlock only when the user explicitly wants to renegotiate the agreed plan.",
       "Use userIds when you want strategies owned by specific humans or bots."
     ],
     examples: [
@@ -1238,6 +1242,23 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         required: true,
         description:
           "Directed acyclic graph with nodes referencing projects/tasks and edges defining the flow order."
+      },
+      {
+        name: "isLocked",
+        type: "boolean",
+        required: false,
+        description:
+          "False for an editable draft. True only after the user accepts the strategy as an execution contract.",
+        defaultValue: false
+      },
+      {
+        name: "lockedByUserId",
+        type: "string|null",
+        required: false,
+        description:
+          "Optional human or bot user id attributed as locking the contract; Forge otherwise resolves the owner.",
+        defaultValue: null,
+        nullable: true
       }
     ]
   },
@@ -2278,13 +2299,21 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
   {
     entityType: "behavior",
     purpose:
-      "A concrete behavior pattern element or habit worth tracking directly.",
+      "One concrete, observable move the user does, says, avoids, checks, or uses to return after a difficult moment.",
     minimumCreateFields: ["kind", "title"],
     relationshipRules: [
+      "A behavior is one observable action. Use behavior_pattern for a recurring cue-to-consequence loop, belief_entry for an inner rule, goal for a desired outcome, and trigger_report for one specific episode.",
+      "For an away move, functional understanding comes from the cue, urge in the user's words, immediate protective payoff, and later cost.",
+      "For a committed action, keep the focus on the observable value-directed move and the situation in which the user wants it available; do not force an avoidance payoff or cost analysis.",
+      "For a recovery move, keep the focus on the observable repair, steadying, or return action after rupture or activation; do not force away-move fields.",
       "Behaviors can connect to behavior patterns, values, schemas, and modes.",
       "Trigger reports can link to behaviors they contained."
     ],
-    searchHints: ["Search by title and kind before creating a new behavior."],
+    searchHints: [
+      "Search by title, kind, observable action, and linked pattern or mode before creating a new behavior.",
+      "Read the exact current behavior before an update, then ask only for the smallest newly true change; do not force a sparse existing record through full create intake.",
+      "If the user is describing a whole recurring loop, inner sentence, desired outcome, or one episode rather than an observable action, offer behavior_pattern, belief_entry, goal, or trigger_report and let the user correct the fit."
+    ],
     examples: [
       '{"kind":"away","title":"Doomscroll after conflict cue","commonCues":["Received a critical text"],"shortTermPayoff":"Numbs the anxiety","longTermCost":"Loses time and deepens shame","replacementMove":"Put phone down and take one slow lap outside"}'
     ],
@@ -2307,7 +2336,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         name: "description",
         type: "string",
         required: false,
-        description: "What the behavior looks like.",
+        description:
+          "What someone could see or hear the user do, say, avoid, or check.",
         defaultValue: ""
       },
       {
@@ -2321,21 +2351,24 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         name: "urgeStory",
         type: "string",
         required: false,
-        description: "What the inner urge or story feels like.",
+        description:
+          "For an away move, the urge or inner push in the user's own words.",
         defaultValue: ""
       },
       {
         name: "shortTermPayoff",
         type: "string",
         required: false,
-        description: "Immediate payoff.",
+        description:
+          "For an away move, the immediate relief, certainty, distance, control, or other protective payoff.",
         defaultValue: ""
       },
       {
         name: "longTermCost",
         type: "string",
         required: false,
-        description: "Longer-term cost.",
+        description:
+          "For an away move, the later cost without turning it into a judgment about the user.",
         defaultValue: ""
       },
       {
@@ -2349,7 +2382,8 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         name: "repairPlan",
         type: "string",
         required: false,
-        description: "Repair plan after the behavior occurs.",
+        description:
+          "For a recovery move, the observable action that repairs, steadies, or returns after the difficult moment.",
         defaultValue: ""
       },
       {
@@ -3098,6 +3132,9 @@ function buildPreferredMutationPath(entityType: string) {
   if (entityType === "preference_context") {
     return "Use shared batch CRUD for ordinary preference_context create, update, delete, restore, and search. Read the current contexts through GET /api/v1/preferences/contexts or one exact context through GET /api/v1/preferences/contexts/:id. Use POST /api/v1/preferences/contexts/merge only when the user explicitly wants to consolidate one source context into one target context; do not emulate a merge with batch deletion.";
   }
+  if (entityType === "preference_item") {
+    return "Use shared batch CRUD for ordinary standalone preference_item create, update, delete, restore, and search. Use POST /api/v1/preferences/items/from-entity only to validate and enqueue an existing Forge entity as a comparison candidate. Use POST /api/v1/preferences/judgments or POST /api/v1/preferences/signals for new preference evidence. Use PATCH /api/v1/preferences/items/:id/score only for an explicit manual correction or protection of inferred score state after reading the Preferences Workspace.";
+  }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
   }
@@ -3155,6 +3192,9 @@ function buildPreferredMutationTool(entityType: string) {
   if (entityType === "preference_context") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_merge_preferences_contexts";
   }
+  if (entityType === "preference_item") {
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_get_preferences_workspace | forge_enqueue_preferences_item_from_entity | forge_submit_preferences_judgment | forge_submit_preferences_signal | forge_update_preferences_score";
+  }
   if (entityType === "sleep_session") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_sleep_session for reflective enrichment after review";
   }
@@ -3211,6 +3251,9 @@ function buildPreferredReadPath(entityType: string) {
   }
   if (entityType === "preference_context") {
     return "/api/v1/preferences/contexts | /api/v1/preferences/contexts/:id | /api/v1/entities/search";
+  }
+  if (entityType === "preference_item") {
+    return "/api/v1/preferences/items | /api/v1/preferences/items/:id | /api/v1/preferences/workspace | /api/v1/entities/search";
   }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
     return AGENT_ONBOARDING_BATCH_ROUTE_BASES[
@@ -3685,11 +3728,16 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "One modeled preference candidate that may stand alone or point back to another Forge entity.",
     minimumCreateFields: ["userId", "domain", "label"],
     relationshipRules: [
-      "Preference items are simple entities and should default to batch CRUD.",
-      "They can optionally point back to another Forge entity through sourceEntityType and sourceEntityId."
+      "Preference items are normal stored entities and should use shared batch CRUD for ordinary standalone create, update, delete, restore, and search.",
+      "When an existing Forge entity should become a comparison candidate, use the dedicated enqueue-from-entity action so Forge validates the source, derives its identity, and queues it for comparison.",
+      "Use judgments and signals as new preference evidence. Use a score override only for an explicit correction or protection of inferred state after reading the current workspace evidence.",
+      "They can optionally point back to another Forge entity through sourceEntityType and sourceEntityId, but agents should not hand-build that linkage when the dedicated enqueue action fits."
     ],
     searchHints: [
-      "Search by label, domain, or linked source entity before creating another preference item."
+      "Search by label, domain, or linked source entity before creating another preference item.",
+      "Read the exact item and Preferences Workspace before recording a signal, judgment, or override so the selected user, domain, context, item, and current evidence agree.",
+      "When enqueueing an existing Forge entity, search for the same sourceEntityType and sourceEntityId first; ask for label, description, or tags only when the source-derived wording needs an override.",
+      "Do not translate favorite, veto, must-have, bookmark, neutral, or compare-later language into a manual score override; those are direct signals."
     ],
     examples: [
       '{"userId":"user_operator","domain":"tools","label":"Mechanical keyboard"}'
@@ -4341,15 +4389,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "strategy",
     openingQuestion:
-      "What future state are you actually trying to arrive at with this strategy?",
+      "Are you shaping this strategy, reviewing how execution is going, or deciding whether the plan should be locked or renegotiated?",
     coachingGoal:
-      "Turn a vague plan into a deliberate sequence toward a real end state.",
+      "Turn a vague plan into a deliberate sequence, then help the user review or renegotiate that execution contract without confusing progress updates with plan changes.",
     askSequence: [
-      "Ask what end state the strategy is trying to land.",
-      "Reflect the destination in plain language so the user can correct it early.",
-      "Ask which goals or projects are the true targets.",
-      "Ask what the major steps or nodes are.",
-      "Ask about order, dependencies, and anything that must not be skipped."
+      "Identify the lane first: create or shape a draft, review execution, make an ordinary status change, lock the agreed plan, or explicitly unlock it to renegotiate.",
+      "For any existing strategy, read the exact current record before questioning. Reflect its end state, targets, lock state, and relevant active, blocked, out-of-order, or off-plan evidence so the user can correct the frame.",
+      "For review, answer what is progressing, blocked, out of order, or outside the agreed scope before asking at most one question about the decision the evidence does not settle.",
+      "For a draft, ask what future state it should make real, which goals or projects are true targets, and which existing project or task nodes form the smallest sufficient plan.",
+      "Clarify only the order, branch condition, dependency, or must-not-skip step that remains ambiguous; keep the graph directed and acyclic with no missing or duplicate nodes, self-loops, or duplicate edges.",
+      "Before locking, summarize the target, end-state or overview, graph sequence, and meaningful linked context as the proposed contract, then ask for explicit lock acceptance.",
+      "When a locked strategy needs a core plan change, distinguish execution progress from real renegotiation. Do not unlock it unless the user explicitly chooses to reopen the contract; ordinary status changes do not require an unlock.",
+      "Use shared batch CRUD for strategy create, update, delete, restore, and search; do not invent a specialized Strategy lifecycle route."
     ]
   },
   {
@@ -4735,15 +4786,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "preference_item",
     openingQuestion:
-      "What preference are you trying to make clearer by saving this item?",
+      "Are you adding a preference candidate, bringing in an existing Forge record, reviewing its evidence, or correcting how it is scored?",
     coachingGoal:
-      "Save one concrete preference candidate or signal without losing the context that makes it meaningful.",
+      "Preserve one clear preference candidate while distinguishing ordinary item CRUD, source-entity enqueue, new evidence, and explicit model correction.",
     askSequence: [
-      "Ask what preference or taste question this item belongs to.",
-      "Ask what domain or context it should live in.",
-      "Ask whether the user is saving a comparison candidate or a direct signal such as favorite, veto, or compare-later.",
-      "If the user is saving or editing a candidate, keep it on batch CRUD; if they are recording a comparison outcome or direct mark, switch to the preference judgment or signal route.",
-      "Ask what makes the item distinct enough to compare usefully only if it is still a comparison candidate."
+      "Identify the lane first: review, ordinary standalone create or update, enqueue an existing Forge entity, record a pairwise judgment, record a direct signal, or explicitly override inferred score state. Skip the lane question when the user's verb already makes it clear.",
+      "For review or any action on an existing item, read the exact item and Preferences Workspace first. Answer what the current judgments, signals, override, evidence count, and uncertainty imply before asking for a write.",
+      "For an ordinary standalone candidate, ask which preference question and domain it belongs to, search for a duplicate, and use shared batch CRUD. Ask what distinguishes it only when nearby candidates would otherwise be ambiguous.",
+      "For an existing Forge record, confirm the exact source entity, user, and preference domain; search for the same sourceEntityType and sourceEntityId, then use forge_enqueue_preferences_item_from_entity. Let Forge derive the source label and description unless the user wants a meaningful override.",
+      "Treat left, right, tie, or skip as a pairwise judgment and favorite, veto, must-have, bookmark, neutral, or compare-later as a direct signal. Use their dedicated action tools instead of changing the item or score through batch CRUD.",
+      "Use forge_update_preferences_score only when the user explicitly wants to correct or protect inferred state. Confirm the exact item, user, domain, and context; distinguish a manual status, manual score, confidence lock, bookmark, compare-later flag, or frozen state from new evidence, and preserve unmentioned override fields.",
+      "After enqueue, judgment, signal, or score override, read or use the returned Preferences Workspace to verify the item, context, evidence, and resulting state rather than reporting only that the call succeeded."
     ]
   },
   {
@@ -5066,17 +5119,18 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "behavior",
     useWhen:
-      "Use for one recurring move, coping action, or regulating action that the user wants to understand more clearly and possibly link to a broader pattern.",
+      "Use for one observable move the user does, says, avoids, checks, or uses to repair or return, not for a whole recurring loop, inner belief, desired outcome, or one-off episode.",
     coachingGoal:
-      "Describe the behavior in plain language, understand its function, classify whether it moves away, toward, or back into repair, and identify a more workable move when relevant.",
+      "Describe one observable behavior in the user's language, classify it without moral judgment, and use only the kind-specific questions that clarify an away move, committed action, or recovery move.",
     askSequence: [
-      "Start with a recent example of the behavior in context.",
-      "Name what the user actually does or tends to do.",
-      "Clarify what cues, urges, or situations pull the behavior online.",
-      "Clarify the short-term payoff or relief.",
-      "Clarify the long-term cost or price.",
-      "Decide whether the behavior is away, committed, or recovery.",
-      "Identify a replacement move or repair plan if the user wants one."
+      "First identify whether this is a direct save, update, review, or guided formulation. For an existing behavior, read it first and ask only for the smallest newly true change; do not require sparse legacy fields to be backfilled.",
+      "For guided formulation, start with one recent moment and name what the user actually did, said, avoided, or checked. If the material is a whole loop, inner rule, desired outcome, or one episode, offer behavior_pattern, belief_entry, goal, or trigger_report as a possible better fit.",
+      "Reflect the observable action and ask which situation or cue tends to bring it online, then classify it collaboratively: away when it narrows or escapes at a later cost, committed when it expresses a value despite discomfort, or recovery when it repairs, steadies, or returns after activation.",
+      "For an away move only, capture the urge or inner push in the user's own words, the immediate relief or protective payoff, and one later cost without blame. Once these are visible, offer one tentative hypothesis about the problem the move solves and ask one fit-or-correction question.",
+      "For a committed action, clarify the observable value-directed move and the cue or situation in which the user wants it available. Do not demand an urge, avoidance payoff, later cost, or repair plan unless the user's ambivalence makes one relevant.",
+      "For a recovery move, clarify what rupture or activation it follows and the observable action that repairs, steadies, or returns. Do not demand away-move urge, payoff, or cost fields.",
+      "Ask for a replacementMove only when an away move needs another action that still meets the underlying need; ask for repairPlan when the behavior itself is recovery. Add pattern, value, schema, or mode links only after the behavior is clear.",
+      "Use shared batch CRUD for behavior create, update, delete, restore, and search once the user's wording and accuracy or consent are clear."
     ],
     requiredForCreate: ["kind", "title"],
     highValueOptionalFields: [
@@ -5101,12 +5155,13 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "If you wanted another option available, what would it be?"
     ],
     notes: [
-      "Keep the user close to observable behavior rather than jumping straight to labels.",
+      "Keep the user close to observable behavior rather than jumping straight to labels. A behavior is what someone could see or hear the user do, say, avoid, or check.",
       "When the behavior clearly belongs inside a larger loop, suggest linking or also mapping the related behavior_pattern.",
       "If the user asks for understanding before storage, ask about the recent example and function of the move before classifying it.",
-      "Ask what the move is trying to do for the user before moving into replacement planning.",
-      "Name the immediate protective job before discussing costs or alternatives.",
-      "Once one example is clear, offer one tentative hypothesis about the immediate problem the behavior solves, the cue or urge that pulls it online, and the cost it creates later."
+      "For an away move, ask what the move is trying to do for the user before replacement planning and name the immediate protective job before discussing costs or alternatives.",
+      "For committed and recovery moves, do not manufacture an avoidance function. Formulate the value direction or repair function that the user's example actually supports.",
+      "Once one away-move example is clear, offer one tentative hypothesis about the immediate problem the behavior solves, the cue or urge that pulls it online, and the cost it creates later. For a committed or recovery move, hypothesize only about the supported value direction or repair need.",
+      "Direct saves and narrow updates do not require a fresh episode or interpretation when the user has already supplied an observable action, kind, exact target when updating, and explicit save intent."
     ]
   },
   {
@@ -5478,6 +5533,12 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "life_event") {
     return "Ready when the Life Event's working title or significance, start/end span or event target, place when it changes matching, and selected lane are clear: shared batch CRUD for ordinary saves and links, or the published Life Events route key for timeline, detail, calendar match, ticket import, or travel-status work.";
   }
+  if (guide.entityType === "strategy") {
+    return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
+  }
+  if (guide.entityType === "behavior") {
+    return "Ready on one of two paths. Direct save or update: when clear entity-specific wording names one observable action and its away, committed, or recovery kind, there is explicit save or update intent plus the exact existing target for an update, and one accuracy or consent check confirms the wording; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when one concrete example identifies the observable action, at least one cue, and the kind-specific shape: an away move has the user's urge wording, immediate protective payoff, later cost, and one tentative hypothesis followed by a fit-or-correction check; a committed action has its value-directed move and relevant cue without forced avoidance fields; a recovery move has the rupture or activation plus an observable repair or return action without forced away fields. One final accuracy or consent check must confirm the saveable record shape before shared batch CRUD. For a sparse existing behavior, read the exact record and make only the accepted update; never force full create backfill.";
+  }
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
     return "Ready on one of two paths. Direct save or update: when the user supplies clear entity-specific wording and explicit save or update intent, plus the exact existing target for an update, reflect it and ask at most one accuracy or consent question; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis used has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
   }
@@ -5522,6 +5583,9 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "preference_context") {
     return "Ready on the selected Preference Context lane. Review is ready when the practical question and matching context scope are clear. Ordinary create or update is ready for shared batch CRUD when the context purpose, decision boundary, accepted wording, and duplicate or preservation check are clear. Merge is ready only after reading both exact contexts, confirming one sourceContextId and one targetContextId on the same profile, explaining that judgments and signals move, the source is deactivated, and the target is recomputed, and receiving explicit merge intent. Never use batch delete to imitate a context merge.";
+  }
+  if (guide.entityType === "preference_item") {
+    return "Ready on the selected Preference Item lane. Review is ready after reading the exact item and Preferences Workspace for the selected user, domain, and context. Ordinary standalone create or update is ready for shared batch CRUD when the candidate, domain, accepted wording, and duplicate check are clear. Enqueue is ready when the exact existing Forge entity, user, domain, and source-identity duplicate check are clear; use forge_enqueue_preferences_item_from_entity rather than hand-building source links. Judgment or signal is ready when the exact context and item or pair plus truthful outcome or signal are clear. Score override is ready only after the workspace evidence is explained, the user explicitly chooses correction or protection rather than new evidence, the exact item, user, domain, and context are known, and at least one override field is intentionally changed. Never use batch CRUD for enqueue, judgment, signal, or score override actions.";
   }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
@@ -5975,6 +6039,38 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"routeKey":"nodeResult","pathParams":{"id":"flow_research_digest","runId":"run_123","nodeId":"node_summary"}}'
   },
   {
+    toolName: "forge_get_preferences_workspace",
+    summary:
+      "Read one Preferences workspace with inferred scores, judgments, signals, overrides, evidence counts, uncertainty, and the next comparison pair.",
+    whenToUse:
+      "Use before explaining or changing preference evidence or inferred score state for an existing item.",
+    inputShape:
+      "{ userId?: string, domain?: PreferenceDomain, contextId?: string }",
+    requiredFields: [],
+    notes: [
+      "Use userId, domain, and contextId when they change which preference profile or evidence set answers the question.",
+      "Explain evidence and uncertainty before proposing a judgment, signal, or manual override."
+    ],
+    example:
+      '{"userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work"}'
+  },
+  {
+    toolName: "forge_start_preferences_game",
+    summary:
+      "Start or refresh the pairwise comparison game for one preference profile and optional context or concept catalog.",
+    whenToUse:
+      "Use when the user wants another comparison pair, not when they already supplied a judgment or direct signal.",
+    inputShape:
+      "{ userId: string, domain: PreferenceDomain, contextId?: string, catalogId?: string }",
+    requiredFields: ["userId", "domain"],
+    notes: [
+      "contextId narrows the evidence model; catalogId seeds one selected concept catalog when appropriate.",
+      "Read or use the returned workspace and present the actual pair instead of asking the user for item ids."
+    ],
+    example:
+      '{"userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work"}'
+  },
+  {
     toolName: "forge_merge_preferences_contexts",
     summary:
       "Merge one source preference context into one target context without discarding the source evidence.",
@@ -5990,6 +6086,81 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"sourceContextId":"preference_context_tired_work","targetContextId":"preference_context_deep_work"}'
+  },
+  {
+    toolName: "forge_enqueue_preferences_item_from_entity",
+    summary:
+      "Validate an existing Forge entity and queue it as an entity-backed preference candidate.",
+    whenToUse:
+      "Use only when the source is an exact existing Forge entity that should enter a preference domain or comparison game.",
+    inputShape:
+      "{ userId: string, domain: PreferenceDomain, entityType: CrudEntityType, entityId: string, label?: string, description?: string, tags?: string[] }",
+    requiredFields: ["userId", "domain", "entityType", "entityId"],
+    notes: [
+      "Search for the same sourceEntityType and sourceEntityId before enqueueing so the same source is not represented twice.",
+      "Forge derives label and description from the source. Supply overrides only when the source wording is not meaningful in a comparison.",
+      "This action validates the source and sets queueForCompare; do not imitate it by hand-building source fields through batch CRUD."
+    ],
+    example:
+      '{"userId":"user_operator","domain":"projects","entityType":"project","entityId":"project_thesis"}'
+  },
+  {
+    toolName: "forge_submit_preferences_judgment",
+    summary:
+      "Record one left, right, tie, or skip outcome for two distinct preference items in one context.",
+    whenToUse:
+      "Use when the user has made one pairwise comparison; do not use it for a direct favorite, veto, or bookmark signal.",
+    inputShape:
+      "{ userId: string, domain: PreferenceDomain, contextId: string, leftItemId: string, rightItemId: string, outcome: 'left'|'right'|'tie'|'skip', strength?: number, responseTimeMs?: number|null, reasonTags?: string[] }",
+    requiredFields: [
+      "userId",
+      "domain",
+      "contextId",
+      "leftItemId",
+      "rightItemId",
+      "outcome"
+    ],
+    notes: [
+      "Read the workspace pair first unless the user already identified two exact, distinct items in the same profile.",
+      "strength must be between 0.5 and 2; omit it for the server default of 1.",
+      "The server recomputes the selected context after recording the judgment."
+    ],
+    example:
+      '{"userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work","leftItemId":"preference_item_a","rightItemId":"preference_item_b","outcome":"left"}'
+  },
+  {
+    toolName: "forge_submit_preferences_signal",
+    summary:
+      "Record one direct favorite, veto, must-have, bookmark, neutral, or compare-later signal for an item in one context.",
+    whenToUse:
+      "Use for a direct non-pairwise mark; do not translate it into a batch item edit or manual score override.",
+    inputShape:
+      "{ userId: string, domain: PreferenceDomain, contextId: string, itemId: string, signalType: 'favorite'|'veto'|'must_have'|'bookmark'|'neutral'|'compare_later', strength?: number }",
+    requiredFields: ["userId", "domain", "contextId", "itemId", "signalType"],
+    notes: [
+      "Read the exact item and workspace context first when identity or context is not already explicit.",
+      "strength must be between 0.5 and 2; omit it for the server default of 1.",
+      "The server recomputes the selected context after recording the signal."
+    ],
+    example:
+      '{"userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work","itemId":"preference_item_keyboard","signalType":"favorite"}'
+  },
+  {
+    toolName: "forge_update_preferences_score",
+    summary:
+      "Explicitly correct or protect inferred state for one item in one preference context.",
+    whenToUse:
+      "Use only after explaining the current evidence and confirming that the user wants a manual override rather than a new judgment or signal.",
+    inputShape:
+      "{ itemId: string, userId: string, domain: PreferenceDomain, contextId: string, manualStatus?: PreferenceItemStatus|null, manualScore?: number|null, confidenceLock?: number|null, bookmarked?: boolean, compareLater?: boolean, frozen?: boolean }",
+    requiredFields: ["itemId", "userId", "domain", "contextId"],
+    notes: [
+      "At least one override field should be intentionally supplied; omit fields that should remain unchanged and use null only to clear a nullable override.",
+      "favorite, veto, must-have, bookmark, neutral, and compare-later statements are normally signals, not score overrides.",
+      "The response is the refreshed workspace; verify the resulting override and evidence state from it."
+    ],
+    example:
+      '{"itemId":"preference_item_keyboard","userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work","manualScore":0.9,"confidenceLock":0.8}'
   },
   {
     toolName: "forge_get_sleep_overview",

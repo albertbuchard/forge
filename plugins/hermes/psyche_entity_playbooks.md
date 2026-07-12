@@ -1077,23 +1077,43 @@ Preferred opening question:
 
 ## Behavior
 
-Aim: understand one recurring move and the function it serves.
+Aim: understand one observable move and use only the questions that fit an away move,
+committed action, or recovery move.
 
 Arc:
 
-1. Ask what the behavior actually looks like in a recent moment.
-2. Ask what cue, urge, or body signal pulls it online.
-3. Ask what it does for the user in the moment.
-4. Ask what cost shows up later.
-5. Decide whether it is `away`, `committed`, or `recovery`.
-6. If useful, ask what move they want available instead.
+1. Identify direct save, update, review, or guided formulation. For an existing
+   behavior, read it first and ask only for the smallest newly true change; do not
+   make sparse legacy records backfill a full create flow.
+2. For guided formulation, ask what the user actually did, said, avoided, or checked
+   in one recent moment. Keep this to one observable action. A whole recurring loop
+   is a `behavior_pattern`, an inner rule is a `belief_entry`, a desired outcome is a
+   `goal`, and one episode is a `trigger_report`.
+3. Reflect the observable action, ask what situation or cue brings it online, and
+   classify it collaboratively: `away` when it narrows or escapes at a later cost,
+   `committed` when it expresses a value despite discomfort, or `recovery` when it
+   repairs, steadies, or returns after activation.
+4. For an `away` move only, capture the urge in the user's words, the immediate
+   relief or protective payoff, and one later cost without blame. Once these are
+   visible, offer one tentative functional hypothesis and ask one fit-or-correction
+   question.
+5. For a `committed` action, clarify the observable value-directed move and the cue
+   or situation where the user wants it available. Do not demand an avoidance payoff,
+   later cost, or repair plan unless the user's ambivalence makes one relevant.
+6. For a `recovery` move, clarify the rupture or activation it follows and the
+   observable action that repairs, steadies, or returns. Do not demand away-move urge,
+   payoff, or cost fields.
+7. Ask for `replacementMove` only when an away move needs another action that still
+   meets the underlying need; use `repairPlan` when the behavior itself is recovery.
+   Add links only after the behavior is clear.
 
 Helpful follow-up lanes:
 
-- what the urge is trying to fix immediately
-- what cue or body signal appears first
-- what the move protects the user from
-- what alternative move would still meet the underlying need
+- for every kind: the observable action and cue or situation
+- for `away`: the urge wording, immediate protection or relief, later cost, and a
+  replacement that still meets the need
+- for `committed`: the value direction and action the user wants available
+- for `recovery`: the rupture or activation and concrete repair or return action
 
 Likely linked entities:
 
@@ -1103,9 +1123,13 @@ Likely linked entities:
 
 Ready to save when:
 
-- the move has a stable title
-- its `kind` is clear
-- at least one cue, payoff, cost, or replacement move is grounded enough to help later
+- direct save or update has an observable action, `kind`, exact target when updating,
+  and clear save intent; it does not require a fresh episode or hypothesis
+- guided formulation has an observable action, at least one cue, and the
+  kind-specific shape: urge/payoff/cost for `away`, value direction for `committed`,
+  or repair action for `recovery`
+- any hypothesis has been accepted or corrected and one final accuracy or consent
+  check confirms the record
 
 Preferred opening question:
 

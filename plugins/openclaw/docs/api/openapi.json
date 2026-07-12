@@ -22377,6 +22377,56 @@
     "/api/v1/preferences/game/start": {
       "post": {
         "summary": "Start the Preferences game for a domain or concept list and return the refreshed workspace",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId",
+                  "domain"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "domain": {
+                    "type": "string",
+                    "enum": [
+                      "projects",
+                      "tasks",
+                      "strategies",
+                      "habits",
+                      "calendar",
+                      "sleep",
+                      "sports",
+                      "activities",
+                      "food",
+                      "places",
+                      "countries",
+                      "fashion",
+                      "people",
+                      "media",
+                      "tools",
+                      "custom"
+                    ]
+                  },
+                  "contextId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "catalogId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Refreshed Preferences workspace",
@@ -23117,6 +23167,71 @@
     "/api/v1/preferences/items/from-entity": {
       "post": {
         "summary": "Create or queue a Preferences item from an existing Forge entity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId",
+                  "domain",
+                  "entityType",
+                  "entityId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "domain": {
+                    "type": "string",
+                    "enum": [
+                      "projects",
+                      "tasks",
+                      "strategies",
+                      "habits",
+                      "calendar",
+                      "sleep",
+                      "sports",
+                      "activities",
+                      "food",
+                      "places",
+                      "countries",
+                      "fashion",
+                      "people",
+                      "media",
+                      "tools",
+                      "custom"
+                    ]
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Queued entity-backed Preferences item",
@@ -23150,6 +23265,96 @@
     "/api/v1/preferences/judgments": {
       "post": {
         "summary": "Submit a pairwise Preferences judgment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId",
+                  "domain",
+                  "contextId",
+                  "leftItemId",
+                  "rightItemId",
+                  "outcome"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "domain": {
+                    "type": "string",
+                    "enum": [
+                      "projects",
+                      "tasks",
+                      "strategies",
+                      "habits",
+                      "calendar",
+                      "sleep",
+                      "sports",
+                      "activities",
+                      "food",
+                      "places",
+                      "countries",
+                      "fashion",
+                      "people",
+                      "media",
+                      "tools",
+                      "custom"
+                    ]
+                  },
+                  "contextId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "leftItemId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "rightItemId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "right",
+                      "tie",
+                      "skip"
+                    ]
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 2
+                  },
+                  "responseTimeMs": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reasonTags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created pairwise judgment",
@@ -23183,6 +23388,75 @@
     "/api/v1/preferences/signals": {
       "post": {
         "summary": "Submit an absolute Preferences signal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId",
+                  "domain",
+                  "contextId",
+                  "itemId",
+                  "signalType"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "domain": {
+                    "type": "string",
+                    "enum": [
+                      "projects",
+                      "tasks",
+                      "strategies",
+                      "habits",
+                      "calendar",
+                      "sleep",
+                      "sports",
+                      "activities",
+                      "food",
+                      "places",
+                      "countries",
+                      "fashion",
+                      "people",
+                      "media",
+                      "tools",
+                      "custom"
+                    ]
+                  },
+                  "contextId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signalType": {
+                    "type": "string",
+                    "enum": [
+                      "favorite",
+                      "veto",
+                      "must_have",
+                      "bookmark",
+                      "neutral",
+                      "compare_later"
+                    ]
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 2
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created absolute signal",
@@ -23216,6 +23490,104 @@
     "/api/v1/preferences/items/{id}/score": {
       "patch": {
         "summary": "Patch manual score state for a Preferences item and return the refreshed workspace",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "userId",
+                  "domain",
+                  "contextId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "domain": {
+                    "type": "string",
+                    "enum": [
+                      "projects",
+                      "tasks",
+                      "strategies",
+                      "habits",
+                      "calendar",
+                      "sleep",
+                      "sports",
+                      "activities",
+                      "food",
+                      "places",
+                      "countries",
+                      "fashion",
+                      "people",
+                      "media",
+                      "tools",
+                      "custom"
+                    ]
+                  },
+                  "contextId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "manualStatus": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "liked",
+                          "disliked",
+                          "uncertain",
+                          "vetoed",
+                          "bookmarked",
+                          "favorite",
+                          "must_have",
+                          "neutral"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "manualScore": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "confidenceLock": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bookmarked": {
+                    "type": "boolean"
+                  },
+                  "compareLater": {
+                    "type": "boolean"
+                  },
+                  "frozen": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Refreshed Preferences workspace",

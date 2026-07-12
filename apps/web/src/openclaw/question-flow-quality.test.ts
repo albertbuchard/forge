@@ -33,7 +33,11 @@ describe("question flow quality coverage", () => {
     const scenarios = [
       ["Goal", /keep hold of here/i, /why it matters now/i],
       ["Project", /make true in your life or work/i, /bounded workstream/i],
-      ["Strategy", /actually trying to arrive at/i, /major phases/i],
+      [
+        "Strategy",
+        /shaping this strategy, reviewing how execution is going/i,
+        /execution contract/i
+      ],
       ["Task", /next concrete move here/i, /one-session work item/i],
       ["Habit", /strengthen or interrupt/i, /honest check-in/i],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
@@ -161,8 +165,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Preference Item",
-        /make clearer by saving this item/i,
-        /favorite, veto, or compare-later/i
+        /adding a preference candidate, bringing in an existing Forge record/i,
+        /source-entity enqueue[\s\S]*explicit model correction/i
       ],
       [
         "Questionnaire Instrument",
@@ -832,6 +836,13 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /questionnaire_run[\s\S]*\/api\/v1\/psyche\/questionnaires\/:id\/runs[\s\S]*\/api\/v1\/psyche\/questionnaire-runs\/:id\/complete/i
     );
+    const strategySection = getSectionSlice(entityPlaybook, "Strategy");
+    expect(strategySection).toMatch(
+      /create or shape a draft, review execution[\s\S]*read the exact current record[\s\S]*active, blocked,[\s\S]*out-of-order, or off-plan evidence[\s\S]*answer what is progressing[\s\S]*smallest[\s\S]*sufficient plan/i
+    );
+    expect(strategySection).toMatch(
+      /directed and acyclic[\s\S]*no missing or[\s\S]*duplicate nodes, self-loops, or duplicate edges[\s\S]*explicit lock[\s\S]*Do not unlock[\s\S]*ordinary status changes do not require an unlock[\s\S]*shared batch CRUD/i
+    );
     expect(entityPlaybook).toMatch(
       /Do not ask route-neutral reflective questions[\s\S]*action path is already obvious/i
     );
@@ -860,8 +871,18 @@ describe("question flow quality coverage", () => {
     expect(preferenceContextSection).toMatch(
       /forge_merge_preferences_contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*exactly one[\s\S]*sourceContextId[\s\S]*targetContextId[\s\S]*Never imitate a merge by deleting/i
     );
-    expect(entityPlaybook).toMatch(
-      /preference_item[\s\S]*normal stored Preferences CRUD/i
+    const preferenceItemSection = getSectionSlice(
+      entityPlaybook,
+      "Preference Item"
+    );
+    expect(preferenceItemSection).toMatch(
+      /ordinary standalone create or update[\s\S]*read the exact item and Preferences[\s\S]*Workspace[\s\S]*shared batch CRUD[\s\S]*sourceEntityType[\s\S]*sourceEntityId[\s\S]*forge_enqueue_preferences_item_from_entity/i
+    );
+    expect(preferenceItemSection).toMatch(
+      /left, right, tie, or skip[\s\S]*favorite, veto,[\s\S]*must-have, bookmark, neutral, or compare-later[\s\S]*forge_update_preferences_score[\s\S]*exact item, user, domain, and[\s\S]*context[\s\S]*preserve unmentioned[\s\S]*returned[\s\S]*Preferences Workspace/i
+    );
+    expect(preferenceItemSection).toMatch(
+      /POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*forge_submit_preferences_judgment[\s\S]*forge_submit_preferences_signal[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score/i
     );
     expect(entityPlaybook).toMatch(
       /questionnaire_instrument[\s\S]*normal stored CRUD/i
@@ -917,7 +938,7 @@ describe("question flow quality coverage", () => {
       [
         "Behavior",
         /last time this move showed up/i,
-        /what it does for the user in the moment/i
+        /away move,[\s\S]*committed action, or recovery move/i
       ],
       ["Belief", /what does it start telling you/i, /one explicit sentence/i],
       [
@@ -958,6 +979,23 @@ describe("question flow quality coverage", () => {
         `${section} should stay grounded in lived experience`
       ).toMatch(anchor);
     }
+
+    const behaviorSection = getSectionSlice(psychePlaybook, "Behavior");
+    expect(behaviorSection).toMatch(
+      /direct save, update, review, or guided formulation[\s\S]*smallest newly true change[\s\S]*did, said, avoided, or checked[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report/i
+    );
+    expect(behaviorSection).toMatch(
+      /`away` when it narrows or escapes[\s\S]*`committed` when it expresses a value[\s\S]*`recovery` when it[\s\S]*repairs, steadies, or returns/i
+    );
+    expect(behaviorSection).toMatch(
+      /For an `away` move only[\s\S]*urge in the user's words[\s\S]*protective payoff[\s\S]*later cost without blame[\s\S]*tentative functional hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(behaviorSection).toMatch(
+      /For a `committed` action[\s\S]*value-directed move[\s\S]*Do not demand an avoidance payoff,[\s\S]*later cost, or repair plan[\s\S]*For a `recovery` move[\s\S]*Do not demand away-move urge,[\s\S]*payoff, or cost fields/i
+    );
+    expect(behaviorSection).toMatch(
+      /sparse legacy records[\s\S]*direct save or update[\s\S]*does not require a fresh episode or hypothesis/i
+    );
   });
 
   it("keeps the Psyche playbook paced around reflection before interpretation or repair", () => {

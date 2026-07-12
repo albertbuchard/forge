@@ -85,6 +85,7 @@ async function loadOnboardingPayload() {
     conversationRules: string[];
     psycheCoachingPlaybooks: Array<{
       focus: string;
+      useWhen?: string;
       openingQuestion: string;
       askSequence: string[];
       exampleQuestions?: string[];
@@ -1022,7 +1023,11 @@ describe("forge onboarding contract", () => {
                 ? expect.stringMatching(
                     /shared batch CRUD[\s\S]*GET \/api\/v1\/preferences\/contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*do not emulate a merge with batch deletion/i
                   )
-                : "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
+                : entityType === "preference_item"
+                  ? expect.stringMatching(
+                      /shared batch CRUD[\s\S]*POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*POST \/api\/v1\/preferences\/judgments[\s\S]*POST \/api\/v1\/preferences\/signals[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score/i
+                    )
+                  : "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
         })
       );
     }
@@ -1630,6 +1635,14 @@ describe("forge onboarding contract", () => {
       /book, article, paper, source, concept, person, conversation, project reference/i
     );
 
+    const strategyPlaybook = playbookByFocus.get("strategy");
+    expect(strategyPlaybook?.openingQuestion).toMatch(
+      /shaping this strategy, reviewing how execution is going, or deciding whether the plan should be locked or renegotiated/i
+    );
+    expect(strategyPlaybook?.askSequence.join(" ")).toMatch(
+      /create or shape a draft, review execution, make an ordinary status change, lock the agreed plan, or explicitly unlock it to renegotiate[\s\S]*read the exact current record[\s\S]*active, blocked, out-of-order, or off-plan evidence[\s\S]*answer what is progressing[\s\S]*smallest sufficient plan[\s\S]*directed and acyclic[\s\S]*explicit lock acceptance[\s\S]*progress from real renegotiation[\s\S]*shared batch CRUD/i
+    );
+
     expect(playbookByFocus.get("wiki_page")?.openingQuestion).toMatch(
       /find, preserve, or improve in the wiki/i
     );
@@ -1648,9 +1661,14 @@ describe("forge onboarding contract", () => {
       playbookByFocus.get("self_observation")?.askSequence.join(" ")
     ).toMatch(/Do not promote self-observation over functional analysis/i);
 
+    expect(playbookByFocus.get("preference_item")?.openingQuestion).toMatch(
+      /adding a preference candidate, bringing in an existing Forge record, reviewing its evidence, or correcting how it is scored/i
+    );
     expect(
       playbookByFocus.get("preference_item")?.askSequence.join(" ")
-    ).toMatch(/batch CRUD[\s\S]*preference judgment or signal route/i);
+    ).toMatch(
+      /ordinary standalone create or update[\s\S]*enqueue an existing Forge entity[\s\S]*read the exact item and Preferences Workspace[\s\S]*shared batch CRUD[\s\S]*sourceEntityType and sourceEntityId[\s\S]*forge_enqueue_preferences_item_from_entity[\s\S]*pairwise judgment[\s\S]*direct signal[\s\S]*forge_update_preferences_score[\s\S]*exact item, user, domain, and context[\s\S]*returned Preferences Workspace/i
+    );
     expect(
       playbookByFocus.get("preference_judgment")?.askSequence.join(" ")
     ).toMatch(
@@ -1772,6 +1790,28 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("behavior")?.notes.join(" ")).toMatch(
       /immediate problem the behavior solves/i
     );
+    expect(psycheByFocus.get("behavior")?.useWhen).toMatch(
+      /observable move[\s\S]*not for a whole recurring loop, inner belief, desired outcome, or one-off episode/i
+    );
+    expect(psycheByFocus.get("behavior")?.askSequence.join(" ")).toMatch(
+      /direct save, update, review, or guided formulation[\s\S]*smallest newly true change[\s\S]*did, said, avoided, or checked[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report[\s\S]*away when it narrows or escapes[\s\S]*committed when it expresses a value[\s\S]*recovery when it repairs[\s\S]*For an away move only[\s\S]*tentative hypothesis[\s\S]*For a committed action[\s\S]*Do not demand an urge, avoidance payoff[\s\S]*For a recovery move[\s\S]*Do not demand away-move urge/i
+    );
+    expect(psycheByFocus.get("behavior")?.notes.join(" ")).toMatch(
+      /do not manufacture an avoidance function[\s\S]*value direction or repair function/i
+    );
+    const behaviorCatalog = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "behavior"
+    );
+    expect(behaviorCatalog?.purpose).toMatch(
+      /observable move[\s\S]*does, says, avoids, checks/i
+    );
+    expect(behaviorCatalog?.relationshipRules?.join(" ")).toMatch(
+      /observable action[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report[\s\S]*away move[\s\S]*committed action[\s\S]*do not force an avoidance payoff or cost analysis[\s\S]*recovery move[\s\S]*do not force away-move fields/i
+    );
+    expect(
+      behaviorCatalog?.fieldGuide?.find((field) => field.name === "repairPlan")
+        ?.description
+    ).toMatch(/recovery move[\s\S]*repairs, steadies, or returns/i);
     expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
       /rule or prediction[\s\S]*invite correction/i
     );

@@ -83,6 +83,36 @@ const CALENDAR_PROVIDER_VALUES = [
   "macos_local"
 ];
 
+const PREFERENCE_DOMAIN_VALUES = [
+  "projects",
+  "tasks",
+  "strategies",
+  "habits",
+  "calendar",
+  "sleep",
+  "sports",
+  "activities",
+  "food",
+  "places",
+  "countries",
+  "fashion",
+  "people",
+  "media",
+  "tools",
+  "custom"
+];
+
+const PREFERENCE_ITEM_STATUS_VALUES = [
+  "liked",
+  "disliked",
+  "uncertain",
+  "vetoed",
+  "bookmarked",
+  "favorite",
+  "must_have",
+  "neutral"
+];
+
 const API_TAGS = [
   {
     name: "Meta",
@@ -10707,6 +10737,27 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Start the Preferences game for a domain or concept list and return the refreshed workspace",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["userId", "domain"],
+                  properties: {
+                    userId: { type: "string", minLength: 1 },
+                    domain: {
+                      type: "string",
+                      enum: PREFERENCE_DOMAIN_VALUES
+                    },
+                    contextId: { type: "string", minLength: 1 },
+                    catalogId: { type: "string", minLength: 1 }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -11164,6 +11215,30 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Create or queue a Preferences item from an existing Forge entity",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["userId", "domain", "entityType", "entityId"],
+                  properties: {
+                    userId: { type: "string", minLength: 1 },
+                    domain: {
+                      type: "string",
+                      enum: PREFERENCE_DOMAIN_VALUES
+                    },
+                    entityType: { type: "string", minLength: 1 },
+                    entityId: { type: "string", minLength: 1 },
+                    label: { type: "string" },
+                    description: { type: "string" },
+                    tags: arrayOf({ type: "string", minLength: 1 })
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -11185,6 +11260,45 @@ export function buildOpenApiDocument() {
       "/api/v1/preferences/judgments": {
         post: {
           summary: "Submit a pairwise Preferences judgment",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "userId",
+                    "domain",
+                    "contextId",
+                    "leftItemId",
+                    "rightItemId",
+                    "outcome"
+                  ],
+                  properties: {
+                    userId: { type: "string", minLength: 1 },
+                    domain: {
+                      type: "string",
+                      enum: PREFERENCE_DOMAIN_VALUES
+                    },
+                    contextId: { type: "string", minLength: 1 },
+                    leftItemId: { type: "string", minLength: 1 },
+                    rightItemId: { type: "string", minLength: 1 },
+                    outcome: {
+                      type: "string",
+                      enum: ["left", "right", "tie", "skip"]
+                    },
+                    strength: { type: "number", minimum: 0.5, maximum: 2 },
+                    responseTimeMs: nullable({
+                      type: "integer",
+                      minimum: 0
+                    }),
+                    reasonTags: arrayOf({ type: "string", minLength: 1 })
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -11206,6 +11320,45 @@ export function buildOpenApiDocument() {
       "/api/v1/preferences/signals": {
         post: {
           summary: "Submit an absolute Preferences signal",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "userId",
+                    "domain",
+                    "contextId",
+                    "itemId",
+                    "signalType"
+                  ],
+                  properties: {
+                    userId: { type: "string", minLength: 1 },
+                    domain: {
+                      type: "string",
+                      enum: PREFERENCE_DOMAIN_VALUES
+                    },
+                    contextId: { type: "string", minLength: 1 },
+                    itemId: { type: "string", minLength: 1 },
+                    signalType: {
+                      type: "string",
+                      enum: [
+                        "favorite",
+                        "veto",
+                        "must_have",
+                        "bookmark",
+                        "neutral",
+                        "compare_later"
+                      ]
+                    },
+                    strength: { type: "number", minimum: 0.5, maximum: 2 }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -11228,6 +11381,39 @@ export function buildOpenApiDocument() {
         patch: {
           summary:
             "Patch manual score state for a Preferences item and return the refreshed workspace",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["userId", "domain", "contextId"],
+                  properties: {
+                    userId: { type: "string", minLength: 1 },
+                    domain: {
+                      type: "string",
+                      enum: PREFERENCE_DOMAIN_VALUES
+                    },
+                    contextId: { type: "string", minLength: 1 },
+                    manualStatus: nullable({
+                      type: "string",
+                      enum: PREFERENCE_ITEM_STATUS_VALUES
+                    }),
+                    manualScore: nullable({ type: "number" }),
+                    confidenceLock: nullable({
+                      type: "number",
+                      minimum: 0,
+                      maximum: 1
+                    }),
+                    bookmarked: { type: "boolean" },
+                    compareLater: { type: "boolean" },
+                    frozen: { type: "boolean" }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {

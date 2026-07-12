@@ -808,7 +808,9 @@ describe("forge skill playbook parity", () => {
     expect(entityPlaybook).toMatch(
       /stable public input contract or published output/i
     );
-    expect(entityPlaybook).toMatch(/favorite, veto, or compare-later/i);
+    expect(entityPlaybook).toMatch(
+      /favorite, veto,[\s\S]*must-have, bookmark, neutral, or compare-later/i
+    );
     expect(entityPlaybook).toMatch(
       /Movement, Life Events, Life Force, or Workbench work/i
     );

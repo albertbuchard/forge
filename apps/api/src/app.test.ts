@@ -21217,7 +21217,9 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(preferenceItemConversationPlaybook);
     assert.ok(
       preferenceItemConversationPlaybook.askSequence.some((step) =>
-        /favorite, veto, or compare-later/i.test(step)
+        /favorite, veto, must-have, bookmark, neutral, or compare-later/i.test(
+          step
+        )
       )
     );
     const questionnaireConversationPlaybook =

@@ -11,7 +11,18 @@ import {
   buildServer
 } from "../../../../apps/api/src/app";
 import { buildOpenApiDocument } from "../../../../apps/api/src/openapi";
-import { mergePreferenceContextsSchema } from "../../../../apps/api/src/preferences-types";
+import {
+  enqueueEntityPreferenceItemSchema,
+  mergePreferenceContextsSchema,
+  preferenceDomainSchema,
+  preferenceItemStatusSchema,
+  preferenceJudgmentOutcomeSchema,
+  preferenceSignalTypeSchema,
+  startPreferenceGameSchema,
+  submitAbsoluteSignalSchema,
+  submitPairwiseJudgmentSchema,
+  updatePreferenceScoreSchema
+} from "../../../../apps/api/src/preferences-types";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity";
 import { collectMirroredApiRouteKeys } from "./routes";
 import { registerForgePluginTools } from "./tools";
@@ -369,6 +380,190 @@ describe("openclaw tool contracts", () => {
     expect(hermesMergeBlock).toMatch(/sourceContextId/);
     expect(hermesMergeBlock).toMatch(/targetContextId/);
     expect(hermesMergeBlock).not.toMatch(/sourceContextIds/);
+  });
+
+  it("keeps every Preferences action body aligned across server, OpenAPI, onboarding, and plugins", () => {
+    const tools = collectRegisteredTools();
+    const openApi = buildOpenApiDocument() as {
+      paths: Record<
+        string,
+        Record<
+          string,
+          {
+            requestBody?: {
+              content?: Record<
+                string,
+                {
+                  schema?: {
+                    properties?: Record<
+                      string,
+                      { enum?: string[]; anyOf?: Array<{ const?: string }> }
+                    >;
+                    required?: string[];
+                  };
+                }
+              >;
+            };
+          }
+        >
+      >;
+    };
+    const contracts = [
+      {
+        toolName: "forge_start_preferences_game",
+        method: "post",
+        path: "/api/v1/preferences/game/start",
+        schema: startPreferenceGameSchema,
+        pathFields: [] as string[]
+      },
+      {
+        toolName: "forge_enqueue_preferences_item_from_entity",
+        method: "post",
+        path: "/api/v1/preferences/items/from-entity",
+        schema: enqueueEntityPreferenceItemSchema,
+        pathFields: [] as string[]
+      },
+      {
+        toolName: "forge_submit_preferences_judgment",
+        method: "post",
+        path: "/api/v1/preferences/judgments",
+        schema: submitPairwiseJudgmentSchema,
+        pathFields: [] as string[]
+      },
+      {
+        toolName: "forge_submit_preferences_signal",
+        method: "post",
+        path: "/api/v1/preferences/signals",
+        schema: submitAbsoluteSignalSchema,
+        pathFields: [] as string[]
+      },
+      {
+        toolName: "forge_update_preferences_score",
+        method: "patch",
+        path: "/api/v1/preferences/items/{id}/score",
+        schema: updatePreferenceScoreSchema,
+        pathFields: ["itemId"]
+      }
+    ] as const;
+
+    for (const contract of contracts) {
+      const shape = contract.schema.shape as Record<
+        string,
+        { isOptional: () => boolean }
+      >;
+      const bodyFields = Object.keys(shape).sort();
+      const bodyRequired = Object.entries(shape)
+        .filter(([, field]) => !field.isOptional())
+        .map(([name]) => name)
+        .sort();
+      const expectedToolFields = [...bodyFields, ...contract.pathFields].sort();
+      const expectedToolRequired = [
+        ...bodyRequired,
+        ...contract.pathFields
+      ].sort();
+      const tool = requireTool(tools, contract.toolName);
+      const toolFields = Object.keys(
+        (tool.parameters?.properties as Record<string, unknown>) ?? {}
+      ).sort();
+      const toolRequired = Array.isArray(tool.parameters?.required)
+        ? [...tool.parameters.required].sort()
+        : [];
+      const openApiSchema =
+        openApi.paths[contract.path]?.[contract.method]?.requestBody?.content?.[
+          "application/json"
+        ]?.schema;
+
+      expect(toolFields, `${contract.toolName} fields`).toEqual(
+        expectedToolFields
+      );
+      expect(toolRequired, `${contract.toolName} required`).toEqual(
+        expectedToolRequired
+      );
+      expect(
+        Object.keys(openApiSchema?.properties ?? {}).sort(),
+        `${contract.path} OpenAPI fields`
+      ).toEqual(bodyFields);
+      expect(
+        [...(openApiSchema?.required ?? [])].sort(),
+        `${contract.path} OpenAPI required`
+      ).toEqual(bodyRequired);
+
+      const toolInputGuide = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+        (entry) => entry.toolName === contract.toolName
+      );
+      expect(
+        toolInputGuide,
+        `${contract.toolName} onboarding input guide`
+      ).toBeDefined();
+      expect(toolInputGuide?.requiredFields.slice().sort()).toEqual(
+        expectedToolRequired
+      );
+      expect(toolInputGuide?.inputShape).not.toBe("{}");
+    }
+
+    const domainValues = preferenceDomainSchema.options.slice().sort();
+    for (const contract of contracts) {
+      const tool = requireTool(tools, contract.toolName);
+      expect(readTypeBoxUnionValues(tool.parameters ?? {}, "domain")).toEqual(
+        domainValues
+      );
+      const domainSchema =
+        openApi.paths[contract.path]?.[contract.method]?.requestBody?.content?.[
+          "application/json"
+        ]?.schema?.properties?.domain;
+      expect([...(domainSchema?.enum ?? [])].sort()).toEqual(domainValues);
+    }
+    expect(
+      readTypeBoxUnionValues(
+        requireTool(tools, "forge_submit_preferences_judgment").parameters ??
+          {},
+        "outcome"
+      )
+    ).toEqual(preferenceJudgmentOutcomeSchema.options.slice().sort());
+    expect(
+      readTypeBoxUnionValues(
+        requireTool(tools, "forge_submit_preferences_signal").parameters ?? {},
+        "signalType"
+      )
+    ).toEqual(preferenceSignalTypeSchema.options.slice().sort());
+    expect(
+      readTypeBoxUnionValues(
+        requireTool(tools, "forge_update_preferences_score").parameters ?? {},
+        "manualStatus"
+      )
+    ).toEqual(preferenceItemStatusSchema.options.slice().sort());
+
+    const workspaceGuide = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
+      (entry) => entry.toolName === "forge_get_preferences_workspace"
+    );
+    expect(workspaceGuide?.inputShape).toMatch(
+      /userId\?: string[\s\S]*domain\?: PreferenceDomain[\s\S]*contextId\?: string/i
+    );
+
+    const hermesCatalog = readFileSync(
+      path.join(repoRoot, "plugins/hermes/forge_hermes/catalog.py"),
+      "utf8"
+    );
+    const judgmentStart = hermesCatalog.indexOf(
+      '"name": "forge_submit_preferences_judgment"'
+    );
+    const judgmentEnd = hermesCatalog.indexOf(
+      '"name": "forge_submit_preferences_signal"',
+      judgmentStart
+    );
+    const signalEnd = hermesCatalog.indexOf(
+      '"name": "forge_update_preferences_score"',
+      judgmentEnd
+    );
+    const judgmentBlock = hermesCatalog.slice(judgmentStart, judgmentEnd);
+    const signalBlock = hermesCatalog.slice(judgmentEnd, signalEnd);
+    for (const block of [judgmentBlock, signalBlock]) {
+      expect(block).toMatch(/"userId"/);
+      expect(block).toMatch(/"domain"/);
+      expect(block).toMatch(/"contextId"/);
+      expect(block).not.toMatch(/"profileId"/);
+      expect(block).not.toMatch(/"source"\s*:/);
+    }
   });
 
   it("publishes the Psyche schema catalog as a read-only reference tool", () => {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11T20:35:35.746Z",
+  "generatedAt": "2026-07-12T20:37:58.267Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -394,13 +394,22 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Enqueue Preferences Item From Entity",
-      "summary": "Queue an existing Forge entity into a preference domain so it can appear in the comparison game.",
-      "whenToUse": "Queue an existing Forge entity into a preference domain so it can appear in the comparison game.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Validate an existing Forge entity and queue it as an entity-backed preference candidate.",
+      "whenToUse": "Use only when the source is an exact existing Forge entity that should enter a preference domain or comparison game.",
+      "inputShape": "{ userId: string, domain: PreferenceDomain, entityType: CrudEntityType, entityId: string, label?: string, description?: string, tags?: string[] }",
+      "requiredFields": [
+        "userId",
+        "domain",
+        "entityType",
+        "entityId"
+      ],
+      "notes": [
+        "Search for the same sourceEntityType and sourceEntityId before enqueueing so the same source is not represented twice.",
+        "Forge derives label and description from the source. Supply overrides only when the source wording is not meaningful in a comparison.",
+        "This action validates the source and sets queueForCompare; do not imitate it by hand-building source fields through batch CRUD."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"domain\":\"projects\",\"entityType\":\"project\",\"entityId\":\"project_thesis\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_ensure_questionnaire_draft",
@@ -539,13 +548,16 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Preferences Workspace",
-      "summary": "Read Forge's current preference model for one user and domain, including the summary-first landing view, next comparison pair, concept libraries, map, table, and history.",
-      "whenToUse": "Read Forge's current preference model for one user and domain, including the summary-first landing view, next comparison pair, concept libraries, map, table, and history.",
-      "inputShape": "{}",
+      "summary": "Read one Preferences workspace with inferred scores, judgments, signals, overrides, evidence counts, uncertainty, and the next comparison pair.",
+      "whenToUse": "Use before explaining or changing preference evidence or inferred score state for an existing item.",
+      "inputShape": "{ userId?: string, domain?: PreferenceDomain, contextId?: string }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "Use userId, domain, and contextId when they change which preference profile or evidence set answers the question.",
+        "Explain evidence and uncertainty before proposing a judgment, signal, or manual override."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"domain\":\"tools\",\"contextId\":\"preference_context_deep_work\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_psyche_overview",
@@ -1244,13 +1256,19 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Start Preferences Game",
-      "summary": "Start the Forge comparison game for one preference domain or context and return the next pair of items to compare.",
-      "whenToUse": "Start the Forge comparison game for one preference domain or context and return the next pair of items to compare.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Start or refresh the pairwise comparison game for one preference profile and optional context or concept catalog.",
+      "whenToUse": "Use when the user wants another comparison pair, not when they already supplied a judgment or direct signal.",
+      "inputShape": "{ userId: string, domain: PreferenceDomain, contextId?: string, catalogId?: string }",
+      "requiredFields": [
+        "userId",
+        "domain"
+      ],
+      "notes": [
+        "contextId narrows the evidence model; catalogId seeds one selected concept catalog when appropriate.",
+        "Read or use the returned workspace and present the actual pair instead of asking the user for item ids."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"domain\":\"tools\",\"contextId\":\"preference_context_deep_work\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_start_questionnaire_run",
@@ -1291,26 +1309,47 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Submit Preferences Judgment",
-      "summary": "Record one pairwise preference outcome such as left, right, tie, or skip.",
-      "whenToUse": "Record one pairwise preference outcome such as left, right, tie, or skip.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Record one left, right, tie, or skip outcome for two distinct preference items in one context.",
+      "whenToUse": "Use when the user has made one pairwise comparison; do not use it for a direct favorite, veto, or bookmark signal.",
+      "inputShape": "{ userId: string, domain: PreferenceDomain, contextId: string, leftItemId: string, rightItemId: string, outcome: 'left'|'right'|'tie'|'skip', strength?: number, responseTimeMs?: number|null, reasonTags?: string[] }",
+      "requiredFields": [
+        "userId",
+        "domain",
+        "contextId",
+        "leftItemId",
+        "rightItemId",
+        "outcome"
+      ],
+      "notes": [
+        "Read the workspace pair first unless the user already identified two exact, distinct items in the same profile.",
+        "strength must be between 0.5 and 2; omit it for the server default of 1.",
+        "The server recomputes the selected context after recording the judgment."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"domain\":\"tools\",\"contextId\":\"preference_context_deep_work\",\"leftItemId\":\"preference_item_a\",\"rightItemId\":\"preference_item_b\",\"outcome\":\"left\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_submit_preferences_signal",
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Submit Preferences Signal",
-      "summary": "Record a direct non-pairwise preference signal such as favorite, veto, must-have, bookmark, neutral, or compare-later.",
-      "whenToUse": "Record a direct non-pairwise preference signal such as favorite, veto, must-have, bookmark, neutral, or compare-later.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Record one direct favorite, veto, must-have, bookmark, neutral, or compare-later signal for an item in one context.",
+      "whenToUse": "Use for a direct non-pairwise mark; do not translate it into a batch item edit or manual score override.",
+      "inputShape": "{ userId: string, domain: PreferenceDomain, contextId: string, itemId: string, signalType: 'favorite'|'veto'|'must_have'|'bookmark'|'neutral'|'compare_later', strength?: number }",
+      "requiredFields": [
+        "userId",
+        "domain",
+        "contextId",
+        "itemId",
+        "signalType"
+      ],
+      "notes": [
+        "Read the exact item and workspace context first when identity or context is not already explicit.",
+        "strength must be between 0.5 and 2; omit it for the server default of 1.",
+        "The server recomputes the selected context after recording the signal."
+      ],
+      "example": "{\"userId\":\"user_operator\",\"domain\":\"tools\",\"contextId\":\"preference_context_deep_work\",\"itemId\":\"preference_item_keyboard\",\"signalType\":\"favorite\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_sync_calendar_connection",
@@ -1390,13 +1429,22 @@
       "groupId": "preferences",
       "groupTitle": "Preferences",
       "label": "Forge Update Preferences Score",
-      "summary": "Override or protect the inferred state of one preference item when the user wants explicit correction.",
-      "whenToUse": "Override or protect the inferred state of one preference item when the user wants explicit correction.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Explicitly correct or protect inferred state for one item in one preference context.",
+      "whenToUse": "Use only after explaining the current evidence and confirming that the user wants a manual override rather than a new judgment or signal.",
+      "inputShape": "{ itemId: string, userId: string, domain: PreferenceDomain, contextId: string, manualStatus?: PreferenceItemStatus|null, manualScore?: number|null, confidenceLock?: number|null, bookmarked?: boolean, compareLater?: boolean, frozen?: boolean }",
+      "requiredFields": [
+        "itemId",
+        "userId",
+        "domain",
+        "contextId"
+      ],
+      "notes": [
+        "At least one override field should be intentionally supplied; omit fields that should remain unchanged and use null only to clear a nullable override.",
+        "favorite, veto, must-have, bookmark, neutral, and compare-later statements are normally signals, not score overrides.",
+        "The response is the refreshed workspace; verify the resulting override and evidence state from it."
+      ],
+      "example": "{\"itemId\":\"preference_item_keyboard\",\"userId\":\"user_operator\",\"domain\":\"tools\",\"contextId\":\"preference_context_deep_work\",\"manualScore\":0.9,\"confidenceLock\":0.8}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_update_questionnaire_run",

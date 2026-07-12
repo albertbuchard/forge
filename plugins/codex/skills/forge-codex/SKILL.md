@@ -578,6 +578,15 @@ Surface rule:
      `targetContextId` after explaining that judgments and signals move, the source is
      deactivated, and the target is recomputed. Never emulate a merge with batch
      deletion.
+     Treat entity-backed Preference Item enqueue and evidence changes as separate
+     actions. Use `forge_enqueue_preferences_item_from_entity` for an exact existing
+     Forge source instead of hand-building source links. Read the Preferences
+     Workspace before judgment, signal, or score correction; judgment and signal
+     require `userId`, `domain`, and `contextId`, while
+     `forge_update_preferences_score` also requires `itemId`. Use a signal for
+     favorite, veto, must-have, bookmark, neutral, or compare-later language, and
+     reserve score override for an explicit correction or protection of inferred
+     state.
 5. Specialized CRUD entities are `wiki_page` and `calendar_connection`.
    Use wiki pages whenever the user wants durable memory for a book, article, paper,
    source, concept, person, conversation, project reference, recurring explanation,

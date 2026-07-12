@@ -35,6 +35,7 @@ async function loadOnboardingPayload() {
       entityType: string;
       classification: string;
       preferredReadPath: string | null;
+      fieldGuide?: Array<{ name: string; description?: string }>;
       questionFlow: {
         openingQuestion: string;
         coachingGoal: string;
@@ -317,7 +318,7 @@ describe("question flow simulation cycles", () => {
     "Preference Context":
       "Merge my tired-work context into deep work without losing the comparisons that explain the ranking.",
     "Preference Item":
-      "Save one preference candidate and decide if it is a signal or comparison item.",
+      "Bring an existing Forge project into Preferences, then decide whether my reaction is new evidence or an explicit score correction.",
     "Questionnaire Instrument":
       "Draft a reusable questionnaire for post-session reflection.",
     "Questionnaire Run":
@@ -410,7 +411,15 @@ describe("question flow simulation cycles", () => {
     "Preference Catalog": ["add", "update", "review", "browse"],
     "Preference Catalog Item": ["add", "update", "review", "compare"],
     "Preference Context": ["add", "update", "review", "merge"],
-    "Preference Item": ["add", "update", "review", "signal"],
+    "Preference Item": [
+      "add",
+      "update",
+      "review",
+      "enqueue-from-entity",
+      "judgment",
+      "signal",
+      "override-score"
+    ],
     "Questionnaire Instrument": [
       "review",
       "create",
@@ -459,6 +468,22 @@ describe("question flow simulation cycles", () => {
     cycle1: taskWorkItemLevelScenarios,
     cycle2: taskWorkItemLevelScenarios,
     cycle3: taskWorkItemLevelScenarios
+  } as const;
+
+  const behaviorKindScenarios = {
+    away: "When a reply feels ambiguous, I reread it repeatedly for certainty, feel relief for a minute, and lose the rest of the evening.",
+    committed:
+      "When I notice the urge to hide my draft, I send the honest version because showing my work matters to me.",
+    recovery:
+      "After I become sharp in a difficult conversation, I pause, name what happened, and make a concrete repair.",
+    narrow_update:
+      "Change only the observable action wording on an older saved behavior and keep everything else as it is."
+  } as const;
+
+  const behaviorKindCoverageByCycle = {
+    cycle1: behaviorKindScenarios,
+    cycle2: behaviorKindScenarios,
+    cycle3: behaviorKindScenarios
   } as const;
 
   const expectedApiPosture: Record<
@@ -510,7 +535,7 @@ describe("question flow simulation cycles", () => {
     "Preference Catalog": "batch",
     "Preference Catalog Item": "batch",
     "Preference Context": "hybridBatchAndAction",
-    "Preference Item": "batch",
+    "Preference Item": "hybridBatchAndAction",
     "Questionnaire Instrument": "batch",
     "Questionnaire Run": "action",
     Value: "batch",
@@ -926,6 +951,23 @@ describe("question flow simulation cycles", () => {
       }
     }
 
+    for (const [cycleName, kindScenarios] of Object.entries(
+      behaviorKindCoverageByCycle
+    )) {
+      expect(
+        Object.keys(kindScenarios).sort(),
+        `${cycleName} should exercise every Behavior kind plus a narrow update`
+      ).toEqual(["away", "committed", "narrow_update", "recovery"]);
+      for (const [kind, scenario] of Object.entries(kindScenarios)) {
+        expect(
+          scenario,
+          `${cycleName} Behavior ${kind} scenario should be user-facing`
+        ).not.toMatch(
+          /\b(API|CRUD|endpoint|payload|mutation path|route key|schema field)\b/i
+        );
+      }
+    }
+
     for (const section of nonPsycheSections) {
       expect(simulatedUserScenarios[section], `${section} scenario`).toMatch(
         /\w/
@@ -1065,6 +1107,19 @@ describe("question flow simulation cycles", () => {
       );
     }
 
+    const behaviorFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "behavior"
+    )?.questionFlow;
+    expect(behaviorFlow?.askSequence.join("\n")).toMatch(
+      /direct save, update, review, or guided formulation[\s\S]*read it first[\s\S]*smallest newly true change[\s\S]*did, said, avoided, or checked[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report[\s\S]*away when it narrows or escapes[\s\S]*committed when it expresses a value[\s\S]*recovery when it repairs[\s\S]*For an away move only[\s\S]*urge or inner push[\s\S]*protective payoff[\s\S]*fit-or-correction[\s\S]*For a committed action[\s\S]*Do not demand an urge, avoidance payoff, later cost, or repair plan[\s\S]*For a recovery move[\s\S]*Do not demand away-move urge, payoff, or cost fields[\s\S]*replacementMove[\s\S]*repairPlan[\s\S]*shared batch CRUD/i
+    );
+    expect(behaviorFlow?.readinessCheck).toMatch(
+      /Direct save or update[\s\S]*observable action[\s\S]*away, committed, or recovery kind[\s\S]*do not require a new concrete example or hypothesis[\s\S]*Guided formulation[\s\S]*at least one cue[\s\S]*away move has the user's urge wording, immediate protective payoff, later cost[\s\S]*committed action has its value-directed move[\s\S]*without forced avoidance fields[\s\S]*recovery move has the rupture or activation[\s\S]*without forced away fields[\s\S]*sparse existing behavior[\s\S]*never force full create backfill/i
+    );
+    expect(behaviorFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+
     const selfObservationFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "self_observation"
     )?.questionFlow;
@@ -1193,6 +1248,26 @@ describe("question flow simulation cycles", () => {
       /forge_get_weight_loss_overview[\s\S]*forge_log_food[\s\S]*forge_log_body_checkin[\s\S]*forge_log_gut_checkin[\s\S]*forge_start_nutrition_experiment/i
     );
 
+    const strategyEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "strategy"
+    );
+    const strategyFlow = strategyEntry?.questionFlow;
+    expect(strategyFlow?.openingQuestion).toMatch(
+      /shaping this strategy, reviewing how execution is going, or deciding whether the plan should be locked or renegotiated/i
+    );
+    expect(strategyFlow?.askSequence.join("\n")).toMatch(
+      /create or shape a draft, review execution, make an ordinary status change, lock the agreed plan, or explicitly unlock it to renegotiate[\s\S]*read the exact current record[\s\S]*active, blocked, out-of-order, or off-plan evidence[\s\S]*answer what is progressing[\s\S]*smallest sufficient plan[\s\S]*directed and acyclic[\s\S]*no missing or duplicate nodes, self-loops, or duplicate edges[\s\S]*explicit lock acceptance[\s\S]*progress from real renegotiation[\s\S]*shared batch CRUD/i
+    );
+    expect(strategyFlow?.readinessCheck).toMatch(
+      /Review is ready after reading the exact current strategy[\s\S]*draft create or update is ready for shared batch CRUD[\s\S]*directed acyclic sequence[\s\S]*Lock is ready only when at least one target[\s\S]*explicit acceptance[\s\S]*Unlock is ready only when the user explicitly wants to renegotiate[\s\S]*All Strategy writes remain on shared batch CRUD/i
+    );
+    expect(strategyFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+    expect(strategyEntry?.fieldGuide?.map((field) => field.name)).toEqual(
+      expect.arrayContaining(["isLocked", "lockedByUserId"])
+    );
+
     const calendarConnectionFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "calendar_connection"
     )?.questionFlow;
@@ -1262,6 +1337,22 @@ describe("question flow simulation cycles", () => {
     );
     expect(preferenceContextFlow?.apiAccessHint).toMatch(
       /shared batch CRUD for ordinary preference_context[\s\S]*GET \/api\/v1\/preferences\/contexts\/:id[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*forge_merge_preferences_contexts/i
+    );
+
+    const preferenceItemFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "preference_item"
+    )?.questionFlow;
+    expect(preferenceItemFlow?.openingQuestion).toMatch(
+      /adding a preference candidate, bringing in an existing Forge record, reviewing its evidence, or correcting how it is scored/i
+    );
+    expect(preferenceItemFlow?.askSequence.join("\n")).toMatch(
+      /ordinary standalone create or update[\s\S]*enqueue an existing Forge entity[\s\S]*read the exact item and Preferences Workspace[\s\S]*judgments, signals, override, evidence count, and uncertainty[\s\S]*shared batch CRUD[\s\S]*sourceEntityType and sourceEntityId[\s\S]*forge_enqueue_preferences_item_from_entity[\s\S]*left, right, tie, or skip[\s\S]*favorite, veto, must-have, bookmark, neutral, or compare-later[\s\S]*forge_update_preferences_score[\s\S]*manual status, manual score, confidence lock[\s\S]*returned Preferences Workspace/i
+    );
+    expect(preferenceItemFlow?.readinessCheck).toMatch(
+      /Review is ready after reading the exact item and Preferences Workspace[\s\S]*Ordinary standalone create or update is ready for shared batch CRUD[\s\S]*Enqueue is ready[\s\S]*forge_enqueue_preferences_item_from_entity[\s\S]*Judgment or signal is ready[\s\S]*Score override is ready only after the workspace evidence is explained[\s\S]*exact item, user, domain, and context[\s\S]*Never use batch CRUD for enqueue, judgment, signal, or score override/i
+    );
+    expect(preferenceItemFlow?.apiAccessHint).toMatch(
+      /shared batch CRUD for ordinary standalone preference_item[\s\S]*POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*POST \/api\/v1\/preferences\/judgments[\s\S]*POST \/api\/v1\/preferences\/signals[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score[\s\S]*forge_enqueue_preferences_item_from_entity[\s\S]*forge_update_preferences_score/i
     );
 
     const questionnaireInstrumentFlow = onboarding.entityCatalog.find(
@@ -1646,11 +1737,18 @@ describe("question flow simulation cycles", () => {
         continue;
       }
       if (posture === "hybridBatchAndAction") {
-        expect(sectionSlice).toMatch(/shared batch entity tools/i);
-        expect(sectionSlice).toMatch(/forge_merge_preferences_contexts/i);
-        expect(sectionSlice).toMatch(
-          /exactly one[\s\S]*`sourceContextId` and one `targetContextId`/i
-        );
+        expect(sectionSlice).toMatch(/shared batch (?:entity tools|CRUD)/i);
+        if (section === "Preference Context") {
+          expect(sectionSlice).toMatch(/forge_merge_preferences_contexts/i);
+          expect(sectionSlice).toMatch(
+            /exactly one[\s\S]*`sourceContextId` and one `targetContextId`/i
+          );
+        } else {
+          expect(section).toBe("Preference Item");
+          expect(sectionSlice).toMatch(
+            /forge_enqueue_preferences_item_from_entity[\s\S]*forge_submit_preferences_judgment[\s\S]*forge_submit_preferences_signal[\s\S]*forge_update_preferences_score/i
+          );
+        }
         continue;
       }
       if (posture === "action") {

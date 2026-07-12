@@ -376,6 +376,34 @@ const entityNavigationRouteSpecs = {
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
+function literalUnion(values: readonly string[]) {
+  return Type.Union(
+    values.map((value) => Type.Literal(value)) as [
+      ReturnType<typeof Type.Literal>,
+      ReturnType<typeof Type.Literal>,
+      ...Array<ReturnType<typeof Type.Literal>>
+    ]
+  );
+}
+const preferenceDomainInputSchema = () =>
+  literalUnion([
+    "projects",
+    "tasks",
+    "strategies",
+    "habits",
+    "calendar",
+    "sleep",
+    "sports",
+    "activities",
+    "food",
+    "places",
+    "countries",
+    "fashion",
+    "people",
+    "media",
+    "tools",
+    "custom"
+  ]);
 const optionalDeleteMode = () =>
   Type.Optional(Type.Union([Type.Literal("soft"), Type.Literal("hard")]));
 const optionalBoolean = () => Type.Optional(Type.Boolean());
@@ -1700,7 +1728,7 @@ export function registerForgePluginTools(
       "Read Forge's current preference model for one user and domain, including the summary-first landing view, next comparison pair, concept libraries, map, table, and history.",
     parameters: Type.Object({
       userId: optionalString(),
-      domain: optionalString(),
+      domain: Type.Optional(preferenceDomainInputSchema()),
       contextId: optionalString()
     }),
     path: (params) =>
@@ -1718,8 +1746,9 @@ export function registerForgePluginTools(
       "Start the Forge comparison game for one preference domain or context and return the next pair of items to compare.",
     parameters: Type.Object({
       userId: Type.String({ minLength: 1 }),
-      domain: Type.String({ minLength: 1 }),
-      contextId: optionalString()
+      domain: preferenceDomainInputSchema(),
+      contextId: optionalString(),
+      catalogId: optionalString()
     }),
     method: "POST",
     path: "/api/v1/preferences/game/start"
@@ -1745,9 +1774,12 @@ export function registerForgePluginTools(
       "Queue an existing Forge entity into a preference domain so it can appear in the comparison game.",
     parameters: Type.Object({
       userId: Type.String({ minLength: 1 }),
-      domain: Type.String({ minLength: 1 }),
+      domain: preferenceDomainInputSchema(),
       entityType: Type.String({ minLength: 1 }),
-      entityId: Type.String({ minLength: 1 })
+      entityId: Type.String({ minLength: 1 }),
+      label: optionalString(),
+      description: optionalString(),
+      tags: Type.Optional(Type.Array(Type.String({ minLength: 1 })))
     }),
     method: "POST",
     path: "/api/v1/preferences/items/from-entity"
@@ -1759,17 +1791,16 @@ export function registerForgePluginTools(
     description:
       "Record one pairwise preference outcome such as left, right, tie, or skip.",
     parameters: Type.Object({
-      profileId: Type.String({ minLength: 1 }),
-      contextId: Type.String({ minLength: 1 }),
       userId: Type.String({ minLength: 1 }),
+      domain: preferenceDomainInputSchema(),
+      contextId: Type.String({ minLength: 1 }),
       leftItemId: Type.String({ minLength: 1 }),
       rightItemId: Type.String({ minLength: 1 }),
-      outcome: Type.String({ minLength: 1 }),
+      outcome: literalUnion(["left", "right", "tie", "skip"]),
       strength: Type.Optional(Type.Number({ minimum: 0.5, maximum: 2 })),
       responseTimeMs: Type.Optional(
         Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])
       ),
-      source: optionalString(),
       reasonTags: Type.Optional(Type.Array(Type.String()))
     }),
     method: "POST",
@@ -1782,13 +1813,19 @@ export function registerForgePluginTools(
     description:
       "Record a direct non-pairwise preference signal such as favorite, veto, must-have, bookmark, neutral, or compare-later.",
     parameters: Type.Object({
-      profileId: Type.String({ minLength: 1 }),
-      contextId: Type.String({ minLength: 1 }),
       userId: Type.String({ minLength: 1 }),
+      domain: preferenceDomainInputSchema(),
+      contextId: Type.String({ minLength: 1 }),
       itemId: Type.String({ minLength: 1 }),
-      signalType: Type.String({ minLength: 1 }),
-      strength: Type.Optional(Type.Number({ minimum: 0.5, maximum: 2 })),
-      source: optionalString()
+      signalType: literalUnion([
+        "favorite",
+        "veto",
+        "must_have",
+        "bookmark",
+        "neutral",
+        "compare_later"
+      ]),
+      strength: Type.Optional(Type.Number({ minimum: 0.5, maximum: 2 }))
     }),
     method: "POST",
     path: "/api/v1/preferences/signals"
@@ -1801,7 +1838,22 @@ export function registerForgePluginTools(
       "Override or protect the inferred state of one preference item when the user wants explicit correction.",
     parameters: Type.Object({
       itemId: Type.String({ minLength: 1 }),
-      manualStatus: optionalNullableString(),
+      userId: Type.String({ minLength: 1 }),
+      domain: preferenceDomainInputSchema(),
+      contextId: Type.String({ minLength: 1 }),
+      manualStatus: Type.Optional(
+        Type.Union([
+          Type.Literal("liked"),
+          Type.Literal("disliked"),
+          Type.Literal("uncertain"),
+          Type.Literal("vetoed"),
+          Type.Literal("bookmarked"),
+          Type.Literal("favorite"),
+          Type.Literal("must_have"),
+          Type.Literal("neutral"),
+          Type.Null()
+        ])
+      ),
       manualScore: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
       confidenceLock: Type.Optional(
         Type.Union([Type.Number({ minimum: 0, maximum: 1 }), Type.Null()])
@@ -1817,6 +1869,9 @@ export function registerForgePluginTools(
           method: "PATCH",
           path: `/api/v1/preferences/items/${typed.itemId as string}/score`,
           body: {
+            userId: typed.userId,
+            domain: typed.domain,
+            contextId: typed.contextId,
             manualStatus: typed.manualStatus,
             manualScore: typed.manualScore,
             confidenceLock: typed.confidenceLock,
