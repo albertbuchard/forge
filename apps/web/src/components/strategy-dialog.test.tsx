@@ -251,4 +251,45 @@ describe("StrategyDialog", () => {
       "Draft the mobile-safe strategy footer"
     );
   });
+
+  it("fills the initial placeholder and can undo the graph change", async () => {
+    renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Strategy title"), {
+      target: { value: "Land the multi-user planning system" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Define the objective and the end targets"
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Keep the right supporting entities in view"
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", {
+      name: "Build the execution sequence"
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Search goals, projects, tasks, owners, humans, or bots"
+      ),
+      { target: { value: "Core strategy project" } }
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+
+    expect(screen.getByRole("button", { name: "In sequence" })).toBeDisabled();
+    expect(screen.getAllByText("Step 1")).toHaveLength(1);
+    expect(screen.queryByText("Select an entity for this step")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Undo last graph change" })
+    );
+
+    expect(
+      screen.getByText("Select an entity for this step")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add step" })).toBeEnabled();
+  });
 });

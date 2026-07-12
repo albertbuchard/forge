@@ -1,5 +1,6 @@
 import {
   DndContext,
+  KeyboardSensor,
   PointerSensor,
   closestCenter,
   useSensor,
@@ -7,9 +8,10 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Undo2 } from "lucide-react";
 import { Dispatch, SetStateAction } from "react";
 
 import { FlowField } from "@/components/flows/question-flow-dialog";
@@ -84,6 +86,8 @@ export function StrategySequenceBuilder({
   updateNode,
   removeNode,
   reorderNodes,
+  undoNodes,
+  canUndoNodes,
   contractChecks,
   alignmentBreakdown
 }: {
@@ -123,6 +127,8 @@ export function StrategySequenceBuilder({
   updateNode: (nodeId: string, patch: Partial<StrategyDialogDraftNode>) => void;
   removeNode: (nodeId: string) => void;
   reorderNodes: (activeId: string, overId: string) => void;
+  undoNodes: () => void;
+  canUndoNodes: boolean;
   contractChecks: StrategyReadinessCheck[];
   alignmentBreakdown: StrategyAlignmentMetric[];
 }) {
@@ -131,6 +137,9 @@ export function StrategySequenceBuilder({
       activationConstraint: {
         distance: 6
       }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
     })
   );
 
@@ -218,9 +227,23 @@ export function StrategySequenceBuilder({
                 special joins.
               </div>
             </div>
-            <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
-              {draft.nodes.length} planned steps
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="size-9 px-0"
+                aria-label="Undo last graph change"
+                title="Undo graph change"
+                disabled={!canUndoNodes}
+                onClick={undoNodes}
+              >
+                <Undo2 className="size-4" />
+              </Button>
+              <Badge className="bg-[var(--primary)]/14 text-[var(--primary)]">
+                {draft.nodes.length} planned steps
+              </Badge>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -278,6 +301,15 @@ export function StrategySequenceBuilder({
                   allNodes={draft.nodes}
                   onUpdate={updateNode}
                   onRemove={removeNode}
+                  onMove={(nodeId, direction) => {
+                    const currentIndex = draft.nodes.findIndex(
+                      (candidate) => candidate.id === nodeId
+                    );
+                    const target = draft.nodes[currentIndex + direction];
+                    if (target) {
+                      reorderNodes(nodeId, target.id);
+                    }
+                  }}
                 />
               ))}
             </div>

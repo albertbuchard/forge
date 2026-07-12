@@ -2,7 +2,9 @@ import { z } from "zod";
 
 const trimmed = z.string().trim();
 const nonEmpty = trimmed.min(1);
-const uniqueStrings = z.array(nonEmpty).transform((values) => Array.from(new Set(values)));
+const uniqueStrings = z
+  .array(nonEmpty)
+  .transform((values) => Array.from(new Set(values)));
 const ownedUserId = z.string().trim().min(1).nullable().optional();
 
 export const psycheValueSchema = z.object({
@@ -49,6 +51,58 @@ export const behaviorSchema = z.object({
   userId: ownedUserId
 });
 
+export const behaviorCreateSchema = behaviorSchema.superRefine(
+  (value, context) => {
+    if (!value.description.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["description"],
+        message: "Describe the observable action."
+      });
+    }
+
+    if (!value.commonCues.some((cue) => cue.trim().length > 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["commonCues"],
+        message: "Add at least one cue or situation."
+      });
+    }
+
+    if (value.kind === "away") {
+      if (!value.urgeStory.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["urgeStory"],
+          message: "Capture the urge in the user's wording."
+        });
+      }
+      if (!value.shortTermPayoff.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["shortTermPayoff"],
+          message: "Name the immediate payoff or relief."
+        });
+      }
+      if (!value.longTermCost.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["longTermCost"],
+          message: "Name the later cost."
+        });
+      }
+    }
+
+    if (value.kind === "recovery" && !value.repairPlan.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["repairPlan"],
+        message: "Describe the recovery or repair action."
+      });
+    }
+  }
+);
+
 export const beliefEntrySchema = z.object({
   schemaId: z.string().nullable(),
   statement: nonEmpty,
@@ -66,7 +120,13 @@ export const beliefEntrySchema = z.object({
 });
 
 export const modeProfileSchema = z.object({
-  family: z.enum(["coping", "child", "critic_parent", "healthy_adult", "happy_child"]),
+  family: z.enum([
+    "coping",
+    "child",
+    "critic_parent",
+    "healthy_adult",
+    "happy_child"
+  ]),
   archetype: trimmed,
   title: nonEmpty,
   persona: trimmed,
@@ -86,12 +146,14 @@ export const modeProfileSchema = z.object({
 
 export const modeGuideSessionSchema = z.object({
   summary: nonEmpty,
-  answers: z.array(
-    z.object({
-      questionKey: nonEmpty,
-      value: nonEmpty
-    })
-  ).min(1),
+  answers: z
+    .array(
+      z.object({
+        questionKey: nonEmpty,
+        value: nonEmpty
+      })
+    )
+    .min(1),
   userId: ownedUserId
 });
 
@@ -107,8 +169,12 @@ export const flashcardSchema = z.object({
   typography: z.enum(["serif", "sans", "mono", "display"]).default("serif"),
   imageUrl: trimmed.default(""),
   imageAlt: trimmed.default(""),
-  layout: z.enum(["centered", "top_left", "image_split", "poster"]).default("centered"),
-  visualStyle: z.enum(["calm", "urgent", "warm", "clinical", "playful"]).default("calm"),
+  layout: z
+    .enum(["centered", "top_left", "image_split", "poster"])
+    .default("centered"),
+  visualStyle: z
+    .enum(["calm", "urgent", "warm", "clinical", "playful"])
+    .default("calm"),
   linkedValueIds: z.array(z.string()).default([]),
   linkedBehaviorIds: z.array(z.string()).default([]),
   linkedPatternIds: z.array(z.string()).default([]),

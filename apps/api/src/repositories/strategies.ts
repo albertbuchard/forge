@@ -384,7 +384,7 @@ function buildStrategyMetrics(
     offPlanEntityCount,
     offPlanActiveEntityCount,
     offPlanCompletedEntityCount,
-    activeNodeIds: activeNodeIds.slice(0, 8),
+    activeNodeIds,
     nextNodeIds: activeNodeIds.slice(0, 5),
     blockedNodeIds,
     outOfOrderNodeIds

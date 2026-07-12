@@ -104,6 +104,24 @@ const familyLabelMap: Record<ModeProfile["family"], string> = {
   happy_child: "Happy child"
 };
 
+export function resolveModeContinueBlocker(
+  stepId: string,
+  value: ModeProfileInput,
+  allowSparseExisting = false
+) {
+  if (stepId === "identity" && !value.title.trim()) {
+    return "Give this state a recognizable working name. It can stay tentative and change later.";
+  }
+  if (
+    stepId === "burden" &&
+    !allowSparseExisting &&
+    !value.protectiveJob.trim()
+  ) {
+    return "Name the job this mode may be trying to do for you. Treat it as a working hypothesis you can correct, not a fact.";
+  }
+  return null;
+}
+
 export function PsycheModesPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
@@ -335,17 +353,6 @@ export function PsycheModesPage() {
         "Start with the mode itself: who it feels like, what family it belongs to, and the recognizable role it plays.",
       render: (value, setValue) => (
         <>
-          <UserSelectField
-            value={value.userId ?? null}
-            users={shell.snapshot.users}
-            onChange={(userId) => setValue({ userId })}
-            defaultLabel={formatOwnerSelectDefaultLabel(
-              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                null,
-              "Choose mode owner"
-            )}
-            help="Modes can belong to a human or bot user while still linking across shared patterns, behaviors, and values."
-          />
           <FlowField
             label="Mode family"
             description="Choose the broader inner family this mode belongs to."
@@ -465,7 +472,7 @@ export function PsycheModesPage() {
       eyebrow: "Burden",
       title: "Map fear, burden, job, and origin",
       description:
-        "This is what turns a named mode into a readable inner-state profile.",
+        "Explore what this state fears, carries, and may be trying to do for you. These are working hypotheses, not diagnoses.",
       render: (value, setValue) => (
         <>
           <div className="grid gap-4 md:grid-cols-3">
@@ -529,6 +536,17 @@ export function PsycheModesPage() {
         "Modes should connect to patterns, behaviors, and values, not sit in isolation.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose mode owner"
+            )}
+            help="Choose an owner only when it changes whose mode profile this is. Links may still cross owners."
+          />
           <FlowField
             label="Linked patterns"
             description="Choose the loops this mode tends to activate or maintain."
@@ -768,6 +786,9 @@ export function PsycheModesPage() {
           editingMode ? `psyche.mode.${editingMode.id}` : "psyche.mode.new"
         }
         steps={steps}
+        resolveContinueBlocker={(stepId, value) =>
+          resolveModeContinueBlocker(stepId, value, Boolean(editingMode))
+        }
         submitLabel={editingMode ? "Save mode" : "Create mode"}
         pending={saveMutation.isPending}
         error={submitError}

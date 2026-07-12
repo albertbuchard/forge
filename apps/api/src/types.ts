@@ -4922,6 +4922,7 @@ function validateStrategyGraph(
 
   const outgoing = new Map<string, string[]>();
   const incomingCount = new Map<string, number>();
+  const edgeKeys = new Set<string>();
   for (const nodeId of nodeIds) {
     outgoing.set(nodeId, []);
     incomingCount.set(nodeId, 0);
@@ -4944,6 +4945,16 @@ function validateStrategyGraph(
       });
       return;
     }
+    const edgeKey = `${edge.from}\u0000${edge.to}`;
+    if (edgeKeys.has(edgeKey)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["edges"],
+        message: `Strategy graph edge ${edge.from} -> ${edge.to} is duplicated`
+      });
+      return;
+    }
+    edgeKeys.add(edgeKey);
     outgoing.get(edge.from)!.push(edge.to);
     incomingCount.set(edge.to, (incomingCount.get(edge.to) ?? 0) + 1);
   }
@@ -4961,8 +4972,10 @@ function validateStrategyGraph(
   }
 
   let visited = 0;
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
+  let queueIndex = 0;
+  while (queueIndex < queue.length) {
+    const nodeId = queue[queueIndex]!;
+    queueIndex += 1;
     visited += 1;
     for (const nextId of outgoing.get(nodeId) ?? []) {
       const nextIncoming = (incomingCount.get(nextId) ?? 0) - 1;

@@ -218,7 +218,7 @@ export function strategyToDraft(strategy: Strategy): StrategyDialogDraft {
 
 export function resolveDraftPredecessors(nodes: StrategyDialogDraftNode[]) {
   const predecessorIdsByNode = new Map<string, string[]>();
-  const earlierIds = new Set<string>();
+  const nodeIds = new Set(nodes.map((node) => node.id));
 
   for (const [index, node] of nodes.entries()) {
     const previousNode = nodes[index - 1];
@@ -234,8 +234,12 @@ export function resolveDraftPredecessors(nodes: StrategyDialogDraftNode[]) {
           : [];
         break;
       case "custom":
-        predecessorIds = node.customPredecessorIds.filter((id) =>
-          earlierIds.has(id)
+        predecessorIds = Array.from(
+          new Set(
+            node.customPredecessorIds.filter(
+              (id) => id !== node.id && nodeIds.has(id)
+            )
+          )
         );
         break;
       case "start":
@@ -245,7 +249,6 @@ export function resolveDraftPredecessors(nodes: StrategyDialogDraftNode[]) {
     }
 
     predecessorIdsByNode.set(node.id, predecessorIds);
-    earlierIds.add(node.id);
   }
 
   return predecessorIdsByNode;
@@ -253,28 +256,37 @@ export function resolveDraftPredecessors(nodes: StrategyDialogDraftNode[]) {
 
 export function hasGraphCycle(nodes: StrategyDialogDraftNode[]) {
   const predecessorIdsByNode = resolveDraftPredecessors(nodes);
-  const visited = new Set<string>();
-  const active = new Set<string>();
-
-  function visit(nodeId: string): boolean {
-    if (active.has(nodeId)) {
-      return true;
+  const outgoingByNode = new Map(
+    nodes.map((node) => [node.id, [] as string[]] as const)
+  );
+  const incomingCount = new Map(
+    nodes.map(
+      (node) =>
+        [node.id, predecessorIdsByNode.get(node.id)?.length ?? 0] as const
+    )
+  );
+  for (const [nodeId, predecessorIds] of predecessorIdsByNode) {
+    for (const predecessorId of predecessorIds) {
+      outgoingByNode.get(predecessorId)?.push(nodeId);
     }
-    if (visited.has(nodeId)) {
-      return false;
-    }
-    visited.add(nodeId);
-    active.add(nodeId);
-    for (const predecessorId of predecessorIdsByNode.get(nodeId) ?? []) {
-      if (visit(predecessorId)) {
-        return true;
-      }
-    }
-    active.delete(nodeId);
-    return false;
   }
 
-  return nodes.some((node) => visit(node.id));
+  const queue = nodes
+    .filter((node) => (incomingCount.get(node.id) ?? 0) === 0)
+    .map((node) => node.id);
+  let visitedCount = 0;
+  for (let index = 0; index < queue.length; index += 1) {
+    const nodeId = queue[index]!;
+    visitedCount += 1;
+    for (const nextId of outgoingByNode.get(nodeId) ?? []) {
+      const nextIncoming = (incomingCount.get(nextId) ?? 0) - 1;
+      incomingCount.set(nextId, nextIncoming);
+      if (nextIncoming === 0) {
+        queue.push(nextId);
+      }
+    }
+  }
+  return visitedCount !== nodes.length;
 }
 
 export const DEFAULT_STRATEGY_DRAFT: StrategyDialogDraft = {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -31,7 +31,11 @@ import { UserBadge } from "@/components/ui/user-badge";
 import { UserSelectField } from "@/components/ui/user-select-field";
 import { prependEntityToCollection } from "@/lib/query-cache";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
-import { behaviorSchema, type BehaviorInput } from "@/lib/psyche-schemas";
+import {
+  behaviorCreateSchema,
+  behaviorSchema,
+  type BehaviorInput
+} from "@/lib/psyche-schemas";
 import type {
   Behavior,
   BehaviorPattern,
@@ -102,6 +106,113 @@ const kindTitleMap: Record<Behavior["kind"], string> = {
   committed: "Committed actions",
   recovery: "Recovery moves"
 };
+
+export function resolveBehaviorContinueBlocker(
+  stepId: string,
+  value: BehaviorInput,
+  allowSparseOptionalFields = false
+) {
+  if (stepId === "behavior") {
+    if (!value.title.trim()) {
+      return "Use your own words to give this action a short, recognizable name.";
+    }
+    if (!allowSparseOptionalFields && !value.description.trim()) {
+      return "Describe what you do, say, avoid, or check so this stays an observable behavior rather than a belief, pattern, goal, or episode report.";
+    }
+  }
+
+  if (allowSparseOptionalFields) {
+    return null;
+  }
+
+  if (
+    stepId === "context" &&
+    !value.commonCues.some((cue) => cue.trim().length > 0)
+  ) {
+    return "Add at least one situation or cue that tends to come just before this action.";
+  }
+
+  if (stepId === "context" && value.kind === "away") {
+    if (!value.urgeStory.trim()) {
+      return "Write the urge or inner push in the words that actually show up just before the action.";
+    }
+    if (!value.shortTermPayoff.trim()) {
+      return "Name what this action provides right away, such as relief, distance, certainty, or control.";
+    }
+  }
+
+  if (
+    stepId === "response" &&
+    value.kind === "away" &&
+    !value.longTermCost.trim()
+  ) {
+    return "Name one cost that appears later, without turning it into a judgment about yourself.";
+  }
+
+  if (
+    stepId === "response" &&
+    value.kind === "recovery" &&
+    !value.repairPlan.trim()
+  ) {
+    return "Describe the action that helps you repair, steady, or return after the difficult moment.";
+  }
+
+  return null;
+}
+
+function ListeningField({
+  value,
+  editing,
+  question,
+  heardLabel,
+  children
+}: {
+  value: string;
+  editing: boolean;
+  question: string;
+  heardLabel: string;
+  children: ReactNode;
+}) {
+  if (!editing || !value.trim()) {
+    return <FlowField label={question}>{children}</FlowField>;
+  }
+
+  return (
+    <div className="grid gap-3 rounded-[8px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4">
+      <div className="grid gap-1">
+        <div className="text-xs font-medium uppercase text-[var(--ui-ink-faint)]">
+          I heard {heardLabel}
+        </div>
+        <div className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--ui-ink-strong)]">
+          "{value}"
+        </div>
+      </div>
+      <details>
+        <summary className="cursor-pointer text-sm font-medium text-[var(--primary)]">
+          Edit this wording
+        </summary>
+        <div className="mt-3">
+          <FlowField label={`Your wording for ${heardLabel}`}>
+            {children}
+          </FlowField>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function ListeningLead({ children }: { children: string }) {
+  if (!children.trim()) {
+    return null;
+  }
+
+  return (
+    <div className="border-l-2 border-[var(--primary)] pl-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+      I am hearing the action as: "{children}". I will keep that wording and
+      only ask for details that are still missing.
+    </div>
+  );
+}
 
 export function PsycheBehaviorsPage() {
   const shell = useForgeShell();
@@ -343,51 +454,102 @@ export function PsycheBehaviorsPage() {
   const steps: Array<QuestionFlowStep<BehaviorInput>> = [
     {
       id: "behavior",
-      eyebrow: "Behavior",
-      title: "Describe the move or urge in plain language",
+      eyebrow: "Observable action",
+      title: "What do you actually do?",
       description:
-        "Start with the behavior itself so the map reads like something you can instantly recognize in real life.",
+        "A behavior is something you do, say, avoid, or check. An inner sentence is a belief; a recurring cue-to-consequence sequence is a pattern; a desired outcome is a goal; and one specific episode belongs in a trigger report.",
       render: (value, setValue) => (
         <>
-          <UserSelectField
-            value={value.userId ?? null}
-            users={shell.snapshot.users}
-            onChange={(userId) => setValue({ userId })}
-            defaultLabel={formatOwnerSelectDefaultLabel(
-              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
-                null,
-              "Choose behavior owner"
-            )}
-            help="Behaviors can belong to a human or bot user while still linking across shared patterns, schemas, and modes."
-          />
-          <FlowField label="Behavior title">
+          <ListeningField
+            value={value.title}
+            editing={Boolean(editingBehavior)}
+            question="What short name would you use for this action?"
+            heardLabel="the name"
+          >
             <Input
               value={value.title}
               onChange={(event) => setValue({ title: event.target.value })}
               placeholder="Scroll to numb the impact"
             />
-          </FlowField>
-          <FlowField label="What does the move look like?">
+          </ListeningField>
+          <ListeningField
+            value={value.description}
+            editing={Boolean(editingBehavior)}
+            question="What would someone see or hear you do?"
+            heardLabel="the observable action"
+          >
             <Textarea
               value={value.description}
               onChange={(event) =>
                 setValue({ description: event.target.value })
               }
-              placeholder="Describe the move the way you would recognize it in the moment, not in therapist shorthand."
+              placeholder="I open the app again, reread the message, and stop the task I was doing."
             />
-          </FlowField>
+          </ListeningField>
         </>
       )
     },
     {
-      id: "context",
-      eyebrow: "Context",
-      title: "Capture the cue, the pull, and the immediate payoff",
+      id: "classification",
+      eyebrow: "Direction",
+      title: "What kind of action is this?",
       description:
-        "Make the move readable as a real pattern instead of a label.",
+        "Classify the action itself, not your intention or worth. Away moves narrow life, committed actions move toward a value, and recovery moves help you return after a difficult moment.",
+      render: (value, setValue) => {
+        const kindControl = (
+          <div className="grid gap-3 md:grid-cols-3">
+            {(["away", "committed", "recovery"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                className={cn(
+                  "rounded-[8px] border px-4 py-4 text-left transition",
+                  value.kind === kind
+                    ? "border-[color-mix(in_srgb,var(--primary)_40%,var(--ui-border-subtle)_60%)] bg-[color-mix(in_srgb,var(--primary)_12%,var(--ui-surface-1)_88%)] text-[var(--ui-ink-strong)]"
+                    : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                )}
+                onClick={() => setValue({ kind })}
+              >
+                {kindTitleMap[kind]}
+              </button>
+            ))}
+          </div>
+        );
+
+        return (
+          <>
+            <ListeningLead>{value.description}</ListeningLead>
+            {editingBehavior ? (
+              <ListeningField
+                value={kindTitleMap[value.kind]}
+                editing
+                question="What kind of action is this?"
+                heardLabel="the move type"
+              >
+                {kindControl}
+              </ListeningField>
+            ) : (
+              <FlowField label="Move type">{kindControl}</FlowField>
+            )}
+          </>
+        );
+      }
+    },
+    {
+      id: "context",
+      eyebrow: "Cue and urge",
+      title: "What happens just before, and what pulls you toward it?",
+      description:
+        "Keep recurring cues here rather than retelling a whole one-off episode. Preserve the urge in the words that actually appear; a broader standing belief can be stored separately.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Common cues">
+          <ListeningLead>{value.description}</ListeningLead>
+          <ListeningField
+            value={value.commonCues.join("\n")}
+            editing={Boolean(editingBehavior)}
+            question="What tends to be happening just before this action?"
+            heardLabel="the recurring cues"
+          >
             <Textarea
               value={value.commonCues.join("\n")}
               onChange={(event) =>
@@ -402,15 +564,25 @@ export function PsycheBehaviorsPage() {
                 "One line per cue\nLate-night ambiguity\nFeedback after a hard week"
               }
             />
-          </FlowField>
-          <FlowField label="What inner push or story shows up?">
+          </ListeningField>
+          <ListeningField
+            value={value.urgeStory}
+            editing={Boolean(editingBehavior)}
+            question="What urge or inner push shows up just before you act?"
+            heardLabel="the urge in your words"
+          >
             <Textarea
               value={value.urgeStory}
               onChange={(event) => setValue({ urgeStory: event.target.value })}
-              placeholder="What inner push or justification tends to appear?"
+              placeholder="Just check once more. Then I will know whether I am safe."
             />
-          </FlowField>
-          <FlowField label="What do you get right away from this move?">
+          </ListeningField>
+          <ListeningField
+            value={value.shortTermPayoff}
+            editing={Boolean(editingBehavior)}
+            question="What does this action give you right away?"
+            heardLabel="the immediate payoff"
+          >
             <Textarea
               value={value.shortTermPayoff}
               onChange={(event) =>
@@ -418,39 +590,26 @@ export function PsycheBehaviorsPage() {
               }
               placeholder="What relief, certainty, distance, or control does it give in the short term?"
             />
-          </FlowField>
+          </ListeningField>
         </>
       )
     },
     {
-      id: "classification",
-      eyebrow: "Classification",
-      title: "Now classify the move and define the return path",
+      id: "response",
+      eyebrow: "Impact and return",
+      title: "What happens later, and what other action could be available?",
       description:
-        "Once the move is clear, decide whether it is an away move, a committed action, or a recovery path.",
+        "Acknowledge what the action was trying to do before considering cost, replacement, or repair. Leave any field blank when it does not fit this action.",
       render: (value, setValue) => (
         <>
-          <FlowField label="Move type">
-            <div className="grid gap-3 md:grid-cols-3">
-              {(["away", "committed", "recovery"] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  className={cn(
-                    "rounded-[8px] border px-4 py-4 text-left transition",
-                    value.kind === kind
-                      ? "border-[color-mix(in_srgb,var(--primary)_40%,var(--ui-border-subtle)_60%)] bg-[color-mix(in_srgb,var(--primary)_12%,var(--ui-surface-1)_88%)] text-[var(--ui-ink-strong)]"
-                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                  )}
-                  onClick={() => setValue({ kind })}
-                >
-                  {kindTitleMap[kind]}
-                </button>
-              ))}
-            </div>
-          </FlowField>
+          <ListeningLead>{value.description}</ListeningLead>
           <div className="grid gap-4 md:grid-cols-2">
-            <FlowField label="What does it cost over time?">
+            <ListeningField
+              value={value.longTermCost}
+              editing={Boolean(editingBehavior)}
+              question="What cost shows up later?"
+              heardLabel="the later cost"
+            >
               <Textarea
                 value={value.longTermCost}
                 onChange={(event) =>
@@ -458,8 +617,13 @@ export function PsycheBehaviorsPage() {
                 }
                 placeholder="What does this move cost over time?"
               />
-            </FlowField>
-            <FlowField label="What move should replace or steady it?">
+            </ListeningField>
+            <ListeningField
+              value={value.replacementMove}
+              editing={Boolean(editingBehavior)}
+              question="What other observable action would you like available?"
+              heardLabel="the alternative action"
+            >
               <Textarea
                 value={value.replacementMove}
                 onChange={(event) =>
@@ -467,15 +631,20 @@ export function PsycheBehaviorsPage() {
                 }
                 placeholder="What move should replace this one when possible?"
               />
-            </FlowField>
+            </ListeningField>
           </div>
-          <FlowField label="If the slip happens, how do you repair and return?">
+          <ListeningField
+            value={value.repairPlan}
+            editing={Boolean(editingBehavior)}
+            question="After a difficult moment, what do you actually do to repair or return?"
+            heardLabel="the repair action"
+          >
             <Textarea
               value={value.repairPlan}
               onChange={(event) => setValue({ repairPlan: event.target.value })}
               placeholder="Describe the repair path without shame or collapse."
             />
-          </FlowField>
+          </ListeningField>
         </>
       )
     },
@@ -487,6 +656,17 @@ export function PsycheBehaviorsPage() {
         "This turns the move into part of the full graphical psyche system.",
       render: (value, setValue) => (
         <>
+          <UserSelectField
+            value={value.userId ?? null}
+            users={shell.snapshot.users}
+            onChange={(userId) => setValue({ userId })}
+            defaultLabel={formatOwnerSelectDefaultLabel(
+              shell.snapshot.users.find((user) => user.id === defaultUserId) ??
+                null,
+              "Choose behavior owner"
+            )}
+            help="Choose an owner only when it changes whose behavior this is. Links may still cross owners."
+          />
           <FlowField label="Linked patterns">
             <EntityLinkMultiSelect
               options={patternOptions}
@@ -764,15 +944,26 @@ export function PsycheBehaviorsPage() {
             : "psyche.behavior.new"
         }
         steps={steps}
+        resolveContinueBlocker={(stepId, value) =>
+          resolveBehaviorContinueBlocker(
+            stepId,
+            value,
+            Boolean(editingBehavior)
+          )
+        }
         submitLabel={editingBehavior ? "Save behavior" : "Create behavior"}
         pending={saveMutation.isPending}
         error={submitError}
         onSubmit={async () => {
           setSubmitError(null);
-          const parsed = behaviorSchema.safeParse(draft);
+          const parsed = editingBehavior
+            ? behaviorSchema.safeParse(draft)
+            : behaviorCreateSchema.safeParse(draft);
           if (!parsed.success) {
             setSubmitError(
-              "This behavior still needs a kind and a title before it can be saved."
+              editingBehavior
+                ? "This behavior still needs a kind and a title before it can be saved."
+                : "This behavior still needs an observable action, a recurring cue, and the details required for its move type."
             );
             return;
           }

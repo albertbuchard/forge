@@ -191,6 +191,8 @@ export function StrategyGraphCanvas({
     >
       <ReactFlow
         fitView
+        fitViewOptions={{ minZoom: 0.15, maxZoom: 1 }}
+        onlyRenderVisibleElements
         nodes={nodes}
         edges={edges}
         nodesDraggable={false}

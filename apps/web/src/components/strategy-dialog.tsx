@@ -106,6 +106,9 @@ export function StrategyDialog({
   const [showInlineTaskComposer, setShowInlineTaskComposer] = useState(false);
   const [inlineTaskError, setInlineTaskError] = useState<string | null>(null);
   const [inlineTaskPending, setInlineTaskPending] = useState(false);
+  const [nodeHistory, setNodeHistory] = useState<StrategyDialogDraftNode[][]>(
+    []
+  );
 
   useEffect(() => {
     if (!open) {
@@ -143,7 +146,39 @@ export function StrategyDialog({
     );
     setInlineTaskError(null);
     setSubmitError(null);
+    setNodeHistory([]);
   }, [defaultUserId, editingStrategy, open, projects]);
+
+  useEffect(() => {
+    if (!open || nodeHistory.length === 0) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== "z"
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      const previousNodes = nodeHistory[nodeHistory.length - 1];
+      if (!previousNodes) {
+        return;
+      }
+      setNodeHistory((current) => current.slice(0, -1));
+      setDraft((current) => ({ ...current, nodes: previousNodes }));
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [nodeHistory, open]);
 
   const objectiveQuery = useDeferredValue(objectiveSearchQuery);
   const contextQuery = useDeferredValue(contextSearchQuery);
@@ -590,6 +625,7 @@ export function StrategyDialog({
     nodeId: string,
     patch: Partial<StrategyDialogDraftNode>
   ) => {
+    setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
     setDraft((current) => ({
       ...current,
       nodes: current.nodes.map((node) =>
@@ -609,20 +645,35 @@ export function StrategyDialog({
     ) {
       return;
     }
-    setDraft((current) => ({
-      ...current,
-      nodes: [
-        ...current.nodes,
-        createDraftNode(entityType, {
-          entityId,
-          dependencyMode:
-            current.nodes.length === 0 ? "start" : "after_previous"
-        })
-      ]
-    }));
+    setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
+    setDraft((current) => {
+      const emptyNodeId = current.nodes.find((node) => !node.entityId)?.id;
+      return {
+        ...current,
+        nodes: emptyNodeId
+          ? current.nodes.map((node) =>
+              node.id === emptyNodeId
+                ? {
+                    ...node,
+                    entityType,
+                    entityId
+                  }
+                : node
+            )
+          : [
+              ...current.nodes,
+              createDraftNode(entityType, {
+                entityId,
+                dependencyMode:
+                  current.nodes.length === 0 ? "start" : "after_previous"
+              })
+            ]
+      };
+    });
   };
 
   const removeNode = (nodeId: string) => {
+    setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
     setDraft((current) => {
       const remaining = current.nodes.filter((node) => node.id !== nodeId);
       return {
@@ -642,6 +693,12 @@ export function StrategyDialog({
   };
 
   const reorderNodes = (activeId: string, overId: string) => {
+    const oldIndex = draft.nodes.findIndex((node) => node.id === activeId);
+    const newIndex = draft.nodes.findIndex((node) => node.id === overId);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) {
+      return;
+    }
+    setNodeHistory((current) => [...current.slice(-49), draft.nodes]);
     setDraft((current) => {
       const oldIndex = current.nodes.findIndex((node) => node.id === activeId);
       const newIndex = current.nodes.findIndex((node) => node.id === overId);
@@ -653,6 +710,15 @@ export function StrategyDialog({
         nodes: arrayMove(current.nodes, oldIndex, newIndex)
       };
     });
+  };
+
+  const undoNodes = () => {
+    const previousNodes = nodeHistory[nodeHistory.length - 1];
+    if (!previousNodes) {
+      return;
+    }
+    setNodeHistory((current) => current.slice(0, -1));
+    setDraft((current) => ({ ...current, nodes: previousNodes }));
   };
 
   const openInlineTaskComposer = () => {
@@ -1288,6 +1354,8 @@ export function StrategyDialog({
           updateNode={updateNode}
           removeNode={removeNode}
           reorderNodes={reorderNodes}
+          undoNodes={undoNodes}
+          canUndoNodes={nodeHistory.length > 0}
           contractChecks={contractChecks}
           alignmentBreakdown={alignmentBreakdown}
         />

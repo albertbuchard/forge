@@ -21200,7 +21200,14 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(preferenceContextConversationPlaybook);
     assert.ok(
       preferenceContextConversationPlaybook.askSequence.some((step) =>
-        /decisions or comparisons should feel different/i.test(step)
+        /review, create, update, or merge/i.test(step)
+      )
+    );
+    assert.ok(
+      preferenceContextConversationPlaybook.askSequence.some((step) =>
+        /sourceContextId and targetContextId[\s\S]*never imitate it by deleting/i.test(
+          step
+        )
       )
     );
     const preferenceItemConversationPlaybook =
@@ -21220,11 +21227,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(questionnaireConversationPlaybook);
     assert.match(
       questionnaireConversationPlaybook.openingQuestion,
-      /help someone notice or track/i
+      /understand, create, revise, or publish/i
     );
     assert.ok(
       questionnaireConversationPlaybook.askSequence.some((step) =>
-        /practical use case back in plain language/i.test(step)
+        /clone, draft, and publish tools only for version lifecycle/i.test(step)
       )
     );
     const questionnaireRunConversationPlaybook =
@@ -21400,6 +21407,16 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(preferenceCatalogEntity);
     assert.equal(preferenceCatalogEntity.classification, "batch_crud_entity");
     assert.ok(preferenceCatalogEntity.minimumCreateFields.includes("userId"));
+    const preferenceContextEntity =
+      onboardingBody.onboarding.entityCatalog.find(
+        (entity) => entity.entityType === "preference_context"
+      );
+    assert.ok(preferenceContextEntity);
+    assert.equal(preferenceContextEntity.classification, "batch_crud_entity");
+    assert.match(
+      preferenceContextEntity.preferredMutationPath ?? "",
+      /shared batch CRUD[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*do not emulate a merge with batch deletion/i
+    );
     const questionnaireEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "questionnaire_instrument"
     );
@@ -21407,7 +21424,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(questionnaireEntity.classification, "batch_crud_entity");
     assert.match(
       questionnaireEntity.preferredMutationPath ?? "",
-      /\/api\/v1\/entities\/create/
+      /shared batch CRUD[\s\S]*POST \/api\/v1\/psyche\/questionnaires\/:id\/clone[\s\S]*\/draft[\s\S]*\/publish/i
     );
     const modeGuideEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "mode_guide_session"
