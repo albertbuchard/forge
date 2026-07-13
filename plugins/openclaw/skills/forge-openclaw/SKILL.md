@@ -140,8 +140,10 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
-  Use the wiki tools for wiki pages, the calendar connection tools for provider setup
-  and sync, and the Artifact Store route family for paged metadata listing,
+  Use `forge_call_wiki_route` for the complete Wiki lifecycle, the narrower Wiki
+  helpers for settled operations, `forge_call_calendar_connection_route` for the
+  complete calendar connection lifecycle, the narrower calendar connect/sync helpers
+  when those actions are already settled, and the Artifact Store route family for paged metadata listing,
   trusted file upload, metadata,
   static scan, LLM metadata enrichment, generic entity links, trust state, versions,
   and audit. Batch CRUD may search, update, delete, and restore artifact metadata, but
@@ -187,6 +189,15 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   published `routeKeys` and `methodRoutes` for those specialized CRUD surfaces before
   calling lower-level routes, and cross-check OpenAPI when debugging a contract
   mismatch. Do not guess wiki, calendar connection, or artifact paths from memory.
+- For `wiki_page`, prefer `forge_call_wiki_route` when the job needs the complete
+  lifecycle, especially `readBySlug` or `delete`. Resolve and read the exact page
+  before update or delete, pass `id` or `slug` through `pathParams`, and read the
+  affected page, list, search, or health state back when verification matters.
+- For `calendar_connection`, prefer `forge_call_calendar_connection_route` with the
+  published `list`, `discover`, `discoverMacOSLocal`, `rediscover`, `create`, `update`,
+  `sync`, or `delete` key. List first for existing-record changes unless an exact id
+  came from a current read, pass that id through `pathParams.id`, and list again when
+  read-back is needed to prove the intended result.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the
@@ -811,7 +822,7 @@ These tools operate on:
 `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `work_block_template`, `task_timebox`, `psyche_value`, `behavior_pattern`, `behavior`, `belief_entry`, `mode_profile`, `mode_guide_session`, `flashcard`, `trigger_report`, `event_type`, `emotion_definition`, `preference_catalog`, `preference_catalog_item`, `preference_context`, `preference_item`, `questionnaire_instrument`, `sleep_session`, `workout_session`
 
 Use the wiki tools for SQLite-backed memory work:
-`forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
+`forge_call_wiki_route`, `forge_get_wiki_settings`, `forge_list_wiki_pages`, `forge_get_wiki_page`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_get_wiki_health`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, `forge_ingest_wiki_source`
 
 Use the health tools for review, reflective enrichment, and nutrition evidence capture:
 `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, `forge_update_workout_session`, `forge_search_foods`, `forge_search_nutrition_foods`, `forge_lookup_nutrition_barcode`, `forge_log_food`, `forge_parse_food_log_with_chatgpt`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, `forge_update_nutrition_experiment`
@@ -956,6 +967,9 @@ Use `forge_log_work` only for retroactive work that already happened. If the use
 Use the calendar tools when the request is about planning or availability rather than entity storage:
 
 - `forge_get_calendar_overview` to inspect mirrored events, work blocks, provider connections, and existing timeboxes
+- `forge_call_calendar_connection_route` for the full connection lifecycle: list,
+  provider discovery, macOS-local discovery, rediscovery, create, selected-calendar
+  update, sync, and delete
 - `forge_connect_calendar_provider` only when the operator explicitly wants a new Google, Apple, Exchange Online, or custom CalDAV connection and the discovery choices are already known
 - `forge_sync_calendar_connection` after a provider connection is created or when the calendar needs a fresh pull/push cycle
 - `forge_create_work_block_template` as a convenience helper for Main Activity, Secondary Activity, Third Activity, Rest, Holiday, or Custom recurring blocks
@@ -1060,6 +1074,8 @@ When the user asks which Forge tools are available, list exactly these tools:
 `forge_apply_doctor_fix`
 `forge_call_attention_route`
 `forge_call_entity_navigation_route`
+`forge_call_calendar_connection_route`
+`forge_call_wiki_route`
 `forge_call_movement_route`
 `forge_call_life_force_route`
 `forge_call_workbench_route`

@@ -3140,7 +3140,7 @@ function buildPreferredMutationPath(entityType: string) {
   }
   switch (entityType) {
     case "wiki_page":
-      return "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.";
+      return "Use the dedicated Wiki route family for list, search, create, id or slug read, update, delete, health, sync, reindex, and ingest. Do not use shared batch CRUD for wiki_page.";
     case "calendar_connection":
       return "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.";
     case "artifact":
@@ -3206,9 +3206,9 @@ function buildPreferredMutationTool(entityType: string) {
   }
   switch (entityType) {
     case "wiki_page":
-      return "forge_upsert_wiki_page";
+      return "forge_call_wiki_route | forge_list_wiki_pages | forge_search_wiki | forge_get_wiki_page | forge_upsert_wiki_page | forge_get_wiki_health | forge_sync_wiki_vault | forge_reindex_wiki_embeddings | forge_ingest_wiki_source";
     case "calendar_connection":
-      return "forge_connect_calendar_provider | forge_sync_calendar_connection | mirrored calendar connection routes";
+      return "forge_call_calendar_connection_route | forge_connect_calendar_provider | forge_sync_calendar_connection";
     case "artifact":
       return "forge_call_artifact_route | forge_search_entities | forge_update_entities | forge_delete_entities | forge_restore_entities";
     case "task_run":
@@ -3303,6 +3303,10 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
     "Specialized route surface: attention. Route tool: forge_call_attention_route. Route keys: list, snooze, dismiss, restore.",
   entity_navigation:
     "Specialized route surface: entityNavigation. Route tool: forge_call_entity_navigation_route. Route keys: list, touch. Pin and unpin remain human-operator-only.",
+  calendar_connection:
+    "Specialized CRUD surface: calendar_connection. Route tool: forge_call_calendar_connection_route. Route keys: list, discover, discoverMacOSLocal, rediscover, create, update, sync, delete.",
+  wiki_page:
+    "Specialized CRUD surface: wiki_page. Route tool: forge_call_wiki_route. Route keys: list, search, create, read, readBySlug, update, delete, health, sync, reindex, ingest.",
   life_event:
     "Specialized route surface: lifeEvents. Route tool: forge_call_life_event_route. Route keys: timeline, read, calendarSync, fromCalendarEvent, importTicket, travelStatus.",
   movement:
@@ -5344,16 +5348,18 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for one specific emotionally meaningful incident that should be mapped from situation through emotions, thoughts, behaviors, consequences, and next moves.",
     coachingGoal:
-      "Help the user build a clear incident chain with enough structure to learn from one episode while staying grounded and not rushing past the user's felt experience.",
+      "Help the user preserve or understand one incident without making a currently activated person complete a worksheet, while keeping observable events, felt meaning, and tentative interpretation distinct.",
     askSequence: [
-      "Start with the situation and felt stake: what happened, and why did it hit enough to save.",
+      "First distinguish immediate support, direct draft capture, retrospective formulation, and review or update. If this is an existing report, read the exact report before asking what changed.",
+      "If the user is still activated, ask what needs steadying now and stay with the smallest tolerable slice. Do not require the full chain before offering support or saving a partial draft the user wants to resume later.",
+      "For retrospective formulation, start with the situation and felt stake: what observably happened or was said, and why did it hit enough to save.",
       "Name the incident briefly only after the concrete sequence is clear.",
       "Capture emotions, body state, and intensity before moving into interpretation.",
-      "Capture thoughts, meanings, or belief-linked interpretations.",
+      "Capture the fast thought or meaning separately from the observable event, without arguing with or silently converting either one into fact.",
       "Capture behaviors, urges, and immediate coping moves.",
       "Capture what the move did short term and what it cost or changed later.",
       "Offer one careful hypothesis about the sequence only after situation, emotion, meaning, behavior, and consequence are partly visible.",
-      "Identify next moves and linked patterns, beliefs, modes, values, or tasks."
+      "Identify next moves and linked patterns, beliefs, modes, values, or tasks only after the episode is held clearly and the user wants to continue."
     ],
     requiredForCreate: ["title"],
     highValueOptionalFields: [
@@ -5386,7 +5392,9 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Use emotionDefinitionId only when a known emotion definition fits; otherwise keep the raw label.",
       "Do not turn the report into a worksheet dump before the felt stake is clear; reflect what made the episode matter before asking for the full chain.",
       "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn.",
-      "Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible."
+      "A title plus the meaningful episode slice the user has already supplied is enough for a provisional draft when they want to save and return later; preserve missing segments as missing instead of inventing or interrogating for them.",
+      "For an update, preserve the existing chain and change only the newly true segment unless the user is deliberately reformulating the whole report.",
+      "Keep what happened, what the user inferred, and the agent's hypothesis visibly distinct. Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible."
     ]
   },
   {
@@ -5909,6 +5917,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"sourceKind":"url","sourceUrl":"https://example.com/article","titleHint":"Research import","parseStrategy":"auto","entityProposalMode":"suggest"}'
   },
   {
+    toolName: "forge_call_wiki_route",
+    summary:
+      "Call one complete Wiki lifecycle route, including slug reads and page deletion that narrower helper tools do not cover.",
+    whenToUse:
+      "Use for the full specialized Wiki contract. Resolve and read an existing page before update or delete, and use the narrower Wiki helpers only when their already-settled input shape is more convenient.",
+    inputShape:
+      '{ routeKey: "list"|"search"|"create"|"read"|"readBySlug"|"update"|"delete"|"health"|"sync"|"reindex"|"ingest", pathParams?: { id?: string, slug?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Use pathParams.id for read, update, and delete; use pathParams.slug for readBySlug. Do not place either identifier in routeKey, query, or body.",
+      "Before update or delete, read the exact page and preserve the intended meaning, provenance, backlinks, citations, and reusable instructions.",
+      "Search is POST and takes its retrieval fields in body. List and health use query; create, update, sync, reindex, and ingest use body.",
+      "After create or update, read the page back when wording or links need verification. After delete, list or search when disappearance and remaining references need verification.",
+      "Wiki pages are specialized CRUD and must not be sent through shared batch entity routes."
+    ],
+    example:
+      '{"routeKey":"readBySlug","pathParams":{"slug":"research/methods/causal-dag"}}'
+  },
+  {
     toolName: "forge_call_attention_route",
     summary:
       "List the current actor's bounded Attention queue or snooze, dismiss, and restore eligible items.",
@@ -5943,6 +5970,25 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"routeKey":"touch","body":{"entityType":"project","entityId":"project_123"}}'
+  },
+  {
+    toolName: "forge_call_calendar_connection_route",
+    summary:
+      "Call one Calendar Connection lifecycle route for discovery, list, create, update, sync, rediscovery, or removal.",
+    whenToUse:
+      "Use for the complete specialized calendar-connection lifecycle. List first for existing-record work, then select the exact connection and action instead of using batch CRUD or guessing a path.",
+    inputShape:
+      '{ routeKey: "list"|"discover"|"discoverMacOSLocal"|"rediscover"|"create"|"update"|"sync"|"delete", pathParams?: { id?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Use list before update, rediscover, sync, or delete unless the user supplied an exact connection id from a current read.",
+      "Use pathParams.id for rediscover, update, sync, and delete. Do not put the id into routeKey, query, or body.",
+      "Use discover for Apple or custom CalDAV provider discovery and discoverMacOSLocal for calendars already configured on this Mac.",
+      "Create and update bodies must follow the exact live OpenAPI schemas. Interactive Google or Microsoft authorization remains operator-owned until a completed authSessionId exists.",
+      "After create, update, sync, or delete, list connections again when read-back is needed to verify the user's practical goal."
+    ],
+    example:
+      '{"routeKey":"update","pathParams":{"id":"calendar_connection_123"},"body":{"label":"Work calendar","selectedCalendarUrls":["https://calendar.example/work/"]}}'
   },
   {
     toolName: "forge_call_artifact_route",
@@ -6886,6 +6932,7 @@ function buildAgentOnboardingPayload(request: {
       },
       specializedCrudEntities: {
         wiki_page: {
+          routeTool: "forge_call_wiki_route",
           create: "/api/v1/wiki/pages",
           update: "/api/v1/wiki/pages/:id",
           read: "/api/v1/wiki/pages/:id",
@@ -6925,6 +6972,7 @@ function buildAgentOnboardingPayload(request: {
           }
         },
         calendar_connection: {
+          routeTool: "forge_call_calendar_connection_route",
           list: "/api/v1/calendar/connections",
           discover: "/api/v1/calendar/discovery",
           discoverMacOSLocal: "/api/v1/calendar/macos-local/discovery",
@@ -6970,6 +7018,7 @@ function buildAgentOnboardingPayload(request: {
           }
         },
         artifact: {
+          routeTool: "forge_call_artifact_route",
           list: "/api/v1/artifacts",
           createWithBytes: "/api/v1/artifacts",
           readMetadata: "/api/v1/artifacts/:id",
@@ -7772,6 +7821,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_restore_entities"
       ],
       wikiWorkflow: [
+        "forge_call_wiki_route",
         "forge_get_wiki_settings",
         "forge_list_wiki_pages",
         "forge_get_wiki_page",
@@ -7814,6 +7864,7 @@ function buildAgentOnboardingPayload(request: {
       ],
       calendarWorkflow: [
         "forge_get_calendar_overview",
+        "forge_call_calendar_connection_route",
         "forge_connect_calendar_provider",
         "forge_sync_calendar_connection",
         "forge_create_work_block_template",

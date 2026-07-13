@@ -1310,23 +1310,35 @@ Preferred opening question:
 ## Trigger Report
 
 Aim: capture one emotionally meaningful episode clearly enough that it can teach the
-user something later.
+user something later without making a currently activated person complete a worksheet.
 
 Arc:
 
-1. Anchor the report in one specific episode.
-2. Ask what happened as concretely as possible.
-3. If the episode still feels hot or confusing, stay with one slice before trying to
-   cover the whole chain.
-4. Ask what emotions, thoughts, and body signals showed up.
-5. Ask what the user did next and what happened after.
-6. Ask what helped short term and what the consequences were later.
-7. Ask what pattern, belief, mode, or value seems most active here.
-8. Ask what would help next time only after the episode itself is clear.
+1. Distinguish immediate support, direct draft capture, retrospective formulation,
+   and review or update. For an existing report, read the exact report first and ask
+   only which segment is newly true or inaccurate.
+2. If the user is still activated, ask what needs steadying now and stay with the
+   smallest tolerable slice. Do not require the whole chain before support or before
+   saving a partial draft they want to resume later.
+3. For retrospective formulation, anchor the report in one specific episode and ask
+   what observably happened or was said.
+4. Reflect the felt stake, then keep the fast thought or meaning separate from those
+   observable events. Do not dispute the meaning or silently restate it as fact.
+5. Ask what emotions and body signals showed up, then what the user did or felt pulled
+   to do.
+6. Ask what happened after and what the move did short term or cost later, one segment
+   at a time.
+7. Offer one careful chain hypothesis only when enough of situation, emotion, meaning,
+   behavior, and consequence is visible for the user to correct it.
+8. Ask about a next move or a linked pattern, belief, mode, or value only after the
+   episode is held clearly and the user wants to continue.
 
 Helpful follow-up lanes:
 
+- whether the user needs support now, a partial draft, a retrospective map, or one
+  narrow correction to an existing report
 - what happened first
+- what was directly observable versus what it immediately came to mean
 - what emotions were present and how intense they felt
 - what felt most threatened or unbearable
 - what meaning or interpretation arrived fast
@@ -1343,13 +1355,24 @@ Likely linked entities:
 
 Ready to save when:
 
-- the situation is specific enough to recognize later
-- the emotional and behavioral sequence is understandable
-- one or more linked Psyche meanings are clear enough to note
+- for a provisional draft, the title and one recognizable episode slice are present,
+  the user wants to preserve it, and unspoken chain segments remain missing rather
+  than being guessed
+- for a fuller retrospective report, the situation is specific enough to recognize
+  later and the supplied emotional, meaning, behavior, and consequence segments are
+  distinguishable
+- for an update, the exact current report was read and the newly true segment is clear;
+  do not force the rest of a sparse report through create intake
 
 Preferred opening question:
 
-- "What happened in that moment, as concretely as you can say it?"
+- "What part of the moment or report needs attention first before we map the whole episode?"
+
+Intent-specific alternatives:
+
+- Immediate support: "What part of it needs steadying right now?"
+- Retrospective formulation: "What happened in that moment, including the words or actions you directly observed?"
+- Existing report: "I have the current report in view. Which part now feels newly true or inaccurate?"
 
 ## Event Type
 

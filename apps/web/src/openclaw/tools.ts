@@ -373,6 +373,85 @@ const entityNavigationRouteSpecs = {
   }
 } as const satisfies Record<string, SpecializedRouteSpec>;
 
+const calendarConnectionRouteSpecs = {
+  list: { method: "GET", path: "/api/v1/calendar/connections" },
+  discover: {
+    method: "POST",
+    path: "/api/v1/calendar/discovery",
+    requiresToken: true
+  },
+  discoverMacOSLocal: {
+    method: "GET",
+    path: "/api/v1/calendar/macos-local/discovery"
+  },
+  rediscover: {
+    method: "GET",
+    path: "/api/v1/calendar/connections/:id/discovery"
+  },
+  create: {
+    method: "POST",
+    path: "/api/v1/calendar/connections",
+    requiresToken: true
+  },
+  update: {
+    method: "PATCH",
+    path: "/api/v1/calendar/connections/:id",
+    requiresToken: true
+  },
+  sync: {
+    method: "POST",
+    path: "/api/v1/calendar/connections/:id/sync",
+    requiresToken: true
+  },
+  delete: {
+    method: "DELETE",
+    path: "/api/v1/calendar/connections/:id",
+    requiresToken: true
+  }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
+const wikiRouteSpecs = {
+  list: { method: "GET", path: "/api/v1/wiki/pages" },
+  search: {
+    method: "POST",
+    path: "/api/v1/wiki/search",
+    requiresToken: true
+  },
+  create: {
+    method: "POST",
+    path: "/api/v1/wiki/pages",
+    requiresToken: true
+  },
+  read: { method: "GET", path: "/api/v1/wiki/pages/:id" },
+  readBySlug: { method: "GET", path: "/api/v1/wiki/by-slug/:slug" },
+  update: {
+    method: "PATCH",
+    path: "/api/v1/wiki/pages/:id",
+    requiresToken: true
+  },
+  delete: {
+    method: "DELETE",
+    path: "/api/v1/wiki/pages/:id",
+    requiresToken: true
+  },
+  health: { method: "GET", path: "/api/v1/wiki/health" },
+  sync: {
+    method: "POST",
+    path: "/api/v1/wiki/sync",
+    requiresToken: true
+  },
+  reindex: {
+    method: "POST",
+    path: "/api/v1/wiki/reindex",
+    requiresToken: true
+  },
+  ingest: {
+    method: "POST",
+    path: "/api/v1/wiki/ingest-jobs",
+    requiresToken: true
+  }
+} as const satisfies Record<string, SpecializedRouteSpec>;
+
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
@@ -879,6 +958,22 @@ export function registerForgePluginTools(
     description:
       "Call the dedicated Entity Navigation list or touch route. List returns bounded canonical pins and this agent's own recent records. Touch records that this agent viewed an existing in-scope record. Human pin and unpin operations are intentionally unavailable to agents.",
     routeSpecs: entityNavigationRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_calendar_connection_route",
+    label: "Forge Calendar Connection Route",
+    description:
+      "Call one allowed dedicated Calendar Connection lifecycle route for list, provider discovery, macOS-local discovery, rediscovery, create, selected-calendar update, sync, or delete. Read the current connection first for existing-record changes and do not use batch CRUD for calendar connections.",
+    routeSpecs: calendarConnectionRouteSpecs
+  });
+
+  registerSpecializedRouteTool(api, config, {
+    name: "forge_call_wiki_route",
+    label: "Forge Wiki Route",
+    description:
+      "Call one allowed dedicated Wiki lifecycle route for list, search, create, id or slug read, update, delete, health, sync, reindex, or ingest. Read the exact page before existing-page changes and do not use batch CRUD for wiki pages.",
+    routeSpecs: wikiRouteSpecs
   });
 
   registerSpecializedRouteTool(api, config, {

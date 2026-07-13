@@ -575,6 +575,7 @@ describe("forge onboarding contract", () => {
 
     expect(routeModel.specializedCrudEntities.wiki_page).toEqual(
       expect.objectContaining({
+        routeTool: "forge_call_wiki_route",
         create: "/api/v1/wiki/pages",
         update: "/api/v1/wiki/pages/:id",
         read: "/api/v1/wiki/pages/:id",
@@ -596,6 +597,7 @@ describe("forge onboarding contract", () => {
     );
     expect(routeModel.specializedCrudEntities.calendar_connection).toEqual(
       expect.objectContaining({
+        routeTool: "forge_call_calendar_connection_route",
         create: "/api/v1/calendar/connections",
         discover: "/api/v1/calendar/discovery",
         discoverMacOSLocal: "/api/v1/calendar/macos-local/discovery",
@@ -632,6 +634,23 @@ describe("forge onboarding contract", () => {
           },
           delete: { method: "DELETE", path: "/api/v1/calendar/connections/:id" }
         })
+      })
+    );
+    expect(routeModel.specializedCrudEntities.artifact).toEqual(
+      expect.objectContaining({
+        routeTool: "forge_call_artifact_route",
+        routeKeys: expect.arrayContaining([
+          "list",
+          "createWithBytes",
+          "readMetadata",
+          "updateMetadata",
+          "rescan",
+          "enrichWithLlm",
+          "replaceGenericLinks",
+          "trustState",
+          "versions",
+          "audit"
+        ])
       })
     );
 
@@ -1050,10 +1069,26 @@ describe("forge onboarding contract", () => {
       expect.objectContaining({
         classification: "specialized_crud_entity",
         preferredMutationPath:
-          "Use /api/v1/wiki/pages with POST or PATCH for page CRUD.",
+          "Use the dedicated Wiki route family for list, search, create, id or slug read, update, delete, health, sync, reindex, and ingest. Do not use shared batch CRUD for wiki_page.",
         preferredReadPath: "/api/v1/wiki/pages/:id",
-        preferredMutationTool: "forge_upsert_wiki_page"
+        preferredMutationTool: expect.stringMatching(
+          /forge_call_wiki_route[\s\S]*forge_upsert_wiki_page/i
+        )
       })
+    );
+    const wikiRouteTool = onboarding.toolInputCatalog.find(
+      (entry) => entry.toolName === "forge_call_wiki_route"
+    );
+    expect(wikiRouteTool).toEqual(
+      expect.objectContaining({
+        requiredFields: ["routeKey"],
+        inputShape: expect.stringMatching(
+          /list[\s\S]*search[\s\S]*create[\s\S]*readBySlug[\s\S]*update[\s\S]*delete[\s\S]*health[\s\S]*sync[\s\S]*reindex[\s\S]*ingest/i
+        )
+      })
+    );
+    expect(wikiRouteTool?.notes.join(" ")).toMatch(
+      /pathParams\.id[\s\S]*pathParams\.slug[\s\S]*read the exact page[\s\S]*read the page back/i
     );
     expect(entityByType.get("calendar_connection")).toEqual(
       expect.objectContaining({
@@ -1062,8 +1097,22 @@ describe("forge onboarding contract", () => {
           "Use /api/v1/calendar/discovery or /api/v1/calendar/macos-local/discovery before setup when needed; use /api/v1/calendar/connections with POST, PATCH, DELETE, rediscovery, and sync for connection lifecycle work.",
         preferredReadPath: "/api/v1/calendar/connections",
         preferredMutationTool:
-          "forge_connect_calendar_provider | forge_sync_calendar_connection | mirrored calendar connection routes"
+          "forge_call_calendar_connection_route | forge_connect_calendar_provider | forge_sync_calendar_connection"
       })
+    );
+    const calendarRouteTool = onboarding.toolInputCatalog.find(
+      (entry) => entry.toolName === "forge_call_calendar_connection_route"
+    );
+    expect(calendarRouteTool).toEqual(
+      expect.objectContaining({
+        requiredFields: ["routeKey"],
+        inputShape: expect.stringMatching(
+          /list[\s\S]*discover[\s\S]*discoverMacOSLocal[\s\S]*rediscover[\s\S]*create[\s\S]*update[\s\S]*sync[\s\S]*delete/i
+        )
+      })
+    );
+    expect(calendarRouteTool?.notes.join(" ")).toMatch(
+      /list before update[\s\S]*pathParams\.id[\s\S]*read-back/i
     );
 
     expect(entityByType.get("task_run")).toEqual(
@@ -1838,6 +1887,15 @@ describe("forge onboarding contract", () => {
     );
     expect(psycheByFocus.get("trigger_report")?.notes.join(" ")).toMatch(
       /worksheet dump[\s\S]*felt stake/i
+    );
+    expect(psycheByFocus.get("trigger_report")?.askSequence.join(" ")).toMatch(
+      /immediate support[\s\S]*existing report[\s\S]*read the exact report[\s\S]*smallest tolerable slice[\s\S]*partial draft/i
+    );
+    expect(psycheByFocus.get("trigger_report")?.askSequence.join(" ")).toMatch(
+      /observably happened or was said[\s\S]*fast thought or meaning separately[\s\S]*observable event/i
+    );
+    expect(psycheByFocus.get("trigger_report")?.notes.join(" ")).toMatch(
+      /provisional draft[\s\S]*missing segments as missing[\s\S]*existing chain[\s\S]*newly true segment[\s\S]*what happened[\s\S]*inferred[\s\S]*hypothesis/i
     );
     expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /repeated emotional or relational stake/i

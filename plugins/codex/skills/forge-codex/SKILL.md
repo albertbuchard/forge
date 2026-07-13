@@ -127,8 +127,10 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
 - `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
-  Use the wiki tools for wiki pages, the calendar connection tools for provider setup
-  and sync, and the Artifact Store route family for paged metadata listing,
+  Use `forge_call_wiki_route` for the complete Wiki lifecycle, the narrower Wiki
+  helpers for settled operations, `forge_call_calendar_connection_route` for the
+  complete calendar connection lifecycle, the narrower calendar connect/sync helpers
+  when those actions are already settled, and the Artifact Store route family for paged metadata listing,
   trusted file upload, metadata,
   static scan, LLM metadata enrichment, generic entity links, trust state, versions,
   and audit. Batch CRUD may search, update, delete, and restore artifact metadata, but
@@ -171,6 +173,15 @@ Never hide placeholders in `query` or `body`, and never guess a nearby path.
   published `routeKeys` and `methodRoutes` for those specialized CRUD surfaces before
   calling lower-level routes, and cross-check OpenAPI when debugging a contract
   mismatch. Do not guess wiki, calendar connection, or artifact paths from memory.
+- For `wiki_page`, prefer `forge_call_wiki_route` when the job needs the complete
+  lifecycle, especially `readBySlug` or `delete`. Resolve and read the exact page
+  before update or delete, pass `id` or `slug` through `pathParams`, and read the
+  affected page, list, search, or health state back when verification matters.
+- For `calendar_connection`, prefer `forge_call_calendar_connection_route` with the
+  published `list`, `discover`, `discoverMacOSLocal`, `rediscover`, `create`, `update`,
+  `sync`, or `delete` key. List first for existing-record changes unless an exact id
+  came from a current read, pass that id through `pathParams.id`, and list again when
+  read-back is needed to prove the intended result.
 - The live onboarding `routeKeys` list, `methodRoutes` map, and specialized
   route-key tool schemas include the exact route-key to method/path map. Use
   `routeKeys` for the allowed names and `methodRoutes` as the

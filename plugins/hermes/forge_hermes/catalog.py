@@ -209,6 +209,31 @@ ENTITY_NAVIGATION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "touch": {"method": "POST", "path": "/api/v1/entity-navigation/touch", "write": True},
 }
 
+CALENDAR_CONNECTION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "list": {"method": "GET", "path": "/api/v1/calendar/connections"},
+    "discover": {"method": "POST", "path": "/api/v1/calendar/discovery", "write": True},
+    "discoverMacOSLocal": {"method": "GET", "path": "/api/v1/calendar/macos-local/discovery"},
+    "rediscover": {"method": "GET", "path": "/api/v1/calendar/connections/:id/discovery"},
+    "create": {"method": "POST", "path": "/api/v1/calendar/connections", "write": True},
+    "update": {"method": "PATCH", "path": "/api/v1/calendar/connections/:id", "write": True},
+    "sync": {"method": "POST", "path": "/api/v1/calendar/connections/:id/sync", "write": True},
+    "delete": {"method": "DELETE", "path": "/api/v1/calendar/connections/:id", "write": True},
+}
+
+WIKI_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "list": {"method": "GET", "path": "/api/v1/wiki/pages"},
+    "search": {"method": "POST", "path": "/api/v1/wiki/search", "write": True},
+    "create": {"method": "POST", "path": "/api/v1/wiki/pages", "write": True},
+    "read": {"method": "GET", "path": "/api/v1/wiki/pages/:id"},
+    "readBySlug": {"method": "GET", "path": "/api/v1/wiki/by-slug/:slug"},
+    "update": {"method": "PATCH", "path": "/api/v1/wiki/pages/:id", "write": True},
+    "delete": {"method": "DELETE", "path": "/api/v1/wiki/pages/:id", "write": True},
+    "health": {"method": "GET", "path": "/api/v1/wiki/health"},
+    "sync": {"method": "POST", "path": "/api/v1/wiki/sync", "write": True},
+    "reindex": {"method": "POST", "path": "/api/v1/wiki/reindex", "write": True},
+    "ingest": {"method": "POST", "path": "/api/v1/wiki/ingest-jobs", "write": True},
+}
+
 
 def specialized_route_parameters(
     route_specs: Dict[str, Dict[str, Any]],
@@ -738,6 +763,24 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(ENTITY_NAVIGATION_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(ENTITY_NAVIGATION_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_calendar_connection_route",
+        "description": "Call one allowed dedicated Calendar Connection lifecycle route for list, provider discovery, macOS-local discovery, rediscovery, create, selected-calendar update, sync, or delete. Read the current connection first for existing-record changes and do not use batch CRUD for calendar connections.",
+        "parameters": specialized_route_parameters(CALENDAR_CONNECTION_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(CALENDAR_CONNECTION_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(CALENDAR_CONNECTION_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(CALENDAR_CONNECTION_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_wiki_route",
+        "description": "Call one allowed dedicated Wiki lifecycle route for list, search, create, id or slug read, update, delete, health, sync, reindex, or ingest. Read the exact page before existing-page changes and do not use batch CRUD for wiki pages.",
+        "parameters": specialized_route_parameters(WIKI_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(WIKI_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(WIKI_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(WIKI_ROUTE_SPECS, args),
     },
     {
         "name": "forge_call_movement_route",

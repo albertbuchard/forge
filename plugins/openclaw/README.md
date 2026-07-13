@@ -231,7 +231,7 @@ Forge now exposes three more agent-relevant surfaces directly:
 
 OpenClaw tool coverage for those areas is explicit:
 
-- wiki reads and writes use the `forge_get_wiki_*`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, and `forge_ingest_wiki_source` tools
+- the complete wiki lifecycle uses `forge_call_wiki_route`, including slug reads and delete; the `forge_get_wiki_*`, `forge_search_wiki`, `forge_upsert_wiki_page`, `forge_sync_wiki_vault`, `forge_reindex_wiki_embeddings`, and `forge_ingest_wiki_source` tools remain focused helpers
 - sleep review uses `forge_get_sleep_overview` and record enrichment uses `forge_update_sleep_session`
 - sports review uses `forge_get_sports_overview` and record enrichment uses `forge_update_workout_session`
 
@@ -423,7 +423,7 @@ The main mental model is intentionally small:
 9. `forge_adjust_work_minutes` for signed minute corrections on existing tasks or projects
 10. `forge_log_work` for completion-style retroactive work
 11. `forge_start_task_run`, `forge_heartbeat_task_run`, `forge_focus_task_run`, `forge_complete_task_run`, and `forge_release_task_run` for real live work
-12. `forge_get_calendar_overview`, `forge_connect_calendar_provider`, `forge_sync_calendar_connection`, `forge_create_work_block_template`, `forge_recommend_task_timeboxes`, and `forge_create_task_timebox` for calendar-aware execution
+12. `forge_get_calendar_overview`, `forge_call_calendar_connection_route`, `forge_connect_calendar_provider`, `forge_sync_calendar_connection`, `forge_create_work_block_template`, `forge_recommend_task_timeboxes`, and `forge_create_task_timebox` for calendar-aware execution
 13. `forge_post_insight` for recommendations
 
 Use the UI entrypoint sparingly.
@@ -491,6 +491,7 @@ Calendar-aware execution tools:
 
 - `forge_get_calendar_overview` reads provider state, mirrored events, work blocks, and timeboxes together
 - `forge_create_entities`, `forge_update_entities`, and `forge_delete_entities` are the normal path for `calendar_event`, `work_block_template`, and `task_timebox`
+- `forge_call_calendar_connection_route` covers the complete specialized lifecycle: list, provider discovery, macOS-local discovery, rediscovery, create, selected-calendar update, sync, and delete. Existing-record changes should start from `list`, use `pathParams.id`, and read the list back when verification matters.
 - `forge_connect_calendar_provider` creates a Google, Apple, Exchange Online, Calendars On This Mac, or custom CalDAV connection once the mirrored calendars are chosen. Exchange Online normally relies on the interactive Settings sign-in flow first, after the local Microsoft client ID, tenant, and redirect URI are configured in Forge. The macOS-local path relies on EventKit and replaces overlapping remote account connections instead of keeping duplicate copies.
 - `forge_sync_calendar_connection` runs provider pull/push sync for one connection
 - `forge_create_work_block_template` creates recurring half-day, holiday, or custom work blocks

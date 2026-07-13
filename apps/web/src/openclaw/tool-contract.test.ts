@@ -90,6 +90,22 @@ async function loadOnboardingRouteContracts() {
       ]
     )
   );
+  const calendarConnectionMethodRoutes = Object.fromEntries(
+    Object.entries(
+      specializedCrudEntities.calendar_connection?.methodRoutes ?? {}
+    ).map(([routeKey, route]) => [
+      routeKey,
+      typeof route === "string" ? route : `${route.method} ${route.path}`
+    ])
+  );
+  const wikiMethodRoutes = Object.fromEntries(
+    Object.entries(specializedCrudEntities.wiki_page?.methodRoutes ?? {}).map(
+      ([routeKey, route]) => [
+        routeKey,
+        typeof route === "string" ? route : `${route.method} ${route.path}`
+      ]
+    )
+  );
   return {
     attention: surfaces.attention,
     entityNavigation: surfaces.entityNavigation,
@@ -97,6 +113,14 @@ async function loadOnboardingRouteContracts() {
     lifeForce: surfaces.lifeForce,
     workbench: surfaces.workbench,
     lifeEvents: surfaces.lifeEvents,
+    calendarConnection: {
+      routeKeys: specializedCrudEntities.calendar_connection?.routeKeys ?? [],
+      methodRoutes: calendarConnectionMethodRoutes
+    },
+    wiki: {
+      routeKeys: specializedCrudEntities.wiki_page?.routeKeys ?? [],
+      methodRoutes: wikiMethodRoutes
+    },
     artifact: {
       routeKeys: specializedCrudEntities.artifact?.routeKeys ?? [],
       methodRoutes: artifactMethodRoutes
@@ -590,6 +614,11 @@ describe("openclaw tool contracts", () => {
       tools,
       "forge_call_entity_navigation_route"
     );
+    const calendarConnection = requireTool(
+      tools,
+      "forge_call_calendar_connection_route"
+    );
+    const wiki = requireTool(tools, "forge_call_wiki_route");
     const movement = requireTool(tools, "forge_call_movement_route");
     const lifeForce = requireTool(tools, "forge_call_life_force_route");
     const workbench = requireTool(tools, "forge_call_workbench_route");
@@ -602,6 +631,14 @@ describe("openclaw tool contracts", () => {
     );
     const entityNavigationRouteKeys = readTypeBoxUnionValues(
       entityNavigation.parameters ?? {},
+      "routeKey"
+    );
+    const calendarConnectionRouteKeys = readTypeBoxUnionValues(
+      calendarConnection.parameters ?? {},
+      "routeKey"
+    );
+    const wikiRouteKeys = readTypeBoxUnionValues(
+      wiki.parameters ?? {},
       "routeKey"
     );
     const movementRouteKeys = readTypeBoxUnionValues(
@@ -631,6 +668,12 @@ describe("openclaw tool contracts", () => {
     expect(entityNavigationRouteKeys).toEqual(
       [...onboardingSurfaces.entityNavigation.routeKeys].sort()
     );
+    expect(calendarConnectionRouteKeys).toEqual(
+      [...onboardingSurfaces.calendarConnection.routeKeys].sort()
+    );
+    expect(wikiRouteKeys).toEqual(
+      [...onboardingSurfaces.wiki.routeKeys].sort()
+    );
     expect(movementRouteKeys).toEqual(
       [...onboardingSurfaces.movement.routeKeys].sort()
     );
@@ -656,6 +699,16 @@ describe("openclaw tool contracts", () => {
         readPropertyDescription(entityNavigation.parameters ?? {}, "routeKey")
       )
     ).toEqual(onboardingSurfaces.entityNavigation.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(calendarConnection.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.calendarConnection.methodRoutes);
+    expect(
+      readRouteGuideFromDescription(
+        readPropertyDescription(wiki.parameters ?? {}, "routeKey")
+      )
+    ).toEqual(onboardingSurfaces.wiki.methodRoutes);
     expect(
       readRouteGuideFromDescription(
         readPropertyDescription(movement.parameters ?? {}, "routeKey")
@@ -689,6 +742,29 @@ describe("openclaw tool contracts", () => {
       "snooze"
     ]);
     expect(entityNavigationRouteKeys).toEqual(["list", "touch"]);
+    expect(calendarConnectionRouteKeys).toEqual([
+      "create",
+      "delete",
+      "discover",
+      "discoverMacOSLocal",
+      "list",
+      "rediscover",
+      "sync",
+      "update"
+    ]);
+    expect(wikiRouteKeys).toEqual([
+      "create",
+      "delete",
+      "health",
+      "ingest",
+      "list",
+      "read",
+      "readBySlug",
+      "reindex",
+      "search",
+      "sync",
+      "update"
+    ]);
     expect(movementRouteKeys).toEqual(
       expect.arrayContaining([
         "day",
@@ -769,6 +845,8 @@ describe("openclaw tool contracts", () => {
     for (const tool of [
       attention,
       entityNavigation,
+      calendarConnection,
+      wiki,
       movement,
       lifeForce,
       workbench,
@@ -792,6 +870,12 @@ describe("openclaw tool contracts", () => {
     expect(attention.description ?? "").toMatch(/stable item id/i);
     expect(attention.description ?? "").toMatch(/derived queue/i);
     expect(entityNavigation.description ?? "").toMatch(/Human pin and unpin/i);
+    expect(calendarConnection.description ?? "").toMatch(
+      /complete|lifecycle|list.*discovery/i
+    );
+    expect(calendarConnection.description ?? "").toMatch(/batch CRUD/i);
+    expect(wiki.description ?? "").toMatch(/id or slug read/i);
+    expect(wiki.description ?? "").toMatch(/batch CRUD/i);
 
     expect(
       readPropertyDescription(attention.parameters ?? {}, "routeKey")
@@ -802,6 +886,14 @@ describe("openclaw tool contracts", () => {
       readPropertyDescription(entityNavigation.parameters ?? {}, "routeKey")
     ).toMatch(
       /list: GET \/api\/v1\/entity-navigation[\s\S]*touch: POST \/api\/v1\/entity-navigation\/touch/
+    );
+    expect(
+      readPropertyDescription(calendarConnection.parameters ?? {}, "routeKey")
+    ).toMatch(
+      /list: GET \/api\/v1\/calendar\/connections[\s\S]*discover: POST \/api\/v1\/calendar\/discovery[\s\S]*update: PATCH \/api\/v1\/calendar\/connections\/:id[\s\S]*delete: DELETE \/api\/v1\/calendar\/connections\/:id/
+    );
+    expect(readPropertyDescription(wiki.parameters ?? {}, "routeKey")).toMatch(
+      /list: GET \/api\/v1\/wiki\/pages[\s\S]*readBySlug: GET \/api\/v1\/wiki\/by-slug\/:slug[\s\S]*delete: DELETE \/api\/v1\/wiki\/pages\/:id[\s\S]*ingest: POST \/api\/v1\/wiki\/ingest-jobs/
     );
     expect(
       readPropertyDescription(movement.parameters ?? {}, "routeKey")
@@ -835,6 +927,8 @@ describe("openclaw tool contracts", () => {
     for (const tool of [
       attention,
       entityNavigation,
+      calendarConnection,
+      wiki,
       movement,
       lifeForce,
       workbench,
@@ -859,6 +953,12 @@ describe("openclaw tool contracts", () => {
 
     expect(readHermesRouteSpecs("ATTENTION_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.attention.methodRoutes
+    );
+    expect(readHermesRouteSpecs("CALENDAR_CONNECTION_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.calendarConnection.methodRoutes
+    );
+    expect(readHermesRouteSpecs("WIKI_ROUTE_SPECS")).toEqual(
+      onboardingSurfaces.wiki.methodRoutes
     );
     expect(readHermesRouteSpecs("MOVEMENT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.movement.methodRoutes

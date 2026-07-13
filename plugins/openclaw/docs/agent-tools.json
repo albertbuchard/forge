@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-12T20:37:58.267Z",
+  "generatedAt": "2026-07-13T20:40:16.765Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -123,6 +123,27 @@
       "catalogDocumented": true
     },
     {
+      "name": "forge_call_calendar_connection_route",
+      "groupId": "calendar",
+      "groupTitle": "Calendar And Timeboxes",
+      "label": "Forge Calendar Connection Route",
+      "summary": "Call one Calendar Connection lifecycle route for discovery, list, create, update, sync, rediscovery, or removal.",
+      "whenToUse": "Use for the complete specialized calendar-connection lifecycle. List first for existing-record work, then select the exact connection and action instead of using batch CRUD or guessing a path.",
+      "inputShape": "{ routeKey: \"list\"|\"discover\"|\"discoverMacOSLocal\"|\"rediscover\"|\"create\"|\"update\"|\"sync\"|\"delete\", pathParams?: { id?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Use list before update, rediscover, sync, or delete unless the user supplied an exact connection id from a current read.",
+        "Use pathParams.id for rediscover, update, sync, and delete. Do not put the id into routeKey, query, or body.",
+        "Use discover for Apple or custom CalDAV provider discovery and discoverMacOSLocal for calendars already configured on this Mac.",
+        "Create and update bodies must follow the exact live OpenAPI schemas. Interactive Google or Microsoft authorization remains operator-owned until a completed authSessionId exists.",
+        "After create, update, sync, or delete, list connections again when read-back is needed to verify the user's practical goal."
+      ],
+      "example": "{\"routeKey\":\"update\",\"pathParams\":{\"id\":\"calendar_connection_123\"},\"body\":{\"label\":\"Work calendar\",\"selectedCalendarUrls\":[\"https://calendar.example/work/\"]}}",
+      "catalogDocumented": true
+    },
+    {
       "name": "forge_call_entity_navigation_route",
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
@@ -202,6 +223,27 @@
         "After a Movement repair, read back the relevant timeline, box detail, place list, settings, or selection view when it proves the practical correction."
       ],
       "example": "{\"routeKey\":\"userBoxPreflight\",\"body\":{\"kind\":\"stay\",\"startedAt\":\"2026-05-06T13:00:00.000Z\",\"endedAt\":\"2026-05-06T15:00:00.000Z\",\"placeLabel\":\"Home\",\"userId\":\"user_operator\"}}",
+      "catalogDocumented": true
+    },
+    {
+      "name": "forge_call_wiki_route",
+      "groupId": "wiki",
+      "groupTitle": "Wiki And Evidence Memory",
+      "label": "Forge Wiki Route",
+      "summary": "Call one complete Wiki lifecycle route, including slug reads and page deletion that narrower helper tools do not cover.",
+      "whenToUse": "Use for the full specialized Wiki contract. Resolve and read an existing page before update or delete, and use the narrower Wiki helpers only when their already-settled input shape is more convenient.",
+      "inputShape": "{ routeKey: \"list\"|\"search\"|\"create\"|\"read\"|\"readBySlug\"|\"update\"|\"delete\"|\"health\"|\"sync\"|\"reindex\"|\"ingest\", pathParams?: { id?: string, slug?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Use pathParams.id for read, update, and delete; use pathParams.slug for readBySlug. Do not place either identifier in routeKey, query, or body.",
+        "Before update or delete, read the exact page and preserve the intended meaning, provenance, backlinks, citations, and reusable instructions.",
+        "Search is POST and takes its retrieval fields in body. List and health use query; create, update, sync, reindex, and ingest use body.",
+        "After create or update, read the page back when wording or links need verification. After delete, list or search when disappearance and remaining references need verification.",
+        "Wiki pages are specialized CRUD and must not be sent through shared batch entity routes."
+      ],
+      "example": "{\"routeKey\":\"readBySlug\",\"pathParams\":{\"slug\":\"research/methods/causal-dag\"}}",
       "catalogDocumented": true
     },
     {

@@ -9,10 +9,12 @@ import pytest
 from forge_hermes import tools
 from forge_hermes.catalog import (
     ATTENTION_ROUTE_SPECS,
+    CALENDAR_CONNECTION_ROUTE_SPECS,
     ENTITY_NAVIGATION_ROUTE_SPECS,
     LIFE_FORCE_ROUTE_SPECS,
     MOVEMENT_ROUTE_SPECS,
     TOOL_CATALOG,
+    WIKI_ROUTE_SPECS,
     WORKBENCH_ROUTE_EXAMPLES,
     WORKBENCH_ROUTE_SPECS,
     release_task_run_body,
@@ -256,6 +258,33 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     assert specs["forge_call_entity_navigation_route"]["parameters"]["properties"][
         "routeKey"
     ]["enum"] == ["list", "touch"]
+    assert specs["forge_call_calendar_connection_route"]["parameters"]["properties"][
+        "routeKey"
+    ]["enum"] == [
+        "create",
+        "delete",
+        "discover",
+        "discoverMacOSLocal",
+        "list",
+        "rediscover",
+        "sync",
+        "update",
+    ]
+    assert specs["forge_call_wiki_route"]["parameters"]["properties"]["routeKey"][
+        "enum"
+    ] == [
+        "create",
+        "delete",
+        "health",
+        "ingest",
+        "list",
+        "read",
+        "readBySlug",
+        "reindex",
+        "search",
+        "sync",
+        "update",
+    ]
     assert set(
         specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
     ) >= {
@@ -312,6 +341,12 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     entity_navigation_route_description = specs[
         "forge_call_entity_navigation_route"
     ]["parameters"]["properties"]["routeKey"]["description"]
+    calendar_connection_route_description = specs[
+        "forge_call_calendar_connection_route"
+    ]["parameters"]["properties"]["routeKey"]["description"]
+    wiki_route_description = specs["forge_call_wiki_route"]["parameters"][
+        "properties"
+    ]["routeKey"]["description"]
     movement_route_description = specs["forge_call_movement_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
@@ -330,6 +365,16 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "touch: POST /api/v1/entity-navigation/touch"
         in entity_navigation_route_description
     )
+    assert (
+        "list: GET /api/v1/calendar/connections"
+        in calendar_connection_route_description
+    )
+    assert (
+        "delete: DELETE /api/v1/calendar/connections/:id"
+        in calendar_connection_route_description
+    )
+    assert "readBySlug: GET /api/v1/wiki/by-slug/:slug" in wiki_route_description
+    assert "delete: DELETE /api/v1/wiki/pages/:id" in wiki_route_description
     assert (
         "snooze: POST /api/v1/attention-inbox/:id/snooze"
         in attention_route_description
@@ -354,6 +399,8 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
     for tool_name in [
         "forge_call_attention_route",
         "forge_call_entity_navigation_route",
+        "forge_call_calendar_connection_route",
+        "forge_call_wiki_route",
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route",
@@ -380,6 +427,14 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         ENTITY_NAVIGATION_ROUTE_SPECS,
         {"routeKey": "touch"},
     ) == "/api/v1/entity-navigation/touch"
+    assert specialized_route_path(
+        CALENDAR_CONNECTION_ROUTE_SPECS,
+        {"routeKey": "update", "pathParams": {"id": "calendar connection/1"}},
+    ) == "/api/v1/calendar/connections/calendar%20connection%2F1"
+    assert specialized_route_path(
+        WIKI_ROUTE_SPECS,
+        {"routeKey": "readBySlug", "pathParams": {"slug": "research/method 1"}},
+    ) == "/api/v1/wiki/by-slug/research%2Fmethod%201"
     assert specialized_route_path(
         LIFE_FORCE_ROUTE_SPECS,
         {"routeKey": "weekdayTemplate", "pathParams": {"weekday": "monday"}},

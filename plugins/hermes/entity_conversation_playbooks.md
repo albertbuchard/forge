@@ -1643,8 +1643,8 @@ Arc:
 1. Identify whether the user wants to browse, search, read, create, update, delete,
    ingest, inspect wiki health, sync, or reindex. Skip this lane question when their
    verb already makes it clear.
-2. For browse, review, update, or delete work, list, search, or read the existing page
-   before asking authoring questions.
+2. For browse, review, update, or delete work, list, search, or resolve the existing
+   page by id or slug, then read it before asking authoring questions.
 3. For a new page, ask what it should help the user remember, understand, or reuse,
    then search for a near-duplicate topic before creating it.
 4. For an update, ask for the smallest change that is newly true and what meaning,
@@ -1657,6 +1657,9 @@ Arc:
    pages, or history must remain understandable.
 8. Ask about linked entities, aliases, tags, or supporting evidence only when they
    change retrieval, provenance, or navigation.
+9. After create or update, read the page back when wording or links need verification.
+   After delete, list or search when the user needs confirmation that the page is gone
+   and remaining references are still understandable.
 
 Helpful follow-up lanes:
 
@@ -1673,6 +1676,9 @@ Routing rule:
   book or article, keep a concept, or build a reusable explanation, consider
   `wiki_page` before `note`. Use `note` for temporary evidence, work logs, or linked
   detail; use `wiki_page` for durable memory.
+- Use `forge_call_wiki_route` for the complete `list`, `search`, `create`, `read`,
+  `readBySlug`, `update`, `delete`, `health`, `sync`, `reindex`, and `ingest`
+  lifecycle. The narrower Wiki tools remain convenient for their settled operations.
 - Use the wiki tools and the `/api/v1/wiki/pages` route family for list, search,
   create, read, read-by-slug, update, delete, health, sync, reindex, and ingest. Do
   not route `wiki_page` through batch entity CRUD or guess a nearby route.
@@ -1684,6 +1690,7 @@ Ready to act when:
 - browse, search, or health has a practical question and answer-changing scope
 - read, update, or delete has the exact page plus the intended lifecycle action and
   preservation need
+- an existing-page change starts from a current page read resolved by id or slug
 - create has passed a duplicate check and has a durable purpose, findable title, and
   meaningful Markdown body
 - ingest, sync, or reindex has a source or maintenance target plus the expected result
@@ -2387,9 +2394,14 @@ Arc:
    real use case.
 4. Ask only for the next provider-specific step that still matters, such as auth flow,
    label, or calendar selection.
-5. If the user is updating or removing an existing connection, ask which connection
-   and what exact lifecycle action they want before touching credentials or sync.
-6. Move into the actual connection flow once the setup goal is clear.
+5. If the user is updating, rediscovering, syncing, or removing an existing
+   connection, list first and read the exact returned connection instead of making
+   them reconstruct provider details from memory.
+6. Reflect the current label, provider, selected calendars, and writable/read-only
+   role, then ask only for the smallest lifecycle change or preservation choice that
+   remains unclear.
+7. Move into the actual connection flow once the setup goal is clear, and list again
+   after a mutation when that verifies the intended result.
 
 Helpful follow-up lanes:
 
@@ -2401,6 +2413,11 @@ Helpful follow-up lanes:
 Route note:
 
 - `calendar_connection` is a specialized CRUD surface, not a batch CRUD entity.
+- Use `forge_call_calendar_connection_route` with `list`, `discover`,
+  `discoverMacOSLocal`, `rediscover`, `create`, `update`, `sync`, or `delete` so every
+  published lifecycle action is callable without route guessing. The narrower
+  `forge_connect_calendar_provider` and `forge_sync_calendar_connection` tools remain
+  convenience helpers for those two already-settled actions.
 - Use `GET /api/v1/calendar/connections` to read existing connections.
 - Use `POST /api/v1/calendar/discovery` for Apple or custom CalDAV discovery and
   `GET /api/v1/calendar/macos-local/discovery` for calendars already configured on
@@ -2416,6 +2433,8 @@ Ready to act when:
 - the provider is clear
 - the existing connection is clear if this is rediscovery, selected-calendar update,
   sync, or removal
+- its current provider, selected calendars, and writable/read-only role have been read
+  rather than guessed for an existing-record change
 - the intended sync behavior is clear enough
 - the user-facing workflow that depends on the connection is clear enough
 - the next setup, auth, calendar-selection, sync, or removal step is obvious

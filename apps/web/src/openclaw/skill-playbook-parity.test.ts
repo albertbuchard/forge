@@ -1028,6 +1028,7 @@ describe("forge skill playbook parity", () => {
           "Put a calendar event on Friday and sync it to my writable calendar.",
         required: [
           /forge_get_calendar_overview/,
+          /forge_call_calendar_connection_route/,
           /forge_connect_calendar_provider/,
           /forge_sync_calendar_connection/,
           /entityType: "calendar_event"/

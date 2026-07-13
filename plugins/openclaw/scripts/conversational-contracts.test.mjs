@@ -41,6 +41,7 @@ const generalSectionByEntity = {
   preference_catalog_item: "Preference Catalog Item",
   preference_context: "Preference Context",
   preference_item: "Preference Item",
+  preferences_workspace: "Preferences Workspace",
   questionnaire_instrument: "Questionnaire Instrument",
   task_run: "Task Run",
   work_adjustment: "Work Adjustment",
@@ -196,6 +197,8 @@ test("adapter skills reconcile with onboarding and keep route families exact", (
       "forge_call_life_event_route",
       "forge_call_life_force_route",
       "forge_call_workbench_route",
+      "forge_call_calendar_connection_route",
+      "forge_call_wiki_route",
       "GET /api/v1/life-force",
       '`{"routeKey":"selection"',
       '`{"routeKey":"runFlow"'

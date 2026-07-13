@@ -21292,6 +21292,23 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(modeGuidePlaybook);
     assert.ok(modeGuidePlaybook.requiredForCreate.includes("summary"));
     assert.ok(modeGuidePlaybook.requiredForCreate.includes("answers"));
+    const triggerReportPlaybook =
+      onboardingBody.onboarding.psycheCoachingPlaybooks.find(
+        (playbook) => playbook.focus === "trigger_report"
+      );
+    assert.ok(triggerReportPlaybook);
+    assert.match(
+      triggerReportPlaybook.askSequence.join(" "),
+      /immediate support[\s\S]*read the exact report[\s\S]*smallest tolerable slice[\s\S]*partial draft/i
+    );
+    assert.match(
+      triggerReportPlaybook.askSequence.join(" "),
+      /observably happened or was said[\s\S]*fast thought or meaning separately[\s\S]*observable event/i
+    );
+    assert.match(
+      triggerReportPlaybook.notes.join(" "),
+      /provisional draft[\s\S]*missing segments as missing[\s\S]*newly true segment[\s\S]*what happened[\s\S]*inferred[\s\S]*hypothesis/i
+    );
     assert.ok(
       onboardingBody.onboarding.relationshipModel.some((rule) =>
         /Projects belong to one goal/.test(rule)
@@ -21463,6 +21480,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.equal(
       movementEntity.preferredMutationTool,
       "forge_call_movement_route"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.specializedCrudEntities
+        .artifact.routeTool,
+      "forge_call_artifact_route"
     );
     const lifeForceEntity = onboardingBody.onboarding.entityCatalog.find(
       (entity) => entity.entityType === "life_force"
@@ -21844,6 +21866,7 @@ test("settings and local agent token management persist through the versioned AP
       onboardingBody.onboarding.recommendedPluginTools.calendarWorkflow,
       [
         "forge_get_calendar_overview",
+        "forge_call_calendar_connection_route",
         "forge_connect_calendar_provider",
         "forge_sync_calendar_connection",
         "forge_create_work_block_template",

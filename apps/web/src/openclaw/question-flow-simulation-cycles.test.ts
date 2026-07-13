@@ -86,6 +86,7 @@ async function loadAgentContractPayloads() {
         specializedCrudEntities: Record<
           string,
           {
+            routeTool?: string;
             routeKeys?: string[];
             methodRoutes?: Record<
               string,
@@ -1586,6 +1587,7 @@ describe("question flow simulation cycles", () => {
         "ingest"
       ])
     );
+    expect(specializedCrud.wiki_page.routeTool).toBe("forge_call_wiki_route");
     expect(specializedCrud.calendar_connection.routeKeys).toEqual(
       expect.arrayContaining([
         "list",
@@ -1597,6 +1599,12 @@ describe("question flow simulation cycles", () => {
         "sync",
         "delete"
       ])
+    );
+    expect(specializedCrud.calendar_connection.routeTool).toBe(
+      "forge_call_calendar_connection_route"
+    );
+    expect(specializedCrud.artifact.routeTool).toBe(
+      "forge_call_artifact_route"
     );
     expect(specializedCrud.artifact.routeKeys).not.toEqual(
       expect.arrayContaining([
@@ -2980,6 +2988,19 @@ describe("question flow simulation cycles", () => {
     );
     expect(hypothesisExamples).toMatch(
       /`trigger_report`:[\s\S]*silence started meaning danger/i
+    );
+    const triggerReportSection = getSectionSlice(
+      psychePlaybook,
+      "Trigger Report"
+    );
+    expect(triggerReportSection).toMatch(
+      /immediate support[\s\S]*existing report[\s\S]*read the exact report first[\s\S]*partial draft/i
+    );
+    expect(triggerReportSection).toMatch(
+      /observably happened or was said[\s\S]*fast thought or meaning[\s\S]*Do not dispute the meaning or silently restate it as fact/i
+    );
+    expect(triggerReportSection).toMatch(
+      /provisional draft[\s\S]*unspoken chain segments remain missing[\s\S]*exact current report was read[\s\S]*do not force the rest of a sparse report through create intake/i
     );
     expect(hypothesisExamples).toMatch(
       /`flashcard`:[\s\S]*hide this before they\s+see it[\s\S]*shame alarm[\s\S]*verdict/i

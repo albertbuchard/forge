@@ -194,6 +194,16 @@ describe("question flow quality coverage", () => {
         `${section} should state the job of the record`
       ).toMatch(purpose);
     }
+    const wikiSection = getSectionSlice(entityPlaybook, "Wiki Page");
+    expect(wikiSection).toMatch(
+      /forge_call_wiki_route[\s\S]*readBySlug[\s\S]*delete/i
+    );
+    expect(wikiSection).toMatch(
+      /do\s+not route[\s\S]*guess a nearby route/i
+    );
+    expect(wikiSection).toMatch(
+      /resolve the existing[\s\S]*by id or slug[\s\S]*read it before[\s\S]*After create or update[\s\S]*After delete/i
+    );
     const artifactSection = getSectionSlice(entityPlaybook, "Artifact");
     expect(artifactSection).toMatch(
       /OpenAPI documents human-only download and encryption paths[\s\S]*intentionally absent from `forge_call_artifact_route`[\s\S]*must not be called by agents/i
@@ -230,13 +240,19 @@ describe("question flow quality coverage", () => {
       "Calendar Connection"
     );
     expect(calendarConnectionSection).toMatch(
-      /updating or removing an existing connection[\s\S]*which connection[\s\S]*exact lifecycle action/i
+      /updating, rediscovering, syncing, or removing an existing[\s\S]*list first[\s\S]*read the exact returned connection/i
     );
     expect(calendarConnectionSection).toMatch(
       /rediscovery, selected-calendar update, sync, or removal/i
     );
     expect(calendarConnectionSection).toMatch(
       /GET \/api\/v1\/calendar\/connections\/:id\/discovery[\s\S]*PATCH \/api\/v1\/calendar\/connections\/:id[\s\S]*DELETE \/api\/v1\/calendar\/connections\/:id/i
+    );
+    expect(calendarConnectionSection).toMatch(
+      /forge_call_calendar_connection_route[\s\S]*list[\s\S]*discoverMacOSLocal[\s\S]*rediscover[\s\S]*update[\s\S]*delete/i
+    );
+    expect(calendarConnectionSection).toMatch(
+      /list first[\s\S]*read the exact returned connection[\s\S]*current label, provider, selected calendars,[\s\S]*list again/i
     );
     const questionnaireInstrumentSection = getSectionSlice(
       entityPlaybook,
