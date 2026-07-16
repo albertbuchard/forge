@@ -23,7 +23,7 @@ Export the production dependency graph as a CycloneDX 1.5 application document:
 
 ```bash
 npm run sbom:check
-npm run --silent sbom > forge-connectivity-service-0.1.9.cdx.json
+npm run --silent sbom > forge-connectivity-service-0.1.10.cdx.json
 ```
 
 Attach the SBOM to the release and retain its digest with the package and image digests. Do not commit generated release artifacts to this package.
@@ -40,12 +40,12 @@ The default Node image is pinned by patch tag and manifest digest. Update both i
 
 ```bash
 docker buildx build \
-  --build-arg SERVICE_VERSION=0.1.9 \
+  --build-arg SERVICE_VERSION=0.1.10 \
   --build-arg VCS_REF="$(git rev-parse HEAD)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --sbom=true \
   --provenance=true \
-  -t registry.example/forge-connectivity-service:0.1.9 .
+  -t registry.example/forge-connectivity-service:0.1.10 .
 ```
 
 Inspect the final image configuration and attestations before publishing. Required properties are the unprivileged `node` user, root-owned application files, `/data` as the only writable persistent path, `SIGTERM`, the `/healthz` check, exec-form command, and OCI source/version/revision/date/base-image labels. Run the image with a read-only root filesystem and a writable `/data` volume where supported.
