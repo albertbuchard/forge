@@ -1,6 +1,6 @@
 {
   "name": "forge-connectivity-service",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Self-hosted, content-blind connectivity reference service for Forge peers.",
   "license": "Apache-2.0",
   "repository": {
