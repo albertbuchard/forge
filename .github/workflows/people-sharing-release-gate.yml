@@ -148,7 +148,7 @@ jobs:
         run: npm ci
 
       - name: Install Python test dependencies
-        run: python3 -m pip install --disable-pip-version-check build==1.4.2 pytest==8.4.2 pyyaml==6.0.3
+        run: python3 -m pip install --disable-pip-version-check build==1.4.2 pytest==8.4.2 pyyaml==6.0.3 setuptools==80.9.0 wheel==0.45.1
 
       - name: Verify reusable gate dependency contract
         run: |
