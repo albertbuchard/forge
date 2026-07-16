@@ -141,6 +141,16 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
     }
   );
   assert.equal(step("forge-peer-release-binary-admission").internal, true);
+  assert.deepEqual(
+    {
+      args: step("forge-peer-advisory-audit").args,
+      executable: step("forge-peer-advisory-audit").executable
+    },
+    {
+      args: ["scripts/audit.sh"],
+      executable: "sh"
+    }
+  );
   assert.deepEqual(step("people-api-sweep").args, [
     "run",
     "test:people-sharing"

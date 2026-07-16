@@ -388,7 +388,7 @@ const groups = Object.freeze({
       cwd: "packages/forge-peer",
       id: "forge-peer-release-build"
     }),
-    command("forge-peer advisory audit", "cargo", ["audit"], {
+    command("forge-peer advisory audit", "sh", ["scripts/audit.sh"], {
       cwd: "packages/forge-peer"
     }),
     command("forge-peer policy audit", "cargo", [
