@@ -1,4 +1,11 @@
-import { useEffect, useRef, type ContextType, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  type ContextType,
+  type ReactNode
+} from "react";
 import {
   UNSAFE_LocationContext,
   type Location as RouterLocation
@@ -34,12 +41,19 @@ export function useShellRouteHandoff({
   const dispatch = useAppDispatch();
   const previousRoutePathKeyRef = useRef(routePathKey);
   const visibleRouterLocation = optimisticLocation ?? routerLocation;
-
-  const displayedRoute: RouteRenderState = {
-    key: routePathKey,
-    node: outlet,
-    location: routerLocation
-  };
+  const currentRoute = useMemo<RouteRenderState>(
+    () => ({
+      key: routePathKey,
+      node: outlet,
+      location: routerLocation
+    }),
+    [outlet, routePathKey, routerLocation]
+  );
+  const displayedRouteRef = useRef<RouteRenderState>(currentRoute);
+  if (outlet !== null) {
+    displayedRouteRef.current = currentRoute;
+  }
+  const displayedRoute = useDeferredValue(displayedRouteRef.current);
 
   useEffect(() => {
     if (previousRoutePathKeyRef.current !== routePathKey) {

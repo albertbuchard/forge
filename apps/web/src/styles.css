@@ -902,6 +902,10 @@ body.theme-forge-light [class*="border-white/25"] {
     color-mix(in srgb, var(--canvas) 88%, transparent);
 }
 
+[data-route-transition-content]:not(:empty) + [data-route-transition-fallback] {
+  display: none;
+}
+
 .route-view-loading--core {
   --route-loading-accent: color-mix(in srgb, var(--primary) 20%, transparent);
 }

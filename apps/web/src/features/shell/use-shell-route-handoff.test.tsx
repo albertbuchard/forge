@@ -98,4 +98,61 @@ describe("useShellRouteHandoff", () => {
     );
     expect(result.current.visibleLocation.pathname).toBe("/sports");
   });
+
+  it("retains the previous route while the next lazy outlet is unresolved", () => {
+    const overviewLocation = buildLocation("/overview");
+    const movementLocation = buildLocation("/movement");
+    const wrapper = createWrapper();
+    const overviewOutlet = <div>Overview route</div>;
+    const movementOutlet = <div>Movement route</div>;
+
+    const { result, rerender } = renderHook(
+      (props: {
+        routePathKey: string;
+        routerLocation: Location;
+        outlet: ReactNode;
+      }) =>
+        useShellRouteHandoff({
+          ...props,
+          routerLocationContext: {
+            location: props.routerLocation,
+            navigationType: NavigationType.Push
+          },
+          optimisticLocation: null
+        }),
+      {
+        initialProps: {
+          routePathKey: "/overview",
+          routerLocation: overviewLocation,
+          outlet: overviewOutlet as ReactNode
+        },
+        wrapper
+      }
+    );
+
+    rerender({
+      routePathKey: "/movement",
+      routerLocation: movementLocation,
+      outlet: null
+    });
+
+    expect(result.current.displayedRoute.key).toBe("/overview");
+    expect(result.current.displayedRoute.node).toBe(overviewOutlet);
+    expect(result.current.displayedLocationContext?.location.pathname).toBe(
+      "/overview"
+    );
+    expect(result.current.visibleLocation.pathname).toBe("/movement");
+
+    rerender({
+      routePathKey: "/movement",
+      routerLocation: movementLocation,
+      outlet: movementOutlet
+    });
+
+    expect(result.current.displayedRoute.key).toBe("/movement");
+    expect(result.current.displayedRoute.node).toBe(movementOutlet);
+    expect(result.current.displayedLocationContext?.location.pathname).toBe(
+      "/movement"
+    );
+  });
 });

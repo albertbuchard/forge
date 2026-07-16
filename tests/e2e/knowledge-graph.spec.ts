@@ -68,9 +68,11 @@ async function waitForDiagnostics(page: Page) {
   await page.waitForFunction(
     () =>
       Boolean(
-        (window as Window & {
-          __FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__?: unknown;
-        }).__FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__
+        (
+          window as Window & {
+            __FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__?: unknown;
+          }
+        ).__FORGE_KNOWLEDGE_GRAPH_DIAGNOSTICS__
       ),
     undefined,
     { timeout: 20_000 }
@@ -97,16 +99,23 @@ async function readPageDiagnostics(page: Page) {
   });
 }
 
-async function clickVisibleNode(page: Page, strategy: "pointer" | "api" = "api") {
+async function clickVisibleNode(
+  page: Page,
+  strategy: "pointer" | "api" = "api"
+) {
   const diagnostics = (await readDiagnostics(page)) as GraphDiagnostics;
   const targetId =
-    diagnostics.visibleNodeIds.find((nodeId) => nodeId !== diagnostics.focusedNodeId) ??
-    diagnostics.visibleNodeIds[0];
+    diagnostics.visibleNodeIds.find(
+      (nodeId) => nodeId !== diagnostics.focusedNodeId
+    ) ?? diagnostics.visibleNodeIds[0];
   expect(targetId).toBeTruthy();
   if (strategy === "pointer") {
     const targetPosition = diagnostics.nodeScreenPositions[targetId!];
     expect(targetPosition).toBeTruthy();
-    const canvasBox = await page.getByLabel("Knowledge graph canvas").first().boundingBox();
+    const canvasBox = await page
+      .getByLabel("Knowledge graph canvas")
+      .first()
+      .boundingBox();
     expect(canvasBox).toBeTruthy();
     await page.mouse.click(
       canvasBox!.x + targetPosition.x,
@@ -142,7 +151,10 @@ async function clickVisibleNode(page: Page, strategy: "pointer" | "api" = "api")
 test("knowledge graph loads without renderer crashes and stays stable while idle", async ({
   page
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "Desktop-only graph stability test");
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Desktop-only graph stability test"
+  );
 
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
@@ -177,17 +189,26 @@ test("knowledge graph loads without renderer crashes and stays stable while idle
   expect(Math.abs(after.graphCentroid?.x ?? 0)).toBeLessThan(6);
   expect(Math.abs(after.graphCentroid?.y ?? 0)).toBeLessThan(6);
   expect(consoleErrors.join("\n")).not.toContain("UsageGraphError");
-  expect(consoleErrors.join("\n")).not.toContain("An error occurred in the <ForwardRef");
-  expect(consoleErrors.join("\n")).not.toContain("Too many active WebGL contexts");
-  expect(consoleErrors.join("\n")).not.toContain("Sigma: Container has no width");
+  expect(consoleErrors.join("\n")).not.toContain(
+    "An error occurred in the <ForwardRef"
+  );
+  expect(consoleErrors.join("\n")).not.toContain(
+    "Too many active WebGL contexts"
+  );
+  expect(consoleErrors.join("\n")).not.toContain(
+    "Sigma: Container has no width"
+  );
   expect(pageErrors.join("\n")).not.toContain("UsageGraphError");
   expect(pageErrors.join("\n")).not.toContain("Sigma: Container has no width");
 });
 
-test("knowledge graph starts at origin and reports a satisfied startup invariant", async ({
+test("knowledge graph starts centered and reports a satisfied startup invariant", async ({
   page
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "Desktop-only startup diagnostics test");
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Desktop-only startup diagnostics test"
+  );
 
   await page.addInitScript(() => {
     (
@@ -205,8 +226,10 @@ test("knowledge graph starts at origin and reports a satisfied startup invariant
 
   const diagnostics = (await readDiagnostics(page)) as GraphDiagnostics;
   expect(diagnostics.visibleNodeIds.length).toBeGreaterThan(0);
-  expect(diagnostics.camera.x).toBeCloseTo(0, 3);
-  expect(diagnostics.camera.y).toBeCloseTo(0, 3);
+  const centeredCameraCoordinate =
+    diagnostics.rendererMode === "sigma" ? 0.5 : 0;
+  expect(diagnostics.camera.x).toBeCloseTo(centeredCameraCoordinate, 3);
+  expect(diagnostics.camera.y).toBeCloseTo(centeredCameraCoordinate, 3);
   expect(diagnostics.startupInvariantSatisfied).toBe(true);
   expect(Math.abs(diagnostics.graphCentroid?.x ?? 0)).toBeLessThan(0.6);
   expect(Math.abs(diagnostics.graphCentroid?.y ?? 0)).toBeLessThan(0.6);
@@ -217,7 +240,10 @@ test("knowledge graph starts at origin and reports a satisfied startup invariant
 test("desktop focus keeps the focused node anchored on screen while the neighborhood settles", async ({
   page
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "Desktop-only graph interaction test");
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Desktop-only graph interaction test"
+  );
 
   await page.addInitScript(() => {
     (
@@ -239,8 +265,12 @@ test("desktop focus keeps the focused node anchored on screen while the neighbor
   const settled = (await readDiagnostics(page)) as GraphDiagnostics;
   const settledScreenPosition = settled.nodeScreenPositions[focusedNodeId];
   expect(settledScreenPosition).toBeTruthy();
-  expect(Math.abs(settledScreenPosition.x - beforeScreenPosition.x)).toBeLessThan(28);
-  expect(Math.abs(settledScreenPosition.y - beforeScreenPosition.y)).toBeLessThan(28);
+  expect(
+    Math.abs(settledScreenPosition.x - beforeScreenPosition.x)
+  ).toBeLessThan(28);
+  expect(
+    Math.abs(settledScreenPosition.y - beforeScreenPosition.y)
+  ).toBeLessThan(28);
   expect(Math.abs(settled.graphCentroid?.x ?? 0)).toBeLessThan(6);
   expect(Math.abs(settled.graphCentroid?.y ?? 0)).toBeLessThan(6);
 });
@@ -248,7 +278,10 @@ test("desktop focus keeps the focused node anchored on screen while the neighbor
 test("mobile knowledge graph keeps first tap in focus mode and opens details on the second tap", async ({
   page
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "pixel-7", "Mobile-only graph interaction test");
+  test.skip(
+    testInfo.project.name !== "pixel-7",
+    "Mobile-only graph interaction test"
+  );
 
   await page.addInitScript(() => {
     (
@@ -275,11 +308,14 @@ test("mobile knowledge graph keeps first tap in focus mode and opens details on 
   await expect
     .poll(async () => (await readPageDiagnostics(page))?.mobileSheetOpen)
     .toBe(false);
-  await expect(page.getByTestId("knowledge-graph-desktop-toolbar")).toHaveCount(0);
+  await expect(page.getByTestId("knowledge-graph-desktop-toolbar")).toHaveCount(
+    0
+  );
   await page.waitForFunction(
     (nodeId) =>
       window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__?.focusNodeId === nodeId &&
-      typeof window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__?.activateFocusedNode === "function",
+      typeof window.__FORGE_KNOWLEDGE_GRAPH_PAGE_TEST__?.activateFocusedNode ===
+        "function",
     clickedNodeId
   );
   await page.evaluate(() => {
@@ -300,7 +336,10 @@ test("mobile knowledge graph keeps first tap in focus mode and opens details on 
 test("desktop graph test api can move a node without rebuilding the layout shell", async ({
   page
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "Desktop-only graph interaction test");
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Desktop-only graph interaction test"
+  );
 
   await page.addInitScript(() => {
     (
@@ -318,15 +357,26 @@ test("desktop graph test api can move a node without rebuilding the layout shell
   const beforePosition = before.nodeScreenPositions[targetId!];
   expect(beforePosition).toBeTruthy();
 
-  await page.evaluate(([nodeId, deltaX, deltaY]) => {
-    (
-      window as Window & {
-        __FORGE_KNOWLEDGE_GRAPH_TEST_API__?: {
-          moveNodeBy?: (nextNodeId: string, moveX: number, moveY: number) => void;
-        };
-      }
-    ).__FORGE_KNOWLEDGE_GRAPH_TEST_API__?.moveNodeBy?.(nodeId, deltaX, deltaY);
-  }, [targetId!, 5, -3] as const);
+  await page.evaluate(
+    ([nodeId, deltaX, deltaY]) => {
+      (
+        window as Window & {
+          __FORGE_KNOWLEDGE_GRAPH_TEST_API__?: {
+            moveNodeBy?: (
+              nextNodeId: string,
+              moveX: number,
+              moveY: number
+            ) => void;
+          };
+        }
+      ).__FORGE_KNOWLEDGE_GRAPH_TEST_API__?.moveNodeBy?.(
+        nodeId,
+        deltaX,
+        deltaY
+      );
+    },
+    [targetId!, 5, -3] as const
+  );
 
   await expect
     .poll(async () => {
