@@ -333,6 +333,18 @@ describe("forge onboarding contract", () => {
           );
           continue;
         }
+        if (catalogEntry.entityType === "mode_profile") {
+          expect(flow.readinessCheck).toMatch(
+            /Direct capture[\s\S]*accepted title and family[\s\S]*Review or narrow update[\s\S]*exact existing profile[\s\S]*Guided formulation[\s\S]*protective job or fear[\s\S]*Derivation from a mode guide session[\s\S]*explicit consent/i
+          );
+          continue;
+        }
+        if (catalogEntry.entityType === "behavior_pattern") {
+          expect(flow.readinessCheck).toMatch(
+            /Direct capture[\s\S]*accepted title[\s\S]*Review or narrow update[\s\S]*exact existing pattern[\s\S]*Guided functional analysis[\s\S]*protective payoff or later cost[\s\S]*fit-or-correction/i
+          );
+          continue;
+        }
         expect(flow.readinessCheck).toMatch(
           /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*do not require a new concrete example or hypothesis/i
         );
@@ -589,6 +601,7 @@ describe("forge onboarding contract", () => {
         "task",
         "habit",
         "note",
+        "person",
         "sleep_session",
         "workout_session",
         "life_event",
@@ -1372,6 +1385,8 @@ describe("forge onboarding contract", () => {
     ).toEqual([
       "forge_call_attention_route",
       "forge_call_entity_navigation_route",
+      "forge_call_people_route",
+      "forge_call_peer_route",
       "forge_call_movement_route",
       "forge_call_life_event_route",
       "forge_call_life_force_route",
@@ -1382,6 +1397,17 @@ describe("forge onboarding contract", () => {
         "forge_get_today_priority",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog"
+      ])
+    );
+    expect(onboarding.recommendedPluginTools?.peopleWorkflow).toEqual(
+      expect.arrayContaining([
+        "forge_search_entities",
+        "forge_create_entities",
+        "forge_update_entities",
+        "forge_delete_entities",
+        "forge_restore_entities",
+        "forge_call_people_route",
+        "forge_call_peer_route"
       ])
     );
     expect(onboarding.recommendedPluginTools?.preferencesWorkflow).toEqual(
@@ -1409,10 +1435,11 @@ describe("forge onboarding contract", () => {
       "forge_update_entities"
     ]);
     const guidedToolNames = new Set(
-      onboarding.toolInputCatalog.flatMap((entry) =>
-        entry.toolName.split(" | ")
-      )
+      onboarding.toolInputCatalog.map((entry) => entry.toolName)
     );
+    expect(
+      onboarding.toolInputCatalog.some((entry) => entry.toolName.includes(" | "))
+    ).toBe(false);
     for (const [workflowName, tools] of Object.entries(
       onboarding.recommendedPluginTools ?? {}
     )) {
@@ -1804,6 +1831,9 @@ describe("forge onboarding contract", () => {
     ).toBeLessThan(
       modeProfileSequence.indexOf("Choose the mode family only after")
     );
+    expect(modeProfileSequence).toMatch(
+      /direct capture[\s\S]*guided formulation[\s\S]*review or narrow update[\s\S]*derivation from an accepted mode guide session[\s\S]*read the exact existing mode profile first[\s\S]*patch only that accepted change[\s\S]*at most one candidate name or functional hypothesis[\s\S]*fit-or-correction[\s\S]*explicit consent/i
+    );
 
     expect(playbookByFocus.get("task_run")).toEqual(
       expect.objectContaining({
@@ -1997,6 +2027,12 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
       /tentative functional-analysis hypothesis/i
     );
+    expect(psycheByFocus.get("behavior_pattern")?.askSequence.join(" ")).toMatch(
+      /direct capture[\s\S]*guided functional analysis[\s\S]*review or narrow update[\s\S]*search for and read the exact existing behavior pattern first[\s\S]*patch only that accepted change[\s\S]*trigger_report for one episode[\s\S]*behavior for one observable move[\s\S]*belief_entry for one central sentence[\s\S]*goal for a desired outcome[\s\S]*rapidly made it mean[\s\S]*at most one tentative functional hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
+      /sparse existing pattern[\s\S]*preserve accepted wording and links[\s\S]*preferredResponse[\s\S]*function/i
+    );
     for (const focus of [
       "psyche_value",
       "behavior_pattern",
@@ -2086,6 +2122,9 @@ describe("forge onboarding contract", () => {
     );
     expect(psycheByFocus.get("mode_profile")?.notes.join(" ")).toMatch(
       /Do not start by asking for the mode family/i
+    );
+    expect(psycheByFocus.get("mode_profile")?.notes.join(" ")).toMatch(
+      /sparse existing profile[\s\S]*preserve accepted wording and links[\s\S]*ask only what changed/i
     );
     expect(psycheByFocus.get("mode_guide_session")?.notes.join(" ")).toMatch(
       /exploration worksheet|interpretations tentative/i

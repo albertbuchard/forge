@@ -21679,10 +21679,14 @@ test("settings and local agent token management persist through the versioned AP
       )
     );
     const foodSearchTool = onboardingBody.onboarding.toolInputCatalog.find(
-      (tool) =>
-        tool.toolName === "forge_search_foods | forge_search_nutrition_foods"
+      (tool) => tool.toolName === "forge_search_foods"
     );
     assert.ok(foodSearchTool);
+    const longFoodSearchTool = onboardingBody.onboarding.toolInputCatalog.find(
+      (tool) => tool.toolName === "forge_search_nutrition_foods"
+    );
+    assert.ok(longFoodSearchTool);
+    assert.equal(longFoodSearchTool.inputShape, foodSearchTool.inputShape);
     const foodSearchNotes =
       (foodSearchTool as { notes?: string[] }).notes ?? [];
     assert.match(foodSearchNotes.join(" "), /custom foods/i);
@@ -21698,6 +21702,25 @@ test("settings and local agent token management persist through the versioned AP
       /name-only custom foods are rejected/i
     );
     assert.match(logFoodNotes.join(" "), /internet/i);
+    const nutritionExperimentCreateTool =
+      onboardingBody.onboarding.toolInputCatalog.find(
+        (tool) => tool.toolName === "forge_start_nutrition_experiment"
+      );
+    assert.ok(nutritionExperimentCreateTool);
+    assert.deepEqual(nutritionExperimentCreateTool.requiredFields, [
+      "title",
+      "hypothesis",
+      "metricKey",
+      "intervention"
+    ]);
+    const nutritionExperimentUpdateTool =
+      onboardingBody.onboarding.toolInputCatalog.find(
+        (tool) => tool.toolName === "forge_update_nutrition_experiment"
+      );
+    assert.ok(nutritionExperimentUpdateTool);
+    assert.deepEqual(nutritionExperimentUpdateTool.requiredFields, [
+      "experimentId"
+    ]);
     const startRunTool = onboardingBody.onboarding.toolInputCatalog.find(
       (tool) => tool.toolName === "forge_start_task_run"
     );
@@ -22169,6 +22192,11 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(
       onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
         "questionnaire_instrument"
+      )
+    );
+    assert.ok(
+      onboardingBody.onboarding.entityRouteModel.batchCrudEntities.includes(
+        "person"
       )
     );
     assert.equal(

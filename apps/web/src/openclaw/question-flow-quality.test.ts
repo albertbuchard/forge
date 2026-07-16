@@ -1007,6 +1007,22 @@ describe("question flow quality coverage", () => {
       ).toMatch(anchor);
     }
 
+    const behaviorPatternSection = getSectionSlice(
+      psychePlaybook,
+      "Behavior Pattern"
+    );
+    expect(behaviorPatternSection).toMatch(
+      /direct capture[\s\S]*current activation or guided functional analysis[\s\S]*review or narrow update[\s\S]*complete[\s\S]*cue-to-cost chain[\s\S]*search for and read the exact existing pattern first[\s\S]*Never force a sparse pattern through full create intake/i
+    );
+    expect(behaviorPatternSection).toMatch(
+      /trigger_report[\s\S]*one episode[\s\S]*behavior[\s\S]*one observable[\s\S]*move[\s\S]*belief_entry[\s\S]*one central sentence[\s\S]*goal[\s\S]*desired outcome/i
+    );
+    expect(behaviorPatternSection).toMatch(
+      /what happened[\s\S]*rapidly made it mean[\s\S]*agent's[\s\S]*interpretation separate[\s\S]*at most one tentative functional hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(behaviorPatternSection).toMatch(
+      /protects, relieves, or helps avoid short term before[\s\S]*costs long term[\s\S]*preferredResponse[\s\S]*optional[\s\S]*user wants change work/i
+    );
     const behaviorSection = getSectionSlice(psychePlaybook, "Behavior");
     expect(behaviorSection).toMatch(
       /direct save, update, review, or guided formulation[\s\S]*smallest newly true change[\s\S]*did, said, avoided, or checked[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report/i
@@ -1022,6 +1038,22 @@ describe("question flow quality coverage", () => {
     );
     expect(behaviorSection).toMatch(
       /sparse legacy records[\s\S]*direct save or update[\s\S]*does not require a fresh episode or hypothesis/i
+    );
+    const modeProfileSection = getSectionSlice(
+      psychePlaybook,
+      "Mode Profile"
+    );
+    expect(modeProfileSection).toMatch(
+      /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or[\s\S]*narrow update[\s\S]*derivation from an accepted Mode Guide session/i
+    );
+    expect(modeProfileSection).toMatch(
+      /search for and read the exact existing profile first[\s\S]*newly true or inaccurate[\s\S]*patch only that[\s\S]*accepted change[\s\S]*Never force a sparse profile through full create intake/i
+    );
+    expect(modeProfileSection).toMatch(
+      /at most one candidate name or functional hypothesis[\s\S]*directly noticed separate from the interpretation[\s\S]*fit-or-correction/i
+    );
+    expect(modeProfileSection).toMatch(
+      /session derivation[\s\S]*exact Mode Guide session[\s\S]*accepted answers[\s\S]*tentative results[\s\S]*explicit consent/i
     );
     const modeGuideSection = getSectionSlice(
       psychePlaybook,

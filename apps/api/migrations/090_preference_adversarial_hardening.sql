@@ -10,6 +10,14 @@ CREATE TABLE IF NOT EXISTS preference_judgment_receipts (
 CREATE INDEX IF NOT EXISTS idx_preference_judgment_receipts_judgment
   ON preference_judgment_receipts(judgment_id);
 
+-- Some restored databases can retain the 086 migration receipt while missing
+-- this support table. Recreate it before repairing legacy archive provenance.
+CREATE TABLE IF NOT EXISTS preference_catalog_archive_members (
+  catalog_id TEXT NOT NULL REFERENCES preference_catalogs(id) ON DELETE CASCADE,
+  catalog_item_id TEXT NOT NULL REFERENCES preference_catalog_items(id) ON DELETE CASCADE,
+  PRIMARY KEY (catalog_id, catalog_item_id)
+);
+
 INSERT INTO entity_owners (
   entity_type,
   entity_id,

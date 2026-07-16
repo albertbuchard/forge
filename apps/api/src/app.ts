@@ -695,6 +695,7 @@ import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
 import { registerPeopleRoutes } from "./routes/people.js";
 import { registerPeerSharingRoutes } from "./routes/peer-sharing.js";
+import { PEER_ROUTE_CONTRACTS } from "./peer-route-contract.js";
 import { persistPeerPairingConfirmation } from "./repositories/peer-pairing.js";
 import { authenticatePeerCompanionRequest } from "./services/peer-companion-auth.js";
 import {
@@ -5396,15 +5397,17 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for a recurring loop that shows up across multiple situations and can be described as cue -> response -> payoff -> cost -> preferred response.",
     coachingGoal:
-      "Help the user build a CBT-style functional analysis with active listening instead of just naming the problem vaguely.",
+      "Help the user capture, review, or build a rigorous CBT-style functional analysis with active listening, without forcing a direct save or narrow update through the full loop.",
     askSequence: [
-      "Start from one recent concrete example before generalizing the loop.",
-      "Identify the typical cue, vulnerability, or context that makes the loop more likely.",
-      "Reflect back the sequence of thoughts, feelings, body state, and visible behavior once it starts.",
-      "Clarify the short-term payoff, protection, or escape function.",
-      "Clarify the long-term cost to the self, relationships, work, or values.",
-      "Ask what a slightly more workable response would look like.",
-      "Notice adjacent beliefs, schema themes, modes, or values that should be linked or saved separately."
+      "Distinguish direct capture, current activation or guided functional analysis, and review or narrow update before asking for the full loop.",
+      "For direct capture, reflect the user's pattern title and supplied wording, then ask one accuracy or consent question; do not demand a fresh episode, complete cue-to-cost chain, replacement response, links, or hypothesis.",
+      "For review or update, search for and read the exact existing behavior pattern first. Briefly summarize the accepted cue, response, protective function, payoff, cost, preferred response, and links, then ask only what is newly true or inaccurate and patch only that accepted change.",
+      "For guided functional analysis, start from one recent concrete example and confirm that the loop recurs; use trigger_report for one episode, behavior for one observable move, belief_entry for one central sentence, and goal for a desired outcome.",
+      "Identify the typical cue, vulnerability, or context, then reflect the sequence of thoughts, feelings, body state, urges, and visible behavior one step at a time.",
+      "Keep what happened, what the user rapidly made it mean, and the agent's interpretation separate. Once the sequence is concrete, offer at most one tentative functional hypothesis about protection, escape, control, or prediction and ask one fit-or-correction question.",
+      "Clarify the short-term payoff or protective function before the long-term cost to the self, relationships, work, or values; do not frame the payoff as irrational or the cost as blame.",
+      "Ask about a slightly more workable response only after the current loop's function is understood and only when the user wants change work now.",
+      "Notice adjacent beliefs, schema themes, modes, or values, plus trigger reports, only when a link would preserve something useful; do not turn them into a required entity checklist."
     ],
     requiredForCreate: ["title"],
     highValueOptionalFields: [
@@ -5433,7 +5436,11 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Reflect before the next question, and avoid interrogating through the schema fields in order.",
       "If the user asks to understand the loop first, do not lead with a finished working diagnosis or title before asking at least one clarifying question.",
       "Before you ask how to change the loop, ask what it is protecting, preventing, or managing for the user.",
-      "Once one example is clear, it is appropriate to offer one tentative functional-analysis hypothesis about cue, protection, payoff, cost, or replacement need, then ask whether it lands."
+      "Once one example is clear, it is appropriate to offer one tentative functional-analysis hypothesis about cue, protection, payoff, cost, or replacement need, then ask whether it lands.",
+      "Never force a sparse existing pattern through full create intake. Read it first, preserve accepted wording and links, and limit the patch to what the user wants changed.",
+      "A direct capture can be complete with an accepted title and one accuracy check; the full functional chain remains available for guided analysis rather than becoming a save gate.",
+      "Keep observable sequence, the user's fast meaning, and the agent's tentative functional hypothesis distinct. Never save a rejected interpretation as the pattern's function.",
+      "Do not rush to preferredResponse. Understanding what the loop achieves immediately is part of serious functional analysis, not a prelude to be skipped."
     ]
   },
   {
@@ -5539,16 +5546,17 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use when the user is describing a recurring part-state, protector, critic, vulnerable child state, or healthy adult stance.",
     coachingGoal:
-      "Help the user describe how the mode shows up, what it is trying to do, what it fears, and what burden it carries, rather than reducing it to a label only.",
+      "Help the user capture, understand, review, or carefully derive a recurring part-state without turning a direct save or narrow update into a full interview, and without reducing the part to a label.",
     askSequence: [
-      "Start with a recent moment when this part-state took over.",
-      "Describe the felt persona, body posture, imagery, or symbolic form.",
-      "Clarify what it is trying to protect, prevent, control, or force.",
-      "Clarify its fear, burden, and protective job before choosing a family label.",
-      "Offer one candidate name or formulation in the user's language and invite correction.",
-      "Choose the mode family only after the lived description, protective job, fear, or burden is visible enough.",
-      "Explore when it first became necessary or familiar.",
-      "Notice linked patterns, behaviors, values, and what a healthy-adult response would need to do."
+      "Distinguish direct capture, current activation or guided formulation, review or narrow update, and derivation from an accepted mode guide session before asking deeper questions.",
+      "For direct capture, reflect the user's name and description, ask only for family if it is still needed, and use one accuracy or consent question; do not demand a fresh episode, origin, imagery, burden, links, or a new hypothesis.",
+      "For review or update, search for and read the exact existing mode profile first. Briefly separate its accepted title, family, voice or posture, protective job, fear, burden, and links from what the user says is newly true or inaccurate, then patch only that accepted change.",
+      "For guided formulation, start with one recent moment when this part-state took over and describe its felt voice, persona, body posture, imagery, or symbolic form.",
+      "Clarify what it is trying to protect, prevent, control, or force, then clarify its fear, burden, and protective job before choosing a family label.",
+      "Offer at most one candidate name or functional hypothesis in the user's language, keep it separate from what the user directly noticed, and ask one fit-or-correction question.",
+      "Choose the mode family only after the lived description, protective job, fear, or burden is visible enough; if uncertainty remains, name it rather than forcing certainty.",
+      "Explore when it first became necessary, linked patterns, behaviors, values, and a healthy-adult response only when those details would help the user and they want to continue.",
+      "When deriving from a mode guide session, read the exact session first, preserve accepted answers, distinguish tentative results from the user's accepted recurring formulation, and create a separate durable mode profile only after explicit consent."
     ],
     requiredForCreate: ["family", "title"],
     highValueOptionalFields: [
@@ -5580,7 +5588,11 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Do not overpathologize. The point is to understand the part's job and cost, then increase choice.",
       "Do not start by asking for the mode family; choose the family after the lived description, protective job, fear, or burden is visible enough.",
       "If the user asks to understand the mode first, start from a recent moment and ask what the part is trying to do before you name it.",
-      "When enough evidence is present, offer one tentative hypothesis about the mode's protective job, fear, or burden before choosing the family label."
+      "When enough evidence is present, offer one tentative hypothesis about the mode's protective job, fear, or burden before choosing the family label.",
+      "Never force a sparse existing profile through full create intake. Read it first, preserve accepted wording and links, and ask only what changed.",
+      "A direct capture can be complete with the accepted title and family plus one accuracy check; origin, imagery, burden, links, and a fresh episode remain optional.",
+      "Keep the user's observed voice, posture, or behavior separate from the agent's tentative interpretation. Never save a rejected protective-job or fear hypothesis as accepted truth.",
+      "Deriving a mode profile from a mode guide session creates a separate durable record only when the user recognizes the formulation as recurring and explicitly wants it saved."
     ]
   },
   {
@@ -5871,8 +5883,14 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "strategy") {
     return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
   }
+  if (guide.entityType === "behavior_pattern") {
+    return "Ready on the selected Behavior Pattern lane. Direct capture is ready for shared batch CRUD when the user's accepted title and supplied pattern wording are clear and one accuracy or consent check confirms them; do not require a fresh episode, complete functional chain, replacement response, links, or hypothesis. Review or narrow update is ready only after reading the exact existing pattern, separating accepted cue, response, function, payoff, cost, preferred response, and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse pattern through full create intake. Guided functional analysis is ready when one concrete recurring example identifies a cue or context, the response sequence or target behavior, and at least one meaningful protective payoff or later cost, with observable events, the user's fast meaning, and at most one tentative functional hypothesis kept distinct and followed by one fit-or-correction check. A preferred response is optional and should be asked only after the current function is understood and the user wants change work. All behavior pattern writes remain on shared batch CRUD.";
+  }
   if (guide.entityType === "behavior") {
     return "Ready on one of two paths. Direct save or update: when clear entity-specific wording names one observable action and its away, committed, or recovery kind, there is explicit save or update intent plus the exact existing target for an update, and one accuracy or consent check confirms the wording; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when one concrete example identifies the observable action, at least one cue, and the kind-specific shape: an away move has the user's urge wording, immediate protective payoff, later cost, and one tentative hypothesis followed by a fit-or-correction check; a committed action has its value-directed move and relevant cue without forced avoidance fields; a recovery move has the rupture or activation plus an observable repair or return action without forced away fields. One final accuracy or consent check must confirm the saveable record shape before shared batch CRUD. For a sparse existing behavior, read the exact record and make only the accepted update; never force full create backfill.";
+  }
+  if (guide.entityType === "mode_profile") {
+    return "Ready on the selected Mode Profile lane. Direct capture is ready for shared batch CRUD when the user's accepted title and family are clear and one accuracy or consent check confirms the wording; do not require a fresh episode, origin, imagery, burden, links, or hypothesis. Review or narrow update is ready only after reading the exact existing profile, distinguishing its accepted wording and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse profile through full create intake. Guided formulation is ready when one concrete moment supports an accepted title, family, and understandable protective job or fear, with at most one tentative functional hypothesis followed by one fit-or-correction check. Derivation from a mode guide session is ready only after reading the exact session, separating accepted answers from tentative results, confirming that the formulation recurs, and obtaining explicit consent to create the separate durable profile. All mode profile writes remain on shared batch CRUD.";
   }
   if (guide.entityType === "mode_guide_session") {
     return "Ready on the selected Mode Guide lane. Immediate support is ready whenever the user needs help getting steadier and does not require a save. A new, partial, or direct-save session is ready for shared batch CRUD when one recognizable situation or present need, a faithful summary, the answers gathered so far, and one accuracy or consent check are clear; do not require a candidate mode label, a completed inquiry, or a new hypothesis. Resume, review, or update is ready only after reading the exact existing session, separating accepted prior answers and tentative results from what is newly true or inaccurate, and limiting the patch to that change. Guided formulation may use at most one tentative hypothesis followed by one fit-or-correction check. Closing may preserve the session without a durable label; create or link a mode_profile only when the user accepts a recurring formulation and wants that separate record.";
@@ -6004,6 +6022,41 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_WITH_QUESTION_FLOW =
     ...guide,
     questionFlow: buildEntityQuestionFlow(guide)
   }));
+
+function buildPeoplePeerOnboardingRouteMap(
+  routeContracts: Array<(typeof PEER_ROUTE_CONTRACTS)[number]>
+) {
+  return {
+    routeKeys: routeContracts.map((route) => route.operationId),
+    methodRoutes: Object.fromEntries(
+      routeContracts.map((route) => [
+        route.operationId,
+        `${route.method} ${route.path}`
+      ])
+    ),
+    readRoutes: Object.fromEntries(
+      routeContracts
+        .filter((route) => route.method === "GET")
+        .map((route) => [route.operationId, route.path])
+    ),
+    writeRoutes: Object.fromEntries(
+      routeContracts
+        .filter((route) => route.method !== "GET")
+        .map((route) => [route.operationId, route.path])
+    )
+  };
+}
+
+const PEOPLE_AGENT_ONBOARDING_ROUTES = buildPeoplePeerOnboardingRouteMap(
+  PEER_ROUTE_CONTRACTS.filter(
+    (route) => route.mcpExposed && route.path.startsWith("/api/v1/people")
+  )
+);
+const PEER_AGENT_ONBOARDING_ROUTES = buildPeoplePeerOnboardingRouteMap(
+  PEER_ROUTE_CONTRACTS.filter(
+    (route) => route.mcpExposed && route.path.startsWith("/api/v1/peers")
+  )
+);
 
 export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   {
@@ -6431,6 +6484,43 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"routeKey":"touch","body":{"entityType":"project","entityId":"project_123"}}'
+  },
+  {
+    toolName: "forge_call_people_route",
+    summary:
+      "Read bounded People context, review Wiki associations, or ask a typed question through an existing directional grant.",
+    whenToUse:
+      "Use after selecting an existing Person when the user needs source-labelled context, reviewed Wiki association, or an answer from an already-approved peer grant. Keep ordinary Person record mutations on shared batch CRUD.",
+    inputShape:
+      '{ routeKey: "listPeopleReadModel"|"getPersonContext"|"scanPeopleWikiCandidates"|"previewPeopleWikiAssociations"|"applyPeopleWikiAssociations"|"interpretPersonQuestion"|"executePersonQuestion"|"listPersonQuestionHistory", pathParams?: { personId?: string }, query?: object, body?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Verify the selected operation id against live onboarding specializedDomainSurfaces.people.methodRoutes, then fill personId through pathParams when the published path requires it.",
+      "Every call requires a configured agent token with the exact published People, Wiki, or peer-query scopes. An operator session is not a substitute for the agent token.",
+      "List and context are bounded reads. Scan, preview, and apply are a reviewed Wiki-association sequence; do not jump from scan directly to apply.",
+      "For typed questions, preserve state, source, freshness, precision, completeness, and redactedFields. Never infer withheld fields or treat missing evidence as permission.",
+      "Creating, searching, updating, soft-deleting, restoring, and linking Person records remains on forge_search_entities and the shared batch mutation tools. This tool cannot pair Forge installations or change grants, devices, credentials, or consent."
+    ],
+    example:
+      '{"routeKey":"interpretPersonQuestion","pathParams":{"personId":"person_jon"},"body":{"question":"What is Jon doing next Monday?","timeZone":"Europe/Zurich"}}'
+  },
+  {
+    toolName: "forge_call_peer_route",
+    summary:
+      "Read current requests, relationships, devices, grants, sync state, or diagnostics for an existing human-approved Forge peer relationship.",
+    whenToUse:
+      "Use only for status and diagnostic reads after the human has already created the relationship and consent boundary.",
+    inputShape:
+      '{ routeKey: "listPeerRequests"|"listPeerRelationships"|"getPeerRelationship"|"listPeerDevices"|"listPeerGrants"|"getPeerSyncStatus"|"getPeerDiagnostics", pathParams?: { relationshipId?: string }, query?: object }',
+    requiredFields: ["routeKey"],
+    notes: [
+      "Verify the selected operation id against live onboarding specializedDomainSurfaces.peerSharing.methodRoutes, then fill relationshipId through pathParams when the published path requires it.",
+      "Every call requires a configured agent token with peer:status. These routes expose current state only.",
+      "This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+      "When the user asks for a human-only change, explain the exact decision in product language and hand it to the People UI instead of inventing an agent route."
+    ],
+    example:
+      '{"routeKey":"getPeerDiagnostics","pathParams":{"relationshipId":"peer_relationship_123"},"query":{"limit":25}}'
   },
   {
     toolName: "forge_call_calendar_connection_route",
@@ -6868,14 +6958,30 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     example: '{"userIds":["user_operator"]}'
   },
   {
-    toolName: "forge_search_foods | forge_search_nutrition_foods",
+    toolName: "forge_search_foods",
     summary:
       "Search Forge's local custom/cache database plus Open Food Facts and USDA-backed public nutrition sources before logging a food item.",
     whenToUse:
       "Use before forge_log_food whenever the user names a food, brand, meal component, or custom food that might already exist.",
-    inputShape: "{ query: string, limit?: number, userIds?: string[] }",
+    inputShape: "{ query: string, limit?: integer 1..30, userIds?: string[] }",
     requiredFields: ["query"],
     notes: [
+      "Reuse a returned food by passing its id as item.foodId to forge_log_food.",
+      "The local results include custom foods previously added to Forge, so this prevents duplicate custom-food records.",
+      "If no result is good enough, research nutrition facts on the internet before creating a custom item."
+    ],
+    example: '{"query":"Greek yogurt 2%","limit":5}'
+  },
+  {
+    toolName: "forge_search_nutrition_foods",
+    summary:
+      "Search Forge's local custom/cache database plus Open Food Facts and USDA-backed public nutrition sources before logging a food item.",
+    whenToUse:
+      "Use before forge_log_food whenever the user names a food, brand, meal component, or custom food that might already exist.",
+    inputShape: "{ query: string, limit?: integer 1..30, userIds?: string[] }",
+    requiredFields: ["query"],
+    notes: [
+      "This is the long-name equivalent of forge_search_foods; call one alias, not both.",
       "Reuse a returned food by passing its id as item.foodId to forge_log_food.",
       "The local results include custom foods previously added to Forge, so this prevents duplicate custom-food records.",
       "If no result is good enough, research nutrition facts on the internet before creating a custom item."
@@ -6933,31 +7039,91 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"mealLabel":"post-workout","items":[{"foodId":"food_123","name":"Greek yogurt","quantity":250,"unit":"g"}]}'
   },
   {
-    toolName:
-      "forge_log_body_checkin | forge_log_appearance_checkin | forge_log_subjective_food_effect | forge_log_gut_checkin",
+    toolName: "forge_log_body_checkin",
     summary:
-      "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
+      "Record a body-composition check-in for trend calculations.",
     whenToUse:
-      "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
+      "Use when the operator wants to preserve weight, circumference, body-fat, photo-asset, or body-composition notes.",
     inputShape:
-      "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
-    requiredFields: ["at least one metric field"],
+      "{ checkedAt?: string, weightKg?: number|null, waistCm?: number|null, hipCm?: number|null, neckCm?: number|null, bodyFatPercent?: number|null, photoAssetId?: string|null, notes?: string|null, userIds?: string[] }",
+    requiredFields: [],
     notes: [
-      "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
-      "Link subjective or gut check-ins to a food log when the timing is known."
+      "Supply at least one meaningful measurement, photo asset, or note even though the transport schema has no single universally required metric.",
+      "Use kilograms, centimeters, and percent only in the fields that name those units."
     ],
     example:
-      '{"energy":8,"focus":7,"bloating":2,"timeRelation":"2h after lunch","linkedFoodLogId":"nfl_123"}'
+      '{"checkedAt":"2026-07-16T07:30:00+02:00","weightKg":78.4,"waistCm":83.2,"notes":"Morning check-in"}'
   },
   {
-    toolName:
-      "forge_get_nutrition_patterns | forge_start_nutrition_experiment | forge_update_nutrition_experiment",
+    toolName: "forge_log_appearance_checkin",
     summary:
-      "Review nutrition hypotheses and manage N-of-1 experiments for food, training fuel, gut comfort, cravings, and aesthetic outcomes.",
+      "Record an appearance check-in with bounded visual-look scores.",
     whenToUse:
-      "Use when the operator wants to test a causal idea such as caffeine timing, carb timing, sodium/puffiness, fiber ramp, low-FODMAP trial, or pre-training fueling.",
+      "Use when the operator wants to preserve muscle fullness, leanness, vascularity, puffiness, visual bloat, posture confidence, outfit fit, or overall aesthetic score.",
     inputShape:
-      "{ title, hypothesis, metricKey, intervention, baseline dates?, experiment dates?, successCriteria?, userIds? }",
+      "{ checkedAt?: string, muscleFullness?: number|null, leanness?: number|null, vascularity?: number|null, facePuffiness?: number|null, abdomenBloatLook?: number|null, postureConfidence?: number|null, outfitFit?: number|null, aestheticScore?: number|null, notes?: string|null, userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
+      "Score fields use the surface's 0-10 interpretation."
+    ],
+    example:
+      '{"checkedAt":"2026-07-16T07:30:00+02:00","muscleFullness":7,"facePuffiness":3,"aestheticScore":7.5}'
+  },
+  {
+    toolName: "forge_log_subjective_food_effect",
+    summary:
+      "Record a subjective food-effect check-in for energy, mood, focus, cravings, stress, recovery, or performance.",
+    whenToUse:
+      "Use when the operator wants to preserve how food or meal timing seemed to affect them, optionally linked to one known food log.",
+    inputShape:
+      "{ checkedAt?: string, energy?: number|null, mood?: number|null, focus?: number|null, libido?: number|null, sleepiness?: number|null, soreness?: number|null, stress?: number|null, hunger?: number|null, cravings?: number|null, workoutPerformance?: number|null, timeRelation?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
+      "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
+    ],
+    example:
+      '{"energy":8,"focus":7,"cravings":2,"timeRelation":"2h after lunch","linkedFoodLogId":"nfl_123"}'
+  },
+  {
+    toolName: "forge_log_gut_checkin",
+    summary:
+      "Record a gut-health check-in for symptoms, stool observations, and suspected food triggers.",
+    whenToUse:
+      "Use when the operator wants to preserve bloating, pain, gas, reflux, nausea, stool type or frequency, or a suspected trigger, optionally linked to one known food log.",
+    inputShape:
+      "{ checkedAt?: string, bloating?: number|null, abdominalPain?: number|null, gas?: number|null, reflux?: number|null, nausea?: number|null, stoolType?: number|null, stoolFrequency?: number|null, suspectedTrigger?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Supply at least one meaningful symptom, stool observation, suspected trigger, or note even though the transport schema has no single universally required metric.",
+      "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
+    ],
+    example:
+      '{"bloating":2,"abdominalPain":1,"suspectedTrigger":"large onion serving","linkedFoodLogId":"nfl_123"}'
+  },
+  {
+    toolName: "forge_get_nutrition_patterns",
+    summary:
+      "Read current food-effect hypotheses and N-of-1 nutrition experiments.",
+    whenToUse:
+      "Use before proposing or updating an experiment so the operator can review repeated evidence, current hypotheses, and existing experiment state.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "This is a read-only pattern and experiment surface.",
+      "Treat hypotheses as decision aids, not medical diagnosis."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_start_nutrition_experiment",
+    summary:
+      "Create a structured N-of-1 nutrition experiment.",
+    whenToUse:
+      "Use after reviewing current patterns when the operator accepts a testable intervention, outcome metric, and experiment framing.",
+    inputShape:
+      '{ title: string, hypothesis: string, metricKey: string, intervention: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: "planned"|"running"|"paused"|"completed"|"abandoned", successCriteria?: string|null, confounders?: string[], userIds?: string[] }',
     requiredFields: ["title", "hypothesis", "metricKey", "intervention"],
     notes: [
       "Experiments should name the metric being optimized and define success criteria before results are interpreted.",
@@ -6965,6 +7131,22 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     ],
     example:
       '{"title":"Carbs before kickboxing","hypothesis":"60g carbs 2h before training improves performance without gut discomfort","metricKey":"workoutPerformance","intervention":"60g low-fat carbs before training"}'
+  },
+  {
+    toolName: "forge_update_nutrition_experiment",
+    summary:
+      "Patch one existing N-of-1 nutrition experiment after reviewing its current state and new evidence.",
+    whenToUse:
+      "Use to change an experiment's status, dates, hypothesis, metric, intervention, success criteria, confounders, or conclusion without creating a duplicate experiment.",
+    inputShape:
+      '{ experimentId: string, title?: string, hypothesis?: string, metricKey?: string, intervention?: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: "planned"|"running"|"paused"|"completed"|"abandoned", successCriteria?: string|null, confounders?: string[], conclusion?: string|null, userIds?: string[] }',
+    requiredFields: ["experimentId"],
+    notes: [
+      "Read current nutrition patterns and the experiment state first, then patch only fields the operator intends to change.",
+      "Do not present a conclusion as causal certainty or medical diagnosis."
+    ],
+    example:
+      '{"experimentId":"nexp_123","status":"completed","conclusion":"Performance improved on two of three matched sessions; repeat before treating this as stable."}'
   },
   {
     toolName: "forge_update_sleep_session",
@@ -7528,6 +7710,7 @@ function buildAgentOnboardingPayload(request: {
         "strategy",
         "habit",
         "tag",
+        "person",
         "note",
         "insight",
         "calendar_event",
@@ -8082,6 +8265,46 @@ function buildAgentOnboardingPayload(request: {
             "Touch only after reading or opening the exact target. It does not mutate the target record.",
             "Pin and unpin routes require a human operator session and are intentionally absent from agent route tools and HTTP mirrors.",
             "Pinned deleted or missing records stay visible as unavailable so the human can unpin or inspect the settings bin; unavailable recents stay hidden."
+          ]
+        },
+        people: {
+          classification: "specialized_domain_surface",
+          aliases: ["person", "People", "people records"],
+          routeTool: "forge_call_people_route",
+          summary:
+            "Hybrid People API. Ordinary Person records stay on shared batch CRUD; these dedicated operations provide bounded collection and context reads, reviewed Wiki association, and typed questions through an existing directional grant.",
+          ...PEOPLE_AGENT_ONBOARDING_ROUTES,
+          routeSelectionQuestions: [
+            "Is the user saving or changing the local Person record, reading what Forge knows with source labels, reviewing a Wiki association, or asking a question through an existing approved share?",
+            "If this concerns an existing person, which exact Person did the current owner-scoped search or list return?",
+            "If this is Wiki association, has the human reviewed the proposed matches before anything is applied?",
+            "If this is a shared question, what precise question should be answered, and is there already a directional grant that permits it?"
+          ],
+          notes: [
+            "Use shared batch entity search, create, update, soft delete, and restore for the stored person record. Creating a Person never pairs another Forge or grants access.",
+            "Dedicated list and context reads require people:read:basic and stay bounded. Private, contact, sensitive, and restricted fields remain redacted unless the token has their exact scopes.",
+            "Wiki association is a scan, preview, then apply sequence. Apply requires people:write plus wiki:read and must use the reviewed preview rather than an inferred match.",
+            "Typed questions require people:read:basic plus peer:query and an existing directional grant. Preserve result state, source, freshness, precision, completeness, and redactedFields; never infer withheld fields.",
+            "Pairing, grant creation or widening, device approval, credential management, and human-presence ceremonies remain human-only."
+          ]
+        },
+        peerSharing: {
+          classification: "specialized_domain_surface",
+          aliases: ["peer_sharing", "peer-sharing", "peers", "Forge sharing"],
+          routeTool: "forge_call_peer_route",
+          summary:
+            "Bounded status API for existing human-approved Forge peer relationships. Agents can inspect current requests, relationships, devices, grants, sync state, and diagnostics but cannot create or change consent.",
+          ...PEER_AGENT_ONBOARDING_ROUTES,
+          routeSelectionQuestions: [
+            "Is the user trying to understand a pending request, an existing relationship, its devices or grants, current sync state, or diagnostics?",
+            "Which exact relationship from the current bounded list is being inspected?",
+            "If the user wants consent or device state changed, which human decision should be handed to the People UI rather than attempted by the agent?"
+          ],
+          notes: [
+            "Every exposed operation is a bounded GET and requires a configured agent token with peer:status.",
+            "Use relationshipId through pathParams for relationship, device, grant, sync, and diagnostic reads. Do not invent a relationship from a Person record.",
+            "Agents cannot create or accept pairing, request resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform human-presence ceremonies.",
+            "Transport reachability never creates consent. Report current evidence and direct a requested human-only decision to the People UI."
           ]
         },
         lifeEvents: {
@@ -8658,6 +8881,8 @@ function buildAgentOnboardingPayload(request: {
       specializedDomainWorkflow: [
         "forge_call_attention_route",
         "forge_call_entity_navigation_route",
+        "forge_call_people_route",
+        "forge_call_peer_route",
         "forge_call_movement_route",
         "forge_call_life_event_route",
         "forge_call_life_force_route",
@@ -8672,6 +8897,16 @@ function buildAgentOnboardingPayload(request: {
       ],
       attentionWorkflow: ["forge_call_attention_route"],
       entityNavigationWorkflow: ["forge_call_entity_navigation_route"],
+      peopleWorkflow: [
+        "forge_get_user_directory",
+        "forge_search_entities",
+        "forge_create_entities",
+        "forge_update_entities",
+        "forge_delete_entities",
+        "forge_restore_entities",
+        "forge_call_people_route",
+        "forge_call_peer_route"
+      ],
       preferencesWorkflow: [
         "forge_get_preferences_workspace",
         "forge_start_preferences_game",

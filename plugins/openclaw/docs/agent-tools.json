@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T12:30:41.541Z",
+  "generatedAt": "2026-07-16T21:15:44.315Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -230,26 +230,41 @@
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
       "label": "Forge Peer Status And Query Route",
-      "summary": "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
-      "whenToUse": "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Read current requests, relationships, devices, grants, sync state, or diagnostics for an existing human-approved Forge peer relationship.",
+      "whenToUse": "Use only for status and diagnostic reads after the human has already created the relationship and consent boundary.",
+      "inputShape": "{ routeKey: \"listPeerRequests\"|\"listPeerRelationships\"|\"getPeerRelationship\"|\"listPeerDevices\"|\"listPeerGrants\"|\"getPeerSyncStatus\"|\"getPeerDiagnostics\", pathParams?: { relationshipId?: string }, query?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Verify the selected operation id against live onboarding specializedDomainSurfaces.peerSharing.methodRoutes, then fill relationshipId through pathParams when the published path requires it.",
+        "Every call requires a configured agent token with peer:status. These routes expose current state only.",
+        "This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+        "When the user asks for a human-only change, explain the exact decision in product language and hand it to the People UI instead of inventing an agent route."
+      ],
+      "example": "{\"routeKey\":\"getPeerDiagnostics\",\"pathParams\":{\"relationshipId\":\"peer_relationship_123\"},\"query\":{\"limit\":25}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_call_people_route",
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
       "label": "Forge People Route",
-      "summary": "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
-      "whenToUse": "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Read bounded People context, review Wiki associations, or ask a typed question through an existing directional grant.",
+      "whenToUse": "Use after selecting an existing Person when the user needs source-labelled context, reviewed Wiki association, or an answer from an already-approved peer grant. Keep ordinary Person record mutations on shared batch CRUD.",
+      "inputShape": "{ routeKey: \"listPeopleReadModel\"|\"getPersonContext\"|\"scanPeopleWikiCandidates\"|\"previewPeopleWikiAssociations\"|\"applyPeopleWikiAssociations\"|\"interpretPersonQuestion\"|\"executePersonQuestion\"|\"listPersonQuestionHistory\", pathParams?: { personId?: string }, query?: object, body?: object }",
+      "requiredFields": [
+        "routeKey"
+      ],
+      "notes": [
+        "Verify the selected operation id against live onboarding specializedDomainSurfaces.people.methodRoutes, then fill personId through pathParams when the published path requires it.",
+        "Every call requires a configured agent token with the exact published People, Wiki, or peer-query scopes. An operator session is not a substitute for the agent token.",
+        "List and context are bounded reads. Scan, preview, and apply are a reviewed Wiki-association sequence; do not jump from scan directly to apply.",
+        "For typed questions, preserve state, source, freshness, precision, completeness, and redactedFields. Never infer withheld fields or treat missing evidence as permission.",
+        "Creating, searching, updating, soft-deleting, restoring, and linking Person records remains on forge_search_entities and the shared batch mutation tools. This tool cannot pair Forge installations or change grants, devices, credentials, or consent."
+      ],
+      "example": "{\"routeKey\":\"interpretPersonQuestion\",\"pathParams\":{\"personId\":\"person_jon\"},\"body\":{\"question\":\"What is Jon doing next Monday?\",\"timeZone\":\"Europe/Zurich\"}}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_call_wiki_route",
@@ -595,20 +610,15 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Nutrition Patterns",
-      "summary": "Review nutrition hypotheses and manage N-of-1 experiments for food, training fuel, gut comfort, cravings, and aesthetic outcomes.",
-      "whenToUse": "Use when the operator wants to test a causal idea such as caffeine timing, carb timing, sodium/puffiness, fiber ramp, low-FODMAP trial, or pre-training fueling.",
-      "inputShape": "{ title, hypothesis, metricKey, intervention, baseline dates?, experiment dates?, successCriteria?, userIds? }",
-      "requiredFields": [
-        "title",
-        "hypothesis",
-        "metricKey",
-        "intervention"
-      ],
+      "summary": "Read current food-effect hypotheses and N-of-1 nutrition experiments.",
+      "whenToUse": "Use before proposing or updating an experiment so the operator can review repeated evidence, current hypotheses, and existing experiment state.",
+      "inputShape": "{ userIds?: string[] }",
+      "requiredFields": [],
       "notes": [
-        "Experiments should name the metric being optimized and define success criteria before results are interpreted.",
-        "Forge treats hypotheses as decision aids, not medical diagnosis."
+        "This is a read-only pattern and experiment surface.",
+        "Treat hypotheses as decision aids, not medical diagnosis."
       ],
-      "example": "{\"title\":\"Carbs before kickboxing\",\"hypothesis\":\"60g carbs 2h before training improves performance without gut discomfort\",\"metricKey\":\"workoutPerformance\",\"intervention\":\"60g low-fat carbs before training\"}",
+      "example": "{\"userIds\":[\"user_operator\"]}",
       "catalogDocumented": true
     },
     {
@@ -1037,17 +1047,15 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Log Appearance Check-In",
-      "summary": "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
-      "whenToUse": "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
-      "inputShape": "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
-      "requiredFields": [
-        "at least one metric field"
-      ],
+      "summary": "Record an appearance check-in with bounded visual-look scores.",
+      "whenToUse": "Use when the operator wants to preserve muscle fullness, leanness, vascularity, puffiness, visual bloat, posture confidence, outfit fit, or overall aesthetic score.",
+      "inputShape": "{ checkedAt?: string, muscleFullness?: number|null, leanness?: number|null, vascularity?: number|null, facePuffiness?: number|null, abdomenBloatLook?: number|null, postureConfidence?: number|null, outfitFit?: number|null, aestheticScore?: number|null, notes?: string|null, userIds?: string[] }",
+      "requiredFields": [],
       "notes": [
-        "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
-        "Link subjective or gut check-ins to a food log when the timing is known."
+        "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
+        "Score fields use the surface's 0-10 interpretation."
       ],
-      "example": "{\"energy\":8,\"focus\":7,\"bloating\":2,\"timeRelation\":\"2h after lunch\",\"linkedFoodLogId\":\"nfl_123\"}",
+      "example": "{\"checkedAt\":\"2026-07-16T07:30:00+02:00\",\"muscleFullness\":7,\"facePuffiness\":3,\"aestheticScore\":7.5}",
       "catalogDocumented": true
     },
     {
@@ -1055,17 +1063,15 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Log Body Check-In",
-      "summary": "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
-      "whenToUse": "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
-      "inputShape": "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
-      "requiredFields": [
-        "at least one metric field"
-      ],
+      "summary": "Record a body-composition check-in for trend calculations.",
+      "whenToUse": "Use when the operator wants to preserve weight, circumference, body-fat, photo-asset, or body-composition notes.",
+      "inputShape": "{ checkedAt?: string, weightKg?: number|null, waistCm?: number|null, hipCm?: number|null, neckCm?: number|null, bodyFatPercent?: number|null, photoAssetId?: string|null, notes?: string|null, userIds?: string[] }",
+      "requiredFields": [],
       "notes": [
-        "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
-        "Link subjective or gut check-ins to a food log when the timing is known."
+        "Supply at least one meaningful measurement, photo asset, or note even though the transport schema has no single universally required metric.",
+        "Use kilograms, centimeters, and percent only in the fields that name those units."
       ],
-      "example": "{\"energy\":8,\"focus\":7,\"bloating\":2,\"timeRelation\":\"2h after lunch\",\"linkedFoodLogId\":\"nfl_123\"}",
+      "example": "{\"checkedAt\":\"2026-07-16T07:30:00+02:00\",\"weightKg\":78.4,\"waistCm\":83.2,\"notes\":\"Morning check-in\"}",
       "catalogDocumented": true
     },
     {
@@ -1094,17 +1100,15 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Log Gut Check-In",
-      "summary": "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
-      "whenToUse": "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
-      "inputShape": "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
-      "requiredFields": [
-        "at least one metric field"
-      ],
+      "summary": "Record a gut-health check-in for symptoms, stool observations, and suspected food triggers.",
+      "whenToUse": "Use when the operator wants to preserve bloating, pain, gas, reflux, nausea, stool type or frequency, or a suspected trigger, optionally linked to one known food log.",
+      "inputShape": "{ checkedAt?: string, bloating?: number|null, abdominalPain?: number|null, gas?: number|null, reflux?: number|null, nausea?: number|null, stoolType?: number|null, stoolFrequency?: number|null, suspectedTrigger?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+      "requiredFields": [],
       "notes": [
-        "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
-        "Link subjective or gut check-ins to a food log when the timing is known."
+        "Supply at least one meaningful symptom, stool observation, suspected trigger, or note even though the transport schema has no single universally required metric.",
+        "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
       ],
-      "example": "{\"energy\":8,\"focus\":7,\"bloating\":2,\"timeRelation\":\"2h after lunch\",\"linkedFoodLogId\":\"nfl_123\"}",
+      "example": "{\"bloating\":2,\"abdominalPain\":1,\"suspectedTrigger\":\"large onion serving\",\"linkedFoodLogId\":\"nfl_123\"}",
       "catalogDocumented": true
     },
     {
@@ -1112,17 +1116,15 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Log Subjective Food Effect",
-      "summary": "Record body composition, aesthetic look, energy/mood/focus/cravings/performance, and gut-comfort check-ins.",
-      "whenToUse": "Use alongside food logs to let Forge discover links between eating, sport, visual look, energy, cravings, and gut health.",
-      "inputShape": "{ checkedAt?: string, score fields, linkedFoodLogId?: string, notes?: string, userIds?: string[] }",
-      "requiredFields": [
-        "at least one metric field"
-      ],
+      "summary": "Record a subjective food-effect check-in for energy, mood, focus, cravings, stress, recovery, or performance.",
+      "whenToUse": "Use when the operator wants to preserve how food or meal timing seemed to affect them, optionally linked to one known food log.",
+      "inputShape": "{ checkedAt?: string, energy?: number|null, mood?: number|null, focus?: number|null, libido?: number|null, sleepiness?: number|null, soreness?: number|null, stress?: number|null, hunger?: number|null, cravings?: number|null, workoutPerformance?: number|null, timeRelation?: string|null, linkedFoodLogId?: string|null, notes?: string|null, userIds?: string[] }",
+      "requiredFields": [],
       "notes": [
-        "Scores are 0-10 unless the field name gives a physical unit such as kg or cm.",
-        "Link subjective or gut check-ins to a food log when the timing is known."
+        "Supply at least one meaningful score or note even though the transport schema has no single universally required metric.",
+        "Use linkedFoodLogId only when the relevant food log is known; do not guess it."
       ],
-      "example": "{\"energy\":8,\"focus\":7,\"bloating\":2,\"timeRelation\":\"2h after lunch\",\"linkedFoodLogId\":\"nfl_123\"}",
+      "example": "{\"energy\":8,\"focus\":7,\"cravings\":2,\"timeRelation\":\"2h after lunch\",\"linkedFoodLogId\":\"nfl_123\"}",
       "catalogDocumented": true
     },
     {
@@ -1343,7 +1345,7 @@
       "label": "Forge Search Foods",
       "summary": "Search Forge's local custom/cache database plus Open Food Facts and USDA-backed public nutrition sources before logging a food item.",
       "whenToUse": "Use before forge_log_food whenever the user names a food, brand, meal component, or custom food that might already exist.",
-      "inputShape": "{ query: string, limit?: number, userIds?: string[] }",
+      "inputShape": "{ query: string, limit?: integer 1..30, userIds?: string[] }",
       "requiredFields": [
         "query"
       ],
@@ -1362,11 +1364,12 @@
       "label": "Forge Search Nutrition Foods",
       "summary": "Search Forge's local custom/cache database plus Open Food Facts and USDA-backed public nutrition sources before logging a food item.",
       "whenToUse": "Use before forge_log_food whenever the user names a food, brand, meal component, or custom food that might already exist.",
-      "inputShape": "{ query: string, limit?: number, userIds?: string[] }",
+      "inputShape": "{ query: string, limit?: integer 1..30, userIds?: string[] }",
       "requiredFields": [
         "query"
       ],
       "notes": [
+        "This is the long-name equivalent of forge_search_foods; call one alias, not both.",
         "Reuse a returned food by passing its id as item.foodId to forge_log_food.",
         "The local results include custom foods previously added to Forge, so this prevents duplicate custom-food records.",
         "If no result is good enough, research nutrition facts on the internet before creating a custom item."
@@ -1397,9 +1400,9 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Start Nutrition Experiment",
-      "summary": "Review nutrition hypotheses and manage N-of-1 experiments for food, training fuel, gut comfort, cravings, and aesthetic outcomes.",
-      "whenToUse": "Use when the operator wants to test a causal idea such as caffeine timing, carb timing, sodium/puffiness, fiber ramp, low-FODMAP trial, or pre-training fueling.",
-      "inputShape": "{ title, hypothesis, metricKey, intervention, baseline dates?, experiment dates?, successCriteria?, userIds? }",
+      "summary": "Create a structured N-of-1 nutrition experiment.",
+      "whenToUse": "Use after reviewing current patterns when the operator accepts a testable intervention, outcome metric, and experiment framing.",
+      "inputShape": "{ title: string, hypothesis: string, metricKey: string, intervention: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: \"planned\"|\"running\"|\"paused\"|\"completed\"|\"abandoned\", successCriteria?: string|null, confounders?: string[], userIds?: string[] }",
       "requiredFields": [
         "title",
         "hypothesis",
@@ -1582,20 +1585,17 @@
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
       "label": "Forge Update Nutrition Experiment",
-      "summary": "Review nutrition hypotheses and manage N-of-1 experiments for food, training fuel, gut comfort, cravings, and aesthetic outcomes.",
-      "whenToUse": "Use when the operator wants to test a causal idea such as caffeine timing, carb timing, sodium/puffiness, fiber ramp, low-FODMAP trial, or pre-training fueling.",
-      "inputShape": "{ title, hypothesis, metricKey, intervention, baseline dates?, experiment dates?, successCriteria?, userIds? }",
+      "summary": "Patch one existing N-of-1 nutrition experiment after reviewing its current state and new evidence.",
+      "whenToUse": "Use to change an experiment's status, dates, hypothesis, metric, intervention, success criteria, confounders, or conclusion without creating a duplicate experiment.",
+      "inputShape": "{ experimentId: string, title?: string, hypothesis?: string, metricKey?: string, intervention?: string, baselineStart?: string|null, baselineEnd?: string|null, experimentStart?: string|null, experimentEnd?: string|null, status?: \"planned\"|\"running\"|\"paused\"|\"completed\"|\"abandoned\", successCriteria?: string|null, confounders?: string[], conclusion?: string|null, userIds?: string[] }",
       "requiredFields": [
-        "title",
-        "hypothesis",
-        "metricKey",
-        "intervention"
+        "experimentId"
       ],
       "notes": [
-        "Experiments should name the metric being optimized and define success criteria before results are interpreted.",
-        "Forge treats hypotheses as decision aids, not medical diagnosis."
+        "Read current nutrition patterns and the experiment state first, then patch only fields the operator intends to change.",
+        "Do not present a conclusion as causal certainty or medical diagnosis."
       ],
-      "example": "{\"title\":\"Carbs before kickboxing\",\"hypothesis\":\"60g carbs 2h before training improves performance without gut discomfort\",\"metricKey\":\"workoutPerformance\",\"intervention\":\"60g low-fat carbs before training\"}",
+      "example": "{\"experimentId\":\"nexp_123\",\"status\":\"completed\",\"conclusion\":\"Performance improved on two of three matched sessions; repeat before treating this as stable.\"}",
       "catalogDocumented": true
     },
     {

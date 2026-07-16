@@ -1233,7 +1233,11 @@ describe("question flow simulation cycles", () => {
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
         /accuracy or consent/i
       );
-      if (entityType === "mode_guide_session") {
+      if (
+        entityType === "mode_guide_session" ||
+        entityType === "mode_profile" ||
+        entityType === "behavior_pattern"
+      ) {
         continue;
       }
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
@@ -1247,6 +1251,20 @@ describe("question flow simulation cycles", () => {
     const behaviorFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "behavior"
     )?.questionFlow;
+
+    const behaviorPatternFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "behavior_pattern"
+    )?.questionFlow;
+    expect(behaviorPatternFlow?.askSequence.join("\n")).toMatch(
+      /direct capture[\s\S]*current activation or guided functional analysis[\s\S]*review or narrow update[\s\S]*do not demand a fresh episode, complete cue-to-cost chain, replacement response, links, or hypothesis[\s\S]*search for and read the exact existing behavior pattern first[\s\S]*patch only that accepted change[\s\S]*trigger_report for one episode[\s\S]*behavior for one observable move[\s\S]*belief_entry for one central sentence[\s\S]*goal for a desired outcome[\s\S]*rapidly made it mean[\s\S]*at most one tentative functional hypothesis[\s\S]*fit-or-correction[\s\S]*short-term payoff or protective function before the long-term cost[\s\S]*user wants change work/i
+    );
+    expect(behaviorPatternFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted title[\s\S]*do not require a fresh episode, complete functional chain, replacement response, links, or hypothesis[\s\S]*Review or narrow update[\s\S]*exact existing pattern[\s\S]*never force a sparse pattern through full create intake[\s\S]*Guided functional analysis[\s\S]*concrete recurring example[\s\S]*protective payoff or later cost[\s\S]*observable events[\s\S]*fast meaning[\s\S]*tentative functional hypothesis[\s\S]*fit-or-correction[\s\S]*preferred response is optional[\s\S]*shared batch CRUD/i
+    );
+    expect(behaviorPatternFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+
     expect(behaviorFlow?.askSequence.join("\n")).toMatch(
       /direct save, update, review, or guided formulation[\s\S]*read it first[\s\S]*smallest newly true change[\s\S]*did, said, avoided, or checked[\s\S]*behavior_pattern[\s\S]*belief_entry[\s\S]*goal[\s\S]*trigger_report[\s\S]*away when it narrows or escapes[\s\S]*committed when it expresses a value[\s\S]*recovery when it repairs[\s\S]*For an away move only[\s\S]*urge or inner push[\s\S]*protective payoff[\s\S]*fit-or-correction[\s\S]*For a committed action[\s\S]*Do not demand an urge, avoidance payoff, later cost, or repair plan[\s\S]*For a recovery move[\s\S]*Do not demand away-move urge, payoff, or cost fields[\s\S]*replacementMove[\s\S]*repairPlan[\s\S]*shared batch CRUD/i
     );
@@ -1264,6 +1282,19 @@ describe("question flow simulation cycles", () => {
       /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or narrow update[\s\S]*optional examination[\s\S]*one accuracy or consent question[\s\S]*without demanding a new episode, confidence rating, evidence list, origin story, or alternative belief[\s\S]*read the exact existing belief first[\s\S]*patch only that accepted change[\s\S]*directly observed separate from[\s\S]*rapidly came to mean[\s\S]*at most one tentative hypothesis[\s\S]*fit-or-correction[\s\S]*observed evidence, the user's interpretation, and the agent's hypothesis distinct/i
     );
     expect(beliefFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+
+    const modeProfileFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "mode_profile"
+    )?.questionFlow;
+    expect(modeProfileFlow?.askSequence.join("\n")).toMatch(
+      /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or narrow update[\s\S]*derivation from an accepted mode guide session[\s\S]*do not demand a fresh episode, origin, imagery, burden, links, or a new hypothesis[\s\S]*read the exact existing mode profile first[\s\S]*patch only that accepted change[\s\S]*at most one candidate name or functional hypothesis[\s\S]*fit-or-correction[\s\S]*read the exact session first[\s\S]*explicit consent/i
+    );
+    expect(modeProfileFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted title and family[\s\S]*do not require a fresh episode, origin, imagery, burden, links, or hypothesis[\s\S]*Review or narrow update[\s\S]*reading the exact existing profile[\s\S]*never force a sparse profile through full create intake[\s\S]*Guided formulation[\s\S]*protective job or fear[\s\S]*at most one tentative functional hypothesis[\s\S]*fit-or-correction[\s\S]*Derivation from a mode guide session[\s\S]*accepted answers from tentative results[\s\S]*explicit consent[\s\S]*shared batch CRUD/i
+    );
+    expect(modeProfileFlow?.apiAccessHint).toMatch(
       /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
     );
 

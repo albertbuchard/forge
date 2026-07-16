@@ -1037,17 +1037,34 @@ Preferred opening question:
 
 ## Behavior Pattern
 
-Aim: build a functional analysis of a recurring loop.
+Aim: capture, review, or build a functional analysis of a recurring loop without
+making the complete chain a gate for direct saving or a narrow update.
 
 Arc:
 
-1. Anchor in one recent example.
-2. Map cues, vulnerability factors, and context.
-3. Reflect the sequence of thoughts, feelings, body state, and actions.
-4. Ask what the loop protects, relieves, or helps avoid short term.
-5. Ask what it costs long term.
-6. Ask what a more workable response would need to preserve.
-7. Notice linked beliefs, modes, values, or behaviors.
+1. Distinguish direct capture, current activation or guided functional analysis, and
+   review or narrow update before asking for the full loop.
+2. For direct capture, reflect the user's title and supplied pattern wording, then ask
+   one accuracy or consent question. Do not demand a fresh episode, complete
+   cue-to-cost chain, replacement response, links, or hypothesis.
+3. For review or update, search for and read the exact existing pattern first. Briefly
+   summarize its accepted cue, response, protective function, payoff, cost, preferred
+   response, and links, then ask only what is newly true or inaccurate and patch only
+   that accepted change. Never force a sparse pattern through full create intake.
+4. For guided functional analysis, anchor in one recent example and confirm that the
+   loop recurs. Use `trigger_report` for one episode, `behavior` for one observable
+   move, `belief_entry` for one central sentence, and `goal` for a desired outcome.
+5. Map cues, vulnerability factors, and context, then reflect the sequence of thoughts,
+   feelings, body state, urges, and actions one step at a time.
+6. Keep what happened, what the user rapidly made it mean, and the agent's
+   interpretation separate. Offer at most one tentative functional hypothesis about
+   protection, escape, control, or prediction, then ask one fit-or-correction question.
+7. Ask what the loop protects, relieves, or helps avoid short term before asking what
+   it costs long term. Do not frame the payoff as irrational or the cost as blame.
+8. Ask what a more workable response would need to preserve only after the current
+   function is understood and only when the user wants change work now.
+9. Notice linked beliefs, modes, values, behaviors, or trigger reports only when a link
+   would preserve something useful, not as a required entity checklist.
 
 Helpful follow-up lanes:
 
@@ -1067,13 +1084,31 @@ Likely linked entities:
 
 Ready to save when:
 
-- the pattern can be named in plain language
-- the cue, short-term payoff, and long-term cost are at least roughly clear
-- there is a preferred response or at least a direction for one
+- direct capture has an accepted title, the supplied pattern wording, and one accuracy
+  or consent check; it does not require a fresh episode, full functional chain,
+  preferred response, links, or hypothesis
+- a review or narrow update starts from the exact existing pattern and changes only
+  what the user says is newly true or inaccurate while preserving accepted sparse
+  wording and links
+- guided functional analysis has one concrete recurring example, a cue or context,
+  the response sequence or target behavior, and at least one meaningful protective
+  payoff or later cost; observable events, the user's fast meaning, and any tentative
+  functional hypothesis remain distinct and the hypothesis is accepted or corrected
+- `preferredResponse` remains optional until the current function is understood and
+  the user wants change work
 
 Preferred opening question:
 
 - "What happened the last time this pattern showed up?"
+
+Intent-specific alternatives:
+
+- Direct capture: "You have already named the loop clearly. Is this wording true
+  enough to preserve as it is?"
+- Existing pattern: "I have the current pattern in view. What now feels newly true or
+  inaccurate, and what should stay unchanged?"
+- Guided analysis: "Can we slow down one recent example and find the moment the loop
+  began to make sense from the inside?"
 
 ## Behavior
 
@@ -1209,19 +1244,36 @@ Intent-specific alternatives:
 
 ## Mode Profile
 
-Aim: describe a recurring part-state, what it does, and what it fears.
+Aim: capture, understand, review, or carefully derive a recurring part-state without
+making a durable label the price of support and without forcing a direct save or narrow
+update through a full formulation interview.
 
 Arc:
 
-1. Start from a recent moment when the mode showed up.
-2. Ask how it feels, sounds, looks, or carries itself.
-3. Ask what it is trying to protect, prevent, or control.
-4. Name its fear, burden, and protective job.
-5. Choose the mode family only after the lived description is clearer.
-6. Ask when it first became necessary or familiar.
-7. Ask what a healthier relationship to the mode would require.
-8. Offer one candidate formulation yourself when the user has the experience but not
-   the wording.
+1. Distinguish direct capture, current activation or guided formulation, review or
+   narrow update, and derivation from an accepted Mode Guide session.
+2. For direct capture, reflect the user's name and description, ask only for `family`
+   if it is still needed, and make one accuracy or consent check. Do not demand a
+   fresh episode, origin, imagery, burden, links, or a new hypothesis.
+3. For review or update, search for and read the exact existing profile first. Briefly
+   separate its accepted title, family, voice or posture, protective job, fear,
+   burden, and links from what is newly true or inaccurate, then patch only that
+   accepted change. Never force a sparse profile through full create intake.
+4. For guided formulation, start from one recent moment and ask how the part felt,
+   sounded, looked, or carried itself.
+5. Ask what it was trying to protect, prevent, or control, and whether it was trying
+   to force something, then clarify its
+   fear, burden, and protective job before choosing a family label.
+6. Offer at most one candidate name or functional hypothesis in the user's language.
+   Keep what the user directly noticed separate from the interpretation and ask one
+   fit-or-correction question.
+7. Choose the family only after the lived description is clearer. Name uncertainty
+   rather than forcing certainty.
+8. Explore origin, links, and a healthy-adult response only when those details would
+   help and the user wants to continue.
+9. When deriving from a Mode Guide session, read the exact session, preserve accepted
+   answers, separate tentative results from the accepted recurring formulation, and
+   create a separate durable profile only after explicit consent.
 
 Helpful follow-up lanes:
 
@@ -1239,13 +1291,32 @@ Likely linked entities:
 
 Ready to save when:
 
-- the mode has a stable name
-- `family` is clear enough to choose without forcing certainty
-- its job or fear is understandable in plain language
+- direct capture has the user's accepted title and `family` plus one accuracy or
+  consent check; it does not require a fresh episode, origin, imagery, burden, links,
+  or hypothesis
+- a review or narrow update starts from the exact existing profile and changes only
+  what the user says is newly true or inaccurate while preserving accepted sparse
+  wording and links
+- guided formulation has one concrete moment, an accepted title and `family`, and an
+  understandable protective job or fear; any tentative functional hypothesis has
+  been accepted or corrected
+- session derivation starts from the exact Mode Guide session, keeps accepted answers
+  separate from tentative results, establishes that the formulation recurs, and has
+  explicit consent for a separate durable profile
 
 Preferred opening question:
 
 - "When this part takes over, what feels most at risk or most in need of protection?"
+
+Intent-specific alternatives:
+
+- Direct capture: "You already have a clear name for this part. What family fits it
+  best, and is the rest of your wording true enough to preserve as it is?"
+- Existing profile: "I have the current profile in view. What now feels newly true or
+  inaccurate, and what should stay unchanged?"
+- Session derivation: "The session contains both accepted answers and tentative
+  interpretations. Which recurring formulation feels true enough to become a
+  separate durable profile?"
 
 ## Mode Guide Session
 

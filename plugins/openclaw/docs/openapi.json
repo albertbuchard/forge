@@ -20680,6 +20680,13 @@
               "readModels",
               "uiWorkflow",
               "specializedDomainWorkflow",
+              "artifactWorkflow",
+              "attentionWorkflow",
+              "entityNavigationWorkflow",
+              "peopleWorkflow",
+              "preferencesWorkflow",
+              "questionnaireWorkflow",
+              "selfObservationWorkflow",
               "entityWorkflow",
               "wikiWorkflow",
               "healthWorkflow",
@@ -20708,6 +20715,48 @@
                 }
               },
               "specializedDomainWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "artifactWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "attentionWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "entityNavigationWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "peopleWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "preferencesWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "questionnaireWorkflow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "selfObservationWorkflow": {
                 "type": "array",
                 "items": {
                   "type": "string"

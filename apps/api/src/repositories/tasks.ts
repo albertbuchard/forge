@@ -44,6 +44,7 @@ import {
 import { createWorkAdjustment } from "./work-adjustments.js";
 import {
   calendarSchedulingRulesSchema,
+  completionReportSchema,
   createTaskSchema,
   getSafeHttpUrl,
   taskSchema,
@@ -430,10 +431,9 @@ function mapTaskBase(
     gitRefs?: WorkItemGitRef[];
   }
 ): TaskBaseShape {
-  const completionReport =
-    row.completion_report_json === null
-      ? null
-      : (JSON.parse(row.completion_report_json) as CompletionReport);
+  const completionReport = parseStoredCompletionReport(
+    row.completion_report_json
+  );
   return {
     id: row.id,
     title: row.title,
@@ -486,6 +486,46 @@ function mapTaskBase(
     tagIds: relations?.tagIds ?? readTaskTagIds(row.id),
     time
   };
+}
+
+function parseStoredCompletionReport(value: string | null): CompletionReport | null {
+  if (value === null) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  const canonical = completionReportSchema.safeParse(parsed);
+  if (canonical.success) {
+    return canonical.data;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return null;
+  }
+
+  const legacy = parsed as Record<string, unknown>;
+  const normalized = completionReportSchema.safeParse({
+    workSummary:
+      typeof legacy.workSummary === "string"
+        ? legacy.workSummary
+        : typeof legacy.summary === "string"
+          ? legacy.summary
+          : "",
+    modifiedFiles: Array.isArray(legacy.modifiedFiles)
+      ? legacy.modifiedFiles
+      : Array.isArray(legacy.modified_files)
+        ? legacy.modified_files
+        : [],
+    linkedGitRefIds: Array.isArray(legacy.linkedGitRefIds)
+      ? legacy.linkedGitRefIds
+      : []
+  });
+  return normalized.success ? normalized.data : null;
 }
 
 function finalizeTask(taskInput: TaskBaseShape): Task {

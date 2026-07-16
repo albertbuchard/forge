@@ -214,3 +214,50 @@ test("migration 090 conservatively preserves legacy concept archives and repairs
     await rm(rootDir, { recursive: true, force: true });
   }
 });
+
+test("migration 090 repairs a missing preference archive-members support table", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-pref-090-repair-"));
+  const database = new DatabaseSync(path.join(rootDir, "forge.sqlite"));
+  database.exec("PRAGMA foreign_keys = ON");
+  try {
+    await applyMigrationsBefore090(database);
+    database.exec("DROP TABLE preference_catalog_archive_members");
+
+    const before = database
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM preference_catalogs) AS catalogs,
+           (SELECT COUNT(*) FROM preference_catalog_items) AS items,
+           (SELECT COUNT(*) FROM preference_contexts) AS contexts`
+      )
+      .get() as { catalogs: number; items: number; contexts: number };
+    const migration = await readFile(
+      path.join(migrationsDir, migrationName),
+      "utf8"
+    );
+
+    database.exec(migration);
+    database.exec(migration);
+
+    const repairedTable = database
+      .prepare(
+        `SELECT name
+         FROM sqlite_master
+         WHERE type = 'table' AND name = 'preference_catalog_archive_members'`
+      )
+      .get();
+    assert.ok(repairedTable);
+    const after = database
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM preference_catalogs) AS catalogs,
+           (SELECT COUNT(*) FROM preference_catalog_items) AS items,
+           (SELECT COUNT(*) FROM preference_contexts) AS contexts`
+      )
+      .get() as typeof before;
+    assert.deepEqual({ ...after }, { ...before });
+  } finally {
+    database.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

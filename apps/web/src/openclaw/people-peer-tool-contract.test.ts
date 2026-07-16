@@ -368,20 +368,79 @@ describe("People and peer-sharing agent contract", () => {
     await app.close();
     expect(response.statusCode).toBe(200);
     expect(openApiResponse.statusCode).toBe(200);
-    const person = response
-      .json()
-      .onboarding.entityCatalog.find(
+    const onboarding = response.json().onboarding;
+    const person = onboarding.entityCatalog.find(
         (entry: { entityType: string }) => entry.entityType === "person"
       );
     expect(person?.classification).toBe("batch_crud_entity");
+    expect(onboarding.entityRouteModel.batchCrudEntities).toContain("person");
     expect(person?.preferredMutationTool).toMatch(/forge_create_entities/);
     expect(person?.preferredMutationTool).toMatch(/forge_restore_entities/);
     expect(person?.questionFlow?.openingQuestion).toMatch(
       /Who is this person/i
     );
 
+    const expectedPeopleRoutes = PEER_ROUTE_CONTRACTS.filter(
+      (route) => route.mcpExposed && route.path.startsWith("/api/v1/people")
+    );
+    const expectedPeerRoutes = PEER_ROUTE_CONTRACTS.filter(
+      (route) => route.mcpExposed && route.path.startsWith("/api/v1/peers")
+    );
+    for (const [surfaceKey, routeTool, expectedRoutes] of [
+      ["people", "forge_call_people_route", expectedPeopleRoutes],
+      ["peerSharing", "forge_call_peer_route", expectedPeerRoutes]
+    ] as const) {
+      const surface =
+        onboarding.entityRouteModel.specializedDomainSurfaces[surfaceKey];
+      expect(surface?.routeTool).toBe(routeTool);
+      expect(surface?.routeKeys).toEqual(
+        expectedRoutes.map((route) => route.operationId)
+      );
+      expect(surface?.methodRoutes).toEqual(
+        Object.fromEntries(
+          expectedRoutes.map((route) => [
+            route.operationId,
+            `${route.method} ${route.path}`
+          ])
+        )
+      );
+      const inputGuide = onboarding.toolInputCatalog.find(
+        (entry: { toolName: string }) => entry.toolName === routeTool
+      );
+      expect(inputGuide?.requiredFields).toContain("routeKey");
+      for (const route of expectedRoutes) {
+        expect(inputGuide?.inputShape).toContain(`"${route.operationId}"`);
+      }
+    }
+    expect(onboarding.recommendedPluginTools.peopleWorkflow).toEqual(
+      expect.arrayContaining([
+        "forge_search_entities",
+        "forge_create_entities",
+        "forge_update_entities",
+        "forge_delete_entities",
+        "forge_restore_entities",
+        "forge_call_people_route",
+        "forge_call_peer_route"
+      ])
+    );
+    expect(onboarding.recommendedPluginTools.specializedDomainWorkflow).toEqual(
+      expect.arrayContaining([
+        "forge_call_people_route",
+        "forge_call_peer_route"
+      ])
+    );
+
     const openApi = openApiResponse.json() as {
       paths: Record<string, Record<string, { operationId?: string }>>;
+      components: {
+        schemas: {
+          AgentOnboardingPayload: {
+            properties: {
+              recommendedPluginTools: { required: string[] };
+            };
+          };
+        };
+      };
     };
     for (const route of PEER_ROUTE_CONTRACTS) {
       const openApiPath = route.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
@@ -390,5 +449,19 @@ describe("People and peer-sharing agent contract", () => {
         `${route.method} ${route.path} is missing from live OpenAPI`
       ).toBe(route.operationId);
     }
+    expect(
+      openApi.components.schemas.AgentOnboardingPayload.properties
+        .recommendedPluginTools.required
+    ).toEqual(
+      expect.arrayContaining([
+        "artifactWorkflow",
+        "attentionWorkflow",
+        "entityNavigationWorkflow",
+        "peopleWorkflow",
+        "preferencesWorkflow",
+        "questionnaireWorkflow",
+        "selfObservationWorkflow"
+      ])
+    );
   });
 });

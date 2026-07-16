@@ -5212,6 +5212,7 @@ export interface AgentOnboardingPayload {
     artifactWorkflow: string[];
     attentionWorkflow: string[];
     entityNavigationWorkflow: string[];
+    peopleWorkflow: string[];
     preferencesWorkflow: string[];
     questionnaireWorkflow: string[];
     selfObservationWorkflow: string[];

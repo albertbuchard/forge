@@ -429,6 +429,39 @@ test("PLAN-17 release remains handoff-only and quick completion is deferred", as
   });
 });
 
+test("PLAN-17 task reads normalize historical completion reports", async () => {
+  await withIsolatedForge(() => {
+    const { task } = createFixtureTask("legacy-closeout");
+    getDatabase()
+      .prepare(
+        `UPDATE tasks
+         SET status = 'done', completion_report_json = ?
+         WHERE id = ?`
+      )
+      .run(
+        JSON.stringify({
+          completed_by: "codex",
+          summary: "Historical closeout evidence remains readable.",
+          modified_files: ["apps/api/src/repositories/tasks.ts"],
+          verification: ["legacy fixture"]
+        }),
+        task.id
+      );
+
+    const saved = getTaskById(task.id);
+    assert.equal(saved?.closeoutState, "complete");
+    assert.deepEqual(saved?.completionReport, {
+      workSummary: "Historical closeout evidence remains readable.",
+      modifiedFiles: ["apps/api/src/repositories/tasks.ts"],
+      linkedGitRefIds: []
+    });
+    assert.equal(
+      listTasks().find((candidate) => candidate.id === task.id)?.closeoutState,
+      "complete"
+    );
+  });
+});
+
 test("PLAN-17 onboarding publishes rich completion and distinct release contracts", async () => {
   const complete = AGENT_ONBOARDING_TOOL_INPUT_CATALOG.find(
     (entry) => entry.toolName === "forge_complete_task_run"
