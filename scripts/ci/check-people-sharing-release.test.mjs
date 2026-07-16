@@ -510,6 +510,38 @@ test("packed-surface release config requires one exact archive per surface", () 
   );
 });
 
+test("Hermes runtime metadata matches the generated OpenClaw runtime source", () => {
+  const openclawPackage = JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), "plugins/openclaw/package.json"),
+      "utf8"
+    )
+  );
+  const hermesRuntimePackage = JSON.parse(
+    readFileSync(
+      path.join(
+        process.cwd(),
+        "plugins/hermes/forge_hermes/runtime/package.json"
+      ),
+      "utf8"
+    )
+  );
+  const hermesVersionSource = readFileSync(
+    path.join(process.cwd(), "plugins/hermes/forge_hermes/version.py"),
+    "utf8"
+  );
+  const hermesVersion = hermesVersionSource.match(
+    /^__version__ = "([^"]+)"$/m
+  )?.[1];
+
+  assert.equal(hermesRuntimePackage.version, hermesVersion);
+  assert.equal(hermesRuntimePackage.version, openclawPackage.version);
+  assert.deepEqual(
+    hermesRuntimePackage.dependencies,
+    openclawPackage.dependencies
+  );
+});
+
 test("Hermes release staging excludes build debris and rejects source links", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "forge-hermes-stage-"));
   const repoRoot = path.join(root, "repo");

@@ -10,15 +10,15 @@ The process defaults to loopback. A public service needs HTTPS termination in fr
 
 ```bash
 docker build \
-  --build-arg SERVICE_VERSION=0.1.2 \
+  --build-arg SERVICE_VERSION=0.1.3 \
   --build-arg VCS_REF="$(git rev-parse HEAD)" \
   --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -t forge-connectivity-service:0.1.2 .
+  -t forge-connectivity-service:0.1.3 .
 docker run --rm \
   --name forge-connectivity \
   -p 127.0.0.1:8787:8787 \
   -v forge-connectivity-data:/data \
-  forge-connectivity-service:0.1.2
+  forge-connectivity-service:0.1.3
 ```
 
 The image uses the immutable digest recorded in `Dockerfile`, runs as the unprivileged `node` user, keeps application files root-owned, declares `/data` as its only persistent volume, and checks `/healthz`. Put Caddy, nginx, HAProxy, or an equivalent TLS proxy in front. Disable request-body and query logging there. If source-network logs are operationally required, use explicit short retention and access controls; the application itself does not record IP addresses.
