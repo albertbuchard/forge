@@ -35,9 +35,9 @@
 		</dict>
 	</array>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.162</string>
+	<string>1.0.163</string>
 	<key>CFBundleVersion</key>
-	<string>44</string>
+	<string>45</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tailscale</string>

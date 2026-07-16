@@ -25,6 +25,9 @@ const { getCalendarOverviewMock, recommendTaskTimeboxesMock } = vi.hoisted(
   })
 );
 
+const resolvedDateTimeFormatOptions =
+  Intl.DateTimeFormat.prototype.resolvedOptions;
+
 vi.mock("@/lib/api", () => ({
   getCalendarOverview: getCalendarOverviewMock,
   recommendTaskTimeboxes: recommendTaskTimeboxesMock
@@ -63,10 +66,20 @@ function renderWithProviders(node: ReactNode) {
 
 describe("Life Force calendar flows", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     cleanup();
   });
 
   beforeEach(() => {
+    vi.spyOn(
+      Intl.DateTimeFormat.prototype,
+      "resolvedOptions"
+    ).mockImplementation(function (this: Intl.DateTimeFormat) {
+      return {
+        ...resolvedDateTimeFormatOptions.call(this),
+        timeZone: "Europe/Zurich"
+      };
+    });
     installMatchMedia();
     getCalendarOverviewMock.mockReset();
     recommendTaskTimeboxesMock.mockReset();
