@@ -361,6 +361,12 @@ const groups = Object.freeze({
       "deny.toml",
       "check"
     ]),
+    command(
+      "connectivity service test build",
+      "npm",
+      ["--prefix", "packages/forge-connectivity-service", "run", "build"],
+      { id: "connectivity-service-test-build" }
+    ),
     command("forge-peer format", "cargo", ["fmt", "--", "--check"], {
       cwd: "packages/forge-peer"
     }),
@@ -378,9 +384,14 @@ const groups = Object.freeze({
       ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
       { cwd: "packages/forge-peer" }
     ),
-    command("forge-peer tests", "cargo", ["test", "--all-targets"], {
-      cwd: "packages/forge-peer"
-    }),
+    command(
+      "forge-peer tests",
+      "cargo",
+      ["test", "--all-targets", "--", "--test-threads=1"],
+      {
+        cwd: "packages/forge-peer"
+      }
+    ),
     command("forge-peer doc tests", "cargo", ["test", "--doc"], {
       cwd: "packages/forge-peer"
     }),

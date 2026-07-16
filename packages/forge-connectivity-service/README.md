@@ -51,7 +51,7 @@ Configuration, container deployment, backup, and reverse-proxy guidance are in [
 ```bash
 npm run verify
 npm run audit
-npm run --silent sbom > forge-connectivity-service-0.1.3.cdx.json
+npm run --silent sbom > forge-connectivity-service-0.1.4.cdx.json
 ```
 
 `verify` runs formatting, lint, typecheck, unit/integration/upgrade/abuse/load tests, build, OpenAPI drift, container policy, dependency-license checks, an application-classified CycloneDX SBOM check, and release-metadata drift checks. The abuse suite deterministically encrypts sensitive fixtures, then proves the fixtures are absent from SQLite, WAL, responses, and captured logs.
