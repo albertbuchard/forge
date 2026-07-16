@@ -8,7 +8,7 @@ app:
     - com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension
 
 version:
-  marketing: "1.0.166"
+  marketing: "1.0.167"
 
 release:
   default_mode: testflight

@@ -234,7 +234,12 @@ test("knowledge graph starts centered and reports a satisfied startup invariant"
   expect(Math.abs(diagnostics.graphCentroid?.x ?? 0)).toBeLessThan(0.6);
   expect(Math.abs(diagnostics.graphCentroid?.y ?? 0)).toBeLessThan(0.6);
   expect(diagnostics.centroidDistanceFromOrigin ?? 99).toBeLessThan(0.6);
-  expect(diagnostics.cameraDistanceFromOrigin ?? 99).toBeLessThan(0.6);
+  const centeredCameraDistanceFromOrigin =
+    diagnostics.rendererMode === "sigma" ? Math.SQRT1_2 : 0;
+  expect(diagnostics.cameraDistanceFromOrigin).toBeCloseTo(
+    centeredCameraDistanceFromOrigin,
+    3
+  );
 });
 
 test("desktop focus keeps the focused node anchored on screen while the neighborhood settles", async ({
