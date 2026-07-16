@@ -1,4 +1,4 @@
-Forge Companion 1.0.167 adds People and selective Forge-to-Forge sharing.
+Forge Companion 1.0.168 adds People and selective Forge-to-Forge sharing.
 
 Create and link Person records, pair another Forge by QR code, and review exactly what each person can receive. Shared information keeps its source, freshness, precision, and revocation state.
 

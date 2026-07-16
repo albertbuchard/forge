@@ -411,16 +411,16 @@ const legacyRewardOwnerSql = `COALESCE(
     SELECT users.id
     FROM users
     WHERE reward_ledger.actor IS NOT NULL
-      AND (
-        LOWER(TRIM(users.display_name)) = LOWER(TRIM(reward_ledger.actor))
-        OR LOWER(TRIM(users.handle)) = LOWER(TRIM(reward_ledger.actor))
-      )
-    ORDER BY
-      CASE
-        WHEN LOWER(TRIM(users.handle)) = LOWER(TRIM(reward_ledger.actor))
-        THEN 0 ELSE 1
-      END,
-      users.id
+      AND LOWER(TRIM(users.handle)) = LOWER(TRIM(reward_ledger.actor))
+    ORDER BY users.id
+    LIMIT 1
+  ),
+  (
+    SELECT users.id
+    FROM users
+    WHERE reward_ledger.actor IS NOT NULL
+      AND LOWER(TRIM(users.display_name)) = LOWER(TRIM(reward_ledger.actor))
+    ORDER BY users.id
     LIMIT 1
   ),
   ?
