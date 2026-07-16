@@ -362,6 +362,12 @@ const groups = Object.freeze({
       "check"
     ]),
     command(
+      "connectivity service test dependencies",
+      "npm",
+      ["--prefix", "packages/forge-connectivity-service", "ci"],
+      { id: "connectivity-service-test-dependencies" }
+    ),
+    command(
       "connectivity service test build",
       "npm",
       ["--prefix", "packages/forge-connectivity-service", "run", "build"],
