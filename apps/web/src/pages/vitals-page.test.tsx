@@ -236,6 +236,10 @@ describe("VitalsPage", () => {
     expect(
       screen.getByText("12 tracked days across 5 metrics")
     ).toBeInTheDocument();
+    expect(getPsycheMetricsViewMock).toHaveBeenCalledWith({
+      userIds: ["user_operator"],
+      timeZone: expect.any(String)
+    });
   });
 
   it("does not render physiological interpretation when no vital evidence exists", async () => {

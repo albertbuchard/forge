@@ -1,183 +1,72 @@
 import SwiftUI
 import MapKit
 
+private enum PairedForgeSheet: String, Identifiable {
+    case controlCenter
+    case settings
+    case diagnostics
+    case movementSettings
+    case people
+
+    var id: String { rawValue }
+}
+
 struct PairedForgeScreen: View {
     @EnvironmentObject private var appModel: CompanionAppModel
+    @EnvironmentObject private var peoplePeerStore: PeoplePeerStore
 
     let reopenSetup: () -> Void
 
-    @State private var menuVisible = false
-    @State private var reloadToken = UUID()
+    @State private var presentedSheet: PairedForgeSheet?
+    @State private var reloadRequest = ForgeWebReloadRequest(kind: .standard)
     @State private var isLoading = true
-    @State private var webError: String?
-    @State private var movementSettingsVisible = false
-    @State private var settingsVisible = false
-    @State private var diagnosticsVisible = false
+    @State private var webFailure: ForgeWebFailure?
+    @State private var manualSyncInFlight = false
     @State private var lifeTimelineVisible = false
     @State private var screenshotScenarioApplied = false
-    @State private var menuAttentionPulse = false
     @State private var targetedForgeURL: URL?
 
     var body: some View {
-        GeometryReader { proxy in
-            let topControlsPadding = max(6, proxy.safeAreaInsets.top + 4)
-            let menuSheetTopPadding = topControlsPadding + 56
-            let historicalImportNeedsAttention = appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel
+        VStack(spacing: 0) {
+            nativeControlBar
 
-            ZStack(alignment: .topTrailing) {
-                CompanionStyle.background
-
-                if appModel.screenshotScenario?.usesForgeCanvasPlaceholder == true {
-                    CompanionScreenshotForgeCanvas()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
-                } else if let url = targetedForgeURL ?? appModel.forgeWebURL {
-                    ForgeWebView(
-                        url: url,
-                        transport: appModel.pairing?.transport,
-                        reloadToken: reloadToken,
-                        isLoading: $isLoading,
-                        errorMessage: $webError
-                    )
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                }
-
-                if isLoading {
-                    VStack {
-                        ProgressView()
-                            .tint(CompanionStyle.accentStrong)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black.opacity(0.08))
-                    .allowsHitTesting(false)
-                }
-
-                if let webError {
-                    VStack {
-                        Spacer()
-
-                        Text(webError)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Color.black.opacity(0.36), in: Capsule())
-                            .padding(.bottom, proxy.safeAreaInsets.bottom + 18)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-                }
-
-                Button {
-                    companionDebugLog(
-                        "PairedForgeScreen",
-                        "menu button tap old=\(menuVisible)"
-                    )
-                    menuVisible.toggle()
-                } label: {
-                    Image(systemName: menuVisible ? "xmark" : "line.3.horizontal")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            historicalImportNeedsAttention
-                                ? CompanionStyle.accent.opacity(0.82)
-                                : Color.black.opacity(0.24),
-                            in: Circle()
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    historicalImportNeedsAttention
-                                        ? CompanionStyle.accentStrong.opacity(menuAttentionPulse ? 0.86 : 0.28)
-                                        : Color.white.opacity(0.14),
-                                    lineWidth: historicalImportNeedsAttention ? 2 : 1
-                                )
-                                .scaleEffect(historicalImportNeedsAttention && menuAttentionPulse ? 1.18 : 1)
-                                .opacity(historicalImportNeedsAttention ? (menuAttentionPulse ? 0.75 : 1) : 1)
-                        )
-                        .overlay(alignment: .topTrailing) {
-                            if appModel.needsNativeAttention {
-                                Circle()
-                                    .fill(Color(red: 1, green: 0.67, blue: 0.29))
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 1, y: -1)
-                            }
-                        }
-                        .overlay(alignment: .bottomLeading) {
-                            if historicalImportNeedsAttention {
-                                Image(systemName: "clock.arrow.circlepath")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Color(red: 13 / 255, green: 20 / 255, blue: 37 / 255))
-                                    .frame(width: 18, height: 18)
-                                    .background(CompanionStyle.accentStrong, in: Circle())
-                                    .offset(x: -3, y: 3)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 16)
-                .padding(.top, topControlsPadding)
-                .zIndex(3)
-
-                if menuVisible {
-                    Color.black.opacity(0.001)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            companionDebugLog("PairedForgeScreen", "overlay tap close menu")
-                            menuVisible = false
-                        }
-                        .zIndex(1)
-
-                    CompanionMenuSheet(
-                        openSettings: { settingsVisible = true },
-                        openLifeTimeline: { lifeTimelineVisible = true },
-                        openPinnedRecord: { targetPath in
-                            targetedForgeURL = CompanionForgeTargetURLResolver.resolve(
-                                baseURL: appModel.forgeWebURL,
-                                targetPath: targetPath
-                            )
-                        },
-                        closeMenu: { menuVisible = false }
-                    )
-                    .environmentObject(appModel)
-                    .padding(.top, menuSheetTopPadding)
-                    .padding(.trailing, 16)
-                    .zIndex(2)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
+            if let webFailure {
+                webFailureBanner(webFailure)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .clipped()
+
+            GeometryReader { proxy in
+                ZStack {
+                    CompanionStyle.background
+
+                    if appModel.screenshotScenario?.usesForgeCanvasPlaceholder == true {
+                        CompanionScreenshotForgeCanvas()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                    } else if let url = targetedForgeURL ?? appModel.forgeWebURL {
+                        ForgeWebView(
+                            url: url,
+                            transport: appModel.pairing?.transport,
+                            reloadRequest: reloadRequest,
+                            isLoading: $isLoading,
+                            failure: $webFailure
+                        )
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("ForgeWebExperience")
+                .accessibilityValue(activeForgePathForAccessibility)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea(edges: .bottom)
-        .sheet(isPresented: $movementSettingsVisible) {
-            MovementSettingsSheet(
-                movementStore: appModel.movementStore,
-                close: { movementSettingsVisible = false }
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $settingsVisible) {
-            CompanionSettingsSheet(
-                reopenSetup: reopenSetup,
-                reloadForge: { reloadToken = UUID() },
-                openDiagnostics: { diagnosticsVisible = true },
-                openMovementSettings: { movementSettingsVisible = true },
-                close: { settingsVisible = false }
-            )
-            .environmentObject(appModel)
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $diagnosticsVisible) {
-            CompanionDiagnosticsSheet(
-                close: { diagnosticsVisible = false }
-            )
-            .environmentObject(appModel)
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+        .background(CompanionStyle.background)
+        .sheet(item: $presentedSheet) { sheet in
+            presentedSheetContent(sheet)
+                .environmentObject(appModel)
+                .environmentObject(peoplePeerStore)
+                .presentationDetents(sheet == .controlCenter ? [.medium, .large] : [.large])
+                .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $lifeTimelineVisible) {
             MovementLifeTimelineView(
@@ -186,15 +75,22 @@ struct PairedForgeScreen: View {
             .environmentObject(appModel)
         }
         .onAppear {
+#if DEBUG
+            appModel.watchSessionManager.injectPendingPhoneHandoffURLForUITestingIfConfigured()
+#endif
+            consumePendingWatchHandoff()
+            if peoplePeerStore.consumeManagementRequest() {
+                presentedSheet = .people
+            }
             if appModel.screenshotScenario != nil {
                 isLoading = false
-                webError = nil
+                webFailure = nil
             }
             if screenshotScenarioApplied == false, let screenshotScenario = appModel.screenshotScenario {
                 screenshotScenarioApplied = true
                 DispatchQueue.main.async {
                     if screenshotScenario.autoOpensDiagnostics {
-                        diagnosticsVisible = true
+                        presentedSheet = .diagnostics
                     }
                     if screenshotScenario.autoOpensLifeTimeline {
                         lifeTimelineVisible = true
@@ -205,32 +101,260 @@ struct PairedForgeScreen: View {
                 "PairedForgeScreen",
                 "onAppear forgeWebURL=\(appModel.forgeWebURL?.absoluteString ?? "nil")"
             )
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                menuAttentionPulse = true
-            }
         }
-        .onChange(of: menuVisible) { _, nextValue in
-            companionDebugLog("PairedForgeScreen", "menuVisible -> \(nextValue)")
-        }
-        .onChange(of: reloadToken) { _, nextValue in
-            companionDebugLog("PairedForgeScreen", "reloadToken -> \(nextValue.uuidString)")
+        .onChange(of: reloadRequest) { _, nextValue in
+            companionDebugLog(
+                "PairedForgeScreen",
+                "reloadRequest -> \(nextValue.id.uuidString) kind=\(String(describing: nextValue.kind))"
+            )
         }
         .onChange(of: isLoading) { _, nextValue in
             companionDebugLog("PairedForgeScreen", "isLoading -> \(nextValue)")
         }
-        .onChange(of: webError) { _, nextValue in
-            companionDebugLog("PairedForgeScreen", "webError -> \(nextValue ?? "nil")")
+        .onChange(of: webFailure) { _, nextValue in
+            companionDebugLog("PairedForgeScreen", "webFailure -> \(nextValue?.title ?? "nil")")
         }
         .onChange(of: appModel.forgeWebURL) { _, nextValue in
             companionDebugLog(
                 "PairedForgeScreen",
                 "forgeWebURL -> \(nextValue?.absoluteString ?? "nil")"
             )
+            consumePendingWatchHandoff()
         }
-        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: menuVisible)
-        .animation(.spring(response: 0.32, dampingFraction: 0.9), value: appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel)
+        .onChange(of: appModel.watchSessionManager.pendingPhoneHandoffURL) { _, _ in
+            consumePendingWatchHandoff()
+        }
+        .onChange(of: peoplePeerStore.managementRequested) { _, requested in
+            guard requested, peoplePeerStore.consumeManagementRequest() else { return }
+            presentedSheet = .people
+        }
+        .animation(.easeInOut(duration: 0.18), value: webFailure)
     }
 
+    private var activeForgePathForAccessibility: String {
+        (targetedForgeURL ?? appModel.forgeWebURL)?.path ?? "Unavailable"
+    }
+
+    private var nativeControlBar: some View {
+        HStack(spacing: 6) {
+            Button {
+                presentedSheet = .controlCenter
+            } label: {
+                HStack(spacing: 9) {
+                    Group {
+                        if isLoading {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .tint(CompanionStyle.textSecondary)
+                                .accessibilityLabel("Loading Forge")
+                        } else {
+                            Circle()
+                                .fill(nativeStatusColor)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .frame(width: 12, height: 12)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Forge")
+                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textPrimary)
+
+                        Text(appModel.forgeHostLabel)
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.textMuted)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open Companion control center")
+
+            Button {
+                requestWebReload(kind: .standard)
+            } label: {
+                nativeControlIcon(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Reload Forge web experience")
+            .accessibilityIdentifier("ForgeWebReloadButton")
+
+            Button {
+                runManualSync()
+            } label: {
+                if manualSyncInFlight || appModel.syncUploadStatus.isSyncing {
+                    ProgressView()
+                        .tint(CompanionStyle.textPrimary)
+                        .frame(width: 40, height: 40)
+                } else {
+                    nativeControlIcon(systemName: "arrow.triangle.2.circlepath")
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(manualSyncInFlight || appModel.syncUploadStatus.isSyncing)
+            .accessibilityLabel(manualSyncInFlight ? "Syncing Forge" : "Sync Forge now")
+            .accessibilityIdentifier("ForgeNativeSyncButton")
+
+            Button {
+                presentedSheet = .settings
+            } label: {
+                nativeControlIcon(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open Companion settings")
+            .accessibilityIdentifier("ForgeNativeSettingsButton")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 50)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ForgeNativeControlBar")
+    }
+
+    private func nativeControlIcon(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(CompanionStyle.textPrimary)
+            .frame(width: 40, height: 40)
+            .contentShape(Rectangle())
+    }
+
+    private var nativeStatusColor: Color {
+        switch appModel.companionOperationalSummary.status {
+        case .ok:
+            return Color(red: 0.35, green: 0.8, blue: 0.56)
+        case .warning:
+            return Color(red: 1, green: 0.75, blue: 0.34)
+        case .error:
+            return CompanionStyle.destructive
+        }
+    }
+
+    private func webFailureBanner(_ failure: ForgeWebFailure) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: failure.isOffline ? "wifi.slash" : "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(failure.isOffline ? CompanionStyle.textSecondary : CompanionStyle.destructive)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(failure.title)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textPrimary)
+                Text(failure.detail)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(CompanionStyle.textSecondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 4)
+
+            Button("Retry") {
+                requestWebReload(kind: .standard)
+            }
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .buttonStyle(.bordered)
+            .tint(CompanionStyle.accentStrong)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(CompanionStyle.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ForgeWebFailureBanner")
+    }
+
+    @ViewBuilder
+    private func presentedSheetContent(_ sheet: PairedForgeSheet) -> some View {
+        switch sheet {
+        case .controlCenter:
+            CompanionMenuSheet(
+                openSettings: { presentedSheet = .settings },
+                openPeople: { presentedSheet = .people },
+                openLifeTimeline: openLifeTimelineFromSheet,
+                openPinnedRecord: { targetPath in
+                    targetedForgeURL = CompanionForgeTargetURLResolver.resolve(
+                        baseURL: appModel.forgeWebURL,
+                        targetPath: targetPath
+                    )
+                },
+                closeMenu: { presentedSheet = nil }
+            )
+        case .settings:
+            CompanionSettingsSheet(
+                reopenSetup: reopenSetup,
+                reloadForge: { requestWebReload(kind: .clearCache) },
+                openDiagnostics: { presentedSheet = .diagnostics },
+                openMovementSettings: { presentedSheet = .movementSettings },
+                close: { presentedSheet = nil }
+            )
+        case .diagnostics:
+            CompanionDiagnosticsSheet(close: { presentedSheet = nil })
+        case .movementSettings:
+            MovementSettingsSheet(
+                movementStore: appModel.movementStore,
+                close: { presentedSheet = nil }
+            )
+        case .people:
+            PeoplePeerManagementView(close: { presentedSheet = nil })
+        }
+    }
+
+    private func requestWebReload(kind: ForgeWebReloadKind) {
+        webFailure = nil
+        reloadRequest = ForgeWebReloadRequest(kind: kind)
+    }
+
+    private func consumePendingWatchHandoff() {
+        guard let pairedBaseURL = appModel.forgeWebURL else {
+            return
+        }
+        guard let pendingURL = appModel.watchSessionManager.consumePendingPhoneHandoffURL() else {
+            return
+        }
+        guard let destinationURL = CompanionWatchHandoffURLPolicy.navigationURL(
+            pendingURL: pendingURL,
+            pairedBaseURL: pairedBaseURL
+        ) else {
+            companionDebugLog(
+                "PairedForgeScreen",
+                "ignored watch handoff outside the paired Forge view"
+            )
+            return
+        }
+        targetedForgeURL = destinationURL
+        webFailure = nil
+        isLoading = true
+    }
+
+    private func runManualSync() {
+        guard manualSyncInFlight == false, appModel.syncUploadStatus.isSyncing == false else {
+            return
+        }
+        manualSyncInFlight = true
+        Task {
+            defer { manualSyncInFlight = false }
+            await appModel.runManualSync()
+        }
+    }
+
+    private func openLifeTimelineFromSheet() {
+        presentedSheet = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            lifeTimelineVisible = true
+        }
+    }
 }
 
 enum CompanionForgeTargetURLResolver {
@@ -260,6 +384,66 @@ enum CompanionForgeTargetURLResolver {
         baseComponents.percentEncodedQuery = targetComponents.percentEncodedQuery
         baseComponents.percentEncodedFragment = targetComponents.percentEncodedFragment
         return baseComponents.url
+    }
+}
+
+enum CompanionWatchHandoffURLPolicy {
+    private static let allowedSchemes = Set(["https", "http", "forge-iroh"])
+
+    static func navigationURL(pendingURL: URL?, pairedBaseURL: URL?) -> URL? {
+        guard
+            let pendingURL,
+            let pairedBaseURL,
+            let pendingComponents = URLComponents(
+                url: pendingURL,
+                resolvingAgainstBaseURL: false
+            ),
+            let scheme = pendingComponents.scheme?.lowercased(),
+            allowedSchemes.contains(scheme),
+            pendingComponents.user == nil,
+            pendingComponents.password == nil,
+            pendingComponents.percentEncodedQuery == nil,
+            pendingComponents.percentEncodedFragment == nil,
+            ForgeWebNavigationPolicy.disposition(
+                for: pendingURL,
+                relativeTo: pairedBaseURL,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ) == .allow,
+            let basePath = safePathComponents(of: pairedBaseURL),
+            let destinationPath = safePathComponents(of: pendingURL),
+            destinationPath.count > basePath.count,
+            destinationPath.starts(with: basePath)
+        else {
+            return nil
+        }
+        return pendingURL
+    }
+
+    private static func safePathComponents(of url: URL) -> [String]? {
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            components.percentEncodedPath.hasPrefix("/"),
+            components.percentEncodedPath.contains("//") == false
+        else {
+            return nil
+        }
+        var result: [String] = []
+        for encodedComponent in components.percentEncodedPath.split(separator: "/") {
+            guard
+                let component = String(encodedComponent).removingPercentEncoding,
+                component.isEmpty == false,
+                component != ".",
+                component != "..",
+                component.contains("/") == false,
+                component.contains("\\") == false
+            else {
+                return nil
+            }
+            result.append(component)
+        }
+        return result
     }
 }
 

@@ -22,6 +22,8 @@ Forge should provide an Artifact Store for trusted stored files that belong in t
 
 Forge should provide Life Events as a first-class chronological memory surface for important personal events. A Life Event is a structured record for something meaningful that happened or will happen in time, connected to the calendar when appropriate but not reduced to a calendar block. Life Events can be short moments or intervals lasting days, weeks, or months, including travel, flights, trains, car trips, stays, lodging, holidays, vacations, visits, moves, festivals, retreats, conferences, concerts, cinema, dates, friends, family, work phases, work milestones, thesis milestones, health episodes, administrative events, celebrations, memories, and custom events. They should link to calendar events, ticket artifacts, wiki pages, notes, goals, projects, tasks, Psyche records, movement context, and other Forge entities through the general `entity_links` model.
 
+Forge should provide People as owner-scoped structured memory for the people in a user's life. A Person is separate from a Forge User, agent, peer identity, device, or sharing grant and links to the rest of Forge through the general `entity_links` model. Two independently operated Forge installations can pair through a human-confirmed invitation and exchange only registered projections covered by a signed directional grant. Direct, Iroh, Tor when locally supported, and an optional self-hosted ciphertext mailbox are interchangeable transport providers behind the same protocol. Transport reachability never creates consent, and trusted agents can use existing scoped grants without gaining any pairing, device, or permission-management authority.
+
 Forge should provide one bounded Attention surface for existing records and operational evidence that need a next move. It derives actor-scoped items from decisions, unreviewed insights, blocked or overdue work, companion sync problems, and stale agent runtimes; it does not create a second source of truth. Items expose stable ids, severity, reason, target, and allowed actions. Snooze and dismiss are reversible per actor, changed source evidence reactivates an item, and blocked or overdue work cannot be hidden through dismissal.
 
 Forge should stay modern and production-grade:
@@ -33,6 +35,8 @@ Forge should stay modern and production-grade:
 - Fastify 5
 - SQLite
 - generated OpenAPI
+- a Rust 2024 `forge-peer` daemon and companion Iroh transport
+- an optional Node 24 Forge Connectivity Service for end-to-end encrypted offline delivery
 - OpenClaw, Hermes, Codex, and Claude Code adapter surfaces
 - Swift iPhone companion
 - SwiftUI watchOS companion command surface
@@ -71,6 +75,7 @@ Forge already has strong foundations:
 - goals, projects, strategies, tasks, task runs, habits, notes, wiki, preferences, health, movement, and Psyche surfaces
 - an Artifact Store for trusted human-download-only files with precise metadata, provenance, static scans, danger scoring, versions, audit history, optional LLM metadata enrichment, a dedicated web view, and relationships stored through general entity links
 - Life Events for chronological personal event memory, including short events and longer stays or periods, with calendar reconciliation, ticket artifact import, travel segments, status reads, a virtualized web timeline, guided modal creation/import flows, and relationships stored through general entity links
+- People records with guided web flows, general entity links, Wiki association, owner-scoped private fields, and secure selective Forge-to-Forge sharing through human-confirmed pairing, directional grants, typed questions, encrypted transport providers, and a privacy-bounded iPhone/watch companion surface
 - an actor-scoped Attention queue with bounded pagination, reversible snooze/dismiss/restore state, source-change reactivation, a responsive web view, agent route contracts, and compact iPhone/watch Inbox summaries
 - canonical shared or user-owned entity pins plus actor-scoped recent-view history, exposed through the existing Action Bar, a compact iPhone/watch snapshot, and agent-safe list/touch routes while human operators alone control pin state
 - Psyche flashcards as batch CRUD records for therapeutic reminder cards that can be retrieved by tags, trigger wording, title, or linked Psyche context during urge and trigger support

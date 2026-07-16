@@ -1,4 +1,5 @@
 import type { CrudEntityType, Note, NotesSummaryByEntity } from "./types";
+import { formatLocalDateKey } from "./date-keys";
 
 const ANCHOR_KEY_LABELS: Partial<Record<string, string>> = {
   spark: "Spark stage",
@@ -8,12 +9,25 @@ const ANCHOR_KEY_LABELS: Partial<Record<string, string>> = {
   pivot: "Pivot stage"
 };
 
-export function getNotesSummaryKey(entityType: CrudEntityType, entityId: string) {
+export function getNotesSummaryKey(
+  entityType: CrudEntityType,
+  entityId: string
+) {
   return `${entityType}:${entityId}`;
 }
 
-export function getEntityNotesSummary(summaryByEntity: NotesSummaryByEntity | undefined, entityType: CrudEntityType, entityId: string) {
-  return summaryByEntity?.[getNotesSummaryKey(entityType, entityId)] ?? { count: 0, latestNoteId: null, latestCreatedAt: null };
+export function getEntityNotesSummary(
+  summaryByEntity: NotesSummaryByEntity | undefined,
+  entityType: CrudEntityType,
+  entityId: string
+) {
+  return (
+    summaryByEntity?.[getNotesSummaryKey(entityType, entityId)] ?? {
+      count: 0,
+      latestNoteId: null,
+      latestCreatedAt: null
+    }
+  );
 }
 
 export function formatNotesCountLabel(count: number) {
@@ -40,7 +54,10 @@ export function formatAnchorKeyLabel(anchorKey: string | null | undefined) {
     .join(" ");
 }
 
-export function getAnchorKeyHelpText(entityType: CrudEntityType, anchorKey: string | null | undefined) {
+export function getAnchorKeyHelpText(
+  entityType: CrudEntityType,
+  anchorKey: string | null | undefined
+) {
   const label = formatAnchorKeyLabel(anchorKey);
   if (!label) {
     return null;
@@ -52,37 +69,73 @@ export function getAnchorKeyHelpText(entityType: CrudEntityType, anchorKey: stri
 }
 
 export function getEntityRoute(entityType: CrudEntityType, entityId: string) {
+  const encodedId = encodeURIComponent(entityId);
   switch (entityType) {
     case "goal":
-      return `/goals/${entityId}`;
+      return `/goals/${encodedId}`;
     case "project":
-      return `/projects/${entityId}`;
+      return `/projects/${encodedId}`;
     case "task":
-      return `/tasks/${entityId}`;
+      return `/tasks/${encodedId}`;
     case "strategy":
-      return `/strategies/${entityId}`;
+      return `/strategies/${encodedId}`;
     case "artifact":
-      return `/artifacts/${entityId}`;
+      return `/artifacts/${encodedId}`;
+    case "person":
+      return `/people/${encodedId}`;
+    case "life_event":
+      return `/life-events?focus=${encodedId}`;
+    case "task_timebox":
+      return `/calendar?timeboxId=${encodedId}`;
+    case "note":
+      return `/notes?focus=${encodedId}`;
     case "psyche_value":
-      return `/psyche/values?focus=${entityId}#values-atlas`;
+      return `/psyche/values?focus=${encodedId}#values-atlas`;
     case "behavior_pattern":
-      return `/psyche/patterns?focus=${entityId}#pattern-lanes`;
+      return `/psyche/patterns?focus=${encodedId}#pattern-lanes`;
     case "behavior":
-      return `/psyche/behaviors?focus=${entityId}#behavior-columns`;
+      return `/psyche/behaviors?focus=${encodedId}#behavior-columns`;
     case "belief_entry":
-      return `/psyche/schemas-beliefs?focus=${entityId}`;
+      return `/psyche/schemas-beliefs?focus=${encodedId}`;
     case "mode_profile":
-      return `/psyche/modes?focus=${entityId}`;
+      return `/psyche/modes?focus=${encodedId}`;
     case "flashcard":
-      return `/psyche/flashcards?focus=${entityId}`;
+      return `/psyche/flashcards?focus=${encodedId}`;
     case "trigger_report":
-      return `/psyche/reports/${entityId}`;
+      return `/psyche/reports/${encodedId}`;
+    case "preference_catalog":
+      return `/preferences?focusCatalog=${encodedId}`;
+    case "preference_catalog_item":
+      return `/preferences?focusCatalogItem=${encodedId}`;
+    case "preference_context":
+      return `/preferences?focusContext=${encodedId}`;
+    case "preference_item":
+      return `/preferences?focusItem=${encodedId}`;
+    case "questionnaire_instrument":
+      return `/psyche/questionnaires/${encodedId}`;
+    case "sleep_session":
+      return `/sleep?focus=${encodedId}`;
+    case "workout_session":
+      return `/sports/workouts/${encodedId}`;
     default:
       return null;
   }
 }
 
-export function getEntityNotesHref(entityType: CrudEntityType, entityId: string) {
+export function countNotesCreatedOnLocalDate(
+  notes: Array<Pick<Note, "createdAt">>,
+  now = new Date()
+) {
+  const todayKey = formatLocalDateKey(now);
+  return notes.filter(
+    (note) => formatLocalDateKey(new Date(note.createdAt)) === todayKey
+  ).length;
+}
+
+export function getEntityNotesHref(
+  entityType: CrudEntityType,
+  entityId: string
+) {
   switch (entityType) {
     case "goal":
     case "project":
@@ -98,5 +151,11 @@ export function getEntityNotesHref(entityType: CrudEntityType, entityId: string)
 }
 
 export function getPrimaryNavigableLink(note: Note) {
-  return note.links.find((link) => getEntityRoute(link.entityType, link.entityId) !== null) ?? note.links[0] ?? null;
+  return (
+    note.links.find(
+      (link) => getEntityRoute(link.entityType, link.entityId) !== null
+    ) ??
+    note.links[0] ??
+    null
+  );
 }

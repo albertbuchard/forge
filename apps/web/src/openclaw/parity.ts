@@ -42,6 +42,11 @@ export const FORGE_SUPPORTED_PLUGIN_API_ROUTES: ForgeSupportedPluginApiRoute[] =
       path: "/api/v1/operator/context",
       purpose: "operator_context"
     },
+    {
+      method: "GET",
+      path: "/api/v1/today/priority",
+      purpose: "operator_context"
+    },
     { method: "GET", path: "/api/v1/agents/onboarding", purpose: "onboarding" },
     { method: "GET", path: "/api/v1/doctor", purpose: "diagnostics" },
     { method: "POST", path: "/api/v1/doctor/fixes", purpose: "diagnostics" },

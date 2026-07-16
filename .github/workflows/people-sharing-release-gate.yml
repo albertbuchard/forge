@@ -1,0 +1,372 @@
+name: Forge People Sharing Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "apps/api/migrations/**"
+      - "apps/api/src/**"
+      - "apps/ios-companion/**"
+      - "apps/web/src/**"
+      - "deny.toml"
+      - "docs/reference/people-and-peer-sharing.md"
+      - "package.json"
+      - "package-lock.json"
+      - "packages/companion-iroh/**"
+      - "packages/forge-connectivity-service/**"
+      - "packages/forge-memory/**"
+      - "packages/forge-peer/**"
+      - "plugins/codex/**"
+      - "plugins/hermes/**"
+      - "plugins/openclaw/**"
+      - "scripts/ci/**"
+      - "scripts/perf/**"
+      - "scripts/release/**"
+      - "scripts/smoke/**"
+      - "tests/e2e/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "apps/api/migrations/**"
+      - "apps/api/src/**"
+      - "apps/ios-companion/**"
+      - "apps/web/src/**"
+      - "deny.toml"
+      - "docs/reference/people-and-peer-sharing.md"
+      - "package.json"
+      - "package-lock.json"
+      - "packages/companion-iroh/**"
+      - "packages/forge-connectivity-service/**"
+      - "packages/forge-memory/**"
+      - "packages/forge-peer/**"
+      - "plugins/codex/**"
+      - "plugins/hermes/**"
+      - "plugins/openclaw/**"
+      - "scripts/ci/**"
+      - "scripts/perf/**"
+      - "scripts/release/**"
+      - "scripts/smoke/**"
+      - "tests/e2e/**"
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact commit to validate
+        required: true
+        type: string
+      release:
+        description: Require release ancestry and the repository signing key
+        required: true
+        type: boolean
+    secrets:
+      FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY:
+        description: Production native-source signing key for trusted releases
+        required: false
+    outputs:
+      validated_sha:
+        description: Exact commit that passed the canonical release gate
+        value: ${{ jobs.release-gate.outputs.validated_sha }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: people-sharing-release-gate-${{ inputs.release || false }}-${{ github.workflow }}-${{ inputs.source_sha || github.sha }}
+  cancel-in-progress: ${{ !inputs.release }}
+
+jobs:
+  release-gate:
+    name: Canonical People release gate
+    runs-on: macos-26
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    outputs:
+      validated_sha: ${{ steps.receipt.outputs.validated_sha }}
+    env:
+      CI: "true"
+      FORGE_IOS_SKIP_REPO_RELEASE_CHECKS: "1"
+      FORGE_RELEASE_MODE: full
+      FORGE_RELEASE_SKIP_REMOTE_VALIDATION: "1"
+      FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: "1"
+
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
+
+      - name: Verify source identity and release ancestry
+        env:
+          RELEASE: ${{ inputs.release || false }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "${SOURCE_SHA}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "source_sha must be an exact 40-character Git commit." >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          git fetch --no-tags origin main
+          if [ "${RELEASE}" = "true" ]; then
+            git merge-base --is-ancestor "${SOURCE_SHA}" origin/main || {
+              echo "Release commits must be reachable from origin/main." >&2
+              exit 1
+            }
+          fi
+          git switch --force-create main "${SOURCE_SHA}"
+          test "$(git branch --show-current)" = "main"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24.18.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Set up Safe Chain
+        run: ./scripts/ci/setup-safe-chain-ci.sh
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Install Python test dependencies
+        run: python3 -m pip install --disable-pip-version-check build==1.4.2 pytest==8.4.2 pyyaml==6.0.3
+
+      - name: Verify reusable gate dependency contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflow_root = Path(".github/workflows")
+          expression = lambda body: "$" + "{{ " + body + " }}"
+          callers = {
+              "openclaw-plugin.yml": ("plugin", "false"),
+              "connectivity-service.yml": ("verify", "false"),
+              "release-openclaw-plugin.yml": ("publish", "true"),
+              "release-hermes-plugin.yml": ("build", "true"),
+              "release-connectivity-service.yml": ("release", "true"),
+              "release-forge-memory.yml": ("publish", "true"),
+              "release-ios-companion.yml": ("release", "true"),
+          }
+
+          def load_workflow(name):
+              return yaml.load(
+                  (workflow_root / name).read_text(), Loader=yaml.BaseLoader
+              )
+
+          for name, (downstream_job, release) in callers.items():
+              workflow = load_workflow(name)
+              jobs = workflow["jobs"]
+              gate = jobs["people-release-gate"]
+              assert gate["uses"] == (
+                  "./.github/workflows/people-sharing-release-gate.yml"
+              ), name
+              assert gate["with"] == {
+                  "release": release,
+                  "source_sha": expression("github.sha"),
+              }, name
+              assert gate["permissions"] == {"contents": "read"}, name
+              assert jobs[downstream_job]["needs"] == "people-release-gate", name
+              assert "if" not in jobs[downstream_job], name
+              if release == "true":
+                  assert gate["secrets"] == {
+                      "FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY": (
+                          expression(
+                              "secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY"
+                          )
+                      )
+                  }, name
+                  assert workflow["concurrency"]["cancel-in-progress"] == "false", name
+                  verification = jobs[downstream_job]["steps"][0]
+                  assert verification["name"] == "Verify admitted source commit", name
+                  assert verification["env"]["VALIDATED_SHA"] == (
+                      expression(
+                          "needs.people-release-gate.outputs.validated_sha"
+                      )
+                  ), name
+                  assert verification["run"] == (
+                      'test "${VALIDATED_SHA}" = "${GITHUB_SHA}"'
+                  ), name
+              else:
+                  assert "secrets" not in gate, name
+                  assert workflow["concurrency"]["cancel-in-progress"] == "true", name
+
+          reusable = load_workflow("people-sharing-release-gate.yml")
+          required_direct_paths = {
+              "apps/api/src/**",
+              "apps/ios-companion/**",
+              "apps/web/src/**",
+              "packages/forge-peer/**",
+              "plugins/codex/**",
+              "plugins/hermes/**",
+              "plugins/openclaw/**",
+              "scripts/ci/**",
+              "scripts/perf/**",
+              "scripts/smoke/**",
+          }
+          assert "workflow_dispatch" in reusable["on"]
+          for event in ("push", "pull_request"):
+              trigger = reusable["on"][event]
+              assert trigger["branches"] == ["main"]
+              assert required_direct_paths <= set(trigger["paths"])
+          assert reusable["permissions"] == {"contents": "read"}
+          assert reusable["concurrency"]["cancel-in-progress"] == (
+              expression("!inputs.release")
+          )
+          release_gate = reusable["jobs"]["release-gate"]
+          assert release_gate["permissions"] == {"contents": "read"}
+          assert release_gate["env"]["FORGE_RELEASE_MODE"] == "full"
+          assert release_gate["env"]["FORGE_REQUIRE_SIGNED_NATIVE_SOURCE"] == "1"
+          gate_steps = {
+              step["name"]: step for step in release_gate["steps"]
+          }
+          assert gate_steps["Run canonical People sharing release gate"]["run"] == (
+              "npm run check:people-sharing-release"
+          )
+          assert gate_steps["Upload validated gate artifacts"]["with"][
+              "if-no-files-found"
+          ] == "error"
+          print("Verified seven callers and the reusable People release gate.")
+          PY
+
+      - name: Install Rust release audit tools
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo install cargo-deny --version 0.20.2 --locked
+
+      - name: Install Playwright browser
+        run: npx playwright install chromium
+
+      - name: Prepare native source signing key
+        env:
+          RELEASE: ${{ inputs.release || false }}
+          RELEASE_SIGNING_KEY: ${{ secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_path="${RUNNER_TEMP}/forge-native-source-ed25519-v1.pem"
+          umask 077
+          if [ "${RELEASE}" = "true" ]; then
+            if [ -z "${RELEASE_SIGNING_KEY}" ]; then
+              echo "FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY is required for a release gate." >&2
+              exit 1
+            fi
+            printf '%s\n' "${RELEASE_SIGNING_KEY}" > "${key_path}"
+          else
+            KEY_PATH="${key_path}" node --input-type=module <<'NODE'
+          import { generateKeyPairSync } from "node:crypto";
+          import { writeFileSync } from "node:fs";
+
+          const { privateKey } = generateKeyPairSync("ed25519");
+          writeFileSync(
+            process.env.KEY_PATH,
+            privateKey.export({ format: "pem", type: "pkcs8" }),
+            { mode: 0o600 }
+          );
+          NODE
+          fi
+          chmod 600 "${key_path}"
+          echo "FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
+
+      - name: Initialize isolated release roots
+        run: |
+          set -euo pipefail
+          data_root="${RUNNER_TEMP}/forge-people-release-data"
+          artifact_root="${RUNNER_TEMP}/forge-people-release-artifacts"
+          test ! -e "${data_root}"
+          test ! -e "${artifact_root}"
+          npm run check:people-sharing-release -- --initialize-root "${data_root}"
+          install -d -m 700 "${artifact_root}"
+          {
+            echo "FORGE_PEOPLE_RELEASE_DATA_ROOT=${data_root}"
+            echo "FORGE_PEOPLE_RELEASE_ARTIFACT_ROOT=${artifact_root}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Run canonical People sharing release gate
+        run: npm run check:people-sharing-release
+
+      - name: Record gate provenance
+        id: receipt
+        env:
+          RELEASE: ${{ inputs.release || false }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          ARTIFACT_ROOT="${FORGE_PEOPLE_RELEASE_ARTIFACT_ROOT}" \
+          RELEASE="${RELEASE}" \
+          SOURCE_SHA="${SOURCE_SHA}" \
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+          import path from "node:path";
+
+          const root = process.env.ARTIFACT_ROOT;
+          const artifacts = readdirSync(root)
+            .sort()
+            .map((name) => {
+              const absolutePath = path.join(root, name);
+              const metadata = statSync(absolutePath);
+              if (!metadata.isFile()) return null;
+              return {
+                name,
+                sha256: createHash("sha256")
+                  .update(readFileSync(absolutePath))
+                  .digest("hex"),
+                size: metadata.size
+              };
+            })
+            .filter(Boolean);
+          const receipt = {
+            schema: "forge-people-sharing-release-gate/1",
+            repository: process.env.GITHUB_REPOSITORY,
+            sourceSha: process.env.SOURCE_SHA,
+            sourceRef: process.env.GITHUB_REF,
+            release: process.env.RELEASE === "true",
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            workflowRef: process.env.GITHUB_WORKFLOW_REF,
+            artifacts
+          };
+          writeFileSync(
+            path.join(root, "people-sharing-release-gate-receipt.json"),
+            `${JSON.stringify(receipt, null, 2)}\n`,
+            { mode: 0o600 }
+          );
+          NODE
+          echo "validated_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload validated gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: people-sharing-release-gate-${{ inputs.source_sha || github.sha }}
+          path: ${{ runner.temp }}/forge-people-release-artifacts
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove native source signing key
+        if: always()
+        run: |
+          key_path="${RUNNER_TEMP}/forge-native-source-ed25519-v1.pem"
+          if [ -f "${key_path}" ]; then
+            rm -f "${key_path}"
+          fi

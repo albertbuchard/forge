@@ -1,4 +1,9 @@
-import { Type, type TObject, type TProperties } from "@sinclair/typebox";
+import {
+  Type,
+  type TObject,
+  type TProperties,
+  type TSchema
+} from "@sinclair/typebox";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
   callConfiguredForgeApi,
@@ -93,6 +98,18 @@ async function runRead(config: ForgePluginConfig, path: string) {
   return expectForgeSuccess(result);
 }
 
+async function runReadBody(
+  config: ForgePluginConfig,
+  options: { path: string; body: unknown }
+) {
+  const result = await callConfiguredForgeApi(config, {
+    method: "POST",
+    path: options.path,
+    body: options.body
+  });
+  return expectForgeSuccess(result);
+}
+
 async function runWrite(
   config: ForgePluginConfig,
   options: {
@@ -114,10 +131,29 @@ const emptyObjectSchema = Type.Object({});
 const scopedReadSchema = Type.Object({
   userIds: Type.Optional(Type.Array(Type.String()))
 });
+const todayPriorityReadSchema = Type.Object({
+  userIds: Type.Optional(Type.Array(Type.String())),
+  timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  candidateLimit: Type.Optional(
+    Type.Integer({ minimum: 1, maximum: 100, default: 24 })
+  )
+});
 type SpecializedRouteSpec = {
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   path: string;
   requiresToken?: boolean;
+  requiresAgentToken?: boolean;
+};
+
+type PeoplePeerAgentRouteSpec = SpecializedRouteSpec & {
+  operationId: string;
+  requiredScopes: readonly string[];
+  principalClasses: readonly string[];
+  humanOnly: false;
+  mcpExposed: true;
+  paramsSchema: TObject;
+  querySchema: TObject;
+  bodySchema?: TObject;
 };
 
 const movementRouteSpecs = {
@@ -414,8 +450,7 @@ const wikiRouteSpecs = {
   list: { method: "GET", path: "/api/v1/wiki/pages" },
   search: {
     method: "POST",
-    path: "/api/v1/wiki/search",
-    requiresToken: true
+    path: "/api/v1/wiki/search"
   },
   create: {
     method: "POST",
@@ -455,15 +490,509 @@ const wikiRouteSpecs = {
 const optionalString = () => Type.Optional(Type.String());
 const optionalNullableString = () =>
   Type.Optional(Type.Union([Type.String(), Type.Null()]));
-function literalUnion(values: readonly string[]) {
+function literalUnion(
+  values: readonly string[],
+  options: Record<string, unknown> = {}
+) {
   return Type.Union(
     values.map((value) => Type.Literal(value)) as [
       ReturnType<typeof Type.Literal>,
       ReturnType<typeof Type.Literal>,
       ...Array<ReturnType<typeof Type.Literal>>
-    ]
+    ],
+    options
   );
 }
+
+const strictObject = <T extends TProperties>(properties: T) =>
+  Type.Object(properties, { additionalProperties: false });
+const peoplePeerIdSchema = () => Type.String({ minLength: 1, maxLength: 240 });
+const peoplePeerVersionSchema = () =>
+  Type.String({ minLength: 1, maxLength: 240 });
+const peoplePeerCursorSchema = () =>
+  Type.String({
+    minLength: 8,
+    maxLength: 2_048,
+    pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+  });
+const peoplePeerHashSchema = () => Type.String({ pattern: "^[a-f0-9]{64}$" });
+const peoplePeerIdempotencyKeySchema = () =>
+  Type.String({
+    minLength: 16,
+    maxLength: 240,
+    pattern: "^[A-Za-z0-9._:-]+$"
+  });
+const peoplePeerEmptySchema = () => strictObject({});
+const personPathParamsSchema = () =>
+  strictObject({ personId: peoplePeerIdSchema() });
+const relationshipPathParamsSchema = () =>
+  strictObject({ relationshipId: peoplePeerIdSchema() });
+const peopleWikiDecisionSchema = () =>
+  Type.Union([
+    strictObject({
+      wikiPageId: peoplePeerIdSchema(),
+      action: Type.Literal("associate"),
+      personId: peoplePeerIdSchema(),
+      expectedWikiVersion: peoplePeerVersionSchema(),
+      expectedPersonVersion: peoplePeerVersionSchema()
+    }),
+    strictObject({
+      wikiPageId: peoplePeerIdSchema(),
+      action: Type.Literal("create_person"),
+      displayName: Type.String({ minLength: 1, maxLength: 160 }),
+      expectedWikiVersion: peoplePeerVersionSchema()
+    }),
+    strictObject({
+      wikiPageId: peoplePeerIdSchema(),
+      action: Type.Literal("skip"),
+      expectedWikiVersion: peoplePeerVersionSchema()
+    })
+  ]);
+const peopleWikiAssociationBaseSchema = () => ({
+  userId: Type.Optional(peoplePeerIdSchema()),
+  peopleRootPageId: peoplePeerIdSchema(),
+  decisions: Type.Array(peopleWikiDecisionSchema(), {
+    minItems: 1,
+    maxItems: 100
+  })
+});
+const listPeopleAgentQuerySchema = () =>
+  strictObject({
+    userId: Type.Optional(peoplePeerIdSchema()),
+    query: Type.Optional(Type.String({ maxLength: 200 })),
+    relationshipStatus: Type.Optional(
+      literalUnion(["none", "pending", "active", "paused", "revoked"])
+    ),
+    source: Type.Optional(
+      literalUnion(["local", "shared", "both"], { default: "both" })
+    ),
+    hasUpcomingSharedContext: Type.Optional(Type.Boolean()),
+    sort: Type.Optional(
+      literalUnion(["display_name", "updated_at", "next_shared_event"], {
+        default: "display_name"
+      })
+    ),
+    direction: Type.Optional(literalUnion(["asc", "desc"], { default: "asc" })),
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+const personContextAgentQuerySchema = () =>
+  strictObject({
+    includePrivate: Type.Optional(Type.Boolean({ default: false })),
+    includeShared: Type.Optional(Type.Boolean({ default: true })),
+    linkLimit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 200, default: 100 })
+    ),
+    projectionLimit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 40 })
+    )
+  });
+const peopleWikiCandidateScanBodySchema = () =>
+  strictObject({
+    userId: Type.Optional(peoplePeerIdSchema()),
+    peopleRootPageId: peoplePeerIdSchema(),
+    query: Type.Optional(Type.String({ maxLength: 200 })),
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+const peopleWikiAssociationPreviewBodySchema = () =>
+  strictObject(peopleWikiAssociationBaseSchema());
+const peopleWikiAssociationApplyBodySchema = () =>
+  strictObject({
+    userId: Type.Optional(peoplePeerIdSchema()),
+    peopleRootPageId: peoplePeerIdSchema(),
+    previewId: peoplePeerIdSchema(),
+    previewHash: peoplePeerHashSchema(),
+    idempotencyKey: peoplePeerIdempotencyKeySchema(),
+    decisions: Type.Array(peopleWikiDecisionSchema(), {
+      minItems: 1,
+      maxItems: 100
+    })
+  });
+const peerRequestsAgentQuerySchema = () =>
+  strictObject({
+    kind: Type.Optional(literalUnion(["pairing", "device", "grant"])),
+    status: Type.Optional(
+      literalUnion(["pending", "accepted", "rejected", "expired"])
+    ),
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+const peerRelationshipsAgentQuerySchema = () =>
+  strictObject({
+    query: Type.Optional(Type.String({ maxLength: 200 })),
+    status: Type.Optional(
+      literalUnion([
+        "pending_verification",
+        "active",
+        "paused",
+        "revoked",
+        "recovery_required"
+      ])
+    ),
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+const peerGrantsAgentQuerySchema = () =>
+  strictObject({
+    status: Type.Optional(
+      literalUnion([
+        "draft",
+        "proposed",
+        "active",
+        "countered",
+        "rejected",
+        "revoked",
+        "superseded",
+        "expired",
+        "conflicted"
+      ])
+    ),
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+const peerDiagnosticsAgentQuerySchema = () =>
+  strictObject({
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 200, default: 100 })
+    )
+  });
+const personQuestionInterpretBodySchema = () =>
+  strictObject({
+    question: Type.String({ minLength: 1, maxLength: 1_000 }),
+    timeZone: Type.String({ minLength: 1, maxLength: 100 }),
+    referenceTime: Type.Optional(Type.String({ format: "date-time" }))
+  });
+const personQuestionIntervalSchema = () =>
+  strictObject({
+    startsAt: Type.String({ format: "date-time" }),
+    endsAt: Type.String({ format: "date-time" }),
+    timeZone: Type.String({ minLength: 1, maxLength: 64 })
+  });
+const personQuestionEntityIdsSchema = (maximum: number) =>
+  Type.Optional(
+    Type.Array(peoplePeerIdSchema(), { maxItems: maximum, default: [] })
+  );
+const personQuestionFieldsSchema = (values: readonly string[]) =>
+  Type.Optional(
+    Type.Array(literalUnion(values), {
+      maxItems: values.length,
+      default: []
+    })
+  );
+const personQuestionMaximumResultCountSchema = () =>
+  Type.Optional(Type.Integer({ minimum: 1, maximum: 1_000, default: 100 }));
+const personQuestionEmptyParametersSchema = () => strictObject({});
+const personQuestionTypedQuerySchema = () =>
+  Type.Union([
+    strictObject({
+      projectionId: Type.Literal("calendar.availability.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(0),
+      fields: personQuestionFieldsSchema([
+        "start",
+        "end",
+        "timezone",
+        "busyState",
+        "eventTitle",
+        "eventLocation"
+      ]),
+      precision: literalUnion(["exact", "fifteen_minutes", "hour"]),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("calendar.selected_events.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(256),
+      fields: personQuestionFieldsSchema([
+        "start",
+        "end",
+        "timezone",
+        "busyState",
+        "eventTitle",
+        "eventLocation"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("goals.horizon_summary.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(0),
+      fields: personQuestionFieldsSchema([
+        "goalTitle",
+        "goalSummary",
+        "goalState",
+        "goalProgress"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("health.cycling.aggregate.v1"),
+      parameters: strictObject({
+        granularity: literalUnion(["day", "week", "month"]),
+        units: peoplePeerIdSchema()
+      }),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(0),
+      fields: personQuestionFieldsSchema([
+        "duration",
+        "distance",
+        "activityCount",
+        "energy"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("person.profile.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: Type.Null(),
+      entityIds: personQuestionEntityIdsSchema(0),
+      fields: personQuestionFieldsSchema([
+        "displayName",
+        "preferredName",
+        "pronouns",
+        "relationshipLabel",
+        "shortDescription"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("life_events.selected.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(256),
+      fields: personQuestionFieldsSchema([
+        "lifeEventTitle",
+        "lifeEventType",
+        "lifeEventPlace"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("movement.aggregate.v1"),
+      parameters: strictObject({
+        granularity: literalUnion(["day", "week", "month"])
+      }),
+      interval: personQuestionIntervalSchema(),
+      entityIds: personQuestionEntityIdsSchema(0),
+      fields: personQuestionFieldsSchema([
+        "movementDuration",
+        "movementDistance"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    }),
+    strictObject({
+      projectionId: Type.Literal("custom.selected_entities.v1"),
+      parameters: personQuestionEmptyParametersSchema(),
+      interval: Type.Null(),
+      entityIds: personQuestionEntityIdsSchema(256),
+      fields: personQuestionFieldsSchema([
+        "customTitle",
+        "customSummary",
+        "customState"
+      ]),
+      precision: Type.Literal("exact"),
+      maximumResultCount: personQuestionMaximumResultCountSchema()
+    })
+  ]);
+const personQuestionExecuteBodySchema = () =>
+  strictObject({
+    interpretationId: peoplePeerIdSchema(),
+    interpretationHash: peoplePeerHashSchema(),
+    query: personQuestionTypedQuerySchema(),
+    sourcePreference: Type.Optional(
+      literalUnion(["live_then_cache", "live_only", "cache_only"], {
+        default: "live_then_cache"
+      })
+    )
+  });
+const personQuestionHistoryAgentQuerySchema = () =>
+  strictObject({
+    cursor: Type.Optional(peoplePeerCursorSchema()),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 100, default: 50 })
+    )
+  });
+
+function peoplePeerAgentRouteSpec(
+  input: Omit<
+    PeoplePeerAgentRouteSpec,
+    "humanOnly" | "mcpExposed" | "requiresAgentToken"
+  >
+): PeoplePeerAgentRouteSpec {
+  return {
+    ...input,
+    humanOnly: false,
+    mcpExposed: true,
+    requiresAgentToken: true
+  };
+}
+
+export const PEOPLE_AGENT_ROUTE_SPECS = {
+  listPeopleReadModel: peoplePeerAgentRouteSpec({
+    operationId: "listPeopleReadModel",
+    method: "GET",
+    path: "/api/v1/people",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: listPeopleAgentQuerySchema()
+  }),
+  getPersonContext: peoplePeerAgentRouteSpec({
+    operationId: "getPersonContext",
+    method: "GET",
+    path: "/api/v1/people/:personId/context",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic"],
+    paramsSchema: personPathParamsSchema(),
+    querySchema: personContextAgentQuerySchema()
+  }),
+  scanPeopleWikiCandidates: peoplePeerAgentRouteSpec({
+    operationId: "scanPeopleWikiCandidates",
+    method: "POST",
+    path: "/api/v1/people/wiki-candidates/scan",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic", "wiki:read"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: peoplePeerEmptySchema(),
+    bodySchema: peopleWikiCandidateScanBodySchema()
+  }),
+  previewPeopleWikiAssociations: peoplePeerAgentRouteSpec({
+    operationId: "previewPeopleWikiAssociations",
+    method: "POST",
+    path: "/api/v1/people/wiki-associations/preview",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:write", "wiki:read"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: peoplePeerEmptySchema(),
+    bodySchema: peopleWikiAssociationPreviewBodySchema()
+  }),
+  applyPeopleWikiAssociations: peoplePeerAgentRouteSpec({
+    operationId: "applyPeopleWikiAssociations",
+    method: "POST",
+    path: "/api/v1/people/wiki-associations/apply",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:write", "wiki:read"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: peoplePeerEmptySchema(),
+    bodySchema: peopleWikiAssociationApplyBodySchema()
+  }),
+  interpretPersonQuestion: peoplePeerAgentRouteSpec({
+    operationId: "interpretPersonQuestion",
+    method: "POST",
+    path: "/api/v1/people/:personId/questions/interpret",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic", "peer:query"],
+    paramsSchema: personPathParamsSchema(),
+    querySchema: peoplePeerEmptySchema(),
+    bodySchema: personQuestionInterpretBodySchema()
+  }),
+  executePersonQuestion: peoplePeerAgentRouteSpec({
+    operationId: "executePersonQuestion",
+    method: "POST",
+    path: "/api/v1/people/:personId/questions/execute",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic", "peer:query"],
+    paramsSchema: personPathParamsSchema(),
+    querySchema: peoplePeerEmptySchema(),
+    bodySchema: personQuestionExecuteBodySchema()
+  }),
+  listPersonQuestionHistory: peoplePeerAgentRouteSpec({
+    operationId: "listPersonQuestionHistory",
+    method: "GET",
+    path: "/api/v1/people/:personId/questions",
+    principalClasses: ["operator_session", "agent_token"],
+    requiredScopes: ["people:read:basic", "peer:query"],
+    paramsSchema: personPathParamsSchema(),
+    querySchema: personQuestionHistoryAgentQuerySchema()
+  })
+} as const satisfies Record<string, PeoplePeerAgentRouteSpec>;
+
+export const PEER_AGENT_ROUTE_SPECS = {
+  listPeerRequests: peoplePeerAgentRouteSpec({
+    operationId: "listPeerRequests",
+    method: "GET",
+    path: "/api/v1/peers/requests",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: peerRequestsAgentQuerySchema()
+  }),
+  listPeerRelationships: peoplePeerAgentRouteSpec({
+    operationId: "listPeerRelationships",
+    method: "GET",
+    path: "/api/v1/peers/relationships",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: peoplePeerEmptySchema(),
+    querySchema: peerRelationshipsAgentQuerySchema()
+  }),
+  getPeerRelationship: peoplePeerAgentRouteSpec({
+    operationId: "getPeerRelationship",
+    method: "GET",
+    path: "/api/v1/peers/relationships/:relationshipId",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: relationshipPathParamsSchema(),
+    querySchema: peoplePeerEmptySchema()
+  }),
+  listPeerDevices: peoplePeerAgentRouteSpec({
+    operationId: "listPeerDevices",
+    method: "GET",
+    path: "/api/v1/peers/relationships/:relationshipId/devices",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: relationshipPathParamsSchema(),
+    querySchema: peoplePeerEmptySchema()
+  }),
+  listPeerGrants: peoplePeerAgentRouteSpec({
+    operationId: "listPeerGrants",
+    method: "GET",
+    path: "/api/v1/peers/relationships/:relationshipId/grants",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: relationshipPathParamsSchema(),
+    querySchema: peerGrantsAgentQuerySchema()
+  }),
+  getPeerSyncStatus: peoplePeerAgentRouteSpec({
+    operationId: "getPeerSyncStatus",
+    method: "GET",
+    path: "/api/v1/peers/relationships/:relationshipId/sync",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: relationshipPathParamsSchema(),
+    querySchema: peoplePeerEmptySchema()
+  }),
+  getPeerDiagnostics: peoplePeerAgentRouteSpec({
+    operationId: "getPeerDiagnostics",
+    method: "GET",
+    path: "/api/v1/peers/relationships/:relationshipId/diagnostics",
+    principalClasses: ["operator_session", "agent_token", "companion_session"],
+    requiredScopes: ["peer:status"],
+    paramsSchema: relationshipPathParamsSchema(),
+    querySchema: peerDiagnosticsAgentQuerySchema()
+  })
+} as const satisfies Record<string, PeoplePeerAgentRouteSpec>;
 const preferenceDomainInputSchema = () =>
   literalUnion([
     "projects",
@@ -603,6 +1132,103 @@ const noteInputSchema = () =>
     )
   });
 
+const taskCloseoutLimits = {
+  workSummaryLength: 8_000,
+  modifiedFiles: 256,
+  modifiedFileLength: 512,
+  linkedGitRefIds: 64,
+  gitRefs: 64,
+  gitRefIdLength: 128,
+  gitProviderLength: 64,
+  gitRepositoryLength: 255,
+  gitRefValueLength: 512,
+  gitUrlLength: 2_048,
+  gitDisplayTitleLength: 512
+} as const;
+
+const completionReportInputSchema = () =>
+  strictObject({
+    modifiedFiles: Type.Optional(
+      Type.Array(
+        Type.String({
+          minLength: 1,
+          maxLength: taskCloseoutLimits.modifiedFileLength,
+          description: "Safe repository-relative path without traversal."
+        }),
+        {
+          maxItems: taskCloseoutLimits.modifiedFiles,
+          uniqueItems: true
+        }
+      )
+    ),
+    workSummary: Type.Optional(
+      Type.String({
+        maxLength: taskCloseoutLimits.workSummaryLength,
+        default: ""
+      })
+    ),
+    linkedGitRefIds: Type.Optional(
+      Type.Array(
+        Type.String({
+          minLength: 1,
+          maxLength: taskCloseoutLimits.gitRefIdLength
+        }),
+        {
+          maxItems: taskCloseoutLimits.linkedGitRefIds,
+          uniqueItems: true
+        }
+      )
+    )
+  });
+
+const workItemGitRefInputSchema = () =>
+  strictObject({
+    id: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: taskCloseoutLimits.gitRefIdLength,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      })
+    ),
+    refType: Type.Union([
+      Type.Literal("commit"),
+      Type.Literal("branch"),
+      Type.Literal("pull_request")
+    ]),
+    provider: Type.Optional(
+      Type.String({
+        maxLength: taskCloseoutLimits.gitProviderLength,
+        default: "git"
+      })
+    ),
+    repository: Type.Optional(
+      Type.String({
+        maxLength: taskCloseoutLimits.gitRepositoryLength,
+        default: ""
+      })
+    ),
+    refValue: Type.String({
+      minLength: 1,
+      maxLength: taskCloseoutLimits.gitRefValueLength
+    }),
+    url: Type.Optional(
+      Type.Union([
+        Type.String({
+          format: "uri",
+          pattern: "^https?://",
+          maxLength: taskCloseoutLimits.gitUrlLength
+        }),
+        Type.Null()
+      ])
+    ),
+    displayTitle: Type.Optional(
+      Type.String({
+        maxLength: taskCloseoutLimits.gitDisplayTitleLength,
+        default: ""
+      })
+    )
+  });
+
 const wikiPageMutationSchema = () =>
   Type.Object({
     pageId: optionalString(),
@@ -737,6 +1363,31 @@ function specializedRouteParametersSchema(
   });
 }
 
+function peoplePeerRouteParametersSchema(
+  routeSpecs: Record<string, PeoplePeerAgentRouteSpec>
+) {
+  const variants = Object.values(routeSpecs).map((spec) => {
+    const contract = `${spec.operationId}: ${spec.method} ${spec.path}; scopes: ${spec.requiredScopes.join(", ")}; principals: ${spec.principalClasses.join(", ")}.`;
+    const properties: TProperties = {
+      routeKey: Type.Literal(spec.operationId, { description: contract })
+    };
+    if (Object.keys(spec.paramsSchema.properties).length > 0) {
+      properties.pathParams = spec.paramsSchema;
+    }
+    if (Object.keys(spec.querySchema.properties).length > 0) {
+      properties.query = Type.Optional(spec.querySchema);
+    }
+    if (spec.bodySchema) {
+      properties.body = spec.bodySchema;
+    }
+    return strictObject(properties);
+  });
+  return Type.Union(variants as unknown as [TSchema, TSchema, ...TSchema[]], {
+    description:
+      "Choose one published MCP operation id. Each variant fixes the exact method, path parameters, query fields, JSON body, principal classes, and local token scopes accepted by Forge."
+  });
+}
+
 function appendAnyQueryParams(path: string, query: unknown) {
   if (!query || typeof query !== "object") {
     return path;
@@ -780,7 +1431,12 @@ async function callSpecializedRoute(
   if (!spec) {
     throw new Error(`Unknown specialized Forge route key: ${routeKey}`);
   }
-  if (spec.requiresToken) {
+  if (spec.requiresAgentToken && config.apiToken.trim().length === 0) {
+    throw new Error(
+      "People and peer-sharing agent tools require a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token."
+    );
+  }
+  if (spec.requiresToken && !spec.requiresAgentToken) {
     requireApiToken(config);
   }
   const path = appendAnyQueryParams(
@@ -801,6 +1457,33 @@ async function callSpecializedRoute(
       body
     })
   );
+}
+
+function registerPeoplePeerRouteTool(
+  api: ForgePluginToolApi,
+  config: ForgePluginConfig,
+  options: {
+    name: string;
+    label: string;
+    description: string;
+    routeSpecs: Record<string, PeoplePeerAgentRouteSpec>;
+  }
+) {
+  api.registerTool({
+    name: options.name,
+    label: options.label,
+    description: options.description,
+    parameters: peoplePeerRouteParametersSchema(options.routeSpecs),
+    async execute(_toolCallId, params) {
+      return jsonResult(
+        await callSpecializedRoute(
+          config,
+          options.routeSpecs,
+          (params ?? {}) as Record<string, unknown>
+        )
+      );
+    }
+  });
 }
 
 function registerSpecializedRouteTool(
@@ -879,6 +1562,33 @@ function registerWriteTool<T extends TObject<TProperties>>(
           method: options.method,
           path: options.path,
           body: options.body ? options.body(typed) : typed
+        })
+      );
+    }
+  });
+}
+
+function registerReadBodyTool<T extends TObject<TProperties>>(
+  api: ForgePluginToolApi,
+  config: ForgePluginConfig,
+  options: {
+    name: string;
+    label: string;
+    description: string;
+    parameters: T;
+    path: string;
+  }
+) {
+  api.registerTool({
+    name: options.name,
+    label: options.label,
+    description: options.description,
+    parameters: options.parameters,
+    async execute(_toolCallId, params) {
+      return jsonResult(
+        await runReadBody(config, {
+          path: options.path,
+          body: params ?? {}
         })
       );
     }
@@ -996,7 +1706,7 @@ export function registerForgePluginTools(
     name: "forge_call_workbench_route",
     label: "Forge Workbench Route",
     description:
-      "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Do not use batch CRUD for Workbench.",
+      "Call one allowed dedicated Workbench route after the conversation has narrowed to flow catalog, flow CRUD, execution, run history, published output, node result, or latest node output. Flow and box catalogs are bounded pages: start with limit 24, use their published q and repeated facet filters, and continue with offset only while hasMore is true. Workbench exposes enabled or disabled endpoint state, not includeArchived. Do not use batch CRUD for Workbench.",
     routeSpecs: workbenchRouteSpecs
   });
 
@@ -1004,7 +1714,7 @@ export function registerForgePluginTools(
     name: "forge_call_artifact_route",
     label: "Forge Artifact Route",
     description:
-      "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Use shared batch CRUD for artifact metadata delete/restore. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
+      "Call one allowed dedicated Artifact Store route for paged metadata listing with limit/offset, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. For createWithBytes, put one stable per-file idempotencyKey in the body and reuse it only for an exact transport retry; Forge normalizes agent provenance and rejects changed-payload key reuse. Use shared batch CRUD for artifact metadata delete/restore. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
     routeSpecs: artifactRouteSpecs
   });
 
@@ -1014,6 +1724,22 @@ export function registerForgePluginTools(
     description:
       "Call one allowed dedicated Life Events route for timeline reads, one-event reads, calendar linking or creation, marking a calendar event as a Life Event, ticket artifact import, or travel-status reads. Use shared batch CRUD for normal stored life_event create, update, delete, restore, and search. Use generic entity_links for relationships.",
     routeSpecs: lifeEventRouteSpecs
+  });
+
+  registerPeoplePeerRouteTool(api, config, {
+    name: "forge_call_people_route",
+    label: "Forge People Route",
+    description:
+      "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
+    routeSpecs: PEOPLE_AGENT_ROUTE_SPECS
+  });
+
+  registerPeoplePeerRouteTool(api, config, {
+    name: "forge_call_peer_route",
+    label: "Forge Peer Status And Query Route",
+    description:
+      "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+    routeSpecs: PEER_AGENT_ROUTE_SPECS
   });
 
   registerReadTool(api, config, {
@@ -1089,19 +1815,21 @@ export function registerForgePluginTools(
     name: "forge_list_wiki_pages",
     label: "Forge List Wiki Pages",
     description:
-      "List wiki or evidence pages inside one space without search ranking.",
+      "List compact wiki or evidence page summaries inside one space with bounded offset pagination.",
     parameters: Type.Object({
       spaceId: optionalString(),
       kind: Type.Optional(
         Type.Union([Type.Literal("wiki"), Type.Literal("evidence")])
       ),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 }))
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+      offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 9999 }))
     }),
     path: (params) =>
       withQueryParams("/api/v1/wiki/pages", params as Record<string, unknown>, [
         "spaceId",
         "kind",
-        "limit"
+        "limit",
+        "offset"
       ])
   });
 
@@ -1135,11 +1863,11 @@ export function registerForgePluginTools(
       )
   });
 
-  registerWriteTool(api, config, {
+  registerReadBodyTool(api, config, {
     name: "forge_search_wiki",
     label: "Forge Search Wiki",
     description:
-      "Search the wiki with text, semantic, entity, or hybrid retrieval.",
+      "Search compact wiki page summaries with ranked title, alias, content, entity, or semantic matches and bounded offset pagination.",
     parameters: Type.Object({
       spaceId: optionalString(),
       kind: Type.Optional(
@@ -1153,7 +1881,7 @@ export function registerForgePluginTools(
           Type.Literal("hybrid")
         ])
       ),
-      query: optionalString(),
+      query: Type.Optional(Type.String({ maxLength: 500 })),
       profileId: optionalString(),
       linkedEntity: Type.Optional(
         Type.Object({
@@ -1161,9 +1889,9 @@ export function registerForgePluginTools(
           entityId: Type.String({ minLength: 1 })
         })
       ),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 }))
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+      offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 999 }))
     }),
-    method: "POST",
     path: "/api/v1/wiki/search"
   });
 
@@ -1322,6 +2050,20 @@ export function registerForgePluginTools(
         xp: context?.xp ?? null
       });
     }
+  });
+
+  registerReadTool(api, config, {
+    name: "forge_get_today_priority",
+    label: "Forge Today Priority",
+    description:
+      "Read Forge's canonical deterministic decision for the next useful work, including active-run conflicts, task-timebox timing, Life Force capacity, ranked alternatives, and explicit no-work or overload states.",
+    parameters: todayPriorityReadSchema,
+    path: (params) =>
+      withQueryParams("/api/v1/today/priority", params, [
+        "userIds",
+        "timeZone",
+        "candidateLimit"
+      ])
   });
 
   registerReadTool(api, config, {
@@ -2209,9 +2951,10 @@ export function registerForgePluginTools(
             })
           ),
           includeDeleted: Type.Optional(Type.Boolean()),
-          limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
+          limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
           clientRef: optionalString()
-        })
+        }),
+        { minItems: 1, maxItems: 50 }
       )
     }),
     method: "POST",
@@ -2229,8 +2972,12 @@ export function registerForgePluginTools(
         Type.Object({
           entityType: Type.String({ minLength: 1 }),
           data: Type.Record(Type.String(), Type.Any()),
+          idempotencyKey: Type.Optional(
+            Type.String({ minLength: 1, maxLength: 128 })
+          ),
           clientRef: optionalString()
-        })
+        }),
+        { minItems: 1, maxItems: 100 }
       )
     }),
     method: "POST",
@@ -2250,7 +2997,8 @@ export function registerForgePluginTools(
           id: Type.String({ minLength: 1 }),
           patch: Type.Record(Type.String(), Type.Any()),
           clientRef: optionalString()
-        })
+        }),
+        { minItems: 1, maxItems: 100 }
       )
     }),
     method: "POST",
@@ -2261,7 +3009,7 @@ export function registerForgePluginTools(
     name: "forge_delete_entities",
     label: "Delete Forge Entities",
     description:
-      "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. Some entities such as calendar-domain records, preference CRUD entities, and questionnaire_instrument delete immediately by design.",
+      "Delete Forge entities in one batch request. Pass `operations` as an array with `entityType` and `id`. Delete defaults to soft mode unless hard is requested explicitly. preference_catalog and preference_catalog_item use reversible soft deletion and forge_restore_entities; preference_context, preference_item, calendar-domain records, and questionnaire_instrument retain immediate deletion.",
     parameters: Type.Object({
       atomic: Type.Optional(Type.Boolean()),
       operations: Type.Array(
@@ -2271,7 +3019,8 @@ export function registerForgePluginTools(
           mode: optionalDeleteMode(),
           reason: optionalString(),
           clientRef: optionalString()
-        })
+        }),
+        { minItems: 1, maxItems: 100 }
       )
     }),
     method: "POST",
@@ -2290,7 +3039,8 @@ export function registerForgePluginTools(
           entityType: Type.String({ minLength: 1 }),
           id: Type.String({ minLength: 1 }),
           clientRef: optionalString()
-        })
+        }),
+        { minItems: 1, maxItems: 100 }
       )
     }),
     method: "POST",
@@ -2483,13 +3233,22 @@ export function registerForgePluginTools(
     name: "forge_complete_task_run",
     label: "Forge Complete Task Run",
     description:
-      "Finish an active task run as completed work and let Forge award the appropriate completion rewards. Prefer closeoutNote when the work summary should become a real linked note.",
-    parameters: Type.Object({
-      taskRunId: Type.String({ minLength: 1 }),
-      actor: optionalString(),
-      note: Type.Optional(Type.String()),
-      closeoutNote: Type.Optional(noteInputSchema())
-    }),
+      "Finish an active task run and atomically store bounded completionReport, canonical gitRefs, an optional linked closeoutNote, task state, time, rewards, and activity. An exact terminal replay is idempotent; changed closeout evidence conflicts. A quick or native completion may truthfully leave closeoutState deferred, so read the task back and inspect its closeout state and evidence.",
+    parameters: Type.Object(
+      {
+        taskRunId: Type.String({ minLength: 1 }),
+        actor: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+        note: Type.Optional(Type.String({ maxLength: 4_000 })),
+        completionReport: Type.Optional(completionReportInputSchema()),
+        gitRefs: Type.Optional(
+          Type.Array(workItemGitRefInputSchema(), {
+            maxItems: taskCloseoutLimits.gitRefs
+          })
+        ),
+        closeoutNote: Type.Optional(noteInputSchema())
+      },
+      { additionalProperties: false }
+    ),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
       return jsonResult(
@@ -2499,6 +3258,8 @@ export function registerForgePluginTools(
           body: {
             actor: typed.actor,
             note: typed.note,
+            completionReport: typed.completionReport,
+            gitRefs: typed.gitRefs,
             closeoutNote: typed.closeoutNote
           }
         })
@@ -2510,13 +3271,16 @@ export function registerForgePluginTools(
     name: "forge_release_task_run",
     label: "Forge Release Task Run",
     description:
-      "Stop an active task run without completing it. Use this to truthfully stop current work. Prefer closeoutNote when blockers or handoff context should become a real linked note.",
-    parameters: Type.Object({
-      taskRunId: Type.String({ minLength: 1 }),
-      actor: optionalString(),
-      note: Type.Optional(Type.String()),
-      closeoutNote: Type.Optional(noteInputSchema())
-    }),
+      "Stop an active task run without completing the task. Release accepts actor, note, and closeoutNote only; it never accepts completionReport or gitRefs. Use closeoutNote when blockers or handoff context should become a durable linked note.",
+    parameters: Type.Object(
+      {
+        taskRunId: Type.String({ minLength: 1 }),
+        actor: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+        note: Type.Optional(Type.String({ maxLength: 4_000 })),
+        closeoutNote: Type.Optional(noteInputSchema())
+      },
+      { additionalProperties: false }
+    ),
     async execute(_toolCallId, params) {
       const typed = params as Record<string, unknown>;
       return jsonResult(
@@ -2611,18 +3375,18 @@ export function registerForgePluginTools(
     path: "/api/v1/calendar/work-block-templates"
   });
 
-  registerWriteTool(api, config, {
+  registerReadBodyTool(api, config, {
     name: "forge_recommend_task_timeboxes",
     label: "Forge Recommend Task Timeboxes",
     description:
-      "Suggest future task timeboxes that fit the current calendar rules and current schedule.",
+      "Read up to 12 future task-timebox suggestions that fit the task owner, requested timezone, current calendar pressure, and scheduling rules.",
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),
       from: optionalString(),
       to: optionalString(),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 24 }))
+      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })),
+      timezone: optionalString()
     }),
-    method: "POST",
     path: "/api/v1/calendar/timeboxes/recommend"
   });
 
@@ -2643,7 +3407,33 @@ export function registerForgePluginTools(
           Type.Literal("suggested"),
           Type.Literal("live_run")
         ])
-      )
+      ),
+      status: Type.Optional(
+        Type.Union([
+          Type.Literal("planned"),
+          Type.Literal("active"),
+          Type.Literal("completed"),
+          Type.Literal("cancelled")
+        ])
+      ),
+      overrideReason: optionalNullableString(),
+      activityPresetKey: Type.Optional(
+        Type.Union([
+          Type.Literal("deep_work"),
+          Type.Literal("admin"),
+          Type.Literal("maintenance"),
+          Type.Literal("meeting"),
+          Type.Literal("recovery_break"),
+          Type.Literal("holiday_leisure"),
+          Type.Literal("light_context"),
+          Type.Literal("task_inherited"),
+          Type.Null()
+        ])
+      ),
+      customSustainRateApPerHour: Type.Optional(
+        Type.Union([Type.Number({ minimum: 0 }), Type.Null()])
+      ),
+      userId: optionalNullableString()
     }),
     method: "POST",
     path: "/api/v1/calendar/timeboxes"

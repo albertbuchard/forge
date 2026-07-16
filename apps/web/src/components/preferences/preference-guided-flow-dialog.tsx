@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   FlowChoiceGrid,
@@ -10,21 +10,39 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UserBadge } from "@/components/ui/user-badge";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import { describeApiError } from "@/lib/api-error";
 import type {
   PreferenceCatalog,
+  PreferenceCatalogItem,
   PreferenceContext,
   PreferenceContextShareMode,
   PreferenceDomain,
+  PreferenceItemScore,
+  PreferenceSignalType,
   PreferenceWorkspacePayload,
   UserSummary
 } from "@/lib/types";
-import type { CandidateEntity } from "./preferences-workspace-model";
+import {
+  getPreferenceContextScope,
+  getPreferenceSignalConflicts,
+  SIGNAL_MODEL_EFFECTS,
+  SIGNAL_OPTIONS,
+  type CandidateEntity
+} from "./preferences-workspace-model";
 
 export type PreferenceGuidedFlow =
-  | { kind: "catalog" }
-  | { kind: "catalog-item"; catalog: PreferenceCatalog }
+  | { kind: "catalog"; catalog?: PreferenceCatalog }
+  | {
+      kind: "catalog-item";
+      catalog: PreferenceCatalog;
+      item?: PreferenceCatalogItem;
+    }
   | { kind: "item" }
+  | { kind: "signal"; score: PreferenceItemScore }
   | { kind: "context"; context?: PreferenceContext }
   | { kind: "merge" }
   | {
@@ -36,12 +54,23 @@ export type PreferenceGuidedFlow =
 export type PreferenceGuidedSubmit =
   | {
       kind: "catalog";
+      catalogId?: string;
       title: string;
       description: string;
+      scopeIn: string;
+      scopeOut: string;
+      links: Array<{
+        entityType: string;
+        entityId: string;
+        anchorKey?: string;
+        relationship: string;
+      }>;
+      idempotencyKey: string;
     }
   | {
       kind: "catalog-item";
       catalogId: string;
+      catalogItemId?: string;
       label: string;
       description: string;
       tags: string[];
@@ -52,6 +81,13 @@ export type PreferenceGuidedSubmit =
       description: string;
       tags: string[];
       queueForCompare: boolean;
+    }
+  | {
+      kind: "signal";
+      itemId: string;
+      signalType: PreferenceSignalType;
+      strength: number;
+      idempotencyKey: string;
     }
   | {
       kind: "context";
@@ -82,6 +118,11 @@ type PreferenceFlowDraft = {
   decayDays: string;
   sourceContextId: string;
   targetContextId: string;
+  scopeIn: string;
+  scopeOut: string;
+  linkedEntityValues: string[];
+  idempotencyKey: string;
+  signalType: PreferenceSignalType | "";
 };
 
 const CONTEXT_EFFECTS: Record<PreferenceContextShareMode, string> = {
@@ -108,19 +149,73 @@ function parseTags(value: string) {
   ];
 }
 
-function buildDraft(flow: PreferenceGuidedFlow | null): PreferenceFlowDraft {
+const CATALOG_IDEMPOTENCY_STORAGE_PREFIX =
+  "forge.preference-catalog.idempotency";
+
+function catalogIdempotencyStorageKey(scope: string) {
+  return `${CATALOG_IDEMPOTENCY_STORAGE_PREFIX}.${scope}`;
+}
+
+function getOrCreateCatalogIdempotencyKey(scope: string | null) {
+  if (!scope || typeof window === "undefined") {
+    return crypto.randomUUID();
+  }
+  try {
+    const storageKey = catalogIdempotencyStorageKey(scope);
+    const existing = window.localStorage.getItem(storageKey);
+    if (existing) {
+      return existing;
+    }
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(storageKey, created);
+    return created;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+function clearCatalogIdempotencyKey(scope: string | null) {
+  if (!scope || typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(catalogIdempotencyStorageKey(scope));
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+function buildDraft(
+  flow: PreferenceGuidedFlow | null,
+  idempotencyKey: string
+): PreferenceFlowDraft {
   const context = flow?.kind === "context" ? flow.context : undefined;
+  const catalog = flow?.kind === "catalog" ? flow.catalog : undefined;
+  const catalogItem = flow?.kind === "catalog-item" ? flow.item : undefined;
+  const signal = flow?.kind === "signal" ? flow.score.effectiveSignal : null;
   return {
-    title: "",
-    label: "",
-    description: context?.description ?? "",
-    tags: "",
+    title: catalog?.title ?? "",
+    label: catalogItem?.label ?? "",
+    description:
+      catalogItem?.description ??
+      catalog?.description ??
+      context?.description ??
+      "",
+    tags: catalogItem?.tags.join(", ") ?? "",
     queueForCompare: true,
     name: context?.name ?? "",
     shareMode: context?.shareMode ?? "blended",
     decayDays: String(context?.decayDays ?? 90),
     sourceContextId: "",
-    targetContextId: ""
+    targetContextId: "",
+    scopeIn: catalog?.scopeIn ?? "",
+    scopeOut: catalog?.scopeOut ?? "",
+    linkedEntityValues:
+      catalog?.links.map(
+        (link) => `${link.targetEntityType}:${link.targetEntityId}`
+      ) ?? [],
+    idempotencyKey,
+    signalType: signal?.signalType ?? ""
   };
 }
 
@@ -169,6 +264,8 @@ export function PreferenceGuidedFlowDialog({
   user,
   domain,
   workspace,
+  linkOptions = [],
+  onSearchLinkOptions,
   onSubmit
 }: {
   flow: PreferenceGuidedFlow | null;
@@ -177,28 +274,72 @@ export function PreferenceGuidedFlowDialog({
   user: UserSummary | null;
   domain: PreferenceDomain;
   workspace: PreferenceWorkspacePayload;
+  linkOptions?: EntityLinkOption[];
+  onSearchLinkOptions?: (query: string) => Promise<EntityLinkOption[]>;
   onSubmit: (input: PreferenceGuidedSubmit) => Promise<void>;
 }) {
+  const catalogIdempotencyScope =
+    flow?.kind === "catalog" && !flow.catalog
+      ? `${user?.id ?? "unknown"}:${domain}`
+      : null;
+  const catalogIdempotencyScopeRef = useRef(catalogIdempotencyScope);
+  const catalogIdempotencyKeyRef = useRef(
+    getOrCreateCatalogIdempotencyKey(catalogIdempotencyScope)
+  );
   const [draft, setDraft] = useState<PreferenceFlowDraft>(() =>
-    buildDraft(flow)
+    buildDraft(flow, catalogIdempotencyKeyRef.current)
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const flowKey =
-    flow?.kind === "catalog-item"
-      ? `${flow.kind}:${flow.catalog.id}`
-      : flow?.kind === "context"
-        ? `${flow.kind}:${flow.context?.id ?? "new"}`
-        : flow?.kind === "entity"
-          ? `${flow.kind}:${flow.candidate.entityType}:${flow.candidate.entityId}`
-          : (flow?.kind ?? "closed");
+    flow?.kind === "catalog"
+      ? `${flow.kind}:${flow.catalog?.id ?? "new"}`
+      : flow?.kind === "catalog-item"
+        ? `${flow.kind}:${flow.catalog.id}:${flow.item?.id ?? "new"}`
+        : flow?.kind === "signal"
+          ? `${flow.kind}:${flow.score.contextId}:${flow.score.itemId}`
+          : flow?.kind === "context"
+            ? `${flow.kind}:${flow.context?.id ?? "new"}`
+            : flow?.kind === "entity"
+              ? `${flow.kind}:${flow.candidate.entityType}:${flow.candidate.entityId}`
+              : (flow?.kind ?? "closed");
+  const previousFlowKeyRef = useRef(flowKey);
+  const visibleLinkOptions = useMemo(() => {
+    const optionsByValue = new Map<string, EntityLinkOption>();
+    if (flow?.kind === "catalog") {
+      for (const link of flow.catalog?.links ?? []) {
+        const entityLabel = link.targetEntityType.replaceAll("_", " ");
+        optionsByValue.set(`${link.targetEntityType}:${link.targetEntityId}`, {
+          value: `${link.targetEntityType}:${link.targetEntityId}`,
+          label: `${entityLabel}: ${link.targetEntityId}`,
+          description: `Saved ${link.relationship} relationship`
+        });
+      }
+    }
+    for (const option of linkOptions) {
+      optionsByValue.set(option.value, option);
+    }
+    return Array.from(optionsByValue.values());
+  }, [flow, linkOptions]);
 
   useEffect(() => {
+    if (previousFlowKeyRef.current !== flowKey) {
+      previousFlowKeyRef.current = flowKey;
+      if (!catalogIdempotencyScope) {
+        catalogIdempotencyKeyRef.current = crypto.randomUUID();
+      }
+    }
     if (!flow) {
       return;
     }
-    setDraft(buildDraft(flow));
+    if (catalogIdempotencyScopeRef.current !== catalogIdempotencyScope) {
+      catalogIdempotencyScopeRef.current = catalogIdempotencyScope;
+      catalogIdempotencyKeyRef.current = getOrCreateCatalogIdempotencyKey(
+        catalogIdempotencyScope
+      );
+    }
+    setDraft(buildDraft(flow, catalogIdempotencyKeyRef.current));
     setSubmitError(null);
-  }, [flowKey, flow]);
+  }, [catalogIdempotencyScope, flowKey, flow]);
 
   const duplicateError = useMemo(() => {
     if (!flow) {
@@ -208,7 +349,9 @@ export function PreferenceGuidedFlowDialog({
       const title = normalizeLabel(draft.title);
       return title &&
         workspace.catalogs.some(
-          (catalog) => normalizeLabel(catalog.title) === title
+          (catalog) =>
+            catalog.id !== flow.catalog?.id &&
+            normalizeLabel(catalog.title) === title
         )
         ? "A concept list with this title already exists in this owner and domain."
         : null;
@@ -216,7 +359,10 @@ export function PreferenceGuidedFlowDialog({
     if (flow.kind === "catalog-item") {
       const label = normalizeLabel(draft.label);
       return label &&
-        flow.catalog.items.some((item) => normalizeLabel(item.label) === label)
+        flow.catalog.items.some(
+          (item) =>
+            item.id !== flow.item?.id && normalizeLabel(item.label) === label
+        )
         ? "This catalog already contains a concept with the same label."
         : null;
     }
@@ -258,7 +404,15 @@ export function PreferenceGuidedFlowDialog({
   );
 
   const commonReview = (
-    <ProvenanceSummary user={user} domain={domain} source="manual" />
+    <ProvenanceSummary
+      user={user}
+      domain={domain}
+      source={
+        flow.kind === "catalog" && flow.catalog
+          ? flow.catalog.createdSource
+          : "recorded on save"
+      }
+    />
   );
 
   let eyebrow = "Preferences";
@@ -269,12 +423,13 @@ export function PreferenceGuidedFlowDialog({
   let steps: Array<QuestionFlowStep<PreferenceFlowDraft>> = [];
 
   if (flow.kind === "catalog") {
+    const editing = Boolean(flow.catalog);
     eyebrow = "Concept library";
-    title = "Create a preference catalog";
+    title = editing ? "Edit preference catalog" : "Create a preference catalog";
     description =
       "Define one reusable comparison library for the selected owner and decision domain.";
-    submitLabel = "Create catalog";
-    pendingLabel = "Creating catalog";
+    submitLabel = editing ? "Save catalog" : "Create catalog";
+    pendingLabel = editing ? "Saving catalog" : "Creating catalog";
     steps = [
       {
         id: "details",
@@ -309,11 +464,68 @@ export function PreferenceGuidedFlowDialog({
         )
       },
       {
+        id: "boundaries",
+        eyebrow: "Catalog boundaries",
+        title: "What belongs in this comparison pool?",
+        description:
+          "State the inclusion and exclusion boundaries so later additions stay coherent.",
+        render: (value, setValue) => (
+          <div className="grid gap-4 md:grid-cols-2">
+            <FlowField
+              label="Include"
+              description="The kinds of options this catalog should compare."
+            >
+              <Textarea
+                className="min-h-28"
+                value={value.scopeIn}
+                onChange={(event) => setValue({ scopeIn: event.target.value })}
+                placeholder="Independent cafes suitable for a quiet work breakfast."
+              />
+            </FlowField>
+            <FlowField
+              label="Exclude"
+              description="Nearby options that would make the comparison misleading."
+            >
+              <Textarea
+                className="min-h-28"
+                value={value.scopeOut}
+                onChange={(event) => setValue({ scopeOut: event.target.value })}
+                placeholder="Takeaway-only counters and places outside walking distance."
+              />
+            </FlowField>
+          </div>
+        )
+      },
+      {
+        id: "links",
+        eyebrow: "Related context",
+        title: "Connect the catalog to relevant Forge records",
+        description:
+          "Links use Forge's general entity relationship model and remain optional.",
+        render: (value, setValue) => (
+          <FlowField
+            label="Linked records"
+            description="Search goals, projects, tasks, calendar records, Psyche records, health records, notes, artifacts, and other stored entities."
+          >
+            <EntityLinkMultiSelect
+              options={visibleLinkOptions}
+              selectedValues={value.linkedEntityValues}
+              onChange={(linkedEntityValues) =>
+                setValue({ linkedEntityValues })
+              }
+              onSearch={onSearchLinkOptions}
+              placeholder="Search Forge records"
+              emptyMessage="No matching Forge records found."
+            />
+          </FlowField>
+        )
+      },
+      {
         id: "review",
         eyebrow: "Ownership and provenance",
-        title: "Keep this library in the right model",
+        title: "Confirm ownership and provenance",
         description:
-          "The catalog belongs to one user and one domain. Forge records it as a custom source and keeps its concepts separate from concrete scored items.",
+          "The catalog belongs to one user and one domain. Forge records the authenticated creator and source when it is first saved.",
         render: () => (
           <>
             {commonReview}
@@ -327,12 +539,16 @@ export function PreferenceGuidedFlowDialog({
       }
     ];
   } else if (flow.kind === "catalog-item") {
+    const editing = Boolean(flow.item);
     eyebrow = "Reusable concept";
-    title = `Add a concept to ${flow.catalog.title}`;
-    description =
-      "Add one reusable catalog concept without creating direct model evidence.";
-    submitLabel = "Add concept";
-    pendingLabel = "Adding concept";
+    title = editing
+      ? `Edit ${flow.item?.label ?? "concept"}`
+      : `Add a concept to ${flow.catalog.title}`;
+    description = editing
+      ? "Update this reusable concept without changing existing scored evidence."
+      : "Add one reusable catalog concept without creating direct model evidence.";
+    submitLabel = editing ? "Save concept" : "Add concept";
+    pendingLabel = editing ? "Saving concept" : "Adding concept";
     steps = [
       {
         id: "details",
@@ -379,8 +595,9 @@ export function PreferenceGuidedFlowDialog({
                 {flow.catalog.title}
               </div>
               <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                {flow.catalog.source} catalog · {flow.catalog.items.length}{" "}
-                existing concepts
+                {flow.catalog.source} catalog ·{" "}
+                {flow.catalog.itemCount ?? flow.catalog.items.length} existing
+                concepts
               </div>
             </div>
             <ModelEffect>
@@ -389,6 +606,98 @@ export function PreferenceGuidedFlowDialog({
             </ModelEffect>
           </>
         )
+      }
+    ];
+  } else if (flow.kind === "signal") {
+    const itemLabel = flow.score.item?.label ?? flow.score.itemId;
+    eyebrow = "Direct preference mark";
+    title = `Mark ${itemLabel}`;
+    description =
+      "Choose the direct effect for this item, then review its context, provenance, and conflicts before applying it.";
+    submitLabel =
+      draft.signalType === "neutral"
+        ? "Clear direct effect"
+        : "Apply direct mark";
+    pendingLabel =
+      draft.signalType === "neutral" ? "Clearing effect" : "Applying mark";
+    steps = [
+      {
+        id: "signal",
+        eyebrow: "Direct effect",
+        title: `How should Forge treat ${itemLabel}?`,
+        description:
+          "This replaces the effective direct mark in the selected context. Pairwise judgments and manual controls remain separate.",
+        render: (value, setValue) => (
+          <FlowChoiceGrid
+            columns={3}
+            value={value.signalType}
+            onChange={(signalType) =>
+              setValue({ signalType: signalType as PreferenceSignalType })
+            }
+            options={SIGNAL_OPTIONS.map((option) => ({
+              value: option.signalType,
+              label: option.label,
+              description: SIGNAL_MODEL_EFFECTS[option.signalType]
+            }))}
+          />
+        )
+      },
+      {
+        id: "review",
+        eyebrow: "Context and provenance",
+        title: "Review what will change",
+        render: (value) => {
+          const selectedSignal = value.signalType || null;
+          const conflicts = selectedSignal
+            ? getPreferenceSignalConflicts(
+                workspace,
+                flow.score.itemId,
+                selectedSignal
+              )
+            : [];
+          return (
+            <>
+              {commonReview}
+              <div className="grid gap-2 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                <div className="font-medium text-[var(--ui-ink-strong)]">
+                  {workspace.selectedContext.name}
+                </div>
+                <div>
+                  {getPreferenceContextScope(workspace.selectedContext)}
+                </div>
+                {flow.score.effectiveSignal ? (
+                  <div>
+                    Current mark:{" "}
+                    {flow.score.effectiveSignal.signalType.replaceAll("_", " ")}
+                    {flow.score.effectiveSignal.actor
+                      ? ` by ${flow.score.effectiveSignal.actor}`
+                      : ""}
+                    {` through ${flow.score.effectiveSignal.source}.`}
+                  </div>
+                ) : (
+                  <div>No direct mark is active in this context.</div>
+                )}
+              </div>
+              {conflicts.length > 0 ? (
+                <div
+                  role="status"
+                  className="rounded-[18px] bg-[var(--ui-warning-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-medium)]"
+                >
+                  <ul className="grid list-disc gap-1 pl-5">
+                    {conflicts.map((conflict) => (
+                      <li key={conflict}>{conflict}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <ModelEffect>
+                {selectedSignal
+                  ? SIGNAL_MODEL_EFFECTS[selectedSignal]
+                  : "Choose a direct mark to see its exact model effect."}
+              </ModelEffect>
+            </>
+          );
+        }
       }
     ];
   } else if (flow.kind === "item") {
@@ -723,8 +1032,30 @@ export function PreferenceGuidedFlowDialog({
       }
       input = {
         kind: "catalog",
+        catalogId: flow.catalog?.id,
         title: draft.title.trim(),
-        description: draft.description.trim()
+        description: draft.description.trim(),
+        scopeIn: draft.scopeIn.trim(),
+        scopeOut: draft.scopeOut.trim(),
+        links: draft.linkedEntityValues.map((value) => {
+          const separator = value.indexOf(":");
+          const entityType = value.slice(0, separator);
+          const entityId = value.slice(separator + 1);
+          const existingLink = flow.catalog?.links.find(
+            (link) =>
+              link.targetEntityType === entityType &&
+              link.targetEntityId === entityId
+          );
+          return {
+            entityType,
+            entityId,
+            ...(existingLink?.anchorKey
+              ? { anchorKey: existingLink.anchorKey }
+              : {}),
+            relationship: existingLink?.relationship ?? "related"
+          };
+        }),
+        idempotencyKey: draft.idempotencyKey
       };
     } else if (flow.kind === "catalog-item") {
       if (!draft.label.trim()) {
@@ -734,9 +1065,22 @@ export function PreferenceGuidedFlowDialog({
       input = {
         kind: "catalog-item",
         catalogId: flow.catalog.id,
+        catalogItemId: flow.item?.id,
         label: draft.label.trim(),
         description: draft.description.trim(),
         tags: parseTags(draft.tags)
+      };
+    } else if (flow.kind === "signal") {
+      if (!draft.signalType) {
+        setSubmitError("Choose a direct mark before reviewing the change.");
+        return;
+      }
+      input = {
+        kind: "signal",
+        itemId: flow.score.itemId,
+        signalType: draft.signalType,
+        strength: 1,
+        idempotencyKey: draft.idempotencyKey
       };
     } else if (flow.kind === "item") {
       if (!draft.label.trim()) {
@@ -796,6 +1140,11 @@ export function PreferenceGuidedFlowDialog({
 
     try {
       await onSubmit(input);
+      if (flow.kind === "catalog" && !flow.catalog) {
+        clearCatalogIdempotencyKey(catalogIdempotencyScope);
+        catalogIdempotencyScopeRef.current = null;
+        catalogIdempotencyKeyRef.current = crypto.randomUUID();
+      }
       onOpenChange(false);
     } catch (error) {
       setSubmitError(describeApiError(error).description);
@@ -816,6 +1165,25 @@ export function PreferenceGuidedFlowDialog({
       pending={pending}
       pendingLabel={pendingLabel}
       error={submitError}
+      resolveContinueBlocker={(stepId, value) => {
+        if (flow.kind === "catalog" && stepId === "details") {
+          if (!value.title.trim()) {
+            return "Name the catalog to continue.";
+          }
+          return duplicateError;
+        }
+        return null;
+      }}
+      resolveContinueBlockerTone={(stepId, value) =>
+        flow.kind === "catalog" && stepId === "details" && !value.title.trim()
+          ? "guidance"
+          : "error"
+      }
+      draftPersistenceKey={
+        flow.kind === "catalog"
+          ? `preference-catalog:${flow.catalog?.id ?? `${user?.id ?? "unknown"}:${domain}`}`
+          : undefined
+      }
       onSubmit={submit}
     />
   );

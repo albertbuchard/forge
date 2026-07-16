@@ -1,21 +1,41 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { getGoalById, listGoals } from "../repositories/goals.js";
-import { buildNotesSummaryByEntity } from "../repositories/notes.js";
+import {
+  buildNotesSummaryByEntity,
+  filterNoteActivityEventsForScope,
+  type NoteReadScope
+} from "../repositories/notes.js";
 import { listProjects } from "../repositories/projects.js";
 import { listTasks } from "../repositories/tasks.js";
 import { listProjectWorkAdjustmentSecondsMap } from "../repositories/work-adjustments.js";
 import { emptyTaskTimeSummary } from "./work-time.js";
-import { projectBoardPayloadSchema, projectSummarySchema, type ProjectBoardPayload, type ProjectListQuery, type ProjectSummary, type Task, type TaskTimeSummary } from "../types.js";
+import {
+  projectBoardPayloadSchema,
+  projectSummarySchema,
+  type ProjectBoardPayload,
+  type ProjectListQuery,
+  type ProjectSummary,
+  type Task,
+  type TaskTimeSummary
+} from "../types.js";
 
 function projectTaskSummary(tasks: Task[]) {
   const completedTasks = tasks.filter((task) => task.status === "done");
   const activeTasks = tasks.filter((task) => task.status !== "done");
   const totalTasks = tasks.length;
-  const earnedPoints = completedTasks.reduce((sum, task) => sum + task.points, 0);
-  const progress = totalTasks === 0 ? 0 : Math.min(100, Math.round((completedTasks.length / totalTasks) * 100));
+  const earnedPoints = completedTasks.reduce(
+    (sum, task) => sum + task.points,
+    0
+  );
+  const progress =
+    totalTasks === 0
+      ? 0
+      : Math.min(100, Math.round((completedTasks.length / totalTasks) * 100));
   const nextTask =
-    activeTasks.find((task) => task.status === "focus" || task.status === "in_progress") ??
+    activeTasks.find(
+      (task) => task.status === "focus" || task.status === "in_progress"
+    ) ??
     activeTasks.find((task) => task.status === "backlog") ??
     activeTasks[0] ??
     null;
@@ -39,42 +59,67 @@ function projectTaskSummary(tasks: Task[]) {
     nextTaskId: nextTask?.id ?? null,
     nextTaskTitle: nextTask?.title ?? null,
     momentumLabel,
-    time: tasks.reduce<TaskTimeSummary>(
-      (summary, task) => {
-        const liveTrackedSeconds = task.time.liveTrackedSeconds ?? 0;
-        const liveCreditedSeconds = task.time.liveCreditedSeconds ?? 0;
-        const manualAdjustedSeconds = task.time.manualAdjustedSeconds ?? 0;
+    time: tasks.reduce<TaskTimeSummary>((summary, task) => {
+      const liveTrackedSeconds = task.time.liveTrackedSeconds ?? 0;
+      const liveCreditedSeconds = task.time.liveCreditedSeconds ?? 0;
+      const manualAdjustedSeconds = task.time.manualAdjustedSeconds ?? 0;
 
-        return {
-          totalTrackedSeconds: summary.totalTrackedSeconds + task.time.totalTrackedSeconds,
-          totalCreditedSeconds: Math.round((summary.totalCreditedSeconds + task.time.totalCreditedSeconds) * 100) / 100,
-          liveTrackedSeconds: summary.liveTrackedSeconds + liveTrackedSeconds,
-          liveCreditedSeconds: Math.round((summary.liveCreditedSeconds + liveCreditedSeconds) * 100) / 100,
-          manualAdjustedSeconds: summary.manualAdjustedSeconds + manualAdjustedSeconds,
-          activeRunCount: summary.activeRunCount + task.time.activeRunCount,
-          hasCurrentRun: summary.hasCurrentRun || task.time.hasCurrentRun,
-          currentRunId: summary.currentRunId ?? task.time.currentRunId
-        };
-      },
-      emptyTaskTimeSummary()
-    )
+      return {
+        totalTrackedSeconds:
+          summary.totalTrackedSeconds + task.time.totalTrackedSeconds,
+        totalCreditedSeconds:
+          Math.round(
+            (summary.totalCreditedSeconds + task.time.totalCreditedSeconds) *
+              100
+          ) / 100,
+        liveTrackedSeconds: summary.liveTrackedSeconds + liveTrackedSeconds,
+        liveCreditedSeconds:
+          Math.round(
+            (summary.liveCreditedSeconds + liveCreditedSeconds) * 100
+          ) / 100,
+        manualAdjustedSeconds:
+          summary.manualAdjustedSeconds + manualAdjustedSeconds,
+        activeRunCount: summary.activeRunCount + task.time.activeRunCount,
+        hasCurrentRun: summary.hasCurrentRun || task.time.hasCurrentRun,
+        currentRunId: summary.currentRunId ?? task.time.currentRunId
+      };
+    }, emptyTaskTimeSummary())
   };
 }
 
-export function listProjectSummaries(filters: ProjectListQuery = {}): ProjectSummary[] {
+export function listProjectSummaries(
+  filters: ProjectListQuery = {}
+): ProjectSummary[] {
   const goals = new Map(listGoals().map((goal) => [goal.id, goal]));
   const tasks = listTasks();
   const projectAdjustmentSeconds = listProjectWorkAdjustmentSecondsMap();
 
-  return filterOwnedEntities("project", listProjects(filters), filters.userIds).map((project) => {
+  return filterOwnedEntities(
+    "project",
+    listProjects(filters),
+    filters.userIds
+  ).map((project) => {
     const goal = goals.get(project.goalId);
     const projectTasks = tasks.filter((task) => task.projectId === project.id);
     const taskSummary = projectTaskSummary(projectTasks);
-    const projectAdjustmentSecondsTotal = projectAdjustmentSeconds.get(project.id) ?? 0;
-    const manualAdjustedSeconds = (taskSummary.time.manualAdjustedSeconds ?? 0) + projectAdjustmentSecondsTotal;
+    const projectAdjustmentSecondsTotal =
+      projectAdjustmentSeconds.get(project.id) ?? 0;
+    const manualAdjustedSeconds =
+      (taskSummary.time.manualAdjustedSeconds ?? 0) +
+      projectAdjustmentSecondsTotal;
     const time = {
-      totalTrackedSeconds: Math.max(0, taskSummary.time.totalTrackedSeconds + projectAdjustmentSecondsTotal),
-      totalCreditedSeconds: Math.round(Math.max(0, taskSummary.time.totalCreditedSeconds + projectAdjustmentSecondsTotal) * 100) / 100,
+      totalTrackedSeconds: Math.max(
+        0,
+        taskSummary.time.totalTrackedSeconds + projectAdjustmentSecondsTotal
+      ),
+      totalCreditedSeconds:
+        Math.round(
+          Math.max(
+            0,
+            taskSummary.time.totalCreditedSeconds +
+              projectAdjustmentSecondsTotal
+          ) * 100
+        ) / 100,
       liveTrackedSeconds: taskSummary.time.liveTrackedSeconds ?? 0,
       liveCreditedSeconds: taskSummary.time.liveCreditedSeconds ?? 0,
       manualAdjustedSeconds,
@@ -91,29 +136,67 @@ export function listProjectSummaries(filters: ProjectListQuery = {}): ProjectSum
   });
 }
 
-export function getProjectSummary(projectId: string): ProjectSummary | undefined {
+export function getProjectSummary(
+  projectId: string
+): ProjectSummary | undefined {
   return listProjectSummaries().find((project) => project.id === projectId);
 }
 
-export function getProjectBoard(projectId: string): ProjectBoardPayload | undefined {
-  const project = getProjectSummary(projectId);
+export function getProjectBoard(
+  projectId: string,
+  options: { userIds?: string[]; noteScope?: NoteReadScope } = {}
+): ProjectBoardPayload | undefined {
+  const project = listProjectSummaries({ userIds: options.userIds }).find(
+    (entry) => entry.id === projectId
+  );
   if (!project) {
     return undefined;
   }
-  const goal = getGoalById(project.goalId);
+  const rawGoal = getGoalById(project.goalId);
+  const goal = rawGoal
+    ? filterOwnedEntities("goal", [rawGoal], options.userIds)[0]
+    : undefined;
   if (!goal) {
     return undefined;
   }
+  const tasks = filterOwnedEntities(
+    "task",
+    listTasks({ projectId }),
+    options.userIds
+  );
+  const noteScope = options.noteScope ?? { userIds: options.userIds };
 
   return projectBoardPayloadSchema.parse({
     project,
     goal,
-    tasks: listTasks({ projectId }),
-    activity: listActivityEvents({ entityType: "project", entityId: projectId, limit: 20 }).concat(
-      listActivityEvents({ entityType: "task", limit: 100 }).filter((event) =>
-        listTasks({ projectId }).some((task) => task.id === event.entityId)
-      ).slice(0, 20)
+    tasks,
+    activity: filterNoteActivityEventsForScope(
+      listActivityEvents({
+        entityType: "project",
+        entityId: projectId,
+        limit: 20,
+        userIds: options.userIds
+      }).concat(
+        listActivityEvents({
+          entityType: "task",
+          limit: 100,
+          userIds: options.userIds
+        })
+          .filter((event) => tasks.some((task) => task.id === event.entityId))
+          .slice(0, 20)
+      ),
+      noteScope
     ),
-    notesSummaryByEntity: buildNotesSummaryByEntity()
+    notesSummaryByEntity: buildNotesSummaryByEntity(
+      [
+        { entityType: "project", entityId: project.id },
+        { entityType: "goal", entityId: goal.id },
+        ...tasks.map((task) => ({
+          entityType: "task" as const,
+          entityId: task.id
+        }))
+      ],
+      noteScope
+    )
   });
 }

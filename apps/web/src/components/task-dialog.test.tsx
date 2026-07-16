@@ -161,6 +161,16 @@ describe("TaskDialog", () => {
     });
     fireEvent.click(screen.getByText("Heavy"));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByText("Add context that should travel with this task")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Work summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Modified files")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add creation note" })
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     const submit = await screen.findByRole("button", { name: "Create task" });
     fireEvent.click(submit);

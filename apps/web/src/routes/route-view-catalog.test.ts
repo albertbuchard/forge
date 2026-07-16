@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   NAV_ROUTE_REGISTRY,
+  PRIMARY_ROUTES,
+  SHELL_NAV_ROUTES,
   getRouteDetail,
-  getRouteLabel
+  getRouteLabel,
+  routeMatches
 } from "@/components/shell/shell-routes";
-import { ROUTE_VIEW_CATALOG } from "@/routes/route-view-catalog";
+import {
+  ROUTE_VIEW_CATALOG,
+  resolveRouteViewIdFromPathname
+} from "@/routes/route-view-catalog";
 
 const t = (key: string) => key;
 
@@ -23,7 +29,10 @@ describe("route view copy", () => {
     for (const [viewId, meta] of Object.entries(ROUTE_VIEW_CATALOG)) {
       expect(meta.description, `${viewId} description`).toMatch(/[a-z]/i);
       expect(meta.description, `${viewId} description`).toMatch(/[,.]/);
-      expect(meta.description.length, `${viewId} description`).toBeGreaterThanOrEqual(58);
+      expect(
+        meta.description.length,
+        `${viewId} description`
+      ).toBeGreaterThanOrEqual(58);
       for (const placeholder of FORBIDDEN_PLACEHOLDERS) {
         expect(meta.description, `${viewId} description`).not.toBe(placeholder);
       }
@@ -43,5 +52,31 @@ describe("route view copy", () => {
       expect(detail, `${label} detail`).toMatch(/[a-z]/i);
       expect(detail.length, `${label} detail`).toBeGreaterThanOrEqual(58);
     }
+  });
+
+  it("registers People as a primary responsive shell destination", () => {
+    const peopleRoute = PRIMARY_ROUTES.find((route) => route.id === "people");
+    expect(peopleRoute).toBeDefined();
+    if (!peopleRoute) {
+      throw new Error("People route is missing.");
+    }
+
+    expect(peopleRoute).toMatchObject({
+      to: "/people",
+      label: "People"
+    });
+    expect(SHELL_NAV_ROUTES).toContain(peopleRoute);
+    expect(NAV_ROUTE_REGISTRY).toContain(peopleRoute);
+    expect(routeMatches("/people/person_123", peopleRoute)).toBe(true);
+    expect(getRouteDetail(peopleRoute, t)).toBe(
+      ROUTE_VIEW_CATALOG["people-index"].description
+    );
+  });
+
+  it("resolves People collection and detail paths to one master-detail surface", () => {
+    expect(resolveRouteViewIdFromPathname("/people")).toBe("people-index");
+    expect(resolveRouteViewIdFromPathname("/forge/people/person_123/")).toBe(
+      "people-index"
+    );
   });
 });

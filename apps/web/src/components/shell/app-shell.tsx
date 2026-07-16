@@ -45,6 +45,11 @@ import { KnowledgeGraphFocusDrawer } from "@/components/knowledge-graph/knowledg
 import { CreateMenu, useForgeCreateActions } from "@/components/create-menu";
 import { StartWorkComposer } from "@/components/start-work-composer";
 import {
+  buildTaskCloseoutEvidencePayload,
+  TaskCloseoutFlowDialog,
+  type TaskCloseoutSubmission
+} from "@/components/task-closeout-flow-dialog";
+import {
   buildKnowledgeGraphSearchFromLocation,
   buildRouteIntentLocation,
   buildRoutePathKey,
@@ -120,6 +125,7 @@ import type {
   CalendarSchedulingRules,
   ForgeSnapshot,
   SettingsPayload,
+  Task,
   TaskRun
 } from "@/lib/types";
 import {
@@ -205,6 +211,7 @@ type ShellContextValue = {
     }
   ) => Promise<void>;
   stopTaskRun: (run: TaskRun) => Promise<void>;
+  openTaskCloseout: (taskId: string, runId?: string | null) => void;
   createGoal: (input: GoalMutationInput) => Promise<void>;
   createProject: (input: ProjectMutationInput) => Promise<void>;
   patchGoal: (goalId: string, patch: GoalMutationInput) => Promise<void>;
@@ -843,7 +850,7 @@ function ShellFrame({
               <>
                 <header
                   data-shell-collapse-header="mobile"
-                  className="fixed inset-x-0 top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-4 [backface-visibility:hidden] [transform:translateZ(0)] [will-change:transform]"
+                  className="fixed inset-x-0 top-0 z-30 isolate border-b border-[var(--ui-border-subtle)] px-4"
                   style={{
                     backgroundColor: "var(--surface-low)",
                     backgroundImage:
@@ -1080,7 +1087,6 @@ function ShellFrame({
 }
 
 export function AppShell() {
-  useLiveEvents();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const xpTimerRef = useRef<number | null>(null);
@@ -1102,6 +1108,13 @@ export function AppShell() {
   const [startWorkError, setStartWorkError] = useState<string | null>(null);
   const [taskCompletionPrompt, setTaskCompletionPrompt] =
     useState<TaskCompletionPromptState | null>(null);
+  const [taskCloseoutPrompt, setTaskCloseoutPrompt] = useState<{
+    task: Task;
+    run: TaskRun | null;
+  } | null>(null);
+  const [taskCloseoutError, setTaskCloseoutError] = useState<string | null>(
+    null
+  );
   const [xpNotice, setXpNotice] = useState<{
     deltaXp: number;
     totalXp: number;
@@ -1126,6 +1139,7 @@ export function AppShell() {
     setOptimisticRouteLocation(nextLocation);
   };
   const operatorSessionQuery = useGetOperatorSessionQuery();
+  useLiveEvents(operatorSessionQuery.isSuccess);
   const snapshotQuery = useGetSnapshotQuery(selectedUserIds, {
     skip: !operatorSessionQuery.isSuccess
   });
@@ -1139,8 +1153,7 @@ export function AppShell() {
   const xpMetricsQuery = useGetXpMetricsQuery(selectedUserIds, {
     skip: !shellBootstrapReady || !xpMetricsPollingEnabled
   });
-  const [markCelebrationSeen, celebrationSeenMutation] =
-    useMarkGamificationCelebrationSeenMutation();
+  const [markCelebrationSeen] = useMarkGamificationCelebrationSeenMutation();
   const visibleCelebrations = useMemo(
     () =>
       (xpMetricsQuery.data?.metrics.celebrations ?? []).filter(
@@ -1321,7 +1334,7 @@ export function AppShell() {
   const [createProjectMutation] = useCreateProjectMutation();
   const [patchGoalMutation] = usePatchGoalMutation();
   const [patchProjectMutation] = usePatchProjectMutation();
-  const [patchTaskMutation] = usePatchTaskMutation();
+  const [patchTaskMutation, patchTaskMutationState] = usePatchTaskMutation();
   const [patchTaskStatusMutation] = usePatchTaskStatusMutation();
   const [claimTaskRunMutation, claimTaskRunMutationState] =
     useClaimTaskRunMutation();
@@ -1397,6 +1410,79 @@ export function AppShell() {
             }
           : current
       );
+    }
+  };
+
+  const openTaskCloseout = (taskId: string, runId: string | null = null) => {
+    const task = snapshotQuery.data?.tasks.find((entry) => entry.id === taskId);
+    const run = runId
+      ? snapshotQuery.data?.activeTaskRuns.find((entry) => entry.id === runId)
+      : null;
+    if (!task || (runId && (!run || run.taskId !== taskId))) {
+      setTaskCloseoutError("Forge could not load that active task closeout.");
+      return;
+    }
+    setTaskCloseoutError(null);
+    setTaskCloseoutPrompt({ task, run: run ?? null });
+  };
+
+  const closeoutTask = taskCloseoutPrompt?.task ?? null;
+  const closeoutRun = taskCloseoutPrompt?.run ?? null;
+
+  const submitGuidedTaskCloseout = async (
+    submission: TaskCloseoutSubmission
+  ) => {
+    if (!taskCloseoutPrompt || !closeoutTask) {
+      throw new Error("Forge could not resolve the task closeout target.");
+    }
+    setTaskCloseoutError(null);
+    const evidence = buildTaskCloseoutEvidencePayload(submission);
+    try {
+      if (closeoutRun) {
+        await completeTaskRunMutation({
+          runId: closeoutRun.id,
+          input: {
+            actor: closeoutRun.actor,
+            note: closeoutRun.note ?? "",
+            completionReport: evidence.completionReport,
+            gitRefs: evidence.gitRefs,
+            ...(evidence.closeoutNote
+              ? { closeoutNote: evidence.closeoutNote }
+              : {})
+          }
+        }).unwrap();
+      } else {
+        await patchTaskMutation({
+          taskId: closeoutTask.id,
+          patch: {
+            status: "done",
+            enforceTodayWorkLog: false,
+            completedTodayWorkSeconds:
+              submission.completedTodayWorkSeconds ?? 0,
+            completionReport: evidence.completionReport ?? null,
+            gitRefs: evidence.gitRefs ?? [],
+            ...(evidence.closeoutNote
+              ? {
+                  notes: [
+                    {
+                      ...evidence.closeoutNote,
+                      author: evidence.closeoutNote.author ?? ""
+                    }
+                  ]
+                }
+              : {})
+          }
+        }).unwrap();
+      }
+      await refreshLegacySnapshotQueries();
+      setTaskCloseoutPrompt(null);
+    } catch (error) {
+      setTaskCloseoutError(
+        error instanceof Error
+          ? error.message
+          : "Forge could not close the task right now."
+      );
+      throw error;
     }
   };
 
@@ -1583,6 +1669,7 @@ export function AppShell() {
       }).unwrap();
       await refreshLegacySnapshotQueries();
     },
+    openTaskCloseout,
     createGoal: async (input) => {
       await createGoalMutation(input).unwrap();
       await refreshLegacySnapshotQueries();
@@ -1604,6 +1691,10 @@ export function AppShell() {
       await refreshLegacySnapshotQueries();
     },
     patchTaskStatus: async (taskId, status, options) => {
+      if (status === "done") {
+        openTaskCloseout(taskId);
+        return;
+      }
       await submitTaskStatusPatch(taskId, status, options);
     },
     openStartWork: (defaults = {}) => {
@@ -1706,14 +1797,9 @@ export function AppShell() {
                 const run = snapshotQuery.data.activeTaskRuns.find(
                   (entry) => entry.id === runId
                 );
-                await completeTaskRunMutation({
-                  runId,
-                  input: {
-                    actor: run?.actor,
-                    note: run?.note ?? ""
-                  }
-                }).unwrap();
-                await refreshLegacySnapshotQueries();
+                if (run) {
+                  openTaskCloseout(run.taskId, run.id);
+                }
               }}
             >
               <div className="relative min-w-0">
@@ -1735,6 +1821,28 @@ export function AppShell() {
                 void submitCompletionPrompt(completedTodayWorkSeconds);
               }}
             />
+            {closeoutTask ? (
+              <TaskCloseoutFlowDialog
+                key={`${closeoutTask.id}:${closeoutRun?.id ?? "direct"}`}
+                open={taskCloseoutPrompt !== null}
+                task={closeoutTask}
+                activeTaskRun={closeoutRun}
+                selectedUserIds={selectedUserIds}
+                requireWorkTime={closeoutRun === null}
+                pending={
+                  completeTaskRunMutationState.isLoading ||
+                  patchTaskMutationState.isLoading
+                }
+                error={taskCloseoutError}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setTaskCloseoutPrompt(null);
+                    setTaskCloseoutError(null);
+                  }
+                }}
+                onSubmit={submitGuidedTaskCloseout}
+              />
+            ) : null}
             {knowledgeGraphOverlayFocus?.focusNode ? (
               <div className="pointer-events-none fixed inset-y-0 right-0 z-[64] hidden lg:flex lg:max-w-[min(30rem,calc(100vw-4rem))] lg:items-start lg:justify-end lg:p-4">
                 <div className="pointer-events-auto h-full w-[min(30rem,calc(100vw-4rem))] max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[color-mix(in_srgb,var(--surface-glass)_94%,transparent)] pt-[calc(var(--forge-shell-desktop-header-padding-top)+4.8rem)] shadow-[var(--ui-shadow-floating)] backdrop-blur-xl">
@@ -1764,26 +1872,14 @@ export function AppShell() {
               xpNotice={xpNotice}
               celebrations={visibleCelebrations}
               onSeen={(celebrationId) => {
-                if (
-                  celebrationSeenMutation.isLoading ||
-                  locallySeenCelebrationIds.has(celebrationId)
-                ) {
-                  return;
-                }
                 setLocallySeenCelebrationIds((current) => {
                   const next = new Set(current);
                   next.add(celebrationId);
                   return next;
                 });
-                void markCelebrationSeen(celebrationId)
+                return markCelebrationSeen(celebrationId)
                   .unwrap()
-                  .catch(() => {
-                    setLocallySeenCelebrationIds((current) => {
-                      const next = new Set(current);
-                      next.delete(celebrationId);
-                      return next;
-                    });
-                  });
+                  .then(() => undefined);
               }}
             />
           </>

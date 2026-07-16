@@ -1137,30 +1137,46 @@ Preferred opening question:
 
 ## Belief
 
-Aim: turn implicit self-talk into one explicit sentence that can be examined.
+Aim: preserve, formulate, review, update, or examine one explicit sentence that names
+the belief without arguing the user out of it before its meaning and protective force
+are understood.
 
 Arc:
 
-1. Ask what the experience starts telling the user in that moment.
-2. Help condense it into one belief sentence in the user's own language.
-3. Clarify whether it is `absolute` or `conditional`.
-4. Ask how true it feels from `0` to `100` only if that helps the user feel the force
-   of it more clearly.
-5. Ask where the rule feels learned, reinforced, or familiar if that would deepen the
-   formulation.
-6. Gather supporting or weakening evidence only if the user wants fuller examination
-   or if the wording is still fuzzy.
-7. Offer a more flexible alternative only if the user wants that and only after the
-   belief itself is clear.
+1. Distinguish direct capture, current activation or guided formulation, review or
+   narrow update, and optional examination or flexible-belief work.
+2. For direct capture, keep the user's serviceable sentence, reflect the felt stake
+   once, ask one accuracy or consent question, and save. Do not require a new episode,
+   confidence rating, evidence list, origin story, or alternative belief.
+3. For review or update, search for and read the exact existing belief first. Ask which
+   sentence, prediction, context, or function is newly true or inaccurate and patch
+   only that accepted change; do not force a sparse older record through create intake.
+4. For guided formulation, anchor in one recent moment. Keep what was directly
+   observed separate from what the moment rapidly came to mean about self, other
+   people, safety, worth, or outcome.
+5. Once a concrete cue and fast meaning are visible, offer at most one tentative
+   hypothesis about the rule, prediction, danger, or protective function. Ask one
+   fit-or-correction question, then condense the accepted belief sentence in the
+   user's own words.
+6. Clarify whether the accepted sentence is `absolute` or `conditional` only after the
+   sentence lands. Ask how true it feels from `0` to `100` only if that helps the user
+   understand its grip or compare change over time.
+7. Explore origin, supporting or weakening evidence, and a flexible alternative only
+   when the user chooses examination. Keep observed evidence, the user's
+   interpretation, and the agent's hypothesis distinct; do not make the user prove the
+   pain or use a flexible sentence as a rebuttal.
 
 Helpful follow-up lanes:
 
+- whether the user wants direct capture, understanding, a narrow update, or
+  examination
 - the feared consequence inside the belief
 - what the moment seems to prove
 - how old or familiar the rule feels
 - evidence for only if the user wants to examine it
 - evidence against only if the user wants to examine it
 - whether the user wants help drafting a more flexible version
+- what should remain unchanged in an existing belief record
 
 Likely linked entities:
 
@@ -1170,13 +1186,26 @@ Likely linked entities:
 
 Ready to save when:
 
-- the belief can be written as one sentence
-- `beliefType` is clear
-- the emotional meaning of the sentence is clear enough to recognize later
+- direct capture has the user's accepted sentence and one accuracy or consent check;
+  it does not require a fresh episode, hypothesis, rating, evidence list, origin, or
+  flexible alternative
+- an update starts from the exact existing belief and changes only what the user says
+  is newly true or inaccurate while preserving accepted history and links
+- guided formulation has one concrete moment, an accepted belief sentence, and
+  `beliefType` when that distinction is clear; any hypothesis has been accepted or
+  corrected
+- examination fields remain optional and are saved only when the user chose that
+  lane; a flexible alternative never replaces the original belief by implication
 
 Preferred opening question:
 
 - "When that reaction hits, what does it start telling you about you, them, or what happens next?"
+
+Intent-specific alternatives:
+
+- Direct capture: "The sentence already carries the belief clearly. Is that wording true enough to preserve as it is?"
+- Existing belief: "I have the current belief in view. Which part now feels newly true or inaccurate, and what should stay unchanged?"
+- Examination: "Do you want to understand how this belief works, examine what strengthens or weakens it, or draft a more flexible sentence?"
 
 ## Mode Profile
 
@@ -1220,24 +1249,39 @@ Preferred opening question:
 
 ## Mode Guide Session
 
-Aim: guide a present-moment inquiry when the active mode is not yet clear.
+Aim: support, begin, resume, review, or close a guided mode inquiry without making a
+mode label the price of being helped or finishing the session.
 
 Arc:
 
-1. Anchor in the current or recent situation.
-2. Ask what the part is feeling, saying, stopping, or pushing for.
-3. Ask what it fears and what it seems to need.
-4. Reflect the answers before suggesting interpretations.
-5. Ask permission before moving from exploration into candidate labels if the material
-   still feels charged.
-6. Offer one or two candidate mode labels only after enough evidence exists.
+1. Distinguish immediate support, a new inquiry, resuming or reviewing an existing
+   session, and closing or deriving a durable mode profile.
+2. If the user is activated, ask what needs steadying now and stay with the smallest
+   tolerable slice. Do not require mode identification before support or before
+   preserving a partial session they want to resume later.
+3. For resume, review, or update, search for and read the exact existing session first.
+   Briefly summarize the accepted answers and tentative results already present, then
+   ask only what is newly true, inaccurate, or unfinished.
+4. For a new guided inquiry, anchor in the current or recent situation and ask what the
+   part is feeling, saying, stopping, or pushing for.
+5. Ask what it fears or needs one lane at a time, reflecting each answer before
+   deepening.
+6. Offer at most one candidate interpretation only after the user's answers support
+   it, then ask one fit-or-correction question. A candidate mode label is optional.
+7. When closing, distinguish the user's accepted wording from tentative results and
+   ask whether to pause for later, preserve the session as complete, or derive a
+   durable `mode_profile` from a recurring formulation the user accepts.
 
 Helpful follow-up lanes:
 
+- whether the user needs immediate steadiness, a new inquiry, a resumed session, a
+  review, or closure
 - what just happened before the shift
 - what the part is saying or demanding
 - what it is afraid of
 - what it seems to need from the user or from others
+- what is newly true or inaccurate in an existing session
+- whether to pause, close, or derive a separate durable mode profile
 
 Likely linked entities:
 
@@ -1247,13 +1291,26 @@ Likely linked entities:
 
 Ready to save when:
 
-- there is a usable `summary`
-- the `answers` capture the user's language faithfully
-- any candidate interpretations remain tentative and evidence-based
+- immediate support never depends on saving or completing a session
+- a new or partial session has one recognizable situation or present need, a usable
+  `summary`, faithful `answers` gathered so far, and save consent
+- a resume, review, or update starts from the exact existing session and changes only
+  the answer or tentative interpretation that is newly true, inaccurate, or unfinished
+- any candidate interpretation remains tentative and evidence-based; closing without
+  a candidate label is valid
+- a separate `mode_profile` is created or linked only when the user recognizes a
+  recurring durable formulation and wants that record
 
 Preferred opening question:
 
-- "What just happened, and what is this part trying to get you to do or stop doing right now?"
+- "What needs attention first: getting steadier right now, continuing where you left off, or making sense of this part?"
+
+Intent-specific alternatives:
+
+- Immediate support: "What part of this needs steadying first?"
+- New inquiry: "What just happened, and what is this part trying to get you to do or stop doing right now?"
+- Existing session: "I have the current session in view. What feels newly true, inaccurate, or unfinished?"
+- Closing: "Do you want to pause this for later, close the inquiry here, or turn the accepted formulation into a durable mode profile?"
 
 ## Flashcard
 
@@ -1390,6 +1447,32 @@ Arc:
 6. Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only
    after the category itself feels accurate.
 
+Storage and history contract:
+
+- Search `event_type` through shared batch search before creating it, then use shared
+  batch create, update, delete, or restore. The dedicated Psyche routes support the
+  web operator flow; they are not the default agent lane.
+- For batch agent use, set `searches[].userIds` to the intended custom owner scope and
+  put one stable `operations[].idempotencyKey` on each create. Reuse a key only for an
+  exact retry. Batch search needs base `read` or `write` plus `psyche.read`; batch
+  mutations need base `write` plus `psyche.write`. Dedicated routes need the
+  corresponding Psyche scope without the base scope.
+- Accepted create fields are `label`, optional `description`, and optional `userId`.
+  There is no `aliases` field. Labels that differ only after Unicode NFKC default
+  case folding, punctuation, or whitespace normalization are duplicates within one
+  owner scope.
+- Entries with `system: true` are built in and read-only. Custom entries are visible
+  and mutable only within their owner scope.
+- A trigger report keeps the user's event wording in `customEventType`. Choosing a
+  reusable event type must not erase that wording. Renaming or deleting the reusable
+  entry does not rewrite historical wording; hard deletion clears only its reusable
+  reference. A soft-deleted reference survives unrelated report updates and returns on
+  restore. Hard deletion permanently consumes the original create idempotency key and
+  leaves it terminal, so a delayed retry cannot recreate the entry.
+- When the user already supplied clear wording and meaning, ask only for a genuinely
+  missing owner or boundary. Do not reopen therapeutic exploration just to fill
+  optional fields.
+
 Helpful follow-up lanes:
 
 - what repeated moment this event type should help future reports name
@@ -1428,6 +1511,32 @@ Arc:
 5. Offer one concise definition in the user's language and invite correction.
 6. Link it to trigger reports, modes, beliefs, or patterns only after the definition
    feels steady.
+
+Storage and history contract:
+
+- Search `emotion_definition` through shared batch search before creating it, then use
+  shared batch create, update, delete, or restore. The dedicated Psyche routes support
+  the web operator flow; they are not the default agent lane.
+- For batch agent use, set `searches[].userIds` to the intended custom owner scope and
+  put one stable `operations[].idempotencyKey` on each create. Reuse a key only for an
+  exact retry. Batch search needs base `read` or `write` plus `psyche.read`; batch
+  mutations need base `write` plus `psyche.write`. Dedicated routes need the
+  corresponding Psyche scope without the base scope.
+- Accepted create fields are `label`, optional `description`, optional `category`, and
+  optional `userId`. There is no `aliases` or `bodySignals` field. Labels that differ
+  only after Unicode NFKC default case folding, punctuation, or whitespace
+  normalization are duplicates within one owner scope.
+- Entries with `system: true` are built in and read-only. Custom entries are visible
+  and mutable only within their owner scope.
+- A trigger report emotion entry keeps the user's own `label` even when it links to an
+  emotion definition. Selecting a reusable definition must not replace that wording.
+  Renaming or deleting the reusable definition does not rewrite historical wording;
+  hard deletion clears only its reusable reference. A soft-deleted reference survives
+  unrelated report updates and returns on restore. Hard deletion permanently consumes
+  the original create idempotency key and leaves it terminal, so a delayed retry cannot
+  recreate the entry.
+- When the user already supplied clear wording and meaning, ask only for a genuinely
+  missing owner or distinction. Do not turn a direct save into a questionnaire.
 
 Helpful follow-up lanes:
 

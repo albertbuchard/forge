@@ -6,7 +6,6 @@ import {
   QuestionFlowDialog,
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
-import { GitRefPicker } from "@/components/git-ref-picker";
 import { defaultGoalValues } from "@/components/goal-dialog";
 import { InlineNoteFields } from "@/components/notes/inline-note-fields";
 import { defaultProjectValues } from "@/components/project-dialog";
@@ -59,45 +58,6 @@ export const defaultTaskValues: QuickTaskInput = {
 };
 
 const EMPTY_WORK_ITEMS: Task[] = [];
-
-function parseMultilineList(value: string) {
-  return value
-    .split("\n")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
-
-function buildCompletionReport(options: {
-  modifiedFiles: string[];
-  workSummary: string;
-  linkedGitRefIds: string[];
-}) {
-  if (
-    options.modifiedFiles.length === 0 &&
-    options.workSummary.trim().length === 0 &&
-    options.linkedGitRefIds.length === 0
-  ) {
-    return null;
-  }
-  return {
-    modifiedFiles: options.modifiedFiles,
-    workSummary: options.workSummary,
-    linkedGitRefIds: options.linkedGitRefIds
-  };
-}
-
-function syncCompletionReportGitRefs(
-  gitRefs: QuickTaskInput["gitRefs"],
-  current: QuickTaskInput["completionReport"]
-) {
-  return buildCompletionReport({
-    modifiedFiles: current?.modifiedFiles ?? [],
-    workSummary: current?.workSummary ?? "",
-    linkedGitRefIds: gitRefs
-      .map((ref) => ref.id)
-      .filter((refId): refId is string => typeof refId === "string")
-  });
-}
 
 type AnchorKind = "goal" | "project" | "issue" | "task";
 
@@ -1440,73 +1400,21 @@ export function TaskDialog({
     },
     {
       id: "notes",
-      eyebrow: "Closeout",
-      title: "Capture what changed when the work is done",
+      eyebrow: "Context",
+      title: "Add context that should travel with this task",
       description:
-        "Completion stays truthful when the closeout records modified files, a concise work summary, and the associated commit refs.",
+        "Creation notes preserve setup details, constraints, evidence, or handoff context from the start.",
       render: (value, setValue) => (
-        <>
-          {value.level !== "issue" ? (
-            <>
-              <FlowField label="Work summary">
-                <Textarea
-                  value={value.completionReport?.workSummary ?? ""}
-                  onChange={(event) =>
-                    setValue({
-                      completionReport: buildCompletionReport({
-                        modifiedFiles:
-                          value.completionReport?.modifiedFiles ?? [],
-                        workSummary: event.target.value,
-                        linkedGitRefIds:
-                          value.completionReport?.linkedGitRefIds ?? []
-                      })
-                    })
-                  }
-                  placeholder="Summarize what changed in this session and what is now true."
-                />
-              </FlowField>
-              <FlowField label="Modified files">
-                <Textarea
-                  value={(value.completionReport?.modifiedFiles ?? []).join(
-                    "\n"
-                  )}
-                  onChange={(event) =>
-                    setValue({
-                      completionReport: buildCompletionReport({
-                        modifiedFiles: parseMultilineList(event.target.value),
-                        workSummary: value.completionReport?.workSummary ?? "",
-                        linkedGitRefIds:
-                          value.completionReport?.linkedGitRefIds ?? []
-                      })
-                    })
-                  }
-                  placeholder="apps/web/src/pages/kanban-page.tsx&#10;apps/api/src/repositories/tasks.ts"
-                />
-              </FlowField>
-              <FlowField label="Git links">
-                <GitRefPicker
-                  selectedRefs={value.gitRefs}
-                  onChange={(gitRefs) =>
-                    setValue({
-                      gitRefs,
-                      completionReport: syncCompletionReportGitRefs(
-                        gitRefs,
-                        value.completionReport
-                      )
-                    })
-                  }
-                />
-              </FlowField>
-            </>
-          ) : null}
-          <FlowField label="Creation notes">
-            <InlineNoteFields
-              notes={value.notes}
-              onChange={(notes) => setValue({ notes })}
-              entityLabel="task"
-            />
-          </FlowField>
-        </>
+        <div className="grid gap-2">
+          <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+            Creation notes
+          </div>
+          <InlineNoteFields
+            notes={value.notes}
+            onChange={(notes) => setValue({ notes })}
+            entityLabel="task"
+          />
+        </div>
       )
     },
     {
@@ -1517,9 +1425,9 @@ export function TaskDialog({
         "These notes become linked Markdown evidence on the task immediately, which helps preserve setup context, blockers, or handoff detail.",
       render: () => (
         <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-          Use the previous step for completion closeout. Use linked notes here
-          only when you want durable extra context, setup detail, or handoff
-          evidence beyond the structured completion report.
+          Use creation notes when the task needs durable setup detail, evidence,
+          constraints, or a handoff before work starts. Forge gathers completion
+          evidence in the guided closeout when the task is finished.
         </div>
       )
     }

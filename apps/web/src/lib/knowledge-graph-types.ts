@@ -2,7 +2,11 @@ import type { CrudEntityType, Note } from "@/lib/types";
 
 export type KnowledgeGraphView = "graph" | "hierarchy";
 
-export type KnowledgeGraphEntityType = CrudEntityType | "wiki_space" | "workbench_flow" | "workbench_surface";
+export type KnowledgeGraphEntityType =
+  | CrudEntityType
+  | "wiki_space"
+  | "workbench_flow"
+  | "workbench_surface";
 
 export type KnowledgeGraphEntityKind =
   | "goal"
@@ -12,6 +16,7 @@ export type KnowledgeGraphEntityKind =
   | "habit"
   | "tag"
   | "note"
+  | "person"
   | "wiki_page"
   | "wiki_space"
   | "insight"
@@ -257,6 +262,11 @@ export const KNOWLEDGE_GRAPH_HIERARCHY_LANES = [
     id: "wiki-spaces",
     label: "Wiki Spaces",
     kinds: ["wiki_space"]
+  },
+  {
+    id: "people",
+    label: "People",
+    kinds: ["person"]
   },
   {
     id: "knowledge",
@@ -512,6 +522,8 @@ export function getKnowledgeGraphEntityHref(
       return `/tags?focus=${encodeURIComponent(entityId)}`;
     case "insight":
       return `/insights`;
+    case "person":
+      return `/people/${encodeURIComponent(entityId)}`;
     case "calendar_event":
     case "work_block_template":
     case "task_timebox":

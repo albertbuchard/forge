@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, Search, Trash2 } from "lucide-react";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,7 @@ const ENTITY_LABELS: Record<CrudEntityType, string> = {
   note: "Notes",
   insight: "Insights",
   artifact: "Artifacts",
+  person: "People",
   psyche_value: "Values",
   behavior_pattern: "Patterns",
   behavior: "Behaviors",
@@ -64,6 +68,7 @@ const ENTITY_BADGE_KIND: Record<
   note: null,
   insight: "report",
   artifact: "artifact",
+  person: "person",
   psyche_value: "value",
   behavior_pattern: "pattern",
   behavior: "behavior",
@@ -281,33 +286,39 @@ export function SettingsBinPage() {
 
   if (operatorSessionQuery.isLoading || binQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings"
-        title="Loading bin"
-        description="Loading deleted items and restore controls."
-        columns={2}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Settings"
+          title="Loading bin"
+          description="Loading deleted items and restore controls."
+          columns={2}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (binQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings"
-        error={binQuery.error}
-        onRetry={() => void binQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={binQuery.error}
+          onRetry={() => void binQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

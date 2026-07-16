@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual
+} from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { AbstractManager } from "../base.js";
@@ -30,6 +37,23 @@ export class SecretsManager extends AbstractManager {
     return timingSafeEqual(leftBuffer, rightBuffer);
   }
 
+  deriveKey(purpose: string, length = 32) {
+    const normalizedPurpose = purpose.trim();
+    if (!normalizedPurpose || normalizedPurpose.length > 240) {
+      throw new Error("Secret-key purpose must contain 1 to 240 characters");
+    }
+    if (!Number.isInteger(length) || length < 16 || length > 64) {
+      throw new Error("Derived secret keys must contain 16 to 64 bytes");
+    }
+    return new Uint8Array(
+      createHmac("sha512", this.getEncryptionKey())
+        .update("forge-purpose-key/v1\0", "utf8")
+        .update(normalizedPurpose, "utf8")
+        .digest()
+        .subarray(0, length)
+    );
+  }
+
   private getCanonicalKeyPath() {
     return path.join(this.rootDir, ".forge-secrets.key");
   }
@@ -56,7 +80,11 @@ export class SecretsManager extends AbstractManager {
     const plaintext = Buffer.from(JSON.stringify(value), "utf8");
     const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
     const tag = cipher.getAuthTag();
-    return [iv.toString("base64"), tag.toString("base64"), encrypted.toString("base64")].join(".");
+    return [
+      iv.toString("base64"),
+      tag.toString("base64"),
+      encrypted.toString("base64")
+    ].join(".");
   }
 
   openJson<T extends Record<string, unknown>>(cipherText: string): T {
@@ -84,11 +112,17 @@ export class SecretsManager extends AbstractManager {
     const keyPath = this.getPreferredKeyPath();
     mkdirSync(path.dirname(keyPath), { recursive: true });
     if (!existsSync(keyPath)) {
-      writeFileSync(keyPath, randomBytes(32).toString("base64"), { encoding: "utf8", mode: 0o600 });
+      writeFileSync(keyPath, randomBytes(32).toString("base64"), {
+        encoding: "utf8",
+        mode: 0o600
+      });
     }
     const encoded = readFileSync(keyPath, "utf8").trim();
     const rawKey = Buffer.from(encoded, "base64");
-    this.cachedKey = rawKey.length === 32 ? rawKey : createHash("sha256").update(rawKey).digest();
+    this.cachedKey =
+      rawKey.length === 32
+        ? rawKey
+        : createHash("sha256").update(rawKey).digest();
     return this.cachedKey;
   }
 }

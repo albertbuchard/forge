@@ -12,6 +12,17 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import {
+  NATIVE_SOURCE_MANIFEST_FILE,
+  TRUSTED_NATIVE_SOURCE_KEYS,
+  UNSIGNED_INTEGRATION_COMMIT_SHA,
+  UNSIGNED_INTEGRATION_SIGNING_KEY_ID,
+  createNativeSourceManifest,
+  serializeNativeSourceManifest,
+  serializeNativeSourceSignature,
+  signNativeSourceManifest
+} from "../../../packages/forge-memory/lib/native-source-manifest.mjs";
+import { readNativeSourceSigningKey } from "./native-source-signing-key.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDir, "..");
@@ -42,6 +53,13 @@ const companionIrohPackageMode = (
 )
   .trim()
   .toLowerCase();
+const forgePeerRoot = path.join(repoRoot, "packages", "forge-peer");
+const nativeSourceSigningKeyPath = (
+  process.env.FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH ?? ""
+).trim();
+const requireSignedNativeSource =
+  process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
+  process.env.FORGE_RELEASE_MODE === "publish-from-tag";
 const pluginServerEntrySource = `import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -132,6 +150,32 @@ function run(command, args, cwd) {
       reject(
         new Error(
           `${command} ${args.join(" ")} exited with code ${code ?? "unknown"}`
+        )
+      );
+    });
+    child.once("error", reject);
+  });
+}
+
+function runCaptured(command, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve(Buffer.concat(stdout).toString("utf8").trim());
+        return;
+      }
+      reject(
+        new Error(
+          `${command} ${args.join(" ")} exited with code ${code ?? "unknown"}: ${Buffer.concat(stderr).toString("utf8").trim()}`
         )
       );
     });
@@ -365,6 +409,165 @@ async function packageCompanionIroh() {
   }
 }
 
+function cargoPackageVersion(cargoToml) {
+  let inPackageSection = false;
+  for (const line of cargoToml.split(/\r?\n/)) {
+    if (line.trim() === "[package]") {
+      inPackageSection = true;
+      continue;
+    }
+    if (inPackageSection && /^\s*\[/.test(line)) break;
+    if (!inPackageSection) continue;
+    const match = /^version\s*=\s*"([^"]+)"\s*$/.exec(line);
+    if (match) return match[1];
+  }
+  throw new Error("packages/forge-peer/Cargo.toml has no package version.");
+}
+
+function releaseSigningKeyAt(generatedAt) {
+  const timestamp = generatedAt.getTime();
+  const key = TRUSTED_NATIVE_SOURCE_KEYS.find((candidate) => {
+    const notBefore = Date.parse(candidate.notBefore);
+    const notAfter =
+      candidate.notAfter === null
+        ? Number.POSITIVE_INFINITY
+        : Date.parse(candidate.notAfter);
+    return (
+      candidate.revokedAt === null &&
+      Number.isFinite(notBefore) &&
+      timestamp >= notBefore &&
+      timestamp <= notAfter
+    );
+  });
+  if (!key) {
+    throw new Error(
+      "No pinned native source signing key is valid for this release commit."
+    );
+  }
+  return key;
+}
+
+async function assertForgePeerSourceClean() {
+  const forgePeerStatus = await runCaptured(
+    "git",
+    [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--",
+      "packages/forge-peer"
+    ],
+    repoRoot
+  );
+  if (forgePeerStatus) {
+    throw new Error(
+      "Signed native source builds require a clean packages/forge-peer tree."
+    );
+  }
+}
+
+async function packageForgePeer(privateKey) {
+  const sourceDir = path.join(pluginDistDir, "forge-peer-src");
+  await removePath(sourceDir);
+  await mkdir(sourceDir, { recursive: true });
+
+  for (const fileName of [
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    ".gitignore"
+  ]) {
+    await copyFile(
+      path.join(forgePeerRoot, fileName),
+      path.join(sourceDir, fileName)
+    );
+  }
+  for (const directoryName of ["src", "tests"]) {
+    await cp(
+      path.join(forgePeerRoot, directoryName),
+      path.join(sourceDir, directoryName),
+      { recursive: true, force: true, dereference: false }
+    );
+  }
+  const fuzzSourceRoot = path.join(forgePeerRoot, "fuzz");
+  const fuzzTargetRoot = path.join(sourceDir, "fuzz");
+  await mkdir(fuzzTargetRoot, { recursive: true });
+  for (const fileName of ["Cargo.toml", "Cargo.lock"]) {
+    await copyFile(
+      path.join(fuzzSourceRoot, fileName),
+      path.join(fuzzTargetRoot, fileName)
+    );
+  }
+  await cp(
+    path.join(fuzzSourceRoot, "fuzz_targets"),
+    path.join(fuzzTargetRoot, "fuzz_targets"),
+    { recursive: true, force: true, dereference: false }
+  );
+
+  const [pluginPackage, cargoToml] = await Promise.all([
+    readFile(path.join(packageRoot, "package.json"), "utf8").then(JSON.parse),
+    readFile(path.join(forgePeerRoot, "Cargo.toml"), "utf8")
+  ]);
+  let commitSha = UNSIGNED_INTEGRATION_COMMIT_SHA;
+  let signingKeyId = UNSIGNED_INTEGRATION_SIGNING_KEY_ID;
+  let generatedAt = new Date();
+  if (privateKey) {
+    const [releaseCommitSha, commitTimestamp] = await Promise.all([
+      runCaptured("git", ["rev-parse", "HEAD"], repoRoot),
+      runCaptured("git", ["show", "-s", "--format=%cI", "HEAD"], repoRoot)
+    ]);
+    commitSha = releaseCommitSha;
+    generatedAt = new Date(commitTimestamp);
+    signingKeyId = releaseSigningKeyAt(generatedAt).id;
+  }
+  if (!Number.isFinite(generatedAt.getTime())) {
+    throw new Error("The release commit timestamp is invalid.");
+  }
+  const manifest = await createNativeSourceManifest({
+    sourceRoot: sourceDir,
+    packageVersion: cargoPackageVersion(cargoToml),
+    runtimePackageVersion: pluginPackage.version,
+    commitSha,
+    generatedAt,
+    signingKeyId
+  });
+  await writeFile(
+    path.join(sourceDir, NATIVE_SOURCE_MANIFEST_FILE),
+    serializeNativeSourceManifest(manifest),
+    { encoding: "utf8", mode: 0o600, flag: "wx" }
+  );
+
+  if (!privateKey) {
+    if (requireSignedNativeSource) {
+      throw new Error(
+        "A signed release build requires FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH."
+      );
+    }
+    return;
+  }
+  const signature = signNativeSourceManifest(manifest, privateKey);
+  await writeFile(
+    path.join(sourceDir, "native-source.signature.json"),
+    serializeNativeSourceSignature(signature),
+    { encoding: "utf8", mode: 0o600, flag: "wx" }
+  );
+}
+
+const nativeSourcePrivateKey = nativeSourceSigningKeyPath
+  ? await readNativeSourceSigningKey({
+      keyPath: nativeSourceSigningKeyPath,
+      repositoryRoot: repoRoot
+    })
+  : null;
+if (requireSignedNativeSource && !nativeSourcePrivateKey) {
+  throw new Error(
+    "A signed release build requires FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH."
+  );
+}
+if (nativeSourcePrivateKey) {
+  await assertForgePeerSourceClean();
+}
+
 await removePath(pluginDistDir);
 await removePath(pluginServerDir);
 await mkdir(pluginDistDir, { recursive: true });
@@ -398,6 +601,7 @@ await run("npm", ["run", "build"], repoRoot);
 await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
 await removePackagedGamificationAssets();
 await packageCompanionIroh();
+await packageForgePeer(nativeSourcePrivateKey);
 await mkdir(path.join(pluginDistDir, "server", "apps", "api"), {
   recursive: true
 });

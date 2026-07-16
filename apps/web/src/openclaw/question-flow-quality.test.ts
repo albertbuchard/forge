@@ -198,9 +198,7 @@ describe("question flow quality coverage", () => {
     expect(wikiSection).toMatch(
       /forge_call_wiki_route[\s\S]*readBySlug[\s\S]*delete/i
     );
-    expect(wikiSection).toMatch(
-      /do\s+not route[\s\S]*guess a nearby route/i
-    );
+    expect(wikiSection).toMatch(/do\s+not route[\s\S]*guess a nearby route/i);
     expect(wikiSection).toMatch(
       /resolve the existing[\s\S]*by id or slug[\s\S]*read it before[\s\S]*After create or update[\s\S]*After delete/i
     );
@@ -216,6 +214,9 @@ describe("question flow quality coverage", () => {
     );
     expect(artifactSection).toMatch(
       /batch\s+metadata routes only for metadata search, update, delete, or restore[\s\S]*never use[\s\S]*batch CRUD to create an artifact or transfer bytes/i
+    );
+    expect(artifactSection).toMatch(
+      /stable idempotency key[\s\S]*exact transport retry[\s\S]*authenticated\s+token[\s\S]*out-of-scope user/i
     );
     const selfObservationSection = getSectionSlice(
       entityPlaybook,
@@ -900,6 +901,16 @@ describe("question flow quality coverage", () => {
     expect(preferenceItemSection).toMatch(
       /POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*forge_submit_preferences_judgment[\s\S]*forge_submit_preferences_signal[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score/i
     );
+    const preferenceSignalSection = getSectionSlice(
+      entityPlaybook,
+      "Preference Signal"
+    );
+    expect(preferenceSignalSection).toMatch(
+      /read the exact item and current Preferences workspace[\s\S]*current direct mark[\s\S]*context sharing and decay[\s\S]*conflict[\s\S]*which current mark will be replaced/i
+    );
+    expect(preferenceSignalSection).toMatch(
+      /neutral[\s\S]*clears the current direct effect[\s\S]*no direct weight, evidence count, or confidence[\s\S]*returned score and status/i
+    );
     expect(entityPlaybook).toMatch(
       /questionnaire_instrument[\s\S]*normal stored CRUD/i
     );
@@ -964,8 +975,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Mode Guide Session",
-        /what just happened/i,
-        /candidate mode labels only after enough evidence exists/i
+        /what needs attention first/i,
+        /support, begin, resume, review, or close/i
       ],
       ["Flashcard", /exact urge sentence or situation/i, /one simple message/i],
       [
@@ -1011,6 +1022,38 @@ describe("question flow quality coverage", () => {
     );
     expect(behaviorSection).toMatch(
       /sparse legacy records[\s\S]*direct save or update[\s\S]*does not require a fresh episode or hypothesis/i
+    );
+    const modeGuideSection = getSectionSlice(
+      psychePlaybook,
+      "Mode Guide Session"
+    );
+    expect(modeGuideSection).toMatch(
+      /immediate support[\s\S]*new inquiry[\s\S]*resuming or reviewing an existing[\s\S]*closing or deriving a durable mode profile/i
+    );
+    expect(modeGuideSection).toMatch(
+      /read the exact existing session first[\s\S]*accepted answers[\s\S]*tentative results[\s\S]*newly true, inaccurate, or unfinished/i
+    );
+    expect(modeGuideSection).toMatch(
+      /at most one candidate interpretation[\s\S]*fit-or-correction[\s\S]*candidate mode label is optional/i
+    );
+    expect(modeGuideSection).toMatch(
+      /closing without[\s\S]*candidate label is valid[\s\S]*mode_profile[\s\S]*recurring durable formulation/i
+    );
+    const beliefSection = getSectionSlice(psychePlaybook, "Belief");
+    expect(beliefSection).toMatch(
+      /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or[\s\S]*narrow update[\s\S]*optional examination/i
+    );
+    expect(beliefSection).toMatch(
+      /read the exact existing belief first[\s\S]*newly true or inaccurate[\s\S]*patch[\s\S]*only that accepted change/i
+    );
+    expect(beliefSection).toMatch(
+      /directly[\s\S]*observed[\s\S]*separate from[\s\S]*rapidly came to mean[\s\S]*at most one tentative[\s\S]*hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(beliefSection).toMatch(
+      /origin, supporting or weakening evidence,[\s\S]*only[\s\S]*user chooses examination[\s\S]*observed evidence[\s\S]*user's[\s\S]*interpretation[\s\S]*agent's hypothesis distinct/i
+    );
+    expect(beliefSection).toMatch(
+      /direct capture[\s\S]*does not require a fresh episode, hypothesis, rating, evidence list, origin,[\s\S]*flexible alternative/i
     );
   });
 

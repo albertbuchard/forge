@@ -12,6 +12,7 @@ import {
   Network,
   NotebookPen,
   PanelTop,
+  UserRound,
   Quote,
   RefreshCw,
   Repeat,
@@ -34,6 +35,7 @@ export const ENTITY_KINDS = [
   "habit",
   "tag",
   "note",
+  "person",
   "wiki_page",
   "wiki_space",
   "insight",
@@ -142,6 +144,13 @@ const ENTITY_VISUAL_SEEDS: ReadonlyArray<EntityVisualSeed> = [
     icon: NotebookPen,
     iconName: "NotebookPen",
     accentRgb: [148, 163, 184]
+  },
+  {
+    kind: "person",
+    label: "Person",
+    icon: UserRound,
+    iconName: "UserRound",
+    accentRgb: [251, 113, 133]
   },
   {
     kind: "wiki_page",
@@ -331,6 +340,7 @@ const CRUD_ENTITY_KIND_MAP: Partial<Record<CrudEntityType, EntityKind>> = {
   habit: "habit",
   tag: "tag",
   note: "note",
+  person: "person",
   insight: "insight",
   calendar_event: "calendar_event",
   work_block_template: "work_block",

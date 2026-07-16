@@ -22,6 +22,8 @@ import {
   MovementPage,
   NotesPage,
   OverviewPage,
+  PeoplePage,
+  PersonDetailPage,
   PreferencesPage,
   ProjectDetailPage,
   ProjectManagementHierarchyPage,
@@ -256,6 +258,24 @@ export function App() {
               "Preferences",
               "Preference profiles, pairwise judgments, and model state.",
               <PreferencesPage />
+            )}
+          />
+          <Route
+            path="people"
+            element={surface(
+              "people-index",
+              "People",
+              "Private Person records, explicit Wiki associations, and directional peer sharing.",
+              <PeoplePage />
+            )}
+          />
+          <Route
+            path="people/:personId"
+            element={surface(
+              "people-index",
+              "People",
+              "Private Person records, explicit Wiki associations, and directional peer sharing.",
+              <PersonDetailPage />
             )}
           />
           <Route

@@ -1,9 +1,10 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, type SyntheticEvent } from "react";
+import { useCallback, useRef, useState, type ImgHTMLAttributes } from "react";
 import {
   Download,
   Flame,
-  Settings,
+  Hammer,
+  RotateCcw,
   Sparkles,
   Trophy,
   X,
@@ -72,23 +73,70 @@ function getGamificationFallbackUrl(
   );
 }
 
-function recoverMissingGamificationImage(
-  event: SyntheticEvent<HTMLImageElement>,
-  fallbackUrl: string
-) {
-  const image = event.currentTarget;
-  if (image.getAttribute("src") === fallbackUrl) {
-    image.hidden = true;
-    return;
-  }
-  image.hidden = false;
-  image.src = fallbackUrl;
-}
+function DurableGamificationImage({
+  src,
+  fallbackSrc,
+  assetKey,
+  alt,
+  className,
+  title,
+  testId,
+  ...imageProps
+}: Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError"> & {
+  src: string;
+  fallbackSrc: string;
+  assetKey: string;
+  testId?: string;
+}) {
+  const requestKey = `${src}\n${fallbackSrc}`;
+  const [imageState, setImageState] = useState({
+    requestKey,
+    activeSrc: src,
+    fallbackFailed: false
+  });
+  const currentState =
+    imageState.requestKey === requestKey
+      ? imageState
+      : { requestKey, activeSrc: src, fallbackFailed: false };
 
-function revealLoadedGamificationImage(
-  event: SyntheticEvent<HTMLImageElement>
-) {
-  event.currentTarget.hidden = false;
+  if (currentState.fallbackFailed) {
+    const Icon = assetKey.startsWith("mascot-") ? Hammer : Trophy;
+    return (
+      <span
+        className={cn("grid place-items-center", className)}
+        role={alt ? "img" : undefined}
+        aria-label={alt || undefined}
+        aria-hidden={alt ? undefined : true}
+        title={title}
+        data-testid={testId}
+        data-gamification-image-fallback="icon"
+      >
+        <Icon className="size-1/2 text-[var(--primary)]" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      {...imageProps}
+      src={currentState.activeSrc}
+      alt={alt}
+      title={title}
+      className={className}
+      data-testid={testId}
+      onError={() => {
+        setImageState((previous) => {
+          const active =
+            previous.requestKey === requestKey
+              ? previous
+              : { requestKey, activeSrc: src, fallbackFailed: false };
+          return active.activeSrc === fallbackSrc
+            ? { ...active, fallbackFailed: true }
+            : { ...active, activeSrc: fallbackSrc };
+        });
+      }}
+    />
+  );
 }
 
 function normalizeProfile(
@@ -167,6 +215,19 @@ export function getGamificationNoticeMotion(
       };
 }
 
+export function getGamificationFailureAlertMotion(
+  reduceMotion: boolean | null
+) {
+  return {
+    initial: reduceMotion ? (false as const) : { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+    exit: {
+      opacity: 0,
+      transition: { duration: reduceMotion ? 0 : 0.16 }
+    }
+  };
+}
+
 export function GamificationMiniHud({
   metrics,
   className
@@ -214,10 +275,12 @@ export function GamificationMiniHud({
 
 export function GamificationOverviewWidget({
   metrics,
-  compact = false
+  compact = false,
+  statusMessage
 }: {
   metrics: XpMetricsPayload;
   compact?: boolean;
+  statusMessage?: string;
 }) {
   const gamificationTheme = useGamificationTheme();
   const queryClient = useQueryClient();
@@ -272,81 +335,58 @@ export function GamificationOverviewWidget({
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
 
-  if (selectedAssetStatus && !selectedAssetStatus.installed) {
-    const isDownloading =
-      assetInstallMutation.isPending &&
-      assetInstallMutation.variables === gamificationTheme;
-    return (
-      <section className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 shadow-[var(--ui-shadow-soft)]">
-        <div className="grid min-w-0 gap-4 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
-          <div className="grid size-18 place-items-center overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
-            <img
-              src={getGamificationThemePreviewUrl(gamificationTheme)}
-              alt={`${selectedStyleLabel} preview`}
-              decoding="async"
-              width={64}
-              height={64}
-              className="size-16 object-contain"
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Badge className="bg-[var(--ui-surface-2)] text-[var(--tertiary)]">
-                Level {profile.level}
-              </Badge>
-              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)]">
-                {profile.currentLevelXp}/{profile.nextLevelXp} XP
-              </Badge>
-              <Badge className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
-                Assets not downloaded
-              </Badge>
-            </div>
-            <div className="mt-3 flex min-w-0 flex-wrap items-end justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-display text-xl text-[var(--ui-ink-strong)]">
-                  Download {selectedStyleLabel} rewards
-                </div>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  This installs the optional mascot, trophy, and unlock art for
-                  the selected reward style.
-                </p>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  pending={isDownloading}
-                  pendingLabel="Downloading"
-                  onClick={() => assetInstallMutation.mutate(gamificationTheme)}
-                >
-                  <Download className="size-3.5" />
-                  Download
-                </Button>
-                <Link
-                  to="/settings"
-                  className="inline-flex min-h-[2.125rem] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-2.5 py-[0.4375rem] text-[13px] font-medium text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-2)] hover:text-[var(--ui-ink-strong)]"
-                >
-                  <Settings className="size-3.5" />
-                  Settings
-                </Link>
-              </div>
-            </div>
-            {assetInstallMutation.isError ? (
-              <div className="mt-3 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
-                {assetInstallMutation.error instanceof Error
-                  ? assetInstallMutation.error.message
-                  : "Could not download reward assets."}
-              </div>
-            ) : (
-              <div className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
-                {selectedAssetStatus.spriteCount}/
-                {selectedAssetStatus.expectedSpriteCount} sprites installed
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-    );
-  }
+  const assetMissing = Boolean(
+    selectedAssetStatus && !selectedAssetStatus.installed
+  );
+  const isDownloading =
+    assetInstallMutation.isPending &&
+    assetInstallMutation.variables === gamificationTheme;
+  const assetInstallBanner = assetStatusQuery.isError ? (
+    <div
+      role="alert"
+      className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--ui-border-subtle)] pb-3 text-xs text-[var(--ui-ink-soft)]"
+    >
+      <span className="min-w-0">
+        Reward art status is unavailable. Core trophies and Smith progress
+        remain available.
+      </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        pending={assetStatusQuery.isFetching}
+        pendingLabel="Retrying"
+        onClick={() => void assetStatusQuery.refetch()}
+      >
+        <RotateCcw className="size-3.5" />
+        Retry art status
+      </Button>
+    </div>
+  ) : assetMissing ? (
+    <div
+      role="status"
+      className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--ui-border-subtle)] pb-3 text-xs text-[var(--ui-ink-soft)]"
+    >
+      <span className="min-w-0">
+        Optional {selectedStyleLabel} trophy and Smith art is not installed.
+      </span>
+      <Button
+        size="sm"
+        pending={isDownloading}
+        pendingLabel="Downloading"
+        onClick={() => assetInstallMutation.mutate(gamificationTheme)}
+      >
+        <Download className="size-3.5" />
+        Download art
+      </Button>
+      {assetInstallMutation.isError ? (
+        <span className="basis-full text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+          {assetInstallMutation.error instanceof Error
+            ? assetInstallMutation.error.message
+            : "Could not download reward assets."}
+        </span>
+      ) : null}
+    </div>
+  ) : null;
 
   if (compact) {
     return (
@@ -354,26 +394,22 @@ export function GamificationOverviewWidget({
         data-testid="forge-smith-overview"
         className="relative isolate min-w-0 overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-3 shadow-[var(--ui-shadow-soft)]"
       >
+        {assetInstallBanner}
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_18%,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_36%),radial-gradient(circle_at_84%_80%,color-mix(in_srgb,var(--primary)_9%,transparent),transparent_38%)]" />
         <div className="grid min-w-0 grid-cols-[7.75rem_minmax(0,1fr)] gap-3">
           <div className="relative min-h-[10.5rem] overflow-hidden rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)]">
-            <img
+            <DurableGamificationImage
               src={getGamificationSpriteUrl(
                 metrics.mascot.spriteKey,
                 512,
                 gamificationTheme
               )}
+              fallbackSrc={getGamificationThemePreviewUrl(gamificationTheme)}
+              assetKey={metrics.mascot.spriteKey}
               alt="Forge Smith mascot"
               decoding="async"
               width={512}
               height={512}
-              onLoad={revealLoadedGamificationImage}
-              onError={(event) =>
-                recoverMissingGamificationImage(
-                  event,
-                  getGamificationThemePreviewUrl(gamificationTheme)
-                )
-              }
               className="absolute inset-0 size-full object-contain object-center p-1 drop-shadow-[var(--ui-shadow-soft)]"
             />
             <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,color-mix(in_srgb,var(--ui-surface-section)_94%,transparent),transparent)] p-2.5">
@@ -396,6 +432,14 @@ export function GamificationOverviewWidget({
                   {profile.streakDays} days
                 </Badge>
               </div>
+              {statusMessage ? (
+                <div
+                  role="status"
+                  className="mt-2 line-clamp-2 text-[10px] leading-4 text-[var(--ui-ink-faint)]"
+                >
+                  {statusMessage}
+                </div>
+              ) : null}
               <div className="mt-2 min-w-0">
                 <div className="min-w-0">
                   <div className="font-display text-lg leading-6 text-[var(--ui-ink-strong)]">
@@ -418,27 +462,22 @@ export function GamificationOverviewWidget({
               >
                 <span className="grid size-14 place-items-center overflow-hidden rounded-[10px] bg-[var(--ui-surface-1)]">
                   {compactTrophy ? (
-                    <img
-                      data-testid="forge-smith-featured-trophy"
+                    <DurableGamificationImage
+                      testId="forge-smith-featured-trophy"
                       src={getGamificationSpriteUrl(
                         compactTrophy.assetKey,
                         256,
                         gamificationTheme
                       )}
+                      fallbackSrc={getGamificationFallbackUrl(
+                        gamificationTheme,
+                        compactTrophy.assetKey
+                      )}
+                      assetKey={compactTrophy.assetKey}
                       alt={`${compactTrophy.title} trophy`}
                       decoding="async"
                       width={56}
                       height={56}
-                      onLoad={revealLoadedGamificationImage}
-                      onError={(event) =>
-                        recoverMissingGamificationImage(
-                          event,
-                          getGamificationFallbackUrl(
-                            gamificationTheme,
-                            compactTrophy.assetKey
-                          )
-                        )
-                      }
                       className="size-14 object-contain"
                     />
                   ) : (
@@ -460,7 +499,7 @@ export function GamificationOverviewWidget({
               <ProgressMeter value={progress} />
               <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--ui-ink-faint)]">
                 <span className="truncate">
-                  {profile.currentLevelXp}/{profile.nextLevelXp} XP
+                  Level XP {profile.currentLevelXp}/{profile.nextLevelXp}
                 </span>
                 <span className="shrink-0">
                   {profile.xpToNextLevel ??
@@ -477,6 +516,7 @@ export function GamificationOverviewWidget({
 
   return (
     <section className="relative isolate min-w-0 overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-4 shadow-[var(--ui-shadow-soft)] md:p-5">
+      {assetInstallBanner}
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_18%_20%,color-mix(in_srgb,var(--tertiary)_12%,transparent),transparent_34%),radial-gradient(circle_at_82%_10%,color-mix(in_srgb,var(--info)_10%,transparent),transparent_32%),radial-gradient(circle_at_76%_82%,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_34%)]" />
       <div
         className={cn(
@@ -492,23 +532,18 @@ export function GamificationOverviewWidget({
             compact ? "min-h-[11rem]" : "min-h-[17rem]"
           )}
         >
-          <img
+          <DurableGamificationImage
             src={getGamificationSpriteUrl(
               metrics.mascot.spriteKey,
               512,
               gamificationTheme
             )}
+            fallbackSrc={getGamificationThemePreviewUrl(gamificationTheme)}
+            assetKey={metrics.mascot.spriteKey}
             alt="Forge Smith mascot"
             decoding="async"
             width={512}
             height={512}
-            onLoad={revealLoadedGamificationImage}
-            onError={(event) =>
-              recoverMissingGamificationImage(
-                event,
-                getGamificationThemePreviewUrl(gamificationTheme)
-              )
-            }
             className={cn(
               "absolute inset-x-0 mx-auto max-w-none object-contain drop-shadow-[var(--ui-shadow-soft)]",
               compact ? "bottom-1 h-[10.5rem]" : "bottom-3 h-[15.5rem]"
@@ -546,6 +581,10 @@ export function GamificationOverviewWidget({
               {formatCompactNumber(profile.totalXp)} XP
             </Badge>
           </div>
+          <p className="mt-3 text-xs leading-5 text-[var(--ui-ink-faint)]">
+            Positive automatic XP extends the streak. Manual adjustments,
+            corrections, penalties, and reversed events do not.
+          </p>
           <div className="mt-4 grid gap-3">
             <div className="flex min-w-0 items-end justify-between gap-3">
               <div className="min-w-0">
@@ -596,27 +635,22 @@ export function GamificationOverviewWidget({
                         key={target.id}
                         className="grid grid-cols-[2rem_minmax(0,1fr)_3.5rem] items-center gap-2"
                       >
-                        <img
+                        <DurableGamificationImage
                           src={getGamificationSpriteUrl(
                             target.assetKey,
                             256,
                             gamificationTheme
                           )}
+                          fallbackSrc={getGamificationFallbackUrl(
+                            gamificationTheme,
+                            target.assetKey
+                          )}
+                          assetKey={target.assetKey}
                           alt=""
                           loading="lazy"
                           decoding="async"
                           width={32}
                           height={32}
-                          onLoad={revealLoadedGamificationImage}
-                          onError={(event) =>
-                            recoverMissingGamificationImage(
-                              event,
-                              getGamificationFallbackUrl(
-                                gamificationTheme,
-                                target.assetKey
-                              )
-                            )
-                          }
                           className="size-8 object-contain opacity-90"
                         />
                         <div className="min-w-0">
@@ -647,29 +681,24 @@ export function GamificationOverviewWidget({
                 <div className="mt-3 flex min-w-0 gap-2">
                   {latestShelf.length > 0 ? (
                     latestShelf.map((item) => (
-                      <img
+                      <DurableGamificationImage
                         key={item.id}
                         src={getGamificationSpriteUrl(
                           item.assetKey,
                           256,
                           gamificationTheme
                         )}
+                        fallbackSrc={getGamificationFallbackUrl(
+                          gamificationTheme,
+                          item.assetKey
+                        )}
+                        assetKey={item.assetKey}
                         alt={item.title}
                         title={item.title}
                         loading="lazy"
                         decoding="async"
                         width={44}
                         height={44}
-                        onLoad={revealLoadedGamificationImage}
-                        onError={(event) =>
-                          recoverMissingGamificationImage(
-                            event,
-                            getGamificationFallbackUrl(
-                              gamificationTheme,
-                              item.assetKey
-                            )
-                          )
-                        }
                         className="size-11 rounded-2xl bg-[var(--ui-surface-2)] object-contain p-1"
                       />
                     ))
@@ -698,11 +727,21 @@ export function GamificationCelebrationLayer({
 }: {
   xpNotice: XpNotice | null;
   celebrations: GamificationCelebration[];
-  onSeen: (celebrationId: string) => void;
+  onSeen: (celebrationId: string) => Promise<void> | void;
 }) {
   const reduceMotion = useReducedMotion();
   const gamificationTheme = useGamificationTheme();
-  const celebration = celebrations[0] ?? null;
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [failedAcknowledgement, setFailedAcknowledgement] = useState<{
+    celebration: GamificationCelebration;
+    message: string;
+  } | null>(null);
+  const [retryingAcknowledgement, setRetryingAcknowledgement] = useState(false);
+  const acknowledgementInFlightIdsRef = useRef(new Set<string>());
+  const celebration =
+    celebrations.find((candidate) => !dismissedIds.has(candidate.id)) ?? null;
   const onSeenRef = useRef(onSeen);
   onSeenRef.current = onSeen;
   const isMajor =
@@ -714,17 +753,69 @@ export function GamificationCelebrationLayer({
     "celebration"
   );
   const xpMotion = getGamificationNoticeMotion(reduceMotion, "xp");
+  const failureAlertMotion = getGamificationFailureAlertMotion(reduceMotion);
 
-  useEffect(() => {
-    if (!celebration) {
+  const dismissCelebration = useCallback(
+    async (current: GamificationCelebration) => {
+      setDismissedIds((previous) => {
+        const next = new Set(previous);
+        next.add(current.id);
+        return next;
+      });
+      if (acknowledgementInFlightIdsRef.current.has(current.id)) {
+        return;
+      }
+      acknowledgementInFlightIdsRef.current.add(current.id);
+      try {
+        await onSeenRef.current(current.id);
+        setFailedAcknowledgement((failed) =>
+          failed?.celebration.id === current.id ? null : failed
+        );
+      } catch (error) {
+        setFailedAcknowledgement({
+          celebration: current,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Forge could not save the acknowledgement."
+        });
+      } finally {
+        acknowledgementInFlightIdsRef.current.delete(current.id);
+      }
+    },
+    []
+  );
+
+  const retryAcknowledgement = async () => {
+    if (!failedAcknowledgement || retryingAcknowledgement) {
       return;
     }
-    const timeout = window.setTimeout(
-      () => onSeenRef.current(celebration.id),
-      isMajor ? 3000 : 1800
-    );
-    return () => window.clearTimeout(timeout);
-  }, [celebration, isMajor]);
+    const celebrationId = failedAcknowledgement.celebration.id;
+    if (acknowledgementInFlightIdsRef.current.has(celebrationId)) {
+      return;
+    }
+    acknowledgementInFlightIdsRef.current.add(celebrationId);
+    setRetryingAcknowledgement(true);
+    try {
+      await onSeenRef.current(celebrationId);
+      setFailedAcknowledgement(null);
+    } catch (error) {
+      setFailedAcknowledgement((current) =>
+        current
+          ? {
+              ...current,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Forge could not save the acknowledgement."
+            }
+          : current
+      );
+    } finally {
+      acknowledgementInFlightIdsRef.current.delete(celebrationId);
+      setRetryingAcknowledgement(false);
+    }
+  };
 
   return (
     <AnimatePresence initial={!reduceMotion}>
@@ -752,29 +843,24 @@ export function GamificationCelebrationLayer({
             <button
               type="button"
               aria-label={`Dismiss ${celebration.kind} celebration`}
-              onClick={() => onSeen(celebration.id)}
+              onClick={() => void dismissCelebration(celebration)}
               className="absolute right-2 top-2 grid size-9 place-items-center rounded-full text-[var(--ui-ink-faint)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
             >
               <X className="size-4" />
             </button>
             <div className="flex min-w-0 items-center gap-3">
-              <img
+              <DurableGamificationImage
                 src={getGamificationSpriteUrl(
                   celebration.assetKey || "mascot-state-020",
                   256,
                   gamificationTheme
                 )}
+                fallbackSrc={getGamificationFallbackUrl(
+                  gamificationTheme,
+                  celebration.assetKey || "mascot-state-020"
+                )}
+                assetKey={celebration.assetKey || "mascot-state-020"}
                 alt=""
-                onLoad={revealLoadedGamificationImage}
-                onError={(event) =>
-                  recoverMissingGamificationImage(
-                    event,
-                    getGamificationFallbackUrl(
-                      gamificationTheme,
-                      celebration.assetKey || "mascot-state-020"
-                    )
-                  )
-                }
                 className={cn(
                   "shrink-0 object-contain",
                   isMajor ? "size-24" : "size-14"
@@ -828,6 +914,32 @@ export function GamificationCelebrationLayer({
               · {formatCompactNumber(xpNotice.totalXp)} total
             </span>
           </div>
+        </motion.div>
+      ) : null}
+      {failedAcknowledgement ? (
+        <motion.div
+          key={`celebration-ack-${failedAcknowledgement.celebration.id}`}
+          {...failureAlertMotion}
+          className="pointer-events-auto fixed inset-x-4 bottom-24 z-[51] mx-auto max-w-[28rem] rounded-[18px] border border-[color-mix(in_srgb,var(--warning)_32%,var(--ui-border-subtle)_68%)] bg-[var(--surface-glass)] p-3 shadow-[var(--ui-shadow-floating)] backdrop-blur-xl lg:bottom-6"
+          role="alert"
+        >
+          <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+            Celebration dismissed, but not saved
+          </div>
+          <div className="mt-1 text-xs leading-5 text-[var(--ui-ink-soft)]">
+            {failedAcknowledgement.message}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="mt-3"
+            pending={retryingAcknowledgement}
+            pendingLabel="Retrying"
+            onClick={() => void retryAcknowledgement()}
+          >
+            Retry saving
+          </Button>
         </motion.div>
       ) : null}
     </AnimatePresence>

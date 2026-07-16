@@ -8,6 +8,7 @@ import {
   lifeForceProfilePatchSchema,
   lifeForceTemplateUpdateSchema,
   type ActionProfile,
+  type CalendarActivityPresetKey,
   type FatigueSignalCreateInput,
   type LifeForceCurvePoint,
   type LifeForcePayload,
@@ -151,7 +152,13 @@ type TaskTimeboxLifeForceRow = {
 type WorkBlockTemplateLifeForceRow = {
   id: string;
   title: string;
-  kind: "main_activity" | "secondary_activity" | "third_activity" | "rest" | "holiday" | "custom";
+  kind:
+    | "main_activity"
+    | "secondary_activity"
+    | "third_activity"
+    | "rest"
+    | "holiday"
+    | "custom";
   color: string;
   weekdays_json: string;
   start_minute: number;
@@ -211,18 +218,20 @@ type TaskLifeForceRuntime = {
   projectedTotalSeconds: number;
 };
 
-const DEFAULT_TEMPLATE_POINTS: Array<{ minuteOfDay: number; rateApPerHour: number }> =
-  [
-    { minuteOfDay: 0, rateApPerHour: 0 },
-    { minuteOfDay: 7 * 60, rateApPerHour: 0 },
-    { minuteOfDay: 8 * 60, rateApPerHour: 8 },
-    { minuteOfDay: 10 * 60, rateApPerHour: 13 },
-    { minuteOfDay: 13 * 60, rateApPerHour: 9 },
-    { minuteOfDay: 14 * 60, rateApPerHour: 11 },
-    { minuteOfDay: 19 * 60, rateApPerHour: 7 },
-    { minuteOfDay: 23 * 60, rateApPerHour: 0 },
-    { minuteOfDay: 24 * 60, rateApPerHour: 0 }
-  ];
+const DEFAULT_TEMPLATE_POINTS: Array<{
+  minuteOfDay: number;
+  rateApPerHour: number;
+}> = [
+  { minuteOfDay: 0, rateApPerHour: 0 },
+  { minuteOfDay: 7 * 60, rateApPerHour: 0 },
+  { minuteOfDay: 8 * 60, rateApPerHour: 8 },
+  { minuteOfDay: 10 * 60, rateApPerHour: 13 },
+  { minuteOfDay: 13 * 60, rateApPerHour: 9 },
+  { minuteOfDay: 14 * 60, rateApPerHour: 11 },
+  { minuteOfDay: 19 * 60, rateApPerHour: 7 },
+  { minuteOfDay: 23 * 60, rateApPerHour: 0 },
+  { minuteOfDay: 24 * 60, rateApPerHour: 0 }
+];
 
 const LIFE_FORCE_STAT_LABELS: Record<LifeForceStatKey, string> = {
   life_force: "Life Force",
@@ -320,7 +329,9 @@ function scaleContributionAp(
   }
   return {
     ...contribution,
-    totalAp: Number((contribution.totalAp * Math.max(0, multiplier)).toFixed(4)),
+    totalAp: Number(
+      (contribution.totalAp * Math.max(0, multiplier)).toFixed(4)
+    ),
     why: `${contribution.why} ${reason}`,
     metadata: {
       ...(contribution.metadata ?? {}),
@@ -328,16 +339,6 @@ function scaleContributionAp(
     }
   };
 }
-
-type CalendarActivityPresetKey =
-  | "deep_work"
-  | "admin"
-  | "maintenance"
-  | "meeting"
-  | "recovery_break"
-  | "holiday_leisure"
-  | "light_context"
-  | "task_inherited";
 
 type CalendarActivityPresetDefinition = {
   title: string;
@@ -503,7 +504,9 @@ const CALENDAR_ACTIVITY_PRESETS: Record<
   }
 };
 
-function buildStatLevels(profile: LifeForceProfileRow): Record<LifeForceStatKey, number> {
+function buildStatLevels(
+  profile: LifeForceProfileRow
+): Record<LifeForceStatKey, number> {
   return {
     life_force: profile.life_force_level,
     activation: profile.activation_level,
@@ -541,19 +544,30 @@ function rateToTotalAp(rateApPerHour: number, durationSeconds: number) {
 }
 
 function clipWindowToRange(window: TimeWindow, range: TimeWindow) {
-  const startMs = Math.max(Date.parse(window.startAt), Date.parse(range.startAt));
+  const startMs = Math.max(
+    Date.parse(window.startAt),
+    Date.parse(range.startAt)
+  );
   const endMs = Math.min(Date.parse(window.endAt), Date.parse(range.endAt));
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    endMs <= startMs
+  ) {
     return null;
   }
   return { startMs, endMs };
 }
 
-function computeUncoveredSeconds(window: TimeWindow, blockingWindows: TimeWindow[]) {
+function computeUncoveredSeconds(
+  window: TimeWindow,
+  blockingWindows: TimeWindow[]
+) {
   const clippedBlocks = blockingWindows
     .map((candidate) => clipWindowToRange(candidate, window))
     .filter(
-      (candidate): candidate is { startMs: number; endMs: number } => candidate !== null
+      (candidate): candidate is { startMs: number; endMs: number } =>
+        candidate !== null
     )
     .sort((left, right) => left.startMs - right.startMs);
   const totalSeconds = Math.max(
@@ -601,7 +615,9 @@ function toDateKey(date: Date) {
 }
 
 function startOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
 }
 
 function buildDayRange(date: Date): TimeRange {
@@ -625,7 +641,13 @@ function parseCurvePoints(raw: string): LifeForceCurvePoint[] {
     }
     return parsed
       .filter(
-        (value): value is { minuteOfDay: number; rateApPerHour: number; locked?: boolean } =>
+        (
+          value
+        ): value is {
+          minuteOfDay: number;
+          rateApPerHour: number;
+          locked?: boolean;
+        } =>
           !!value &&
           typeof value === "object" &&
           typeof value.minuteOfDay === "number" &&
@@ -643,7 +665,10 @@ function parseCurvePoints(raw: string): LifeForceCurvePoint[] {
 }
 
 function defaultTemplatePoints(): LifeForceCurvePoint[] {
-  return normalizeCurveToBudget(DEFAULT_TEMPLATE_POINTS, LIFE_FORCE_BASELINE_DAILY_AP);
+  return normalizeCurveToBudget(
+    DEFAULT_TEMPLATE_POINTS,
+    LIFE_FORCE_BASELINE_DAILY_AP
+  );
 }
 
 function resolveWorkBlockPresetKey(
@@ -670,13 +695,21 @@ function resolveCalendarEventPresetKey(input: {
   availability: "busy" | "free";
 }): Exclude<CalendarActivityPresetKey, "task_inherited"> {
   const searchable = `${input.title} ${input.eventType ?? ""}`.toLowerCase();
-  if (searchable.includes("meeting") || searchable.includes("call") || searchable.includes("interview")) {
+  if (
+    searchable.includes("meeting") ||
+    searchable.includes("call") ||
+    searchable.includes("interview")
+  ) {
     return "meeting";
   }
   if (searchable.includes("deep work") || searchable.includes("focus")) {
     return "deep_work";
   }
-  if (searchable.includes("admin") || searchable.includes("email") || searchable.includes("inbox")) {
+  if (
+    searchable.includes("admin") ||
+    searchable.includes("email") ||
+    searchable.includes("inbox")
+  ) {
     return "admin";
   }
   if (
@@ -783,7 +816,7 @@ function buildCalendarActivityProfile(input: {
       input.customSustainRateApPerHour !== null &&
       input.customSustainRateApPerHour !== undefined
         ? "manual"
-        : input.sourceMethod ?? base.sourceMethod,
+        : (input.sourceMethod ?? base.sourceMethod),
     metadata: {
       ...base.metadata,
       activityPresetKey: input.activityPresetKey,
@@ -1232,7 +1265,8 @@ export function upsertTaskActionProfile(input: {
     title: input.title || "Task",
     expectedDurationSeconds: input.plannedDurationSeconds,
     totalCostAp:
-      input.totalCostAp ?? resolveBandTotalCostAp(input.actionCostBand ?? "standard"),
+      input.totalCostAp ??
+      resolveBandTotalCostAp(input.actionCostBand ?? "standard"),
     costBand: input.actionCostBand ?? "standard",
     sourceMethod: "manual"
   });
@@ -1502,7 +1536,10 @@ function readTaskRunRows(range: TimeRange, userId: string): TaskRunTimingRow[] {
 
 function terminalRunMs(row: TaskRunTimingRow, now: Date) {
   if (row.status === "active") {
-    return Math.max(Date.parse(row.claimed_at), Math.min(now.getTime(), Date.parse(row.lease_expires_at)));
+    return Math.max(
+      Date.parse(row.claimed_at),
+      Math.min(now.getTime(), Date.parse(row.lease_expires_at))
+    );
   }
   const terminal =
     row.completed_at ??
@@ -1559,19 +1596,17 @@ function readPrimarySleepSessionForDate(userId: string, date: Date) {
   const range = buildDayRange(date);
   const lookback = new Date(range.startMs - 18 * 60 * 60 * 1000).toISOString();
   try {
-    return (
-      getDatabase()
-        .prepare(
-          `SELECT id, started_at, ended_at, asleep_seconds, sleep_score
+    return getDatabase()
+      .prepare(
+        `SELECT id, started_at, ended_at, asleep_seconds, sleep_score
            FROM health_sleep_sessions
            WHERE user_id = ?
              AND ended_at >= ?
              AND ended_at < ?
            ORDER BY asleep_seconds DESC, ended_at DESC
            LIMIT 1`
-        )
-        .get(userId, lookback, range.to) as SleepSessionRow | undefined
-    );
+      )
+      .get(userId, lookback, range.to) as SleepSessionRow | undefined;
   } catch {
     return undefined;
   }
@@ -1583,7 +1618,11 @@ function computeSleepRecoveryMultiplier(userId: string, date: Date) {
     return 1;
   }
   const sleepHours = session.asleep_seconds / 3600;
-  const durationFactor = clamp(0.82 + ((sleepHours - 4.5) / 4.5) * 0.22, 0.85, 1.1);
+  const durationFactor = clamp(
+    0.82 + ((sleepHours - 4.5) / 4.5) * 0.22,
+    0.85,
+    1.1
+  );
   const scoreFactor =
     session.sleep_score === null
       ? 1
@@ -1612,7 +1651,10 @@ function computeFatigueDebtCarry(userId: string, date: Date) {
        WHERE user_id = ? AND date_key = ?`
     )
     .get(userId, previousKey) as { total_ap: number };
-  return Math.max(0, Number((spent.total_ap - snapshot.daily_budget_ap).toFixed(2)));
+  return Math.max(
+    0,
+    Number((spent.total_ap - snapshot.daily_budget_ap).toFixed(2))
+  );
 }
 
 function getOrCreateDaySnapshot(userId: string, date: Date): SnapshotRow {
@@ -1627,7 +1669,10 @@ function getOrCreateDaySnapshot(userId: string, date: Date): SnapshotRow {
   if (existing) {
     const profile = ensureLifeForceProfile(userId);
     const template = readWeekdayTemplate(userId, date.getUTCDay());
-    const sleepRecoveryMultiplier = computeSleepRecoveryMultiplier(userId, date);
+    const sleepRecoveryMultiplier = computeSleepRecoveryMultiplier(
+      userId,
+      date
+    );
     const fatigueDebtCarry = computeFatigueDebtCarry(userId, date);
     const readinessMultiplier = profile.readiness_multiplier;
     const dailyBudgetAp = Math.max(
@@ -1641,7 +1686,8 @@ function getOrCreateDaySnapshot(userId: string, date: Date): SnapshotRow {
     );
     const derivedChanged =
       Math.abs(existing.daily_budget_ap - dailyBudgetAp) > 0.01 ||
-      Math.abs(existing.sleep_recovery_multiplier - sleepRecoveryMultiplier) > 0.001 ||
+      Math.abs(existing.sleep_recovery_multiplier - sleepRecoveryMultiplier) >
+        0.001 ||
       Math.abs(existing.readiness_multiplier - readinessMultiplier) > 0.001 ||
       Math.abs(existing.fatigue_debt_carry - fatigueDebtCarry) > 0.01;
     if (!derivedChanged) {
@@ -1765,7 +1811,9 @@ function resolveTaskActionProfileFromRow(
       baseProfile.expectedDurationSeconds ?? task.plannedDurationSeconds
     )
   };
-  return lifeForceProfile ? buildEffectiveProfile(profile, lifeForceProfile) : profile;
+  return lifeForceProfile
+    ? buildEffectiveProfile(profile, lifeForceProfile)
+    : profile;
 }
 
 export function buildTaskTimeboxActionProfile(input: {
@@ -1837,17 +1885,17 @@ function readTodayAdjustmentRows(userId: string, range: TimeRange) {
          AND work_adjustments.created_at < ?`
     )
     .all(userId, range.from, range.to) as Array<{
-      id: string;
-      entity_type: string;
-      entity_id: string;
-      applied_delta_minutes: number;
-      note: string;
-      actor: string | null;
-      source: string;
-      created_at: string;
-      planned_duration_seconds: number | null;
-      task_goal_id: string | null;
-    }>;
+    id: string;
+    entity_type: string;
+    entity_id: string;
+    applied_delta_minutes: number;
+    note: string;
+    actor: string | null;
+    source: string;
+    created_at: string;
+    planned_duration_seconds: number | null;
+    task_goal_id: string | null;
+  }>;
 }
 
 function readTodayAdjustmentApByTaskId(
@@ -1868,14 +1916,16 @@ function readTodayAdjustmentApByTaskId(
       },
       lifeForceProfile
     );
-    const deltaAp = rateToTotalAp(
-      profile.sustainRateApPerHour,
-      row.applied_delta_minutes * 60
-    ) * agentSupervisionMultiplier({
-      actor: row.actor,
-      source: row.source,
-      goalLinked: Boolean(row.task_goal_id)
-    });
+    const deltaAp =
+      rateToTotalAp(
+        profile.sustainRateApPerHour,
+        row.applied_delta_minutes * 60
+      ) *
+      agentSupervisionMultiplier({
+        actor: row.actor,
+        source: row.source,
+        goalLinked: Boolean(row.task_goal_id)
+      });
     totals.set(row.entity_id, (totals.get(row.entity_id) ?? 0) + deltaAp);
   }
   return totals;
@@ -1896,7 +1946,9 @@ function readTodayAdjustmentSecondsByTaskId(userId: string, range: TimeRange) {
   return totals;
 }
 
-function readActiveTaskRunProjectionRows(taskId: string): ActiveTaskRunProjectionRow[] {
+function readActiveTaskRunProjectionRows(
+  taskId: string
+): ActiveTaskRunProjectionRow[] {
   return getDatabase()
     .prepare(
       `SELECT
@@ -1964,10 +2016,7 @@ function computeProjectedRemainingSeconds(
 }
 
 function buildTaskLifeForceRuntime(
-  task: Pick<
-    Task,
-    "id" | "plannedDurationSeconds" | "time"
-  >,
+  task: Pick<Task, "id" | "plannedDurationSeconds" | "time">,
   userId: string,
   now = new Date(),
   lifeForceProfile = ensureLifeForceProfile(userId)
@@ -1980,7 +2029,8 @@ function buildTaskLifeForceRuntime(
   const todayAdjustmentSeconds =
     readTodayAdjustmentSecondsByTaskId(userId, range).get(task.id) ?? 0;
   const todayCreditedSeconds = todayRunSeconds + todayAdjustmentSeconds;
-  const spentTodayAp = (todayCreditedSeconds / 3600) * profile.sustainRateApPerHour;
+  const spentTodayAp =
+    (todayCreditedSeconds / 3600) * profile.sustainRateApPerHour;
   const spentTotalAp =
     (task.time.totalCreditedSeconds / 3600) * profile.sustainRateApPerHour;
   const projectedTotalSeconds =
@@ -2039,29 +2089,33 @@ function buildWorkAdjustmentContributions(
         profile.sustainRateApPerHour,
         row.applied_delta_minutes * 60
       );
-      return scaleContributionAp({
-        entityType: "task",
-        entityId: row.entity_id,
-        eventKind: "work_adjustment",
-        sourceKind: "work_adjustment",
-        totalAp,
-        rateApPerHour: null,
-        title: row.note?.trim() || "Manual work adjustment",
-        why: "Manual time adjustments count toward today's Action Point spend.",
-        startsAt: row.created_at,
-        endsAt: row.created_at,
-        role: "background" as const,
-        metadata: {
-          adjustmentId: row.id,
-          appliedDeltaMinutes: row.applied_delta_minutes,
+      return scaleContributionAp(
+        {
+          entityType: "task",
+          entityId: row.entity_id,
+          eventKind: "work_adjustment",
+          sourceKind: "work_adjustment",
+          totalAp,
+          rateApPerHour: null,
+          title: row.note?.trim() || "Manual work adjustment",
+          why: "Manual time adjustments count toward today's Action Point spend.",
+          startsAt: row.created_at,
+          endsAt: row.created_at,
+          role: "background" as const,
+          metadata: {
+            adjustmentId: row.id,
+            appliedDeltaMinutes: row.applied_delta_minutes,
+            actor: row.actor,
+            source: row.source
+          }
+        },
+        agentSupervisionMultiplier({
           actor: row.actor,
-          source: row.source
-        }
-      }, agentSupervisionMultiplier({
-        actor: row.actor,
-        source: row.source,
-        goalLinked: Boolean(row.task_goal_id)
-      }), "Agent-authored manual work is charged as light supervision AP instead of full human effort.");
+          source: row.source,
+          goalLinked: Boolean(row.task_goal_id)
+        }),
+        "Agent-authored manual work is charged as light supervision AP instead of full human effort."
+      );
     });
 }
 
@@ -2072,7 +2126,10 @@ function buildTaskRunContributions(
   lifeForceProfile: LifeForceProfileRow
 ) {
   const contributions: ApContribution[] = [];
-  const totalsByTaskId = new Map<string, { todayAp: number; totalAp: number }>();
+  const totalsByTaskId = new Map<
+    string,
+    { todayAp: number; totalAp: number }
+  >();
   const activeDrains: ApContribution[] = [];
   for (const row of readTaskRunRows(range, userId)) {
     const seconds = overlapSeconds(range, row, now);
@@ -2088,32 +2145,46 @@ function buildTaskRunContributions(
       lifeForceProfile
     );
     const totalAp = rateToTotalAp(profile.sustainRateApPerHour, seconds);
-    const startsAt = new Date(Math.max(range.startMs, Date.parse(row.claimed_at))).toISOString();
-    const endsAt = new Date(Math.min(range.endMs, terminalRunMs(row, now))).toISOString();
-    const contribution = scaleContributionAp({
-      entityType: "task",
-      entityId: row.task_id,
-      eventKind: "task_run",
-      sourceKind: "task_run",
-      totalAp,
-      rateApPerHour: profile.sustainRateApPerHour,
-      title: row.task_title,
-      why: "Active timed work consumes Action Points proportionally to actual time worked today.",
-      startsAt,
-      endsAt,
-      role: row.is_current === 1 ? "primary" : "secondary",
-      metadata: { taskRunId: row.id, actor: row.actor }
-    }, agentSupervisionMultiplier({
-      actor: row.actor,
-      goalLinked: Boolean(row.task_goal_id)
-    }), "Agent-authored task runs are charged as supervision AP for the human user.");
+    const startsAt = new Date(
+      Math.max(range.startMs, Date.parse(row.claimed_at))
+    ).toISOString();
+    const endsAt = new Date(
+      Math.min(range.endMs, terminalRunMs(row, now))
+    ).toISOString();
+    const contribution = scaleContributionAp(
+      {
+        entityType: "task",
+        entityId: row.task_id,
+        eventKind: "task_run",
+        sourceKind: "task_run",
+        totalAp,
+        rateApPerHour: profile.sustainRateApPerHour,
+        title: row.task_title,
+        why: "Active timed work consumes Action Points proportionally to actual time worked today.",
+        startsAt,
+        endsAt,
+        role: row.is_current === 1 ? "primary" : "secondary",
+        metadata: { taskRunId: row.id, actor: row.actor }
+      },
+      agentSupervisionMultiplier({
+        actor: row.actor,
+        goalLinked: Boolean(row.task_goal_id)
+      }),
+      "Agent-authored task runs are charged as supervision AP for the human user."
+    );
     contributions.push(contribution);
-    const existing = totalsByTaskId.get(row.task_id) ?? { todayAp: 0, totalAp: 0 };
+    const existing = totalsByTaskId.get(row.task_id) ?? {
+      todayAp: 0,
+      totalAp: 0
+    };
     existing.todayAp += totalAp;
     existing.totalAp += totalAp;
     totalsByTaskId.set(row.task_id, existing);
 
-    if (row.status === "active" && Date.parse(row.lease_expires_at) > now.getTime()) {
+    if (
+      row.status === "active" &&
+      Date.parse(row.lease_expires_at) > now.getTime()
+    ) {
       activeDrains.push({
         ...contribution,
         totalAp: 0
@@ -2131,10 +2202,16 @@ function buildNoteContributions(
 ): ApContribution[] {
   try {
     const noteProfile = buildEffectiveProfile(
-      seededActionProfiles().find((entry) => entry.profileKey === "note_quick")!,
+      seededActionProfiles().find(
+        (entry) => entry.profileKey === "note_quick"
+      )!,
       lifeForceProfile
     );
-    const taskRunWindowsByTaskId = readTaskRunWindowsByTaskId(userId, range, now);
+    const taskRunWindowsByTaskId = readTaskRunWindowsByTaskId(
+      userId,
+      range,
+      now
+    );
     const rows = getDatabase()
       .prepare(
         `SELECT
@@ -2177,7 +2254,8 @@ function buildNoteContributions(
           .filter(Boolean);
         return !linkedTaskIds.some((taskId) =>
           (taskRunWindowsByTaskId.get(taskId) ?? []).some(
-            (window) => createdAtMs >= window.startMs && createdAtMs <= window.endMs
+            (window) =>
+              createdAtMs >= window.startMs && createdAtMs <= window.endMs
           )
         );
       })
@@ -2190,23 +2268,27 @@ function buildNoteContributions(
           return [];
         }
         return [
-          scaleContributionAp({
-            entityType: "note",
-            entityId: row.id,
-            eventKind: "note_created",
-            sourceKind: "note",
-            totalAp: noteProfile.totalCostAp,
-            rateApPerHour: null,
-            title: row.title || "Note",
-            why: "Standalone capture takes a small impulse of activation and focus.",
-            startsAt: row.created_at,
-            endsAt: row.created_at,
-            role: "background" as const,
-            metadata: {
-              author: row.author,
-              source: row.source
-            }
-          }, multiplier, "Agent-authored notes are charged as a small monitoring impulse instead of full personal work.")
+          scaleContributionAp(
+            {
+              entityType: "note",
+              entityId: row.id,
+              eventKind: "note_created",
+              sourceKind: "note",
+              totalAp: noteProfile.totalCostAp,
+              rateApPerHour: null,
+              title: row.title || "Note",
+              why: "Standalone capture takes a small impulse of activation and focus.",
+              startsAt: row.created_at,
+              endsAt: row.created_at,
+              role: "background" as const,
+              metadata: {
+                author: row.author,
+                source: row.source
+              }
+            },
+            multiplier,
+            "Agent-authored notes are charged as a small monitoring impulse instead of full personal work."
+          )
         ];
       });
   } catch {
@@ -2221,7 +2303,9 @@ function buildHabitContributions(
 ): ApContribution[] {
   try {
     const habitProfile = buildEffectiveProfile(
-      seededActionProfiles().find((entry) => entry.profileKey === "habit_default")!,
+      seededActionProfiles().find(
+        (entry) => entry.profileKey === "habit_default"
+      )!,
       lifeForceProfile
     );
     const rows = getDatabase()
@@ -2252,17 +2336,17 @@ function buildHabitContributions(
     return rows
       .filter((row) => row.generated_workout_id === null)
       .map((row) => ({
-      entityType: "habit",
-      entityId: row.id,
-      eventKind: "habit_check_in",
-      sourceKind: "habit",
-      totalAp: habitProfile.totalCostAp,
-      rateApPerHour: null,
-      title: row.title,
-      why: "Habit execution still costs activation even when the action is short.",
-      startsAt: row.created_at,
-      endsAt: row.created_at,
-      role: "background" as const
+        entityType: "habit",
+        entityId: row.id,
+        eventKind: "habit_check_in",
+        sourceKind: "habit",
+        totalAp: habitProfile.totalCostAp,
+        rateApPerHour: null,
+        title: row.title,
+        why: "Habit execution still costs activation even when the action is short.",
+        startsAt: row.created_at,
+        endsAt: row.created_at,
+        role: "background" as const
       }));
   } catch {
     return [];
@@ -2306,7 +2390,9 @@ function buildWorkoutContributions(
   const contributions: ApContribution[] = [];
   const activeDrains: ApContribution[] = [];
   const workoutProfile = buildEffectiveProfile(
-    seededActionProfiles().find((entry) => entry.profileKey === "workout_default")!,
+    seededActionProfiles().find(
+      (entry) => entry.profileKey === "workout_default"
+    )!,
     lifeForceProfile
   );
   for (const row of rows) {
@@ -2336,7 +2422,10 @@ function buildWorkoutContributions(
       role: "secondary"
     };
     contributions.push(contribution);
-    if (Date.parse(row.started_at) <= now.getTime() && Date.parse(row.ended_at) > now.getTime()) {
+    if (
+      Date.parse(row.started_at) <= now.getTime() &&
+      Date.parse(row.ended_at) > now.getTime()
+    ) {
       activeDrains.push({ ...contribution, totalAp: 0 });
     }
   }
@@ -2348,7 +2437,10 @@ function buildWakeImpulseContributions(
   range: TimeRange,
   lifeForceProfile: LifeForceProfileRow
 ) {
-  const primarySleep = readPrimarySleepSessionForDate(userId, new Date(range.startMs));
+  const primarySleep = readPrimarySleepSessionForDate(
+    userId,
+    new Date(range.startMs)
+  );
   if (!primarySleep) {
     return [];
   }
@@ -2386,11 +2478,14 @@ function buildMovementTripProfile(
   const expectedMet = trip.expected_met ?? 2;
   const baseRateApPerHour = clamp(expectedMet * 4, 4, 22);
   const lowerTitle = `${trip.activity_type} ${trip.travel_mode}`.toLowerCase();
-  const vigor = lowerTitle.includes("walk") || lowerTitle.includes("run") || lowerTitle.includes("bike")
-    ? 0.65
-    : lowerTitle.includes("drive") || lowerTitle.includes("train")
-      ? 0.2
-      : 0.45;
+  const vigor =
+    lowerTitle.includes("walk") ||
+    lowerTitle.includes("run") ||
+    lowerTitle.includes("bike")
+      ? 0.65
+      : lowerTitle.includes("drive") || lowerTitle.includes("train")
+        ? 0.2
+        : 0.45;
   const focus = lowerTitle.includes("drive") ? 0.35 : 0.15;
   const flow = 1 - vigor - focus;
   return actionProfileSchema.parse({
@@ -2466,14 +2561,22 @@ function buildMovementTripContributions(
       sourceKind: "movement",
       totalAp: rateToTotalAp(profile.sustainRateApPerHour, seconds),
       rateApPerHour: profile.sustainRateApPerHour,
-      title: row.label || row.activity_type || row.travel_mode || "Movement trip",
+      title:
+        row.label || row.activity_type || row.travel_mode || "Movement trip",
       why: "Movement and commuting consume current capacity through physical effort, attention, and switching overhead.",
-      startsAt: new Date(Math.max(range.startMs, Date.parse(row.started_at))).toISOString(),
-      endsAt: new Date(Math.min(range.endMs, Date.parse(row.ended_at))).toISOString(),
+      startsAt: new Date(
+        Math.max(range.startMs, Date.parse(row.started_at))
+      ).toISOString(),
+      endsAt: new Date(
+        Math.min(range.endMs, Date.parse(row.ended_at))
+      ).toISOString(),
       role: "secondary"
     };
     contributions.push(contribution);
-    if (Date.parse(row.started_at) <= now.getTime() && Date.parse(row.ended_at) > now.getTime()) {
+    if (
+      Date.parse(row.started_at) <= now.getTime() &&
+      Date.parse(row.ended_at) > now.getTime()
+    ) {
       activeDrains.push({ ...contribution, totalAp: 0 });
     }
   }
@@ -2611,11 +2714,17 @@ function deriveTodayWorkBlocks(userId: string, range: TimeRange) {
       if (template.ends_on && dayKey > template.ends_on) {
         return false;
       }
-      return parseWeekdaysJson(template.weekdays_json).includes(dayDate.getUTCDay());
+      return parseWeekdaysJson(template.weekdays_json).includes(
+        dayDate.getUTCDay()
+      );
     })
     .map((template) => {
-      const startAt = new Date(range.startMs + template.start_minute * 60_000).toISOString();
-      const endAt = new Date(range.startMs + template.end_minute * 60_000).toISOString();
+      const startAt = new Date(
+        range.startMs + template.start_minute * 60_000
+      ).toISOString();
+      const endAt = new Date(
+        range.startMs + template.end_minute * 60_000
+      ).toISOString();
       return {
         ...template,
         instance_id: `wbinst_${template.id}_${dayKey}`,
@@ -2644,8 +2753,12 @@ function buildWorkBlockProfile(input: {
   if (storedProfile) {
     return storedProfile;
   }
-  const startMinute = new Date(input.startAt).getUTCHours() * 60 + new Date(input.startAt).getUTCMinutes();
-  const endMinute = new Date(input.endAt).getUTCHours() * 60 + new Date(input.endAt).getUTCMinutes();
+  const startMinute =
+    new Date(input.startAt).getUTCHours() * 60 +
+    new Date(input.startAt).getUTCMinutes();
+  const endMinute =
+    new Date(input.endAt).getUTCHours() * 60 +
+    new Date(input.endAt).getUTCMinutes();
   return buildWorkBlockTemplateActionProfile({
     templateId: input.templateId,
     title: input.title,
@@ -2696,7 +2809,7 @@ function buildTimeboxAndWorkBlockDrains(
             }),
           lifeForceProfile
         )
-      : storedProfile ??
+      : (storedProfile ??
         buildTaskTimeboxActionProfile({
           timeboxId: row.id,
           title: row.title,
@@ -2704,11 +2817,16 @@ function buildTimeboxAndWorkBlockDrains(
           taskPlannedDurationSeconds: row.task_planned_duration_seconds,
           startsAt: row.starts_at,
           endsAt: row.ends_at
-        });
-    const higherPriorityWindows = [...actualSourceWindows, ...calendarEventWindows];
+        }));
+    const higherPriorityWindows = [
+      ...actualSourceWindows,
+      ...calendarEventWindows
+    ];
     const elapsedWindow = {
       startAt: row.starts_at,
-      endAt: new Date(Math.min(now.getTime(), Date.parse(row.ends_at))).toISOString()
+      endAt: new Date(
+        Math.min(now.getTime(), Date.parse(row.ends_at))
+      ).toISOString()
     };
     const elapsedSeconds = computeUncoveredSeconds(
       elapsedWindow,
@@ -2803,7 +2921,9 @@ function buildTimeboxAndWorkBlockDrains(
     );
     const elapsedWindow = {
       startAt: block.start_at,
-      endAt: new Date(Math.min(now.getTime(), Date.parse(block.end_at))).toISOString()
+      endAt: new Date(
+        Math.min(now.getTime(), Date.parse(block.end_at))
+      ).toISOString()
     };
     const elapsedSeconds = computeUncoveredSeconds(
       elapsedWindow,
@@ -2828,7 +2948,10 @@ function buildTimeboxAndWorkBlockDrains(
         }
       });
     }
-    const remainingStartMs = Math.max(now.getTime(), Date.parse(block.start_at));
+    const remainingStartMs = Math.max(
+      now.getTime(),
+      Date.parse(block.start_at)
+    );
     const remainingEndMs = Math.min(range.endMs, Date.parse(block.end_at));
     const remainingWindow =
       remainingEndMs > remainingStartMs
@@ -2928,16 +3051,24 @@ function buildCalendarDrains(
       );
       const elapsedWindow = {
         startAt: row.start_at,
-        endAt: new Date(Math.min(now.getTime(), Date.parse(row.end_at))).toISOString()
+        endAt: new Date(
+          Math.min(now.getTime(), Date.parse(row.end_at))
+        ).toISOString()
       };
-      const elapsedSeconds = computeUncoveredSeconds(elapsedWindow, blockingWindows);
+      const elapsedSeconds = computeUncoveredSeconds(
+        elapsedWindow,
+        blockingWindows
+      );
       if (elapsedSeconds > 0 && row.link_count === 0) {
         actualContributions.push({
           entityType: "calendar_event",
           entityId: row.id,
           eventKind: "calendar_event_actual",
           sourceKind: "calendar",
-          totalAp: rateToTotalAp(calendarProfile.sustainRateApPerHour, elapsedSeconds),
+          totalAp: rateToTotalAp(
+            calendarProfile.sustainRateApPerHour,
+            elapsedSeconds
+          ),
           rateApPerHour: calendarProfile.sustainRateApPerHour,
           title: row.title,
           why: "Busy calendar events debit today's AP when they were real containers and nothing richer occupied the same window.",
@@ -2947,16 +3078,25 @@ function buildCalendarDrains(
           metadata: {}
         });
       }
-      const remainingStartMs = Math.max(now.getTime(), Date.parse(row.start_at));
+      const remainingStartMs = Math.max(
+        now.getTime(),
+        Date.parse(row.start_at)
+      );
       const remainingEndMs = Math.min(range.endMs, Date.parse(row.end_at));
-      const remainingSeconds = Math.max(0, Math.floor((remainingEndMs - remainingStartMs) / 1000));
+      const remainingSeconds = Math.max(
+        0,
+        Math.floor((remainingEndMs - remainingStartMs) / 1000)
+      );
       if (remainingSeconds > 0 && row.link_count === 0) {
         plannedDrains.push({
           entityType: "calendar_event",
           entityId: row.id,
           eventKind: "calendar_event_plan",
           sourceKind: "calendar",
-          totalAp: rateToTotalAp(calendarProfile.sustainRateApPerHour, remainingSeconds),
+          totalAp: rateToTotalAp(
+            calendarProfile.sustainRateApPerHour,
+            remainingSeconds
+          ),
           rateApPerHour: calendarProfile.sustainRateApPerHour,
           title: row.title,
           why: "Busy calendar events reserve attention and social bandwidth even before deeper work is linked to them.",
@@ -2993,7 +3133,11 @@ function buildCalendarDrains(
   return { actualContributions, activeDrains, plannedDrains };
 }
 
-function syncApLedger(userId: string, range: TimeRange, contributions: ApContribution[]) {
+function syncApLedger(
+  userId: string,
+  range: TimeRange,
+  contributions: ApContribution[]
+) {
   runInTransaction(() => {
     const database = getDatabase();
     database
@@ -3055,25 +3199,30 @@ function syncStatXpEvents(
     if (contribution.totalAp <= 0) {
       continue;
     }
-    const weights =
-      contribution.profile?.demandWeights ?? {
-        activation: 0.2,
-        focus: 0.25,
-        vigor: 0.2,
-        composure: 0.15,
-        flow: 0.2
-      };
+    const weights = contribution.profile?.demandWeights ?? {
+      activation: 0.2,
+      focus: 0.25,
+      vigor: 0.2,
+      composure: 0.15,
+      flow: 0.2
+    };
     for (const [key, weight] of Object.entries(weights) as Array<
       [Exclude<LifeForceStatKey, "life_force">, number]
     >) {
       totals.set(
         key,
-        Number(((totals.get(key) ?? 0) + contribution.totalAp * weight).toFixed(4))
+        Number(
+          ((totals.get(key) ?? 0) + contribution.totalAp * weight).toFixed(4)
+        )
       );
     }
     totals.set(
       "life_force",
-      Number(((totals.get("life_force") ?? 0) + contribution.totalAp * 0.35).toFixed(4))
+      Number(
+        ((totals.get("life_force") ?? 0) + contribution.totalAp * 0.35).toFixed(
+          4
+        )
+      )
     );
   }
 
@@ -3150,7 +3299,8 @@ function buildWarnings(input: {
       id: "lf_overload",
       tone: "danger",
       title: "You are overloaded right now",
-      detail: "Current concurrent work is draining more than the available instant capacity."
+      detail:
+        "Current concurrent work is draining more than the available instant capacity."
     });
   }
   if (input.spentTodayAp > input.dailyBudgetAp) {
@@ -3187,7 +3337,10 @@ export function resolveLifeForceUser(userIds?: string[]) {
   return getDefaultUser();
 }
 
-export function buildLifeForcePayload(now = new Date(), userIds?: string[]): LifeForcePayload {
+export function buildLifeForcePayload(
+  now = new Date(),
+  userIds?: string[]
+): LifeForcePayload {
   ensureActionProfileTemplates();
   const user = resolveLifeForceUser(userIds);
   const profile = ensureLifeForceProfile(user.id);
@@ -3218,7 +3371,9 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
     startAt: row.start_at,
     endAt: row.end_at
   }));
-  const activeTaskRunTaskIds = new Set(taskRuns.activeDrains.map((entry) => entry.entityId));
+  const activeTaskRunTaskIds = new Set(
+    taskRuns.activeDrains.map((entry) => entry.entityId)
+  );
   const plannedContainers = buildTimeboxAndWorkBlockDrains(
     user.id,
     range,
@@ -3289,7 +3444,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
       profileLookup.set(
         `${contribution.entityType}:${contribution.entityId}`,
         buildEffectiveProfile(
-          seededProfilesByKey.get("habit_default") ?? seededActionProfiles()[0]!,
+          seededProfilesByKey.get("habit_default") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3299,7 +3455,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
       profileLookup.set(
         `${contribution.entityType}:${contribution.entityId}`,
         buildEffectiveProfile(
-          seededProfilesByKey.get("workout_default") ?? seededActionProfiles()[0]!,
+          seededProfilesByKey.get("workout_default") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3309,7 +3466,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
       profileLookup.set(
         `${contribution.entityType}:${contribution.entityId}`,
         buildEffectiveProfile(
-          seededProfilesByKey.get("movement_trip_default") ?? seededActionProfiles()[0]!,
+          seededProfilesByKey.get("movement_trip_default") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3324,7 +3482,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
             title: contribution.title,
             entityType: "task_timebox"
           }) ??
-            (seededProfilesByKey.get("task_timebox_default") ?? seededActionProfiles()[0]!),
+            seededProfilesByKey.get("task_timebox_default") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3349,7 +3508,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
             title: contribution.title,
             entityType: "work_block_template"
           }) ??
-            (seededProfilesByKey.get("work_block_main") ?? seededActionProfiles()[0]!),
+            seededProfilesByKey.get("work_block_main") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3364,7 +3524,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
             title: contribution.title,
             entityType: "calendar_event"
           }) ??
-            (seededProfilesByKey.get("calendar_event_default") ?? seededActionProfiles()[0]!),
+            seededProfilesByKey.get("calendar_event_default") ??
+            seededActionProfiles()[0]!,
           profile
         )
       );
@@ -3380,9 +3541,16 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
       );
     }
   }
-  const adjustmentApByTaskId = readTodayAdjustmentApByTaskId(user.id, range, profile);
+  const adjustmentApByTaskId = readTodayAdjustmentApByTaskId(
+    user.id,
+    range,
+    profile
+  );
   for (const [taskId, adjustmentAp] of adjustmentApByTaskId.entries()) {
-    const existing = taskRuns.totalsByTaskId.get(taskId) ?? { todayAp: 0, totalAp: 0 };
+    const existing = taskRuns.totalsByTaskId.get(taskId) ?? {
+      todayAp: 0,
+      totalAp: 0
+    };
     existing.todayAp += adjustmentAp;
     existing.totalAp += adjustmentAp;
     taskRuns.totalsByTaskId.set(taskId, existing);
@@ -3394,14 +3562,19 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
     contributions.map((contribution) => ({
       ...contribution,
       profile:
-        profileLookup.get(`${contribution.entityType}:${contribution.entityId}`) ?? null
+        profileLookup.get(
+          `${contribution.entityType}:${contribution.entityId}`
+        ) ?? null
     }))
   );
   const ledger = readTodayLedger(user.id, range.dateKey);
   const spentTodayAp = ledger.reduce((sum, row) => sum + row.total_ap, 0);
   const currentCurve = parseCurvePoints(snapshot.points_json);
   const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const instantCapacityApPerHour = interpolateCurveRate(currentCurve, minuteOfDay);
+  const instantCapacityApPerHour = interpolateCurveRate(
+    currentCurve,
+    minuteOfDay
+  );
   const activeDrains = [
     ...taskRuns.activeDrains,
     ...workouts.activeDrains,
@@ -3409,7 +3582,9 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
     ...plannedContainers.activeDrains,
     ...calendarDrains.activeDrains
   ]
-    .sort((left, right) => (right.rateApPerHour ?? 0) - (left.rateApPerHour ?? 0))
+    .sort(
+      (left, right) => (right.rateApPerHour ?? 0) - (left.rateApPerHour ?? 0)
+    )
     .map((entry, index) => ({
       id: `${entry.sourceKind}:${entry.entityId}`,
       sourceType: entry.entityType,
@@ -3426,7 +3601,11 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
     ...plannedContainers.plannedDrains,
     ...calendarDrains.plannedDrains
   ]
-    .sort((left, right) => Date.parse(left.startsAt ?? now.toISOString()) - Date.parse(right.startsAt ?? now.toISOString()))
+    .sort(
+      (left, right) =>
+        Date.parse(left.startsAt ?? now.toISOString()) -
+        Date.parse(right.startsAt ?? now.toISOString())
+    )
     .map((entry) => ({
       id: `${entry.sourceKind}:${entry.entityId}`,
       sourceType: entry.entityType,
@@ -3447,20 +3626,33 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
     (sortedRates[1] ?? 0) * 0.6 +
     (sortedRates[2] ?? 0) * 0.35 +
     sortedRates.slice(3).reduce((sum, value) => sum + value * 0.2, 0);
-  const fatigueFromSignals = readTodayFatigueSignals(user.id, range.dateKey).reduce(
-    (sum, signal) => sum + signal.delta,
-    0
-  );
+  const fatigueFromSignals = readTodayFatigueSignals(
+    user.id,
+    range.dateKey
+  ).reduce((sum, signal) => sum + signal.delta, 0);
   const fatigueBufferApPerHour = Math.max(
     0,
-    Number((fatigueFromSignals + Math.max(0, activeDrains.length - 1) * 1.5).toFixed(2))
+    Number(
+      (fatigueFromSignals + Math.max(0, activeDrains.length - 1) * 1.5).toFixed(
+        2
+      )
+    )
   );
   const rawInstantFreeApPerHour = Number(
-    (instantCapacityApPerHour - currentDrainApPerHour - fatigueBufferApPerHour).toFixed(2)
+    (
+      instantCapacityApPerHour -
+      currentDrainApPerHour -
+      fatigueBufferApPerHour
+    ).toFixed(2)
   );
   const instantFreeApPerHour = Math.max(0, rawInstantFreeApPerHour);
-  const overloadApPerHour = Math.max(0, Number((-rawInstantFreeApPerHour).toFixed(2)));
-  const remainingAp = Number((snapshot.daily_budget_ap - spentTodayAp).toFixed(2));
+  const overloadApPerHour = Math.max(
+    0,
+    Number((-rawInstantFreeApPerHour).toFixed(2))
+  );
+  const remainingAp = Number(
+    (snapshot.daily_budget_ap - spentTodayAp).toFixed(2)
+  );
   const plannedRemainingAp = Number(
     plannedDrains.reduce((sum, entry) => sum + entry.instantAp, 0).toFixed(2)
   );
@@ -3479,7 +3671,9 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
        WHERE entity_owners.user_id = ?`
     )
     .all(user.id)
-    .map((row) => row as { id: string; planned_duration_seconds: number | null })
+    .map(
+      (row) => row as { id: string; planned_duration_seconds: number | null }
+    )
     .filter((row) => {
       const time = workTime.taskSummaries.get(row.id);
       return buildTaskSplitSuggestion({
@@ -3488,7 +3682,8 @@ export function buildLifeForcePayload(now = new Date(), userIds?: string[]): Lif
         projectedTotalSeconds:
           (time?.totalCreditedSeconds ?? 0) +
           readActiveTaskRunProjectionRows(row.id).reduce(
-            (sum, activeRow) => sum + computeProjectedRemainingSeconds(activeRow, now),
+            (sum, activeRow) =>
+              sum + computeProjectedRemainingSeconds(activeRow, now),
             0
           )
       }).shouldSplit;
@@ -3612,8 +3807,7 @@ export function buildTasksLifeForceFields(tasks: Task[]) {
       const spentTodayAp =
         (todayCreditedSeconds / 3600) * profile.sustainRateApPerHour;
       const spentTotalAp =
-        (task.time.totalCreditedSeconds / 3600) *
-        profile.sustainRateApPerHour;
+        (task.time.totalCreditedSeconds / 3600) * profile.sustainRateApPerHour;
       const projectedTotalSeconds =
         task.time.totalCreditedSeconds +
         (activeProjectionRowsByTaskId.get(task.id) ?? []).reduce(
@@ -3658,14 +3852,11 @@ export function updateLifeForceProfile(
     base_daily_ap: parsed.baseDailyAp ?? current.base_daily_ap,
     readiness_multiplier:
       parsed.readinessMultiplier ?? current.readiness_multiplier,
-    life_force_level:
-      parsed.stats?.life_force ?? current.life_force_level,
-    activation_level:
-      parsed.stats?.activation ?? current.activation_level,
+    life_force_level: parsed.stats?.life_force ?? current.life_force_level,
+    activation_level: parsed.stats?.activation ?? current.activation_level,
     focus_level: parsed.stats?.focus ?? current.focus_level,
     vigor_level: parsed.stats?.vigor ?? current.vigor_level,
-    composure_level:
-      parsed.stats?.composure ?? current.composure_level,
+    composure_level: parsed.stats?.composure ?? current.composure_level,
     flow_level: parsed.stats?.flow ?? current.flow_level
   };
   getDatabase()
@@ -3712,7 +3903,9 @@ export function updateLifeForceTemplate(
   const parsed = lifeForceTemplateUpdateSchema.parse(input);
   ensureWeekdayTemplates(userId);
   const normalized = normalizeCurveToBudget(
-    [...parsed.points].sort((left, right) => left.minuteOfDay - right.minuteOfDay),
+    [...parsed.points].sort(
+      (left, right) => left.minuteOfDay - right.minuteOfDay
+    ),
     LIFE_FORCE_BASELINE_DAILY_AP
   );
   getDatabase()

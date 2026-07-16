@@ -16,7 +16,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  people-release-gate:
+    name: Canonical People release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/people-sharing-release-gate.yml
+    with:
+      release: true
+      source_sha: ${{ github.sha }}
+    secrets:
+      FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY: ${{ secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY }}
+
   publish:
+    needs: people-release-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -24,6 +36,11 @@ jobs:
       id-token: write
 
     steps:
+      - name: Verify admitted source commit
+        env:
+          VALIDATED_SHA: ${{ needs.people-release-gate.outputs.validated_sha }}
+        run: test "${VALIDATED_SHA}" = "${GITHUB_SHA}"
+
       - name: Checkout repository
         uses: actions/checkout@v5
         with:

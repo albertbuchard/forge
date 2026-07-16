@@ -18,7 +18,10 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -300,25 +303,29 @@ export function SettingsMobilePage() {
 
   if (overviewQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Companion"
-        title="Loading mobile companion"
-        description="Checking pairing state and recent sync status."
-        columns={2}
-        blocks={5}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Companion"
+          title="Loading mobile companion"
+          description="Checking pairing state and recent sync status."
+          columns={2}
+          blocks={5}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (overviewQuery.isError || !overviewQuery.data) {
     return (
-      <ErrorState
-        eyebrow="Companion"
-        error={
-          overviewQuery.error ?? new Error("Companion overview unavailable")
-        }
-        onRetry={() => void overviewQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Companion"
+          error={
+            overviewQuery.error ?? new Error("Companion overview unavailable")
+          }
+          onRetry={() => void overviewQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

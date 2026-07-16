@@ -1,0 +1,27 @@
+[package]
+name = "forge-peer-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.10"
+forge-peer = { path = "..", version = "=0.1.0" }
+
+[[bin]]
+name = "frame_decode"
+path = "fuzz_targets/frame_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "endpoint_validation"
+path = "fuzz_targets/endpoint_validation.rs"
+test = false
+doc = false
+bench = false

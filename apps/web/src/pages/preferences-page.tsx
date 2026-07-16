@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Heart, Plus, Search, Trash2 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import type { EntityLinkOption } from "@/components/psyche/entity-link-multiselect";
+import { PlanningRecordDeleteDialog } from "@/components/planning/planning-record-delete-dialog";
 import {
   psycheFocusClass,
   usePsycheFocusTarget
@@ -20,6 +29,7 @@ import {
 } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import { UserBadge } from "@/components/ui/user-badge";
+import { PreferenceCatalogItemDeleteDialog } from "@/components/preferences/preference-catalog-item-delete-dialog";
 import {
   createPreferenceCatalog,
   createPreferenceCatalogItem,
@@ -28,6 +38,8 @@ import {
   deletePreferenceCatalog,
   deletePreferenceCatalogItem,
   enqueuePreferenceEntity,
+  getPreferenceCatalogs,
+  getPreferenceCatalogItems,
   getPreferenceWorkspace,
   mergePreferenceContexts,
   patchPreferenceCatalog,
@@ -35,21 +47,30 @@ import {
   patchPreferenceContext,
   patchPreferenceItem,
   patchPreferenceScore,
+  refreshPreferenceWorkspace,
+  searchEntities,
   startPreferenceGame,
   submitPairwisePreferenceJudgment,
   submitPreferenceSignal
 } from "@/lib/api";
-import { describeApiError } from "@/lib/api-error";
+import { ForgeApiError, describeApiError } from "@/lib/api-error";
 import type {
+  CrudEntityType,
+  PreferenceCatalog,
+  PreferenceCatalogItem,
+  PreferenceCatalogItemPage,
   PreferenceDimensionId,
   PreferenceDomain,
   PreferenceItemStatus,
   PreferenceSignalType
 } from "@/lib/types";
+import { ACTION_BAR_SEARCH_ENTITY_TYPES } from "@/lib/action-bar";
+import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
 import { getSingleSelectedUserId } from "@/lib/user-ownership";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_DIMENSIONS,
+  DOMAIN_OPTIONS,
   DIMENSION_LABELS,
   DimensionBar,
   FORGE_GAME_DOMAINS,
@@ -60,6 +81,7 @@ import {
   formatPercent,
   getScoreStatus,
   getSourceEntityHref,
+  isPreferenceHistoryPartial,
   normalizeText,
   resolveSelectedTab
 } from "@/components/preferences/preferences-workspace-model";
@@ -78,6 +100,80 @@ import {
 } from "@/components/preferences/preference-guided-flow-dialog";
 import { PreferenceEvidencePanel } from "@/components/preferences/preference-evidence-panel";
 
+const PREFERENCE_LINK_ENTITY_TYPES: CrudEntityType[] = Array.from(
+  new Set<CrudEntityType>([
+    ...ACTION_BAR_SEARCH_ENTITY_TYPES,
+    "tag",
+    "artifact",
+    "life_event",
+    "event_type",
+    "emotion_definition",
+    "mode_guide_session",
+    "preference_catalog",
+    "preference_catalog_item",
+    "preference_context",
+    "preference_item",
+    "questionnaire_instrument",
+    "sleep_session",
+    "workout_session"
+  ])
+);
+const PREFERENCE_CATALOG_PAGE_SIZE = 24;
+const PREFERENCE_WORKSPACE_PAGE_SIZE = 50;
+const PREFERENCE_HISTORY_PAGE_SIZE = 50;
+
+function getLinkEntityLabel(entity: Record<string, unknown>, fallback: string) {
+  for (const key of [
+    "title",
+    "label",
+    "name",
+    "statement",
+    "summary",
+    "originalFileName"
+  ]) {
+    const value = entity[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return fallback;
+}
+
+function getLinkEntityDescription(
+  entity: Record<string, unknown>,
+  entityType: string
+) {
+  for (const key of [
+    "shortDescription",
+    "description",
+    "overview",
+    "eventSituation"
+  ]) {
+    const value = entity[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return entityType.replaceAll("_", " ");
+}
+
+function formatCatalogCreatedSource(
+  source: PreferenceCatalog["createdSource"]
+) {
+  switch (source) {
+    case "ui":
+      return "Forge web";
+    case "openclaw":
+      return "OpenClaw";
+    case "agent":
+      return "a trusted agent";
+    case "system":
+      return "Forge";
+    case "unknown":
+      return "an earlier Forge version";
+  }
+}
+
 export function PreferencesPage() {
   const shell = useForgeShell();
   const queryClient = useQueryClient();
@@ -85,6 +181,22 @@ export function PreferencesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [entitySearchQuery, setEntitySearchQuery] = useState("");
   const [conceptSearchQuery, setConceptSearchQuery] = useState("");
+  const deferredConceptSearchQuery = useDeferredValue(conceptSearchQuery);
+  const [catalogPageCursors, setCatalogPageCursors] = useState<
+    Array<string | null>
+  >([null]);
+  const [catalogItemPages, setCatalogItemPages] = useState<
+    Record<string, PreferenceCatalogItemPage>
+  >({});
+  const [catalogItemPageCursors, setCatalogItemPageCursors] = useState<
+    Record<string, Array<string | null>>
+  >({});
+  const [catalogPendingArchive, setCatalogPendingArchive] =
+    useState<PreferenceCatalog | null>(null);
+  const [catalogItemPendingDelete, setCatalogItemPendingDelete] = useState<{
+    catalog: PreferenceCatalog;
+    item: PreferenceCatalogItem;
+  } | null>(null);
   const [guidedFlow, setGuidedFlow] = useState<PreferenceGuidedFlow | null>(
     null
   );
@@ -130,29 +242,31 @@ export function PreferencesPage() {
       surprise: "0"
     }
   });
-  const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
-  const [editingCatalogDraft, setEditingCatalogDraft] = useState({
-    title: "",
-    description: ""
-  });
-  const [editingCatalogItemId, setEditingCatalogItemId] = useState<
-    string | null
-  >(null);
-  const [editingCatalogItemDraft, setEditingCatalogItemDraft] = useState({
-    label: "",
-    description: "",
-    tags: ""
-  });
-
-  const selectedUserId =
-    searchParams.get("userId") ??
-    getSingleSelectedUserId(shell.selectedUserIds) ??
-    shell.snapshot.users[0]?.id ??
-    null;
-  const selectedDomain =
-    (searchParams.get("domain") as PreferenceDomain | null) ?? "projects";
+  const requestedUserId = searchParams.get("userId");
+  const selectedShellUserId = getSingleSelectedUserId(shell.selectedUserIds);
+  const ownerSelectionRequired =
+    !requestedUserId && shell.selectedUserIds.length > 1;
+  const selectedUserId = ownerSelectionRequired
+    ? null
+    : (requestedUserId ??
+      selectedShellUserId ??
+      shell.snapshot.users[0]?.id ??
+      null);
+  const requestedDomain = searchParams.get("domain");
+  const selectedDomain: PreferenceDomain = DOMAIN_OPTIONS.some(
+    (option) => option.value === requestedDomain
+  )
+    ? (requestedDomain as PreferenceDomain)
+    : "projects";
   const selectedTab = resolveSelectedTab(searchParams.get("tab"));
   const selectedContextId = searchParams.get("contextId");
+  const requestedItemOffset = Number.parseInt(
+    searchParams.get("itemOffset") ?? "0",
+    10
+  );
+  const workspaceItemOffset = Number.isFinite(requestedItemOffset)
+    ? Math.max(0, requestedItemOffset)
+    : 0;
   const focusedItemIdFromQuery = searchParams.get("focusItem");
   const focusedCatalogId = searchParams.get("focusCatalog");
   const focusedCatalogItemId = searchParams.get("focusCatalogItem");
@@ -174,22 +288,87 @@ export function PreferencesPage() {
     () => buildCandidateEntities(shell.snapshot),
     [shell.snapshot]
   );
+  const catalogLinkOptions = useMemo<EntityLinkOption[]>(
+    () =>
+      candidateEntities.map((candidate) => ({
+        value: `${candidate.entityType}:${candidate.entityId}`,
+        label: candidate.label,
+        description: candidate.description,
+        searchText: candidate.searchText,
+        kind: getEntityKindForCrudEntityType(candidate.entityType) ?? undefined
+      })),
+    [candidateEntities]
+  );
+  const searchCatalogLinkOptions = useCallback(
+    async (query: string): Promise<EntityLinkOption[]> => {
+      const response = await searchEntities({
+        searches: [
+          {
+            entityTypes: PREFERENCE_LINK_ENTITY_TYPES,
+            query,
+            limit: 40,
+            clientRef: "preference-catalog-links"
+          }
+        ]
+      });
+      const matches = Array.isArray(response.results[0]?.matches)
+        ? (response.results[0]?.matches as unknown[])
+        : [];
+      return matches
+        .map((match): EntityLinkOption | null => {
+          if (!match || typeof match !== "object") {
+            return null;
+          }
+          const candidate = match as {
+            entityType?: unknown;
+            id?: unknown;
+            entity?: unknown;
+          };
+          if (
+            typeof candidate.entityType !== "string" ||
+            !PREFERENCE_LINK_ENTITY_TYPES.includes(
+              candidate.entityType as CrudEntityType
+            ) ||
+            typeof candidate.id !== "string" ||
+            !candidate.entity ||
+            typeof candidate.entity !== "object"
+          ) {
+            return null;
+          }
+          const entity = candidate.entity as Record<string, unknown>;
+          const entityType = candidate.entityType as CrudEntityType;
+          const label = getLinkEntityLabel(entity, candidate.id);
+          const description = getLinkEntityDescription(entity, entityType);
+          return {
+            value: `${entityType}:${candidate.id}`,
+            label,
+            description,
+            searchText: `${label} ${description}`,
+            kind: getEntityKindForCrudEntityType(entityType) ?? undefined
+          };
+        })
+        .filter((option): option is EntityLinkOption => option !== null);
+    },
+    []
+  );
 
   const workspaceQuery = useQuery({
     queryKey: [
       "forge-preferences",
       selectedUserId,
       selectedDomain,
-      selectedContextId
+      selectedContextId,
+      workspaceItemOffset
     ],
-    queryFn: async () =>
-      (
-        await getPreferenceWorkspace({
-          userId: selectedUserId ?? undefined,
-          domain: selectedDomain,
-          contextId: selectedContextId ?? undefined
-        })
-      ).workspace,
+    queryFn: () =>
+      getPreferenceWorkspace({
+        userId: selectedUserId!,
+        domain: selectedDomain,
+        contextId: selectedContextId ?? undefined,
+        itemLimit: PREFERENCE_WORKSPACE_PAGE_SIZE,
+        itemOffset: workspaceItemOffset,
+        historyLimit: PREFERENCE_HISTORY_PAGE_SIZE
+      }).then((response) => response.workspace),
     enabled: Boolean(selectedUserId)
   });
 
@@ -200,22 +379,111 @@ export function PreferencesPage() {
       gameState.domain,
       selectedContextId
     ],
-    queryFn: async () =>
-      (
-        await getPreferenceWorkspace({
-          userId: selectedUserId ?? undefined,
-          domain: gameState.domain,
-          contextId: selectedContextId ?? undefined
-        })
-      ).workspace,
+    queryFn: () =>
+      getPreferenceWorkspace({
+        userId: selectedUserId!,
+        domain: gameState.domain,
+        contextId: selectedContextId ?? undefined,
+        itemLimit: PREFERENCE_WORKSPACE_PAGE_SIZE,
+        itemOffset: 0,
+        historyLimit: PREFERENCE_HISTORY_PAGE_SIZE
+      }).then((response) => response.workspace),
     enabled: Boolean(selectedUserId) && gameState.open
   });
 
-  const workspace = workspaceQuery.data ?? null;
+  const workspace =
+    workspaceQuery.data &&
+    workspaceQuery.data.profile.userId === selectedUserId &&
+    workspaceQuery.data.profile.domain === selectedDomain &&
+    (!selectedContextId ||
+      workspaceQuery.data.selectedContext.id === selectedContextId)
+      ? workspaceQuery.data
+      : null;
+  const gameWorkspace =
+    gameWorkspaceQuery.data &&
+    gameWorkspaceQuery.data.profile.userId === selectedUserId &&
+    gameWorkspaceQuery.data.profile.domain === gameState.domain &&
+    (!selectedContextId ||
+      gameWorkspaceQuery.data.selectedContext.id === selectedContextId)
+      ? gameWorkspaceQuery.data
+      : null;
   const activeGameWorkspace =
-    gameState.domain === selectedDomain
-      ? workspace
-      : (gameWorkspaceQuery.data ?? null);
+    gameState.domain === selectedDomain ? workspace : gameWorkspace;
+  const preferenceScopeKey = `${selectedUserId ?? "none"}:${selectedDomain}:${selectedContextId ?? "default"}`;
+  const previousPreferenceScopeKeyRef = useRef(preferenceScopeKey);
+  const guidedFlowScopeRef = useRef<string | null>(null);
+  const gameScopeRef = useRef<string | null>(null);
+  const catalogArchiveScopeRef = useRef<string | null>(null);
+  const catalogItemDeleteScopeRef = useRef<string | null>(null);
+
+  const openGuidedFlow = (flow: PreferenceGuidedFlow) => {
+    guidedFlowScopeRef.current = preferenceScopeKey;
+    setGuidedFlow(flow);
+  };
+  const closeGuidedFlow = () => {
+    guidedFlowScopeRef.current = null;
+    setGuidedFlow(null);
+  };
+  const bindGameToScope = (
+    domain: PreferenceDomain,
+    contextId: string | null = selectedContextId
+  ) => {
+    gameScopeRef.current = `${selectedUserId ?? "none"}:${domain}:${contextId ?? "default"}`;
+  };
+  const openCatalogArchive = (catalog: PreferenceCatalog) => {
+    catalogArchiveScopeRef.current = preferenceScopeKey;
+    setCatalogPendingArchive(catalog);
+  };
+  const openCatalogItemDelete = (
+    catalog: PreferenceCatalog,
+    item: PreferenceCatalogItem
+  ) => {
+    catalogItemDeleteScopeRef.current = preferenceScopeKey;
+    setCatalogItemPendingDelete({ catalog, item });
+  };
+
+  useEffect(() => {
+    if (previousPreferenceScopeKeyRef.current === preferenceScopeKey) {
+      return;
+    }
+    previousPreferenceScopeKeyRef.current = preferenceScopeKey;
+    guidedFlowScopeRef.current = null;
+    gameScopeRef.current = null;
+    catalogArchiveScopeRef.current = null;
+    catalogItemDeleteScopeRef.current = null;
+    setGuidedFlow(null);
+    setCatalogPendingArchive(null);
+    setCatalogItemPendingDelete(null);
+    setGameState({ open: false, phase: "domain", domain: selectedDomain });
+    setGameError(null);
+    setGameNotice(null);
+  }, [preferenceScopeKey, selectedDomain]);
+  const catalogQueryDomain =
+    gameState.open && gameState.phase === "catalog"
+      ? gameState.domain
+      : selectedDomain;
+  const catalogPageCursor = catalogPageCursors.at(-1) ?? null;
+  const catalogDirectoryQuery = useQuery({
+    queryKey: [
+      "forge-preferences-catalogs",
+      selectedUserId,
+      catalogQueryDomain,
+      deferredConceptSearchQuery,
+      catalogPageCursor
+    ],
+    queryFn: () =>
+      getPreferenceCatalogs({
+        userId: selectedUserId ?? undefined,
+        domain: catalogQueryDomain,
+        query: deferredConceptSearchQuery,
+        limit: PREFERENCE_CATALOG_PAGE_SIZE,
+        cursor: catalogPageCursor ?? undefined
+      }),
+    enabled:
+      Boolean(selectedUserId) &&
+      (selectedTab === "concepts" ||
+        (gameState.open && gameState.phase === "catalog"))
+  });
 
   useEffect(() => {
     if (!workspace) {
@@ -309,45 +577,46 @@ export function PreferencesPage() {
   }, [candidateEntities, entitySearchQuery, selectedDomain]);
   const filteredEntities = matchingEntities.slice(0, 12);
 
-  const filteredCatalogs = useMemo(() => {
-    const sourceWorkspace =
-      gameState.open && gameState.phase === "catalog"
-        ? (activeGameWorkspace ?? workspace)
-        : workspace;
-    const catalogs = sourceWorkspace?.catalogs ?? [];
-    const normalized = normalizeText(conceptSearchQuery);
-    if (!normalized) {
-      return catalogs;
-    }
-    return catalogs.filter((catalog) =>
-      [
-        catalog.title,
-        catalog.description,
-        catalog.source,
-        ...catalog.items.flatMap((item) => [
-          item.label,
-          item.description,
-          item.tags.join(" ")
-        ])
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized)
-    );
-  }, [
-    activeGameWorkspace,
-    conceptSearchQuery,
-    gameState.open,
-    gameState.phase,
-    workspace
-  ]);
+  const choosingGameCatalog = gameState.open && gameState.phase === "catalog";
+  const filteredCatalogs =
+    choosingGameCatalog || selectedTab === "concepts"
+      ? (catalogDirectoryQuery.data?.catalogs ?? [])
+      : (catalogDirectoryQuery.data?.catalogs ?? workspace?.catalogs ?? []);
+
+  useEffect(() => {
+    setCatalogPageCursors([null]);
+    setCatalogItemPages({});
+    setCatalogItemPageCursors({});
+  }, [deferredConceptSearchQuery, catalogQueryDomain, selectedUserId]);
 
   const refreshWorkspace = async () => {
     await queryClient.invalidateQueries({ queryKey: ["forge-preferences"] });
     await queryClient.invalidateQueries({
       queryKey: ["forge-preferences-game"]
     });
+    await queryClient.invalidateQueries({
+      queryKey: ["forge-preferences-catalogs"]
+    });
   };
+
+  const rebuildWorkspace = async () => {
+    if (!selectedUserId) {
+      return;
+    }
+    await refreshPreferenceWorkspace({
+      userId: selectedUserId,
+      domain: selectedDomain,
+      contextId: selectedContextId ?? undefined,
+      itemLimit: PREFERENCE_WORKSPACE_PAGE_SIZE,
+      itemOffset: workspaceItemOffset,
+      historyLimit: PREFERENCE_HISTORY_PAGE_SIZE
+    });
+    await refreshWorkspace();
+  };
+
+  const refreshModelMutation = useMutation({
+    mutationFn: rebuildWorkspace
+  });
 
   const enqueueMutation = useMutation({
     mutationFn: enqueuePreferenceEntity,
@@ -364,11 +633,12 @@ export function PreferencesPage() {
 
   const createCatalogMutation = useMutation({
     mutationFn: createPreferenceCatalog,
-    onSuccess: async () => {
+    onSuccess: async ({ catalog }) => {
       await refreshWorkspace();
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.set("tab", "concepts");
+        next.set("focusCatalog", catalog.id);
         return next;
       });
     }
@@ -382,10 +652,7 @@ export function PreferencesPage() {
       catalogId: string;
       patch: Parameters<typeof patchPreferenceCatalog>[1];
     }) => patchPreferenceCatalog(catalogId, patch),
-    onSuccess: async () => {
-      await refreshWorkspace();
-      setEditingCatalogId(null);
-    }
+    onSuccess: refreshWorkspace
   });
 
   const deleteCatalogMutation = useMutation({
@@ -396,6 +663,8 @@ export function PreferencesPage() {
   const createCatalogItemMutation = useMutation({
     mutationFn: createPreferenceCatalogItem,
     onSuccess: async () => {
+      setCatalogItemPages({});
+      setCatalogItemPageCursors({});
       await refreshWorkspace();
     }
   });
@@ -409,14 +678,71 @@ export function PreferencesPage() {
       patch: Parameters<typeof patchPreferenceCatalogItem>[1];
     }) => patchPreferenceCatalogItem(catalogItemId, patch),
     onSuccess: async () => {
+      setCatalogItemPages({});
+      setCatalogItemPageCursors({});
       await refreshWorkspace();
-      setEditingCatalogItemId(null);
     }
   });
 
   const deleteCatalogItemMutation = useMutation({
     mutationFn: deletePreferenceCatalogItem,
-    onSuccess: refreshWorkspace
+    onSuccess: async () => {
+      setCatalogItemPages({});
+      setCatalogItemPageCursors({});
+      await refreshWorkspace();
+    }
+  });
+
+  const loadCatalogItemsMutation = useMutation({
+    mutationFn: async ({
+      catalogId,
+      cursor,
+      bootstrap
+    }: {
+      catalogId: string;
+      cursor: string | null;
+      direction: "next" | "previous";
+      bootstrap?: boolean;
+    }) => {
+      const readPage = (pageCursor?: string) =>
+        getPreferenceCatalogItems({
+          catalogId,
+          query: deferredConceptSearchQuery,
+          limit: PREFERENCE_CATALOG_PAGE_SIZE,
+          cursor: pageCursor
+        });
+      if (bootstrap) {
+        const firstPage = await readPage();
+        if (!firstPage.nextCursor) {
+          return { page: firstPage, cursorHistory: [null] };
+        }
+        return {
+          page: await readPage(firstPage.nextCursor),
+          cursorHistory: [null, firstPage.nextCursor]
+        };
+      }
+      return {
+        page: await readPage(cursor ?? undefined),
+        cursorHistory: null
+      };
+    },
+    onSuccess: ({ page, cursorHistory }, { catalogId, cursor, direction }) => {
+      setCatalogItemPages((current) => ({
+        ...current,
+        [catalogId]: page
+      }));
+      setCatalogItemPageCursors((current) => {
+        if (cursorHistory) {
+          return { ...current, [catalogId]: cursorHistory };
+        }
+        const history = current[catalogId] ?? [null];
+        return {
+          ...current,
+          [catalogId]:
+            direction === "next" ? [...history, cursor] : history.slice(0, -1)
+        };
+      });
+    }
   });
 
   const startGameMutation = useMutation({
@@ -546,6 +872,7 @@ export function PreferencesPage() {
   const openGame = (domain = selectedDomain) => {
     setGameError(null);
     setGameNotice(null);
+    bindGameToScope(domain);
     setGameState({
       open: true,
       phase: "domain",
@@ -575,6 +902,7 @@ export function PreferencesPage() {
       return;
     }
     try {
+      bindGameToScope(domain, null);
       updateSearchParams({
         domain,
         tab: "overview",
@@ -595,6 +923,7 @@ export function PreferencesPage() {
         )
       );
       await refreshWorkspace();
+      bindGameToScope(domain, null);
       setGameState({
         open: true,
         phase: "play",
@@ -621,6 +950,7 @@ export function PreferencesPage() {
     }
     setGameError(null);
     setGameNotice(null);
+    bindGameToScope(domain, null);
     updateSearchParams({
       domain,
       tab: "overview",
@@ -634,6 +964,7 @@ export function PreferencesPage() {
         contextId: selectedContextId ?? undefined,
         catalogId
       });
+      bindGameToScope(domain, null);
       setGameState({
         open: true,
         phase: "play",
@@ -666,6 +997,11 @@ export function PreferencesPage() {
     outcome: "left" | "right" | "tie" | "skip",
     strength = 1
   ) => {
+    if (gameScopeRef.current !== preferenceScopeKey) {
+      throw new Error(
+        "The preference scope changed. Reopen the game before recording a judgment."
+      );
+    }
     if (!selectedUserId || !activeGameWorkspace?.compare.nextPair) {
       return;
     }
@@ -690,48 +1026,107 @@ export function PreferencesPage() {
 
   const handleGameSignal = async (
     itemId: string,
-    signalType: PreferenceSignalType
+    signalType: PreferenceSignalType,
+    idempotencyKey: string
   ) => {
+    if (gameScopeRef.current !== preferenceScopeKey) {
+      throw new Error(
+        "The preference scope changed. Reopen the game before recording a signal."
+      );
+    }
     if (!selectedUserId || !activeGameWorkspace) {
       return;
     }
-    await signalMutation.mutateAsync({
+    const { score } = await signalMutation.mutateAsync({
       userId: selectedUserId,
       domain: gameState.domain,
       contextId: activeGameWorkspace.selectedContext.id,
       itemId,
       signalType,
-      strength: 1
+      strength: 1,
+      idempotencyKey
     });
     const item = activeGameWorkspace.scores.find(
       (score) => score.itemId === itemId
     )?.item;
     setGameNotice(
-      `${signalType.replaceAll("_", " ")} recorded for ${item?.label ?? itemId} in ${activeGameWorkspace.selectedContext.name}.`
+      signalType === "neutral"
+        ? `Direct effect cleared for ${item?.label ?? itemId}. Remaining evidence now gives a ${score.status.replaceAll("_", " ")} status with score ${score.latentScore.toFixed(2)}.`
+        : `${signalType.replaceAll("_", " ")} recorded for ${item?.label ?? itemId}. The resulting status is ${score.status.replaceAll("_", " ")} with score ${score.latentScore.toFixed(2)}.`
     );
   };
 
   const handleGuidedSubmit = async (input: PreferenceGuidedSubmit) => {
+    if (guidedFlowScopeRef.current !== preferenceScopeKey) {
+      throw new Error(
+        "The preference scope changed. Reopen this guided flow before saving."
+      );
+    }
     if (!selectedUserId) {
       throw new Error("Select one user before changing a preference model.");
     }
     if (input.kind === "catalog") {
-      await createCatalogMutation.mutateAsync({
-        userId: selectedUserId,
-        domain: selectedDomain,
+      const catalogInput = {
         title: input.title,
-        description: input.description
-      });
+        description: input.description,
+        scopeIn: input.scopeIn,
+        scopeOut: input.scopeOut,
+        links: input.links.map((link) => ({
+          ...link,
+          entityType: link.entityType as CrudEntityType
+        }))
+      };
+      if (input.catalogId) {
+        await updateCatalogMutation.mutateAsync({
+          catalogId: input.catalogId,
+          patch: catalogInput
+        });
+      } else {
+        await createCatalogMutation.mutateAsync({
+          userId: selectedUserId,
+          domain: selectedDomain,
+          ...catalogInput,
+          idempotencyKey: input.idempotencyKey
+        });
+      }
       return;
     }
     if (input.kind === "catalog-item") {
-      await createCatalogItemMutation.mutateAsync({
-        catalogId: input.catalogId,
-        label: input.label,
-        description: input.description,
-        tags: input.tags,
-        featureWeights: DEFAULT_DIMENSIONS
-      });
+      if (input.catalogItemId) {
+        await updateCatalogItemMutation.mutateAsync({
+          catalogItemId: input.catalogItemId,
+          patch: {
+            label: input.label,
+            description: input.description,
+            tags: input.tags
+          }
+        });
+      } else {
+        await createCatalogItemMutation.mutateAsync({
+          catalogId: input.catalogId,
+          label: input.label,
+          description: input.description,
+          tags: input.tags,
+          featureWeights: DEFAULT_DIMENSIONS
+        });
+      }
+      return;
+    }
+    if (input.kind === "signal") {
+      if (!workspace) {
+        throw new Error("The selected preference workspace is unavailable.");
+      }
+      const { score } = await signalMutation.mutateAsync({
+        userId: selectedUserId,
+        domain: selectedDomain,
+      contextId: workspace.selectedContext.id,
+      itemId: input.itemId,
+      signalType: input.signalType,
+      strength: input.strength,
+      idempotencyKey: input.idempotencyKey
+    });
+      setSelectedItemId(score.itemId);
+      updateSearchParams({ focusItem: score.itemId });
       return;
     }
     if (input.kind === "item") {
@@ -799,25 +1194,31 @@ export function PreferencesPage() {
 
   const guidedFlowPending =
     guidedFlow?.kind === "catalog"
-      ? createCatalogMutation.isPending
+      ? createCatalogMutation.isPending || updateCatalogMutation.isPending
       : guidedFlow?.kind === "catalog-item"
-        ? createCatalogItemMutation.isPending
+        ? createCatalogItemMutation.isPending ||
+          updateCatalogItemMutation.isPending
         : guidedFlow?.kind === "item"
           ? createItemMutation.isPending
-          : guidedFlow?.kind === "context"
-            ? createContextMutation.isPending || updateContextMutation.isPending
-            : guidedFlow?.kind === "merge"
-              ? mergeContextMutation.isPending
-              : guidedFlow?.kind === "entity"
-                ? enqueueMutation.isPending
-                : false;
+          : guidedFlow?.kind === "signal"
+            ? signalMutation.isPending
+            : guidedFlow?.kind === "context"
+              ? createContextMutation.isPending ||
+                updateContextMutation.isPending
+              : guidedFlow?.kind === "merge"
+                ? mergeContextMutation.isPending
+                : guidedFlow?.kind === "entity"
+                  ? enqueueMutation.isPending
+                  : false;
   const mutationError = [
     updateCatalogMutation.error,
     deleteCatalogMutation.error,
     updateCatalogItemMutation.error,
     deleteCatalogItemMutation.error,
+    signalMutation.error,
     saveItemMutation.error,
-    updateContextMutation.error
+    updateContextMutation.error,
+    refreshModelMutation.error
   ].find(Boolean);
   const mutationErrorDescription = mutationError
     ? describeApiError(mutationError).description
@@ -827,8 +1228,36 @@ export function PreferencesPage() {
     return (
       <EmptyState
         eyebrow="Preferences"
-        title="No Forge user available"
-        description="Forge needs at least one human or bot user before it can learn preferences."
+        title={
+          ownerSelectionRequired
+            ? "Choose one preference owner"
+            : "No Forge user available"
+        }
+        description={
+          ownerSelectionRequired
+            ? "Preference catalogs and signals belong to exactly one Forge user. Choose the owner before reading or changing this model."
+            : "Forge needs at least one human or bot user before it can learn preferences."
+        }
+        action={
+          ownerSelectionRequired ? (
+            <div className="flex max-w-xl flex-wrap justify-center gap-2">
+              {shell.snapshot.users
+                .filter((entry) => shell.selectedUserIds.includes(entry.id))
+                .map((entry) => (
+                  <Button
+                    key={entry.id}
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      updateSearchParams({ userId: entry.id, focusItem: null })
+                    }
+                  >
+                    {entry.displayName || entry.handle}
+                  </Button>
+                ))}
+            </div>
+          ) : undefined
+        }
       />
     );
   }
@@ -839,6 +1268,37 @@ export function PreferencesPage() {
         eyebrow="Preferences"
         title="Loading preference model"
         description="Reconstructing current scores, uncertainty, and concept libraries."
+      />
+    );
+  }
+
+  if (
+    workspaceQuery.isError &&
+    workspaceQuery.error instanceof ForgeApiError &&
+    workspaceQuery.error.code === "preferences_workspace_not_initialized"
+  ) {
+    return (
+      <EmptyState
+        eyebrow="Preferences"
+        title="Initialize this preference model"
+        description="No stored preference model exists for this user and domain yet."
+        action={
+          <div className="grid justify-items-center gap-3">
+            <Button
+              type="button"
+              pending={refreshModelMutation.isPending}
+              pendingLabel="Initializing preferences"
+              onClick={() => refreshModelMutation.mutate()}
+            >
+              Initialize preferences
+            </Button>
+            {refreshModelMutation.isError ? (
+              <div role="alert" className="text-sm text-[var(--danger)]">
+                {describeApiError(refreshModelMutation.error).description}
+              </div>
+            ) : null}
+          </div>
+        }
       />
     );
   }
@@ -875,12 +1335,27 @@ export function PreferencesPage() {
     selectedScore?.item?.sourceEntityType ?? null,
     selectedScore?.item?.sourceEntityId ?? null
   );
-  const visibleScores = filteredScores.slice(0, 50);
-  const visibleCatalogs = filteredCatalogs.slice(0, 12);
+  const visibleScores = filteredScores;
+  const itemRangeStart =
+    workspace.presentation.returnedItems > 0
+      ? workspace.presentation.itemOffset + 1
+      : 0;
+  const itemRangeEnd =
+    workspace.presentation.itemOffset + workspace.presentation.returnedItems;
+  const selectedContextCoverage = workspace.evidenceCoverage.contexts.find(
+    (coverage) => coverage.contextId === workspace.selectedContext.id
+  );
+  const historyPartial = isPreferenceHistoryPartial(workspace);
+  const visibleCatalogs = filteredCatalogs;
+  const catalogPageOffset =
+    catalogDirectoryQuery.data?.offset ??
+    (catalogPageCursors.length - 1) * PREFERENCE_CATALOG_PAGE_SIZE;
+  const hasPreviousCatalogPage = catalogPageCursors.length > 1;
+  const nextCatalogCursor = catalogDirectoryQuery.data?.nextCursor ?? null;
   const visibleContexts = workspace.contexts.slice(0, 16);
   return (
     <>
-      <div className="grid gap-5">
+      <div className="grid gap-5" aria-busy={workspaceQuery.isFetching}>
         <PageHero
           title="Preferences"
           titleText="Preferences"
@@ -893,9 +1368,12 @@ export function PreferencesPage() {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => void refreshWorkspace()}
+                disabled={refreshModelMutation.isPending}
+                onClick={() => refreshModelMutation.mutate()}
               >
-                Refresh model
+                {refreshModelMutation.isPending
+                  ? "Refreshing model"
+                  : "Refresh model"}
               </Button>
             </div>
           }
@@ -919,7 +1397,9 @@ export function PreferencesPage() {
           selectedUserId={selectedUserId}
           selectedDomain={selectedDomain}
           workspace={workspace}
-          onPatchSearch={updateSearchParams}
+          onPatchSearch={(patch) =>
+            updateSearchParams({ ...patch, itemOffset: null })
+          }
         />
 
         <PreferenceWorkspaceTabNav
@@ -1189,7 +1669,7 @@ export function PreferencesPage() {
                           variant="secondary"
                           size="sm"
                           onClick={() =>
-                            setGuidedFlow({
+                            openGuidedFlow({
                               kind: "entity",
                               candidate: entry,
                               existingItemId: existingItem?.id
@@ -1271,9 +1751,10 @@ export function PreferencesPage() {
                 />
               </div>
               <div className="text-xs text-[var(--ui-ink-faint)]">
-                Showing {visibleScores.length} of {filteredScores.length}{" "}
-                matching items. Refine the search to inspect results beyond this
-                bounded view.
+                Showing {visibleScores.length} matching items on page{" "}
+                {itemRangeStart}-{itemRangeEnd} of{" "}
+                {workspace.presentation.totalItems}. Search applies to this
+                page.
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
@@ -1297,7 +1778,7 @@ export function PreferencesPage() {
                             : undefined
                         }
                         className={cn(
-                          "cursor-pointer border-t border-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-2)]",
+                          "border-t border-[var(--ui-border-subtle)] transition hover:bg-[var(--ui-surface-2)]",
                           score.itemId === selectedScore?.itemId
                             ? "bg-[var(--ui-surface-2)]"
                             : "",
@@ -1305,18 +1786,24 @@ export function PreferencesPage() {
                             ? "bg-[color-mix(in_srgb,var(--info)_12%,var(--ui-surface-1)_88%)]"
                             : ""
                         )}
-                        onClick={() => {
-                          setSelectedItemId(score.itemId);
-                          updateSearchParams({ focusItem: score.itemId });
-                        }}
                       >
                         <td className="px-3 py-3">
-                          <div className="font-medium text-[var(--ui-ink-strong)]">
-                            {score.item?.label ?? score.itemId}
-                          </div>
-                          <div className="text-xs text-[var(--ui-ink-muted)]">
-                            {(score.item?.tags ?? []).join(" · ")}
-                          </div>
+                          <button
+                            type="button"
+                            className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--info)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ui-surface-1)]"
+                            aria-label={`Inspect ${score.item?.label ?? score.itemId}`}
+                            onClick={() => {
+                              setSelectedItemId(score.itemId);
+                              updateSearchParams({ focusItem: score.itemId });
+                            }}
+                          >
+                            <span className="block font-medium text-[var(--ui-ink-strong)]">
+                              {score.item?.label ?? score.itemId}
+                            </span>
+                            <span className="block text-xs text-[var(--ui-ink-muted)]">
+                              {(score.item?.tags ?? []).join(" · ")}
+                            </span>
+                          </button>
                         </td>
                         <td className="px-3 py-3 text-[var(--ui-ink-medium)]">
                           {score.latentScore.toFixed(2)}
@@ -1338,6 +1825,45 @@ export function PreferencesPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--ui-border-subtle)] pt-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={workspace.presentation.itemOffset === 0}
+                  onClick={() =>
+                    updateSearchParams({
+                      itemOffset: String(
+                        Math.max(
+                          0,
+                          workspace.presentation.itemOffset -
+                            workspace.presentation.itemLimit
+                        )
+                      )
+                    })
+                  }
+                >
+                  Previous
+                </Button>
+                <div className="text-xs text-[var(--ui-ink-faint)]">
+                  {itemRangeStart}-{itemRangeEnd} of{" "}
+                  {workspace.presentation.totalItems}
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!workspace.presentation.hasMore}
+                  onClick={() =>
+                    updateSearchParams({
+                      itemOffset: String(
+                        workspace.presentation.nextOffset ??
+                          workspace.presentation.itemOffset
+                      )
+                    })
+                  }
+                >
+                  Next
+                </Button>
               </div>
             </Card>
 
@@ -1486,6 +2012,16 @@ export function PreferencesPage() {
                     modelVersion={workspace.profile.modelVersion}
                   />
                   <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      openGuidedFlow({ kind: "signal", score: selectedScore })
+                    }
+                  >
+                    <Heart className="size-4" />
+                    Review direct mark
+                  </Button>
+                  <Button
                     pending={saveItemMutation.isPending}
                     pendingLabel="Saving item"
                     onClick={() => void saveItemMutation.mutateAsync()}
@@ -1517,7 +2053,7 @@ export function PreferencesPage() {
                     in a catalog instead.
                   </div>
                 </div>
-                <Button onClick={() => setGuidedFlow({ kind: "item" })}>
+                <Button onClick={() => openGuidedFlow({ kind: "item" })}>
                   <Plus className="size-4" />
                   Add direct item
                 </Button>
@@ -1528,6 +2064,13 @@ export function PreferencesPage() {
 
         {selectedTab === "history" ? (
           <div className="grid gap-5 xl:grid-cols-3">
+            {historyPartial ? (
+              <div className="border-l-2 border-[var(--warning)] pl-3 text-sm leading-6 text-[var(--ui-ink-soft)] xl:col-span-3">
+                Recent preference history is partial. Active signals, comparison
+                totals, and conflict summaries use authoritative score state
+                that may include evidence outside this bounded window.
+              </div>
+            ) : null}
             <Card className="grid gap-3 xl:col-span-2">
               <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
                 Recent pairwise judgments
@@ -1535,8 +2078,12 @@ export function PreferencesPage() {
               <div className="text-xs text-[var(--ui-ink-faint)]">
                 Showing latest{" "}
                 {Math.min(12, workspace.history.judgments.length)} of{" "}
-                {workspace.history.judgments.length} in{" "}
-                {workspace.selectedContext.name}.
+                {selectedContextCoverage?.totalJudgments ??
+                  workspace.history.judgments.length}{" "}
+                in {workspace.selectedContext.name}.
+                {selectedContextCoverage?.truncated
+                  ? ` The model used the latest ${selectedContextCoverage.consideredJudgments} judgments for this context; older evidence remains stored.`
+                  : ""}
               </div>
               <div className="grid gap-2">
                 {workspace.history.judgments.slice(0, 12).map((judgment) => {
@@ -1711,7 +2258,7 @@ export function PreferencesPage() {
                     <Button
                       variant="secondary"
                       onClick={() =>
-                        setGuidedFlow({ kind: "context", context })
+                        openGuidedFlow({ kind: "context", context })
                       }
                     >
                       Edit context
@@ -1762,7 +2309,7 @@ export function PreferencesPage() {
                   Define a situational boundary, evidence-sharing policy, and
                   decay window in a guided review flow.
                 </div>
-                <Button onClick={() => setGuidedFlow({ kind: "context" })}>
+                <Button onClick={() => openGuidedFlow({ kind: "context" })}>
                   <Plus className="size-4" />
                   Create context
                 </Button>
@@ -1779,7 +2326,7 @@ export function PreferencesPage() {
                 <Button
                   variant="secondary"
                   disabled={workspace.contexts.length < 2}
-                  onClick={() => setGuidedFlow({ kind: "merge" })}
+                  onClick={() => openGuidedFlow({ kind: "merge" })}
                 >
                   Review context merge
                 </Button>
@@ -1825,6 +2372,7 @@ export function PreferencesPage() {
                 <div className="flex items-center gap-3">
                   <Search className="size-4 text-[var(--ui-ink-muted)]" />
                   <Input
+                    aria-label="Search concept libraries"
                     value={conceptSearchQuery}
                     onChange={(event) =>
                       setConceptSearchQuery(event.target.value)
@@ -1839,27 +2387,53 @@ export function PreferencesPage() {
                   Create concept list
                 </div>
                 <div className="text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Define its decision purpose, owner, domain, and custom
-                  provenance before adding reusable concepts.
+                  Define its decision purpose, boundaries, and related Forge
+                  records before adding reusable concepts.
                 </div>
-                <Button onClick={() => setGuidedFlow({ kind: "catalog" })}>
+                <Button onClick={() => openGuidedFlow({ kind: "catalog" })}>
                   <Plus className="size-4" />
                   Create concept list
                 </Button>
               </Card>
             </div>
 
-            <div className="grid gap-4">
+            <div
+              className="grid gap-4"
+              aria-busy={catalogDirectoryQuery.isFetching}
+            >
+              {catalogDirectoryQuery.isLoading ? (
+                <div
+                  role="status"
+                  className="text-sm text-[var(--ui-ink-soft)]"
+                >
+                  Loading concept libraries...
+                </div>
+              ) : null}
+              {catalogDirectoryQuery.isError ? (
+                <div role="alert" className="text-sm text-[var(--danger)]">
+                  {describeApiError(catalogDirectoryQuery.error).description}
+                </div>
+              ) : null}
               {visibleCatalogs.map((catalog) => {
-                const matchingItems = catalog.items.filter((item) =>
-                  conceptSearchQuery.trim()
-                    ? [item.label, item.description, item.tags.join(" ")]
-                        .join(" ")
-                        .toLowerCase()
-                        .includes(normalizeText(conceptSearchQuery))
-                    : true
-                );
-                const visibleItems = matchingItems.slice(0, 24);
+                const loadedPage = catalogItemPages[catalog.id];
+                const itemCursorHistory = catalogItemPageCursors[
+                  catalog.id
+                ] ?? [null];
+                const visibleItems = loadedPage?.items ?? catalog.items;
+                const catalogItemCount = catalog.itemCount;
+                const matchingItemCount = conceptSearchQuery.trim()
+                  ? (catalog.matchingItemCount ?? visibleItems.length)
+                  : catalogItemCount;
+                const itemOffset = loadedPage?.offset ?? 0;
+                const hasPreviousItemPage =
+                  Boolean(loadedPage) && itemCursorHistory.length > 1;
+                const nextItemCursor = loadedPage?.nextCursor ?? null;
+                const hasNextItemPage = loadedPage
+                  ? nextItemCursor !== null
+                  : catalog.itemsTruncated;
+                const itemRangeStart =
+                  visibleItems.length > 0 ? itemOffset + 1 : 0;
+                const itemRangeEnd = itemOffset + visibleItems.length;
                 return (
                   <Card
                     key={catalog.id}
@@ -1874,55 +2448,50 @@ export function PreferencesPage() {
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        {editingCatalogId === catalog.id ? (
-                          <div className="grid gap-3">
-                            <Input
-                              value={editingCatalogDraft.title}
-                              onChange={(event) =>
-                                setEditingCatalogDraft((current) => ({
-                                  ...current,
-                                  title: event.target.value
-                                }))
-                              }
-                            />
-                            <Textarea
-                              value={editingCatalogDraft.description}
-                              onChange={(event) =>
-                                setEditingCatalogDraft((current) => ({
-                                  ...current,
-                                  description: event.target.value
-                                }))
-                              }
-                              className="min-h-24"
-                            />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
+                            {catalog.title}
                           </div>
-                        ) : (
-                          <>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="font-display text-2xl text-[var(--ui-ink-strong)]">
-                                {catalog.title}
-                              </div>
-                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-                                {catalog.source}
-                              </Badge>
-                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-                                {catalog.domain}
-                              </Badge>
-                              <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
-                                {catalog.items.length} items
-                              </Badge>
+                          <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                            {catalog.source}
+                          </Badge>
+                          <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                            {catalog.domain}
+                          </Badge>
+                          <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
+                            {conceptSearchQuery.trim()
+                              ? `${matchingItemCount} matches · ${catalogItemCount} items`
+                              : `${catalogItemCount} items`}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                          {catalog.description || "No decision purpose yet."}
+                        </div>
+                        {catalog.scopeIn || catalog.scopeOut ? (
+                          <div className="mt-3 grid gap-2 text-xs leading-5 text-[var(--ui-ink-soft)] sm:grid-cols-2">
+                            <div>
+                              <strong className="text-[var(--ui-ink-medium)]">
+                                Includes:
+                              </strong>{" "}
+                              {catalog.scopeIn || "Not specified"}
                             </div>
-                            <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                              {catalog.description || "No description yet."}
+                            <div>
+                              <strong className="text-[var(--ui-ink-medium)]">
+                                Excludes:
+                              </strong>{" "}
+                              {catalog.scopeOut || "Not specified"}
                             </div>
-                            <div className="mt-1 text-xs text-[var(--ui-ink-faint)]">
-                              Owner {user?.displayName ?? selectedUserId} ·{" "}
-                              {catalog.source === "seeded"
-                                ? "Forge seed provenance"
-                                : "User-created provenance"}
-                            </div>
-                          </>
-                        )}
+                          </div>
+                        ) : null}
+                        <div className="mt-2 text-xs text-[var(--ui-ink-faint)]">
+                          Owner {catalog.user?.displayName ?? catalog.userId} ·
+                          Created through{" "}
+                          {formatCatalogCreatedSource(catalog.createdSource)}
+                          {catalog.createdByActor
+                            ? ` by ${catalog.createdByActor}`
+                            : ""}{" "}
+                          · {catalog.links.length} linked records
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -1934,62 +2503,22 @@ export function PreferencesPage() {
                         >
                           Start from this list
                         </Button>
-                        {editingCatalogId === catalog.id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              pending={updateCatalogMutation.isPending}
-                              pendingLabel="Saving"
-                              onClick={() =>
-                                void updateCatalogMutation.mutateAsync({
-                                  catalogId: catalog.id,
-                                  patch: {
-                                    title: editingCatalogDraft.title,
-                                    description: editingCatalogDraft.description
-                                  }
-                                })
-                              }
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingCatalogId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingCatalogId(catalog.id);
-                              setEditingCatalogDraft({
-                                title: catalog.title,
-                                description: catalog.description
-                              });
-                            }}
-                          >
-                            Edit list
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            openGuidedFlow({ kind: "catalog", catalog })
+                          }
+                        >
+                          Edit list
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           pending={deleteCatalogMutation.isPending}
                           pendingLabel="Archiving"
                           title="Archive this catalog and its reusable concepts. Concrete scored items already created from it remain in the preference model."
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Archive ${catalog.title}? Its reusable concepts leave the catalog, but existing scored items and evidence remain.`
-                              )
-                            ) {
-                              deleteCatalogMutation.mutate(catalog.id);
-                            }
-                          }}
+                          onClick={() => openCatalogArchive(catalog)}
                         >
                           Archive list
                         </Button>
@@ -2011,133 +2540,120 @@ export function PreferencesPage() {
                             psycheFocusClass(focusedCatalogItemId === item.id)
                           )}
                         >
-                          {editingCatalogItemId === item.id ? (
-                            <div className="grid gap-3">
-                              <Input
-                                value={editingCatalogItemDraft.label}
-                                onChange={(event) =>
-                                  setEditingCatalogItemDraft((current) => ({
-                                    ...current,
-                                    label: event.target.value
-                                  }))
-                                }
-                              />
-                              <Textarea
-                                value={editingCatalogItemDraft.description}
-                                onChange={(event) =>
-                                  setEditingCatalogItemDraft((current) => ({
-                                    ...current,
-                                    description: event.target.value
-                                  }))
-                                }
-                                className="min-h-20"
-                              />
-                              <Input
-                                value={editingCatalogItemDraft.tags}
-                                onChange={(event) =>
-                                  setEditingCatalogItemDraft((current) => ({
-                                    ...current,
-                                    tags: event.target.value
-                                  }))
-                                }
-                                placeholder="comma, separated, tags"
-                              />
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  pending={updateCatalogItemMutation.isPending}
-                                  pendingLabel="Saving"
-                                  onClick={() =>
-                                    void updateCatalogItemMutation.mutateAsync({
-                                      catalogItemId: item.id,
-                                      patch: {
-                                        label: editingCatalogItemDraft.label,
-                                        description:
-                                          editingCatalogItemDraft.description,
-                                        tags: editingCatalogItemDraft.tags
-                                          .split(",")
-                                          .map((entry) => entry.trim())
-                                          .filter(Boolean)
-                                      }
-                                    })
-                                  }
-                                >
-                                  Save concept
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setEditingCatalogItemId(null)}
-                                >
-                                  Cancel
-                                </Button>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-[var(--ui-ink-strong)]">
+                                {item.label}
+                              </div>
+                              <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                                {item.description || "No description yet."}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {item.tags.map((tag) => (
+                                  <Badge
+                                    key={`${item.id}-${tag}`}
+                                    className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
                               </div>
                             </div>
-                          ) : (
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="font-medium text-[var(--ui-ink-strong)]">
-                                  {item.label}
-                                </div>
-                                <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                                  {item.description || "No description yet."}
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {item.tags.map((tag) => (
-                                    <Badge
-                                      key={`${item.id}-${tag}`}
-                                      className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
-                                    >
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingCatalogItemId(item.id);
-                                    setEditingCatalogItemDraft({
-                                      label: item.label,
-                                      description: item.description,
-                                      tags: item.tags.join(", ")
-                                    });
-                                  }}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  pending={deleteCatalogItemMutation.isPending}
-                                  pendingLabel="Archiving"
-                                  title="Archive this reusable concept without deleting concrete scored items already created from it."
-                                  onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `Archive ${item.label}? Existing scored items and evidence remain.`
-                                      )
-                                    ) {
-                                      deleteCatalogItemMutation.mutate(item.id);
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="mr-1 size-4" />
-                                  Archive
-                                </Button>
-                              </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  openGuidedFlow({
+                                    kind: "catalog-item",
+                                    catalog,
+                                    item
+                                  })
+                                }
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                pending={deleteCatalogItemMutation.isPending}
+                                pendingLabel="Deleting"
+                                title="Delete this reusable concept without deleting concrete scored items already created from it."
+                                onClick={() =>
+                                  openCatalogItemDelete(catalog, item)
+                                }
+                              >
+                                <Trash2 className="mr-1 size-4" />
+                                Delete
+                              </Button>
                             </div>
-                          )}
+                          </div>
                         </div>
                       ))}
-                      {matchingItems.length > visibleItems.length ? (
-                        <div className="text-xs text-[var(--ui-ink-faint)]">
-                          Showing {visibleItems.length} of{" "}
-                          {matchingItems.length}
-                          matching concepts. Refine the search to narrow this
-                          bounded list.
+                      {hasPreviousItemPage || hasNextItemPage ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs text-[var(--ui-ink-faint)]">
+                            Showing {itemRangeStart}-{itemRangeEnd} of{" "}
+                            {matchingItemCount}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {hasPreviousItemPage ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                pending={
+                                  loadCatalogItemsMutation.isPending &&
+                                  loadCatalogItemsMutation.variables
+                                    ?.catalogId === catalog.id
+                                }
+                                pendingLabel="Loading concepts"
+                                onClick={() =>
+                                  loadCatalogItemsMutation.mutate({
+                                    catalogId: catalog.id,
+                                    cursor: itemCursorHistory.at(-2) ?? null,
+                                    direction: "previous"
+                                  })
+                                }
+                              >
+                                Previous concepts
+                              </Button>
+                            ) : null}
+                            {hasNextItemPage ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                pending={
+                                  loadCatalogItemsMutation.isPending &&
+                                  loadCatalogItemsMutation.variables
+                                    ?.catalogId === catalog.id
+                                }
+                                pendingLabel="Loading concepts"
+                                onClick={() =>
+                                  loadCatalogItemsMutation.mutate({
+                                    catalogId: catalog.id,
+                                    cursor: nextItemCursor,
+                                    direction: "next",
+                                    bootstrap: !loadedPage
+                                  })
+                                }
+                              >
+                                Next concepts
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                      {loadCatalogItemsMutation.isError &&
+                      loadCatalogItemsMutation.variables?.catalogId ===
+                        catalog.id ? (
+                        <div
+                          role="alert"
+                          className="text-sm text-[var(--danger)]"
+                        >
+                          {
+                            describeApiError(loadCatalogItemsMutation.error)
+                              .description
+                          }
                         </div>
                       ) : null}
                     </div>
@@ -2149,7 +2665,7 @@ export function PreferencesPage() {
                       </div>
                       <Button
                         onClick={() =>
-                          setGuidedFlow({ kind: "catalog-item", catalog })
+                          openGuidedFlow({ kind: "catalog-item", catalog })
                         }
                       >
                         Add concept
@@ -2158,12 +2674,69 @@ export function PreferencesPage() {
                   </Card>
                 );
               })}
-              {filteredCatalogs.length > visibleCatalogs.length ? (
-                <div className="text-sm text-[var(--ui-ink-soft)]">
-                  Showing {visibleCatalogs.length} of {filteredCatalogs.length}
-                  matching catalogs. Refine the search to narrow this bounded
-                  view.
+              {catalogDirectoryQuery.data &&
+              (hasPreviousCatalogPage || nextCatalogCursor !== null) ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-[var(--ui-ink-faint)]">
+                    Showing {catalogPageOffset + 1}-
+                    {catalogPageOffset + visibleCatalogs.length}
+                    {conceptSearchQuery.trim()
+                      ? " matching libraries"
+                      : ` of ${workspace.libraries.totalCatalogs} libraries`}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {hasPreviousCatalogPage ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setCatalogPageCursors((current) =>
+                            current.length > 1 ? current.slice(0, -1) : current
+                          )
+                        }
+                      >
+                        Previous libraries
+                      </Button>
+                    ) : null}
+                    {nextCatalogCursor !== null ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setCatalogPageCursors((current) => [
+                            ...current,
+                            nextCatalogCursor
+                          ])
+                        }
+                      >
+                        Next libraries
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
+              ) : null}
+              {!catalogDirectoryQuery.isLoading &&
+              !catalogDirectoryQuery.isError &&
+              filteredCatalogs.length === 0 ? (
+                <EmptyState
+                  eyebrow="Concept libraries"
+                  title={
+                    conceptSearchQuery.trim()
+                      ? "No matching catalogs"
+                      : "No catalogs in this domain"
+                  }
+                  description={
+                    conceptSearchQuery.trim()
+                      ? "Try a different catalog, concept, or tag search."
+                      : "Create a guided catalog to define the first comparison pool."
+                  }
+                  action={
+                    <Button onClick={() => openGuidedFlow({ kind: "catalog" })}>
+                      <Plus className="size-4" />
+                      Create concept list
+                    </Button>
+                  }
+                />
               ) : null}
             </div>
           </div>
@@ -2175,6 +2748,7 @@ export function PreferencesPage() {
         onOpenChange={(open) => {
           if (!open) {
             setGameError(null);
+            gameScopeRef.current = null;
           }
           setGameState((current) => ({
             ...current,
@@ -2195,6 +2769,38 @@ export function PreferencesPage() {
         conceptSearchQuery={conceptSearchQuery}
         onConceptSearchQueryChange={setConceptSearchQuery}
         filteredCatalogs={visibleCatalogs}
+        catalogsLoading={catalogDirectoryQuery.isLoading}
+        catalogsRefreshing={
+          catalogDirectoryQuery.isFetching ||
+          conceptSearchQuery.trim() !== deferredConceptSearchQuery.trim()
+        }
+        catalogsError={
+          catalogDirectoryQuery.isError
+            ? describeApiError(catalogDirectoryQuery.error).description
+            : null
+        }
+        catalogOffset={catalogPageOffset}
+        catalogPreviousOffset={
+          hasPreviousCatalogPage
+            ? Math.max(0, catalogPageOffset - PREFERENCE_CATALOG_PAGE_SIZE)
+            : null
+        }
+        catalogNextOffset={
+          nextCatalogCursor !== null
+            ? catalogPageOffset + visibleCatalogs.length
+            : null
+        }
+        onPreviousCatalogs={() => {
+          setCatalogPageCursors((current) =>
+            current.length > 1 ? current.slice(0, -1) : current
+          );
+        }}
+        onNextCatalogs={() => {
+          if (nextCatalogCursor !== null) {
+            setCatalogPageCursors((current) => [...current, nextCatalogCursor]);
+          }
+        }}
+        onRetryCatalogs={() => void catalogDirectoryQuery.refetch()}
         onSelectDomain={(domain) => void handleGameDomainSelection(domain)}
         onStartCatalogGame={(domain, catalogId) =>
           void startCatalogGame(domain, catalogId)
@@ -2205,10 +2811,10 @@ export function PreferencesPage() {
             setGameError(describeApiError(error).description);
           });
         }}
-        onSignal={(itemId, signalType) => {
+        onSignal={(itemId, signalType, idempotencyKey) => {
           setGameError(null);
-          void handleGameSignal(itemId, signalType).catch((error) =>
-            setGameError(describeApiError(error).description)
+          void handleGameSignal(itemId, signalType, idempotencyKey).catch(
+            (error) => setGameError(describeApiError(error).description)
           );
         }}
       />
@@ -2216,14 +2822,66 @@ export function PreferencesPage() {
         flow={guidedFlow}
         onOpenChange={(open) => {
           if (!open) {
-            setGuidedFlow(null);
+            closeGuidedFlow();
           }
         }}
         pending={guidedFlowPending}
         user={user}
         domain={selectedDomain}
         workspace={workspace}
+        linkOptions={catalogLinkOptions}
+        onSearchLinkOptions={searchCatalogLinkOptions}
         onSubmit={handleGuidedSubmit}
+      />
+      <PlanningRecordDeleteDialog
+        open={Boolean(catalogPendingArchive)}
+        recordKind="preference catalog"
+        recordTitle={catalogPendingArchive?.title ?? "catalog"}
+        onOpenChange={(open) => {
+          if (!open) {
+            catalogArchiveScopeRef.current = null;
+            setCatalogPendingArchive(null);
+          }
+        }}
+        onConfirm={async () => {
+          if (!catalogPendingArchive) {
+            return;
+          }
+          if (catalogArchiveScopeRef.current !== preferenceScopeKey) {
+            throw new Error(
+              "The preference scope changed. Reopen the archive confirmation."
+            );
+          }
+          await deleteCatalogMutation.mutateAsync(catalogPendingArchive.id);
+          catalogArchiveScopeRef.current = null;
+          setCatalogPendingArchive(null);
+        }}
+      />
+      <PreferenceCatalogItemDeleteDialog
+        open={Boolean(catalogItemPendingDelete)}
+        itemLabel={catalogItemPendingDelete?.item.label ?? "concept"}
+        catalogTitle={catalogItemPendingDelete?.catalog.title ?? "catalog"}
+        onOpenChange={(open) => {
+          if (!open) {
+            catalogItemDeleteScopeRef.current = null;
+            setCatalogItemPendingDelete(null);
+          }
+        }}
+        onConfirm={async () => {
+          if (!catalogItemPendingDelete) {
+            return;
+          }
+          if (catalogItemDeleteScopeRef.current !== preferenceScopeKey) {
+            throw new Error(
+              "The preference scope changed. Reopen the delete confirmation."
+            );
+          }
+          await deleteCatalogItemMutation.mutateAsync(
+            catalogItemPendingDelete.item.id
+          );
+          catalogItemDeleteScopeRef.current = null;
+          setCatalogItemPendingDelete(null);
+        }}
       />
     </>
   );

@@ -11,6 +11,7 @@ tmp/
 .env.*
 !.env.example
 !.env.local.example
+.forge-secrets.key
 .npmrc
 *.log
 *.bak-*

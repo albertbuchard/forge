@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildGoalGravityScene, type GoalGravityCluster } from "@/components/psyche/goal-gravity-scene";
+import {
+  buildGoalGravityScene,
+  type GoalGravityCluster
+} from "@/components/psyche/goal-gravity-scene";
 import type { TriggerReport } from "@/lib/psyche-types";
 import type { Goal } from "@/lib/types";
 
@@ -34,6 +37,7 @@ describe("buildGoalGravityScene", () => {
       customEventType: "",
       eventTypeId: null,
       occurredAt: null,
+      bodyCues: [],
       consequences: {
         selfShortTerm: [],
         selfLongTerm: [],
@@ -50,6 +54,13 @@ describe("buildGoalGravityScene", () => {
       modeOverlays: [],
       schemaLinks: [],
       modeTimeline: [],
+      memoryClarity: "clear",
+      reflection: "",
+      hypothesis: "",
+      hypothesisFit: "not_reviewed",
+      hypothesisCorrection: "",
+      interpretationConsent: false,
+      revision: 1,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     };

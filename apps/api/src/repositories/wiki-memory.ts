@@ -70,6 +70,19 @@ type NoteLinkRow = {
   created_at: string;
 };
 
+type WikiLinkEdgeRow = {
+  source_note_id: string;
+  target_type: "page" | "note" | "entity" | "unresolved";
+  target_note_id: string | null;
+  target_entity_type: CrudEntityType | null;
+  target_entity_id: string | null;
+  label: string;
+  raw_target: string;
+  is_embed: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type WikiSpaceRow = {
   id: string;
   slug: string;
@@ -119,6 +132,21 @@ function normalizeWikiLinkTargetType(
     return value;
   }
   return "unresolved";
+}
+
+function mapWikiLinkEdgeRow(row: WikiLinkEdgeRow): WikiLinkEdge {
+  return wikiLinkEdgeSchema.parse({
+    sourceNoteId: row.source_note_id,
+    targetType: normalizeWikiLinkTargetType(row.target_type),
+    targetNoteId: row.target_note_id,
+    targetEntityType: row.target_entity_type,
+    targetEntityId: row.target_entity_id,
+    label: row.label,
+    rawTarget: row.raw_target,
+    isEmbed: row.is_embed === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
 }
 
 const wikiMediaAssetSchema = z.object({
@@ -173,22 +201,43 @@ const wikiSettingsPayloadSchema = z.object({
   embeddingProfiles: z.array(wikiEmbeddingProfileSchema)
 });
 
+export type WikiPageSummary = Pick<
+  Note,
+  | "id"
+  | "kind"
+  | "title"
+  | "slug"
+  | "spaceId"
+  | "parentSlug"
+  | "indexOrder"
+  | "showInIndex"
+  | "aliases"
+  | "summary"
+  | "author"
+  | "source"
+  | "tags"
+  | "createdAt"
+  | "updatedAt"
+>;
+
+export type WikiOutboundLink = WikiLinkEdge & {
+  status: "available" | "missing" | "unavailable" | "unverified";
+  targetPage: WikiPageSummary | null;
+  isSelfLink: boolean;
+};
+
 type WikiPageTreeNode = {
-  page: z.infer<typeof persistedNoteSchema>;
+  page: WikiPageSummary;
   children: WikiPageTreeNode[];
 };
 
-const wikiPageTreeNodeSchema: z.ZodType<
-  WikiPageTreeNode,
-  z.ZodTypeDef,
-  unknown
-> = z.lazy(
-  (): z.ZodType<WikiPageTreeNode, z.ZodTypeDef, unknown> =>
-    z.object({
-      page: persistedNoteSchema,
-      children: z.array(wikiPageTreeNodeSchema)
-    })
-);
+export type WikiSearchMatchKind =
+  | "title"
+  | "alias"
+  | "content"
+  | "entity"
+  | "semantic"
+  | "recent";
 
 const wikiHealthPayloadSchema = z.object({
   space: wikiSpaceSchema,
@@ -438,11 +487,18 @@ export const upsertWikiEmbeddingProfileSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({})
 });
 
+export const WIKI_SEARCH_MAX_QUERY_CHARS = 500;
+export const WIKI_SEARCH_MAX_FTS_TOKENS = 20;
+export const WIKI_SEARCH_MAX_RESULTS = 1_000;
+export const WIKI_PAGE_LIST_MAX_RESULTS = 10_000;
+export const WIKI_PAGE_OUTBOUND_LINK_LIMIT = 500;
+export const WIKI_PAGE_BACKLINK_LIMIT = 100;
+
 export const wikiSearchQuerySchema = z.object({
   spaceId: z.string().trim().optional(),
   kind: noteKindSchema.optional(),
   mode: wikiSearchModeSchema.default("hybrid"),
-  query: z.string().trim().default(""),
+  query: z.string().trim().max(WIKI_SEARCH_MAX_QUERY_CHARS).default(""),
   profileId: z.string().trim().optional(),
   linkedEntity: z
     .object({
@@ -450,7 +506,26 @@ export const wikiSearchQuerySchema = z.object({
       entityId: z.string().trim().min(1)
     })
     .optional(),
-  limit: z.coerce.number().int().positive().max(50).default(20)
+  limit: z.coerce.number().int().positive().max(50).default(20),
+  offset: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(WIKI_SEARCH_MAX_RESULTS - 1)
+    .default(0)
+});
+
+export const wikiPageListQuerySchema = z.object({
+  spaceId: z.string().trim().optional(),
+  kind: noteKindSchema.optional(),
+  limit: z.coerce.number().int().positive().max(500).default(50),
+  offset: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(WIKI_PAGE_LIST_MAX_RESULTS - 1)
+    .default(0),
+  includeHidden: z.boolean().default(false)
 });
 
 export const syncWikiVaultSchema = z.object({
@@ -619,10 +694,7 @@ function parseJsonStringArray(raw: string | null | undefined) {
   }
 }
 
-function readStringRecordValue(
-  record: Record<string, unknown>,
-  key: string
-) {
+function readStringRecordValue(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
@@ -744,9 +816,16 @@ function listNotesByTitleRaw(
     ) as NoteRow[];
 }
 
+function isWikiNoteRowActive(row: NoteRow, timestamp = nowIso()) {
+  return (
+    !isEntityDeleted("note", row.id) &&
+    (!row.destroy_at || row.destroy_at > timestamp)
+  );
+}
+
 function getActiveNoteByIdRaw(noteId: string) {
   const row = getNoteByIdRaw(noteId);
-  if (!row || isEntityDeleted("note", row.id)) {
+  if (!row || !isWikiNoteRowActive(row)) {
     return null;
   }
   return row;
@@ -758,13 +837,16 @@ function getActiveNoteBySlugRaw(
   exceptNoteId?: string
 ) {
   const row = getNoteBySlugRaw(spaceId, slug, exceptNoteId);
-  if (!row || isEntityDeleted("note", row.id)) {
+  if (!row || !isWikiNoteRowActive(row)) {
     return null;
   }
   return row;
 }
 
-function scoreReferenceMatch(reference: string, row: NoteRow) {
+function scoreReferenceMatch(
+  reference: string,
+  row: Pick<NoteRow, "title" | "slug">
+) {
   const referenceSlug = slugify(reference);
   const titleSlug = slugify(row.title);
 
@@ -797,7 +879,8 @@ function scoreReferenceMatch(reference: string, row: NoteRow) {
 }
 
 function chooseBestActiveReferenceMatch(reference: string, rows: NoteRow[]) {
-  const activeRows = rows.filter((row) => !isEntityDeleted("note", row.id));
+  const timestamp = nowIso();
+  const activeRows = rows.filter((row) => isWikiNoteRowActive(row, timestamp));
   if (activeRows.length === 0) {
     return null;
   }
@@ -849,6 +932,137 @@ function getActiveNoteByReferenceRaw(
     )
   );
   return aliasMatch ?? null;
+}
+
+type WikiReferenceRow = Pick<
+  NoteRow,
+  "id" | "title" | "slug" | "aliases_json" | "updated_at"
+>;
+
+function buildActiveWikiReferenceResolver(spaceId: string) {
+  const rows = getDatabase()
+    .prepare(
+      `SELECT notes.id, notes.title, notes.slug, notes.aliases_json, notes.updated_at
+       FROM notes
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+       WHERE notes.space_id = ?
+         AND deleted_entities.entity_id IS NULL
+         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)
+       ORDER BY notes.updated_at DESC, notes.id ASC
+       LIMIT ?`
+    )
+    .all(spaceId, nowIso(), WIKI_PAGE_LIST_MAX_RESULTS) as WikiReferenceRow[];
+  const bySlug = new Map<string, WikiReferenceRow>();
+  const byTitle = new Map<string, WikiReferenceRow[]>();
+  const byAlias = new Map<string, WikiReferenceRow[]>();
+
+  const append = (
+    index: Map<string, WikiReferenceRow[]>,
+    key: string,
+    row: WikiReferenceRow
+  ) => index.set(key, [...(index.get(key) ?? []), row]);
+
+  for (const row of rows) {
+    const slugKey = row.slug.trim().toLowerCase();
+    if (slugKey && !bySlug.has(slugKey)) {
+      bySlug.set(slugKey, row);
+    }
+    const titleKey = row.title.trim().toLowerCase();
+    if (titleKey) {
+      append(byTitle, titleKey, row);
+    }
+    for (const alias of parseJsonStringArray(row.aliases_json)) {
+      const aliasKey = alias.trim().toLowerCase();
+      if (aliasKey) {
+        append(byAlias, aliasKey, row);
+      }
+    }
+  }
+
+  const choose = (reference: string, candidates: WikiReferenceRow[]) =>
+    [...candidates].sort((left, right) => {
+      const leftScore = scoreReferenceMatch(reference, left);
+      const rightScore = scoreReferenceMatch(reference, right);
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore;
+      }
+      if (left.updated_at !== right.updated_at) {
+        return right.updated_at.localeCompare(left.updated_at);
+      }
+      return left.id.localeCompare(right.id);
+    })[0] ?? null;
+
+  return (reference: string) => {
+    const normalized = reference.trim();
+    const key = normalized.toLowerCase();
+    if (!key) {
+      return null;
+    }
+    return (
+      bySlug.get(key) ??
+      choose(normalized, byTitle.get(key) ?? []) ??
+      choose(normalized, byAlias.get(key) ?? [])
+    );
+  };
+}
+
+type ParsedWikiLink = {
+  rawTarget: string;
+  label: string;
+  isEmbed: boolean;
+};
+
+function extractWikiLinks(markdown: string, limit: number) {
+  const links: ParsedWikiLink[] = [];
+  const pattern = /(!)?\[\[([^[\]]+)\]\]/g;
+  let match: RegExpExecArray | null = null;
+  let truncated = false;
+
+  while ((match = pattern.exec(markdown)) !== null) {
+    if (links.length >= limit) {
+      truncated = true;
+      break;
+    }
+    const token = (match[2] ?? "").trim();
+    const separatorIndex = token.indexOf("|");
+    const rawTarget = (
+      separatorIndex >= 0 ? token.slice(0, separatorIndex) : token
+    ).trim();
+    if (!rawTarget) {
+      continue;
+    }
+    const requestedLabel =
+      separatorIndex >= 0 ? token.slice(separatorIndex + 1).trim() : "";
+    links.push({
+      rawTarget,
+      label: requestedLabel || rawTarget,
+      isEmbed: Boolean(match[1])
+    });
+  }
+
+  return { links, truncated };
+}
+
+function wikiLinkDedupeKey(link: ParsedWikiLink) {
+  return [
+    link.isEmbed ? "embed" : "link",
+    link.rawTarget.toLowerCase(),
+    link.label
+  ].join("\u0000");
+}
+
+function dedupeWikiLinks(links: ParsedWikiLink[]) {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = wikiLinkDedupeKey(link);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildContentPlain(markdown: string) {
@@ -903,20 +1117,17 @@ function stripLeadingHeading(markdown: string, title: string) {
   return trimmed.slice(match[0].length).trim();
 }
 
-function mergeWikiPageContent(targetMarkdown: string, incoming: {
-  title: string;
-  markdown: string;
-}) {
+function mergeWikiPageContent(
+  targetMarkdown: string,
+  incoming: {
+    title: string;
+    markdown: string;
+  }
+) {
   const mergedBody =
     stripLeadingHeading(incoming.markdown, incoming.title) ||
     incoming.markdown.trim();
-  return [
-    targetMarkdown.trim(),
-    "",
-    `## ${incoming.title}`,
-    "",
-    mergedBody
-  ]
+  return [targetMarkdown.trim(), "", `## ${incoming.title}`, "", mergedBody]
     .filter((part) => part.trim().length > 0)
     .join("\n");
 }
@@ -1015,12 +1226,11 @@ function buildLinkedEntityTokens(note: Note) {
     .join(" ");
 }
 
-function buildWikiFtsQuery(query: string) {
-  const tokens = query
-    .trim()
-    .split(/\s+/)
-    .map((token) => token.replace(/["*']/g, "").trim())
-    .filter(Boolean);
+export function buildWikiFtsQuery(query: string) {
+  const tokens = (query.match(/[\p{L}\p{N}_]+/gu) ?? []).slice(
+    0,
+    WIKI_SEARCH_MAX_FTS_TOKENS
+  );
   if (tokens.length === 0) {
     return null;
   }
@@ -1338,7 +1548,7 @@ function findExistingSpaceByOwner(ownerUserId: string) {
   return row ? mapWikiSpace(row) : null;
 }
 
-function getWikiSpaceById(spaceId: string) {
+export function getWikiSpaceById(spaceId: string) {
   const row = getDatabase()
     .prepare(
       `SELECT id, slug, label, description, owner_user_id, visibility, created_at, updated_at
@@ -1408,7 +1618,8 @@ function ensurePersonalWikiSpace(userId: string) {
 
 function resolvePersonalWikiSpacePresentation(userId: string) {
   const user = getUserById(userId);
-  const displayName = user?.displayName?.trim() || user?.handle?.trim() || userId;
+  const displayName =
+    user?.displayName?.trim() || user?.handle?.trim() || userId;
   const slugSource = user?.handle?.trim() || displayName || userId;
   return {
     label: `${displayName} Wiki`,
@@ -1416,7 +1627,10 @@ function resolvePersonalWikiSpacePresentation(userId: string) {
   };
 }
 
-function repairAutoGeneratedPersonalWikiSpace(space: WikiSpace, userId: string) {
+function repairAutoGeneratedPersonalWikiSpace(
+  space: WikiSpace,
+  userId: string
+) {
   const presentation = resolvePersonalWikiSpacePresentation(userId);
   const oldLabel = `${userId} Wiki`;
   const oldSlug = `user-${slugify(userId)}`;
@@ -1574,6 +1788,53 @@ function resolveSpaceId(spaceId: string | undefined, userId?: string | null) {
   return ensureSharedWikiSpace().id;
 }
 
+export function resolveWikiSpaceIdForInput(input: {
+  spaceId?: string;
+  userId?: string | null;
+}) {
+  return resolveSpaceId(input.spaceId, input.userId);
+}
+
+export function getWikiPageAccessRecord(noteId: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT notes.id, notes.space_id, notes.kind, notes.slug,
+              (
+                SELECT note_links.entity_type
+                FROM note_links
+                WHERE note_links.note_id = notes.id
+                ORDER BY note_links.created_at ASC, note_links.entity_type ASC, note_links.entity_id ASC
+                LIMIT 1
+              ) AS linked_entity_type
+       FROM notes
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+       WHERE notes.id = ?
+         AND notes.kind IN ('wiki', 'evidence')
+         AND deleted_entities.entity_id IS NULL
+         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)`
+    )
+    .get(noteId, nowIso()) as
+    | {
+        id: string;
+        space_id: string;
+        kind: NoteKind;
+        slug: string;
+        linked_entity_type: CrudEntityType | null;
+      }
+    | undefined;
+  return row
+    ? {
+        id: row.id,
+        spaceId: row.space_id,
+        kind: row.kind,
+        isHomePage: row.slug === "index",
+        linkedEntityType: row.linked_entity_type
+      }
+    : null;
+}
+
 export function prepareNoteWikiFields(input: {
   id: string;
   contentMarkdown: string;
@@ -1710,25 +1971,20 @@ function rebuildWikiLinkEdges(note: Note) {
     .prepare(`DELETE FROM wiki_link_edges WHERE source_note_id = ?`)
     .run(note.id);
 
-  const matches = [...note.contentMarkdown.matchAll(/(!)?\[\[([^[\]]+)\]\]/g)];
+  const links = dedupeWikiLinks(
+    extractWikiLinks(note.contentMarkdown, WIKI_PAGE_OUTBOUND_LINK_LIMIT).links
+  );
+  const resolveReference = buildActiveWikiReferenceResolver(note.spaceId);
   const insert = getDatabase().prepare(
     `INSERT INTO wiki_link_edges (
       source_note_id, target_type, target_note_id, target_entity_type, target_entity_id, label, raw_target, is_embed, created_at, updated_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
-  for (const match of matches) {
-    const isEmbed = Boolean(match[1]);
-    const token = (match[2] ?? "").trim();
-    if (!token) {
-      continue;
-    }
-    const [left, right] = token.split("|");
-    const label = right?.trim() || left.trim();
-
-    if (left.startsWith("forge:")) {
-      const parts = left.split(":");
-      const entityType = parts[1];
+  for (const link of links) {
+    if (link.rawTarget.toLowerCase().startsWith("forge:")) {
+      const parts = link.rawTarget.split(":");
+      const entityType = parts[1]?.toLowerCase();
       const entityId = parts.slice(2).join(":");
       const parsedEntityType = crudEntityTypeSchema.safeParse(entityType);
       if (parsedEntityType.success && entityId.trim()) {
@@ -1738,9 +1994,9 @@ function rebuildWikiLinkEdges(note: Note) {
           null,
           parsedEntityType.data,
           entityId.trim(),
-          label,
-          left,
-          isEmbed ? 1 : 0,
+          link.label,
+          link.rawTarget,
+          link.isEmbed ? 1 : 0,
           now,
           now
         );
@@ -1748,11 +2004,7 @@ function rebuildWikiLinkEdges(note: Note) {
       }
     }
 
-    const targetNote = getActiveNoteByReferenceRaw(
-      note.spaceId,
-      left.trim(),
-      note.id
-    );
+    const targetNote = resolveReference(link.rawTarget);
     if (targetNote) {
       insert.run(
         note.id,
@@ -1760,9 +2012,9 @@ function rebuildWikiLinkEdges(note: Note) {
         targetNote.id,
         null,
         null,
-        label,
-        left.trim(),
-        isEmbed ? 1 : 0,
+        link.label,
+        link.rawTarget,
+        link.isEmbed ? 1 : 0,
         now,
         now
       );
@@ -1775,9 +2027,9 @@ function rebuildWikiLinkEdges(note: Note) {
       null,
       null,
       null,
-      label,
-      left.trim(),
-      isEmbed ? 1 : 0,
+      link.label,
+      link.rawTarget,
+      link.isEmbed ? 1 : 0,
       now,
       now
     );
@@ -1791,12 +2043,19 @@ function loadNotesByIds(noteIds: string[]) {
   const placeholders = noteIds.map(() => "?").join(", ");
   const rows = getDatabase()
     .prepare(
-      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source,
-              tags_json, destroy_at, source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
+      `SELECT notes.id, notes.kind, notes.title, notes.slug, notes.space_id, notes.aliases_json, notes.summary,
+              notes.content_markdown, notes.content_plain, notes.author, notes.source, notes.tags_json, notes.destroy_at,
+              notes.source_path, notes.frontmatter_json, notes.revision_hash, notes.last_synced_at, notes.parent_slug,
+              notes.index_order, notes.show_in_index, notes.created_at, notes.updated_at
        FROM notes
-       WHERE id IN (${placeholders})`
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+       WHERE notes.id IN (${placeholders})
+         AND deleted_entities.entity_id IS NULL
+         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)`
     )
-    .all(...noteIds) as NoteRow[];
+    .all(...noteIds, nowIso()) as NoteRow[];
   const links = listLinkRowsForNotes(noteIds);
   const linksByNoteId = new Map<string, NoteLinkRow[]>();
   for (const link of links) {
@@ -1807,18 +2066,61 @@ function loadNotesByIds(noteIds: string[]) {
   return rows.map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
 }
 
-function listAllNotes() {
-  const rows = getNoteRows();
-  const links = listLinkRowsForNotes(rows.map((row) => row.id));
-  const linksByNoteId = new Map<string, NoteLinkRow[]>();
-  for (const link of links) {
-    const current = linksByNoteId.get(link.note_id) ?? [];
-    current.push(link);
-    linksByNoteId.set(link.note_id, current);
+function loadWikiPageSummariesByIds(noteIds: string[]) {
+  if (noteIds.length === 0) {
+    return [];
   }
-  return rows
-    .filter((row) => !isEntityDeleted("note", row.id))
-    .map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
+  const placeholders = noteIds.map(() => "?").join(", ");
+  const rows = getDatabase()
+    .prepare(
+      `SELECT notes.id, notes.kind, notes.title, notes.slug, notes.space_id, notes.aliases_json, notes.summary,
+              notes.author, notes.source, notes.tags_json, notes.parent_slug, notes.index_order, notes.show_in_index,
+              notes.created_at, notes.updated_at
+       FROM notes
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+       WHERE notes.id IN (${placeholders})
+         AND deleted_entities.entity_id IS NULL
+         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)`
+    )
+    .all(...noteIds, nowIso()) as Array<{
+    id: string;
+    kind: NoteKind;
+    title: string;
+    slug: string;
+    space_id: string;
+    aliases_json: string;
+    summary: string;
+    author: string | null;
+    source: Note["source"];
+    tags_json: string;
+    parent_slug: string | null;
+    index_order: number;
+    show_in_index: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  return rows.map(
+    (row): WikiPageSummary => ({
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      slug: row.slug,
+      spaceId: row.space_id,
+      parentSlug: row.parent_slug,
+      indexOrder: row.index_order,
+      showInIndex: row.show_in_index === 1,
+      aliases: normalizeAliases(parseJsonStringArray(row.aliases_json)),
+      summary: row.summary,
+      author: row.author,
+      source: row.source,
+      tags: normalizeTags(parseJsonStringArray(row.tags_json)),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })
+  );
 }
 
 export function listWikiSpaces() {
@@ -1868,7 +2170,99 @@ function compareWikiPageOrder(left: Note, right: Note) {
   if (left.indexOrder !== right.indexOrder) {
     return left.indexOrder - right.indexOrder;
   }
-  return left.title.localeCompare(right.title);
+  const titleDelta = left.title.localeCompare(right.title);
+  return titleDelta !== 0 ? titleDelta : left.id.localeCompare(right.id);
+}
+
+export function toWikiPageSummary(page: Note): WikiPageSummary {
+  return {
+    id: page.id,
+    kind: page.kind,
+    title: page.title,
+    slug: page.slug,
+    spaceId: page.spaceId,
+    parentSlug: page.parentSlug,
+    indexOrder: page.indexOrder,
+    showInIndex: page.showInIndex,
+    aliases: page.aliases,
+    summary: page.summary,
+    author: page.author,
+    source: page.source,
+    tags: page.tags,
+    createdAt: page.createdAt,
+    updatedAt: page.updatedAt
+  };
+}
+
+function loadWikiPageWindow(query: {
+  spaceId: string;
+  kind?: NoteKind;
+  limit: number;
+  offset: number;
+  includeHidden: boolean;
+}) {
+  const conditions = [
+    "notes.space_id = ?",
+    "deleted_entities.entity_id IS NULL",
+    "(notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)"
+  ];
+  const params: Array<string | number> = [query.spaceId, nowIso()];
+  if (!query.includeHidden) {
+    conditions.push("notes.show_in_index = 1");
+  }
+  if (query.kind) {
+    conditions.push("notes.kind = ?");
+    params.push(query.kind);
+  }
+
+  const rows = getDatabase()
+    .prepare(
+      `SELECT notes.id, notes.kind, notes.title, notes.slug, notes.space_id, notes.aliases_json, notes.summary,
+              notes.content_markdown, notes.content_plain, notes.author, notes.source, notes.tags_json, notes.destroy_at,
+              notes.source_path, notes.frontmatter_json, notes.revision_hash, notes.last_synced_at, notes.parent_slug,
+              notes.index_order, notes.show_in_index, notes.created_at, notes.updated_at
+       FROM notes
+       LEFT JOIN deleted_entities
+         ON deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY COALESCE(notes.parent_slug, ''), notes.index_order, LOWER(notes.title), notes.id
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, query.limit, query.offset) as NoteRow[];
+  const links = listLinkRowsForNotes(rows.map((row) => row.id));
+  const linksByNoteId = new Map<string, NoteLinkRow[]>();
+  for (const link of links) {
+    const current = linksByNoteId.get(link.note_id) ?? [];
+    current.push(link);
+    linksByNoteId.set(link.note_id, current);
+  }
+  return rows.map((row) => mapNoteRow(row, linksByNoteId.get(row.id) ?? []));
+}
+
+export function listWikiPagesPage(
+  input: z.input<typeof wikiPageListQuerySchema>
+) {
+  const parsed = wikiPageListQuerySchema.parse(input);
+  const spaceId = resolveSpaceId(parsed.spaceId, null);
+  ensureWikiSpaceSeedPages(spaceId);
+  const remaining = WIKI_PAGE_LIST_MAX_RESULTS - parsed.offset;
+  const effectiveLimit = Math.min(parsed.limit, remaining);
+  const canLookAhead =
+    parsed.offset + effectiveLimit < WIKI_PAGE_LIST_MAX_RESULTS;
+  const window = loadWikiPageWindow({
+    ...parsed,
+    spaceId,
+    limit: effectiveLimit + (canLookAhead ? 1 : 0)
+  });
+  const hasMore = canLookAhead && window.length > effectiveLimit;
+  return {
+    pages: window.slice(0, effectiveLimit),
+    limit: parsed.limit,
+    offset: parsed.offset,
+    hasMore,
+    nextOffset: hasMore ? parsed.offset + effectiveLimit : null
+  };
 }
 
 export function listWikiPages(query: {
@@ -1879,18 +2273,31 @@ export function listWikiPages(query: {
 }) {
   const spaceId = resolveSpaceId(query.spaceId, null);
   ensureWikiSpaceSeedPages(spaceId);
-  return listAllNotes()
-    .filter((note) => note.spaceId === spaceId)
-    .filter((note) => (query.includeHidden ? true : note.showInIndex))
-    .filter((note) => (query.kind ? note.kind === query.kind : true))
-    .sort(compareWikiPageOrder)
-    .slice(0, query.limit ?? 100);
+  return loadWikiPageWindow({
+    spaceId,
+    kind: query.kind,
+    limit: Math.min(Math.max(query.limit ?? 100, 1), 10_000),
+    offset: 0,
+    includeHidden: query.includeHidden ?? false
+  });
 }
 
-export function listWikiPageTree(query: { spaceId?: string; kind?: NoteKind }) {
-  const pages = listWikiPages({ ...query, limit: 10_000 }).filter(
-    (page) => page.kind === "wiki" && page.showInIndex
-  );
+export function listWikiPageTree(query: {
+  spaceId?: string;
+  kind?: NoteKind;
+  limit?: number;
+}) {
+  if (query.kind && query.kind !== "wiki") {
+    return { tree: [], truncated: false };
+  }
+  const limit = Math.min(Math.max(query.limit ?? 500, 1), 500);
+  const window = listWikiPages({
+    ...query,
+    kind: "wiki",
+    limit: limit + 1
+  }).filter((page) => page.showInIndex);
+  const truncated = window.length > limit;
+  const pages = window.slice(0, limit);
   const childrenByParent = new Map<string | null, Note[]>();
   for (const page of pages) {
     const key = page.parentSlug ?? null;
@@ -1898,9 +2305,11 @@ export function listWikiPageTree(query: { spaceId?: string; kind?: NoteKind }) {
     current.push(page);
     childrenByParent.set(key, current);
   }
-  const build = (
-    parentSlug: string | null
-  ): Array<{ page: Note; children: unknown[] }> =>
+  type FullWikiPageTreeNode = {
+    page: Note;
+    children: FullWikiPageTreeNode[];
+  };
+  const build = (parentSlug: string | null): FullWikiPageTreeNode[] =>
     (childrenByParent.get(parentSlug) ?? [])
       .sort(compareWikiPageOrder)
       .map((page) => ({
@@ -1908,7 +2317,15 @@ export function listWikiPageTree(query: { spaceId?: string; kind?: NoteKind }) {
         children: build(page.slug)
       }));
 
-  return z.array(wikiPageTreeNodeSchema).parse(build(null));
+  return {
+    tree: build(null).map(function summarizeNode(node): WikiPageTreeNode {
+      return {
+        page: toWikiPageSummary(node.page),
+        children: node.children.map(summarizeNode)
+      };
+    }),
+    truncated
+  };
 }
 
 export function getWikiHomePageDetail(input: { spaceId?: string } = {}) {
@@ -1940,25 +2357,155 @@ export function getWikiPageDetail(noteId: string) {
     return null;
   }
   const note = mapNoteRow(row, listLinkRowsForNotes([row.id]));
-  const backlinkRows = getDatabase()
+  const outboundRowsWindow = getDatabase()
     .prepare(
-      `SELECT source_note_id, target_type, target_note_id, target_entity_type, target_entity_id, label, raw_target, is_embed, created_at, updated_at
+      `SELECT source_note_id, target_type, target_note_id, target_entity_type, target_entity_id, label, raw_target, is_embed,
+              created_at, updated_at
        FROM wiki_link_edges
-       WHERE target_note_id = ?
-       ORDER BY updated_at DESC`
+       WHERE source_note_id = ?
+       ORDER BY created_at ASC, raw_target COLLATE NOCASE ASC, label ASC
+       LIMIT ?`
     )
-    .all(noteId) as Array<{
-    source_note_id: string;
-    target_type: "page" | "entity" | "unresolved";
-    target_note_id: string | null;
-    target_entity_type: CrudEntityType | null;
-    target_entity_id: string | null;
-    label: string;
-    raw_target: string;
-    is_embed: number;
-    created_at: string;
-    updated_at: string;
-  }>;
+    .all(noteId, WIKI_PAGE_OUTBOUND_LINK_LIMIT + 1) as WikiLinkEdgeRow[];
+  const outboundMarkup = extractWikiLinks(
+    note.contentMarkdown,
+    WIKI_PAGE_OUTBOUND_LINK_LIMIT
+  );
+  const storedOutboundByKey = new Map(
+    outboundRowsWindow.map((edge) => [
+      wikiLinkDedupeKey({
+        rawTarget: edge.raw_target,
+        label: edge.label,
+        isEmbed: edge.is_embed === 1
+      }),
+      edge
+    ])
+  );
+  const outboundRows = dedupeWikiLinks(outboundMarkup.links).map(
+    (link): WikiLinkEdgeRow =>
+      storedOutboundByKey.get(wikiLinkDedupeKey(link)) ?? {
+        source_note_id: note.id,
+        target_type: "unresolved",
+        target_note_id: null,
+        target_entity_type: null,
+        target_entity_id: null,
+        label: link.label,
+        raw_target: link.rawTarget,
+        is_embed: link.isEmbed ? 1 : 0,
+        created_at: note.updatedAt,
+        updated_at: note.updatedAt
+      }
+  );
+  const resolveReference = buildActiveWikiReferenceResolver(note.spaceId);
+  const outboundTargets = outboundRows.map((edge) => {
+    if (normalizeWikiLinkTargetType(edge.target_type) === "entity") {
+      return { edge, targetId: null };
+    }
+    if (edge.target_note_id) {
+      return { edge, targetId: edge.target_note_id };
+    }
+    return { edge, targetId: resolveReference(edge.raw_target)?.id ?? null };
+  });
+  const outboundTargetPages = loadWikiPageSummariesByIds(
+    Array.from(
+      new Set(
+        outboundTargets.flatMap(({ targetId }) => (targetId ? [targetId] : []))
+      )
+    )
+  );
+  const outboundTargetPageById = new Map(
+    outboundTargetPages.map((page) => [page.id, page])
+  );
+  const outboundLinks: WikiOutboundLink[] = outboundTargets.map(
+    ({ edge: row, targetId }) => {
+      const edge = mapWikiLinkEdgeRow(row);
+      if (edge.targetType === "entity") {
+        return {
+          ...edge,
+          status: "unverified",
+          targetPage: null,
+          isSelfLink: false
+        };
+      }
+      const candidate = targetId ? outboundTargetPageById.get(targetId) : null;
+      const targetPage = candidate?.spaceId === note.spaceId ? candidate : null;
+      if (targetPage) {
+        return {
+          ...edge,
+          targetType: "page",
+          targetNoteId: targetPage.id,
+          status: "available",
+          targetPage,
+          isSelfLink: targetPage.id === note.id
+        };
+      }
+      return {
+        ...edge,
+        status: edge.targetNoteId ? "unavailable" : "missing",
+        targetPage: null,
+        isSelfLink: false
+      };
+    }
+  );
+  const backlinkRowsWindow = getDatabase()
+    .prepare(
+      `SELECT wiki_link_edges.source_note_id,
+              CASE WHEN wiki_link_edges.target_note_id IS NULL THEN 'page' ELSE wiki_link_edges.target_type END AS target_type,
+              ? AS target_note_id,
+              wiki_link_edges.target_entity_type,
+              wiki_link_edges.target_entity_id,
+              wiki_link_edges.label,
+              wiki_link_edges.raw_target,
+              wiki_link_edges.is_embed,
+              MIN(wiki_link_edges.created_at) AS created_at,
+              MAX(wiki_link_edges.updated_at) AS updated_at
+       FROM wiki_link_edges
+       INNER JOIN notes AS source_notes
+         ON source_notes.id = wiki_link_edges.source_note_id
+       LEFT JOIN deleted_entities AS source_deletions
+         ON source_deletions.entity_type = 'note'
+        AND source_deletions.entity_id = source_notes.id
+       WHERE source_notes.space_id = ?
+         AND source_notes.id != ?
+         AND source_deletions.entity_id IS NULL
+         AND (
+           source_notes.destroy_at IS NULL
+           OR source_notes.destroy_at = ''
+           OR source_notes.destroy_at > ?
+         )
+         AND (
+           wiki_link_edges.target_note_id = ?
+           OR (
+             wiki_link_edges.target_type = 'unresolved'
+             AND (
+               lower(trim(wiki_link_edges.raw_target)) IN (lower(?), lower(?))
+               OR EXISTS (
+                 SELECT 1
+                 FROM json_each(?) AS target_alias
+                 WHERE lower(trim(CAST(target_alias.value AS TEXT))) = lower(trim(wiki_link_edges.raw_target))
+               )
+             )
+           )
+         )
+       GROUP BY wiki_link_edges.source_note_id, wiki_link_edges.target_type,
+                wiki_link_edges.target_note_id, wiki_link_edges.target_entity_type,
+                wiki_link_edges.target_entity_id, wiki_link_edges.label,
+                wiki_link_edges.raw_target, wiki_link_edges.is_embed
+       ORDER BY updated_at DESC, wiki_link_edges.source_note_id ASC, wiki_link_edges.label ASC
+       LIMIT ?`
+    )
+    .all(
+      noteId,
+      note.spaceId,
+      noteId,
+      nowIso(),
+      noteId,
+      note.slug,
+      note.title,
+      JSON.stringify(note.aliases),
+      WIKI_PAGE_BACKLINK_LIMIT + 1
+    ) as WikiLinkEdgeRow[];
+  const backlinkRows = backlinkRowsWindow.slice(0, WIKI_PAGE_BACKLINK_LIMIT);
   const assets = getDatabase()
     .prepare(
       `SELECT id, space_id, note_id, label, mime_type, file_name, file_path, size_bytes, checksum, transcript_note_id, metadata_json, created_at, updated_at
@@ -1982,7 +2529,7 @@ export function getWikiPageDetail(noteId: string) {
     updated_at: string;
   }>;
 
-  const backlinkSourceNotes = loadNotesByIds(
+  const backlinkSourceNotes = loadWikiPageSummariesByIds(
     Array.from(new Set(backlinkRows.map((row) => row.source_note_id)))
   );
   const backlinkSourceById = new Map(
@@ -1991,20 +2538,14 @@ export function getWikiPageDetail(noteId: string) {
 
   return {
     page: note,
-    backlinks: backlinkRows.map((row) =>
-      wikiLinkEdgeSchema.parse({
-        sourceNoteId: row.source_note_id,
-        targetType: normalizeWikiLinkTargetType(row.target_type),
-        targetNoteId: row.target_note_id,
-        targetEntityType: row.target_entity_type,
-        targetEntityId: row.target_entity_id,
-        label: row.label,
-        rawTarget: row.raw_target,
-        isEmbed: row.is_embed === 1,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      })
-    ),
+    outboundLinks,
+    outboundLinksTruncated:
+      outboundRowsWindow.length > WIKI_PAGE_OUTBOUND_LINK_LIMIT ||
+      outboundMarkup.truncated,
+    outboundLinkLimit: WIKI_PAGE_OUTBOUND_LINK_LIMIT,
+    backlinks: backlinkRows.map(mapWikiLinkEdgeRow),
+    backlinksTruncated: backlinkRowsWindow.length > WIKI_PAGE_BACKLINK_LIMIT,
+    backlinkLimit: WIKI_PAGE_BACKLINK_LIMIT,
     backlinkSourceNotes,
     assets: assets.map((row) =>
       wikiMediaAssetSchema.parse({
@@ -2053,31 +2594,205 @@ export async function syncWikiVaultFromDisk(
   return { updated };
 }
 
-function findMatchingWikiNoteIds(query: string) {
-  const ftsQuery = buildWikiFtsQuery(query);
-  if (!ftsQuery) {
-    return new Set<string>();
+const WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT = WIKI_SEARCH_MAX_RESULTS;
+const WIKI_SEARCH_CHANNEL_RESERVE = 100;
+const WIKI_SEMANTIC_CHUNK_SCAN_LIMIT = 5_000;
+
+export type WikiSearchCandidateChannel =
+  | "direct"
+  | "entity"
+  | "fts"
+  | "semantic"
+  | "recent";
+
+const WIKI_SEARCH_CANDIDATE_CHANNELS: WikiSearchCandidateChannel[] = [
+  "direct",
+  "entity",
+  "fts",
+  "semantic",
+  "recent"
+];
+
+export function mergeWikiSearchCandidateChannels(
+  channels: Partial<Record<WikiSearchCandidateChannel, readonly string[]>>,
+  options: { maxCandidates?: number; reservePerChannel?: number } = {}
+) {
+  const maxCandidates = Math.min(
+    Math.max(options.maxCandidates ?? WIKI_SEARCH_MAX_RESULTS, 1),
+    WIKI_SEARCH_MAX_RESULTS
+  );
+  const reservePerChannel = Math.min(
+    Math.max(options.reservePerChannel ?? WIKI_SEARCH_CHANNEL_RESERVE, 0),
+    maxCandidates
+  );
+  const boundedChannels = WIKI_SEARCH_CANDIDATE_CHANNELS.map((channel) => ({
+    channel,
+    ids: (channels[channel] ?? []).slice(
+      0,
+      WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT
+    ),
+    nextIndex: 0
+  }));
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  const add = (id: string) => {
+    if (!id || seen.has(id) || merged.length >= maxCandidates) {
+      return;
+    }
+    seen.add(id);
+    merged.push(id);
+  };
+
+  for (const channel of boundedChannels) {
+    const reserveEnd = Math.min(channel.ids.length, reservePerChannel);
+    while (channel.nextIndex < reserveEnd && merged.length < maxCandidates) {
+      add(channel.ids[channel.nextIndex]!);
+      channel.nextIndex += 1;
+    }
   }
-  const rows = getDatabase()
-    .prepare(`SELECT note_id FROM wiki_pages_fts WHERE wiki_pages_fts MATCH ?`)
-    .all(ftsQuery) as Array<{ note_id: string }>;
-  return new Set(rows.map((row) => row.note_id));
+
+  let madeProgress = true;
+  while (merged.length < maxCandidates && madeProgress) {
+    madeProgress = false;
+    for (const channel of boundedChannels) {
+      while (
+        channel.nextIndex < channel.ids.length &&
+        seen.has(channel.ids[channel.nextIndex]!)
+      ) {
+        channel.nextIndex += 1;
+      }
+      if (channel.nextIndex < channel.ids.length) {
+        add(channel.ids[channel.nextIndex]!);
+        channel.nextIndex += 1;
+        madeProgress = true;
+      }
+      if (merged.length >= maxCandidates) {
+        break;
+      }
+    }
+  }
+
+  return merged;
+}
+
+type WikiSearchScope = {
+  allowedSpaceIds?: string[];
+};
+
+type WikiTextMatchRow = {
+  note_id: string;
+  rank: number;
+  snippet: string;
+};
+
+function buildWikiSearchScope(
+  parsed: z.output<typeof wikiSearchQuerySchema>,
+  options: WikiSearchScope
+) {
+  const conditions = [
+    "deleted_entities.entity_id IS NULL",
+    "notes.show_in_index = 1",
+    "(notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)"
+  ];
+  const params: Array<string | number> = [nowIso()];
+  if (parsed.spaceId) {
+    conditions.push("notes.space_id = ?");
+    params.push(parsed.spaceId);
+  }
+  if (options.allowedSpaceIds) {
+    if (options.allowedSpaceIds.length === 0) {
+      conditions.push("1 = 0");
+    } else {
+      conditions.push(
+        `notes.space_id IN (${options.allowedSpaceIds.map(() => "?").join(", ")})`
+      );
+      params.push(...options.allowedSpaceIds);
+    }
+  }
+  if (parsed.kind) {
+    conditions.push("notes.kind = ?");
+    params.push(parsed.kind);
+  }
+  return { conditions, params };
+}
+
+function clipWikiSearchText(value: string, maxLength = 240) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
 export async function searchWikiPages(
   input: z.input<typeof wikiSearchQuerySchema>,
-  secrets?: SecretsManager
+  secrets?: SecretsManager,
+  options: WikiSearchScope = {}
 ) {
   const parsed = wikiSearchQuerySchema.parse(input);
-  const pages = listAllNotes()
-    .filter((page) => (parsed.spaceId ? page.spaceId === parsed.spaceId : true))
-    .filter((page) => page.showInIndex)
-    .filter((page) => (parsed.kind ? page.kind === parsed.kind : true));
-
+  const candidateChannels: Record<WikiSearchCandidateChannel, string[]> = {
+    direct: [],
+    entity: [],
+    fts: [],
+    semantic: [],
+    recent: []
+  };
+  const candidateChannelSets: Record<
+    WikiSearchCandidateChannel,
+    Set<string>
+  > = {
+    direct: new Set(),
+    entity: new Set(),
+    fts: new Set(),
+    semantic: new Set(),
+    recent: new Set()
+  };
   const scores = new Map<string, number>();
+  const snippets = new Map<string, string>();
+  const matchKinds = new Map<string, WikiSearchMatchKind>();
+  const warnings: string[] = [];
+  const matchPriority: Record<WikiSearchMatchKind, number> = {
+    title: 6,
+    alias: 5,
+    content: 4,
+    entity: 3,
+    semantic: 2,
+    recent: 1
+  };
+  const addCandidate = (
+    channel: WikiSearchCandidateChannel,
+    noteId: string
+  ) => {
+    if (
+      candidateChannelSets[channel].has(noteId) ||
+      candidateChannels[channel].length >= WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT
+    ) {
+      return;
+    }
+    candidateChannelSets[channel].add(noteId);
+    candidateChannels[channel].push(noteId);
+  };
   const addScore = (noteId: string, value: number) => {
     scores.set(noteId, (scores.get(noteId) ?? 0) + value);
   };
+  const recordMatch = (
+    noteId: string,
+    matchKind: WikiSearchMatchKind,
+    snippet?: string
+  ) => {
+    const current = matchKinds.get(noteId);
+    if (!current || matchPriority[matchKind] > matchPriority[current]) {
+      matchKinds.set(noteId, matchKind);
+      if (snippet?.trim()) {
+        snippets.set(noteId, clipWikiSearchText(snippet));
+      }
+    } else if (!snippets.has(noteId) && snippet?.trim()) {
+      snippets.set(noteId, clipWikiSearchText(snippet));
+    }
+  };
+
+  const scope = buildWikiSearchScope(parsed, options);
+  let textMatches: WikiTextMatchRow[] = [];
 
   if (
     parsed.mode === "text" ||
@@ -2085,103 +2800,306 @@ export async function searchWikiPages(
     parsed.mode === "entity"
   ) {
     if (parsed.query) {
-      for (const noteId of findMatchingWikiNoteIds(parsed.query)) {
-        addScore(noteId, 4);
+      const ftsQuery = buildWikiFtsQuery(parsed.query);
+      if (ftsQuery) {
+        textMatches = getDatabase()
+          .prepare(
+            `SELECT wiki_pages_fts.note_id,
+                    bm25(wiki_pages_fts, 0.0, 10.0, 8.0, 6.0, 3.0, 1.0, 2.0) AS rank,
+                    snippet(wiki_pages_fts, 5, '', '', ' … ', 36) AS snippet
+             FROM wiki_pages_fts
+             INNER JOIN notes ON notes.id = wiki_pages_fts.note_id
+             LEFT JOIN deleted_entities
+               ON deleted_entities.entity_type = 'note'
+              AND deleted_entities.entity_id = notes.id
+             WHERE wiki_pages_fts MATCH ?
+               AND ${scope.conditions.join(" AND ")}
+             ORDER BY rank ASC, notes.updated_at DESC, notes.id ASC
+             LIMIT ?`
+          )
+          .all(
+            ftsQuery,
+            ...scope.params,
+            WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT
+          ) as WikiTextMatchRow[];
+        textMatches.forEach((row, index) => {
+          addCandidate("fts", row.note_id);
+          addScore(
+            row.note_id,
+            8 * (1 - index / WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT)
+          );
+          recordMatch(row.note_id, "content", row.snippet);
+        });
       }
+
+      const normalizedQuery = parsed.query.toLowerCase();
+      const directRows = getDatabase()
+        .prepare(
+          `WITH search_input(query) AS (VALUES (?))
+           SELECT notes.id AS note_id
+           FROM notes
+           CROSS JOIN search_input
+           LEFT JOIN deleted_entities
+             ON deleted_entities.entity_type = 'note'
+            AND deleted_entities.entity_id = notes.id
+           WHERE ${scope.conditions.join(" AND ")}
+             AND (
+               INSTR(LOWER(notes.title), search_input.query) > 0
+               OR LOWER(notes.slug) = search_input.query
+               OR EXISTS (
+                 SELECT 1
+                 FROM json_each(
+                   CASE
+                     WHEN json_valid(notes.aliases_json) THEN notes.aliases_json
+                     ELSE '[]'
+                   END
+                 ) AS aliases
+                 WHERE INSTR(
+                   LOWER(CAST(aliases.value AS TEXT)),
+                   search_input.query
+                 ) > 0
+               )
+             )
+           ORDER BY
+             CASE
+               WHEN LOWER(notes.title) = search_input.query THEN 0
+               WHEN EXISTS (
+                 SELECT 1
+                 FROM json_each(
+                   CASE
+                     WHEN json_valid(notes.aliases_json) THEN notes.aliases_json
+                     ELSE '[]'
+                   END
+                 ) AS aliases
+                 WHERE LOWER(CAST(aliases.value AS TEXT)) = search_input.query
+               ) THEN 1
+               WHEN LOWER(notes.slug) = search_input.query THEN 2
+               WHEN INSTR(LOWER(notes.title), search_input.query) = 1 THEN 3
+               WHEN INSTR(LOWER(notes.title), search_input.query) > 0 THEN 4
+               ELSE 5
+             END,
+             notes.updated_at DESC,
+             notes.id ASC
+           LIMIT ?`
+        )
+        .all(
+          normalizedQuery,
+          ...scope.params,
+          WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT
+        ) as Array<{ note_id: string }>;
+      directRows.forEach((row) => addCandidate("direct", row.note_id));
     }
   }
 
   if (parsed.linkedEntity) {
-    for (const page of pages) {
-      if (
-        page.links.some(
-          (link) =>
-            link.entityType === parsed.linkedEntity?.entityType &&
-            link.entityId === parsed.linkedEntity?.entityId
-        )
-      ) {
-        addScore(page.id, 6);
-      }
+    const linkedRows = getDatabase()
+      .prepare(
+        `SELECT DISTINCT notes.id AS note_id
+         FROM note_links
+         INNER JOIN notes ON notes.id = note_links.note_id
+         LEFT JOIN deleted_entities
+           ON deleted_entities.entity_type = 'note'
+          AND deleted_entities.entity_id = notes.id
+         WHERE note_links.entity_type = ?
+           AND note_links.entity_id = ?
+           AND ${scope.conditions.join(" AND ")}
+         ORDER BY notes.updated_at DESC, notes.id ASC
+         LIMIT ?`
+      )
+      .all(
+        parsed.linkedEntity.entityType,
+        parsed.linkedEntity.entityId,
+        ...scope.params,
+        WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT
+      ) as Array<{ note_id: string }>;
+    for (const row of linkedRows) {
+      addCandidate("entity", row.note_id);
+      addScore(row.note_id, 14);
+      recordMatch(row.note_id, "entity");
     }
   }
 
+  let activeProfile: WikiEmbeddingProfile | null = null;
   if (
     secrets &&
     parsed.query &&
     (parsed.mode === "semantic" || parsed.mode === "hybrid")
   ) {
-    const profile =
+    activeProfile =
       listWikiEmbeddingProfiles().find(
         (entry) =>
           entry.enabled && (!parsed.profileId || entry.id === parsed.profileId)
       ) ?? null;
-    if (profile) {
-      const [queryVector] = await embedTexts(profile, secrets, [parsed.query]);
-      if (queryVector && queryVector.length > 0) {
-        const chunkRows = getDatabase()
-          .prepare(
-            `SELECT note_id, vector_json
-             FROM wiki_embedding_chunks
-             WHERE profile_id = ?
-               ${parsed.spaceId ? "AND space_id = ?" : ""}
-             ORDER BY updated_at DESC`
-          )
-          .all(
-            ...(parsed.spaceId ? [profile.id, parsed.spaceId] : [profile.id])
-          ) as Array<{ note_id: string; vector_json: string }>;
-        for (const row of chunkRows) {
-          try {
-            const score = cosineSimilarity(
-              JSON.parse(row.vector_json) as number[],
-              queryVector
-            );
-            if (score > 0) {
-              addScore(row.note_id, score * 5);
+    if (!activeProfile) {
+      warnings.push(
+        parsed.mode === "semantic"
+          ? "Semantic search is unavailable because no enabled embedding profile matches this request."
+          : "Hybrid search used text ranking because no enabled embedding profile matches this request."
+      );
+    } else {
+      try {
+        const [queryVector] = await embedTexts(activeProfile, secrets, [
+          parsed.query
+        ]);
+        if (queryVector && queryVector.length > 0) {
+          const chunkRows = getDatabase()
+            .prepare(
+              `SELECT wiki_embedding_chunks.note_id, wiki_embedding_chunks.content_text, wiki_embedding_chunks.vector_json
+               FROM wiki_embedding_chunks
+               INNER JOIN notes ON notes.id = wiki_embedding_chunks.note_id
+               LEFT JOIN deleted_entities
+                 ON deleted_entities.entity_type = 'note'
+                AND deleted_entities.entity_id = notes.id
+               WHERE wiki_embedding_chunks.profile_id = ?
+                 AND ${scope.conditions.join(" AND ")}
+               ORDER BY wiki_embedding_chunks.updated_at DESC,
+                        wiki_embedding_chunks.note_id ASC,
+                        wiki_embedding_chunks.id ASC
+               LIMIT ?`
+            )
+            .all(
+              activeProfile.id,
+              ...scope.params,
+              WIKI_SEMANTIC_CHUNK_SCAN_LIMIT
+            ) as Array<{
+            note_id: string;
+            content_text: string;
+            vector_json: string;
+          }>;
+          const semanticMatches = new Map<
+            string,
+            { score: number; snippet: string }
+          >();
+          for (const row of chunkRows) {
+            try {
+              const score = cosineSimilarity(
+                JSON.parse(row.vector_json) as number[],
+                queryVector
+              );
+              const current = semanticMatches.get(row.note_id);
+              if (score > 0 && (!current || score > current.score)) {
+                semanticMatches.set(row.note_id, {
+                  score,
+                  snippet: row.content_text
+                });
+              }
+            } catch {
+              continue;
             }
-          } catch {
-            continue;
           }
+          for (const [noteId, match] of [...semanticMatches.entries()].sort(
+            (left, right) =>
+              right[1].score - left[1].score || left[0].localeCompare(right[0])
+          )) {
+            addCandidate("semantic", noteId);
+            addScore(noteId, match.score * 10);
+            recordMatch(noteId, "semantic", match.snippet);
+          }
+        } else {
+          warnings.push(
+            parsed.mode === "semantic"
+              ? "Semantic search is unavailable because the selected embedding profile has no usable credentials."
+              : "Hybrid search used text ranking because the selected embedding profile has no usable credentials."
+          );
         }
+      } catch (error) {
+        if (parsed.mode === "semantic") {
+          throw error;
+        }
+        warnings.push(
+          "Hybrid search used text ranking because semantic ranking failed."
+        );
       }
     }
   }
 
-  if (parsed.query) {
+  if (!parsed.query && !parsed.linkedEntity) {
+    const recentRows = getDatabase()
+      .prepare(
+        `SELECT notes.id AS note_id
+         FROM notes
+         LEFT JOIN deleted_entities
+           ON deleted_entities.entity_type = 'note'
+          AND deleted_entities.entity_id = notes.id
+         WHERE ${scope.conditions.join(" AND ")}
+         ORDER BY notes.updated_at DESC, notes.id ASC
+         LIMIT ?`
+      )
+      .all(...scope.params, WIKI_SEARCH_CHANNEL_CANDIDATE_LIMIT) as Array<{
+      note_id: string;
+    }>;
+    for (const row of recentRows) {
+      addCandidate("recent", row.note_id);
+      recordMatch(row.note_id, "recent");
+    }
+  }
+
+  const candidateIds = mergeWikiSearchCandidateChannels(candidateChannels);
+  const candidateIdSet = new Set(candidateIds);
+  const pages = loadNotesByIds(candidateIds);
+  if (
+    parsed.query &&
+    (parsed.mode === "text" ||
+      parsed.mode === "hybrid" ||
+      parsed.mode === "entity")
+  ) {
     const normalizedQuery = parsed.query.toLowerCase();
     for (const page of pages) {
-      if (page.slug.toLowerCase() === normalizedQuery) {
-        addScore(page.id, 12);
-      } else if (page.title.toLowerCase() === normalizedQuery) {
-        addScore(page.id, 10);
-      } else if (page.title.toLowerCase().includes(normalizedQuery)) {
-        addScore(page.id, 2);
+      const title = page.title.toLowerCase();
+      const slug = page.slug.toLowerCase();
+      const aliases = page.aliases.map((alias) => alias.toLowerCase());
+      const titleSnippet = page.summary || page.contentPlain;
+      if (title === normalizedQuery) {
+        addScore(page.id, 40);
+        recordMatch(page.id, "title", titleSnippet);
+      } else if (aliases.includes(normalizedQuery)) {
+        addScore(page.id, 36);
+        recordMatch(page.id, "alias", titleSnippet);
+      } else if (slug === normalizedQuery) {
+        addScore(page.id, 34);
+        recordMatch(page.id, "title", titleSnippet);
+      } else if (title.startsWith(normalizedQuery)) {
+        addScore(page.id, 28);
+        recordMatch(page.id, "title", titleSnippet);
+      } else if (title.includes(normalizedQuery)) {
+        addScore(page.id, 24);
+        recordMatch(page.id, "title", titleSnippet);
+      } else if (aliases.some((alias) => alias.includes(normalizedQuery))) {
+        addScore(page.id, 20);
+        recordMatch(page.id, "alias", titleSnippet);
       }
     }
   }
 
   const ranked = [...pages]
-    .filter((page) => {
-      if (!parsed.query && !parsed.linkedEntity) {
-        return true;
-      }
-      return scores.has(page.id);
-    })
+    .filter((page) => candidateIdSet.has(page.id))
     .sort((left, right) => {
       const scoreDelta =
         (scores.get(right.id) ?? 0) - (scores.get(left.id) ?? 0);
       if (scoreDelta !== 0) {
         return scoreDelta;
       }
-      return right.updatedAt.localeCompare(left.updatedAt);
-    })
-    .slice(0, parsed.limit);
+      const updatedAtDelta = right.updatedAt.localeCompare(left.updatedAt);
+      return updatedAtDelta !== 0
+        ? updatedAtDelta
+        : left.id.localeCompare(right.id);
+    });
+  const window = ranked.slice(parsed.offset, parsed.offset + parsed.limit + 1);
+  const hasMore = window.length > parsed.limit;
 
   return {
     mode: parsed.mode,
-    profileId: parsed.profileId ?? null,
-    results: ranked.map((page) => ({
-      page,
-      score: Number((scores.get(page.id) ?? 0).toFixed(4))
+    profileId: activeProfile?.id ?? null,
+    limit: parsed.limit,
+    offset: parsed.offset,
+    hasMore,
+    nextOffset: hasMore ? parsed.offset + parsed.limit : null,
+    warnings,
+    results: window.slice(0, parsed.limit).map((page) => ({
+      page: toWikiPageSummary(page),
+      score: Number((scores.get(page.id) ?? 0).toFixed(4)),
+      matchKind: matchKinds.get(page.id) ?? "content",
+      snippet: snippets.get(page.id) ?? clipWikiSearchText(page.summary)
     }))
   };
 }
@@ -2851,6 +3769,13 @@ function readWikiIngestJobRow(jobId: string) {
     .get(jobId) as WikiIngestJobRow | undefined;
 }
 
+export function getWikiIngestJobSpaceId(jobId: string) {
+  const row = getDatabase()
+    .prepare(`SELECT space_id FROM wiki_ingest_jobs WHERE id = ?`)
+    .get(jobId) as { space_id: string } | undefined;
+  return row?.space_id ?? null;
+}
+
 function mapWikiIngestJobRow(job: WikiIngestJobRow) {
   return {
     id: job.id,
@@ -3121,7 +4046,10 @@ function findOpenAiResponseIdForJobAsset(input: {
       }
       continue;
     }
-    const loggedSourceLocator = readStringRecordValue(metadata, "sourceLocator");
+    const loggedSourceLocator = readStringRecordValue(
+      metadata,
+      "sourceLocator"
+    );
     if (loggedSourceLocator) {
       if (
         loggedSourceLocator.trim().toLowerCase() === normalizedSourceLocator
@@ -3762,11 +4690,11 @@ export async function processWikiIngestJob(
       chunkIndex:
         typeof details.chunkIndex === "number"
           ? details.chunkIndex
-          : currentAssetContext?.chunkIndex ?? null,
+          : (currentAssetContext?.chunkIndex ?? null),
       chunkCount:
         typeof details.chunkCount === "number"
           ? details.chunkCount
-          : currentAssetContext?.chunkCount ?? null
+          : (currentAssetContext?.chunkCount ?? null)
     } satisfies Record<string, unknown>;
     const eventKey =
       typeof details.eventKey === "string" ? details.eventKey : "";
@@ -3836,16 +4764,11 @@ export async function processWikiIngestJob(
         openAiPollCount: currentPollCount
       });
     }
-    createWikiIngestLog(
-      jobId,
-      message,
-      level === "debug" ? "info" : level,
-      {
-        scope: "wiki_llm",
-        eventKey: "wiki_llm_event",
-        ...enrichedDetails
-      }
-    );
+    createWikiIngestLog(jobId, message, level === "debug" ? "info" : level, {
+      scope: "wiki_llm",
+      eventKey: "wiki_llm_event",
+      ...enrichedDetails
+    });
   };
 
   const refreshCounts = () => {
@@ -4036,25 +4959,35 @@ export async function processWikiIngestJob(
         });
       const compiled =
         llmProfile && parsed.parseStrategy !== "text_only"
-          ? await options.llm.compileWikiIngest(llmProfile, {
-              titleHint: parsed.titleHint,
-              rawText: fetched.contentText,
-              binary: fetched.binary,
-              mimeType: fetched.mimeType,
-              parseStrategy: parsed.parseStrategy
-            }, {
-              resumeResponseId
-            }, llmDiagnosticLogger)
-          : llmProfile && fetched.contentText
-            ? await options.llm.compileWikiIngest(llmProfile, {
+          ? await options.llm.compileWikiIngest(
+              llmProfile,
+              {
                 titleHint: parsed.titleHint,
                 rawText: fetched.contentText,
                 binary: fetched.binary,
                 mimeType: fetched.mimeType,
-                parseStrategy: "text_only"
-              }, {
+                parseStrategy: parsed.parseStrategy
+              },
+              {
                 resumeResponseId
-              }, llmDiagnosticLogger)
+              },
+              llmDiagnosticLogger
+            )
+          : llmProfile && fetched.contentText
+            ? await options.llm.compileWikiIngest(
+                llmProfile,
+                {
+                  titleHint: parsed.titleHint,
+                  rawText: fetched.contentText,
+                  binary: fetched.binary,
+                  mimeType: fetched.mimeType,
+                  parseStrategy: "text_only"
+                },
+                {
+                  resumeResponseId
+                },
+                llmDiagnosticLogger
+              )
             : null;
 
       if (llmProfile && !compiled) {
@@ -4251,17 +5184,12 @@ export async function processWikiIngestJob(
         progressPercent: calculateProgress(totalFiles, processedFiles),
         latestMessage: lastFailureMessage
       });
-      createWikiIngestLog(
-        jobId,
-        lastFailureMessage,
-        "error",
-        {
-          fileName: currentAssetContext?.fileName ?? null,
-          fileIndex: currentAssetContext?.fileIndex ?? null,
-          totalFiles: currentAssetContext?.totalFiles ?? totalFiles,
-          pollCount: currentPollCount
-        }
-      );
+      createWikiIngestLog(jobId, lastFailureMessage, "error", {
+        fileName: currentAssetContext?.fileName ?? null,
+        fileIndex: currentAssetContext?.fileIndex ?? null,
+        totalFiles: currentAssetContext?.totalFiles ?? totalFiles,
+        pollCount: currentPollCount
+      });
       currentAssetContext = null;
       currentPollCount = 0;
     }
@@ -4305,22 +5233,35 @@ export async function processWikiIngestJob(
 }
 
 export function listWikiIngestJobs(
-  input: z.input<typeof listWikiIngestJobsQuerySchema> = {}
+  input: z.input<typeof listWikiIngestJobsQuerySchema> = {},
+  options: { allowedSpaceIds?: string[] } = {}
 ) {
   const parsed = listWikiIngestJobsQuerySchema.parse(input);
+  const conditions: string[] = [];
+  const params: Array<string | number> = [];
+  if (parsed.spaceId) {
+    conditions.push("space_id = ?");
+    params.push(parsed.spaceId);
+  }
+  if (options.allowedSpaceIds) {
+    if (options.allowedSpaceIds.length === 0) {
+      conditions.push("1 = 0");
+    } else {
+      conditions.push(
+        `space_id IN (${options.allowedSpaceIds.map(() => "?").join(", ")})`
+      );
+      params.push(...options.allowedSpaceIds);
+    }
+  }
   const rows = getDatabase()
     .prepare(
       `SELECT id
        FROM wiki_ingest_jobs
-       WHERE (? IS NULL OR space_id = ?)
-       ORDER BY created_at DESC
+       ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
+       ORDER BY created_at DESC, id ASC
        LIMIT ?`
     )
-    .all(
-      parsed.spaceId ?? null,
-      parsed.spaceId ?? null,
-      parsed.limit
-    ) as Array<{
+    .all(...params, parsed.limit) as Array<{
     id: string;
   }>;
   return rows
@@ -4328,18 +5269,37 @@ export function listWikiIngestJobs(
     .filter((job): job is WikiIngestJobPayload => job !== null);
 }
 
-export function countWikiIngestJobs(input: { spaceId?: string } = {}) {
+export function countWikiIngestJobs(
+  input: { spaceId?: string } = {},
+  options: { allowedSpaceIds?: string[] } = {}
+) {
   const parsed = listWikiIngestJobsQuerySchema.parse({
     ...input,
     limit: 1
   });
+  const conditions: string[] = [];
+  const params: string[] = [];
+  if (parsed.spaceId) {
+    conditions.push("space_id = ?");
+    params.push(parsed.spaceId);
+  }
+  if (options.allowedSpaceIds) {
+    if (options.allowedSpaceIds.length === 0) {
+      conditions.push("1 = 0");
+    } else {
+      conditions.push(
+        `space_id IN (${options.allowedSpaceIds.map(() => "?").join(", ")})`
+      );
+      params.push(...options.allowedSpaceIds);
+    }
+  }
   const row = getDatabase()
     .prepare(
       `SELECT COUNT(*) AS count
        FROM wiki_ingest_jobs
-       WHERE (? IS NULL OR space_id = ?)`
+       ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}`
     )
-    .get(parsed.spaceId ?? null, parsed.spaceId ?? null) as { count: number };
+    .get(...params) as { count: number };
   return row.count;
 }
 
@@ -4354,7 +5314,9 @@ export async function rerunWikiIngestJob(
     return null;
   }
   if (["queued", "processing"].includes(job.status)) {
-    throw new Error("Wiki ingest jobs can only be rerun after processing ends.");
+    throw new Error(
+      "Wiki ingest jobs can only be rerun after processing ends."
+    );
   }
 
   const ingestInput = readWikiIngestInput(jobId);
@@ -4397,26 +5359,16 @@ export async function rerunWikiIngestJob(
 
   const nextJobId = replayResult.job?.job.id ?? null;
   if (nextJobId) {
-    createWikiIngestLog(
-      nextJobId,
-      `Reran ingest from ${jobId}.`,
-      "info",
-      {
-        scope: "wiki_ingest",
-        eventKey: "wiki_ingest_rerun",
-        sourceJobId: jobId
-      }
-    );
-    createWikiIngestLog(
-      jobId,
-      `Created rerun job ${nextJobId}.`,
-      "info",
-      {
-        scope: "wiki_ingest",
-        eventKey: "wiki_ingest_rerun_requested",
-        rerunJobId: nextJobId
-      }
-    );
+    createWikiIngestLog(nextJobId, `Reran ingest from ${jobId}.`, "info", {
+      scope: "wiki_ingest",
+      eventKey: "wiki_ingest_rerun",
+      sourceJobId: jobId
+    });
+    createWikiIngestLog(jobId, `Created rerun job ${nextJobId}.`, "info", {
+      scope: "wiki_ingest",
+      eventKey: "wiki_ingest_rerun_requested",
+      rerunJobId: nextJobId
+    });
   }
 
   return replayResult;
@@ -4428,7 +5380,9 @@ export function deleteWikiIngestJob(jobId: string) {
     return null;
   }
   if (["queued", "processing"].includes(job.status)) {
-    throw new Error("Wiki ingest jobs can only be deleted after processing ends.");
+    throw new Error(
+      "Wiki ingest jobs can only be deleted after processing ends."
+    );
   }
 
   const candidates = listWikiIngestCandidatesInternal(jobId);
@@ -4459,9 +5413,7 @@ export function deleteWikiIngestJob(jobId: string) {
     rmSync(jobDir, { recursive: true, force: true });
   }
 
-  getDatabase()
-    .prepare(`DELETE FROM wiki_ingest_jobs WHERE id = ?`)
-    .run(jobId);
+  getDatabase().prepare(`DELETE FROM wiki_ingest_jobs WHERE id = ?`).run(jobId);
 
   return {
     id: jobId
@@ -4481,12 +5433,10 @@ export async function reviewWikiIngestJob(
     resolveMappedEntity: (
       entityType: CrudEntityType,
       entityId: string
-    ) =>
-      | {
-          entityType: CrudEntityType;
-          entityId: string;
-        }
-      | null;
+    ) => {
+      entityType: CrudEntityType;
+      entityId: string;
+    } | null;
   }
 ) {
   const parsed = reviewWikiIngestJobSchema.parse(input);
@@ -4515,8 +5465,7 @@ export async function reviewWikiIngestJob(
       continue;
     }
     const action =
-      decision.action ??
-      (decision.keep === false ? "discard" : "keep");
+      decision.action ?? (decision.keep === false ? "discard" : "keep");
     if (action === "discard") {
       rejectedCount += 1;
       updateWikiIngestCandidate(candidate.id, { status: "rejected" });
@@ -4524,93 +5473,92 @@ export async function reviewWikiIngestJob(
     }
 
     try {
-        const payload = parseJsonRecord(candidate.payload_json);
-        if (candidate.candidate_type === "page") {
-          if (action === "merge_existing") {
-            const target =
-              decision.targetNoteId
-                ? (getWikiPageDetail(decision.targetNoteId)?.page ?? null)
-                : null;
-            if (!target || target.spaceId !== job.space_id) {
-              throw new Error("Merge target page was not found.");
+      const payload = parseJsonRecord(candidate.payload_json);
+      if (candidate.candidate_type === "page") {
+        if (action === "merge_existing") {
+          const target = decision.targetNoteId
+            ? (getWikiPageDetail(decision.targetNoteId)?.page ?? null)
+            : null;
+          if (!target || target.spaceId !== job.space_id) {
+            throw new Error("Merge target page was not found.");
+          }
+          const incomingTitle =
+            typeof payload.title === "string" ? payload.title : candidate.title;
+          const incomingMarkdown =
+            typeof payload.contentMarkdown === "string"
+              ? payload.contentMarkdown
+              : `# ${candidate.title}\n`;
+          const mergedContentMarkdown = mergeWikiPageContent(
+            target.contentMarkdown,
+            {
+              title: incomingTitle,
+              markdown: incomingMarkdown
             }
-            const incomingTitle =
-              typeof payload.title === "string" ? payload.title : candidate.title;
-            const incomingMarkdown =
+          );
+          const mergedSummary = inferSummary(mergedContentMarkdown);
+          const updated = options.updateNote(target.id, {
+            contentMarkdown: mergedContentMarkdown,
+            summary: mergedSummary
+          });
+          if (!updated) {
+            throw new Error("Merge target page could not be updated.");
+          }
+          acceptedCount += 1;
+          firstPublishedPageId = firstPublishedPageId ?? updated.id;
+          updateWikiIngestCandidate(candidate.id, {
+            status: "applied",
+            publishedNoteId: updated.id
+          });
+        } else {
+          const note = options.createNote({
+            kind: payload.kind === "evidence" ? "evidence" : "wiki",
+            title:
+              typeof payload.title === "string"
+                ? payload.title
+                : candidate.title,
+            slug: "",
+            indexOrder: 0,
+            aliases: Array.isArray(payload.aliases)
+              ? payload.aliases.filter(
+                  (alias): alias is string => typeof alias === "string"
+                )
+              : [],
+            summary:
+              typeof payload.summary === "string"
+                ? payload.summary
+                : candidate.summary,
+            sourcePath: "",
+            frontmatter: {},
+            revisionHash: "",
+            spaceId: job.space_id,
+            parentSlug:
+              typeof payload.parentSlug === "string"
+                ? payload.parentSlug
+                : null,
+            contentMarkdown:
               typeof payload.contentMarkdown === "string"
                 ? payload.contentMarkdown
-                : `# ${candidate.title}\n`;
-            const mergedContentMarkdown = mergeWikiPageContent(
-              target.contentMarkdown,
-              {
-                title: incomingTitle,
-                markdown: incomingMarkdown
-              }
-            );
-            const mergedSummary = inferSummary(mergedContentMarkdown);
-            const updated = options.updateNote(target.id, {
-              contentMarkdown: mergedContentMarkdown,
-              summary: mergedSummary
-            });
-            if (!updated) {
-              throw new Error("Merge target page could not be updated.");
-            }
-            acceptedCount += 1;
-            firstPublishedPageId = firstPublishedPageId ?? updated.id;
-            updateWikiIngestCandidate(candidate.id, {
-              status: "applied",
-              publishedNoteId: updated.id
-            });
-          } else {
-            const note = options.createNote({
-              kind: payload.kind === "evidence" ? "evidence" : "wiki",
-              title:
-                typeof payload.title === "string"
-                  ? payload.title
-                  : candidate.title,
-              slug: "",
-              indexOrder: 0,
-              aliases: Array.isArray(payload.aliases)
-                ? payload.aliases.filter(
-                    (alias): alias is string => typeof alias === "string"
-                  )
-                : [],
-              summary:
-                typeof payload.summary === "string"
-                  ? payload.summary
-                  : candidate.summary,
-              sourcePath: "",
-              frontmatter: {},
-              revisionHash: "",
-              spaceId: job.space_id,
-              parentSlug:
-                typeof payload.parentSlug === "string"
-                  ? payload.parentSlug
-                  : null,
-              contentMarkdown:
-                typeof payload.contentMarkdown === "string"
-                  ? payload.contentMarkdown
-                  : `# ${candidate.title}\n`,
-              author: ingestInput.userId ?? null,
-              links: Array.isArray(payload.links)
-                ? (payload.links as CreateNoteInput["links"])
-                : ingestInput.linkedEntityHints,
-              tags: Array.isArray(payload.tags)
-                ? payload.tags.filter(
-                    (tag): tag is string => typeof tag === "string"
-                  )
-                : [],
-              destroyAt: null,
-              userId: ingestInput.userId ?? null
-            });
-            acceptedCount += 1;
-            firstPublishedPageId = firstPublishedPageId ?? note.id;
-            updateWikiIngestCandidate(candidate.id, {
-              status: "applied",
-              publishedNoteId: note.id
-            });
-          }
-        } else if (candidate.candidate_type === "page_update") {
+                : `# ${candidate.title}\n`,
+            author: ingestInput.userId ?? null,
+            links: Array.isArray(payload.links)
+              ? (payload.links as CreateNoteInput["links"])
+              : ingestInput.linkedEntityHints,
+            tags: Array.isArray(payload.tags)
+              ? payload.tags.filter(
+                  (tag): tag is string => typeof tag === "string"
+                )
+              : [],
+            destroyAt: null,
+            userId: ingestInput.userId ?? null
+          });
+          acceptedCount += 1;
+          firstPublishedPageId = firstPublishedPageId ?? note.id;
+          updateWikiIngestCandidate(candidate.id, {
+            status: "applied",
+            publishedNoteId: note.id
+          });
+        }
+      } else if (candidate.candidate_type === "page_update") {
         const targetSlug =
           typeof payload.targetSlug === "string"
             ? payload.targetSlug

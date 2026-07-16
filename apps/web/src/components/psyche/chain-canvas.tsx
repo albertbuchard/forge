@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ export function ChainCanvas({
   inspector?: ReactNode;
 }) {
   const isMobile = useIsMobileCanvas();
+  const reducedMotion = useReducedMotion();
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const activeStage = stages.find((stage) => stage.id === activeStageId);
 
@@ -79,6 +80,7 @@ export function ChainCanvas({
             <Button
               variant="secondary"
               size="sm"
+              aria-expanded={inspectorOpen}
               onClick={() => setInspectorOpen((current) => !current)}
             >
               {inspectorOpen ? (
@@ -97,6 +99,8 @@ export function ChainCanvas({
               <button
                 key={stage.id}
                 type="button"
+                aria-pressed={stage.id === activeStageId}
+                aria-controls="psyche-chain-stage-panel"
                 className={cn(
                   "min-w-0 max-w-full rounded-[22px] px-4 py-3 text-left transition",
                   isMobile ? "flex-1 basis-[5.5rem]" : "basis-[13rem]",
@@ -119,7 +123,10 @@ export function ChainCanvas({
           </div>
         </div>
 
-        <div className="min-w-0 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 md:p-5">
+        <div
+          id="psyche-chain-stage-panel"
+          className="min-w-0 rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 md:p-5"
+        >
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[var(--ui-surface-2)] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
               {activeStage?.label}
@@ -131,10 +138,15 @@ export function ChainCanvas({
           <AnimatePresence mode="wait">
             <motion.div
               key={activeStageId}
-              initial={{ opacity: 0, y: 14 }}
+              data-motion-mode={reducedMotion ? "reduced" : "full"}
+              initial={reducedMotion ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -14 }}
-              transition={{ duration: 0.26, ease: "easeOut" }}
+              exit={reducedMotion ? undefined : { opacity: 0, y: -14 }}
+              transition={
+                reducedMotion
+                  ? { duration: 0 }
+                  : { duration: 0.26, ease: "easeOut" }
+              }
             >
               {stageContent}
             </motion.div>
@@ -146,10 +158,15 @@ export function ChainCanvas({
         <AnimatePresence initial={false}>
           {inspectorOpen ? (
             <motion.div
-              initial={{ opacity: 0, x: 16 }}
+              data-motion-mode={reducedMotion ? "reduced" : "full"}
+              initial={reducedMotion ? false : { opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 16 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
+              exit={reducedMotion ? undefined : { opacity: 0, x: 16 }}
+              transition={
+                reducedMotion
+                  ? { duration: 0 }
+                  : { duration: 0.22, ease: "easeOut" }
+              }
               className="min-w-0 rounded-[26px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-section)] p-3.5"
             >
               <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">

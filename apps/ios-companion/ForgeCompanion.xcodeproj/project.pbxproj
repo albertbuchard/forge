@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A70700000000000000000001 /* ForgeWatch_Watch_AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70700000000000000000002 /* ForgeWatch_Watch_AppTests.swift */; };
 		026ADCCD654CFCD77957E9CC /* rose-pine-x.json in Resources */ = {isa = PBXBuildFile; fileRef = 8ABBADB2AB81FE641E5B2527 /* rose-pine-x.json */; };
 		063708E0646D9174E0F996C7 /* rose-pine-dawn.json in Resources */ = {isa = PBXBuildFile; fileRef = AF3C1DCE3B23349C44A0E440 /* rose-pine-dawn.json */; };
 		0930DC4787D88701DFCD9AEE /* monokai.json in Resources */ = {isa = PBXBuildFile; fileRef = 332518473332E14C70DA35AF /* monokai.json */; };
@@ -38,6 +39,11 @@
 		39F95BE8A62307BBF3147F44 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EB1A9C94E6090E79774F711 /* DeviceActivity.framework */; };
 		39F9E5C28A63D131EED95C7D /* ForgeWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A28AC152FF4863B5D716F40 /* ForgeWebView.swift */; };
 		3B98589423316C410EFC2442 /* CompanionAppRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */; };
+		B71100000000000000000001 /* PeoplePeerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71100000000000000000011 /* PeoplePeerModels.swift */; };
+		B71100000000000000000002 /* PeoplePeerSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71100000000000000000012 /* PeoplePeerSecurity.swift */; };
+		B71100000000000000000003 /* PeoplePeerClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71100000000000000000013 /* PeoplePeerClient.swift */; };
+		B71100000000000000000004 /* PeoplePeerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71100000000000000000014 /* PeoplePeerStore.swift */; };
+		B71100000000000000000005 /* PeoplePeerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71100000000000000000015 /* PeoplePeerViews.swift */; };
 		3BCEBD6145DE933FAC4760F1 /* linear-light.json in Resources */ = {isa = PBXBuildFile; fileRef = 25AEF76C312959F8456FF6BB /* linear-light.json */; };
 		3DA9E9D5BB9DC9AFAE03A0BF /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26FDBECF668AEBC7B1D819C0 /* WatchSessionManager.swift */; };
 		3EA51158CD2B94564493777D /* ForgeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C774B7DC1641F7B73C53087C /* ForgeWatchApp.swift */; };
@@ -148,6 +154,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		A70700000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CE0FC6E6FCEABEEC93BE5F8D;
+			remoteInfo = "ForgeWatch Watch App";
+		};
 		59A2508E530D6D8B95677332 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
@@ -222,6 +235,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A70700000000000000000002 /* ForgeWatch_Watch_AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatch_Watch_AppTests.swift; sourceTree = "<group>"; };
+		A70700000000000000000003 /* ForgeWatch Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "ForgeWatch Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0273258C74CFF59B515D3923 /* lobster-dark-dxSKfHK-.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "lobster-dark-dxSKfHK-.json"; sourceTree = "<group>"; };
 		0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairedForgeScreen.swift; sourceTree = "<group>"; };
 		039C36D8E30A3B07C3440B41 /* WatchComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchComponents.swift; sourceTree = "<group>"; };
@@ -253,6 +268,11 @@
 		29ED0365D12A44207BFCDAC0 /* codex-dark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "codex-dark.json"; sourceTree = "<group>"; };
 		2D5086EEE13CF08C9AD12398 /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
 		2E3B5D8FC9E40AE175BE3227 /* CompanionAppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppRoot.swift; sourceTree = "<group>"; };
+		B71100000000000000000011 /* PeoplePeerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePeerModels.swift; sourceTree = "<group>"; };
+		B71100000000000000000012 /* PeoplePeerSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePeerSecurity.swift; sourceTree = "<group>"; };
+		B71100000000000000000013 /* PeoplePeerClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePeerClient.swift; sourceTree = "<group>"; };
+		B71100000000000000000014 /* PeoplePeerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePeerStore.swift; sourceTree = "<group>"; };
+		B71100000000000000000015 /* PeoplePeerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeoplePeerViews.swift; sourceTree = "<group>"; };
 		2F44C43CE27EC6BB4AE07B8B /* ForgeWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForgeWatch.swift; sourceTree = "<group>"; };
 		2F8724E4FB8BE98D88523A61 /* ForgeCompanionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ForgeCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		31A83A563B26CCDA7F1721B6 /* dracula.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = dracula.json; sourceTree = "<group>"; };
@@ -364,6 +384,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A70700000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		38D6F931C0611DA164524CE7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -463,6 +490,7 @@
 				8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */,
 				8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */,
 				969FEA21AED198B191D1E324 /* ForgeWatchExtension.appex */,
+				A70700000000000000000003 /* ForgeWatch Watch AppTests.xctest */,
 				4B226346218DB40CA48ED80C /* ForgeCompanionUITests.xctest */,
 			);
 			name = Products;
@@ -484,6 +512,15 @@
 			);
 			name = "ForgeWatch Watch App";
 			path = "ForgeCompanion/ForgeWatch Watch App";
+			sourceTree = "<group>";
+		};
+		A70700000000000000000004 /* ForgeWatch Watch AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				A70700000000000000000002 /* ForgeWatch_Watch_AppTests.swift */,
+			);
+			name = "ForgeWatch Watch AppTests";
+			path = "ForgeCompanion/ForgeWatch Watch AppTests";
 			sourceTree = "<group>";
 		};
 		6731BAF5E5A28D30558D535E /* ForgeCompanion */ = {
@@ -511,6 +548,11 @@
 				AA4B31A97CE450C024D3EB8C /* MovementSettingsSheet.swift */,
 				1D58974CBFD49611754BECE2 /* MovementSyncStore.swift */,
 				0289C0EB6BFA22514FE6E019 /* PairedForgeScreen.swift */,
+				B71100000000000000000013 /* PeoplePeerClient.swift */,
+				B71100000000000000000011 /* PeoplePeerModels.swift */,
+				B71100000000000000000012 /* PeoplePeerSecurity.swift */,
+				B71100000000000000000014 /* PeoplePeerStore.swift */,
+				B71100000000000000000015 /* PeoplePeerViews.swift */,
 				39F4CD09294333626B5F8D79 /* QRPairingScanner.swift */,
 				DB2B85CDC2A05B34389D84B7 /* QRScannerView.swift */,
 				904B4E418155C5513933917C /* ScreenTimeCaptureHost.swift */,
@@ -626,6 +668,7 @@
 				FE31BB24B5DE005C2F6A3F07 /* ForgeScreenTimeReportExtension */,
 				0352916F17F356F395F4B0A6 /* ForgeWatch */,
 				4157539215B987FC1188BD08 /* ForgeWatch Watch App */,
+				A70700000000000000000004 /* ForgeWatch Watch AppTests */,
 				0278F021C1813799D6A2CEF5 /* ScreenTimeShared */,
 				241801ADB48EE78E3F5836EA /* Frameworks */,
 				2EC5B307B0F081E32DA4D076 /* Products */,
@@ -718,6 +761,24 @@
 			productReference = 8933BA68703A3C4D4539E369 /* ForgeWatch Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A70700000000000000000008 /* ForgeWatch Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7070000000000000000000D /* Build configuration list for PBXNativeTarget "ForgeWatch Watch AppTests" */;
+			buildPhases = (
+				A70700000000000000000007 /* Sources */,
+				A70700000000000000000005 /* Frameworks */,
+				A70700000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A7070000000000000000000A /* PBXTargetDependency */,
+			);
+			name = "ForgeWatch Watch AppTests";
+			productName = "ForgeWatch Watch AppTests";
+			productReference = A70700000000000000000003 /* ForgeWatch Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2CD0269CF73A6E1BDD5E8446 /* Build configuration list for PBXNativeTarget "ForgeScreenTimeReportExtension" */;
@@ -777,6 +838,11 @@
 						DevelopmentTeam = KZ65F7924F;
 						ProvisioningStyle = Automatic;
 					};
+					A70700000000000000000008 = {
+						DevelopmentTeam = KZ65F7924F;
+						ProvisioningStyle = Automatic;
+						TestTargetID = CE0FC6E6FCEABEEC93BE5F8D;
+					};
 					D7BDBCC2AC0457C8DAB50B41 = {
 						DevelopmentTeam = KZ65F7924F;
 						ProvisioningStyle = Automatic;
@@ -801,6 +867,7 @@
 				8FD7D58A7178F1BDF93DBE66 /* ForgeCompanionTests */,
 				D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */,
 				CE0FC6E6FCEABEEC93BE5F8D /* ForgeWatch Watch App */,
+				A70700000000000000000008 /* ForgeWatch Watch AppTests */,
 				7716D39194A1C5D167013748 /* ForgeWatchExtension */,
 				DFF8B6BF1F6FACFC3EDFB8B2 /* ForgeCompanionUITests */,
 			);
@@ -808,6 +875,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A70700000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		528A73085AF02EA4C270121C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -937,6 +1011,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A70700000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A70700000000000000000001 /* ForgeWatch_Watch_AppTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		517AF1935D4434CC0768EB72 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -982,6 +1064,11 @@
 				8C7CF2331F28E470BF950B68 /* MovementSettingsSheet.swift in Sources */,
 				C456398A5AA670F146063B1E /* MovementSyncStore.swift in Sources */,
 				34D23AEAFF591904DCEAFA41 /* PairedForgeScreen.swift in Sources */,
+				B71100000000000000000003 /* PeoplePeerClient.swift in Sources */,
+				B71100000000000000000001 /* PeoplePeerModels.swift in Sources */,
+				B71100000000000000000002 /* PeoplePeerSecurity.swift in Sources */,
+				B71100000000000000000004 /* PeoplePeerStore.swift in Sources */,
+				B71100000000000000000005 /* PeoplePeerViews.swift in Sources */,
 				6E159D8AD1846EC8F3A05C43 /* QRPairingScanner.swift in Sources */,
 				947CA83023368F473276855A /* QRScannerView.swift in Sources */,
 				F3B8DD1C0C182ACEC3A14A72 /* ScreenTimeCaptureHost.swift in Sources */,
@@ -1035,6 +1122,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		A7070000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CE0FC6E6FCEABEEC93BE5F8D /* ForgeWatch Watch App */;
+			targetProxy = A70700000000000000000009 /* PBXContainerItemProxy */;
+		};
 		45633DC1738FC83E8965F3D3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = ForgeCompanion;
@@ -1070,13 +1162,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1146,13 +1238,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "ForgeCompanion/ForgeWatch Watch App/ForgeWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1187,7 +1279,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1195,7 +1287,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1210,7 +1302,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1219,7 +1311,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1231,7 +1323,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeWatchExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeWatch/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1239,7 +1331,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1279,7 +1371,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1296,7 +1388,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1359,7 +1451,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeCompanion/ForgeCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -1376,7 +1468,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1395,7 +1487,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ForgeCompanion/ForgeScreenTimeReportExtension/ForgeScreenTimeReportExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = KZ65F7924F;
 				INFOPLIST_FILE = ForgeCompanion/ForgeScreenTimeReportExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1404,7 +1496,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.154;
+				MARKETING_VERSION = 1.0.155;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1472,9 +1564,68 @@
 			};
 			name = Debug;
 		};
+		A7070000000000000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 37;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.155;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitappTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeWatch Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ForgeWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		A7070000000000000000000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 37;
+				DEVELOPMENT_TEAM = KZ65F7924F;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.155;
+				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitappTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ForgeWatch Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ForgeWatch Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A7070000000000000000000D /* Build configuration list for PBXNativeTarget "ForgeWatch Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A7070000000000000000000B /* Debug */,
+				A7070000000000000000000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		2288277C5FCF65B552E2EB34 /* Build configuration list for PBXNativeTarget "ForgeWatchExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -192,7 +192,7 @@ test("workbench flows can be created, run, and expose published outputs", async 
 
     const workbenchCatalogResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/workbench/catalog/boxes",
+      url: "/api/v1/workbench/catalog/boxes?source=forge&limit=100",
       headers: {
         cookie: operatorCookie,
         host: "127.0.0.1:4317"

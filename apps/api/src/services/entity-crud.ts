@@ -1,5 +1,6 @@
 import { z, ZodError } from "zod";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import {
   createSleepSession,
   createSleepSessionSchema,
@@ -19,10 +20,13 @@ import {
 import {
   artifactMetadataCreateSchema,
   artifactMetadataPatchSchema,
+  canAccessArtifact,
   createArtifactMetadata,
   deleteArtifactMetadata,
   getArtifactById,
   listArtifacts,
+  searchArtifactsForEntityCrud,
+  serializeArtifactPublicPayload,
   updateArtifactMetadata
 } from "./artifacts.js";
 import {
@@ -41,9 +45,11 @@ import {
   deleteWorkBlockTemplate,
   getCalendarEventById,
   getTaskTimeboxById,
+  getTaskTimeboxByIdIncludingPendingDeletion,
   getWorkBlockTemplateById,
   listCalendarEvents,
-  listTaskTimeboxes,
+  listTaskTimeboxesForEntityCrud,
+  searchTaskTimeboxesForEntityCrud,
   listWorkBlockTemplates,
   updateCalendarEvent,
   updateTaskTimebox,
@@ -53,32 +59,60 @@ import {
   createNote,
   deleteNote,
   getNoteById,
+  getNoteByIdIncludingDeleted,
+  isNoteVisibleToScope,
   listNotes,
+  listNotesPage,
+  noteMatchesSearchQuery,
+  noteHasPsycheLink,
+  resolveNoteMutationUserId,
   unlinkNotesForEntity,
-  updateNote
+  updateNote,
+  type NoteReadScope
 } from "../repositories/notes.js";
 import {
+  createPerson,
+  getPersonByIdAcrossOwners,
+  hardDeletePerson,
+  listAuthorizedPersonLinks,
+  replaceAuthorizedPersonLinks,
+  restorePerson,
+  searchPeopleAcrossOwners,
+  softDeletePerson,
+  updatePerson
+} from "../repositories/people.js";
+import {
   clearEntityOwner,
-  filterOwnedEntities
+  filterOwnedEntities,
+  getEntityOwnerId
 } from "../repositories/entity-ownership.js";
-import { listEntityLinksForEntity } from "../repositories/entity-links.js";
+import {
+  deleteEntityLinksForEntity,
+  listEntityLinksForEntity
+} from "../repositories/entity-links.js";
 import {
   createPreferenceCatalog,
   createPreferenceCatalogItem,
   createPreferenceContext,
   createPreferenceItem,
-  deletePreferenceCatalog,
-  deletePreferenceCatalogItem,
+  archivePreferenceCatalog,
+  archivePreferenceCatalogItem,
   deletePreferenceContext,
   deletePreferenceItem,
   getPreferenceCatalogById,
   getPreferenceCatalogItemById,
   getPreferenceContextById,
   getPreferenceItemById,
+  getPreferenceProfileById,
   listPreferenceCatalogItems,
+  listPreferenceCatalogHardDeleteDescendants,
   listPreferenceCatalogs,
   listPreferenceContexts,
   listPreferenceItems,
+  hardDeletePreferenceCatalog,
+  hardDeletePreferenceCatalogItem,
+  restorePreferenceCatalog,
+  restorePreferenceCatalogItem,
   updatePreferenceCatalog,
   updatePreferenceCatalogItem,
   updatePreferenceContext,
@@ -179,6 +213,7 @@ import {
   listModeProfiles,
   listPsycheValues,
   listTriggerReports,
+  searchTriggerReports,
   updateBehavior,
   updateBehaviorPattern,
   updateBeliefEntry,
@@ -235,6 +270,7 @@ import type {
   CrudEntityType,
   DeleteMode,
   DeletedEntityRecord,
+  Note,
   SettingsBinPayload
 } from "../types.js";
 import {
@@ -274,6 +310,15 @@ import {
   updatePreferenceItemSchema
 } from "../preferences-types.js";
 import { createQuestionnaireInstrumentSchema } from "../questionnaire-types.js";
+import { createPersonSchema, updatePersonSchema } from "../people-types.js";
+import {
+  canAccessWikiNote,
+  filterAccessibleWikiNotes,
+  listAccessibleWikiSpaces,
+  requireWikiNoteAccess,
+  requireWikiUserScope,
+  resolveWikiMutationSpaceId
+} from "./wiki-authorization.js";
 
 const ENTITY_CALENDAR_LIST_RANGE = {
   from: "1970-01-01T00:00:00.000Z",
@@ -283,6 +328,22 @@ const ENTITY_CALENDAR_LIST_RANGE = {
 type CrudContext = {
   source: ActivitySource;
   actor?: string | null;
+  userIds?: string[];
+  projectIds?: string[];
+  tagIds?: string[];
+  idempotencyKey?: string | null;
+};
+
+type CrudSearchInput = BatchSearchEntitiesInput["searches"][number];
+
+type EntitySearchContext = {
+  includePsycheNotes?: boolean;
+  taskScope?: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">;
+  artifactScope?: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">;
+  transformEntityForRead?: (
+    entityType: CrudEntityType,
+    entity: Record<string, unknown> & { id: string }
+  ) => Record<string, unknown> & { id: string };
 };
 
 type CrudOperationType = "create" | "update" | "delete" | "restore" | "search";
@@ -341,6 +402,10 @@ type CrudEntityCapability = {
   deleteMode: "soft_default" | "immediate";
   inBin: boolean;
   list: () => Array<Record<string, unknown>>;
+  search?: (
+    input: CrudSearchInput,
+    context: EntitySearchContext
+  ) => Array<Record<string, unknown>>;
   get: (id: string) => Record<string, unknown> | undefined;
   create: (
     data: Record<string, unknown>,
@@ -355,7 +420,326 @@ type CrudEntityCapability = {
     id: string,
     context: CrudContext
   ) => Record<string, unknown> | undefined;
+  softDelete?: (
+    id: string,
+    context: CrudContext
+  ) => Record<string, unknown> | undefined;
+  restore?: (
+    id: string,
+    context: CrudContext
+  ) => Record<string, unknown> | undefined;
 };
+
+function assertMutationUserScope(context: CrudContext, userId: string) {
+  if (context.userIds?.length && !context.userIds.includes(userId)) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The requested user scope is outside this token's allowed users."
+    );
+  }
+}
+
+function taskMatchesCrudScope(
+  task: Record<string, unknown>,
+  context: Pick<CrudContext, "userIds" | "projectIds" | "tagIds">
+) {
+  const userIds = context.userIds ?? [];
+  if (
+    userIds.length > 0 &&
+    filterOwnedEntities(
+      "task",
+      [task as Record<string, unknown> & { id: string }],
+      userIds
+    ).length === 0
+  ) {
+    return false;
+  }
+  const projectIds = context.projectIds ?? [];
+  if (
+    projectIds.length > 0 &&
+    (typeof task.projectId !== "string" || !projectIds.includes(task.projectId))
+  ) {
+    return false;
+  }
+  const tagIds = context.tagIds ?? [];
+  const taskTagIds = Array.isArray(task.tagIds)
+    ? task.tagIds.filter((value): value is string => typeof value === "string")
+    : [];
+  return (
+    tagIds.length === 0 || taskTagIds.some((tagId) => tagIds.includes(tagId))
+  );
+}
+
+function assertTaskCrudResultScope(
+  task: Record<string, unknown>,
+  context: CrudContext
+) {
+  if (!taskMatchesCrudScope(task, context)) {
+    throw new HttpError(
+      403,
+      "task_scope_forbidden",
+      "The resulting task is outside this token's allowed task scope."
+    );
+  }
+}
+
+function wikiScopeForCrudContext(context: CrudContext) {
+  return { userIds: context.userIds ?? [] };
+}
+
+function requireNoteMutationAccess(
+  note: ReturnType<typeof getNoteByIdIncludingDeleted>,
+  context: CrudContext
+) {
+  const userIds = context.userIds ?? [];
+  if (
+    !note ||
+    (userIds.length > 0 &&
+      filterOwnedEntities("note", [note], userIds).length === 0)
+  ) {
+    throw new HttpError(404, "note_not_found", "Note not found.");
+  }
+  return requireWikiNoteAccess(wikiScopeForCrudContext(context), note, "write");
+}
+
+function canMutateTriggerReport(
+  id: string,
+  snapshot: Record<string, unknown> | undefined,
+  context: CrudContext
+) {
+  const allowedUserIds = context.userIds ?? [];
+  if (allowedUserIds.length === 0) {
+    return true;
+  }
+  const snapshotOwnerId =
+    typeof snapshot?.ownerUserId === "string"
+      ? snapshot.ownerUserId
+      : typeof snapshot?.userId === "string"
+        ? snapshot.userId
+        : null;
+  const knownOwnerIds = new Set(
+    [getEntityOwnerId("trigger_report", id), snapshotOwnerId].filter(
+      (ownerId): ownerId is string => ownerId !== null
+    )
+  );
+  return (
+    knownOwnerIds.size > 0 &&
+    [...knownOwnerIds].every((ownerId) => allowedUserIds.includes(ownerId))
+  );
+}
+
+function authorizeOwnedPersonLinkEndpoint(input: {
+  userId: string;
+  entityType: string;
+  entityId: string;
+}): boolean {
+  return getEntityOwnerId(input.entityType, input.entityId) === input.userId;
+}
+
+function replacePersonBatchLinks(input: {
+  personId: string;
+  userId: string;
+  links: Array<{
+    entityType: string;
+    entityId: string;
+    anchorKey?: string | null;
+    relationship?: string;
+  }>;
+  actor?: string | null;
+}) {
+  return replaceAuthorizedPersonLinks(
+    {
+      userId: input.userId,
+      personId: input.personId,
+      actor: input.actor,
+      links: input.links.map((link) => ({
+        targetEntityType: link.entityType,
+        targetEntityId: link.entityId,
+        anchorKey: link.anchorKey ?? "",
+        relationship: link.relationship ?? "related_to"
+      }))
+    },
+    authorizeOwnedPersonLinkEndpoint
+  );
+}
+
+function attachAuthorizedPersonLinks(
+  person: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!person) {
+    return undefined;
+  }
+  const personId = String(person.id ?? "");
+  const userId = String(person.userId ?? "");
+  if (!personId || !userId) {
+    return person;
+  }
+  return {
+    ...person,
+    links: listAuthorizedPersonLinks(
+      { userId, personId, direction: "both" },
+      authorizeOwnedPersonLinkEndpoint
+    )
+  };
+}
+
+function assertPreferenceCatalogItemScope(
+  item: { catalogId: string } | undefined,
+  context: CrudContext
+) {
+  if (!item) {
+    return;
+  }
+  const catalog = getPreferenceCatalogById(item.catalogId, true);
+  if (!catalog) {
+    throw new HttpError(
+      404,
+      "preferences_catalog_not_found",
+      `Preference catalog ${item.catalogId} was not found.`
+    );
+  }
+  assertMutationUserScope(context, catalog.userId);
+}
+
+function assertPreferenceProfileScope(
+  profileId: string | undefined,
+  context: CrudContext
+) {
+  if (!profileId) {
+    return;
+  }
+  const profile = getPreferenceProfileById(profileId);
+  if (profile) {
+    assertMutationUserScope(context, profile.userId);
+  }
+}
+
+function requirePreferenceSourceReadAccess(
+  sourceEntityType: CrudEntityType,
+  sourceEntityId: string,
+  context: CrudContext
+) {
+  if (sourceEntityType === "note") {
+    requireWikiNoteAccess(
+      wikiScopeForCrudContext(context),
+      getNoteById(sourceEntityId),
+      "read"
+    );
+    return;
+  }
+  const sourceEntity = getEntityById(sourceEntityType, sourceEntityId);
+  const ownerUserId =
+    getEntityOwnerId(sourceEntityType, sourceEntityId) ??
+    (typeof sourceEntity?.userId === "string" ? sourceEntity.userId : null);
+  if (
+    !sourceEntity ||
+    (context.userIds?.length &&
+      (ownerUserId === null || !context.userIds.includes(ownerUserId)))
+  ) {
+    throw new HttpError(
+      404,
+      "preferences_source_entity_not_found",
+      "Preference source entity not found."
+    );
+  }
+}
+
+function requireTaskTimeboxTaskScope(taskId: string, context: CrudContext) {
+  const task = getTaskById(taskId);
+  if (!task) {
+    throw new HttpError(
+      404,
+      "calendar_timebox_task_not_found",
+      "The task for this timebox does not exist."
+    );
+  }
+  const ownerId =
+    getEntityOwnerId("task", task.id) ??
+    task.ownerUserId ??
+    task.userId ??
+    null;
+  if (!ownerId) {
+    throw new HttpError(
+      409,
+      "calendar_timebox_task_owner_missing",
+      "The task must have an owner before it can be timeboxed."
+    );
+  }
+  assertMutationUserScope(context, ownerId);
+  return { task, ownerId };
+}
+
+function requireTaskTimeboxScope(timeboxId: string, context: CrudContext) {
+  const timebox = getTaskTimeboxByIdIncludingPendingDeletion(timeboxId);
+  if (!timebox) {
+    return undefined;
+  }
+  const ownerId =
+    getEntityOwnerId("task_timebox", timebox.id) ??
+    timebox.ownerUserId ??
+    timebox.userId ??
+    null;
+  if (!ownerId) {
+    throw new HttpError(
+      409,
+      "calendar_timebox_owner_missing",
+      "The task timebox has no owner and cannot be mutated safely."
+    );
+  }
+  assertMutationUserScope(context, ownerId);
+  requireTaskTimeboxTaskScope(timebox.taskId, context);
+  return timebox;
+}
+
+function searchNotesForEntityCrud(
+  input: CrudSearchInput,
+  context: EntitySearchContext
+) {
+  const includePsyche = context.includePsycheNotes ?? true;
+  const wikiScope = { userIds: input.userIds ?? [] };
+  const filterVisible = (notes: Note[]) =>
+    filterAccessibleWikiNotes(wikiScope, notes).filter(
+      (note) => includePsyche || !noteHasPsycheLink(note)
+    );
+
+  const accessibleSpaceIds = listAccessibleWikiSpaces(wikiScope, "read").map(
+    (space) => space.id
+  );
+  const notes: Note[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = listNotesPage(
+      {
+        ids: input.ids,
+        query: input.query,
+        linkedTo: input.linkedTo
+          ? [
+              {
+                entityType: input.linkedTo.entityType,
+                entityId: input.linkedTo.id
+              }
+            ]
+          : [],
+        userIds: input.userIds ?? [],
+        limit: Math.min(100, input.limit - notes.length),
+        cursor
+      },
+      { accessibleSpaceIds, includePsyche }
+    );
+    notes.push(
+      ...filterVisible(page.notes).filter((note) =>
+        noteMatchesSearchQuery(note, input.query)
+      )
+    );
+    cursor = page.nextCursor ?? undefined;
+    if (!page.hasMore || !cursor || notes.length >= input.limit) {
+      break;
+    }
+  } while (notes.length < input.limit);
+
+  return notes as Array<Record<string, unknown>>;
+}
 
 const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   goal: {
@@ -396,15 +780,41 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listTasks() as Array<Record<string, unknown>>,
+    search: (_input, context) =>
+      (listTasks() as Array<Record<string, unknown>>).filter((task) =>
+        taskMatchesCrudScope(task, context.taskScope ?? {})
+      ),
     get: (id) => getTaskById(id) as Record<string, unknown> | undefined,
     create: (data, context) =>
-      createTask(data as never, context) as Record<string, unknown>,
+      runInTransaction(() => {
+        const task = createTask(data as never, context) as Record<
+          string,
+          unknown
+        >;
+        assertTaskCrudResultScope(task, context);
+        return task;
+      }),
     update: (id, patch, context) =>
-      updateTask(id, patch as never, context) as
-        | Record<string, unknown>
-        | undefined,
-    hardDelete: (id, context) =>
-      deleteTask(id, context) as Record<string, unknown> | undefined
+      runInTransaction(() => {
+        const current = getTaskById(id) as Record<string, unknown> | undefined;
+        if (!current || !taskMatchesCrudScope(current, context)) {
+          return undefined;
+        }
+        const task = updateTask(id, patch as never, context) as
+          | Record<string, unknown>
+          | undefined;
+        if (task) {
+          assertTaskCrudResultScope(task, context);
+        }
+        return task;
+      }),
+    hardDelete: (id, context) => {
+      const current = getTaskById(id) as Record<string, unknown> | undefined;
+      if (!current || !taskMatchesCrudScope(current, context)) {
+        return undefined;
+      }
+      return deleteTask(id, context) as Record<string, unknown> | undefined;
+    }
   },
   strategy: {
     entityType: "strategy",
@@ -457,15 +867,162 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listNotes() as Array<Record<string, unknown>>,
+    search: searchNotesForEntityCrud,
     get: (id) => getNoteById(id) as Record<string, unknown> | undefined,
-    create: (data, context) =>
-      createNote(data as never, context) as Record<string, unknown>,
-    update: (id, patch, context) =>
-      updateNote(id, patch as never, context) as
-        | Record<string, unknown>
-        | undefined,
-    hardDelete: (id, context) =>
-      deleteNote(id, context) as Record<string, unknown> | undefined
+    create: (data, context) => {
+      const scope = wikiScopeForCrudContext(context);
+      const userId = resolveNoteMutationUserId(
+        typeof data.userId === "string" ? data.userId : null,
+        context.userIds ?? []
+      );
+      const requestedSpaceId =
+        typeof data.spaceId === "string" ? data.spaceId : undefined;
+      requireWikiUserScope(scope, userId);
+      const spaceId = resolveWikiMutationSpaceId(scope, {
+        spaceId: requestedSpaceId,
+        userId
+      });
+      return createNote(
+        { ...data, spaceId, userId } as never,
+        context
+      ) as Record<string, unknown>;
+    },
+    update: (id, patch, context) => {
+      const scope = wikiScopeForCrudContext(context);
+      const current = getNoteById(id);
+      requireNoteMutationAccess(current, context);
+      const userId =
+        patch.userId === undefined
+          ? undefined
+          : resolveNoteMutationUserId(
+              typeof patch.userId === "string" ? patch.userId : null,
+              context.userIds ?? []
+            );
+      requireWikiUserScope(scope, userId ?? current?.userId);
+      const spaceId =
+        typeof patch.spaceId === "string"
+          ? resolveWikiMutationSpaceId(scope, {
+              spaceId: patch.spaceId,
+              userId: userId ?? current?.userId
+            })
+          : current?.spaceId;
+      return updateNote(
+        id,
+        {
+          ...patch,
+          ...(userId !== undefined ? { userId } : {}),
+          ...(spaceId ? { spaceId } : {})
+        } as never,
+        context
+      ) as Record<string, unknown> | undefined;
+    },
+    hardDelete: (id, context) => {
+      requireNoteMutationAccess(getNoteByIdIncludingDeleted(id), context);
+      return deleteNote(id, context) as Record<string, unknown> | undefined;
+    }
+  },
+  person: {
+    entityType: "person",
+    routeBase: "/api/v1/people",
+    deleteMode: "soft_default",
+    inBin: true,
+    list: () =>
+      searchPeopleAcrossOwners({ limit: 500 }) as Array<
+        Record<string, unknown>
+      >,
+    search: (input) =>
+      searchPeopleAcrossOwners({
+        userIds: input.userIds,
+        ids: input.ids,
+        query: input.query,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
+    get: (id) =>
+      attachAuthorizedPersonLinks(
+        getPersonByIdAcrossOwners(id) as Record<string, unknown> | undefined
+      ),
+    create: (data, context) => {
+      assertMutationUserScope(context, String(data.userId ?? ""));
+      return runInTransaction(() => {
+        const person = createPerson(data as never) as Record<string, unknown>;
+        replacePersonBatchLinks({
+          personId: String(person.id),
+          userId: String(person.userId),
+          links: (data.links ?? []) as Array<{
+            entityType: string;
+            entityId: string;
+            anchorKey?: string | null;
+            relationship?: string;
+          }>,
+          actor: context.actor
+        });
+        return attachAuthorizedPersonLinks(person)!;
+      });
+    },
+    update: (id, patch, context) => {
+      const current = getPersonByIdAcrossOwners(id);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      if (!current) {
+        return undefined;
+      }
+      return runInTransaction(() => {
+        const person = updatePerson(id, current.userId, patch as never) as
+          | Record<string, unknown>
+          | undefined;
+        if (!person) {
+          return undefined;
+        }
+        if (patch.links !== undefined) {
+          replacePersonBatchLinks({
+            personId: id,
+            userId: current.userId,
+            links: patch.links as Array<{
+              entityType: string;
+              entityId: string;
+              anchorKey?: string | null;
+              relationship?: string;
+            }>,
+            actor: context.actor
+          });
+        }
+        return attachAuthorizedPersonLinks(person);
+      });
+    },
+    softDelete: (id, context) => {
+      const current = getPersonByIdAcrossOwners(id);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return current
+        ? (softDeletePerson(id, current.userId) as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
+    },
+    restore: (id, context) => {
+      const current = getPersonByIdAcrossOwners(id, { includeDeleted: true });
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return current
+        ? (restorePerson(id, current.userId) as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
+    },
+    hardDelete: (id, context) => {
+      const current = getPersonByIdAcrossOwners(id, { includeDeleted: true });
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return current
+        ? (hardDeletePerson(id, current.userId) as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
+    }
   },
   insight: {
     entityType: "insight",
@@ -526,18 +1083,43 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () =>
-      listTaskTimeboxes(ENTITY_CALENDAR_LIST_RANGE) as Array<
-        Record<string, unknown>
-      >,
+      listTaskTimeboxesForEntityCrud() as Array<Record<string, unknown>>,
+    search: (input) =>
+      searchTaskTimeboxesForEntityCrud({
+        ids: input.ids,
+        query: input.query,
+        status: input.status,
+        userIds: input.userIds,
+        limit: input.linkedTo ? undefined : input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) => getTaskTimeboxById(id) as Record<string, unknown> | undefined,
-    create: (data) =>
-      createTaskTimebox(data as never) as Record<string, unknown>,
-    update: (id, patch) =>
-      updateTaskTimebox(id, patch as never) as
+    create: (data, context) => {
+      const taskId = String(data.taskId ?? "");
+      const { task, ownerId } = requireTaskTimeboxTaskScope(taskId, context);
+      if (data.userId !== undefined && data.userId !== null) {
+        assertMutationUserScope(context, String(data.userId));
+      }
+      return createTaskTimebox({
+        ...data,
+        projectId:
+          data.projectId === undefined ? task.projectId : data.projectId,
+        userId: data.userId ?? ownerId,
+        idempotencyKey: context.idempotencyKey ?? null
+      } as never) as Record<string, unknown>;
+    },
+    update: (id, patch, context) => {
+      requireTaskTimeboxScope(id, context);
+      if (patch.userId !== undefined && patch.userId !== null) {
+        assertMutationUserScope(context, String(patch.userId));
+      }
+      return updateTaskTimebox(id, patch as never) as
         | Record<string, unknown>
-        | undefined,
-    hardDelete: (id) =>
-      deleteTaskTimebox(id) as Record<string, unknown> | undefined
+        | undefined;
+    },
+    hardDelete: (id, context) => {
+      requireTaskTimeboxScope(id, context);
+      return deleteTaskTimebox(id) as Record<string, unknown> | undefined;
+    }
   },
   life_event: {
     entityType: "life_event",
@@ -560,15 +1142,53 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     routeBase: "/api/v1/artifacts",
     deleteMode: "soft_default",
     inBin: true,
-    list: () => listArtifacts() as Array<Record<string, unknown>>,
-    get: (id) => getArtifactById(id) as Record<string, unknown> | undefined,
+    list: () =>
+      listArtifacts().map((artifact) =>
+        serializeArtifactPublicPayload(artifact)
+      ) as Array<Record<string, unknown>>,
+    search: (input, context) =>
+      searchArtifactsForEntityCrud({
+        ids: input.ids,
+        query: input.query,
+        linkedTo: input.linkedTo,
+        userIds: input.userIds ?? context.artifactScope?.userIds,
+        projectIds: context.artifactScope?.projectIds,
+        tagIds: context.artifactScope?.tagIds,
+        limit: input.limit
+      }).map((artifact) => serializeArtifactPublicPayload(artifact)) as Array<
+        Record<string, unknown>
+      >,
+    get: (id) => {
+      const artifact = getArtifactById(id);
+      return artifact
+        ? (serializeArtifactPublicPayload(artifact) as Record<string, unknown>)
+        : undefined;
+    },
     create: () => createArtifactMetadata() as Record<string, unknown>,
-    update: (id, patch, context) =>
-      updateArtifactMetadata(id, patch as never, context) as
-        | Record<string, unknown>
-        | undefined,
-    hardDelete: (id, context) =>
-      deleteArtifactMetadata(id, context) as Record<string, unknown> | undefined
+    update: (id, patch, context) => {
+      const artifact = updateArtifactMetadata(id, patch as never, context);
+      return artifact
+        ? (serializeArtifactPublicPayload(artifact) as Record<string, unknown>)
+        : undefined;
+    },
+    softDelete: (id, context) => {
+      const artifact = getArtifactById(id, context);
+      return artifact
+        ? (serializeArtifactPublicPayload(artifact) as Record<string, unknown>)
+        : undefined;
+    },
+    restore: (id, context) => {
+      const artifact = getArtifactById(id, context);
+      return artifact
+        ? (serializeArtifactPublicPayload(artifact) as Record<string, unknown>)
+        : undefined;
+    },
+    hardDelete: (id, context) => {
+      const artifact = deleteArtifactMetadata(id, context);
+      return artifact
+        ? (serializeArtifactPublicPayload(artifact) as Record<string, unknown>)
+        : undefined;
+    }
   },
   sleep_session: {
     entityType: "sleep_session",
@@ -761,6 +1381,15 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "soft_default",
     inBin: true,
     list: () => listTriggerReports(200) as Array<Record<string, unknown>>,
+    search: (input) =>
+      searchTriggerReports({
+        userIds: input.userIds,
+        ids: input.ids,
+        query: input.query,
+        statuses: input.status,
+        linkedTo: input.linkedTo,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) =>
       getTriggerReportById(id) as Record<string, unknown> | undefined,
     create: (data, context) =>
@@ -775,36 +1404,137 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
   preference_catalog: {
     entityType: "preference_catalog",
     routeBase: "/api/v1/preferences/catalogs",
-    deleteMode: "immediate",
-    inBin: false,
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listPreferenceCatalogs() as Array<Record<string, unknown>>,
+    search: (input) =>
+      listPreferenceCatalogs({
+        userIds: input.userIds,
+        ids: input.ids,
+        query: input.query,
+        linkedTo: input.linkedTo,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) =>
       getPreferenceCatalogById(id) as Record<string, unknown> | undefined,
-    create: (data) =>
-      createPreferenceCatalog(data as never) as Record<string, unknown>,
-    update: (id, patch) =>
-      updatePreferenceCatalog(id, patch as never) as
+    create: (data, context) => {
+      assertMutationUserScope(context, String(data.userId ?? ""));
+      return createPreferenceCatalog(
+        data as never,
+        context,
+        context.idempotencyKey
+      ) as Record<string, unknown>;
+    },
+    update: (id, patch, context) => {
+      const current = getPreferenceCatalogById(id);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return updatePreferenceCatalog(id, patch as never, context) as
         | Record<string, unknown>
-        | undefined,
-    hardDelete: (id) =>
-      deletePreferenceCatalog(id) as Record<string, unknown> | undefined
+        | undefined;
+    },
+    softDelete: (id, context) => {
+      const current = getPreferenceCatalogById(id);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return archivePreferenceCatalog(id) as Record<string, unknown>;
+    },
+    restore: (id, context) => {
+      const current = getPreferenceCatalogById(id, true);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      const restored = restorePreferenceCatalog(id);
+      return restored as Record<string, unknown>;
+    },
+    hardDelete: (id, context) => {
+      const current = getPreferenceCatalogById(id, true);
+      if (current) {
+        assertMutationUserScope(context, current.userId);
+      }
+      return runInTransaction(() => {
+        getDatabase()
+          .prepare(
+            `DELETE FROM deleted_entities
+             WHERE entity_type = 'preference_catalog_item'
+               AND entity_id IN (
+                 SELECT id
+                 FROM preference_catalog_items
+                 WHERE catalog_id = ?
+               )`
+          )
+          .run(id);
+        return hardDeletePreferenceCatalog(id) as Record<string, unknown>;
+      });
+    }
   },
   preference_catalog_item: {
     entityType: "preference_catalog_item",
     routeBase: "/api/v1/preferences/catalog-items",
-    deleteMode: "immediate",
-    inBin: false,
+    deleteMode: "soft_default",
+    inBin: true,
     list: () => listPreferenceCatalogItems() as Array<Record<string, unknown>>,
+    search: (input) =>
+      listPreferenceCatalogItems({
+        userIds: input.userIds,
+        ids: input.ids,
+        catalogIds:
+          input.linkedTo?.entityType === "preference_catalog"
+            ? [input.linkedTo.id]
+            : undefined,
+        query: input.query,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) =>
       getPreferenceCatalogItemById(id) as Record<string, unknown> | undefined,
-    create: (data) =>
-      createPreferenceCatalogItem(data as never) as Record<string, unknown>,
-    update: (id, patch) =>
-      updatePreferenceCatalogItem(id, patch as never) as
+    create: (data, context) => {
+      const catalog = getPreferenceCatalogById(String(data.catalogId ?? ""));
+      if (catalog) {
+        assertMutationUserScope(context, catalog.userId);
+      }
+      return createPreferenceCatalogItem(data as never) as Record<
+        string,
+        unknown
+      >;
+    },
+    update: (id, patch, context) => {
+      assertPreferenceCatalogItemScope(
+        getPreferenceCatalogItemById(id),
+        context
+      );
+      return updatePreferenceCatalogItem(id, patch as never) as
         | Record<string, unknown>
-        | undefined,
-    hardDelete: (id) =>
-      deletePreferenceCatalogItem(id) as Record<string, unknown> | undefined
+        | undefined;
+    },
+    softDelete: (id, context) => {
+      assertPreferenceCatalogItemScope(
+        getPreferenceCatalogItemById(id),
+        context
+      );
+      return archivePreferenceCatalogItem(id) as
+        | Record<string, unknown>
+        | undefined;
+    },
+    restore: (id, context) => {
+      assertPreferenceCatalogItemScope(
+        getPreferenceCatalogItemById(id, true),
+        context
+      );
+      return restorePreferenceCatalogItem(id) as
+        | Record<string, unknown>
+        | undefined;
+    },
+    hardDelete: (id, context) => {
+      assertPreferenceCatalogItemScope(
+        getPreferenceCatalogItemById(id, true),
+        context
+      );
+      return hardDeletePreferenceCatalogItem(id) as
+        | Record<string, unknown>
+        | undefined;
+    }
   },
   preference_context: {
     entityType: "preference_context",
@@ -812,16 +1542,35 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceContexts() as Array<Record<string, unknown>>,
+    search: (input) =>
+      listPreferenceContexts({
+        userIds: input.userIds,
+        ids: input.ids,
+        query: input.query,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) =>
       getPreferenceContextById(id) as Record<string, unknown> | undefined,
-    create: (data) =>
-      createPreferenceContext(data as never) as Record<string, unknown>,
-    update: (id, patch) =>
-      updatePreferenceContext(id, patch as never) as
+    create: (data, context) => {
+      assertMutationUserScope(context, String(data.userId ?? ""));
+      return createPreferenceContext(data as never) as Record<string, unknown>;
+    },
+    update: (id, patch, context) => {
+      assertPreferenceProfileScope(
+        getPreferenceContextById(id)?.profileId,
+        context
+      );
+      return updatePreferenceContext(id, patch as never) as
         | Record<string, unknown>
-        | undefined,
-    hardDelete: (id) =>
-      deletePreferenceContext(id) as Record<string, unknown> | undefined
+        | undefined;
+    },
+    hardDelete: (id, context) => {
+      assertPreferenceProfileScope(
+        getPreferenceContextById(id)?.profileId,
+        context
+      );
+      return deletePreferenceContext(id) as Record<string, unknown> | undefined;
+    }
   },
   preference_item: {
     entityType: "preference_item",
@@ -829,16 +1578,67 @@ const CRUD_ENTITY_CAPABILITIES: Record<CrudEntityType, CrudEntityCapability> = {
     deleteMode: "immediate",
     inBin: false,
     list: () => listPreferenceItems() as Array<Record<string, unknown>>,
+    search: (input) =>
+      listPreferenceItems({
+        userIds: input.userIds,
+        ids: input.ids,
+        query: input.query,
+        limit: input.limit
+      }) as Array<Record<string, unknown>>,
     get: (id) =>
       getPreferenceItemById(id) as Record<string, unknown> | undefined,
-    create: (data) =>
-      createPreferenceItem(data as never) as Record<string, unknown>,
-    update: (id, patch) =>
-      updatePreferenceItem(id, patch as never) as
+    create: (data, context) => {
+      assertMutationUserScope(context, String(data.userId ?? ""));
+      if (
+        typeof data.sourceEntityType === "string" &&
+        typeof data.sourceEntityId === "string"
+      ) {
+        requirePreferenceSourceReadAccess(
+          data.sourceEntityType as CrudEntityType,
+          data.sourceEntityId,
+          context
+        );
+      }
+      return createPreferenceItem(data as never) as Record<string, unknown>;
+    },
+    update: (id, patch, context) => {
+      const current = getPreferenceItemById(id);
+      assertPreferenceProfileScope(current?.profileId, context);
+      if (
+        current &&
+        ("sourceEntityType" in patch || "sourceEntityId" in patch)
+      ) {
+        const sourceEntityType =
+          typeof patch.sourceEntityType === "string"
+            ? (patch.sourceEntityType as CrudEntityType)
+            : patch.sourceEntityType === null
+              ? null
+              : current.sourceEntityType;
+        const sourceEntityId =
+          typeof patch.sourceEntityId === "string"
+            ? patch.sourceEntityId
+            : patch.sourceEntityId === null
+              ? null
+              : current.sourceEntityId;
+        if (sourceEntityType && sourceEntityId) {
+          requirePreferenceSourceReadAccess(
+            sourceEntityType,
+            sourceEntityId,
+            context
+          );
+        }
+      }
+      return updatePreferenceItem(id, patch as never) as
         | Record<string, unknown>
-        | undefined,
-    hardDelete: (id) =>
-      deletePreferenceItem(id) as Record<string, unknown> | undefined
+        | undefined;
+    },
+    hardDelete: (id, context) => {
+      assertPreferenceProfileScope(
+        getPreferenceItemById(id)?.profileId,
+        context
+      );
+      return deletePreferenceItem(id) as Record<string, unknown> | undefined;
+    }
   },
   questionnaire_instrument: {
     entityType: "questionnaire_instrument",
@@ -897,6 +1697,7 @@ const CREATE_ENTITY_SCHEMAS: Record<
   habit: createHabitSchema,
   tag: createTagSchema,
   note: createNoteSchema,
+  person: createPersonSchema,
   insight: createInsightSchema,
   calendar_event: createCalendarEventSchema,
   work_block_template: createWorkBlockTemplateSchema,
@@ -933,6 +1734,7 @@ const UPDATE_ENTITY_SCHEMAS: Record<
   habit: updateHabitSchema,
   tag: updateTagSchema,
   note: updateNoteSchema,
+  person: updatePersonSchema,
   insight: updateInsightSchema,
   calendar_event: updateCalendarEventSchema,
   work_block_template: updateWorkBlockTemplateSchema,
@@ -1272,17 +2074,21 @@ function describeEntity(
       ? entity.title
       : typeof entity.name === "string" && entity.name.trim().length > 0
         ? entity.name
-        : typeof entity.label === "string" && entity.label.trim().length > 0
-          ? entity.label
-          : typeof entity.summary === "string" &&
-              entity.summary.trim().length > 0
-            ? entity.summary
-            : typeof entity.message === "string" &&
-                entity.message.trim().length > 0
-              ? entity.message.slice(0, 72)
-              : typeof entity.body === "string" && entity.body.trim().length > 0
-                ? entity.body.slice(0, 72)
-                : entityType.replaceAll("_", " ");
+        : typeof entity.displayName === "string" &&
+            entity.displayName.trim().length > 0
+          ? entity.displayName
+          : typeof entity.label === "string" && entity.label.trim().length > 0
+            ? entity.label
+            : typeof entity.summary === "string" &&
+                entity.summary.trim().length > 0
+              ? entity.summary
+              : typeof entity.message === "string" &&
+                  entity.message.trim().length > 0
+                ? entity.message.slice(0, 72)
+                : typeof entity.body === "string" &&
+                    entity.body.trim().length > 0
+                  ? entity.body.slice(0, 72)
+                  : entityType.replaceAll("_", " ");
 
   const subtitle =
     typeof entity.description === "string" &&
@@ -1575,6 +2381,27 @@ function purgeAnchoredCollaboration(
   unlinkNotesForEntity(entityType, entityId, { source: "system", actor: null });
 }
 
+class HardDeleteMissingEntityError extends Error {}
+
+function runHardDeleteTransaction(
+  operation: () => Record<string, unknown> | undefined
+) {
+  try {
+    return runInTransaction(() => {
+      const deleted = operation();
+      if (!deleted) {
+        throw new HardDeleteMissingEntityError();
+      }
+      return deleted;
+    });
+  } catch (error) {
+    if (error instanceof HardDeleteMissingEntityError) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 export function deleteEntity(
   entityType: CrudEntityType,
   id: string,
@@ -1583,19 +2410,62 @@ export function deleteEntity(
 ) {
   const capability = getCapability(entityType);
   const mode = options.mode ?? "soft";
+  if (entityType === "artifact" && !canAccessArtifact(id, context)) {
+    return undefined;
+  }
+  if (entityType === "task") {
+    const task = getTaskById(id) as Record<string, unknown> | undefined;
+    const deletedTask = task ? undefined : getDeletedEntityRecord("task", id);
+    if (
+      !(task ?? deletedTask?.snapshot) ||
+      !taskMatchesCrudScope((task ?? deletedTask?.snapshot)!, context)
+    ) {
+      return undefined;
+    }
+  }
   if (capability.deleteMode === "immediate") {
-    clearDeletedEntityRecord(entityType, id);
-    return capability.hardDelete(id, context);
+    return runHardDeleteTransaction(() => {
+      const deleted = capability.hardDelete(id, context);
+      if (!deleted) {
+        return undefined;
+      }
+      clearDeletedEntityRecord(entityType, id);
+      deleteEntityLinksForEntity(entityType, id);
+      const waitsForProviderDeletion =
+        entityType === "task_timebox" &&
+        getTaskTimeboxByIdIncludingPendingDeletion(id) !== undefined;
+      if (!waitsForProviderDeletion) {
+        clearEntityOwner(entityType, id);
+      }
+      clearDeletedEntityRecord(entityType, id);
+      return deleted;
+    });
   }
   const existing = capability.get(id);
+  const deleted = existing ? null : getDeletedEntityRecord(entityType, id);
   if (!existing) {
-    const deleted = getDeletedEntityRecord(entityType, id);
     if (!deleted || mode !== "hard") {
       return undefined;
     }
   }
+  if (
+    entityType === "trigger_report" &&
+    !canMutateTriggerReport(id, existing ?? deleted?.snapshot, context)
+  ) {
+    return undefined;
+  }
+  if (entityType === "note") {
+    requireNoteMutationAccess(
+      (existing ?? deleted?.snapshot) as ReturnType<
+        typeof getNoteByIdIncludingDeleted
+      >,
+      context
+    );
+  }
 
-  return runInTransaction(() => {
+  const transaction =
+    mode === "hard" ? runHardDeleteTransaction : runInTransaction;
+  return transaction(() => {
     if (mode === "soft") {
       const entity = capability.get(id);
       if (!entity) {
@@ -1619,30 +2489,77 @@ export function deleteEntity(
           options.reason ?? ""
         );
       }
-      return entity;
+      return capability.softDelete?.(id, context) ?? entity;
     }
 
+    const preferenceCatalogDescendants =
+      entityType === "preference_catalog"
+        ? listPreferenceCatalogHardDeleteDescendants(id)
+        : [];
     clearDeletedEntityRecord(entityType, id);
+    const deleted = capability.hardDelete(id, context);
+    if (!deleted) {
+      return undefined;
+    }
     if (entityType !== "note" && entityType !== "insight") {
       purgeAnchoredCollaboration(entityType, id);
     }
-    const deleted = capability.hardDelete(id, context);
+    deleteEntityLinksForEntity(entityType, id);
+    for (const descendant of preferenceCatalogDescendants) {
+      clearDeletedEntityRecord(descendant.entityType, descendant.entityId);
+    }
     clearEntityOwner(entityType, id);
     clearDeletedEntityRecord(entityType, id);
     return deleted;
   });
 }
 
-export function restoreEntity(entityType: CrudEntityType, id: string) {
+export function restoreEntity(
+  entityType: CrudEntityType,
+  id: string,
+  context: CrudContext
+) {
+  if (entityType === "artifact" && !canAccessArtifact(id, context)) {
+    return undefined;
+  }
+  const deletedBeforeRestore = getDeletedEntityRecord(entityType, id);
+  if (
+    entityType === "task" &&
+    (!deletedBeforeRestore ||
+      !taskMatchesCrudScope(deletedBeforeRestore.snapshot, context))
+  ) {
+    return undefined;
+  }
+  if (
+    entityType === "trigger_report" &&
+    deletedBeforeRestore &&
+    !canMutateTriggerReport(id, deletedBeforeRestore.snapshot, context)
+  ) {
+    return undefined;
+  }
+  if (entityType === "note" && deletedBeforeRestore) {
+    requireNoteMutationAccess(
+      deletedBeforeRestore.snapshot as ReturnType<
+        typeof getNoteByIdIncludingDeleted
+      >,
+      context
+    );
+  }
   return runInTransaction(() => {
     const deleted = restoreDeletedEntityRecord(entityType, id);
     if (!deleted) {
       return undefined;
     }
+    const capability = getCapability(entityType);
+    const restored = capability.restore?.(id, context);
     if (entityType !== "note" && entityType !== "insight") {
       restoreAnchoredCollaboration(entityType, id);
     }
-    return getCapability(entityType).get(id) ?? deleted.snapshot;
+    const entity = restored ?? capability.get(id) ?? deleted.snapshot;
+    if (entityType === "task") {
+      assertTaskCrudResultScope(entity, context);
+    }
+    return entity;
   });
 }
 
@@ -1654,7 +2571,7 @@ export function createEntities(
     try {
       const entity = getCapability(entry.entityType).create(
         parseCreateInput(entry.entityType, entry.data),
-        context
+        { ...context, idempotencyKey: entry.idempotencyKey ?? null }
       );
       return {
         ok: true,
@@ -1685,7 +2602,7 @@ export function createEntities(
         entityType: entry.entityType,
         clientRef: entry.clientRef,
         error: toOperationError(
-          "create_failed",
+          error instanceof HttpError ? error.code : "create_failed",
           error instanceof Error ? error.message : String(error)
         )
       } satisfies EntityOperationResult;
@@ -1747,7 +2664,7 @@ export function updateEntities(
         id: entry.id,
         clientRef: entry.clientRef,
         error: toOperationError(
-          "update_failed",
+          error instanceof HttpError ? error.code : "update_failed",
           error instanceof Error ? error.message : String(error)
         )
       } satisfies EntityOperationResult;
@@ -1793,7 +2710,7 @@ export function deleteEntities(
         id: entry.id,
         clientRef: entry.clientRef,
         error: toOperationError(
-          "delete_failed",
+          error instanceof HttpError ? error.code : "delete_failed",
           error instanceof Error ? error.message : String(error)
         )
       } satisfies EntityOperationResult;
@@ -1801,12 +2718,15 @@ export function deleteEntities(
   });
 }
 
-export function restoreEntities(input: BatchRestoreEntitiesInput): {
+export function restoreEntities(
+  input: BatchRestoreEntitiesInput,
+  context: CrudContext
+): {
   results: EntityOperationResult[];
 } {
   return executeBatchOperation(input.operations, input.atomic, (entry) => {
     try {
-      const entity = restoreEntity(entry.entityType, entry.id);
+      const entity = restoreEntity(entry.entityType, entry.id, context);
       if (!entity) {
         return {
           ok: false,
@@ -1833,7 +2753,7 @@ export function restoreEntities(input: BatchRestoreEntitiesInput): {
         id: entry.id,
         clientRef: entry.clientRef,
         error: toOperationError(
-          "restore_failed",
+          error instanceof HttpError ? error.code : "restore_failed",
           error instanceof Error ? error.message : String(error)
         )
       } satisfies EntityOperationResult;
@@ -1841,7 +2761,10 @@ export function restoreEntities(input: BatchRestoreEntitiesInput): {
   });
 }
 
-export function searchEntities(input: BatchSearchEntitiesInput): {
+export function searchEntities(
+  input: BatchSearchEntitiesInput,
+  context: EntitySearchContext = {}
+): {
   results: EntityOperationResult[];
 } {
   const deleted = listDeletedEntities();
@@ -1854,23 +2777,63 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
         search.entityTypes && search.entityTypes.length > 0
           ? search.entityTypes
           : defaultEntityTypes;
+      const artifactUserIds = search.userIds ?? context.artifactScope?.userIds;
       const genericLinkedEntityKeys = search.linkedTo
         ? listGenericLinkedEntityKeys(search.linkedTo)
         : null;
-      const liveMatches = entityTypes.flatMap((entityType) =>
-        filterOwnedEntities(
+      const deletedForSearch = deleted.map((item) => ({
+        ...item,
+        snapshot: context.transformEntityForRead
+          ? context.transformEntityForRead(item.entityType, {
+              ...item.snapshot,
+              id: item.entityId
+            })
+          : item.snapshot
+      }));
+      const visibleDeletedEntityKeys = new Set(
+        entityTypes.flatMap((entityType) =>
+          entityType === "artifact"
+            ? []
+            : filterOwnedEntities(
+                entityType,
+                deletedForSearch
+                  .filter((item) => item.entityType === entityType)
+                  .map((item) => ({ ...item.snapshot, id: item.entityId })),
+                search.userIds
+              )
+                .filter(
+                  (entity) =>
+                    entityType !== "task" ||
+                    taskMatchesCrudScope(entity, context.taskScope ?? {})
+                )
+                .map((entity) => `${entityType}:${entity.id}`)
+        )
+      );
+      const liveMatches = entityTypes.flatMap((entityType) => {
+        const capability = getCapability(entityType);
+        const candidates = capability.search
+          ? capability.search(search, context)
+          : capability.list();
+        return filterOwnedEntities(
           entityType,
-          getCapability(entityType).list() as Array<
-            Record<string, unknown> & { id: string }
-          >,
+          candidates as Array<Record<string, unknown> & { id: string }>,
           search.userIds
         )
+          .map((entity) =>
+            context.transformEntityForRead
+              ? context.transformEntityForRead(entityType, entity)
+              : entity
+          )
           .filter((entity) =>
             search.ids && search.ids.length > 0
               ? search.ids.includes(String(entity.id ?? ""))
               : true
           )
-          .filter((entity) => matchesQuery(entity, search.query))
+          .filter((entity) =>
+            entityType === "note" && capability.search
+              ? true
+              : matchesQuery(entity, search.query)
+          )
           .filter((entity) => matchesStatus(entity, search.status))
           .filter((entity) =>
             search.linkedTo
@@ -1884,30 +2847,55 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
             entityType,
             id: String(entity.id ?? ""),
             entity
-          }))
-      );
+          }));
+      });
 
       const deletedMatches = search.includeDeleted
-        ? deleted
+        ? deletedForSearch
             .filter((item) => entityTypes.includes(item.entityType))
+            .filter(
+              (item) =>
+                item.entityType !== "task" ||
+                taskMatchesCrudScope(
+                  { ...item.snapshot, id: item.entityId },
+                  context.taskScope ?? {}
+                )
+            )
+            .filter(
+              (item) =>
+                item.entityType !== "note" ||
+                (canAccessWikiNote(
+                  { userIds: search.userIds ?? [] },
+                  item.snapshot as Note,
+                  "read"
+                ) &&
+                  ((context.includePsycheNotes ?? true) ||
+                    !noteHasPsycheLink(item.snapshot as Note)))
+            )
             .filter((item) =>
               search.ids && search.ids.length > 0
                 ? search.ids.includes(item.entityId)
                 : true
             )
             .filter((item) =>
-              !search.userIds || search.userIds.length === 0
-                ? true
-                : search.userIds.includes(
-                    String(
-                      (item.snapshot as Record<string, unknown>).userId ?? ""
+              item.entityType === "artifact"
+                ? canAccessArtifact(item.entityId, {
+                    source: "system",
+                    userIds: artifactUserIds,
+                    projectIds: context.artifactScope?.projectIds,
+                    tagIds: context.artifactScope?.tagIds
+                  })
+                : !search.userIds || search.userIds.length === 0
+                  ? true
+                  : visibleDeletedEntityKeys.has(
+                      `${item.entityType}:${item.entityId}`
                     )
-                  )
             )
-            .filter(
-              (item) =>
-                matchesQuery(item.snapshot, search.query) ||
-                matchesQuery(item, search.query)
+            .filter((item) =>
+              item.entityType === "note"
+                ? noteMatchesSearchQuery(item.snapshot as Note, search.query)
+                : matchesQuery(item.snapshot, search.query) ||
+                  matchesQuery(item, search.query)
             )
             .filter((item) => matchesStatus(item.snapshot, search.status))
             .filter((item) =>
@@ -1923,13 +2911,23 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
                 : true
             )
             .slice(0, search.limit)
-            .map((item) => ({
-              deleted: true,
-              entityType: item.entityType,
-              id: item.entityId,
-              entity: item.snapshot,
-              deletedRecord: item
-            }))
+            .map((item) =>
+              item.entityType === "artifact"
+                ? serializeArtifactPublicPayload({
+                    deleted: true,
+                    entityType: item.entityType,
+                    id: item.entityId,
+                    entity: item.snapshot,
+                    deletedRecord: item
+                  })
+                : {
+                    deleted: true,
+                    entityType: item.entityType,
+                    id: item.entityId,
+                    entity: item.snapshot,
+                    deletedRecord: item
+                  }
+            )
         : [];
 
       return {
@@ -1941,8 +2939,81 @@ export function searchEntities(input: BatchSearchEntitiesInput): {
   };
 }
 
-export function getSettingsBinPayload(): SettingsBinPayload {
-  return buildSettingsBinPayload();
+export function getSettingsBinPayload(
+  noteScope: NoteReadScope = {}
+): SettingsBinPayload {
+  const payload = buildSettingsBinPayload();
+  const userIds = noteScope.userIds ?? [];
+  if (
+    userIds.length === 0 &&
+    noteScope.accessibleSpaceIds === undefined &&
+    noteScope.includePsyche !== false
+  ) {
+    return payload;
+  }
+
+  const allowedUserIds = new Set(userIds);
+  const records = payload.records.filter((record) => {
+    if (record.entityType === "note") {
+      return isNoteVisibleToScope(record.snapshot as Note, noteScope);
+    }
+    if (record.entityType === "preference_catalog") {
+      const snapshotUserId = (record.snapshot as Record<string, unknown>)
+        .userId;
+      const ownerUserId =
+        getEntityOwnerId(record.entityType, record.entityId) ??
+        (typeof snapshotUserId === "string" ? snapshotUserId : null) ??
+        (
+          getDatabase()
+            .prepare(
+              `SELECT preference_profiles.user_id
+               FROM preference_catalogs
+               INNER JOIN preference_profiles
+                 ON preference_profiles.id = preference_catalogs.profile_id
+               WHERE preference_catalogs.id = ?`
+            )
+            .get(record.entityId) as { user_id: string } | undefined
+        )?.user_id ??
+        null;
+      return ownerUserId !== null && allowedUserIds.has(ownerUserId);
+    }
+    if (record.entityType === "preference_catalog_item") {
+      const snapshotUserId = (record.snapshot as Record<string, unknown>)
+        .userId;
+      const ownerUserId =
+        getEntityOwnerId(record.entityType, record.entityId) ??
+        (typeof snapshotUserId === "string" ? snapshotUserId : null) ??
+        (
+          getDatabase()
+            .prepare(
+              `SELECT preference_profiles.user_id
+               FROM preference_catalog_items
+               INNER JOIN preference_catalogs
+                 ON preference_catalogs.id = preference_catalog_items.catalog_id
+               INNER JOIN preference_profiles
+                 ON preference_profiles.id = preference_catalogs.profile_id
+               WHERE preference_catalog_items.id = ?`
+            )
+            .get(record.entityId) as { user_id: string } | undefined
+        )?.user_id ??
+        null;
+      return ownerUserId !== null && allowedUserIds.has(ownerUserId);
+    }
+    return true;
+  });
+  const countsByEntityType = records.reduce<Record<string, number>>(
+    (counts, record) => {
+      counts[record.entityType] = (counts[record.entityType] ?? 0) + 1;
+      return counts;
+    },
+    {}
+  );
+  return {
+    ...payload,
+    totalCount: records.length,
+    countsByEntityType,
+    records
+  };
 }
 
 export function getDeletedEntityRecords(): DeletedEntityRecord[] {

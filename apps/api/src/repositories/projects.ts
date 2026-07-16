@@ -339,6 +339,13 @@ export function updateProject(
     const completedLinkedTaskCount = autoCompletedWorkItemIds.length;
 
     const project = getProjectById(projectId);
+    if (project) {
+      createLinkedNotes(
+        parsed.notes,
+        { entityType: "project", entityId: project.id, anchorKey: null },
+        activity ?? { source: "ui", actor: null }
+      );
+    }
     if (project && activity) {
       const statusChanged = current.status !== project.status;
       recordActivityEvent({

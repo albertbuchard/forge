@@ -11,7 +11,10 @@ import {
   Stethoscope
 } from "lucide-react";
 import { ThemeCustomizerDialog } from "@/components/settings/theme-customizer-dialog";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { Button } from "@/components/ui/button";
@@ -551,6 +554,9 @@ export function SettingsPage() {
     themePreference: ForgeThemePreference,
     nextCustomTheme: SettingsMutationInput["customTheme"] = customTheme
   ) => {
+    themeMutation.reset();
+    const previousThemePreference = settingsForm.getValues("themePreference");
+    const previousCustomTheme = settingsForm.getValues("customTheme");
     settingsForm.setValue("themePreference", themePreference, {
       shouldDirty: true
     });
@@ -561,19 +567,31 @@ export function SettingsPage() {
         shouldDirty: true
       }
     );
-    await themeMutation.mutateAsync({
-      themePreference,
-      customTheme: nextCustomTheme ?? defaultCustomTheme
-    });
+    try {
+      await themeMutation.mutateAsync({
+        themePreference,
+        customTheme: nextCustomTheme ?? defaultCustomTheme
+      });
+    } catch {
+      settingsForm.setValue("themePreference", previousThemePreference);
+      settingsForm.setValue("customTheme", previousCustomTheme);
+    }
   };
 
   const saveGamificationThemeSelection = async (
     gamificationTheme: GamificationThemePreference
   ) => {
+    gamificationThemeMutation.reset();
+    const previousGamificationTheme =
+      settingsForm.getValues("gamificationTheme");
     settingsForm.setValue("gamificationTheme", gamificationTheme, {
       shouldDirty: true
     });
-    await gamificationThemeMutation.mutateAsync({ gamificationTheme });
+    try {
+      await gamificationThemeMutation.mutateAsync({ gamificationTheme });
+    } catch {
+      settingsForm.setValue("gamificationTheme", previousGamificationTheme);
+    }
   };
 
   useEffect(() => {
@@ -599,36 +617,45 @@ export function SettingsPage() {
 
   if (operatorSessionQuery.isLoading || settingsQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings"
-        title="Loading settings"
-        description="Establishing the operator session and fetching current configuration."
-        columns={2}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <div role="status" aria-live="polite">
+          <span className="sr-only">Loading runtime settings.</span>
+          <SurfaceSkeleton
+            eyebrow="Settings"
+            title="Loading settings"
+            description="Establishing the operator session and fetching current configuration."
+            columns={2}
+            blocks={6}
+          />
+        </div>
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (settingsQuery.isError || !settings) {
     return (
-      <ErrorState
-        eyebrow="Settings"
-        error={
-          settingsQuery.error ??
-          new Error("Forge returned an empty settings payload.")
-        }
-        onRetry={() => void settingsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={
+            settingsQuery.error ??
+            new Error("Forge returned an empty settings payload.")
+          }
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
@@ -636,7 +663,7 @@ export function SettingsPage() {
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
       <PageHero
         title="Settings"
-        description="Tune execution policy, timer behaviour, and personal preferences."
+        description="Manage the operator session, execution policy, appearance, language, and Doctor-backed runtime integrity."
         badge={
           <IntegrityHelpPill
             integrityScore={settings.security.integrityScore}
@@ -830,10 +857,17 @@ export function SettingsPage() {
                   customTheme
                 );
                 const selected = selectedTheme === themeOption.value;
+                const themeLabel =
+                  themeOption.value === "custom"
+                    ? customTheme.label
+                    : themeOption.label;
                 return (
                   <button
                     key={themeOption.value}
                     type="button"
+                    aria-label={`Select ${themeLabel} theme`}
+                    aria-pressed={selected}
+                    disabled={themeMutation.isPending}
                     onClick={() =>
                       void saveThemeSelection(
                         themeOption.value as ForgeThemePreference,
@@ -851,9 +885,7 @@ export function SettingsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-[var(--ui-ink-strong)]">
-                          {themeOption.value === "custom"
-                            ? customTheme.label
-                            : themeOption.label}
+                          {themeLabel}
                         </div>
                         <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--ui-ink-soft)]">
                           {themeOption.description}
@@ -872,6 +904,16 @@ export function SettingsPage() {
                 );
               })}
             </div>
+            {themeMutation.isError ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-[14px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
+              >
+                {themeMutation.error instanceof Error
+                  ? themeMutation.error.message
+                  : "Could not save the selected Forge theme."}
+              </div>
+            ) : null}
             <div
               className={`mt-3 flex flex-wrap items-center justify-between gap-3 ${settingsPanelClass} px-3 py-3`}
             >
@@ -945,6 +987,7 @@ export function SettingsPage() {
                       className="grid gap-2 text-left"
                       aria-label={`Select ${themeOption.label}`}
                       aria-pressed={selected}
+                      disabled={gamificationThemeMutation.isPending}
                     >
                       <GamificationStylePreview
                         selected={selected}
@@ -988,6 +1031,16 @@ export function SettingsPage() {
             {gamificationThemeMutation.isPending ? (
               <div className="text-sm text-[var(--ui-ink-faint)]">
                 Saving reward style…
+              </div>
+            ) : null}
+            {gamificationThemeMutation.isError ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-[14px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
+              >
+                {gamificationThemeMutation.error instanceof Error
+                  ? gamificationThemeMutation.error.message
+                  : "Could not save the selected reward style."}
               </div>
             ) : null}
             {gamificationAssetInstallMutation.isError ? (

@@ -6,9 +6,11 @@
 //
 
 import XCTest
+import AVFoundation
 import CoreLocation
 import HealthKit
 import CryptoKit
+import Security
 import WebKit
 @testable import ForgeCompanion
 
@@ -27,6 +29,517 @@ private let sharedMovementFixtureDateFormatter: ISO8601DateFormatter = {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
 }()
+
+private final class PeerMemorySecretStore: PeerSecretStoring {
+    private(set) var values: [String: Data] = [:]
+    private(set) var saveCount = 0
+    var failingSaveCounts: Set<Int> = []
+
+    @discardableResult
+    func save(_ data: Data, forKey key: String) -> Bool {
+        saveCount += 1
+        guard failingSaveCounts.contains(saveCount) == false else { return false }
+        values[key] = data
+        return true
+    }
+
+    func load(forKey key: String) -> Data? {
+        values[key]
+    }
+
+    func delete(forKey key: String) {
+        values.removeValue(forKey: key)
+    }
+
+    func seed(_ data: Data, forKey key: String) {
+        values[key] = data
+    }
+}
+
+private final class PeerTestDeviceKeyOperations: PeerDeviceKeyOperating {
+    private let privateKey: P256.Signing.PrivateKey
+    var identityAvailable: Bool
+    var signingError: PeerDeviceIdentityError?
+    var substitutedIdentity: PeerDeviceIdentity?
+    private(set) var createCount = 0
+    private(set) var signCount = 0
+    private(set) var authorizations: [PeerDeviceSigningAuthorization] = []
+
+    init(
+        privateKey: P256.Signing.PrivateKey = P256.Signing.PrivateKey(),
+        identityAvailable: Bool = true
+    ) {
+        self.privateKey = privateKey
+        self.identityAvailable = identityAvailable
+    }
+
+    func identity() throws -> PeerDeviceIdentity? {
+        guard identityAvailable else { return nil }
+        if let substitutedIdentity { return substitutedIdentity }
+        return try PeerDeviceIdentityStore.identity(
+            publicKeyX963: privateKey.publicKey.x963Representation
+        )
+    }
+
+    func createIdentity() throws -> PeerDeviceIdentity {
+        createCount += 1
+        identityAvailable = true
+        return try XCTUnwrap(identity())
+    }
+
+    func sign(
+        data: Data,
+        authorization: PeerDeviceSigningAuthorization
+    ) throws -> Data {
+        signCount += 1
+        authorizations.append(authorization)
+        guard case .userPresence(let reason) = authorization,
+              reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        else {
+            throw PeerDeviceIdentityError.userPresenceRequired
+        }
+        if let signingError { throw signingError }
+        guard identityAvailable else { throw PeerDeviceIdentityError.notEnrolled }
+        return try privateKey.signature(for: data).derRepresentation
+    }
+}
+
+private final class PeerTestKeychainOperations: PeerKeychainOperating {
+    var storedData: Data?
+    var forcedUpdateStatus: OSStatus?
+    private(set) var updateCount = 0
+    private(set) var addCount = 0
+    private(set) var deleteCount = 0
+
+    func update(
+        query: [CFString: Any],
+        attributes: [CFString: Any]
+    ) -> OSStatus {
+        updateCount += 1
+        if let forcedUpdateStatus { return forcedUpdateStatus }
+        guard storedData != nil else { return errSecItemNotFound }
+        storedData = attributes[kSecValueData] as? Data
+        return errSecSuccess
+    }
+
+    func add(attributes: [CFString: Any]) -> OSStatus {
+        addCount += 1
+        guard storedData == nil else { return errSecDuplicateItem }
+        storedData = attributes[kSecValueData] as? Data
+        return storedData == nil ? errSecParam : errSecSuccess
+    }
+
+    func load(query: [CFString: Any]) -> (status: OSStatus, data: Data?) {
+        guard let storedData else { return (errSecItemNotFound, nil) }
+        return (errSecSuccess, storedData)
+    }
+
+    func delete(query: [CFString: Any]) {
+        deleteCount += 1
+        storedData = nil
+    }
+}
+
+private enum PeerTestTransportStep {
+    case response(PeerTransportResponse)
+    case failure(Error)
+    case handler((PeerTransportRequest) async throws -> PeerTransportResponse)
+}
+
+private final class PeerTestTransport: PeerTransporting {
+    private(set) var requests: [PeerTransportRequest] = []
+    var steps: [PeerTestTransportStep]
+
+    init(steps: [PeerTestTransportStep] = []) {
+        self.steps = steps
+    }
+
+    func send(_ request: PeerTransportRequest) async throws -> PeerTransportResponse {
+        requests.append(request)
+        guard steps.isEmpty == false else {
+            throw URLError(.badServerResponse)
+        }
+        switch steps.removeFirst() {
+        case .response(let response):
+            return response
+        case .failure(let error):
+            throw error
+        case .handler(let handler):
+            return try await handler(request)
+        }
+    }
+}
+
+private struct PeerTestPresenceOptionsBody: Decodable {
+    let action: PeerPresenceAction
+    let companionDeviceId: String
+}
+
+private struct PeerTestConsentChallenge: Encodable {
+    let protocolName: String
+    let challengeId: String
+    let challenge: String
+    let actionDigest: String
+    let deviceId: String
+    let ownerUserId: String
+    let principalId: String
+    let issuedAt: String
+    let expiresAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol"
+        case challengeId
+        case challenge
+        case actionDigest
+        case deviceId
+        case ownerUserId
+        case principalId
+        case issuedAt
+        case expiresAt
+    }
+}
+
+private struct PeerTestRequestSignatureProof: Encodable {
+    let bodySha256: String
+    let deviceId: String
+    let enrollmentId: String
+    let issuedAt: String
+    let keyId: String
+    let method: String
+    let nonce: String
+    let ownerUserId: String
+    let path: String
+    let protocolName: String
+    let sessionId: String
+
+    private enum CodingKeys: String, CodingKey {
+        case bodySha256
+        case deviceId
+        case enrollmentId
+        case issuedAt
+        case keyId
+        case method
+        case nonce
+        case ownerUserId
+        case path
+        case protocolName = "protocol"
+        case sessionId
+    }
+}
+
+private struct PeerTestPresenceVerifyBody: Decodable {
+    struct Verification: Decodable {
+        let deviceId: String
+        let challenge: String
+        let signature: String
+        let algorithm: String
+        let keyId: String
+    }
+
+    let challengeId: String
+    let action: PeerPresenceAction
+    let verification: Verification
+}
+
+private struct PeerTestConsentSignatureProof: Encodable {
+    let actionDigest: String
+    let algorithm: String
+    let challenge: String
+    let challengeId: String
+    let deviceId: String
+    let expiresAt: String
+    let issuedAt: String
+    let keyId: String
+    let ownerUserId: String
+    let principalId: String
+    let protocolName: String
+
+    private enum CodingKeys: String, CodingKey {
+        case actionDigest
+        case algorithm
+        case challenge
+        case challengeId
+        case deviceId
+        case expiresAt
+        case issuedAt
+        case keyId
+        case ownerUserId
+        case principalId
+        case protocolName = "protocol"
+    }
+}
+
+private struct PeerTestEnrollmentOptionsBody: Decodable {
+    let protocolName: String
+    let enrollmentAttemptId: String
+    let pairingSessionId: String
+    let device: PeerDeviceIdentityRecord
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol"
+        case enrollmentAttemptId
+        case pairingSessionId
+        case device
+    }
+}
+
+private struct PeerTestEnrollmentChallenge: Encodable {
+    let protocolName: String
+    let challengeId: String
+    let challenge: String
+    let enrollmentAttemptId: String
+    let pairingSessionId: String
+    let ownerUserId: String
+    let device: PeerDeviceIdentityRecord
+    let issuedAt: String
+    let expiresAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol"
+        case challengeId
+        case challenge
+        case enrollmentAttemptId
+        case pairingSessionId
+        case ownerUserId
+        case device
+        case issuedAt
+        case expiresAt
+    }
+}
+
+private struct PeerTestEnrollmentProof: Encodable {
+    let algorithm: String
+    let challenge: String
+    let challengeId: String
+    let deviceId: String
+    let enrollmentAttemptId: String
+    let expiresAt: String
+    let issuedAt: String
+    let ownerUserId: String
+    let pairingSessionId: String
+    let protocolName: String
+    let publicKey: String
+    let publicKeyFormat: String
+    let protection: String
+
+    private enum CodingKeys: String, CodingKey {
+        case algorithm
+        case challenge
+        case challengeId
+        case deviceId
+        case enrollmentAttemptId
+        case expiresAt
+        case issuedAt
+        case ownerUserId
+        case pairingSessionId
+        case protocolName = "protocol"
+        case publicKey
+        case publicKeyFormat
+        case protection
+    }
+}
+
+private struct PeerTestEnrollmentVerifyBody: Decodable {
+    let protocolName: String
+    let challengeId: String
+    let enrollmentAttemptId: String
+    let pairingSessionId: String
+    let signature: String
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolName = "protocol"
+        case challengeId
+        case enrollmentAttemptId
+        case pairingSessionId
+        case signature
+    }
+}
+
+private final class PeerAsyncResponseGate {
+    private var continuation: CheckedContinuation<PeerTransportResponse, Never>?
+
+    func wait() async -> PeerTransportResponse {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release(_ response: PeerTransportResponse) {
+        continuation?.resume(returning: response)
+        continuation = nil
+    }
+}
+
+private enum PeopleWatchTestTransportStep {
+    case response(PeopleWatchOperatorResponse)
+    case failure(Error)
+    case handler((PeopleWatchOperatorRequest) async throws -> PeopleWatchOperatorResponse)
+}
+
+@MainActor
+private final class PeopleWatchTestTransport: PeopleWatchOperatorTransporting {
+    private(set) var requests: [PeopleWatchOperatorRequest] = []
+    var steps: [PeopleWatchTestTransportStep]
+
+    init(steps: [PeopleWatchTestTransportStep] = []) {
+        self.steps = steps
+    }
+
+    func send(_ request: PeopleWatchOperatorRequest) async throws -> PeopleWatchOperatorResponse {
+        requests.append(request)
+        guard steps.isEmpty == false else { throw URLError(.badServerResponse) }
+        switch steps.removeFirst() {
+        case .response(let response):
+            return response
+        case .failure(let error):
+            throw error
+        case .handler(let handler):
+            return try await handler(request)
+        }
+    }
+}
+
+@MainActor
+private final class PeopleWatchAsyncResponseGate {
+    private var continuation: CheckedContinuation<PeopleWatchOperatorResponse, Never>?
+
+    func wait() async -> PeopleWatchOperatorResponse {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release(_ response: PeopleWatchOperatorResponse) {
+        continuation?.resume(returning: response)
+        continuation = nil
+    }
+}
+
+private final class PeopleWatchURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, Data))?
+    nonisolated(unsafe) private static var capturedRequests: [URLRequest] = []
+    nonisolated(unsafe) private static var capturedBodies: [Data?] = []
+    private static let lock = NSLock()
+
+    static var requests: [URLRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return capturedRequests
+    }
+
+    static var bodies: [Data?] {
+        lock.lock()
+        defer { lock.unlock() }
+        return capturedBodies
+    }
+
+    static func reset() {
+        lock.lock()
+        capturedRequests = []
+        capturedBodies = []
+        handler = nil
+        lock.unlock()
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        do {
+            guard let handler = Self.handler,
+                  let url = request.url
+            else { throw URLError(.badServerResponse) }
+            Self.lock.lock()
+            Self.capturedRequests.append(request)
+            Self.capturedBodies.append(Self.bodyData(from: request))
+            Self.lock.unlock()
+            let (status, data) = try handler(request)
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: status,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var result = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            result.append(buffer, count: count)
+        }
+        return result.isEmpty ? nil : result
+    }
+}
+
+private final class PeerTestConsentState {
+    var challenge: PeerTestConsentChallenge?
+    var action: PeerPresenceAction?
+}
+
+private final class PeerTestEnrollmentState {
+    private let lock = NSLock()
+    private var storedChallenge: PeerTestEnrollmentChallenge?
+
+    func store(_ challenge: PeerTestEnrollmentChallenge) {
+        lock.lock()
+        storedChallenge = challenge
+        lock.unlock()
+    }
+
+    func challenge() -> PeerTestEnrollmentChallenge? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedChallenge
+    }
+}
+
+private struct PeerTestPageBody: Encodable {
+    let limit: Int
+    let hasMore: Bool
+    let nextCursor: String?
+}
+
+private struct PeerTestRelationshipsBody: Encodable {
+    let relationships: [PeerRelationship]
+    let page: PeerTestPageBody
+}
+
+private struct PeerTestGrantsBody: Encodable {
+    let grants: [PeerGrant]
+    let page: PeerTestPageBody
+}
+
+private struct PeerTestRelationshipBody: Encodable {
+    let relationship: PeerRelationship
+    let devices: [PeerDevice]
+    let grants: [PeerGrant]
+
+    private enum CodingKeys: String, CodingKey {
+        case relationship
+        case devices
+        case grants
+        case sync
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(relationship, forKey: .relationship)
+        try container.encode(devices, forKey: .devices)
+        try container.encode(grants, forKey: .grants)
+        try container.encodeNil(forKey: .sync)
+    }
+}
 
 private actor ForgeIrohWebViewAuthProbeRecorder {
     struct ObservedRequest: Equatable {
@@ -249,11 +762,28 @@ final class ForgeCompanionTests: XCTestCase {
         )
     }
 
-    func testForgeWebViewFreshRequestBypassesCacheAndAddsRefreshToken() throws {
+    func testForgeWebViewDefaultRequestPreservesProtocolCacheAndExistingQuery() throws {
+        let url = URL(string: "https://forge.example/forge/?tab=settings")!
+
+        let request = ForgeWebView.freshRequest(for: url)
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+
+        XCTAssertEqual(request.cachePolicy, .useProtocolCachePolicy)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Cache-Control"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "Pragma"))
+        XCTAssertEqual(components.queryItems?.first(where: { $0.name == "tab" })?.value, "settings")
+        XCTAssertNil(components.queryItems?.first(where: { $0.name == "forgeWebRefresh" }))
+    }
+
+    func testForgeWebViewHardRefreshRequestBypassesCacheAndAddsRefreshToken() throws {
         let token = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
         let url = URL(string: "https://forge.example/forge/?tab=settings")!
 
-        let request = ForgeWebView.freshRequest(for: url, reloadToken: token)
+        let request = ForgeWebView.freshRequest(
+            for: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            reloadToken: token
+        )
         let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
         let queryItems = components.queryItems ?? []
 
@@ -285,11 +815,242 @@ final class ForgeCompanionTests: XCTestCase {
         let script = ForgeWebView.companionBootstrapScript
 
         XCTAssertTrue(script.contains("__forgeCompanionApplyLayout"))
+        XCTAssertTrue(script.contains("__forgeCompanionSyncVisualViewport"))
+        XCTAssertTrue(script.contains("--forge-safe-area-top"))
+        XCTAssertTrue(script.contains("--forge-safe-area-right"))
         XCTAssertTrue(script.contains("--forge-safe-area-bottom"))
+        XCTAssertTrue(script.contains("--forge-safe-area-left"))
+        XCTAssertTrue(script.contains("--forge-keyboard-inset-bottom"))
         XCTAssertFalse(script.contains("!important"))
         XCTAssertFalse(script.contains("document.body.style.background"))
         XCTAssertFalse(script.contains("root.style.background"))
         XCTAssertFalse(script.contains("html, body, #root"))
+    }
+
+    func testForgeWebLayoutMetricsPreserveAllSafeAreaEdgesAndClampNegativeInsets() throws {
+        let metrics = try XCTUnwrap(
+            ForgeWebLayoutMetrics.resolve(
+                bounds: CGRect(x: 0, y: 0, width: 393.9, height: 759.8),
+                safeAreaInsets: UIEdgeInsets(top: 1.9, left: -4, bottom: 33.8, right: 2.7)
+            )
+        )
+
+        XCTAssertEqual(
+            metrics,
+            ForgeWebLayoutMetrics(width: 393, height: 759, top: 1, right: 2, bottom: 33, left: 0)
+        )
+        XCTAssertNil(
+            ForgeWebLayoutMetrics.resolve(
+                bounds: .zero,
+                safeAreaInsets: .zero
+            )
+        )
+    }
+
+    func testForgeWebViewConfiguresNavigationGesturesAndInteractiveKeyboardDismissal() {
+        let webView = WKWebView(frame: .zero)
+
+        ForgeWebView.configureEmbeddedInteraction(on: webView)
+
+        XCTAssertTrue(webView.allowsBackForwardNavigationGestures)
+        XCTAssertEqual(webView.scrollView.keyboardDismissMode, .interactive)
+        XCTAssertEqual(webView.scrollView.contentInsetAdjustmentBehavior, .never)
+        XCTAssertTrue(webView.scrollView.alwaysBounceVertical)
+    }
+
+    func testForgeWebNavigationPolicyKeepsForgeRoutesEmbeddedAndRequiresExplicitExternalLinks() throws {
+        let httpsRoot = try XCTUnwrap(URL(string: "https://forge.example:8443/forge/"))
+        let irohRoot = try XCTUnwrap(URL(string: "forge-iroh://node-id/forge/"))
+
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://forge.example:8443/forge/tasks/1")),
+                relativeTo: httpsRoot,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .allow
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "forge-iroh://node-id/forge/calendar")),
+                relativeTo: irohRoot,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .allow
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://forge.example/forge/")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .openExternally
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://external.example/resource")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .openExternally
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://external.example/redirect")),
+                relativeTo: httpsRoot,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "blob:https://forge.example:8443/download")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .download
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "blob:null/iroh-export")),
+                relativeTo: irohRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .download
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "blob:null/http-export")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://forge.example:8443/forge/export.csv")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .download
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://forge.example:8443/forge/export.csv")),
+                relativeTo: httpsRoot,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "blob:https://external.example/download")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "blob:https://forge.example:8443/document")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: false
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "data:text/plain,export")),
+                relativeTo: httpsRoot,
+                isUserActivated: true,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .cancel
+        )
+        for blockedURL in ["blob:https://forge.example/document", "data:text/html,unsafe", "javascript:alert(1)"] {
+            XCTAssertEqual(
+                ForgeWebNavigationPolicy.disposition(
+                    for: try XCTUnwrap(URL(string: blockedURL)),
+                    relativeTo: httpsRoot,
+                    isUserActivated: false,
+                    isPrimaryNavigation: true,
+                    shouldPerformDownload: false
+                ),
+                .cancel
+            )
+        }
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "about:blank")),
+                relativeTo: httpsRoot,
+                isUserActivated: false,
+                isPrimaryNavigation: false,
+                shouldPerformDownload: false
+            ),
+            .allow
+        )
+    }
+
+    func testForgeWebDownloadPolicySanitizesAndBoundsSuggestedFilenames() {
+        XCTAssertEqual(
+            ForgeWebDownloadPolicy.safeFilename("../../private/report.json"),
+            "report.json"
+        )
+        XCTAssertEqual(
+            ForgeWebDownloadPolicy.safeFilename(#"..\private\report.json"#),
+            "report.json"
+        )
+        XCTAssertEqual(
+            ForgeWebDownloadPolicy.safeFilename("<script>alert(1)</script>.csv"),
+            "script_.csv"
+        )
+        XCTAssertEqual(ForgeWebDownloadPolicy.safeFilename(".."), "Forge download")
+        XCTAssertEqual(
+            ForgeWebDownloadPolicy.safeFilename(String(repeating: "a", count: 200)).count,
+            160
+        )
+    }
+
+    func testForgeWebFailuresUseActionableCopyWithoutEchoingSensitiveNetworkErrors() {
+        let offline = ForgeWebFailure.from(URLError(.notConnectedToInternet))
+        let sensitive = ForgeWebFailure.from(
+            NSError(
+                domain: "ForgeWeb",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "https://user:secret@forge.example/?token=private"]
+            )
+        )
+
+        XCTAssertEqual(offline.title, "Forge is offline")
+        XCTAssertTrue(offline.isOffline)
+        XCTAssertEqual(sensitive.title, "Forge could not load")
+        XCTAssertFalse(sensitive.detail.contains("secret"))
+        XCTAssertFalse(sensitive.detail.contains("token"))
     }
 
     func testForgeIrohWebViewSchemeHandlerPreservesForgePathAndRefreshQuery() throws {
@@ -485,6 +1246,9 @@ final class ForgeCompanionTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         let finalText = (try? await webView.evaluateJavaScript("document.body ? document.body.textContent : ''")) as? String
+        if let finalText, finalText.contains(expectedText) {
+            return finalText
+        }
         XCTFail("Timed out waiting for \(expectedText). Final body text: \(finalText ?? "nil")")
         return finalText ?? ""
     }
@@ -1775,6 +2539,36 @@ final class ForgeCompanionTests: XCTestCase {
         XCTAssertTrue(update.receiptHistory.isEmpty)
         XCTAssertNil(update.completedReceipt)
         XCTAssertFalse(update.shouldContinueFlushing)
+    }
+
+    func testPlan17PhoneRelayPreservesExactStructuredWatchReceiptError() throws {
+        let receipt = ForgeWatchCommandReceipt(
+            actionId: "plan-17-stable-operation",
+            kind: ForgeWatchActionKind.taskRunComplete.rawValue,
+            status: "failed",
+            processedAt: "2026-07-16T10:00:00Z",
+            error: [
+                "statusCode": 404,
+                "code": "watch_task_run_not_found",
+                "message": "Task run not found",
+                "details": .object([
+                    "retryable": false,
+                    "operationId": "plan-17-stable-operation"
+                ])
+            ]
+        )
+
+        let ack = WatchSessionManager.ackEnvelope(for: receipt, bootstrap: nil)
+        let decoded = try JSONDecoder().decode(
+            ForgeWatchAckEnvelope.self,
+            from: JSONEncoder().encode(ack)
+        )
+
+        XCTAssertEqual(decoded.actionId, receipt.actionId)
+        XCTAssertEqual(decoded.status, "failed")
+        XCTAssertEqual(decoded.error, receipt.error)
+        XCTAssertEqual(decoded.error?["statusCode"]?.integerValue, 404)
+        XCTAssertEqual(decoded.error?["code"]?.stringValue, "watch_task_run_not_found")
     }
 
     func testWatchDirectRouteCooldownOnlyAppliesToRecoverableNetworkErrors() {
@@ -8052,6 +8846,3691 @@ final class ForgeCompanionTests: XCTestCase {
             origin: origin,
             editable: origin == .recorded,
             isCurrent: isCurrent
+        )
+    }
+
+    func testWatchPhoneHandoffDeliversPersistedIrohDestinationExactlyOnce() throws {
+        let (defaults, suiteName) = makeWatchHandoffDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date()
+        let pairing = makeWatchHandoffPairing()
+        let request = try XCTUnwrap(
+            ForgeWatchPhoneHandoffRequest(
+                id: "handoff-once",
+                createdAt: ISO8601DateFormatter().string(from: now),
+                destination: .goal("goal-42")
+            )
+        )
+        let firstManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { true }
+        )
+        firstManager.configure { pairing }
+
+        let response = firstManager.handlePhoneHandoffRequestForTesting(request, now: now)
+
+        XCTAssertEqual(response?.status, .ready)
+        XCTAssertEqual(
+            firstManager.pendingPhoneHandoffURL?.absoluteString,
+            "forge-iroh://paired-node/forge/goals/goal-42"
+        )
+
+        let relaunchedManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { true }
+        )
+        relaunchedManager.configure { pairing }
+        XCTAssertEqual(
+            relaunchedManager.consumePendingPhoneHandoffURL()?.absoluteString,
+            "forge-iroh://paired-node/forge/goals/goal-42"
+        )
+        XCTAssertNil(relaunchedManager.consumePendingPhoneHandoffURL())
+    }
+
+    func testWatchPhoneHandoffSuppressesRepeatedAndStaleRequests() throws {
+        let (defaults, suiteName) = makeWatchHandoffDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let now = Date()
+        let pairing = makeWatchHandoffPairing()
+        let request = try XCTUnwrap(
+            ForgeWatchPhoneHandoffRequest(
+                id: "handoff-repeat",
+                createdAt: ISO8601DateFormatter().string(from: now),
+                destination: .today
+            )
+        )
+        let firstManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { true }
+        )
+        firstManager.configure { pairing }
+        XCTAssertEqual(
+            firstManager.handlePhoneHandoffRequestForTesting(request, now: now)?.status,
+            .ready
+        )
+        XCTAssertNotNil(firstManager.consumePendingPhoneHandoffURL())
+
+        let relaunchedManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { true }
+        )
+        relaunchedManager.configure { pairing }
+        XCTAssertEqual(
+            relaunchedManager.handlePhoneHandoffRequestForTesting(
+                request,
+                now: now.addingTimeInterval(1)
+            )?.status,
+            .ready
+        )
+        XCTAssertNil(relaunchedManager.pendingPhoneHandoffURL)
+
+        let staleRequest = try XCTUnwrap(
+            ForgeWatchPhoneHandoffRequest(
+                id: "handoff-stale",
+                createdAt: ISO8601DateFormatter().string(
+                    from: now.addingTimeInterval(-ForgeWatchPhoneHandoffDeliveryPolicy.maximumRequestAge - 1)
+                ),
+                destination: .goals
+            )
+        )
+        XCTAssertEqual(
+            relaunchedManager.handlePhoneHandoffRequestForTesting(staleRequest, now: now)?.status,
+            .unavailable
+        )
+        XCTAssertNil(relaunchedManager.pendingPhoneHandoffURL)
+    }
+
+    func testWatchPhoneHandoffRetriesAfterUnavailableOrUnpairedTransport() throws {
+        let now = Date()
+        let pairing = makeWatchHandoffPairing()
+        let request = try XCTUnwrap(
+            ForgeWatchPhoneHandoffRequest(
+                id: "handoff-retry",
+                createdAt: ISO8601DateFormatter().string(from: now),
+                destination: .task("task-7")
+            )
+        )
+
+        let (unpairedDefaults, unpairedSuite) = makeWatchHandoffDefaults()
+        defer { unpairedDefaults.removePersistentDomain(forName: unpairedSuite) }
+        let unpairedManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: unpairedDefaults,
+            phoneHandoffTransportAvailable: { false }
+        )
+        unpairedManager.configure { pairing }
+        XCTAssertEqual(
+            unpairedManager.handlePhoneHandoffRequestForTesting(request, now: now)?.status,
+            .unavailable
+        )
+        XCTAssertNil(unpairedManager.pendingPhoneHandoffURL)
+
+        let (unavailableDefaults, unavailableSuite) = makeWatchHandoffDefaults()
+        defer { unavailableDefaults.removePersistentDomain(forName: unavailableSuite) }
+        var availablePairing: PairingPayload?
+        let unavailableManager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: unavailableDefaults,
+            phoneHandoffTransportAvailable: { true }
+        )
+        unavailableManager.configure { availablePairing }
+        XCTAssertEqual(
+            unavailableManager.handlePhoneHandoffRequestForTesting(request, now: now)?.status,
+            .unavailable
+        )
+        availablePairing = pairing
+        XCTAssertEqual(
+            unavailableManager.handlePhoneHandoffRequestForTesting(
+                request,
+                now: now.addingTimeInterval(1)
+            )?.status,
+            .ready
+        )
+        XCTAssertEqual(
+            unavailableManager.consumePendingPhoneHandoffURL()?.absoluteString,
+            "forge-iroh://paired-node/forge/tasks/task-7"
+        )
+    }
+
+    func testWatchPhoneHandoffURLPolicyCannotBypassPairedForgeOriginOrDownloads() throws {
+        let pairedBaseURL = try XCTUnwrap(URL(string: "forge-iroh://paired-node/forge/"))
+        XCTAssertEqual(
+            CompanionWatchHandoffURLPolicy.navigationURL(
+                pendingURL: URL(string: "forge-iroh://paired-node/forge/projects/project-1"),
+                pairedBaseURL: pairedBaseURL
+            )?.absoluteString,
+            "forge-iroh://paired-node/forge/projects/project-1"
+        )
+
+        for blockedValue in [
+            "forge-iroh://other-node/forge/goals",
+            "https://paired-node/forge/goals",
+            "forge-iroh://user:secret@paired-node/forge/goals",
+            "forge-iroh://paired-node/forge/goals?download=1",
+            "forge-iroh://paired-node/forge/goals#outside",
+            "forge-iroh://paired-node/admin",
+            "forge-iroh://paired-node/forge/%2E%2E/admin"
+        ] {
+            XCTAssertNil(
+                CompanionWatchHandoffURLPolicy.navigationURL(
+                    pendingURL: URL(string: blockedValue),
+                    pairedBaseURL: pairedBaseURL
+                ),
+                "Unexpectedly accepted \(blockedValue)"
+            )
+        }
+
+        XCTAssertEqual(
+            ForgeWebNavigationPolicy.disposition(
+                for: try XCTUnwrap(URL(string: "https://external.example/export.zip")),
+                relativeTo: pairedBaseURL,
+                isUserActivated: false,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: true
+            ),
+            .cancel
+        )
+    }
+
+    func testPeerNativeRouteInventoryContainsOnlyExecutableCompanionContracts() {
+        let actual = Set(PeerAPIRoute.allCases.map { "\($0.method.rawValue) \($0.pathTemplate)" })
+        let expected: Set<String> = [
+            "GET /api/v1/peers/human-presence",
+            "POST /api/v1/peers/human-presence/options",
+            "POST /api/v1/peers/human-presence/verify",
+            "POST /api/v1/peers/invitations",
+            "GET /api/v1/peers/invitations/:invitationId",
+            "DELETE /api/v1/peers/invitations/:invitationId",
+            "POST /api/v1/peers/pairings/accept",
+            "POST /api/v1/peers/pairings/:pairingId/confirm",
+            "GET /api/v1/peers/requests",
+            "POST /api/v1/peers/requests/:requestId/accept",
+            "POST /api/v1/peers/requests/:requestId/reject",
+            "GET /api/v1/peers/relationships",
+            "GET /api/v1/peers/relationships/:relationshipId",
+            "POST /api/v1/peers/relationships/:relationshipId/revoke",
+            "GET /api/v1/peers/relationships/:relationshipId/devices",
+            "POST /api/v1/peers/relationships/:relationshipId/devices/:deviceId/approve",
+            "POST /api/v1/peers/relationships/:relationshipId/devices/:deviceId/remove",
+            "GET /api/v1/peers/relationships/:relationshipId/grants",
+            "POST /api/v1/peers/relationships/:relationshipId/grants/preview",
+            "POST /api/v1/peers/relationships/:relationshipId/grants/propose",
+            "POST /api/v1/peers/grants/:grantId/accept",
+            "POST /api/v1/peers/grants/:grantId/counter",
+            "POST /api/v1/peers/grants/:grantId/revoke",
+            "GET /api/v1/peers/relationships/:relationshipId/sync",
+            "POST /api/v1/peers/relationships/:relationshipId/resync",
+            "GET /api/v1/peers/relationships/:relationshipId/diagnostics"
+        ]
+
+        XCTAssertEqual(PeerAPIRoute.allCases.count, 26)
+        XCTAssertEqual(actual, expected)
+        XCTAssertTrue(actual.allSatisfy { $0.contains("/api/v1/peers/") })
+        XCTAssertFalse(actual.contains { $0.contains("/api/v1/people") })
+        XCTAssertEqual(
+            try PeerAPIRoute.getPeerRelationship.resolvedPath(parameters: ["relationshipId": "../other"]),
+            "/api/v1/peers/relationships/..%2Fother"
+        )
+    }
+
+    func testPeerSwiftRequestProofBindsExactMethodPathBodySessionAndDevice() async throws {
+        let identityStore = makePeerIdentityStore()
+        let transport = PeerTestTransport(steps: [
+            .response(
+                peerJSONResponse(
+                    #"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            )
+        ])
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+
+        _ = try await client.listRelationships(pairing: makePeerPairing())
+        let request = try XCTUnwrap(transport.requests.first)
+        let signatureText = try XCTUnwrap(
+            request.headers["X-Forge-Companion-Request-Signature"]
+        )
+        let nonce = try XCTUnwrap(
+            request.headers["X-Forge-Companion-Request-Nonce"]
+        )
+        let issuedAt = try XCTUnwrap(
+            request.headers["X-Forge-Companion-Request-Issued-At"]
+        )
+        let identity = try identityStore.identity()
+        let proof = PeerTestRequestSignatureProof(
+            bodySha256: SHA256.hash(data: Data())
+                .map { String(format: "%02x", $0) }
+                .joined(),
+            deviceId: identity.deviceId,
+            enrollmentId: "enrollment-test",
+            issuedAt: issuedAt,
+            keyId: "key-test",
+            method: "GET",
+            nonce: nonce,
+            ownerUserId: "owner-local",
+            path: request.requestTarget,
+            protocolName: PeerCompanionSecurityContract.requestProtocol,
+            sessionId: makePeerPairing().sessionId
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let proofData = try encoder.encode(proof)
+        let publicKey = try P256.Signing.PublicKey(
+            x963Representation: try XCTUnwrap(PeerBase64URL.decode(identity.publicKey))
+        )
+        let signature = try P256.Signing.ECDSASignature(
+            derRepresentation: try XCTUnwrap(PeerBase64URL.decode(signatureText))
+        )
+
+        XCTAssertEqual(
+            request.requestTarget,
+            "/api/v1/peers/relationships?limit=100"
+        )
+        XCTAssertEqual(request.headers["X-Forge-Companion-Session-Id"], "pair-peer-tests")
+        XCTAssertEqual(request.headers["X-Forge-Companion-Device-Id"], identity.deviceId)
+        XCTAssertEqual(request.headers["X-Forge-Companion-Enrollment-Id"], "enrollment-test")
+        XCTAssertEqual(request.headers["X-Forge-Companion-Key-Id"], "key-test")
+        XCTAssertNil(request.headers["X-Forge-Companion-Pairing-Token"])
+        XCTAssertNil(request.headers["X-Forge-Companion-Public-Key"])
+        XCTAssertEqual(nonce.count, 32)
+        XCTAssertTrue(publicKey.isValidSignature(signature, for: proofData))
+        XCTAssertFalse(request.requestTarget.contains(makePeerPairing().pairingToken))
+
+        let tampered = PeerTestRequestSignatureProof(
+            bodySha256: String(repeating: "0", count: 64),
+            deviceId: identity.deviceId,
+            enrollmentId: "enrollment-test",
+            issuedAt: issuedAt,
+            keyId: "key-test",
+            method: "POST",
+            nonce: nonce,
+            ownerUserId: "owner-local",
+            path: "/api/v1/peers/relationships/tampered",
+            protocolName: PeerCompanionSecurityContract.requestProtocol,
+            sessionId: makePeerPairing().sessionId
+        )
+        XCTAssertFalse(
+            publicKey.isValidSignature(signature, for: try encoder.encode(tampered))
+        )
+    }
+
+    func testPeerV2CanonicalWireUsesP256AndIgnoresLegacyEd25519Material() throws {
+        let secrets = PeerMemorySecretStore()
+        secrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: "forge_peer_device_ed25519_private_key_v1"
+        )
+        var privateScalar = Data(repeating: 0, count: 31)
+        privateScalar.append(1)
+        let keys = PeerTestDeviceKeyOperations(
+            privateKey: try P256.Signing.PrivateKey(rawRepresentation: privateScalar)
+        )
+        let identityStore = makePeerIdentityStore(keys: keys, legacySecrets: secrets)
+        let identity = try identityStore.identity()
+        let proof = PeerTestRequestSignatureProof(
+            bodySha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            deviceId: identity.deviceId,
+            enrollmentId: "enrollment-wire-fixture",
+            issuedAt: "2026-07-15T12:00:00Z",
+            keyId: "key-wire-fixture",
+            method: "GET",
+            nonce: "0123456789abcdef0123456789abcdef",
+            ownerUserId: "owner-wire-fixture",
+            path: "/api/v1/peers/relationships?limit=100",
+            protocolName: PeerCompanionSecurityContract.requestProtocol,
+            sessionId: "pair-swift-wire-fixture"
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let canonical = try encoder.encode(proof)
+
+        XCTAssertEqual(
+            String(decoding: canonical, as: UTF8.self),
+            #"{"bodySha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","deviceId":"\#(identity.deviceId)","enrollmentId":"enrollment-wire-fixture","issuedAt":"2026-07-15T12:00:00Z","keyId":"key-wire-fixture","method":"GET","nonce":"0123456789abcdef0123456789abcdef","ownerUserId":"owner-wire-fixture","path":"/api/v1/peers/relationships?limit=100","protocol":"forge-peer-companion-request/v2","sessionId":"pair-swift-wire-fixture"}"#
+        )
+        XCTAssertEqual(identity.algorithm, "ES256")
+        XCTAssertEqual(identity.publicKeyFormat, "ansi-x963")
+        XCTAssertEqual(identity.protection, "secure-enclave-user-presence")
+        let publicKey = try P256.Signing.PublicKey(
+            x963Representation: try XCTUnwrap(PeerBase64URL.decode(identity.publicKey))
+        )
+        let signature = try P256.Signing.ECDSASignature(
+            derRepresentation: try XCTUnwrap(PeerBase64URL.decode(
+                try identityStore.sign(data: canonical, reason: "Test user presence")
+            ))
+        )
+        XCTAssertTrue(publicKey.isValidSignature(signature, for: canonical))
+        XCTAssertNotEqual(secrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey), nil)
+    }
+
+    func testPeerStolenLegacyBootstrapCannotAuthenticateOrImplicitlyEnroll() async throws {
+        let stolenToken = "stolen-legacy-bootstrap-token"
+        let pairing = makePeerPairing(pairingToken: stolenToken)
+        let legacySecrets = PeerMemorySecretStore()
+        legacySecrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey
+        )
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let enrollmentSecrets = PeerMemorySecretStore()
+        let enrollmentVault = PeerCompanionEnrollmentVault(secrets: enrollmentSecrets)
+        let transport = PeerTestTransport()
+        let client = PeerAPIClient(
+            transport: transport,
+            identityStore: makePeerIdentityStore(
+                keys: keys,
+                legacySecrets: legacySecrets
+            ),
+            enrollmentVault: enrollmentVault
+        )
+
+        do {
+            _ = try await client.listRelationships(pairing: pairing)
+            XCTFail("A legacy bootstrap token must not authenticate People")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .secureEnrollmentRequired)
+        }
+
+        let context = PeerCompanionEnrollmentContext(
+            sessionId: pairing.sessionId,
+            ownerUserId: "owner-local",
+            apiBaseURL: pairing.apiBaseUrl
+        )
+        XCTAssertTrue(transport.requests.isEmpty)
+        XCTAssertEqual(keys.createCount, 0)
+        XCTAssertEqual(keys.signCount, 0)
+        XCTAssertNil(try enrollmentVault.pending(context: context))
+        XCTAssertNil(try enrollmentVault.receipt(context: context))
+        XCTAssertNotNil(
+            legacySecrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey)
+        )
+        XCTAssertFalse(enrollmentSecrets.values.values.contains { data in
+            String(decoding: data, as: UTF8.self).contains(stolenToken)
+        })
+    }
+
+    @MainActor
+    func testPeerUpgradedSessionAttackerFirstEnrollmentFailsWithoutHumanOperatorSession() async throws {
+        let pairing = makePeerPairing(pairingToken: "stolen-upgraded-session-token")
+        let legacySecrets = PeerMemorySecretStore()
+        legacySecrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey
+        )
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let identityStore = makePeerIdentityStore(
+            keys: keys,
+            legacySecrets: legacySecrets
+        )
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let companionTransport = PeerTestTransport(steps: [
+            .response(peerJSONResponse(#"{"enrolled":true}"#))
+        ])
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .failure(PeopleWatchPinError.operatorSessionRequired)
+        ])
+        let client = PeerAPIClient(
+            transport: companionTransport,
+            identityStore: identityStore,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: operatorTransport
+        )
+
+        do {
+            _ = try await client.enrollCompanion(
+                pairing: pairing,
+                ownerUserId: "owner-local"
+            )
+            XCTFail("A paired session alone must not enroll the first caller's key")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .operatorSessionRequired)
+        }
+
+        XCTAssertTrue(companionTransport.requests.isEmpty)
+        XCTAssertEqual(operatorTransport.requests.count, 1)
+        let optionsBody = try XCTUnwrap(operatorTransport.requests.first?.body)
+        let options = try JSONDecoder().decode(
+            PeerTestEnrollmentOptionsBody.self,
+            from: optionsBody
+        )
+        XCTAssertEqual(options.device.algorithm, "ES256")
+        XCTAssertEqual(options.device.publicKeyFormat, "ansi-x963")
+        XCTAssertEqual(options.device.protection, "secure-enclave-user-presence")
+        XCTAssertFalse(String(decoding: optionsBody, as: UTF8.self).contains(pairing.pairingToken))
+        XCTAssertEqual(keys.createCount, 1)
+        XCTAssertEqual(keys.signCount, 0)
+        XCTAssertNil(try enrollmentVault.receipt(
+            context: PeerCompanionEnrollmentContext(
+                sessionId: pairing.sessionId,
+                ownerUserId: "owner-local",
+                apiBaseURL: pairing.apiBaseUrl
+            )
+        ))
+        XCTAssertNotNil(
+            legacySecrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey)
+        )
+    }
+
+    @MainActor
+    func testPeerExplicitEnrollmentUsesOperatorSessionP256PresenceProofAndRetiresLegacy() async throws {
+        let pairing = makePeerPairing(pairingToken: "legacy-token-must-never-cross-wire")
+        let legacySecrets = PeerMemorySecretStore()
+        legacySecrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey
+        )
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let identityStore = makePeerIdentityStore(
+            keys: keys,
+            legacySecrets: legacySecrets
+        )
+        let enrollmentSecrets = PeerMemorySecretStore()
+        let enrollmentVault = PeerCompanionEnrollmentVault(secrets: enrollmentSecrets)
+        let regularTransport = PeerTestTransport()
+        let context = PeerCompanionEnrollmentContext(
+            sessionId: pairing.sessionId,
+            ownerUserId: "owner-local",
+            apiBaseURL: pairing.apiBaseUrl
+        )
+        var issuedChallenge: PeerTestEnrollmentChallenge?
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .handler { request in
+                XCTAssertEqual(request.method, "POST")
+                XCTAssertEqual(
+                    request.requestTarget,
+                    PeerCompanionSecurityContract.enrollmentOptionsPath
+                )
+                XCTAssertNil(request.headers["X-Forge-Companion-Pairing-Token"])
+                let body = try XCTUnwrap(request.body)
+                let bodyText = String(decoding: body, as: UTF8.self)
+                XCTAssertFalse(bodyText.contains(pairing.pairingToken))
+                XCTAssertFalse(bodyText.contains("authenticatedAt"))
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: body
+                )
+                XCTAssertEqual(
+                    options.protocolName,
+                    PeerCompanionSecurityContract.enrollmentProtocol
+                )
+                XCTAssertEqual(options.pairingSessionId, pairing.sessionId)
+                XCTAssertEqual(options.device.algorithm, "ES256")
+                XCTAssertEqual(options.device.publicKeyFormat, "ansi-x963")
+                XCTAssertEqual(
+                    options.device.protection,
+                    "secure-enclave-user-presence"
+                )
+                XCTAssertEqual(
+                    try enrollmentVault.pending(context: context)?.attemptId,
+                    options.enrollmentAttemptId
+                )
+
+                let now = Date()
+                let challenge = PeerTestEnrollmentChallenge(
+                    protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                    challengeId: "enrollment-challenge-success",
+                    challenge: String(repeating: "E", count: 43),
+                    enrollmentAttemptId: options.enrollmentAttemptId,
+                    pairingSessionId: options.pairingSessionId,
+                    ownerUserId: "owner-local",
+                    device: options.device,
+                    issuedAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(-1)
+                    ),
+                    expiresAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(120)
+                    )
+                )
+                issuedChallenge = challenge
+                return PeopleWatchOperatorResponse(
+                    statusCode: 200,
+                    data: try JSONEncoder().encode(challenge)
+                )
+            },
+            .handler { request in
+                XCTAssertEqual(
+                    request.requestTarget,
+                    PeerCompanionSecurityContract.enrollmentVerifyPath
+                )
+                XCTAssertNil(request.headers["X-Forge-Companion-Pairing-Token"])
+                let body = try XCTUnwrap(request.body)
+                let bodyText = String(decoding: body, as: UTF8.self)
+                XCTAssertFalse(bodyText.contains(pairing.pairingToken))
+                XCTAssertFalse(bodyText.contains("authenticatedAt"))
+                XCTAssertFalse(bodyText.contains("publicKey"))
+                XCTAssertFalse(bodyText.contains("device"))
+                let verification = try JSONDecoder().decode(
+                    PeerTestEnrollmentVerifyBody.self,
+                    from: body
+                )
+                let challenge = try XCTUnwrap(issuedChallenge)
+                XCTAssertEqual(
+                    verification.protocolName,
+                    PeerCompanionSecurityContract.enrollmentProtocol
+                )
+                XCTAssertEqual(verification.challengeId, challenge.challengeId)
+                XCTAssertEqual(
+                    verification.enrollmentAttemptId,
+                    challenge.enrollmentAttemptId
+                )
+                XCTAssertEqual(verification.pairingSessionId, pairing.sessionId)
+
+                let proof = PeerTestEnrollmentProof(
+                    algorithm: challenge.device.algorithm,
+                    challenge: challenge.challenge,
+                    challengeId: challenge.challengeId,
+                    deviceId: challenge.device.deviceId,
+                    enrollmentAttemptId: challenge.enrollmentAttemptId,
+                    expiresAt: challenge.expiresAt,
+                    issuedAt: challenge.issuedAt,
+                    ownerUserId: challenge.ownerUserId,
+                    pairingSessionId: challenge.pairingSessionId,
+                    protocolName: challenge.protocolName,
+                    publicKey: challenge.device.publicKey,
+                    publicKeyFormat: challenge.device.publicKeyFormat,
+                    protection: challenge.device.protection
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                let publicKey = try P256.Signing.PublicKey(
+                    x963Representation: try XCTUnwrap(
+                        PeerBase64URL.decode(challenge.device.publicKey)
+                    )
+                )
+                let signature = try P256.Signing.ECDSASignature(
+                    derRepresentation: try XCTUnwrap(
+                        PeerBase64URL.decode(verification.signature)
+                    )
+                )
+                XCTAssertTrue(
+                    publicKey.isValidSignature(signature, for: try encoder.encode(proof))
+                )
+
+                let receipt = self.makePeerEnrollmentReceipt(
+                    identity: challenge.device.identity,
+                    pairing: pairing
+                )
+                return PeopleWatchOperatorResponse(
+                    statusCode: 201,
+                    data: try JSONEncoder().encode(receipt)
+                )
+            }
+        ])
+        let client = PeerAPIClient(
+            transport: regularTransport,
+            identityStore: identityStore,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: operatorTransport
+        )
+
+        let receipt = try await client.enrollCompanion(
+            pairing: pairing,
+            ownerUserId: "owner-local"
+        )
+
+        XCTAssertEqual(receipt.identity.identity, try identityStore.identity())
+        XCTAssertEqual(keys.createCount, 1)
+        XCTAssertEqual(keys.signCount, 1)
+        XCTAssertEqual(
+            keys.authorizations,
+            [.userPresence(reason: "Enroll this iPhone for Forge People")]
+        )
+        XCTAssertTrue(regularTransport.requests.isEmpty)
+        XCTAssertEqual(operatorTransport.requests.map(\.requestTarget), [
+            PeerCompanionSecurityContract.enrollmentOptionsPath,
+            PeerCompanionSecurityContract.enrollmentVerifyPath
+        ])
+        XCTAssertNil(try enrollmentVault.pending(context: context))
+        XCTAssertEqual(try enrollmentVault.receipt(context: context), receipt)
+        XCTAssertNil(
+            legacySecrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey)
+        )
+    }
+
+    @MainActor
+    func testPeerLiveOperatorEnrollmentUsesAuthenticatedCookieAndExactV2Wire() async throws {
+        PeopleWatchURLProtocol.reset()
+        defer { PeopleWatchURLProtocol.reset() }
+
+        let pairing = makePeerPairing(pairingToken: "stolen-token-not-operator-proof")
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let identityStore = makePeerIdentityStore(keys: keys)
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let state = PeerTestEnrollmentState()
+        PeopleWatchURLProtocol.handler = { request in
+            let body = try XCTUnwrap(PeopleWatchURLProtocol.bodies.last ?? nil)
+            switch request.url?.path {
+            case PeerCompanionSecurityContract.enrollmentOptionsPath:
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: body
+                )
+                let now = Date()
+                let challenge = PeerTestEnrollmentChallenge(
+                    protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                    challengeId: "live-enrollment-challenge",
+                    challenge: String(repeating: "L", count: 43),
+                    enrollmentAttemptId: options.enrollmentAttemptId,
+                    pairingSessionId: options.pairingSessionId,
+                    ownerUserId: "owner-local",
+                    device: options.device,
+                    issuedAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(-1)
+                    ),
+                    expiresAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(120)
+                    )
+                )
+                state.store(challenge)
+                return (200, try JSONEncoder().encode(challenge))
+
+            case PeerCompanionSecurityContract.enrollmentVerifyPath:
+                let verification = try JSONDecoder().decode(
+                    PeerTestEnrollmentVerifyBody.self,
+                    from: body
+                )
+                let challenge = try XCTUnwrap(state.challenge())
+                let proof = PeerTestEnrollmentProof(
+                    algorithm: challenge.device.algorithm,
+                    challenge: challenge.challenge,
+                    challengeId: challenge.challengeId,
+                    deviceId: challenge.device.deviceId,
+                    enrollmentAttemptId: challenge.enrollmentAttemptId,
+                    expiresAt: challenge.expiresAt,
+                    issuedAt: challenge.issuedAt,
+                    ownerUserId: challenge.ownerUserId,
+                    pairingSessionId: challenge.pairingSessionId,
+                    protocolName: challenge.protocolName,
+                    publicKey: challenge.device.publicKey,
+                    publicKeyFormat: challenge.device.publicKeyFormat,
+                    protection: challenge.device.protection
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                let signature = try P256.Signing.ECDSASignature(
+                    derRepresentation: try XCTUnwrap(
+                        PeerBase64URL.decode(verification.signature)
+                    )
+                )
+                let publicKey = try P256.Signing.PublicKey(
+                    x963Representation: try XCTUnwrap(
+                        PeerBase64URL.decode(challenge.device.publicKey)
+                    )
+                )
+                guard publicKey.isValidSignature(
+                    signature,
+                    for: try encoder.encode(proof)
+                ) else {
+                    throw PeerAPIError.invalidResponse
+                }
+                return (
+                    201,
+                    try JSONEncoder().encode(self.makePeerEnrollmentReceipt(
+                        identity: challenge.device.identity,
+                        pairing: pairing
+                    ))
+                )
+
+            default:
+                return (404, Data(#"{"code":"not_found"}"#.utf8))
+            }
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.protocolClasses = [PeopleWatchURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let dataStore = WKWebsiteDataStore.nonPersistent()
+        let cookieStore = dataStore.httpCookieStore
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "forge.example",
+            .path: "/",
+            .name: "forge_session",
+            .value: "authenticated-human-session",
+            .secure: "TRUE",
+            .expires: Date().addingTimeInterval(300)
+        ]))
+        await withCheckedContinuation { continuation in
+            cookieStore.setCookie(cookie) { continuation.resume() }
+        }
+
+        let regularTransport = PeerTestTransport()
+        let client = PeerAPIClient(
+            transport: regularTransport,
+            identityStore: identityStore,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: LivePeopleWatchOperatorTransport(
+                session: session,
+                cookieStore: cookieStore
+            )
+        )
+        _ = try await client.enrollCompanion(
+            pairing: pairing,
+            ownerUserId: "owner-local"
+        )
+
+        XCTAssertTrue(regularTransport.requests.isEmpty)
+        XCTAssertEqual(PeopleWatchURLProtocol.requests.map { $0.url?.path }, [
+            PeerCompanionSecurityContract.enrollmentOptionsPath,
+            PeerCompanionSecurityContract.enrollmentVerifyPath
+        ])
+        XCTAssertEqual(PeopleWatchURLProtocol.bodies.count, 2)
+        for request in PeopleWatchURLProtocol.requests {
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Cookie"),
+                "forge_session=authenticated-human-session"
+            )
+            XCTAssertNil(
+                request.value(forHTTPHeaderField: "X-Forge-Companion-Pairing-Token")
+            )
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        }
+        for body in PeopleWatchURLProtocol.bodies.compactMap({ $0 }) {
+            let text = String(decoding: body, as: UTF8.self)
+            XCTAssertFalse(text.contains(pairing.pairingToken))
+            XCTAssertFalse(text.contains("authenticatedAt"))
+        }
+        let verifyText = String(
+            decoding: try XCTUnwrap(PeopleWatchURLProtocol.bodies[1]),
+            as: UTF8.self
+        )
+        XCTAssertFalse(verifyText.contains("publicKey"))
+        XCTAssertFalse(verifyText.contains("device"))
+        XCTAssertEqual(keys.signCount, 1)
+        withExtendedLifetime(dataStore) {}
+    }
+
+    @MainActor
+    func testPeerEnrollmentUserPresenceCancellationFailsClosed() async throws {
+        let pairing = makePeerPairing()
+        let legacySecrets = PeerMemorySecretStore()
+        legacySecrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey
+        )
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        keys.signingError = .userPresenceCancelled
+        let identityStore = makePeerIdentityStore(
+            keys: keys,
+            legacySecrets: legacySecrets
+        )
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let context = PeerCompanionEnrollmentContext(
+            sessionId: pairing.sessionId,
+            ownerUserId: "owner-local",
+            apiBaseURL: pairing.apiBaseUrl
+        )
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .handler { request in
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let now = Date()
+                return PeopleWatchOperatorResponse(
+                    statusCode: 200,
+                    data: try JSONEncoder().encode(PeerTestEnrollmentChallenge(
+                        protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                        challengeId: "enrollment-challenge-cancel",
+                        challenge: String(repeating: "C", count: 43),
+                        enrollmentAttemptId: options.enrollmentAttemptId,
+                        pairingSessionId: options.pairingSessionId,
+                        ownerUserId: "owner-local",
+                        device: options.device,
+                        issuedAt: ISO8601DateFormatter().string(from: now),
+                        expiresAt: ISO8601DateFormatter().string(
+                            from: now.addingTimeInterval(120)
+                        )
+                    ))
+                )
+            }
+        ])
+        let client = PeerAPIClient(
+            transport: PeerTestTransport(),
+            identityStore: identityStore,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: operatorTransport
+        )
+
+        do {
+            _ = try await client.enrollCompanion(
+                pairing: pairing,
+                ownerUserId: "owner-local"
+            )
+            XCTFail("Cancellation must not enroll the key")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .localAuthentication(.cancelled))
+        }
+
+        XCTAssertEqual(operatorTransport.requests.count, 1)
+        XCTAssertEqual(keys.signCount, 1)
+        XCTAssertNotNil(try enrollmentVault.pending(context: context))
+        XCTAssertNil(try enrollmentVault.receipt(context: context))
+        XCTAssertNotNil(
+            legacySecrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey)
+        )
+    }
+
+    @MainActor
+    func testPeerEnrollmentRejectsExpiredChallengeBeforeUserPresence() async throws {
+        let pairing = makePeerPairing()
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .handler { request in
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let now = Date()
+                return PeopleWatchOperatorResponse(
+                    statusCode: 200,
+                    data: try JSONEncoder().encode(PeerTestEnrollmentChallenge(
+                        protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                        challengeId: "expired-enrollment-challenge",
+                        challenge: String(repeating: "X", count: 43),
+                        enrollmentAttemptId: options.enrollmentAttemptId,
+                        pairingSessionId: options.pairingSessionId,
+                        ownerUserId: "owner-local",
+                        device: options.device,
+                        issuedAt: ISO8601DateFormatter().string(
+                            from: now.addingTimeInterval(-120)
+                        ),
+                        expiresAt: ISO8601DateFormatter().string(
+                            from: now.addingTimeInterval(-1)
+                        )
+                    ))
+                )
+            }
+        ])
+        let client = PeerAPIClient(
+            transport: PeerTestTransport(),
+            identityStore: makePeerIdentityStore(keys: keys),
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: operatorTransport
+        )
+
+        do {
+            _ = try await client.enrollCompanion(
+                pairing: pairing,
+                ownerUserId: "owner-local"
+            )
+            XCTFail("An expired enrollment challenge must fail closed")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .invalidResponse)
+        }
+        XCTAssertEqual(operatorTransport.requests.count, 1)
+        XCTAssertEqual(keys.signCount, 0)
+        XCTAssertNil(try enrollmentVault.receipt(
+            context: PeerCompanionEnrollmentContext(
+                sessionId: pairing.sessionId,
+                ownerUserId: "owner-local",
+                apiBaseURL: pairing.apiBaseUrl
+            )
+        ))
+    }
+
+    @MainActor
+    func testPeerEnrollmentRejectsReceiptUntilLegacyBootstrapIsDisabled() async throws {
+        let pairing = makePeerPairing()
+        let legacySecrets = PeerMemorySecretStore()
+        legacySecrets.seed(
+            Data((0..<32).map(UInt8.init)),
+            forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey
+        )
+        let keys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let identityStore = makePeerIdentityStore(
+            keys: keys,
+            legacySecrets: legacySecrets
+        )
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let state = PeerTestEnrollmentState()
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .handler { request in
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let now = Date()
+                let challenge = PeerTestEnrollmentChallenge(
+                    protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                    challengeId: "legacy-enabled-enrollment",
+                    challenge: String(repeating: "B", count: 43),
+                    enrollmentAttemptId: options.enrollmentAttemptId,
+                    pairingSessionId: options.pairingSessionId,
+                    ownerUserId: "owner-local",
+                    device: options.device,
+                    issuedAt: ISO8601DateFormatter().string(from: now),
+                    expiresAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(120)
+                    )
+                )
+                state.store(challenge)
+                return PeopleWatchOperatorResponse(
+                    statusCode: 200,
+                    data: try JSONEncoder().encode(challenge)
+                )
+            },
+            .handler { request in
+                _ = try JSONDecoder().decode(
+                    PeerTestEnrollmentVerifyBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let challenge = try XCTUnwrap(state.challenge())
+                return PeopleWatchOperatorResponse(
+                    statusCode: 201,
+                    data: try JSONEncoder().encode(self.makePeerEnrollmentReceipt(
+                        identity: challenge.device.identity,
+                        pairing: pairing,
+                        legacyBootstrapAccepted: true
+                    ))
+                )
+            }
+        ])
+        let client = PeerAPIClient(
+            transport: PeerTestTransport(),
+            identityStore: identityStore,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: operatorTransport
+        )
+
+        do {
+            _ = try await client.enrollCompanion(
+                pairing: pairing,
+                ownerUserId: "owner-local"
+            )
+            XCTFail("Enrollment must not complete while legacy bootstrap remains valid")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .invalidResponse)
+        }
+        XCTAssertEqual(operatorTransport.requests.count, 2)
+        XCTAssertEqual(keys.signCount, 1)
+        XCTAssertNil(try enrollmentVault.receipt(
+            context: PeerCompanionEnrollmentContext(
+                sessionId: pairing.sessionId,
+                ownerUserId: "owner-local",
+                apiBaseURL: pairing.apiBaseUrl
+            )
+        ))
+        XCTAssertNotNil(
+            legacySecrets.load(forKey: PeerDeviceIdentityStore.legacyPrivateKeyKey)
+        )
+    }
+
+    @MainActor
+    func testPeerEnrollmentRejectsKeySubstitutionBeforeSigningOrDispatch() async throws {
+        let pairing = makePeerPairing()
+        let enrollmentKeys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        let identityStore = makePeerIdentityStore(keys: enrollmentKeys)
+        let replacementIdentity = try PeerDeviceIdentityStore.identity(
+            publicKeyX963: P256.Signing.PrivateKey().publicKey.x963Representation
+        )
+        let operatorTransport = PeopleWatchTestTransport(steps: [
+            .handler { request in
+                let options = try JSONDecoder().decode(
+                    PeerTestEnrollmentOptionsBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let now = Date()
+                return PeopleWatchOperatorResponse(
+                    statusCode: 200,
+                    data: try JSONEncoder().encode(PeerTestEnrollmentChallenge(
+                        protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+                        challengeId: "substituted-key-challenge",
+                        challenge: String(repeating: "K", count: 43),
+                        enrollmentAttemptId: options.enrollmentAttemptId,
+                        pairingSessionId: options.pairingSessionId,
+                        ownerUserId: "owner-local",
+                        device: PeerDeviceIdentityRecord(replacementIdentity),
+                        issuedAt: ISO8601DateFormatter().string(from: now),
+                        expiresAt: ISO8601DateFormatter().string(
+                            from: now.addingTimeInterval(120)
+                        )
+                    ))
+                )
+            }
+        ])
+        let client = PeerAPIClient(
+            transport: PeerTestTransport(),
+            identityStore: identityStore,
+            enrollmentVault: PeerCompanionEnrollmentVault(
+                secrets: PeerMemorySecretStore()
+            ),
+            enrollmentTransport: operatorTransport
+        )
+
+        do {
+            _ = try await client.enrollCompanion(
+                pairing: pairing,
+                ownerUserId: "owner-local"
+            )
+            XCTFail("A substituted challenge key must be rejected")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .invalidResponse)
+        }
+        XCTAssertEqual(operatorTransport.requests.count, 1)
+        XCTAssertEqual(enrollmentKeys.signCount, 0)
+
+        let enrolledKeys = PeerTestDeviceKeyOperations()
+        let enrolledIdentityStore = makePeerIdentityStore(keys: enrolledKeys)
+        let ordinaryTransport = PeerTestTransport()
+        let enrolledClient = makeEnrolledPeerClient(
+            transport: ordinaryTransport,
+            identityStore: enrolledIdentityStore
+        )
+        enrolledKeys.substitutedIdentity = replacementIdentity
+        do {
+            _ = try await enrolledClient.listRelationships(pairing: pairing)
+            XCTFail("A key that differs from the enrollment receipt must be rejected")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .secureEnrollmentRequired)
+        }
+        XCTAssertTrue(ordinaryTransport.requests.isEmpty)
+        XCTAssertEqual(enrolledKeys.signCount, 0)
+    }
+
+    func testPeerSecureEnclaveConfigurationRejectsSigningWithoutUserPresence() throws {
+        XCTAssertTrue(
+            PeerCompanionSecurityContract.isValidChallenge(String(repeating: "A", count: 43))
+        )
+        XCTAssertFalse(
+            PeerCompanionSecurityContract.isValidChallenge(String(repeating: "A", count: 42))
+        )
+        XCTAssertFalse(
+            PeerCompanionSecurityContract.isValidChallenge(String(repeating: "!", count: 43))
+        )
+        XCTAssertTrue(
+            SystemPeerSecureEnclaveKeyOperations.accessControlFlags.contains(.privateKeyUsage)
+        )
+        XCTAssertTrue(
+            SystemPeerSecureEnclaveKeyOperations.accessControlFlags.contains(.userPresence)
+        )
+        let interactiveContext = try SystemPeerSecureEnclaveKeyOperations.authenticationContext(
+            for: .userPresence(reason: "Approve the People action")
+        )
+        XCTAssertFalse(interactiveContext.interactionNotAllowed)
+        XCTAssertEqual(interactiveContext.localizedReason, "Approve the People action")
+        let nonInteractiveContext = try SystemPeerSecureEnclaveKeyOperations.authenticationContext(
+            for: .nonInteractive
+        )
+        XCTAssertTrue(nonInteractiveContext.interactionNotAllowed)
+        XCTAssertThrowsError(
+            try SystemPeerSecureEnclaveKeyOperations.authenticationContext(
+                for: .userPresence(reason: "   ")
+            )
+        ) { error in
+            XCTAssertEqual(error as? PeerDeviceIdentityError, .userPresenceRequired)
+        }
+
+        let keys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: keys)
+        XCTAssertThrowsError(
+            try identityStore.sign(
+                data: Data("unsigned".utf8),
+                authorization: .nonInteractive
+            )
+        ) { error in
+            XCTAssertEqual(error as? PeerDeviceIdentityError, .userPresenceRequired)
+        }
+        XCTAssertEqual(keys.authorizations, [.nonInteractive])
+    }
+
+    func testPeerCompanionClientExecutesEveryAdvertisedNativeContract() async throws {
+        let keyOperations = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: keyOperations)
+        let identity = try identityStore.identity()
+        let transport = PeerTestTransport()
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+        let relationship = makePeerRelationship()
+        let device = makePeerDevice()
+        let grant = makePeerGrant()
+        let request = makePeerPendingRequest(id: "request-contract-device", kind: "device")
+        let pairingRequest = makePeerPendingRequest(
+            id: "pairing-contract",
+            kind: "pairing"
+        )
+        let invitation = makePeerInvitation()
+        let invitationStatus = makePeerInvitationStatus(invitation: invitation)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let page = PeerTestPageBody(limit: 100, hasMore: false, nextCursor: nil)
+        let proposalDraft = PeerGrantDraft.proposal(
+            label: "Availability and profile",
+            purpose: "Coordinate through Forge",
+            projections: [.availability, .profile],
+            approvedDeviceIds: [device.deviceId],
+            rollingFutureDays: 30,
+            retentionSeconds: 86_400,
+            expiresAt: "2099-01-01T00:00:00Z"
+        )
+
+        func previewResponse(
+            draft: PeerGrantDraft,
+            hash: String
+        ) throws -> Data {
+            let object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: encoder.encode(draft))
+                    as? [String: Any]
+            )
+            let rules = try XCTUnwrap(object["rules"] as? [[String: Any]])
+            let projectionIds = rules.compactMap { $0["projectionId"] as? String }
+            let direction = try XCTUnwrap(object["direction"])
+            let cachePolicy = try XCTUnwrap(object["cachePolicy"])
+            return try JSONSerialization.data(withJSONObject: [
+                "preview": [
+                    "hash": hash,
+                    "relationshipVersion": relationship.updatedAt,
+                    "exact": [
+                        "direction": direction,
+                        "rules": rules,
+                        "cachePolicy": cachePolicy,
+                        "effectiveAt": object["effectiveAt"] ?? NSNull(),
+                        "expiresAt": object["expiresAt"] ?? NSNull()
+                    ],
+                    "worstCase": [
+                        "projectionIds": projectionIds,
+                        "maximumResultCount": rules.count * 100,
+                        "maximumPayloadBytes": rules.count * 262_144,
+                        "maximumRetentionSeconds": 86_400,
+                        "allShareableRuleCount": rules.count,
+                        "currentApprovedDeviceCount": 1
+                    ],
+                    "samples": []
+                ]
+            ], options: [.sortedKeys])
+        }
+
+        func grantMutationResponse(_ grant: PeerGrant) throws -> Data {
+            var object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: encoder.encode(grant))
+                    as? [String: Any]
+            )
+            object.removeValue(forKey: "versionHash")
+            return try JSONSerialization.data(withJSONObject: [
+                "grant": object,
+                "versionHash": try XCTUnwrap(grant.versionHash)
+            ], options: [.sortedKeys])
+        }
+
+        transport.steps = [.response(peerPresenceStatusResponse(deviceId: identity.deviceId))]
+        _ = try await client.presenceStatus(pairing: makePeerPairing())
+
+        transport.steps = [.response(PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try encoder.encode(
+                PeerTestRelationshipsBody(relationships: [relationship], page: page)
+            )
+        ))]
+        _ = try await client.listRelationships(pairing: makePeerPairing())
+
+        transport.steps = [.response(try peerRequestsResponse(
+            requests: [peerPendingRequestJSONObject(id: request.id, kind: request.kind)],
+            hasMore: false,
+            nextCursor: nil
+        ))]
+        _ = try await client.listRequests(pairing: makePeerPairing())
+
+        transport.steps = [.response(PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try encoder.encode(
+                PeerTestRelationshipBody(
+                    relationship: relationship,
+                    devices: [device],
+                    grants: [grant]
+                )
+            )
+        ))]
+        _ = try await client.relationship(id: relationship.id, pairing: makePeerPairing())
+
+        transport.steps = [.response(PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try encoder.encode(["devices": [device]])
+        ))]
+        _ = try await client.devices(
+            relationshipId: relationship.id,
+            pairing: makePeerPairing()
+        )
+
+        transport.steps = [.response(PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try encoder.encode(PeerTestGrantsBody(grants: [grant], page: page))
+        ))]
+        _ = try await client.grants(
+            relationshipId: relationship.id,
+            pairing: makePeerPairing()
+        )
+
+        transport.steps = [.response(peerJSONResponse(
+            #"{"diagnostics":[{"id":"diagnostic-1","eventType":"peer_connected","actorClass":"companion_session","outcome":"allowed","createdAt":"2026-07-15T12:00:00Z"}],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+        ))]
+        _ = try await client.diagnostics(
+            relationshipId: relationship.id,
+            pairing: makePeerPairing()
+        )
+
+        let relationshipObject = try JSONSerialization.jsonObject(
+            with: encoder.encode(relationship)
+        )
+        transport.steps = [.response(PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try JSONSerialization.data(withJSONObject: [
+                "sync": [
+                    "relationship": relationshipObject,
+                    "pendingOutbox": 0,
+                    "pendingInbox": 0,
+                    "currentRemoteRecords": 2,
+                    "staleRemoteRecords": 0
+                ]
+            ], options: [.sortedKeys])
+        ))]
+        _ = try await client.syncStatus(
+            relationshipId: relationship.id,
+            pairing: makePeerPairing()
+        )
+
+        transport.steps = [.response(try peerInvitationStatusResponse(invitationStatus))]
+        _ = try await client.invitationStatus(
+            invitationId: invitation.id,
+            pairing: makePeerPairing()
+        )
+
+        func appendApproval(_ finalData: Data, character: Character) {
+            transport.steps.append(contentsOf: peerApprovedMutationSteps(
+                identityStore: identityStore,
+                challenge: String(repeating: character, count: 43),
+                capabilitySecret: String(repeating: "z", count: 43),
+                finalData: finalData
+            ))
+        }
+
+        appendApproval(try encoder.encode(["invitation": invitation]), character: "G")
+        _ = try await client.createInvitation(
+            label: "Contract invite",
+            idempotencyKey: "peer-invite-contract",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(
+            Data(#"{"canceled":true,"invitationId":"invite-peer-1"}"#.utf8),
+            character: "H"
+        )
+        _ = try await client.cancelInvitation(
+            invitationStatus,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        var review = PeerPairingReview.scanned(
+            PeerInviteQREnvelope(invitation: invitation)
+        )
+        appendApproval(
+            try peerRequestEnvelopeData(request: pairingRequest),
+            character: "I"
+        )
+        _ = try await client.acceptScannedInvitation(
+            review: review,
+            localPeerDeviceId: "peer-local-device-test",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        review = review.applying(pairingRequest)
+        appendApproval(
+            try peerConfirmationEnvelopeData(
+                relationshipId: relationship.id,
+                request: pairingRequest
+            ),
+            character: "J"
+        )
+        _ = try await client.confirmPairing(
+            review: review,
+            personName: "Remote Forge",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(try peerRequestEnvelopeData(request: request), character: "K")
+        _ = try await client.decideRequest(
+            request,
+            accept: true,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+        appendApproval(try peerRequestEnvelopeData(request: request), character: "L")
+        _ = try await client.decideRequest(
+            request,
+            accept: false,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(try encoder.encode(["device": device]), character: "M")
+        _ = try await client.mutateDevice(
+            route: .approvePeerDevice,
+            relationship: relationship,
+            device: device,
+            reason: "Approve contract device",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+        appendApproval(try encoder.encode(["device": device]), character: "N")
+        _ = try await client.mutateDevice(
+            route: .removePeerDevice,
+            relationship: relationship,
+            device: device,
+            reason: "Remove contract device",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(try encoder.encode(["relationship": relationship]), character: "O")
+        _ = try await client.revokeRelationship(
+            relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(
+            try previewResponse(draft: proposalDraft, hash: String(repeating: "c", count: 64)),
+            character: "P"
+        )
+        let proposalPreview = try await client.previewGrant(
+            draft: proposalDraft,
+            relationship: relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        ).preview
+
+        appendApproval(try grantMutationResponse(grant), character: "Q")
+        _ = try await client.proposeGrant(
+            draft: proposalDraft,
+            preview: proposalPreview,
+            relationship: relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(try grantMutationResponse(grant), character: "R")
+        _ = try await client.acceptGrant(
+            grant,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        let counterDraft = try XCTUnwrap(PeerGrantDraft.countering(
+            grant,
+            retainedAllowRuleIds: Set(grant.rules.map(\.id))
+        ))
+        appendApproval(
+            try previewResponse(draft: counterDraft, hash: String(repeating: "d", count: 64)),
+            character: "S"
+        )
+        let counterPreview = try await client.previewGrant(
+            draft: counterDraft,
+            relationship: relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        ).preview
+
+        appendApproval(try grantMutationResponse(grant), character: "T")
+        _ = try await client.counterGrant(
+            grant,
+            draft: counterDraft,
+            preview: counterPreview,
+            relationship: relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(
+            Data(#"{"requested":true,"envelopeIds":["envelope-contract-1"]}"#.utf8),
+            character: "U"
+        )
+        _ = try await client.requestResync(
+            relationship: relationship,
+            projectionIds: ["person.profile.v1", "calendar.availability.v1"],
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        appendApproval(try grantMutationResponse(grant), character: "V")
+        _ = try await client.revokeGrant(
+            grant,
+            expectedVersionHash: try XCTUnwrap(grant.versionHash),
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        XCTAssertEqual(Set(transport.requests.map(\.route)), Set(PeerAPIRoute.allCases))
+        XCTAssertEqual(keyOperations.signCount, transport.requests.count + 16)
+        XCTAssertTrue(keyOperations.authorizations.allSatisfy {
+            if case .userPresence(let reason) = $0 {
+                return reason.isEmpty == false
+            }
+            return false
+        })
+        XCTAssertFalse(transport.requests.contains {
+            $0.requestTarget.contains("/api/v1/people")
+        })
+        XCTAssertTrue(transport.requests.contains {
+            $0.route == .requestPeerResync && $0.requestTarget.hasSuffix("/resync")
+        })
+        for route in [
+            PeerAPIRoute.proposePeerGrant,
+            .acceptPeerGrant,
+            .counterPeerGrant,
+            .requestPeerResync
+        ] {
+            let request = try XCTUnwrap(
+                transport.requests.last(where: { $0.route == route })
+            )
+            let body = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: try XCTUnwrap(request.body))
+                    as? [String: Any]
+            )
+            XCTAssertNotNil(body["idempotencyKey"] as? String)
+            XCTAssertNotNil(
+                body[route == .acceptPeerGrant || route == .counterPeerGrant
+                    ? "expectedVersionHash"
+                    : "expectedRelationshipVersion"] as? String
+            )
+        }
+    }
+
+    func testPeerInviteQRIsVersionedAndDistinctFromOwnerCompanionPairing() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z"))
+        let peerText = try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+        let ownerPairing = makePeerPairing()
+        let ownerText = String(decoding: try JSONEncoder().encode(ownerPairing), as: UTF8.self)
+
+        XCTAssertEqual(NativeQRCodeClassifier.classify(peerText, now: now), .peerInvite)
+        XCTAssertEqual(NativeQRCodeClassifier.classify(ownerText, now: now), .ownerCompanion)
+        XCTAssertThrowsError(try PairingPayload.decodePairingText(peerText))
+        XCTAssertThrowsError(try PeerInviteQREnvelope.decode(ownerText, now: now))
+        let decoded = try PeerInviteQREnvelope.decode(peerText, now: now)
+        XCTAssertEqual(decoded.kind, "forge-peer-invite")
+        XCTAssertEqual(decoded.version, 1)
+    }
+
+    func testPeerScanStagesReviewWithoutNetworkOrApprovalAction() throws {
+        let transport = PeerTestTransport()
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: makePeerIdentityStore()
+        )
+        let store = PeoplePeerStore(
+            client: client,
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            now: { ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z")! }
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+
+        XCTAssertTrue(
+            store.stageScannedInvitation(
+                try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+            )
+        )
+        XCTAssertEqual(store.pairingReview?.stage, .scanned)
+        XCTAssertNil(store.pairingReview?.verificationPhrase)
+        XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    func testPeerExpiryAndReplayAreRejectedBeforeNetworkAction() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z"))
+        let expired = makePeerInvitation(expiresAt: "2026-07-15T11:59:59Z")
+        XCTAssertThrowsError(
+            try PeerInviteQREnvelope.decode(
+                PeerInviteQREnvelope(invitation: expired).encodedText(),
+                now: now
+            )
+        ) { error in
+            XCTAssertEqual(error as? PeerInviteValidationError, .expired)
+        }
+
+        let secrets = PeerMemorySecretStore()
+        let ledger = PeerReplayLedger(secrets: secrets)
+        try ledger.recordAccepted(invitationId: "invite-peer-1", now: now)
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: PeerTestTransport(),
+                identityStore: makePeerIdentityStore()
+            ),
+            replayLedger: ledger,
+            now: { now }
+        )
+
+        XCTAssertFalse(
+            store.stageScannedInvitation(
+                try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+            )
+        )
+        XCTAssertEqual(store.pairingReview?.stage, .replayed)
+        XCTAssertEqual(store.errorMessage, PeerAPIError.replayed.userMessage)
+    }
+
+    func testPeerVerifiedReviewShowsPhraseFingerprintAndInitialSharingOnlyAfterAPIData() {
+        let envelope = PeerInviteQREnvelope(invitation: makePeerInvitation())
+        let request = PeerPendingRequest(
+            id: "pairing-1",
+            relationshipId: nil,
+            kind: "pairing",
+            status: "pending",
+            version: 3,
+            payload: [
+                "transcriptHash": .string(String(repeating: "a", count: 64)),
+                "remoteLabel": .string("Ada's Forge"),
+                "deviceLabel": .string("Ada's iPhone"),
+                "verificationPhrase": .string("violet harbor seven"),
+                "requestedProjections": .array([.string("calendar.availability.v1")]),
+                "requestedFields": .array([.string("startsAt"), .string("endsAt")])
+            ],
+            expiresAt: "2099-01-01T00:00:00Z",
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:00:00Z"
+        )
+
+        let scanned = PeerPairingReview.scanned(envelope)
+        XCTAssertNil(scanned.verificationPhrase)
+        XCTAssertTrue(scanned.initialFields.isEmpty)
+
+        let verified = scanned.applying(request)
+        XCTAssertEqual(verified.stage, .verified)
+        XCTAssertEqual(verified.fingerprint, "ABCD-EFGH-JKLM-NPQR")
+        XCTAssertEqual(verified.verificationPhrase, "violet harbor seven")
+        XCTAssertEqual(verified.initialProjections, ["calendar.availability.v1"])
+        XCTAssertEqual(verified.initialFields, ["endsAt", "startsAt"])
+        XCTAssertTrue(PeerPrivacyRedactor.presentationIsSafe(verified))
+    }
+
+    func testPeerVerifiedReviewResumesFromSessionScopedKeychainVault() throws {
+        let request = PeerPendingRequest(
+            id: "pairing-resume-1",
+            relationshipId: nil,
+            kind: "pairing",
+            status: "pending",
+            version: 2,
+            payload: [
+                "transcriptHash": .string(String(repeating: "a", count: 64)),
+                "verificationPhrase": .string("amber cedar river"),
+                "remotePrincipalId": .string("remote-principal"),
+                "remoteDeviceId": .string("remote-device")
+            ],
+            expiresAt: "2099-01-01T00:00:00Z",
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:01:00Z"
+        )
+        let secrets = PeerMemorySecretStore()
+        let vault = PeerPairingReviewVault(secrets: secrets)
+        let context = PeerPairingReviewVaultContext(
+            sessionId: "pair-peer-tests",
+            ownerUserId: "owner-local",
+            apiBaseURL: "https://forge.example/api/v1"
+        )
+        var verified = PeerPairingReview.scanned(
+            PeerInviteQREnvelope(invitation: makePeerInvitation())
+        ).applying(request)
+        verified.remoteLabel = "Ada's Forge"
+        try vault.save(verified, context: context)
+
+        XCTAssertNil(
+            try vault.load(
+                context: PeerPairingReviewVaultContext(
+                    sessionId: "different-session",
+                    ownerUserId: "owner-local",
+                    apiBaseURL: "https://forge.example/api/v1"
+                )
+            )
+        )
+        XCTAssertEqual(try vault.load(context: context)?.stage, .verified)
+        XCTAssertEqual(secrets.values.count, 1)
+
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: PeerTestTransport(),
+                identityStore: makePeerIdentityStore()
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: vault
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        XCTAssertTrue(store.canResume(request))
+
+        store.resume(request)
+        XCTAssertEqual(store.pairingReview?.stage, .verified)
+        XCTAssertEqual(store.pairingReview?.verificationPhrase, "amber cedar river")
+        XCTAssertTrue(try XCTUnwrap(store.pairingReview).presentationStrings.allSatisfy {
+            $0.contains(String(repeating: "B", count: 48)) == false &&
+                $0.contains(String(repeating: "S", count: 86)) == false
+        })
+    }
+
+    func testPeerDeviceIdentityAndReplaySecretsUseInjectedKeychainStoreOnly() throws {
+        let defaultsName = "ForgeCompanionTests.peer-secrets.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        defaults.set("unchanged", forKey: "peer-secret-sentinel")
+
+        let secrets = PeerMemorySecretStore()
+        let keys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: keys, legacySecrets: secrets)
+        let identity = try identityStore.identity()
+        let signedData = Data(String(repeating: "C", count: 43).utf8)
+        let signature = try identityStore.sign(
+            data: signedData,
+            reason: "Verify the test user's presence"
+        )
+        XCTAssertTrue(try identityStore.verify(signature: signature, data: signedData))
+        XCTAssertEqual(identity, try identityStore.identity())
+        XCTAssertEqual(keys.signCount, 1)
+        XCTAssertEqual(
+            keys.authorizations,
+            [.userPresence(reason: "Verify the test user's presence")]
+        )
+        XCTAssertTrue(secrets.values.isEmpty)
+
+        let ledger = PeerReplayLedger(secrets: secrets)
+        try ledger.recordAccepted(invitationId: "invite-keychain", now: Date())
+        XCTAssertTrue(try ledger.contains(invitationId: "invite-keychain", now: Date()))
+        XCTAssertEqual(secrets.values.count, 1)
+        XCTAssertEqual(defaults.string(forKey: "peer-secret-sentinel"), "unchanged")
+    }
+
+    func testPeerKeychainUpdateCorruptionAndWriteFailurePreserveExistingRecoveryData() async throws {
+        let keychainOperations = PeerTestKeychainOperations()
+        let keychain = PeerKeychainStore(
+            service: "com.aurel.forgecompanion.people.tests",
+            operations: keychainOperations
+        )
+        let key = "update-or-add"
+        XCTAssertTrue(keychain.save(Data("existing".utf8), forKey: key))
+        XCTAssertTrue(keychain.save(Data("updated".utf8), forKey: key))
+        XCTAssertEqual(keychain.load(forKey: key), Data("updated".utf8))
+        XCTAssertEqual(keychainOperations.updateCount, 2)
+        XCTAssertEqual(keychainOperations.addCount, 1)
+        XCTAssertEqual(keychainOperations.deleteCount, 0)
+
+        keychainOperations.forcedUpdateStatus = errSecInteractionNotAllowed
+        XCTAssertFalse(keychain.save(Data("must-not-replace".utf8), forKey: key))
+        XCTAssertEqual(keychain.load(forKey: key), Data("updated".utf8))
+        XCTAssertEqual(keychainOperations.addCount, 1)
+        XCTAssertEqual(keychainOperations.deleteCount, 0)
+
+        let legacyIdentity = PeerMemorySecretStore()
+        legacyIdentity.seed(
+            Data("not-an-ed25519-private-key".utf8),
+            forKey: "forge_peer_device_ed25519_private_key_v1"
+        )
+        let missingKeys = PeerTestDeviceKeyOperations(identityAvailable: false)
+        XCTAssertThrowsError(
+            try makePeerIdentityStore(
+                keys: missingKeys,
+                legacySecrets: legacyIdentity
+            ).identity()
+        ) { error in
+            XCTAssertEqual(error as? PeerDeviceIdentityError, .notEnrolled)
+        }
+
+        let corruptedReplay = PeerMemorySecretStore()
+        corruptedReplay.seed(
+            Data("corrupted".utf8),
+            forKey: "forge_peer_invitation_replay_ledger_v1"
+        )
+        XCTAssertThrowsError(
+            try PeerReplayLedger(secrets: corruptedReplay).contains(
+                invitationId: "invite-corrupt"
+            )
+        ) { error in
+            XCTAssertTrue(error is PeerReplayLedgerError)
+        }
+        let corruptionStore = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: PeerTestTransport(),
+                identityStore: makePeerIdentityStore(),
+                capabilityVault: PeerActionCapabilityVault(
+                    secrets: PeerMemorySecretStore()
+                )
+            ),
+            replayLedger: PeerReplayLedger(secrets: corruptedReplay),
+            reviewVault: PeerPairingReviewVault(secrets: PeerMemorySecretStore())
+        )
+        corruptionStore.configure(
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+        XCTAssertTrue(
+            corruptionStore.stageScannedInvitation(
+                try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+            )
+        )
+        XCTAssertTrue(corruptionStore.canRetry)
+        if case .failed = corruptionStore.pairingReview?.stage {
+            // Expected fail-closed recovery state.
+        } else {
+            XCTFail("Expected replay-ledger corruption to fail closed")
+        }
+        corruptedReplay.seed(
+            try JSONEncoder().encode([String]()),
+            forKey: "forge_peer_invitation_replay_ledger_v1"
+        )
+        await corruptionStore.retry()
+        XCTAssertEqual(corruptionStore.pairingReview?.stage, .scanned)
+
+        let preservedReview = PeerMemorySecretStore()
+        let storageKey = "forge_peer_pending_review_v1"
+        let original = Data("existing-recovery-record".utf8)
+        preservedReview.seed(original, forKey: storageKey)
+        preservedReview.failingSaveCounts = [1]
+        let vault = PeerPairingReviewVault(secrets: preservedReview)
+        XCTAssertThrowsError(
+            try vault.save(
+                PeerPairingReview.scanned(
+                    PeerInviteQREnvelope(invitation: makePeerInvitation())
+                ),
+                context: PeerPairingReviewVaultContext(
+                    sessionId: "pair-peer-tests",
+                    ownerUserId: "owner-local",
+                    apiBaseURL: "https://forge.example/api/v1"
+                )
+            )
+        ) { error in
+            XCTAssertTrue(error is PeerPairingReviewVaultError)
+        }
+        XCTAssertEqual(preservedReview.load(forKey: storageKey), original)
+
+        let corruptedCapability = PeerMemorySecretStore()
+        corruptedCapability.seed(
+            Data("corrupted".utf8),
+            forKey: "forge_peer_pending_action_capability_v1"
+        )
+        XCTAssertThrowsError(
+            try PeerActionCapabilityVault(secrets: corruptedCapability).load(
+                actionDigest: String(repeating: "a", count: 64),
+                context: PeerActionCapabilityVaultContext(
+                    sessionId: "pair-peer-tests",
+                    ownerUserId: "owner-local",
+                    apiBaseURL: "https://forge.example/api/v1",
+                    deviceId: "ios_\(String(repeating: "a", count: 32))"
+                )
+            )
+        ) { error in
+            XCTAssertTrue(error is PeerActionCapabilityVaultError)
+        }
+    }
+
+    func testPeerSecureEnclaveSigningDenialSendsNoConsentOrMutationRequest() async {
+        let transport = PeerTestTransport()
+        let keys = PeerTestDeviceKeyOperations()
+        keys.signingError = .userPresenceDenied
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: makePeerIdentityStore(keys: keys),
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+
+        do {
+            _ = try await client.createInvitation(
+                label: "Ada",
+                idempotencyKey: "peer-invite-auth-denial",
+                pairing: makePeerPairing(),
+                ownerUserId: "owner-local"
+            )
+            XCTFail("Expected user-presence signing denial")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .localAuthentication(.denied))
+        }
+        XCTAssertEqual(keys.signCount, 1)
+        XCTAssertEqual(
+            keys.authorizations,
+            [.userPresence(reason: "Create a one-use Forge peer invitation")]
+        )
+        XCTAssertTrue(transport.requests.isEmpty)
+    }
+
+    func testPeerCapabilityKeychainFailurePreventsFinalMutationDispatch() async throws {
+        let transport = PeerTestTransport()
+        let capabilitySecrets = PeerMemorySecretStore()
+        capabilitySecrets.failingSaveCounts = [1]
+        let identityStore = makePeerIdentityStore()
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: capabilitySecrets
+            )
+        )
+        transport.steps = Array(
+            peerApprovedMutationSteps(
+                identityStore: identityStore,
+                challenge: String(repeating: "F", count: 43),
+                capabilitySecret: String(repeating: "v", count: 43),
+                finalData: Data(#"{"invitation":{}}"#.utf8)
+            ).prefix(2)
+        )
+
+        do {
+            _ = try await client.createInvitation(
+                label: "No dispatch on Keychain failure",
+                idempotencyKey: "peer-invite-keychain-failure",
+                pairing: makePeerPairing(),
+                ownerUserId: "owner-local"
+            )
+            XCTFail("Expected secure capability storage failure")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .secureStorage)
+        }
+        XCTAssertEqual(transport.requests.map(\.route), [
+            .createPeerHumanPresenceOptions,
+            .verifyPeerHumanPresence
+        ])
+    }
+
+    func testPeerCommittedResponseLossReusesKeychainCapabilityAndStableAcceptBodyAfterRelaunch() async throws {
+        let sharedKeys = PeerTestDeviceKeyOperations()
+        let capabilitySecrets = PeerMemorySecretStore()
+        let review = PeerPairingReview.scanned(
+            PeerInviteQREnvelope(invitation: makePeerInvitation()),
+            now: try XCTUnwrap(
+                ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z")
+            )
+        )
+        let acceptedData = Data(
+            #"{"request":{"id":"pairing-loss-1","relationshipId":null,"kind":"pairing","status":"pending","version":1,"payload":{"transcriptHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","verificationPhrase":"violet harbor seven"},"expiresAt":"2099-01-01T00:00:00Z","createdAt":"2026-07-15T12:00:00Z","updatedAt":"2026-07-15T12:00:00Z"}}"#.utf8
+        )
+        let firstIdentityStore = makePeerIdentityStore(keys: sharedKeys)
+        var firstSteps = peerApprovedMutationSteps(
+            identityStore: firstIdentityStore,
+            challenge: String(repeating: "C", count: 43),
+            capabilitySecret: String(repeating: "s", count: 43),
+            finalData: acceptedData
+        )
+        var firstFinalRequest: PeerTransportRequest?
+        firstSteps[2] = .handler { request in
+            firstFinalRequest = request
+            throw URLError(.networkConnectionLost)
+        }
+        let firstTransport = PeerTestTransport(steps: firstSteps)
+        let firstClient = makeEnrolledPeerClient(
+            transport: firstTransport,
+            identityStore: firstIdentityStore,
+            capabilityVault: PeerActionCapabilityVault(secrets: capabilitySecrets)
+        )
+
+        do {
+            _ = try await firstClient.acceptScannedInvitation(
+                review: review,
+                localPeerDeviceId: "peer-local-device-test",
+                pairing: makePeerPairing(),
+                ownerUserId: "owner-local"
+            )
+            XCTFail("Expected ambiguous response loss")
+        } catch {
+            XCTAssertEqual(error as? PeerAPIError, .offline)
+        }
+        XCTAssertEqual(sharedKeys.signCount, 4)
+        XCTAssertEqual(firstTransport.requests.map(\.route), [
+            .createPeerHumanPresenceOptions,
+            .verifyPeerHumanPresence,
+            .acceptScannedPeerPairing
+        ])
+        XCTAssertEqual(capabilitySecrets.values.count, 1)
+
+        let secondTransport = PeerTestTransport(steps: [
+            .response(PeerTransportResponse(statusCode: 202, headers: [:], data: acceptedData))
+        ])
+        let relaunchedClient = makeEnrolledPeerClient(
+            transport: secondTransport,
+            identityStore: makePeerIdentityStore(keys: sharedKeys),
+            capabilityVault: PeerActionCapabilityVault(secrets: capabilitySecrets)
+        )
+        let response = try await relaunchedClient.acceptScannedInvitation(
+            review: review,
+            localPeerDeviceId: "peer-local-device-test",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        XCTAssertEqual(response.request.id, "pairing-loss-1")
+        XCTAssertEqual(sharedKeys.signCount, 5)
+        XCTAssertEqual(secondTransport.requests.map(\.route), [.acceptScannedPeerPairing])
+        XCTAssertEqual(secondTransport.requests.first?.body, firstFinalRequest?.body)
+        XCTAssertEqual(
+            secondTransport.requests.first?.headers["Cookie"],
+            firstFinalRequest?.headers["Cookie"]
+        )
+        XCTAssertEqual(capabilitySecrets.values.count, 0)
+    }
+
+    func testPeerOfflineLoadCanRetryWithoutDiscardingState() async {
+        let transport = PeerTestTransport(steps: [.failure(URLError(.notConnectedToInternet))])
+        let identityKeys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: identityKeys)
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore
+        )
+        let store = PeoplePeerStore(
+            client: client,
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore())
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+
+        await store.load()
+        XCTAssertEqual(store.loadState, .offline)
+        XCTAssertEqual(store.errorMessage, PeerAPIError.offline.userMessage)
+
+        transport.steps = [
+            .response(peerPresenceStatusResponse(deviceId: try! identityStore.identity().deviceId)),
+            .response(peerJSONResponse(#"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#)),
+            .response(peerJSONResponse(#"{"requests":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#))
+        ]
+        await store.retry()
+
+        XCTAssertEqual(store.loadState, .loaded)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertEqual(transport.requests.map(\.route), [
+            .getPeerHumanPresenceStatus,
+            .getPeerHumanPresenceStatus,
+            .listPeerRelationships,
+            .listPeerRequests
+        ])
+    }
+
+    func testPeerPostAcceptVaultFailurePreservesStableRecoveryAndRetriesSameOperation() async throws {
+        let identityKeys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: identityKeys)
+        let identity = try identityStore.identity()
+        let transport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(
+                peerJSONResponse(
+                    #"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            ),
+            .response(
+                peerJSONResponse(
+                    #"{"requests":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            )
+        ])
+        let reviewSecrets = PeerMemorySecretStore()
+        let reviewVault = PeerPairingReviewVault(secrets: reviewSecrets)
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+        let store = PeoplePeerStore(
+            client: client,
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: reviewVault,
+            now: {
+                ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z")!
+            }
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        await store.load()
+        XCTAssertTrue(
+            store.stageScannedInvitation(
+                try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+            )
+        )
+        let stableReview = try XCTUnwrap(store.pairingReview)
+        XCTAssertEqual(reviewSecrets.saveCount, 1)
+        reviewSecrets.failingSaveCounts = [3]
+
+        let acceptedData = Data(
+            #"{"request":{"id":"pairing-vault-1","relationshipId":null,"kind":"pairing","status":"pending","version":2,"payload":{"transcriptHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","verificationPhrase":"violet harbor seven"},"expiresAt":"2099-01-01T00:00:00Z","createdAt":"2026-07-15T12:00:00Z","updatedAt":"2026-07-15T12:01:00Z"}}"#.utf8
+        )
+        transport.steps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: String(repeating: "D", count: 43),
+            capabilitySecret: String(repeating: "t", count: 43),
+            finalData: acceptedData
+        )
+        await store.submitScannedInvitationForReview()
+
+        XCTAssertTrue(store.canRetry)
+        XCTAssertEqual(store.pairingReview?.pairingId, "pairing-vault-1")
+        if case .failed = store.pairingReview?.stage {
+            // Expected recoverable state.
+        } else {
+            XCTFail("Expected a recoverable secure-vault failure")
+        }
+        let context = PeerPairingReviewVaultContext(
+            sessionId: "pair-peer-tests",
+            ownerUserId: "owner-local",
+            apiBaseURL: "https://forge.example/api/v1"
+        )
+        let preserved = try XCTUnwrap(try reviewVault.load(context: context))
+        XCTAssertEqual(preserved.acceptIdempotencyKey, stableReview.acceptIdempotencyKey)
+        XCTAssertEqual(preserved.scannedAt, stableReview.scannedAt)
+
+        reviewSecrets.failingSaveCounts = []
+        transport.steps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: String(repeating: "E", count: 43),
+            capabilitySecret: String(repeating: "u", count: 43),
+            finalData: acceptedData
+        )
+        await store.retry()
+
+        XCTAssertEqual(store.pairingReview?.stage, .verified)
+        XCTAssertEqual(store.resumablePairingId, "pairing-vault-1")
+        let acceptBodies = transport.requests
+            .filter { $0.route == .acceptScannedPeerPairing }
+            .compactMap(\.body)
+        XCTAssertEqual(acceptBodies.count, 2)
+        XCTAssertEqual(acceptBodies[0], acceptBodies[1])
+        XCTAssertTrue(identityKeys.authorizations.allSatisfy {
+            if case .userPresence = $0 { return true }
+            return false
+        })
+    }
+
+    func testPeerResumeSearchFollowsMoreThanOneHundredPendingRequestsWithoutErasingVault() async throws {
+        let identityKeys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: identityKeys)
+        let identity = try identityStore.identity()
+        let target = PeerPendingRequest(
+            id: "pairing-page-two",
+            relationshipId: nil,
+            kind: "pairing",
+            status: "pending",
+            version: 4,
+            payload: [
+                "transcriptHash": .string(String(repeating: "a", count: 64)),
+                "verificationPhrase": .string("amber cedar river")
+            ],
+            expiresAt: "2099-01-01T00:00:00Z",
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:01:00Z"
+        )
+        let reviewSecrets = PeerMemorySecretStore()
+        let reviewVault = PeerPairingReviewVault(secrets: reviewSecrets)
+        let context = PeerPairingReviewVaultContext(
+            sessionId: "pair-peer-tests",
+            ownerUserId: "owner-local",
+            apiBaseURL: "https://forge.example/api/v1"
+        )
+        let review = PeerPairingReview.scanned(
+            PeerInviteQREnvelope(invitation: makePeerInvitation())
+        ).applying(target)
+        try reviewVault.save(review, context: context)
+
+        let firstPageRequests = (0..<100).map {
+            peerPendingRequestJSONObject(id: "request-page-one-\($0)")
+        }
+        let secondPageRequests = [peerPendingRequestJSONObject(id: target.id)]
+        let transport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(
+                peerJSONResponse(
+                    #"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            ),
+            .handler { request in
+                XCTAssertNil(request.queryItems.first { $0.name == "cursor" })
+                return try self.peerRequestsResponse(
+                    requests: firstPageRequests,
+                    hasMore: true,
+                    nextCursor: "opaque-next-page"
+                )
+            },
+            .handler { request in
+                XCTAssertEqual(
+                    request.queryItems.first { $0.name == "cursor" }?.value,
+                    "opaque-next-page"
+                )
+                return try self.peerRequestsResponse(
+                    requests: secondPageRequests,
+                    hasMore: false,
+                    nextCursor: nil
+                )
+            }
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: transport,
+                identityStore: identityStore,
+                capabilityVault: PeerActionCapabilityVault(
+                    secrets: PeerMemorySecretStore()
+                )
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: reviewVault
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        XCTAssertEqual(store.resumablePairingId, target.id)
+
+        await store.load()
+
+        XCTAssertEqual(store.loadState, .loaded)
+        XCTAssertEqual(store.requests.count, 101)
+        XCTAssertTrue(store.canResume(target))
+        XCTAssertEqual(try reviewVault.load(context: context)?.pairingId, target.id)
+        XCTAssertEqual(
+            transport.requests.filter { $0.route == .listPeerRequests }.count,
+            2
+        )
+    }
+
+    func testPeerHostSwitchCancelsAndIgnoresEveryAwaitedOldHostResponse() async throws {
+        let gate = PeerAsyncResponseGate()
+        let requestStarted = expectation(description: "Old host request started")
+        let identityStore = makePeerIdentityStore()
+        let identity = try identityStore.identity()
+        let transport = PeerTestTransport(steps: [
+            .handler { _ in
+                requestStarted.fulfill()
+                return await gate.wait()
+            }
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: transport,
+                identityStore: identityStore,
+                capabilityVault: PeerActionCapabilityVault(
+                    secrets: PeerMemorySecretStore()
+                )
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: PeerPairingReviewVault(secrets: PeerMemorySecretStore())
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        XCTAssertTrue(
+            store.stageScannedInvitation(
+                try PeerInviteQREnvelope(invitation: makePeerInvitation()).encodedText()
+            )
+        )
+        let oldLoad = Task { await store.load() }
+        await fulfillment(of: [requestStarted], timeout: 2)
+        XCTAssertEqual(transport.requests.count, 1)
+
+        let secondHost = PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "https://second-forge.example/api/v1",
+            uiBaseUrl: "https://second-forge.example/forge/",
+            sessionId: "pair-second-host",
+            pairingToken: "second-host-token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["companion-consent"]
+        )
+        store.configure(pairing: secondHost, ownerUserId: "owner-second")
+        gate.release(peerPresenceStatusResponse(deviceId: identity.deviceId))
+        await oldLoad.value
+
+        XCTAssertEqual(store.loadState, .idle)
+        XCTAssertNil(store.pairingReview)
+        XCTAssertNil(store.outgoingInvitation)
+        XCTAssertNil(store.resumablePairingId)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertTrue(store.relationships.isEmpty)
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    func testPeerOutgoingInvitationRetriesAmbiguousCreateThenRefreshesExpiresAndCancels() async throws {
+        var currentNow = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-15T12:00:00Z")
+        )
+        let invitation = makePeerInvitation(
+            expiresAt: "2026-07-15T12:05:00Z"
+        )
+        let status = makePeerInvitationStatus(invitation: invitation)
+        let identityKeys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: identityKeys)
+        let identity = try identityStore.identity()
+        let transport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(
+                peerJSONResponse(
+                    #"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            ),
+            .response(
+                peerJSONResponse(
+                    #"{"requests":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+                )
+            )
+        ])
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+        let store = PeoplePeerStore(
+            client: client,
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: PeerPairingReviewVault(secrets: PeerMemorySecretStore()),
+            now: { currentNow }
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        await store.load()
+
+        var creationSteps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: String(repeating: "Q", count: 43),
+            capabilitySecret: String(repeating: "y", count: 43),
+            finalData: try JSONEncoder().encode(["invitation": invitation])
+        )
+        creationSteps[2] = .failure(URLError(.networkConnectionLost))
+        transport.steps = creationSteps
+        await store.createInvitation(label: "Remote Forge")
+        XCTAssertEqual(store.loadState, .offline)
+        XCTAssertTrue(store.canRetry)
+        XCTAssertNil(store.outgoingInvitation)
+
+        transport.steps = [
+            .response(PeerTransportResponse(
+                statusCode: 201,
+                headers: ["X-Forge-Idempotent-Replay": "true"],
+                data: try JSONEncoder().encode(["invitation": invitation])
+            )),
+            .response(try peerInvitationStatusResponse(status))
+        ]
+        await store.retry()
+
+        XCTAssertEqual(store.outgoingInvitation?.id, invitation.id)
+        XCTAssertEqual(store.outgoingInvitationStatus?.status, "active")
+        XCTAssertTrue(store.outgoingInvitationIsDisplayable)
+        let createBodies = transport.requests
+            .filter { $0.route == .createPeerInvitation }
+            .compactMap(\.body)
+        XCTAssertEqual(createBodies.count, 2)
+        XCTAssertEqual(createBodies[0], createBodies[1])
+
+        currentNow = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-15T12:06:00Z")
+        )
+        XCTAssertFalse(store.outgoingInvitationIsDisplayable)
+        currentNow = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-15T12:02:00Z")
+        )
+
+        transport.steps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: String(repeating: "R", count: 43),
+            capabilitySecret: String(repeating: "x", count: 43),
+            finalData: Data(
+                #"{"canceled":true,"invitationId":"invite-peer-1"}"#.utf8
+            )
+        )
+        await store.cancelOutgoingInvitation()
+
+        XCTAssertEqual(store.outgoingInvitationStatus?.status, "canceled")
+        XCTAssertFalse(store.outgoingInvitationIsDisplayable)
+        XCTAssertTrue(identityKeys.authorizations.allSatisfy {
+            if case .userPresence = $0 { return true }
+            return false
+        })
+        XCTAssertEqual(
+            transport.requests.last { $0.route == .cancelPeerInvitation }?.body,
+            Data(
+                #"{"expectedVersion":"2026-07-15T12:01:00Z"}"#.utf8
+            )
+        )
+    }
+
+    func testPeerForegroundPollingStopsOffscreenAndSceneActivationRefreshes() async throws {
+        let identityStore = makePeerIdentityStore()
+        let identity = try identityStore.identity()
+        let emptyRelationships = peerJSONResponse(
+            #"{"relationships":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+        )
+        let emptyRequests = peerJSONResponse(
+            #"{"requests":[],"page":{"limit":100,"hasMore":false,"nextCursor":null}}"#
+        )
+        let transport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(emptyRelationships),
+            .response(emptyRequests)
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: transport,
+                identityStore: identityStore,
+                capabilityVault: PeerActionCapabilityVault(
+                    secrets: PeerMemorySecretStore()
+                )
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            reviewVault: PeerPairingReviewVault(secrets: PeerMemorySecretStore()),
+            foregroundRefreshSeconds: 1
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        await store.load()
+
+        transport.steps = [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(emptyRelationships),
+            .response(emptyRequests)
+        ]
+        store.managementDidAppear()
+        try await Task.sleep(nanoseconds: 1_250_000_000)
+        let afterForegroundPoll = transport.requests.filter {
+            $0.route == .getPeerHumanPresenceStatus
+        }.count
+        XCTAssertEqual(afterForegroundPoll, 2)
+
+        store.managementDidDisappear()
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        XCTAssertEqual(
+            transport.requests.filter { $0.route == .getPeerHumanPresenceStatus }.count,
+            afterForegroundPoll
+        )
+
+        let activated = expectation(description: "Scene activation refresh")
+        transport.steps = [
+            .handler { _ in
+                activated.fulfill()
+                return self.peerPresenceStatusResponse(deviceId: identity.deviceId)
+            },
+            .response(emptyRelationships),
+            .response(emptyRequests)
+        ]
+        store.sceneDidLeaveForeground()
+        store.managementDidAppear()
+        store.sceneDidBecomeActive()
+        await fulfillment(of: [activated], timeout: 2)
+        for _ in 0..<20 where transport.steps.isEmpty == false {
+            await Task.yield()
+        }
+        XCTAssertEqual(store.loadState, .loaded)
+        store.managementDidDisappear()
+    }
+
+    func testPeerDeviceRemovalAndRelationshipRevokeUseFreshSignedConsent() async throws {
+        let transport = PeerTestTransport()
+        let identityKeys = PeerTestDeviceKeyOperations()
+        let identityStore = makePeerIdentityStore(keys: identityKeys)
+        let client = makeEnrolledPeerClient(
+            transport: transport,
+            identityStore: identityStore,
+            capabilityVault: PeerActionCapabilityVault(
+                secrets: PeerMemorySecretStore()
+            )
+        )
+        let relationship = makePeerRelationship()
+        let device = makePeerDevice()
+        let secret = String(repeating: "s", count: 43)
+        let challenge = String(repeating: "C", count: 43)
+
+        transport.steps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: challenge,
+            capabilitySecret: secret,
+            finalData: try JSONEncoder().encode(["device": device])
+        )
+        _ = try await client.mutateDevice(
+            route: .removePeerDevice,
+            relationship: relationship,
+            device: device,
+            reason: "Remove test device",
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+
+        XCTAssertEqual(transport.requests.map(\.route), [
+            .createPeerHumanPresenceOptions,
+            .verifyPeerHumanPresence,
+            .removePeerDevice
+        ])
+        XCTAssertEqual(transport.requests.last?.pathParameters, [
+            "relationshipId": relationship.id,
+            "deviceId": device.deviceId
+        ])
+        XCTAssertEqual(transport.requests.last?.headers["Cookie"], "forge_peer_presence=presence-test.\(secret)")
+        XCTAssertFalse(String(decoding: transport.requests.last?.body ?? Data(), as: UTF8.self).contains(secret))
+
+        let requestOffset = transport.requests.count
+        transport.steps = peerApprovedMutationSteps(
+            identityStore: identityStore,
+            challenge: challenge,
+            capabilitySecret: secret,
+            finalData: try JSONEncoder().encode(["relationship": relationship])
+        )
+        _ = try await client.revokeRelationship(
+            relationship,
+            pairing: makePeerPairing(),
+            ownerUserId: "owner-local"
+        )
+        XCTAssertEqual(Array(transport.requests.dropFirst(requestOffset)).map(\.route), [
+            .createPeerHumanPresenceOptions,
+            .verifyPeerHumanPresence,
+            .revokePeerRelationship
+        ])
+        XCTAssertEqual(identityKeys.signCount, 8)
+    }
+
+    func testPeerServerExpiredReplayedRevokedAndConsentUnavailableStatesAreTyped() async {
+        let cases: [(String, PeerAPIError)] = [
+            ("peer_invitation_expired", .expired),
+            ("peer_invitation_replayed", .replayed),
+            ("peer_relationship_revoked", .revoked),
+            ("peer_companion_consent_unavailable", .companionConsentUnavailable)
+        ]
+
+        for (code, expected) in cases {
+            let transport = PeerTestTransport(steps: [
+                .response(peerJSONResponse(#"{"code":"\#(code)","message":"Rejected"}"#, statusCode: 409))
+            ])
+            let client = makeEnrolledPeerClient(
+                transport: transport,
+                identityStore: makePeerIdentityStore()
+            )
+            do {
+                _ = try await client.listRelationships(pairing: makePeerPairing())
+                XCTFail("Expected typed peer error for \(code)")
+            } catch {
+                XCTAssertEqual(error as? PeerAPIError, expected)
+            }
+        }
+    }
+
+    func testPeopleWatchSelectorUsesNewestEligibleOwnerPersonPinAndFallsBackSafely() throws {
+        let owner = "owner-local"
+        let personOne = makePeerRelationship(
+            id: "relationship-person-1",
+            localPersonId: "person-1",
+            remoteDisplayLabel: "Ada"
+        )
+        let personTwo = makePeerRelationship(
+            id: "relationship-person-2",
+            localPersonId: "person-2",
+            status: "revoked",
+            remoteDisplayLabel: "Revoked"
+        )
+        let personThree = makePeerRelationship(
+            id: "relationship-person-3",
+            localPersonId: "person-3",
+            remoteDisplayLabel: "Grace"
+        )
+        let crossOwner = makePeerRelationship(
+            id: "relationship-cross-owner",
+            ownerUserId: "owner-other",
+            localPersonId: "person-4",
+            remoteDisplayLabel: "Other owner"
+        )
+        let generalPin = makePeopleWatchPin(
+            pinId: "pin-task",
+            entityType: "task",
+            entityId: "task-1",
+            title: "General task pin",
+            pinnedAt: "2026-07-16T11:00:00Z"
+        )
+        let crossOwnerPin = makePeopleWatchPin(
+            pinId: "pin-cross-owner",
+            entityId: "person-4",
+            title: "Cross-owner secret",
+            ownerUserId: "owner-other",
+            pinnedAt: "2026-07-16T10:00:00Z"
+        )
+        let binnedPin = makePeopleWatchPin(
+            pinId: "pin-binned",
+            entityId: "person-binned",
+            title: "Settings Bin person",
+            availability: "deleted",
+            pinnedAt: "2026-07-16T09:30:00Z"
+        )
+        let revokedPin = makePeopleWatchPin(
+            pinId: "pin-revoked",
+            entityId: "person-2",
+            title: "Revoked person",
+            pinnedAt: "2026-07-16T09:00:00Z"
+        )
+        let newestEligible = makePeopleWatchPin(
+            pinId: "pin-person-1",
+            entityId: "person-1",
+            title: "Ada Lovelace",
+            pinnedAt: "2026-07-16T08:00:00Z"
+        )
+        let fallbackEligible = makePeopleWatchPin(
+            pinId: "pin-person-3",
+            entityId: "person-3",
+            title: "Grace Hopper",
+            pinnedAt: "2026-07-16T07:00:00Z"
+        )
+        let pins = [
+            generalPin, crossOwnerPin, binnedPin, revokedPin,
+            fallbackEligible, newestEligible
+        ]
+        let relationships = [personOne, personTwo, personThree, crossOwner]
+
+        let selected = PeopleWatchGlanceSelector.resolve(
+            pins: pins,
+            relationships: relationships,
+            ownerUserId: owner,
+            generatedAt: "2026-07-16T12:00:00Z"
+        )
+
+        XCTAssertEqual(selected.selectedPinId, newestEligible.pinId)
+        XCTAssertEqual(selected.snapshot.selection, .selected)
+        XCTAssertEqual(selected.snapshot.personName, "Ada Lovelace")
+        XCTAssertEqual(selected.snapshot.lastConnectedAt, personOne.lastConnectedAt)
+        XCTAssertEqual(Set(selected.pinsByPersonId.keys), ["person-1", "person-3"])
+        XCTAssertFalse(selected.pinsByPersonId.values.contains { $0.pinId == generalPin.pinId })
+        XCTAssertFalse(selected.pinsByPersonId.values.contains { $0.pinId == crossOwnerPin.pinId })
+
+        let fallback = PeopleWatchGlanceSelector.resolve(
+            pins: pins.filter { $0.pinId != newestEligible.pinId },
+            relationships: relationships,
+            ownerUserId: owner,
+            generatedAt: "2026-07-16T12:01:00Z"
+        )
+        XCTAssertEqual(fallback.selectedPinId, fallbackEligible.pinId)
+        XCTAssertEqual(fallback.snapshot.personName, "Grace Hopper")
+
+        let neutral = PeopleWatchGlanceSelector.resolve(
+            pins: pins,
+            relationships: relationships.filter { $0.localPersonId != "person-1" && $0.localPersonId != "person-3" },
+            ownerUserId: owner,
+            generatedAt: "2026-07-16T12:02:00Z"
+        )
+        XCTAssertEqual(neutral.snapshot.selection, .chooseOnIPhone)
+        XCTAssertNil(neutral.selectedPinId)
+        XCTAssertNil(neutral.snapshot.personName)
+        XCTAssertEqual(neutral.snapshot.nextSharedEvent, nil)
+    }
+
+    @MainActor
+    func testPeopleWatchPinClientUsesAuthenticatedOperatorCookieAndExactHumanPinWire() async throws {
+        PeopleWatchURLProtocol.reset()
+        defer { PeopleWatchURLProtocol.reset() }
+
+        let pin = makePeopleWatchPin(
+            pinId: "pin/person 1",
+            entityId: "person-1",
+            title: "Ada Lovelace",
+            pinnedAt: "2026-07-16T12:00:00Z"
+        )
+        let listData = try peopleWatchPinListResponse([pin]).data
+        let mutationData = try peopleWatchPinMutationResponse(pin).data
+        let unpinData = try peopleWatchUnpinResponse(pinId: "pin/person 1").data
+        PeopleWatchURLProtocol.handler = { request in
+            switch request.httpMethod {
+            case "GET":
+                return (200, listData)
+            case "PUT":
+                return (201, mutationData)
+            case "DELETE":
+                return (200, unpinData)
+            default:
+                return (405, Data(#"{"code":"method_not_allowed"}"#.utf8))
+            }
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.protocolClasses = [PeopleWatchURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let dataStore = WKWebsiteDataStore.nonPersistent()
+        let cookieStore = dataStore.httpCookieStore
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "forge.example",
+            .path: "/",
+            .name: "forge_session",
+            .value: "operator-cookie-proof",
+            .secure: "TRUE",
+            .expires: Date().addingTimeInterval(300)
+        ]))
+        await withCheckedContinuation { continuation in
+            cookieStore.setCookie(cookie) { continuation.resume() }
+        }
+        defer { cookieStore.delete(cookie) }
+        let storedCookies: [HTTPCookie] = await withCheckedContinuation { continuation in
+            cookieStore.getAllCookies { continuation.resume(returning: $0) }
+        }
+        XCTAssertTrue(storedCookies.contains { $0.name == cookie.name && $0.value == cookie.value })
+
+        let client = PeopleWatchPinClient(
+            transport: LivePeopleWatchOperatorTransport(
+                session: session,
+                cookieStore: cookieStore
+            )
+        )
+        let pairing = makePeerPairing(
+            pairingToken: "must-never-enter-human-pin-wire"
+        )
+
+        _ = try await client.listPins(pairing: pairing)
+        _ = try await client.pinPerson(
+            personId: "person-1",
+            ownerUserId: "owner-local",
+            pairing: pairing
+        )
+        try await client.unpin(pinId: "pin/person 1", pairing: pairing)
+
+        let requests = PeopleWatchURLProtocol.requests
+        XCTAssertEqual(requests.map(\.httpMethod), ["GET", "PUT", "DELETE"])
+        XCTAssertEqual(
+            requests[0].url?.absoluteString,
+            "https://forge.example/api/v1/entity-navigation?pinnedLimit=25&recentLimit=0"
+        )
+        XCTAssertEqual(requests[1].url?.path, "/api/v1/entity-navigation/pins")
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(requests[2].url), resolvingAgainstBaseURL: false)?.percentEncodedPath,
+            "/api/v1/entity-navigation/pins/pin%2Fperson%201"
+        )
+        for request in requests {
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "forge_session=operator-cookie-proof")
+            let renderedHeaders = request.allHTTPHeaderFields?
+                .map { "\($0.key):\($0.value)" }
+                .joined(separator: "\n")
+                .lowercased() ?? ""
+            for forbidden in [
+                "pairing", "companion", "device-id", "public-key",
+                "signature", "authorization", pairing.pairingToken.lowercased()
+            ] {
+                XCTAssertFalse(renderedHeaders.contains(forbidden))
+            }
+        }
+        let putBody = try XCTUnwrap(PeopleWatchURLProtocol.bodies[1])
+        let putObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: putBody) as? [String: String]
+        )
+        XCTAssertEqual(putObject, [
+            "entityId": "person-1",
+            "entityType": "person",
+            "ownerUserId": "owner-local"
+        ])
+        XCTAssertFalse(String(decoding: putBody, as: UTF8.self).contains(pairing.pairingToken))
+        withExtendedLifetime(dataStore) {}
+    }
+
+    func testPeopleWatchOperatorCookiePolicyRejectsCrossOwnerInsecureAndExpiredCookies() throws {
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-16T12:00:00Z"))
+        let url = try XCTUnwrap(URL(string: "https://forge.example/api/v1/entity-navigation"))
+        let valid = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: ".forge.example", .path: "/api", .name: "session",
+            .value: "valid", .secure: "TRUE", .expires: now.addingTimeInterval(60)
+        ]))
+        let otherHost = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "other.example", .path: "/", .name: "session",
+            .value: "other", .expires: now.addingTimeInterval(60)
+        ]))
+        let expired = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "forge.example", .path: "/", .name: "session",
+            .value: "expired", .expires: now.addingTimeInterval(-1)
+        ]))
+
+        XCTAssertTrue(LivePeopleWatchOperatorTransport.cookie(valid, matches: url, now: now))
+        XCTAssertFalse(LivePeopleWatchOperatorTransport.cookie(otherHost, matches: url, now: now))
+        XCTAssertFalse(LivePeopleWatchOperatorTransport.cookie(expired, matches: url, now: now))
+        XCTAssertFalse(
+            LivePeopleWatchOperatorTransport.cookie(
+                valid,
+                matches: try XCTUnwrap(URL(string: "http://forge.example/api/v1/entity-navigation")),
+                now: now
+            )
+        )
+    }
+
+    @MainActor
+    func testPeopleWatchStoreAssemblesSelectionUnpinFallbackAndRepinWithoutTouchingGeneralPins() async throws {
+        let identityStore = makePeerIdentityStore()
+        let identity = try identityStore.identity()
+        let personOne = makePeerRelationship(
+            id: "relationship-watch-1",
+            localPersonId: "person-1",
+            remoteDisplayLabel: "Ada"
+        )
+        let personTwo = makePeerRelationship(
+            id: "relationship-watch-2",
+            localPersonId: "person-2",
+            remoteDisplayLabel: "Grace"
+        )
+        let personOnePin = makePeopleWatchPin(
+            pinId: "pin-person-1",
+            entityId: "person-1",
+            title: "Ada Lovelace",
+            pinnedAt: "2026-07-16T10:00:00Z"
+        )
+        let personTwoPin = makePeopleWatchPin(
+            pinId: "pin-person-2",
+            entityId: "person-2",
+            title: "Grace Hopper",
+            pinnedAt: "2026-07-16T09:00:00Z"
+        )
+        let generalPin = makePeopleWatchPin(
+            pinId: "pin-task-1",
+            entityType: "task",
+            entityId: "task-1",
+            title: "Keep this general pin",
+            pinnedAt: "2026-07-16T11:00:00Z"
+        )
+        let peerTransport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(try peerRelationshipsResponse([personOne, personTwo])),
+            .response(try peerRequestsResponse(requests: [], hasMore: false, nextCursor: nil))
+        ])
+        let pinTransport = PeopleWatchTestTransport(steps: [
+            .response(try peopleWatchPinListResponse([generalPin, personTwoPin, personOnePin]))
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: peerTransport,
+                identityStore: identityStore
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            watchPinClient: PeopleWatchPinClient(transport: pinTransport),
+            now: { ISO8601DateFormatter().date(from: "2026-07-16T12:00:00Z")! }
+        )
+        var relayedNames: [String?] = []
+        store.configureWatchRelay { relayedNames.append($0.personName) }
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+
+        await store.load()
+
+        XCTAssertEqual(store.loadState, .loaded)
+        XCTAssertEqual(store.selectedWatchPinId, personOnePin.pinId)
+        XCTAssertEqual(store.watchGlance.personName, "Ada Lovelace")
+        XCTAssertTrue(store.isSelectedForWatch(personOne))
+        XCTAssertNotNil(store.watchPin(for: personTwo))
+
+        pinTransport.steps = [
+            .response(try peopleWatchUnpinResponse(pinId: "pin-person-1")),
+            .response(try peopleWatchPinListResponse([generalPin, personTwoPin]))
+        ]
+        await store.removeFromWatch(personOne)
+
+        XCTAssertEqual(store.selectedWatchPinId, personTwoPin.pinId)
+        XCTAssertEqual(store.watchGlance.personName, "Grace Hopper")
+        XCTAssertNil(store.watchPin(for: personOne))
+
+        let repinnedPersonOne = makePeopleWatchPin(
+            pinId: "pin-person-1-new",
+            entityId: "person-1",
+            title: "Ada Lovelace",
+            pinnedAt: "2026-07-16T12:01:00Z"
+        )
+        pinTransport.steps = [
+            .response(try peopleWatchPinMutationResponse(repinnedPersonOne)),
+            .response(try peopleWatchPinListResponse([generalPin, personTwoPin, repinnedPersonOne]))
+        ]
+        await store.chooseForWatch(personOne)
+
+        XCTAssertEqual(store.selectedWatchPinId, repinnedPersonOne.pinId)
+        XCTAssertEqual(store.watchGlance.personName, "Ada Lovelace")
+        XCTAssertEqual(pinTransport.requests.map(\.method), ["GET", "DELETE", "GET", "PUT", "GET"])
+        XCTAssertEqual(pinTransport.requests[1].requestTarget, "/api/v1/entity-navigation/pins/pin-person-1")
+        XCTAssertFalse(pinTransport.requests.contains {
+            $0.method == "DELETE" && $0.requestTarget.contains(generalPin.pinId ?? "")
+        })
+        XCTAssertTrue(relayedNames.contains("Grace Hopper"))
+        XCTAssertEqual(relayedNames.last!, "Ada Lovelace")
+    }
+
+    @MainActor
+    func testPeopleWatchStorePreservesSelectionOfflineThenRetriesCurrentOwnerSnapshot() async throws {
+        let identityStore = makePeerIdentityStore()
+        let identity = try identityStore.identity()
+        let personOne = makePeerRelationship(id: "relationship-offline-1", localPersonId: "person-1")
+        let personTwo = makePeerRelationship(id: "relationship-offline-2", localPersonId: "person-2")
+        let personOnePin = makePeopleWatchPin(
+            pinId: "pin-offline-1",
+            entityId: "person-1",
+            title: "Ada Lovelace",
+            pinnedAt: "2026-07-16T09:00:00Z"
+        )
+        let personTwoPin = makePeopleWatchPin(
+            pinId: "pin-offline-2",
+            entityId: "person-2",
+            title: "Grace Hopper",
+            pinnedAt: "2026-07-16T11:00:00Z"
+        )
+        let peerTransport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(try peerRelationshipsResponse([personOne, personTwo])),
+            .response(try peerRequestsResponse(requests: [], hasMore: false, nextCursor: nil))
+        ])
+        let pinTransport = PeopleWatchTestTransport(steps: [
+            .response(try peopleWatchPinListResponse([personOnePin]))
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: peerTransport,
+                identityStore: identityStore
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            watchPinClient: PeopleWatchPinClient(transport: pinTransport)
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        await store.load()
+        XCTAssertEqual(store.watchGlance.personName, "Ada Lovelace")
+
+        peerTransport.steps = [.response(try peerRelationshipsResponse([personOne, personTwo]))]
+        pinTransport.steps = [.failure(URLError(.notConnectedToInternet))]
+        await store.refreshWatchGlance()
+
+        XCTAssertEqual(store.watchGlance.personName, "Ada Lovelace")
+        XCTAssertEqual(store.selectedWatchPinId, personOnePin.pinId)
+        XCTAssertEqual(store.watchPinErrorMessage, PeopleWatchPinError.offline.userMessage)
+
+        peerTransport.steps = [.response(try peerRelationshipsResponse([personOne, personTwo]))]
+        pinTransport.steps = [.response(try peopleWatchPinListResponse([personOnePin, personTwoPin]))]
+        await store.retryWatchPinAction()
+
+        XCTAssertEqual(store.watchGlance.personName, "Grace Hopper")
+        XCTAssertEqual(store.selectedWatchPinId, personTwoPin.pinId)
+        XCTAssertNil(store.watchPinErrorMessage)
+    }
+
+    @MainActor
+    func testPeopleWatchStoreIgnoresPinResponseAfterHostAndOwnerSwitch() async throws {
+        let identityStore = makePeerIdentityStore()
+        let identity = try identityStore.identity()
+        let relationship = makePeerRelationship(
+            id: "relationship-old-host",
+            localPersonId: "person-old-host"
+        )
+        let peerTransport = PeerTestTransport(steps: [
+            .response(peerPresenceStatusResponse(deviceId: identity.deviceId)),
+            .response(try peerRelationshipsResponse([relationship])),
+            .response(try peerRequestsResponse(requests: [], hasMore: false, nextCursor: nil))
+        ])
+        let pinTransport = PeopleWatchTestTransport(steps: [
+            .response(try peopleWatchPinListResponse([]))
+        ])
+        let store = PeoplePeerStore(
+            client: makeEnrolledPeerClient(
+                transport: peerTransport,
+                identityStore: identityStore
+            ),
+            replayLedger: PeerReplayLedger(secrets: PeerMemorySecretStore()),
+            watchPinClient: PeopleWatchPinClient(transport: pinTransport)
+        )
+        store.configure(pairing: makePeerPairing(), ownerUserId: "owner-local")
+        await store.load()
+
+        let started = expectation(description: "Old-host pin request started")
+        let gate = PeopleWatchAsyncResponseGate()
+        let oldHostPin = makePeopleWatchPin(
+            pinId: "pin-old-host",
+            entityId: "person-old-host",
+            title: "Must not cross hosts",
+            pinnedAt: "2026-07-16T12:00:00Z"
+        )
+        pinTransport.steps = [
+            .handler { _ in
+                started.fulfill()
+                return await gate.wait()
+            }
+        ]
+        let operation = Task { await store.chooseForWatch(relationship) }
+        await fulfillment(of: [started], timeout: 2)
+
+        store.configure(
+            pairing: makePeerPairing(
+                apiBaseUrl: "https://other-forge.example/api/v1",
+                sessionId: "pair-other-host",
+                pairingToken: "other-host-token"
+            ),
+            ownerUserId: "owner-other"
+        )
+        gate.release(try peopleWatchPinMutationResponse(oldHostPin))
+        await operation.value
+
+        XCTAssertEqual(store.watchGlance.selection, .chooseOnIPhone)
+        XCTAssertNil(store.watchGlance.personName)
+        XCTAssertNil(store.selectedWatchPinId)
+        XCTAssertFalse(store.watchPinOperationInFlight)
+        XCTAssertTrue(store.relationships.isEmpty)
+    }
+
+    @MainActor
+    func testPeopleWatchRelayPersistsOnlySameSessionAndCrossSessionClearIsNeutral() throws {
+        let (defaults, suiteName) = makeWatchHandoffDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let sessionOne = "pair-people-one"
+        let connection = ForgeWatchConnection(
+            apiBaseUrl: "https://forge.example/api/v1",
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: sessionOne,
+            pairingToken: "watch-token",
+            transportLabel: "HTTPS",
+            directNetworkingEnabled: true
+        )
+        defaults.set(
+            try JSONEncoder().encode(ForgeWatchBootstrap.empty.withConnection(connection)),
+            forKey: ForgeWatchStorage.bootstrapKey
+        )
+        let selected = ForgeWatchPeopleGlanceSnapshot(
+            selection: .selected,
+            generatedAt: "2026-07-16T12:00:00Z",
+            personName: "Ada Lovelace",
+            lastConnectedAt: "2026-07-16T11:59:00Z",
+            nextSharedEvent: nil
+        )
+        let manager = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { false }
+        )
+
+        manager.updatePeopleGlance(selected, pairingSessionId: sessionOne)
+        XCTAssertEqual(manager.latestBootstrap.people, selected)
+
+        let relaunched = WatchSessionManager(
+            syncClient: ForgeSyncClient(),
+            defaults: defaults,
+            phoneHandoffTransportAvailable: { false }
+        )
+        XCTAssertEqual(relaunched.latestBootstrap.people, selected)
+
+        let wrongSession = ForgeWatchPeopleGlanceSnapshot(
+            selection: .selected,
+            generatedAt: "2026-07-16T12:01:00Z",
+            personName: "Cross-host name",
+            lastConnectedAt: nil,
+            nextSharedEvent: nil
+        )
+        relaunched.updatePeopleGlance(wrongSession, pairingSessionId: "pair-people-two")
+        XCTAssertEqual(relaunched.latestBootstrap.people, selected)
+
+        let neutral = ForgeWatchPeopleGlanceSnapshot.chooseOnIPhone(
+            generatedAt: "2026-07-16T12:02:00Z"
+        )
+        relaunched.updatePeopleGlance(neutral, pairingSessionId: "pair-people-two")
+        XCTAssertEqual(relaunched.latestBootstrap.people, neutral)
+        let wire = String(
+            decoding: try JSONEncoder().encode(relaunched.latestBootstrap),
+            as: UTF8.self
+        ).lowercased()
+        for forbidden in ["relationshipid", "grantid", "deviceid", "identityid", "revoke"] {
+            XCTAssertFalse(wire.contains(forbidden))
+        }
+    }
+
+    func testPeerDeepLinksOpenOnlyGenericPeopleManagementWithoutPayloads() throws {
+        XCTAssertEqual(
+            PeerDeepLinkDestination.parse(try XCTUnwrap(URL(string: "forge-companion://people"))),
+            .people
+        )
+        XCTAssertEqual(
+            PeerDeepLinkDestination.parse(try XCTUnwrap(URL(string: "https://forge.example/forge/people"))),
+            .people
+        )
+        for blocked in [
+            "forge-companion://people?invitation=secret",
+            "forge-companion://people#invite",
+            "forge-companion://user:secret@people",
+            "forge-companion://people/relationships/relationship-1"
+        ] {
+            XCTAssertNil(PeerDeepLinkDestination.parse(try XCTUnwrap(URL(string: blocked))))
+        }
+    }
+
+    func testPeerCameraDenialAndPrivacyRedactionHaveExplicitSafeStates() {
+        XCTAssertEqual(PeerCameraAuthorizationPolicy.state(for: .authorized), .authorized)
+        XCTAssertEqual(PeerCameraAuthorizationPolicy.state(for: .notDetermined), .request)
+        XCTAssertEqual(PeerCameraAuthorizationPolicy.state(for: .denied), .denied)
+        XCTAssertEqual(PeerCameraAuthorizationPolicy.state(for: .restricted), .restricted)
+
+        let value = #"{"bootstrap":"BBBB","requestNonce":"NNNN","idempotencyKey":"IIII","sessionId":"session-secret","signature":"SSSS"} secret=token Bearer abc.def"#
+        let redacted = PeerPrivacyRedactor.redacted(value)
+        XCTAssertFalse(redacted.contains("BBBB"))
+        XCTAssertFalse(redacted.contains("NNNN"))
+        XCTAssertFalse(redacted.contains("IIII"))
+        XCTAssertFalse(redacted.contains("session-secret"))
+        XCTAssertFalse(redacted.contains("SSSS"))
+        XCTAssertFalse(redacted.contains("token"))
+        XCTAssertFalse(redacted.contains("abc.def"))
+        XCTAssertTrue(redacted.contains("[redacted]"))
+    }
+
+    private func makePeerPairing(
+        apiBaseUrl: String = "https://forge.example/api/v1",
+        sessionId: String = "pair-peer-tests",
+        pairingToken: String = "pairing-token-kept-in-headers"
+    ) -> PairingPayload {
+        PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: apiBaseUrl,
+            uiBaseUrl: "https://forge.example/forge/",
+            sessionId: sessionId,
+            pairingToken: pairingToken,
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["companion-consent"]
+        )
+    }
+
+    private func makePeerIdentityStore(
+        keys: PeerTestDeviceKeyOperations = PeerTestDeviceKeyOperations(),
+        legacySecrets: PeerSecretStoring = PeerMemorySecretStore()
+    ) -> PeerDeviceIdentityStore {
+        PeerDeviceIdentityStore(keys: keys, legacySecrets: legacySecrets)
+    }
+
+    private func makeEnrolledPeerClient(
+        transport: PeerTransporting = PeerTestTransport(),
+        identityStore: PeerDeviceIdentityStore? = nil,
+        capabilityVault: PeerActionCapabilityVault = PeerActionCapabilityVault(
+            secrets: PeerMemorySecretStore()
+        ),
+        enrollmentTransport: PeopleWatchOperatorTransporting? = nil,
+        pairing: PairingPayload? = nil,
+        ownerUserId: String = "owner-local"
+    ) -> PeerAPIClient {
+        let resolvedIdentityStore = identityStore ?? makePeerIdentityStore()
+        let resolvedPairing = pairing ?? makePeerPairing()
+        let enrollmentVault = PeerCompanionEnrollmentVault(
+            secrets: PeerMemorySecretStore()
+        )
+        let identity = try! resolvedIdentityStore.identity()
+        let receipt = makePeerEnrollmentReceipt(
+            identity: identity,
+            pairing: resolvedPairing,
+            ownerUserId: ownerUserId
+        )
+        try! enrollmentVault.saveReceipt(
+            receipt,
+            context: PeerCompanionEnrollmentContext(
+                sessionId: resolvedPairing.sessionId,
+                ownerUserId: ownerUserId,
+                apiBaseURL: resolvedPairing.apiBaseUrl
+            )
+        )
+        return PeerAPIClient(
+            transport: transport,
+            identityStore: resolvedIdentityStore,
+            capabilityVault: capabilityVault,
+            enrollmentVault: enrollmentVault,
+            enrollmentTransport: enrollmentTransport
+        )
+    }
+
+    private func makePeerEnrollmentReceipt(
+        identity: PeerDeviceIdentity,
+        pairing: PairingPayload,
+        ownerUserId: String = "owner-local",
+        legacyBootstrapAccepted: Bool = false
+    ) -> PeerCompanionEnrollmentReceipt {
+        PeerCompanionEnrollmentReceipt(
+            protocolName: PeerCompanionSecurityContract.enrollmentProtocol,
+            enrollmentId: "enrollment-test",
+            keyId: "key-test",
+            pairingSessionId: pairing.sessionId,
+            ownerUserId: ownerUserId,
+            identity: PeerDeviceIdentityRecord(identity),
+            scopes: ["peer:grants:manage", "peer:query", "peer:status"],
+            capabilities: [
+                PeerCompanionSecurityContract.enrollmentProtocol,
+                PeerCompanionSecurityContract.requestProtocol,
+                PeerCompanionSecurityContract.consentProtocol
+            ],
+            authorizedOperations: PeerAPIRoute.allCases.map(\.rawValue),
+            enrolledAt: "2026-07-16T00:00:00Z",
+            legacyBootstrapDisabledAt: "2026-07-16T00:00:00Z",
+            legacyBootstrapAccepted: legacyBootstrapAccepted
+        )
+    }
+
+    private func makePeerInvitation(
+        expiresAt: String = "2099-01-01T00:00:00Z"
+    ) -> PeerPairingInvite {
+        PeerPairingInvite(
+            id: "invite-peer-1",
+            ownerUserId: "owner-remote",
+            inviterPrincipalId: "Ada's Forge",
+            inviterDeviceId: "Ada's iPhone",
+            fingerprint: "ABCD-EFGH-JKLM-NPQR",
+            expiresAt: expiresAt,
+            protocolVersion: "forge-peer/1",
+            transportKinds: ["local_direct"],
+            bootstrap: String(repeating: "B", count: 48),
+            signature: String(repeating: "S", count: 86)
+        )
+    }
+
+    private func makePeerRelationship(
+        id: String = "relationship-1",
+        ownerUserId: String = "owner-local",
+        localPersonId: String? = "person-1",
+        status: String = "active",
+        remoteDisplayLabel: String = "Ada's Forge",
+        lastConnectedAt: String? = "2026-07-15T12:01:00Z",
+        updatedAt: String = "2026-07-15T12:01:00Z"
+    ) -> PeerRelationship {
+        PeerRelationship(
+            id: id,
+            ownerUserId: ownerUserId,
+            localPrincipalId: "principal-local",
+            remotePrincipalId: "principal-remote",
+            localPersonId: localPersonId,
+            status: status,
+            negotiatedProtocolVersion: "forge-peer/1",
+            transportPrivacyMode: "fastest",
+            highestReceivedSequence: 2,
+            highestSentSequence: 3,
+            establishedAt: "2026-07-15T12:00:00Z",
+            lastConnectedAt: lastConnectedAt,
+            revokedAt: status == "revoked" ? updatedAt : nil,
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: updatedAt,
+            remoteDisplayLabel: remoteDisplayLabel,
+            remoteTrustState: "verified"
+        )
+    }
+
+    private func makePeopleWatchPin(
+        pinId: String,
+        entityType: String = "person",
+        entityId: String,
+        title: String,
+        ownerUserId: String? = "owner-local",
+        availability: String = "available",
+        pinnedAt: String
+    ) -> PeopleEntityNavigationItem {
+        PeopleEntityNavigationItem(
+            pinId: pinId,
+            entityType: entityType,
+            entityId: entityId,
+            title: title,
+            detail: "",
+            category: entityType == "person" ? "Person" : "Task",
+            targetPath: entityType == "person"
+                ? "/people/\(entityId)"
+                : "/tasks/\(entityId)",
+            ownerUserId: ownerUserId,
+            availability: availability,
+            pinnedAt: pinnedAt
+        )
+    }
+
+    private func peopleWatchPinListResponse(
+        _ pins: [PeopleEntityNavigationItem],
+        pinnedTotal: Int? = nil,
+        generatedAt: String = "2026-07-16T08:00:00Z"
+    ) throws -> PeopleWatchOperatorResponse {
+        let encodedPins = try pins.map { pin -> [String: Any] in
+            let data = try JSONEncoder().encode(pin)
+            return try XCTUnwrap(
+                JSONSerialization.jsonObject(with: data) as? [String: Any]
+            )
+        }
+        return PeopleWatchOperatorResponse(
+            statusCode: 200,
+            data: try JSONSerialization.data(
+                withJSONObject: [
+                    "generatedAt": generatedAt,
+                    "pinnedTotal": pinnedTotal ?? pins.count,
+                    "recentTotal": 0,
+                    "hiddenRecentCount": 0,
+                    "pinned": encodedPins,
+                    "recent": []
+                ],
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private func peopleWatchPinMutationResponse(
+        _ pin: PeopleEntityNavigationItem
+    ) throws -> PeopleWatchOperatorResponse {
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(pin)) as? [String: Any]
+        )
+        return PeopleWatchOperatorResponse(
+            statusCode: 201,
+            data: try JSONSerialization.data(
+                withJSONObject: ["pin": object],
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private func peopleWatchUnpinResponse(pinId: String) throws -> PeopleWatchOperatorResponse {
+        PeopleWatchOperatorResponse(
+            statusCode: 200,
+            data: try JSONSerialization.data(
+                withJSONObject: ["unpinned": true, "pinId": pinId],
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private func makePeerDevice() -> PeerDevice {
+        PeerDevice(
+            relationshipId: "relationship-1",
+            deviceId: "device-remote-1",
+            principalRole: "remote",
+            status: "approved",
+            label: "Ada's iPhone",
+            deviceType: "iphone",
+            lastSeenAt: "2026-07-15T12:01:00Z",
+            approvedAt: "2026-07-15T12:00:30Z",
+            removedAt: nil,
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:01:00Z"
+        )
+    }
+
+    private func makePeerGrant() -> PeerGrant {
+        PeerGrant(
+            id: "grant-1",
+            relationshipId: "relationship-1",
+            direction: "remote_to_local",
+            sequence: 1,
+            status: "proposed",
+            label: "Availability",
+            purpose: "Coordinate time",
+            issuedAt: "2026-07-15T12:00:00Z",
+            effectiveAt: "2026-07-15T12:00:00Z",
+            expiresAt: "2099-01-01T00:00:00Z",
+            revokedAt: nil,
+            rules: [
+                PeerGrantRule(
+                    id: "rule-availability",
+                    effect: "allow",
+                    projectionId: "calendar.availability.v1",
+                    fields: PeerGrantFieldPolicy(
+                        include: ["start", "end", "busyState"],
+                        exclude: ["description", "participants", "providerRaw"]
+                    ),
+                    time: PeerGrantTimePolicy(
+                        startsAt: nil,
+                        endsAt: nil,
+                        rollingPastDays: 0,
+                        rollingFutureDays: 30
+                    ),
+                    precision: "fifteen_minutes",
+                    approvedDeviceIds: ["device-remote-1"],
+                    devicePolicy: "explicit",
+                    maximumResultCount: 100,
+                    maximumPayloadBytes: 262_144
+                )
+            ],
+            protocolVersion: "forge-peer/1",
+            schemaVersion: 1,
+            versionHash: String(repeating: "b", count: 64),
+            cachePolicy: PeerGrantCachePolicy(
+                mode: "duration",
+                maximumRetentionSeconds: 86_400,
+                purgeOnRevocation: true
+            )
+        )
+    }
+
+    private func makePeerPendingRequest(
+        id: String,
+        kind: String
+    ) -> PeerPendingRequest {
+        PeerPendingRequest(
+            id: id,
+            relationshipId: kind == "pairing" ? nil : "relationship-1",
+            kind: kind,
+            status: "pending",
+            version: 1,
+            payload: [
+                "transcriptHash": .string(String(repeating: "a", count: 64)),
+                "verificationPhrase": .string("violet harbor seven"),
+                "remoteLabel": .string("Remote Forge")
+            ],
+            expiresAt: "2099-01-01T00:00:00Z",
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:01:00Z"
+        )
+    }
+
+    private func makePeerInvitationStatus(
+        invitation: PeerPairingInvite
+    ) -> PeerInvitationStatus {
+        PeerInvitationStatus(
+            id: invitation.id,
+            status: "active",
+            fingerprint: invitation.fingerprint,
+            protocolVersion: invitation.protocolVersion,
+            transportKinds: invitation.transportKinds,
+            failedAttemptCount: 0,
+            maximumAttempts: 3,
+            expiresAt: invitation.expiresAt,
+            claimedAt: nil,
+            consumedAt: nil,
+            canceledAt: nil,
+            createdAt: "2026-07-15T12:00:00Z",
+            updatedAt: "2026-07-15T12:01:00Z"
+        )
+    }
+
+    private func peerJSONResponse(
+        _ json: String,
+        statusCode: Int = 200,
+        headers: [String: String] = [:]
+    ) -> PeerTransportResponse {
+        PeerTransportResponse(
+            statusCode: statusCode,
+            headers: headers,
+            data: Data(json.utf8)
+        )
+    }
+
+    private func peerApprovedMutationSteps(
+        identityStore: PeerDeviceIdentityStore,
+        challenge: String,
+        capabilitySecret: String,
+        finalData: Data
+    ) -> [PeerTestTransportStep] {
+        let state = PeerTestConsentState()
+        let identity = try! identityStore.identity()
+        let publicKey = try! P256.Signing.PublicKey(
+            x963Representation: PeerBase64URL.decode(identity.publicKey)!
+        )
+        return [
+            .handler { request in
+                let options = try JSONDecoder().decode(
+                    PeerTestPresenceOptionsBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                var digestInput = Data("forge-peer/human-presence-action/v1\0".utf8)
+                digestInput.append(try encoder.encode(options.action))
+                let digest = SHA256.hash(data: digestInput)
+                    .map { String(format: "%02x", $0) }
+                    .joined()
+                let now = Date()
+                let response = PeerTestConsentChallenge(
+                    protocolName: PeerCompanionSecurityContract.consentProtocol,
+                    challengeId: "challenge-test",
+                    challenge: challenge,
+                    actionDigest: digest,
+                    deviceId: options.companionDeviceId,
+                    ownerUserId: options.action.ownerUserId,
+                    principalId: request.pairing.sessionId,
+                    issuedAt: ISO8601DateFormatter().string(from: now),
+                    expiresAt: ISO8601DateFormatter().string(
+                        from: now.addingTimeInterval(120)
+                    )
+                )
+                state.challenge = response
+                state.action = options.action
+                return PeerTransportResponse(
+                    statusCode: 200,
+                    headers: [:],
+                    data: try encoder.encode(response)
+                )
+            },
+            .handler { request in
+                let verification = try JSONDecoder().decode(
+                    PeerTestPresenceVerifyBody.self,
+                    from: try XCTUnwrap(request.body)
+                )
+                let issued = try XCTUnwrap(state.challenge)
+                guard
+                    verification.challengeId == issued.challengeId,
+                    verification.verification.deviceId == issued.deviceId,
+                    verification.verification.challenge == issued.challenge,
+                    verification.verification.algorithm == identity.algorithm,
+                    verification.verification.keyId == "key-test",
+                    verification.action == state.action,
+                    request.headers["X-Forge-Companion-Public-Key"] == nil,
+                    request.headers["X-Forge-Companion-Pairing-Token"] == nil,
+                    let signatureData = PeerBase64URL.decode(
+                        verification.verification.signature
+                    ),
+                    let signature = try? P256.Signing.ECDSASignature(
+                        derRepresentation: signatureData
+                    )
+                else {
+                    throw PeerAPIError.invalidResponse
+                }
+                let proof = PeerTestConsentSignatureProof(
+                    actionDigest: issued.actionDigest,
+                    algorithm: identity.algorithm,
+                    challenge: issued.challenge,
+                    challengeId: issued.challengeId,
+                    deviceId: issued.deviceId,
+                    expiresAt: issued.expiresAt,
+                    issuedAt: issued.issuedAt,
+                    keyId: verification.verification.keyId,
+                    ownerUserId: issued.ownerUserId,
+                    principalId: issued.principalId,
+                    protocolName: issued.protocolName
+                )
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                guard publicKey.isValidSignature(signature, for: try encoder.encode(proof)) else {
+                    throw PeerAPIError.invalidResponse
+                }
+                return PeerTransportResponse(
+                    statusCode: 200,
+                    headers: [
+                        "Set-Cookie": "forge_peer_presence=presence-test.\(capabilitySecret); Path=/api/v1/peers; HttpOnly; Secure"
+                    ],
+                    data: Data(
+                        #"{"approved":true,"expiresAt":"2099-01-01T00:00:00Z"}"#.utf8
+                    )
+                )
+            },
+            .response(
+                PeerTransportResponse(statusCode: 200, headers: [:], data: finalData)
+            )
+        ]
+    }
+
+    private func peerPresenceStatusResponse(deviceId: String) -> PeerTransportResponse {
+        let operations = PeerAPIRoute.allCases.map(\.rawValue)
+        let object: [String: Any] = [
+            "methods": [
+                "companionConsent": [
+                    "available": true,
+                    "protocol": PeerCompanionSecurityContract.consentProtocol,
+                    "requestProtocol": PeerCompanionSecurityContract.requestProtocol,
+                    "deviceId": deviceId,
+                    "scopes": ["peer:grants:manage", "peer:query", "peer:status"],
+                    "capabilities": [
+                        PeerCompanionSecurityContract.enrollmentProtocol,
+                        PeerCompanionSecurityContract.consentProtocol,
+                        PeerCompanionSecurityContract.requestProtocol
+                    ],
+                    "authorizedOperations": operations
+                ]
+            ],
+            "peerCore": [
+                "enabled": true,
+                "healthy": true,
+                "protocolVersion": "forge-peer/1",
+                "localDeviceId": "peer-local-device-test"
+            ]
+        ]
+        return PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        )
+    }
+
+    private func peerPendingRequestJSONObject(
+        id: String,
+        kind: String = "pairing"
+    ) -> [String: Any] {
+        let relationshipId: Any = kind == "pairing" ? NSNull() : "relationship-1"
+        return [
+            "id": id,
+            "relationshipId": relationshipId,
+            "kind": kind,
+            "status": "pending",
+            "version": 1,
+            "payload": [
+                "transcriptHash": String(repeating: "a", count: 64),
+                "verificationPhrase": "amber cedar river"
+            ],
+            "expiresAt": "2099-01-01T00:00:00Z",
+            "createdAt": "2026-07-15T12:00:00Z",
+            "updatedAt": "2026-07-15T12:01:00Z"
+        ]
+    }
+
+    private func peerPendingRequestJSONObject(
+        _ request: PeerPendingRequest
+    ) throws -> [String: Any] {
+        let encoder = JSONEncoder()
+        let payload = try JSONSerialization.jsonObject(
+            with: encoder.encode(request.payload)
+        )
+        return [
+            "id": request.id,
+            "relationshipId": request.relationshipId.map { $0 as Any } ?? NSNull(),
+            "kind": request.kind,
+            "status": request.status,
+            "version": request.version,
+            "payload": payload,
+            "expiresAt": request.expiresAt,
+            "createdAt": request.createdAt,
+            "updatedAt": request.updatedAt
+        ]
+    }
+
+    private func peerRequestEnvelopeData(
+        request: PeerPendingRequest
+    ) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: ["request": try peerPendingRequestJSONObject(request)],
+            options: [.sortedKeys]
+        )
+    }
+
+    private func peerConfirmationEnvelopeData(
+        relationshipId: String,
+        request: PeerPendingRequest
+    ) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: [
+                "relationshipId": relationshipId,
+                "request": try peerPendingRequestJSONObject(request)
+            ],
+            options: [.sortedKeys]
+        )
+    }
+
+    private func peerInvitationStatusResponse(
+        _ status: PeerInvitationStatus
+    ) throws -> PeerTransportResponse {
+        PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try JSONSerialization.data(
+                withJSONObject: [
+                    "invitation": [
+                        "id": status.id,
+                        "status": status.status,
+                        "fingerprint": status.fingerprint,
+                        "protocolVersion": status.protocolVersion,
+                        "transportKinds": status.transportKinds,
+                        "failedAttemptCount": status.failedAttemptCount,
+                        "maximumAttempts": status.maximumAttempts,
+                        "expiresAt": status.expiresAt,
+                        "claimedAt": status.claimedAt.map { $0 as Any } ?? NSNull(),
+                        "consumedAt": status.consumedAt.map { $0 as Any } ?? NSNull(),
+                        "canceledAt": status.canceledAt.map { $0 as Any } ?? NSNull(),
+                        "createdAt": status.createdAt,
+                        "updatedAt": status.updatedAt
+                    ]
+                ],
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private func peerRequestsResponse(
+        requests: [[String: Any]],
+        hasMore: Bool,
+        nextCursor: String?
+    ) throws -> PeerTransportResponse {
+        PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try JSONSerialization.data(
+                withJSONObject: [
+                    "requests": requests,
+                    "page": [
+                        "limit": 100,
+                        "hasMore": hasMore,
+                        "nextCursor": nextCursor.map { $0 as Any } ?? NSNull()
+                    ]
+                ],
+                options: [.sortedKeys]
+            )
+        )
+    }
+
+    private func peerRelationshipsResponse(
+        _ relationships: [PeerRelationship],
+        hasMore: Bool = false,
+        nextCursor: String? = nil
+    ) throws -> PeerTransportResponse {
+        PeerTransportResponse(
+            statusCode: 200,
+            headers: [:],
+            data: try JSONEncoder().encode(PeerTestRelationshipsBody(
+                relationships: relationships,
+                page: PeerTestPageBody(
+                    limit: 100,
+                    hasMore: hasMore,
+                    nextCursor: nextCursor
+                )
+            ))
+        )
+    }
+
+    private func makeWatchHandoffDefaults() -> (UserDefaults, String) {
+        let suiteName = "ForgeCompanionTests.watch-handoff.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+
+    private func makeWatchHandoffPairing() -> PairingPayload {
+        PairingPayload(
+            kind: "forge-companion-pairing",
+            apiBaseUrl: "forge-iroh://paired-node/api/v1",
+            uiBaseUrl: "forge-iroh://paired-node/forge/",
+            sessionId: "pair-watch-handoff",
+            pairingToken: "watch-handoff-token",
+            expiresAt: "2099-01-01T00:00:00Z",
+            capabilities: ["watch-ready"],
+            transportMode: "iroh",
+            transport: nil
         )
     }
 

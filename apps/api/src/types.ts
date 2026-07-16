@@ -163,6 +163,7 @@ export const activityEntityTypeSchema = z.enum([
   "questionnaire_instrument",
   "questionnaire_run",
   "note",
+  "person",
   "event_type",
   "emotion_definition",
   "tag",
@@ -363,6 +364,7 @@ export const crudEntityTypeSchema = z.enum([
   "habit",
   "tag",
   "note",
+  "person",
   "insight",
   "calendar_event",
   "work_block_template",
@@ -430,6 +432,64 @@ export const surfaceWidgetDensitySchema = z.enum([
 
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
+export const TASK_CLOSEOUT_LIMITS = {
+  workSummaryLength: 8_000,
+  modifiedFiles: 256,
+  modifiedFileLength: 512,
+  linkedGitRefIds: 64,
+  gitRefs: 64,
+  gitRefIdLength: 128,
+  gitProviderLength: 64,
+  gitRepositoryLength: 255,
+  gitRefValueLength: 512,
+  gitUrlLength: 2_048,
+  gitDisplayTitleLength: 512,
+  acceptanceCriteria: 64,
+  acceptanceCriterionLength: 1_000,
+  blockerLinks: 64,
+  blockerEntityTypeLength: 80,
+  blockerEntityIdLength: 256,
+  blockerLabelLength: 512,
+  runNoteLength: 4_000,
+  closeoutNoteLength: 16_000,
+  closeoutNoteAuthorLength: 160,
+  closeoutNoteLinks: 64,
+  closeoutNoteTags: 24,
+  gitHelperQueryLength: 200,
+  gitHelperRepositoryLength: 200,
+  gitHelperResults: 25,
+  gitHelperWarnings: 8
+} as const;
+
+export function getSafeHttpUrl(
+  value: string | null | undefined
+): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized || normalized.length > TASK_CLOSEOUT_LIMITS.gitUrlLength) {
+    return null;
+  }
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? normalized
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export const safeHttpUrlSchema = trimmedString
+  .max(TASK_CLOSEOUT_LIMITS.gitUrlLength)
+  .refine((value) => getSafeHttpUrl(value) !== null, {
+    message: "Expected an http(s) URL"
+  });
+
+function boundedUniqueTrimmedStrings(maxItems: number, maxLength: number) {
+  return z
+    .array(nonEmptyTrimmedString.max(maxLength))
+    .max(maxItems)
+    .transform((values) => Array.from(new Set(values)));
+}
 const timeZoneIdentifierSchema = nonEmptyTrimmedString.refine(isValidTimeZone, {
   message:
     "Use a valid IANA timezone such as Europe/Zurich or America/Los_Angeles"
@@ -623,24 +683,87 @@ const ownershipShape = {
   assignees: z.array(userSummarySchema).default([])
 };
 
-const blockerLinkSchema = z.object({
-  entityType: z.string(),
-  entityId: z.string(),
-  label: trimmedString.optional()
-});
+const blockerLinkSchema = z
+  .object({
+    entityType: nonEmptyTrimmedString.max(
+      TASK_CLOSEOUT_LIMITS.blockerEntityTypeLength
+    ),
+    entityId: nonEmptyTrimmedString.max(
+      TASK_CLOSEOUT_LIMITS.blockerEntityIdLength
+    ),
+    label: trimmedString.max(TASK_CLOSEOUT_LIMITS.blockerLabelLength).optional()
+  })
+  .strict();
 
-const workItemGitRefSchema = z.object({
-  id: z.string(),
-  workItemId: z.string(),
-  refType: workItemGitRefTypeSchema,
-  provider: trimmedString.default("git"),
-  repository: trimmedString.default(""),
-  refValue: nonEmptyTrimmedString,
-  url: trimmedString.nullable().default(null),
-  displayTitle: trimmedString.default(""),
-  createdAt: z.string(),
-  updatedAt: z.string()
-});
+const blockerLinksSchema = z
+  .array(blockerLinkSchema)
+  .max(TASK_CLOSEOUT_LIMITS.blockerLinks)
+  .transform((links) => {
+    const seen = new Set<string>();
+    return links.filter((link) => {
+      const key = `${link.entityType}:${link.entityId}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  });
+
+const acceptanceCriteriaSchema = boundedUniqueTrimmedStrings(
+  TASK_CLOSEOUT_LIMITS.acceptanceCriteria,
+  TASK_CLOSEOUT_LIMITS.acceptanceCriterionLength
+);
+
+export const workItemGitRefIdSchema = nonEmptyTrimmedString.max(
+  TASK_CLOSEOUT_LIMITS.gitRefIdLength
+);
+
+const gitUrlSafetySchema = z.enum(["absent", "safe", "unsafe"]);
+
+export const workItemGitRefSchema = z
+  .object({
+    id: workItemGitRefIdSchema,
+    workItemId: nonEmptyTrimmedString,
+    refType: workItemGitRefTypeSchema,
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default("git"),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRepositoryLength)
+      .default(""),
+    refValue: nonEmptyTrimmedString.max(TASK_CLOSEOUT_LIMITS.gitRefValueLength),
+    url: safeHttpUrlSchema.nullable().default(null),
+    rawUrl: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitUrlLength)
+      .nullable()
+      .default(null),
+    urlSafety: gitUrlSafetySchema.default("absent"),
+    displayTitle: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength)
+      .default(""),
+    createdAt: z.string(),
+    updatedAt: z.string()
+  })
+  .strict();
+
+export const workItemGitRefInputSchema = z
+  .object({
+    id: workItemGitRefIdSchema.optional(),
+    refType: workItemGitRefTypeSchema,
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default("git"),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRepositoryLength)
+      .default(""),
+    refValue: nonEmptyTrimmedString.max(TASK_CLOSEOUT_LIMITS.gitRefValueLength),
+    url: safeHttpUrlSchema.nullable().default(null),
+    displayTitle: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength)
+      .default("")
+  })
+  .strict();
 
 export const gitHelperSearchKindSchema = z.enum([
   "branch",
@@ -648,42 +771,130 @@ export const gitHelperSearchKindSchema = z.enum([
   "pull_request"
 ]);
 
-export const gitHelperRefSchema = z.object({
-  key: nonEmptyTrimmedString,
-  refType: workItemGitRefTypeSchema,
-  provider: trimmedString.default("git"),
-  repository: trimmedString.default(""),
-  refValue: nonEmptyTrimmedString,
-  url: trimmedString.nullable().default(null),
-  displayTitle: trimmedString.default(""),
-  subtitle: trimmedString.default("")
-});
+export const gitHelperRefSchema = z
+  .object({
+    key: nonEmptyTrimmedString.max(TASK_CLOSEOUT_LIMITS.gitRefValueLength + 32),
+    refType: workItemGitRefTypeSchema,
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default("git"),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRepositoryLength)
+      .default(""),
+    refValue: nonEmptyTrimmedString.max(TASK_CLOSEOUT_LIMITS.gitRefValueLength),
+    url: safeHttpUrlSchema.nullable().default(null),
+    displayTitle: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength)
+      .default(""),
+    subtitle: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength)
+      .default("")
+  })
+  .strict();
 
-export const gitHelperOverviewSchema = z.object({
-  repoRoot: nonEmptyTrimmedString,
-  provider: trimmedString.default("git"),
-  repository: trimmedString.default(""),
-  currentBranch: trimmedString.nullable().default(null),
-  baseBranch: trimmedString.default("main"),
-  branches: z.array(gitHelperRefSchema),
-  commits: z.array(gitHelperRefSchema),
-  pullRequests: z.array(gitHelperRefSchema),
-  warnings: z.array(trimmedString).default([])
-});
+export const gitHelperOverviewSchema = z
+  .object({
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default("git"),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength)
+      .default(""),
+    currentBranch: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRefValueLength)
+      .nullable()
+      .default(null),
+    baseBranch: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRefValueLength)
+      .default("main"),
+    branches: z
+      .array(gitHelperRefSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperResults),
+    commits: z
+      .array(gitHelperRefSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperResults),
+    pullRequests: z
+      .array(gitHelperRefSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperResults),
+    warnings: z
+      .array(trimmedString.max(512))
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperWarnings)
+      .default([])
+  })
+  .strict();
 
-export const gitHelperSearchResponseSchema = z.object({
-  provider: trimmedString.default("git"),
-  repository: trimmedString.default(""),
-  kind: gitHelperSearchKindSchema,
-  refs: z.array(gitHelperRefSchema),
-  warnings: z.array(trimmedString).default([])
-});
+export const gitHelperSearchResponseSchema = z
+  .object({
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default("git"),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength)
+      .default(""),
+    kind: gitHelperSearchKindSchema,
+    refs: z
+      .array(gitHelperRefSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperResults),
+    warnings: z
+      .array(trimmedString.max(512))
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperWarnings)
+      .default([])
+  })
+  .strict();
 
-const completionReportSchema = z.object({
-  modifiedFiles: z.array(z.string()).default([]),
-  workSummary: trimmedString.default(""),
-  linkedGitRefIds: z.array(z.string()).default([])
-});
+export const gitHelperSearchQuerySchema = z
+  .object({
+    kind: gitHelperSearchKindSchema,
+    query: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperQueryLength)
+      .default(""),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength)
+      .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, {
+        message: "repository must use canonical owner/repo form"
+      })
+      .optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(TASK_CLOSEOUT_LIMITS.gitHelperResults)
+      .default(12)
+  })
+  .strict();
+
+const modifiedFileSchema = nonEmptyTrimmedString
+  .max(TASK_CLOSEOUT_LIMITS.modifiedFileLength)
+  .transform((value) => value.replace(/^\.\//, ""))
+  .refine(
+    (value) =>
+      value.length > 0 &&
+      !value.startsWith("/") &&
+      !value.includes("\\") &&
+      !value.split("/").includes("..") &&
+      !Array.from(value).some((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint <= 31 || codePoint === 127;
+      }),
+    { message: "Expected a safe repository-relative path" }
+  );
+
+export const completionReportSchema = z
+  .object({
+    modifiedFiles: z
+      .array(modifiedFileSchema)
+      .max(TASK_CLOSEOUT_LIMITS.modifiedFiles)
+      .transform((values) => Array.from(new Set(values)))
+      .default([]),
+    workSummary: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.workSummaryLength)
+      .default(""),
+    linkedGitRefIds: boundedUniqueTrimmedStrings(
+      TASK_CLOSEOUT_LIMITS.linkedGitRefIds,
+      TASK_CLOSEOUT_LIMITS.gitRefIdLength
+    ).default([])
+  })
+  .strict();
 
 export const tagSchema = z.object({
   id: z.string(),
@@ -987,10 +1198,16 @@ export const taskSchema = z.object({
   splitParentTaskId: z.string().nullable().default(null),
   aiInstructions: trimmedString.default(""),
   executionMode: workItemExecutionModeSchema.nullable().default(null),
-  acceptanceCriteria: z.array(trimmedString).default([]),
-  blockerLinks: z.array(blockerLinkSchema).default([]),
+  acceptanceCriteria: acceptanceCriteriaSchema.default([]),
+  blockerLinks: blockerLinksSchema.default([]),
   completionReport: completionReportSchema.nullable().default(null),
-  gitRefs: z.array(workItemGitRefSchema).default([]),
+  closeoutState: z
+    .enum(["not_applicable", "complete", "deferred"])
+    .default("not_applicable"),
+  gitRefs: z
+    .array(workItemGitRefSchema)
+    .max(TASK_CLOSEOUT_LIMITS.gitRefs)
+    .default([]),
   completedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -1935,7 +2152,13 @@ export const gamificationCelebrationSchema = z.object({
   assetKey: z.string(),
   metadata: z.record(
     z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.null()])
+    z.union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.null(),
+      z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    ])
   ),
   createdAt: z.string(),
   seenAt: z.string().nullable()
@@ -2525,7 +2748,10 @@ export const forgeBoxCatalogEntrySchema = z.object({
   tools: z.array(forgeBoxToolAdapterSchema).default([]),
   outputs: z.array(forgeBoxPortDefinitionSchema).default([]).optional(),
   toolAdapters: z.array(forgeBoxToolAdapterSchema).default([]).optional(),
-  snapshotResolverKey: trimmedString.optional()
+  snapshotResolverKey: trimmedString.optional(),
+  source: z.enum(["forge", "flow_output"]).optional(),
+  sourceFlowId: trimmedString.nullable().optional(),
+  sourceFlowEnabled: z.boolean().nullable().optional()
 });
 
 export const forgeBoxSnapshotSchema = z.object({
@@ -2971,7 +3197,13 @@ export const eventLogEntrySchema = z.object({
   causedByEventId: z.string().nullable(),
   metadata: z.record(
     z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.null()])
+    z.union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.null(),
+      z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    ])
   ),
   createdAt: z.string()
 });
@@ -3268,6 +3500,7 @@ export const sessionEventSchema = z.object({
 });
 
 export const xpMetricsPayloadSchema = z.object({
+  timezone: timeZoneIdentifierSchema,
   scope: gamificationScopeSchema,
   profile: gamificationProfileSchema,
   achievements: z.array(achievementSignalSchema),
@@ -3313,6 +3546,26 @@ export const updateRewardRuleSchema = z.object({
   config: z.record(z.string(), rewardConfigValueSchema).optional()
 });
 
+export const manualRewardReservedMetadataKeys = [
+  "manual",
+  "qualifiesForStreak",
+  "idempotencyFingerprint"
+] as const;
+
+const manualRewardMetadataSchema = z
+  .record(z.string(), rewardConfigValueSchema)
+  .superRefine((metadata, context) => {
+    for (const key of manualRewardReservedMetadataKeys) {
+      if (Object.prototype.hasOwnProperty.call(metadata, key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} is server-owned metadata`
+        });
+      }
+    }
+  });
+
 export const createManualRewardGrantSchema = z.object({
   entityType: rewardableEntityTypeSchema,
   entityId: nonEmptyTrimmedString,
@@ -3324,7 +3577,7 @@ export const createManualRewardGrantSchema = z.object({
     }),
   reasonTitle: nonEmptyTrimmedString,
   reasonSummary: trimmedString.default(""),
-  metadata: z.record(z.string(), rewardConfigValueSchema).default({})
+  metadata: manualRewardMetadataSchema.default({})
 });
 
 export const createWorkAdjustmentSchema = z.object({
@@ -3400,16 +3653,28 @@ const repeatedTrimmedStringQuerySchema = z.preprocess((value) => {
   return Array.isArray(value) ? value : [value];
 }, z.array(trimmedString));
 
-const repeatedUnknownQuerySchema = z.preprocess((value) => {
+function boundedRepeatedNoteQuerySchema(maxItems: number, maxLength: number) {
+  return z.preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === "") {
+        return [];
+      }
+      return Array.isArray(value) ? value : [value];
+    },
+    z.array(nonEmptyTrimmedString.max(maxLength)).max(maxItems)
+  );
+}
+
+const boundedRepeatedNoteUnknownQuerySchema = z.preprocess((value) => {
   if (value === undefined || value === null || value === "") {
     return [];
   }
   return Array.isArray(value) ? value : [value];
-}, z.array(z.unknown()));
+}, z.array(z.unknown()).max(24));
 
 const noteLinkedEntityFilterSchema = z.object({
   entityType: crudEntityTypeSchema,
-  entityId: nonEmptyTrimmedString
+  entityId: nonEmptyTrimmedString.max(256)
 });
 
 function parseLinkedEntityQueryValue(raw: string) {
@@ -3425,6 +3690,10 @@ function parseLinkedEntityQueryValue(raw: string) {
   };
 }
 
+function countNoteSearchTokens(value: string) {
+  return value.normalize("NFKC").match(/[\p{L}\p{N}_]+/gu)?.length ?? 0;
+}
+
 export const createNoteSchema = z.object({
   kind: noteKindSchema.default("evidence"),
   title: trimmedString.optional(),
@@ -3437,7 +3706,7 @@ export const createNoteSchema = z.object({
   summary: trimmedString.default(""),
   contentMarkdown: nonEmptyTrimmedString,
   author: trimmedString.nullable().default(null),
-  links: z.array(createNoteLinkSchema).default([]),
+  links: z.array(createNoteLinkSchema).max(64).default([]),
   tags: uniqueNoteTagArraySchema.default([]),
   destroyAt: dateTimeSchema.nullable().default(null),
   sourcePath: trimmedString.default(""),
@@ -3459,12 +3728,52 @@ export const nestedCreateNoteSchema = z.object({
   summary: trimmedString.default(""),
   contentMarkdown: nonEmptyTrimmedString,
   author: trimmedString.nullable().default(null),
-  links: z.array(createNoteLinkSchema).default([]),
+  links: z.array(createNoteLinkSchema).max(64).default([]),
   tags: uniqueNoteTagArraySchema.default([]),
   destroyAt: dateTimeSchema.nullable().default(null),
   sourcePath: trimmedString.default(""),
   frontmatter: z.record(z.string(), z.unknown()).default({})
 });
+
+export const closeoutNoteSchema = z
+  .object({
+    kind: noteKindSchema.default("evidence"),
+    title: trimmedString.max(512).optional(),
+    slug: trimmedString.max(256).optional(),
+    spaceId: trimmedString.max(256).optional(),
+    parentSlug: trimmedString.max(256).nullable().optional(),
+    indexOrder: z.number().int().default(0),
+    showInIndex: z.boolean().optional(),
+    aliases: boundedUniqueTrimmedStrings(32, 160).default([]),
+    summary: trimmedString.max(2_000).default(""),
+    contentMarkdown: nonEmptyTrimmedString.max(
+      TASK_CLOSEOUT_LIMITS.closeoutNoteLength
+    ),
+    author: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.closeoutNoteAuthorLength)
+      .nullable()
+      .default(null),
+    links: z
+      .array(createNoteLinkSchema)
+      .max(TASK_CLOSEOUT_LIMITS.closeoutNoteLinks)
+      .default([]),
+    tags: uniqueNoteTagArraySchema
+      .refine(
+        (tags) => tags.length <= TASK_CLOSEOUT_LIMITS.closeoutNoteTags,
+        `Closeout notes support at most ${TASK_CLOSEOUT_LIMITS.closeoutNoteTags} tags`
+      )
+      .default([]),
+    destroyAt: dateTimeSchema.nullable().default(null),
+    sourcePath: trimmedString.max(1_024).default(""),
+    frontmatter: z
+      .record(z.string().max(160), z.unknown())
+      .refine(
+        (value) => JSON.stringify(value).length <= 4_096,
+        "Closeout note frontmatter is too large"
+      )
+      .default({})
+  })
+  .strict();
 
 export const updateNoteSchema = z.object({
   kind: noteKindSchema.optional(),
@@ -3478,7 +3787,7 @@ export const updateNoteSchema = z.object({
   summary: trimmedString.optional(),
   contentMarkdown: nonEmptyTrimmedString.optional(),
   author: trimmedString.nullable().optional(),
-  links: z.array(createNoteLinkSchema).optional(),
+  links: z.array(createNoteLinkSchema).max(64).optional(),
   tags: uniqueNoteTagArraySchema.optional(),
   destroyAt: dateTimeSchema.nullable().optional(),
   sourcePath: trimmedString.optional(),
@@ -3492,42 +3801,54 @@ export const updateNoteSchema = z.object({
 export const notesListQuerySchema = z
   .object({
     kind: noteKindSchema.optional(),
-    spaceId: trimmedString.optional(),
-    slug: trimmedString.optional(),
+    spaceId: trimmedString.max(128).optional(),
+    slug: trimmedString.max(240).optional(),
     linkedEntityType: crudEntityTypeSchema.optional(),
-    linkedEntityId: nonEmptyTrimmedString.optional(),
-    anchorKey: trimmedString.nullable().optional(),
-    author: trimmedString.optional(),
-    query: trimmedString.optional(),
-    linkedTo: repeatedUnknownQuerySchema.transform((values, context) =>
-      values.map((value, index) => {
-        try {
-          if (typeof value === "string") {
-            return noteLinkedEntityFilterSchema.parse(
-              parseLinkedEntityQueryValue(value)
-            );
+    linkedEntityId: nonEmptyTrimmedString.max(256).optional(),
+    anchorKey: trimmedString.max(120).nullable().optional(),
+    includeAnchorless: z
+      .union([
+        z.boolean(),
+        z.enum(["true", "false"]).transform((value) => value === "true")
+      ])
+      .default(false),
+    author: trimmedString.max(160).optional(),
+    query: trimmedString.max(512).optional(),
+    linkedTo: boundedRepeatedNoteUnknownQuerySchema.transform(
+      (values, context) =>
+        values.map((value, index) => {
+          try {
+            if (typeof value === "string") {
+              return noteLinkedEntityFilterSchema.parse(
+                parseLinkedEntityQueryValue(value)
+              );
+            }
+            return noteLinkedEntityFilterSchema.parse(value);
+          } catch (error) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["linkedTo", index],
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Invalid linkedTo filter"
+            });
+            return {
+              entityType: "goal",
+              entityId: "__invalid__"
+            } as z.infer<typeof noteLinkedEntityFilterSchema>;
           }
-          return noteLinkedEntityFilterSchema.parse(value);
-        } catch (error) {
-          context.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["linkedTo", index],
-            message:
-              error instanceof Error ? error.message : "Invalid linkedTo filter"
-          });
-          return {
-            entityType: "goal",
-            entityId: "__invalid__"
-          } as z.infer<typeof noteLinkedEntityFilterSchema>;
-        }
-      })
+        })
     ),
-    tags: repeatedTrimmedStringQuerySchema,
-    textTerms: repeatedTrimmedStringQuerySchema,
-    userIds: repeatedTrimmedStringQuerySchema,
+    tags: boundedRepeatedNoteQuerySchema(24, 80),
+    textTerms: boundedRepeatedNoteQuerySchema(12, 160),
+    userIds: boundedRepeatedNoteQuerySchema(32, 128),
     updatedFrom: dateOnlySchema.optional(),
     updatedTo: dateOnlySchema.optional(),
-    limit: z.coerce.number().int().positive().max(2000).optional()
+    observedFrom: dateOnlySchema.optional(),
+    observedTo: dateOnlySchema.optional(),
+    limit: z.coerce.number().int().positive().max(100).optional(),
+    cursor: nonEmptyTrimmedString.max(1024).optional()
   })
   .superRefine((value, context) => {
     if (
@@ -3538,6 +3859,13 @@ export const notesListQuerySchema = z
         code: z.ZodIssueCode.custom,
         path: ["linkedEntityId"],
         message: "linkedEntityId is required when linkedEntityType is provided"
+      });
+    }
+    if (value.includeAnchorless && value.anchorKey === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["includeAnchorless"],
+        message: "includeAnchorless requires anchorKey"
       });
     }
     if (
@@ -3551,6 +3879,34 @@ export const notesListQuerySchema = z
         message: "updatedTo must be on or after updatedFrom"
       });
     }
+    if (
+      value.observedFrom &&
+      value.observedTo &&
+      value.observedTo < value.observedFrom
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["observedTo"],
+        message: "observedTo must be on or after observedFrom"
+      });
+    }
+    if (value.query && countNoteSearchTokens(value.query) > 16) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["query"],
+        message: "query must contain at most 16 searchable tokens"
+      });
+    }
+    value.textTerms.forEach((term, index) => {
+      if (countNoteSearchTokens(term) > 12) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["textTerms", index],
+          message:
+            "each textTerms value must contain at most 12 searchable tokens"
+        });
+      }
+    });
   });
 
 export const taskListQuerySchema = z.object({
@@ -3739,6 +4095,21 @@ export const updateCalendarConnectionSchema = z.object({
   selectedCalendarUrls: z.array(nonEmptyTrimmedString.url()).optional()
 });
 
+export const calendarActivityPresetKeySchema = z.enum([
+  "deep_work",
+  "admin",
+  "maintenance",
+  "meeting",
+  "recovery_break",
+  "holiday_leisure",
+  "light_context",
+  "task_inherited"
+]);
+
+export type CalendarActivityPresetKey = z.infer<
+  typeof calendarActivityPresetKeySchema
+>;
+
 const workBlockTemplateMutationShape = {
   title: nonEmptyTrimmedString,
   kind: workBlockKindSchema.default("custom"),
@@ -3760,7 +4131,7 @@ const workBlockTemplateMutationShape = {
 export const createWorkBlockTemplateSchema = z
   .object({
     ...workBlockTemplateMutationShape,
-    activityPresetKey: trimmedString.nullable().optional(),
+    activityPresetKey: calendarActivityPresetKeySchema.nullable().optional(),
     customSustainRateApPerHour: z.number().min(0).nullable().optional()
   })
   .superRefine((value, context) => {
@@ -3796,7 +4167,7 @@ export const updateWorkBlockTemplateSchema = z
     endsOn: dateOnlySchema.nullable().optional(),
     exclusionDates: z.array(dateOnlySchema).max(366).optional(),
     blockingState: z.enum(["allowed", "blocked"]).optional(),
-    activityPresetKey: trimmedString.nullable().optional(),
+    activityPresetKey: calendarActivityPresetKeySchema.nullable().optional(),
     customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
   })
@@ -3837,7 +4208,7 @@ export const createTaskTimeboxSchema = z
     source: calendarTimeboxSourceSchema.default("manual"),
     status: calendarTimeboxStatusSchema.default("planned"),
     overrideReason: trimmedString.nullable().default(null),
-    activityPresetKey: trimmedString.nullable().optional(),
+    activityPresetKey: calendarActivityPresetKeySchema.nullable().optional(),
     customSustainRateApPerHour: z.number().min(0).nullable().optional(),
     userId: nonEmptyTrimmedString.nullable().optional()
   })
@@ -3857,7 +4228,7 @@ export const updateTaskTimeboxSchema = z.object({
   endsAt: z.string().datetime().optional(),
   status: calendarTimeboxStatusSchema.optional(),
   overrideReason: trimmedString.nullable().optional(),
-  activityPresetKey: trimmedString.nullable().optional(),
+  activityPresetKey: calendarActivityPresetKeySchema.nullable().optional(),
   customSustainRateApPerHour: z.number().min(0).nullable().optional(),
   userId: nonEmptyTrimmedString.nullable().optional()
 });
@@ -3866,7 +4237,8 @@ export const recommendTaskTimeboxesSchema = z.object({
   taskId: nonEmptyTrimmedString,
   from: flexibleCalendarQueryDateSchema.optional(),
   to: flexibleCalendarQueryDateSchema.optional(),
-  limit: z.coerce.number().int().positive().max(12).optional()
+  limit: z.coerce.number().int().positive().max(12).optional(),
+  timezone: timeZoneIdentifierSchema.optional()
 });
 
 export const updateCalendarEventSchema = z
@@ -4225,18 +4597,12 @@ export const taskMutationShape = {
   sortOrder: z.number().int().nonnegative().optional(),
   aiInstructions: trimmedString.default(""),
   executionMode: workItemExecutionModeSchema.nullable().default(null),
-  acceptanceCriteria: z.array(trimmedString).default([]),
-  blockerLinks: z.array(blockerLinkSchema).default([]),
+  acceptanceCriteria: acceptanceCriteriaSchema.default([]),
+  blockerLinks: blockerLinksSchema.default([]),
   completionReport: completionReportSchema.nullable().default(null),
   gitRefs: z
-    .array(
-      workItemGitRefSchema.omit({
-        id: true,
-        workItemId: true,
-        createdAt: true,
-        updatedAt: true
-      })
-    )
+    .array(workItemGitRefInputSchema)
+    .max(TASK_CLOSEOUT_LIMITS.gitRefs)
     .default([]),
   tagIds: uniqueStringArraySchema.default([]),
   actionCostBand: actionCostBandSchema.default("standard"),
@@ -4414,19 +4780,12 @@ export const updateTaskSchema = z.object({
   splitParentTaskId: z.string().nullable().optional(),
   aiInstructions: trimmedString.optional(),
   executionMode: workItemExecutionModeSchema.nullable().optional(),
-  acceptanceCriteria: z.array(trimmedString).optional(),
-  blockerLinks: z.array(blockerLinkSchema).optional(),
+  acceptanceCriteria: acceptanceCriteriaSchema.optional(),
+  blockerLinks: blockerLinksSchema.optional(),
   completionReport: completionReportSchema.nullable().optional(),
   gitRefs: z
-    .array(
-      workItemGitRefSchema
-        .omit({
-          workItemId: true,
-          createdAt: true,
-          updatedAt: true
-        })
-        .partial({ id: true })
-    )
+    .array(workItemGitRefInputSchema)
+    .max(TASK_CLOSEOUT_LIMITS.gitRefs)
     .optional(),
   enforceTodayWorkLog: z.boolean().optional(),
   completedTodayWorkSeconds: z
@@ -4472,9 +4831,30 @@ export const tagSuggestionRequestSchema = z.object({
   selectedTagIds: uniqueStringArraySchema.default([])
 });
 
+const taskRunGitContextInputSchema = z
+  .object({
+    provider: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitProviderLength)
+      .default(""),
+    repository: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRepositoryLength)
+      .default(""),
+    branch: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRefValueLength)
+      .default(""),
+    baseBranch: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.gitRefValueLength)
+      .default("main"),
+    branchUrl: safeHttpUrlSchema.nullable().default(null),
+    pullRequestUrl: safeHttpUrlSchema.nullable().default(null),
+    pullRequestNumber: z.number().int().positive().nullable().default(null),
+    compareUrl: safeHttpUrlSchema.nullable().default(null)
+  })
+  .strict();
+
 export const taskRunClaimSchema = z
   .object({
-    actor: nonEmptyTrimmedString,
+    actor: nonEmptyTrimmedString.max(160),
     timerMode: taskTimerModeSchema.default("unlimited"),
     plannedDurationSeconds: z.coerce
       .number()
@@ -4485,9 +4865,9 @@ export const taskRunClaimSchema = z
       .default(null),
     isCurrent: z.coerce.boolean().default(true),
     leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
-    note: trimmedString.default(""),
-    overrideReason: trimmedString.optional(),
-    gitContext: taskRunSchema.shape.gitContext.optional()
+    note: trimmedString.max(TASK_CLOSEOUT_LIMITS.runNoteLength).default(""),
+    overrideReason: trimmedString.max(1_000).optional(),
+    gitContext: taskRunGitContextInputSchema.nullable().optional()
   })
   .superRefine((value, context) => {
     if (
@@ -4514,18 +4894,31 @@ export const taskRunClaimSchema = z
   });
 
 export const taskRunHeartbeatSchema = z.object({
-  actor: nonEmptyTrimmedString.optional(),
+  actor: nonEmptyTrimmedString.max(160).optional(),
   leaseTtlSeconds: z.coerce.number().int().min(1).max(14400).default(900),
-  note: trimmedString.optional(),
-  overrideReason: trimmedString.optional(),
-  gitContext: taskRunSchema.shape.gitContext.optional()
+  note: trimmedString.max(TASK_CLOSEOUT_LIMITS.runNoteLength).optional(),
+  overrideReason: trimmedString.max(1_000).optional(),
+  gitContext: taskRunGitContextInputSchema.nullable().optional()
 });
 
-export const taskRunFinishSchema = z.object({
-  actor: nonEmptyTrimmedString.optional(),
-  note: trimmedString.default(""),
-  closeoutNote: nestedCreateNoteSchema.optional()
-});
+const taskRunTerminalShape = {
+  actor: nonEmptyTrimmedString.max(160).optional(),
+  note: trimmedString.max(TASK_CLOSEOUT_LIMITS.runNoteLength).default(""),
+  closeoutNote: closeoutNoteSchema.optional()
+};
+
+export const taskRunCompleteSchema = z
+  .object({
+    ...taskRunTerminalShape,
+    completionReport: completionReportSchema.optional(),
+    gitRefs: z
+      .array(workItemGitRefInputSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitRefs)
+      .optional()
+  })
+  .strict();
+
+export const taskRunReleaseSchema = z.object(taskRunTerminalShape).strict();
 
 export const taskRunFocusSchema = z.object({
   actor: nonEmptyTrimmedString.optional()
@@ -4876,6 +5269,7 @@ export const resolveApprovalRequestSchema = z.object({
 export const createSessionEventSchema = z.object({
   sessionId: nonEmptyTrimmedString,
   eventType: nonEmptyTrimmedString,
+  timezone: timeZoneIdentifierSchema.optional(),
   metrics: z
     .record(
       z.string(),
@@ -5131,10 +5525,12 @@ export const batchCreateEntitiesSchema = z.object({
       z.object({
         entityType: crudEntityTypeSchema,
         clientRef: trimmedString.optional(),
+        idempotencyKey: nonEmptyTrimmedString.max(128).optional(),
         data: z.record(z.string(), z.unknown())
       })
     )
     .min(1)
+    .max(100)
 });
 
 export const batchUpdateEntitiesSchema = z.object({
@@ -5149,6 +5545,7 @@ export const batchUpdateEntitiesSchema = z.object({
       })
     )
     .min(1)
+    .max(100)
 });
 
 export const batchDeleteEntitiesSchema = z.object({
@@ -5164,6 +5561,7 @@ export const batchDeleteEntitiesSchema = z.object({
       })
     )
     .min(1)
+    .max(100)
 });
 
 export const batchRestoreEntitiesSchema = z.object({
@@ -5177,6 +5575,7 @@ export const batchRestoreEntitiesSchema = z.object({
       })
     )
     .min(1)
+    .max(100)
 });
 
 export const batchSearchEntitiesSchema = z.object({
@@ -5195,6 +5594,7 @@ export const batchSearchEntitiesSchema = z.object({
       })
     )
     .min(1)
+    .max(50)
 });
 
 export const uncompleteTaskSchema = z.object({
@@ -5203,10 +5603,12 @@ export const uncompleteTaskSchema = z.object({
 
 export const operatorLogWorkSchema = z
   .object({
-    taskId: nonEmptyTrimmedString.optional(),
-    title: trimmedString.optional(),
-    description: trimmedString.optional(),
-    summary: trimmedString.default(""),
+    taskId: nonEmptyTrimmedString.max(256).optional(),
+    title: trimmedString.max(1_000).optional(),
+    description: trimmedString.max(16_000).optional(),
+    summary: trimmedString
+      .max(TASK_CLOSEOUT_LIMITS.workSummaryLength)
+      .default(""),
     goalId: nonEmptyTrimmedString.nullable().optional(),
     projectId: nonEmptyTrimmedString.nullable().optional(),
     owner: nonEmptyTrimmedString.optional(),
@@ -5217,9 +5619,15 @@ export const operatorLogWorkSchema = z
     effort: taskEffortSchema.optional(),
     energy: taskEnergySchema.optional(),
     points: z.number().int().min(5).max(500).optional(),
-    tagIds: uniqueStringArraySchema.optional(),
-    closeoutNote: nestedCreateNoteSchema.optional()
+    tagIds: boundedUniqueTrimmedStrings(64, 256).optional(),
+    completionReport: completionReportSchema.optional(),
+    gitRefs: z
+      .array(workItemGitRefInputSchema)
+      .max(TASK_CLOSEOUT_LIMITS.gitRefs)
+      .optional(),
+    closeoutNote: closeoutNoteSchema.optional()
   })
+  .strict()
   .superRefine((value, context) => {
     if (!value.taskId && (!value.title || value.title.trim().length === 0)) {
       context.addIssue({
@@ -5275,6 +5683,7 @@ export type LifeForcePayload = z.infer<typeof lifeForcePayloadSchema>;
 export type GitHelperOverview = z.infer<typeof gitHelperOverviewSchema>;
 export type GitHelperRef = z.infer<typeof gitHelperRefSchema>;
 export type GitHelperSearchKind = z.infer<typeof gitHelperSearchKindSchema>;
+export type GitHelperSearchInput = z.infer<typeof gitHelperSearchQuerySchema>;
 export type GitHelperSearchResponse = z.infer<
   typeof gitHelperSearchResponseSchema
 >;
@@ -5511,6 +5920,8 @@ export type WorkItem = z.infer<typeof taskSchema>;
 export type WorkItemLevel = z.infer<typeof workItemLevelSchema>;
 export type WorkItemExecutionMode = z.infer<typeof workItemExecutionModeSchema>;
 export type WorkItemGitRef = z.infer<typeof workItemGitRefSchema>;
+export type WorkItemGitRefInput = z.infer<typeof workItemGitRefInputSchema>;
+export type CompletionReport = z.infer<typeof completionReportSchema>;
 export type TaskTimeSummary = z.infer<typeof taskTimeSummarySchema>;
 export type TaskDueFilter = z.infer<typeof taskDueFilterSchema>;
 export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
@@ -5534,7 +5945,8 @@ export type RewardsLedgerQuery = z.infer<typeof rewardsLedgerQuerySchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 export type TaskRun = z.infer<typeof taskRunSchema>;
 export type TaskRunClaimInput = z.input<typeof taskRunClaimSchema>;
-export type TaskRunFinishInput = z.infer<typeof taskRunFinishSchema>;
+export type TaskRunCompleteInput = z.input<typeof taskRunCompleteSchema>;
+export type TaskRunReleaseInput = z.input<typeof taskRunReleaseSchema>;
 export type TaskRunFocusInput = z.input<typeof taskRunFocusSchema>;
 export type TaskRunHeartbeatInput = z.infer<typeof taskRunHeartbeatSchema>;
 export type TaskRunListQuery = z.infer<typeof taskRunListQuerySchema>;

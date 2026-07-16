@@ -19,7 +19,7 @@ import type {
   WorkItemGitRefType
 } from "@/lib/types";
 
-type DraftGitRef = {
+export type DraftGitRef = {
   id?: string;
   workItemId?: string;
   refType: WorkItemGitRefType;
@@ -30,8 +30,34 @@ type DraftGitRef = {
   displayTitle: string;
 };
 
+const MAX_SELECTED_GIT_REFS = 24;
+
+export function getSafeGitRefHref(value: string | null | undefined) {
+  const normalized = trim(value);
+  if (!normalized) {
+    return null;
+  }
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" || url.protocol === "http:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function trim(value: string | null | undefined) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+export function createDraftGitRefId(
+  randomUuid: string | null = globalThis.crypto?.randomUUID?.() ?? null
+) {
+  const entropy = randomUuid
+    ? randomUuid.replaceAll("-", "")
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return `gitref_draft_${entropy.replace(/[^a-zA-Z0-9]/g, "").slice(0, 96)}`;
 }
 
 function buildDraftGitRef(
@@ -46,9 +72,7 @@ function buildDraftGitRef(
         entry.repository === ref.repository
     ) ?? null;
   return {
-    id:
-      existingMatch?.id ??
-      `draft-${ref.refType}-${ref.refValue.replace(/[^a-zA-Z0-9]+/g, "-")}`,
+    id: existingMatch?.id ?? createDraftGitRefId(),
     workItemId: existingMatch?.workItemId ?? "",
     refType: ref.refType,
     provider: ref.provider,
@@ -81,7 +105,9 @@ export function GitRefPicker({
   const [loadingOverview, setLoadingOverview] = useState(false);
   const [kind, setKind] = useState<GitHelperSearchKind>("branch");
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [repository, setRepository] = useState("");
+  const [debouncedRepository, setDebouncedRepository] = useState("");
   const [searchResults, setSearchResults] = useState<GitHelperRef[]>([]);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [loadingSearch, setLoadingSearch] = useState(false);
@@ -124,12 +150,20 @@ export function GitRefPicker({
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setDebouncedRepository(repository.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query, repository]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoadingSearch(true);
     void searchGitHelperRefs({
       kind,
-      query,
-      repository
+      query: debouncedQuery,
+      repository: debouncedRepository
     })
       .then((response) => {
         if (cancelled) {
@@ -158,7 +192,7 @@ export function GitRefPicker({
     return () => {
       cancelled = true;
     };
-  }, [kind, query, repository]);
+  }, [debouncedQuery, debouncedRepository, kind]);
 
   const quickCurrentBranch = useMemo(() => {
     const branch = trim(overview?.currentBranch);
@@ -182,6 +216,9 @@ export function GitRefPicker({
   }, [overview?.currentBranch, overview?.repository, repository]);
 
   const addRef = (ref: GitHelperRef) => {
+    if (selectedRefs.length >= MAX_SELECTED_GIT_REFS) {
+      return;
+    }
     const nextRef = buildDraftGitRef(ref, selectedRefs);
     if (
       selectedRefs.some(
@@ -294,11 +331,13 @@ export function GitRefPicker({
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {ref.url ? (
+                  {getSafeGitRefHref(ref.url) ? (
                     <a
-                      href={ref.url}
+                      href={getSafeGitRefHref(ref.url) ?? undefined}
                       target="_blank"
                       rel="noreferrer"
+                      aria-label={`Open ${ref.displayTitle || ref.refValue}`}
+                      title="Open Git reference"
                       className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     >
                       <ExternalLink className="size-4" />
@@ -306,6 +345,8 @@ export function GitRefPicker({
                   ) : null}
                   <button
                     type="button"
+                    aria-label={`Remove ${ref.displayTitle || ref.refValue}`}
+                    title="Remove Git reference"
                     className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                     onClick={() => removeRef(ref)}
                   >
@@ -376,11 +417,13 @@ export function GitRefPicker({
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                {ref.url ? (
+                {getSafeGitRefHref(ref.url) ? (
                   <a
-                    href={ref.url}
+                    href={getSafeGitRefHref(ref.url) ?? undefined}
                     target="_blank"
                     rel="noreferrer"
+                    aria-label={`Open ${ref.displayTitle || ref.refValue}`}
+                    title="Open Git reference"
                     className="inline-flex size-8 items-center justify-center rounded-full text-[var(--ui-ink-soft)] transition hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                   >
                     <ExternalLink className="size-4" />
@@ -390,7 +433,9 @@ export function GitRefPicker({
                   type="button"
                   size="sm"
                   variant="secondary"
-                  disabled={selected}
+                  disabled={
+                    selected || selectedRefs.length >= MAX_SELECTED_GIT_REFS
+                  }
                   onClick={() => addRef(ref)}
                 >
                   {selected ? "Added" : "Add"}
@@ -400,6 +445,11 @@ export function GitRefPicker({
           );
         })}
       </div>
+      {selectedRefs.length >= MAX_SELECTED_GIT_REFS ? (
+        <div role="status" className="text-sm text-[var(--ui-ink-soft)]">
+          A closeout can include up to {MAX_SELECTED_GIT_REFS} Git references.
+        </div>
+      ) : null}
     </div>
   );
 }

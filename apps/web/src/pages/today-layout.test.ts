@@ -19,6 +19,7 @@ describe("normalizeTodayLayout", () => {
     const normalized = normalizeTodayLayout(
       layout([
         "hero",
+        "priority",
         "life-force",
         "metrics",
         "runway",
@@ -30,6 +31,7 @@ describe("normalizeTodayLayout", () => {
 
     expect(normalized.order).toEqual([
       "hero",
+      "priority",
       "runway",
       "life-force",
       "focus",
@@ -50,7 +52,8 @@ describe("normalizeTodayLayout", () => {
           "focus",
           "weather",
           "life-force",
-          "quick-capture"
+          "quick-capture",
+          "priority"
         ],
         "2026-04-07T18:01:44.257Z"
       )
@@ -58,6 +61,7 @@ describe("normalizeTodayLayout", () => {
 
     expect(normalized.order).toEqual([
       "hero",
+      "priority",
       "runway",
       "life-force",
       "focus",
@@ -70,7 +74,15 @@ describe("normalizeTodayLayout", () => {
 
   it("does not override a deliberately customized current layout", () => {
     const customized = layout(
-      ["hero", "calendar", "runway", "focus", "metrics", "life-force"],
+      [
+        "hero",
+        "calendar",
+        "priority",
+        "runway",
+        "focus",
+        "metrics",
+        "life-force"
+      ],
       "2026-07-09T20:00:00.000Z"
     );
 
@@ -81,6 +93,7 @@ describe("normalizeTodayLayout", () => {
     const customized = layout([
       "hero",
       "calendar",
+      "priority",
       "runway",
       "focus",
       "metrics",
@@ -93,6 +106,7 @@ describe("normalizeTodayLayout", () => {
   it("is idempotent once the operational order is active", () => {
     const current = layout([
       "hero",
+      "priority",
       "runway",
       "life-force",
       "focus",
@@ -101,5 +115,34 @@ describe("normalizeTodayLayout", () => {
     ]);
 
     expect(normalizeTodayLayout(current)).toBe(current);
+  });
+
+  it("migrates the previous operational default when the new decision is appended", () => {
+    const normalized = normalizeTodayLayout(
+      layout(
+        [
+          "hero",
+          "runway",
+          "life-force",
+          "focus",
+          "calendar",
+          "metrics",
+          "weather",
+          "priority"
+        ],
+        "2026-07-14T08:00:00.000Z"
+      )
+    );
+
+    expect(normalized.order).toEqual([
+      "hero",
+      "priority",
+      "runway",
+      "life-force",
+      "focus",
+      "calendar",
+      "metrics",
+      "weather"
+    ]);
   });
 });

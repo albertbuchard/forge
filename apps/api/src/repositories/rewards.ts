@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { getDatabase } from "../db.js";
+import { createHash, randomUUID } from "node:crypto";
+import { getDatabase, runInTransaction } from "../db.js";
 import { recordEventLog } from "./event-log.js";
 import {
   createManualRewardGrantSchema,
@@ -59,6 +59,20 @@ type SessionEventRow = {
 };
 
 type MetadataValue = string | number | boolean | null;
+
+type LedgerEventInput = {
+  ruleId?: string | null;
+  eventLogId?: string | null;
+  entityType: string;
+  entityId: string;
+  actor?: string | null;
+  source: ActivitySource;
+  deltaXp: number;
+  reasonTitle: string;
+  reasonSummary?: string;
+  reversibleGroup?: string | null;
+  metadata?: Record<string, MetadataValue>;
+};
 
 const DEFAULT_RULES: Array<{
   id: string;
@@ -283,7 +297,6 @@ export function ensureDefaultRewardRules(now = new Date().toISOString()): void {
 }
 
 export function listRewardRules(): RewardRule[] {
-  ensureDefaultRewardRules();
   const rows = getDatabase()
     .prepare(
       `SELECT id, family, code, title, description, active, config_json, created_at, updated_at
@@ -295,7 +308,6 @@ export function listRewardRules(): RewardRule[] {
 }
 
 export function getRewardRuleById(ruleId: string): RewardRule | undefined {
-  ensureDefaultRewardRules();
   const row = getDatabase()
     .prepare(
       `SELECT id, family, code, title, description, active, config_json, created_at, updated_at
@@ -316,7 +328,6 @@ export function getTaskRunProgressRewardCadence(): {
   intervalSeconds: number;
   fixedXp: number;
 } {
-  ensureDefaultRewardRules();
   const rule = getRuleByCode("task_run_progress");
   const intervalMinutes = Math.max(
     1,
@@ -326,7 +337,7 @@ export function getTaskRunProgressRewardCadence(): {
     rule,
     intervalMinutes,
     intervalSeconds: intervalMinutes * 60,
-    fixedXp: Number(rule?.config.fixedXp ?? 4)
+    fixedXp: effectiveFixedXp(rule, 4)
   };
 }
 
@@ -380,22 +391,66 @@ export function updateRewardRule(
   return getRewardRuleById(ruleId);
 }
 
+function resolveRewardOwnerUserId(input: LedgerEventInput): string | null {
+  const explicitOwner = input.metadata?.ownerUserId;
+  if (typeof explicitOwner === "string" && explicitOwner.trim()) {
+    return explicitOwner.trim();
+  }
+
+  const entityOwner = getDatabase()
+    .prepare(
+      `SELECT user_id
+       FROM entity_owners
+       WHERE entity_type = ? AND entity_id = ?
+       LIMIT 1`
+    )
+    .get(input.entityType, input.entityId) as { user_id: string } | undefined;
+  if (entityOwner) {
+    return entityOwner.user_id;
+  }
+
+  const taskId = input.metadata?.taskId;
+  if (typeof taskId === "string" && taskId.trim()) {
+    const taskOwner = getDatabase()
+      .prepare(
+        `SELECT user_id
+         FROM entity_owners
+         WHERE entity_type = 'task' AND entity_id = ?
+         LIMIT 1`
+      )
+      .get(taskId.trim()) as { user_id: string } | undefined;
+    if (taskOwner) {
+      return taskOwner.user_id;
+    }
+  }
+
+  if (!input.actor?.trim()) {
+    return null;
+  }
+  const normalizedActor = input.actor.trim().toLowerCase();
+  const actorUser = getDatabase()
+    .prepare(
+      `SELECT id
+       FROM users
+       WHERE LOWER(TRIM(display_name)) = ? OR LOWER(TRIM(handle)) = ?
+       ORDER BY CASE WHEN LOWER(TRIM(handle)) = ? THEN 0 ELSE 1 END, id
+       LIMIT 1`
+    )
+    .get(normalizedActor, normalizedActor, normalizedActor) as
+    | { id: string }
+    | undefined;
+  return actorUser?.id ?? null;
+}
+
 function insertLedgerEvent(
-  input: {
-    ruleId?: string | null;
-    eventLogId?: string | null;
-    entityType: string;
-    entityId: string;
-    actor?: string | null;
-    source: ActivitySource;
-    deltaXp: number;
-    reasonTitle: string;
-    reasonSummary?: string;
-    reversibleGroup?: string | null;
-    metadata?: Record<string, MetadataValue>;
-  },
+  input: LedgerEventInput,
   now = new Date()
 ): RewardLedgerEvent {
+  const ownerUserId = resolveRewardOwnerUserId(input);
+  const metadata = {
+    ...(input.metadata ?? {}),
+    ...(ownerUserId ? { ownerUserId } : {})
+  };
   const event = rewardLedgerEventSchema.parse({
     id: `rwd_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
     ruleId: input.ruleId ?? null,
@@ -409,7 +464,7 @@ function insertLedgerEvent(
     reasonSummary: input.reasonSummary ?? "",
     reversibleGroup: input.reversibleGroup ?? null,
     reversedByRewardId: null,
-    metadata: input.metadata ?? {},
+    metadata,
     createdAt: now.toISOString()
   });
 
@@ -417,8 +472,8 @@ function insertLedgerEvent(
     .prepare(
       `INSERT INTO reward_ledger (
         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
-        reversible_group, reversed_by_reward_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+        reversible_group, reversed_by_reward_id, metadata_json, owner_user_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`
     )
     .run(
       event.id,
@@ -433,16 +488,139 @@ function insertLedgerEvent(
       event.reasonSummary,
       event.reversibleGroup,
       JSON.stringify(event.metadata),
+      ownerUserId,
       event.createdAt
     );
 
   return event;
 }
 
+function getLedgerEventByReversibleGroup(
+  reversibleGroup: string
+): RewardLedgerEvent | null {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT
+         id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+         delta_xp, reason_title, reason_summary, reversible_group,
+         reversed_by_reward_id, metadata_json, created_at
+       FROM reward_ledger
+       WHERE reversible_group = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`
+    )
+    .get(reversibleGroup) as RewardLedgerRow | undefined;
+  return existing ? mapLedger(existing) : null;
+}
+
+function runIdempotentRewardOperation(
+  reversibleGroup: string,
+  create: () => RewardLedgerEvent
+): RewardLedgerEvent {
+  return runInTransaction(() => {
+    return getLedgerEventByReversibleGroup(reversibleGroup) ?? create();
+  });
+}
+
+export class RewardIdempotencyConflictError extends Error {
+  readonly existingReward: RewardLedgerEvent;
+
+  constructor(existingReward: RewardLedgerEvent) {
+    super(
+      "This idempotency key was already used for a different manual reward payload."
+    );
+    this.name = "RewardIdempotencyConflictError";
+    this.existingReward = existingReward;
+  }
+}
+
+function canonicalManualRewardMetadata(
+  metadata: Record<string, string | number | boolean | null>
+) {
+  return Object.fromEntries(
+    Object.entries(metadata)
+      .filter(
+        ([key]) =>
+          key !== "idempotencyKey" &&
+          key !== "idempotencyFingerprint" &&
+          key !== "manual" &&
+          key !== "qualifiesForStreak"
+      )
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function manualRewardFingerprint(input: {
+  entityType: string;
+  entityId: string;
+  deltaXp: number;
+  reasonTitle: string;
+  reasonSummary: string;
+  metadata: Record<string, string | number | boolean | null>;
+}) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        deltaXp: input.deltaXp,
+        reasonTitle: input.reasonTitle,
+        reasonSummary: input.reasonSummary,
+        metadata: canonicalManualRewardMetadata(input.metadata)
+      })
+    )
+    .digest("hex");
+}
+
+function fingerprintStoredManualReward(event: RewardLedgerEvent) {
+  const storedFingerprint = event.metadata.idempotencyFingerprint;
+  if (typeof storedFingerprint === "string" && storedFingerprint.trim()) {
+    return storedFingerprint.trim();
+  }
+  return manualRewardFingerprint({
+    entityType: event.entityType,
+    entityId: event.entityId,
+    deltaXp: event.deltaXp,
+    reasonTitle: event.reasonTitle,
+    reasonSummary: event.reasonSummary,
+    metadata: event.metadata
+  });
+}
+
+function manualRewardIdempotencyGroup(
+  input: CreateManualRewardGrantInput,
+  idempotencyKey: string,
+  activity: { actor?: string | null; source: ActivitySource }
+) {
+  const ownerUserId = input.metadata.ownerUserId;
+  const scope =
+    typeof ownerUserId === "string" && ownerUserId.trim()
+      ? `user:${ownerUserId.trim()}`
+      : `actor:${activity.source}:${activity.actor?.trim() || "unknown"}`;
+  const scopeHash = createHash("sha256")
+    .update(scope)
+    .digest("hex")
+    .slice(0, 24);
+  const keyHash = createHash("sha256").update(idempotencyKey).digest("hex");
+  return `manual_bonus:${scopeHash}:${keyHash}`;
+}
+
+function effectiveFixedXp(
+  rule: RewardRule | undefined,
+  fallback: number
+): number {
+  if (rule && !rule.active) {
+    return 0;
+  }
+  const configured = Number(rule?.config.fixedXp ?? fallback);
+  return Number.isFinite(configured)
+    ? Math.max(0, Math.trunc(configured))
+    : Math.max(0, Math.trunc(fallback));
+}
+
 export function listRewardLedger(
   filters: RewardsLedgerQuery = {}
 ): RewardLedgerEvent[] {
-  ensureDefaultRewardRules();
   const whereClauses: string[] = [];
   const params: Array<string | number> = [];
 
@@ -457,10 +635,8 @@ export function listRewardLedger(
 
   const whereSql =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-  const limitSql = filters.limit ? "LIMIT ?" : "";
-  if (filters.limit) {
-    params.push(filters.limit);
-  }
+  const limit = Math.max(1, Math.min(200, filters.limit ?? 50));
+  params.push(limit);
 
   const rows = getDatabase()
     .prepare(
@@ -470,7 +646,7 @@ export function listRewardLedger(
        FROM reward_ledger
        ${whereSql}
        ORDER BY created_at DESC
-       ${limitSql}`
+       LIMIT ?`
     )
     .all(...params) as RewardLedgerRow[];
 
@@ -480,7 +656,6 @@ export function listRewardLedger(
 export function getRewardLedgerEventById(
   rewardId: string
 ): RewardLedgerEvent | null {
-  ensureDefaultRewardRules();
   const row = getDatabase()
     .prepare(
       `SELECT
@@ -495,7 +670,6 @@ export function getRewardLedgerEventById(
 }
 
 export function getTotalXp(): number {
-  ensureDefaultRewardRules();
   const row = getDatabase()
     .prepare(`SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger`)
     .get() as { total: number };
@@ -503,7 +677,6 @@ export function getTotalXp(): number {
 }
 
 export function getWeeklyXp(weekStartIso: string): number {
-  ensureDefaultRewardRules();
   const row = getDatabase()
     .prepare(
       `SELECT COALESCE(SUM(delta_xp), 0) AS total FROM reward_ledger WHERE created_at >= ?`
@@ -512,57 +685,142 @@ export function getWeeklyXp(weekStartIso: string): number {
   return Math.max(0, row.total);
 }
 
-export function getDailyAmbientXp(dayKey: string): number {
-  ensureDefaultRewardRules();
-  const row = getDatabase()
+function resolveRewardTimezone(requestedTimezone?: string): string {
+  const candidate =
+    requestedTimezone?.trim() ||
+    process.env.TZ?.trim() ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "UTC";
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: candidate }).format();
+    return candidate;
+  } catch {
+    return "UTC";
+  }
+}
+
+function dateKeyInTimezone(value: string | Date, timezone: string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return `${parts.find((part) => part.type === "year")?.value ?? "1970"}-${parts.find((part) => part.type === "month")?.value ?? "01"}-${parts.find((part) => part.type === "day")?.value ?? "01"}`;
+}
+
+export function getDailyAmbientXp(
+  dayKey: string,
+  actor: string | null = null,
+  timezone = resolveRewardTimezone()
+): number {
+  const day = new Date(`${dayKey}T12:00:00.000Z`);
+  const lower = new Date(day);
+  lower.setUTCDate(lower.getUTCDate() - 2);
+  const upper = new Date(day);
+  upper.setUTCDate(upper.getUTCDate() + 2);
+  const rows = getDatabase()
     .prepare(
-      `SELECT COALESCE(SUM(reward_ledger.delta_xp), 0) AS total
+      `SELECT reward_ledger.delta_xp, reward_ledger.created_at
        FROM reward_ledger
        JOIN reward_rules ON reward_rules.id = reward_ledger.rule_id
        WHERE reward_rules.family = 'ambient'
+         AND reward_ledger.actor IS ?
          AND reward_ledger.created_at >= ?
          AND reward_ledger.created_at < ?`
     )
-    .get(`${dayKey}T00:00:00.000Z`, `${dayKey}T23:59:59.999Z`) as {
-    total: number;
-  };
-  return row.total;
+    .all(actor, lower.toISOString(), upper.toISOString()) as Array<{
+    delta_xp: number;
+    created_at: string;
+  }>;
+  return Math.max(
+    0,
+    rows
+      .filter((row) => dateKeyInTimezone(row.created_at, timezone) === dayKey)
+      .reduce((sum, row) => sum + row.delta_xp, 0)
+  );
 }
 
 export function awardTaskCompletionReward(
   task: Task,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("task_completion");
-  const eventLog = recordEventLog({
-    eventKind: "reward.task_completion",
-    entityType: "task",
-    entityId: task.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      taskId: task.id,
-      points: task.points,
-      completedAt: task.completedAt ?? ""
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("task_completion");
+    const group = `task_completion:${task.id}:${task.completedAt ?? "unspecified"}`;
+    const existingRows = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+           delta_xp, reason_title, reason_summary, reversible_group,
+           reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+         ORDER BY created_at ASC, id ASC`
+      )
+      .all(group) as RewardLedgerRow[];
+    const firstMetadata = existingRows[0]
+      ? (mapLedger(existingRows[0]).metadata as Record<string, MetadataValue>)
+      : null;
+    const ruleWasActive =
+      firstMetadata?.ruleActive === false ? false : (rule?.active ?? true);
+    const targetXp = ruleWasActive ? Math.max(0, task.points) : 0;
+    const currentNetXp = existingRows.reduce(
+      (sum, row) => sum + row.delta_xp,
+      0
+    );
+    const deltaXp = targetXp - currentNetXp;
+    if (existingRows.length > 0 && deltaXp === 0) {
+      return mapLedger(existingRows.at(-1)!);
     }
-  });
 
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "task",
-    entityId: task.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: task.points,
-    reasonTitle: `Task completed: ${task.title}`,
-    reasonSummary: "Completion XP awarded from the reward engine.",
-    reversibleGroup: `task_completion:${task.id}:${task.completedAt ?? eventLog.createdAt}`,
-    metadata: {
-      taskId: task.id,
-      points: task.points
-    }
+    const correction = existingRows.length > 0;
+    const eventLog = recordEventLog({
+      eventKind: correction
+        ? "reward.task_completion_corrected"
+        : "reward.task_completion",
+      entityType: "task",
+      entityId: task.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        taskId: task.id,
+        points: task.points,
+        completedAt: task.completedAt ?? "",
+        previousNetXp: currentNetXp,
+        nextNetXp: targetXp,
+        correction
+      }
+    });
+
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "task",
+      entityId: task.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: correction
+        ? `Task XP corrected: ${task.title}`
+        : `Task completed: ${task.title}`,
+      reasonSummary: !ruleWasActive
+        ? "The task completion rule was disabled, so this completion earned no XP."
+        : correction
+          ? `Completion XP was corrected from ${currentNetXp} to ${targetXp} after the task points changed.`
+          : "Completion XP awarded from the task's point value.",
+      reversibleGroup: group,
+      metadata: {
+        taskId: task.id,
+        points: task.points,
+        awardedPoints: targetXp,
+        ruleActive: ruleWasActive,
+        correction,
+        qualifiesForStreak: !correction && deltaXp > 0
+      }
+    });
   });
 }
 
@@ -570,60 +828,146 @@ export function reverseLatestTaskCompletionReward(
   task: Task,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent | null {
-  ensureDefaultRewardRules();
-  const latest = getDatabase()
-    .prepare(
-      `SELECT
-         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
-         reversible_group, reversed_by_reward_id, metadata_json, created_at
-       FROM reward_ledger
-       WHERE entity_type = 'task'
-         AND entity_id = ?
-         AND delta_xp > 0
-         AND reversible_group LIKE 'task_completion:%'
-         AND reversed_by_reward_id IS NULL
-       ORDER BY created_at DESC
-       LIMIT 1`
-    )
-    .get(task.id) as RewardLedgerRow | undefined;
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const latestGroup = getDatabase()
+      .prepare(
+        `SELECT reversible_group, MAX(created_at) AS latest_created_at,
+                SUM(delta_xp) AS net_xp
+         FROM reward_ledger
+         WHERE entity_type = 'task'
+           AND entity_id = ?
+           AND reversible_group LIKE 'task_completion:%'
+         GROUP BY reversible_group
+         HAVING SUM(delta_xp) <> 0
+         ORDER BY latest_created_at DESC, reversible_group DESC
+         LIMIT 1`
+      )
+      .get(task.id) as
+      | {
+          reversible_group: string;
+          latest_created_at: string;
+          net_xp: number;
+        }
+      | undefined;
 
-  if (!latest) {
-    return null;
+    if (!latestGroup) {
+      return null;
+    }
+    const latest = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+           delta_xp, reason_title, reason_summary, reversible_group,
+           reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get(latestGroup.reversible_group) as RewardLedgerRow;
+    const reversalEventLog = recordEventLog({
+      eventKind: "reward.task_completion_reversed",
+      entityType: "task",
+      entityId: task.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        rewardGroup: latestGroup.reversible_group,
+        taskId: task.id,
+        reversedXp: latestGroup.net_xp
+      }
+    });
+
+    const reversal = insertLedgerEvent({
+      ruleId: latest.rule_id,
+      eventLogId: reversalEventLog.id,
+      entityType: latest.entity_type,
+      entityId: latest.entity_id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp: -latestGroup.net_xp,
+      reasonTitle: `Task reopened: ${task.title}`,
+      reasonSummary: `Reversed ${latestGroup.net_xp} net completion XP because the task left done.`,
+      reversibleGroup: latestGroup.reversible_group,
+      metadata: {
+        reversedRewardGroup: latestGroup.reversible_group,
+        taskId: task.id,
+        qualifiesForStreak: false
+      }
+    });
+
+    getDatabase()
+      .prepare(
+        `UPDATE reward_ledger
+         SET reversed_by_reward_id = COALESCE(reversed_by_reward_id, ?)
+         WHERE reversible_group = ? AND id <> ?`
+      )
+      .run(reversal.id, latestGroup.reversible_group, reversal.id);
+    return reversal;
+  });
+}
+
+export function reconcileTaskCompletionRewards(tasks: Task[]): number {
+  const completed = tasks.filter(
+    (task) =>
+      task.status === "done" &&
+      task.resolutionKind !== "split" &&
+      Boolean(task.completedAt)
+  );
+  if (completed.length === 0) {
+    return 0;
   }
 
-  const reversalEventLog = recordEventLog({
-    eventKind: "reward.task_completion_reversed",
-    entityType: "task",
-    entityId: task.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      rewardId: latest.id,
-      taskId: task.id
+  const groups = completed.map(
+    (task) => `task_completion:${task.id}:${task.completedAt}`
+  );
+  const existingGroups = new Set<string>();
+  for (let offset = 0; offset < groups.length; offset += 400) {
+    const chunk = groups.slice(offset, offset + 400);
+    const rows = getDatabase()
+      .prepare(
+        `SELECT DISTINCT reversible_group
+         FROM reward_ledger
+         WHERE reversible_group IN (${chunk.map(() => "?").join(", ")})`
+      )
+      .all(...chunk) as Array<{ reversible_group: string }>;
+    for (const row of rows) {
+      existingGroups.add(row.reversible_group);
     }
-  });
+  }
 
-  const reversal = insertLedgerEvent({
-    ruleId: latest.rule_id,
-    eventLogId: reversalEventLog.id,
-    entityType: latest.entity_type,
-    entityId: latest.entity_id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: -Math.abs(latest.delta_xp),
-    reasonTitle: `Task reopened: ${task.title}`,
-    reasonSummary: "Completion XP reversed because the task left done.",
-    reversibleGroup: latest.reversible_group,
-    metadata: {
-      reversedRewardId: latest.id,
-      taskId: task.id
+  let corrected = 0;
+  for (const task of completed) {
+    const group = `task_completion:${task.id}:${task.completedAt}`;
+    if (!existingGroups.has(group)) {
+      continue;
     }
-  });
-
-  getDatabase()
-    .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
-    .run(reversal.id, latest.id);
-  return reversal;
+    const before = getDatabase()
+      .prepare(
+        `SELECT COALESCE(SUM(delta_xp), 0) AS net_xp, COUNT(*) AS event_count
+         FROM reward_ledger
+         WHERE reversible_group = ?`
+      )
+      .get(group) as { net_xp: number; event_count: number };
+    const event = awardTaskCompletionReward(task, {
+      actor: null,
+      source: "system"
+    });
+    if (event.createdAt && before.event_count > 0) {
+      const after = getDatabase()
+        .prepare(
+          `SELECT COUNT(*) AS event_count
+           FROM reward_ledger
+           WHERE reversible_group = ?`
+        )
+        .get(group) as { event_count: number };
+      if (after.event_count > before.event_count) {
+        corrected += 1;
+      }
+    }
+  }
+  return corrected;
 }
 
 export function reverseLatestHabitCheckInReward(
@@ -631,60 +975,66 @@ export function reverseLatestHabitCheckInReward(
   dateKey: string,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent | null {
-  ensureDefaultRewardRules();
-  const reversibleGroup = `habit:${habit.id}:${dateKey}`;
-  const latest = getDatabase()
-    .prepare(
-      `SELECT
-         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
-         reversible_group, reversed_by_reward_id, metadata_json, created_at
-       FROM reward_ledger
-       WHERE reversible_group = ?
-         AND reversed_by_reward_id IS NULL
-       ORDER BY created_at DESC
-       LIMIT 1`
-    )
-    .get(reversibleGroup) as RewardLedgerRow | undefined;
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `habit:${habit.id}:${dateKey}`;
+    const latest = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+           reversible_group, reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+           AND reversed_by_reward_id IS NULL
+           AND json_type(metadata_json, '$.status') IS NOT NULL
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get(reversibleGroup) as RewardLedgerRow | undefined;
 
-  if (!latest) {
-    return null;
-  }
-
-  const reversalEventLog = recordEventLog({
-    eventKind: "reward.habit_check_in_reversed",
-    entityType: "habit",
-    entityId: habit.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      rewardId: latest.id,
-      habitId: habit.id,
-      dateKey
+    if (!latest) {
+      return null;
     }
-  });
 
-  const reversal = insertLedgerEvent({
-    ruleId: latest.rule_id,
-    eventLogId: reversalEventLog.id,
-    entityType: latest.entity_type,
-    entityId: latest.entity_id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: -latest.delta_xp,
-    reasonTitle: `Habit entry removed: ${habit.title}`,
-    reasonSummary: `Habit check-in removed for ${dateKey}.`,
-    reversibleGroup: latest.reversible_group,
-    metadata: {
-      reversedRewardId: latest.id,
-      habitId: habit.id,
-      dateKey
-    }
-  });
+    const reversalEventLog = recordEventLog({
+      eventKind: "reward.habit_check_in_reversed",
+      entityType: "habit",
+      entityId: habit.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        rewardId: latest.id,
+        habitId: habit.id,
+        dateKey
+      }
+    });
 
-  getDatabase()
-    .prepare(`UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`)
-    .run(reversal.id, latest.id);
-  return reversal;
+    const reversal = insertLedgerEvent({
+      ruleId: latest.rule_id,
+      eventLogId: reversalEventLog.id,
+      entityType: latest.entity_type,
+      entityId: latest.entity_id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp: -latest.delta_xp,
+      reasonTitle: `Habit entry removed: ${habit.title}`,
+      reasonSummary: `Habit check-in removed for ${dateKey}.`,
+      reversibleGroup: latest.reversible_group,
+      metadata: {
+        reversedRewardId: latest.id,
+        habitId: habit.id,
+        dateKey,
+        qualifiesForStreak: false
+      }
+    });
+
+    getDatabase()
+      .prepare(
+        `UPDATE reward_ledger SET reversed_by_reward_id = ? WHERE id = ?`
+      )
+      .run(reversal.id, latest.id);
+    return reversal;
+  });
 }
 
 export function recordInsightAppliedReward(
@@ -693,33 +1043,39 @@ export function recordInsightAppliedReward(
   entityId: string,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("insight_applied");
-  const eventLog = recordEventLog({
-    eventKind: "reward.insight_applied",
-    entityType,
-    entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      insightId
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType,
-    entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: Number(rule?.config.fixedXp ?? 15),
-    reasonTitle: "Insight applied",
-    reasonSummary: "A structured insight was accepted and marked as applied.",
-    reversibleGroup: `insight_applied:${insightId}`,
-    metadata: {
-      insightId
-    }
+  const reversibleGroup = `insight_applied:${insightId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("insight_applied");
+    const eventLog = recordEventLog({
+      eventKind: "reward.insight_applied",
+      entityType,
+      entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: { insightId }
+    });
+    const deltaXp = effectiveFixedXp(rule, 15);
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType,
+      entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: "Insight applied",
+      reasonSummary:
+        deltaXp > 0
+          ? "A structured insight was accepted and marked as applied."
+          : "The insight rule was disabled, so this event earned no XP.",
+      reversibleGroup,
+      metadata: {
+        insightId,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
@@ -728,35 +1084,39 @@ export function recordPsycheReflectionReward(
   title: string,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("psyche_reflection_capture");
-  const eventLog = recordEventLog({
-    eventKind: "reward.psyche_reflection_capture",
-    entityType: "trigger_report",
-    entityId: reportId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      triggerReportId: reportId,
-      title
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "trigger_report",
-    entityId: reportId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: Number(rule?.config.fixedXp ?? 8),
-    reasonTitle: `Psyche reflection captured: ${title}`,
-    reasonSummary:
-      "A structured trigger report was stored and the reflection ledger was updated.",
-    reversibleGroup: `psyche_reflection_capture:${reportId}`,
-    metadata: {
-      triggerReportId: reportId
-    }
+  const reversibleGroup = `psyche_reflection_capture:${reportId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("psyche_reflection_capture");
+    const eventLog = recordEventLog({
+      eventKind: "reward.psyche_reflection_capture",
+      entityType: "trigger_report",
+      entityId: reportId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: { triggerReportId: reportId, title }
+    });
+    const deltaXp = effectiveFixedXp(rule, 8);
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "trigger_report",
+      entityId: reportId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: `Psyche reflection captured: ${title}`,
+      reasonSummary:
+        deltaXp > 0
+          ? "A structured trigger report was stored and the reflection ledger was updated."
+          : "The reflection rule was disabled, so this event earned no XP.",
+      reversibleGroup,
+      metadata: {
+        triggerReportId: reportId,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
@@ -777,37 +1137,40 @@ export function recordPsycheClarityReward(
     | "psyche_mode_named",
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode(ruleCode);
-  const eventLog = recordEventLog({
-    eventKind: `reward.${ruleCode}`,
-    entityType,
-    entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
+  const reversibleGroup = `${ruleCode}:${entityId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode(ruleCode);
+    const eventLog = recordEventLog({
+      eventKind: `reward.${ruleCode}`,
+      entityType,
       entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: { entityId, entityType, title }
+    });
+    const deltaXp = effectiveFixedXp(rule, 4);
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
       entityType,
-      title
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType,
-    entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: Number(rule?.config.fixedXp ?? 4),
-    reasonTitle: rule?.title ?? "Psyche clarity gained",
-    reasonSummary:
-      rule?.description ?? "A Psyche entity was clarified and stored.",
-    reversibleGroup: `${ruleCode}:${entityId}`,
-    metadata: {
-      entityType,
-      title
-    }
+      entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: rule?.title ?? "Psyche clarity gained",
+      reasonSummary:
+        deltaXp > 0
+          ? (rule?.description ?? "A Psyche entity was clarified and stored.")
+          : "The reward rule was disabled, so this event earned no XP.",
+      reversibleGroup,
+      metadata: {
+        entityType,
+        title,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
@@ -817,36 +1180,40 @@ export function recordTaskRunCompletionReward(
   actor: string | null,
   source: ActivitySource
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("task_run_completion");
-  const eventLog = recordEventLog({
-    eventKind: "reward.task_run_completion",
-    entityType: "task_run",
-    entityId: taskRunId,
-    actor,
-    source,
-    metadata: {
-      taskId,
-      taskRunId
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "task_run",
-    entityId: taskRunId,
-    actor,
-    source,
-    deltaXp: Number(rule?.config.fixedXp ?? 20),
-    reasonTitle: rule?.title ?? "Focused run completion",
-    reasonSummary:
-      rule?.description ?? "A claimed execution run was completed.",
-    reversibleGroup: `task_run_completion:${taskRunId}`,
-    metadata: {
-      taskId,
-      taskRunId
-    }
+  const reversibleGroup = `task_run_completion:${taskRunId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("task_run_completion");
+    const eventLog = recordEventLog({
+      eventKind: "reward.task_run_completion",
+      entityType: "task_run",
+      entityId: taskRunId,
+      actor,
+      source,
+      metadata: { taskId, taskRunId }
+    });
+    const deltaXp = effectiveFixedXp(rule, 20);
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "task_run",
+      entityId: taskRunId,
+      actor,
+      source,
+      deltaXp,
+      reasonTitle: rule?.title ?? "Focused run completion",
+      reasonSummary:
+        deltaXp > 0
+          ? (rule?.description ?? "A claimed execution run was completed.")
+          : "The focused-run completion rule was disabled, so this event earned no XP.",
+      reversibleGroup,
+      metadata: {
+        taskId,
+        taskRunId,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
@@ -856,36 +1223,40 @@ export function recordTaskRunStartReward(
   actor: string | null,
   source: ActivitySource
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("task_run_started");
-  const eventLog = recordEventLog({
-    eventKind: "reward.task_run_started",
-    entityType: "task_run",
-    entityId: taskRunId,
-    actor,
-    source,
-    metadata: {
-      taskId,
-      taskRunId
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "task_run",
-    entityId: taskRunId,
-    actor,
-    source,
-    deltaXp: Number(rule?.config.fixedXp ?? 8),
-    reasonTitle: rule?.title ?? "Task started",
-    reasonSummary:
-      rule?.description ?? "A live work timer was started for a task.",
-    reversibleGroup: `task_run_started:${taskRunId}`,
-    metadata: {
-      taskId,
-      taskRunId
-    }
+  const reversibleGroup = `task_run_started:${taskRunId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("task_run_started");
+    const eventLog = recordEventLog({
+      eventKind: "reward.task_run_started",
+      entityType: "task_run",
+      entityId: taskRunId,
+      actor,
+      source,
+      metadata: { taskId, taskRunId }
+    });
+    const deltaXp = effectiveFixedXp(rule, 8);
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "task_run",
+      entityId: taskRunId,
+      actor,
+      source,
+      deltaXp,
+      reasonTitle: rule?.title ?? "Task started",
+      reasonSummary:
+        deltaXp > 0
+          ? (rule?.description ?? "A live work timer was started for a task.")
+          : "The task-start rule was disabled, so this event earned no XP.",
+      reversibleGroup,
+      metadata: {
+        taskId,
+        taskRunId,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
@@ -896,75 +1267,83 @@ export function recordTaskRunProgressRewards(
   source: ActivitySource,
   creditedSeconds: number
 ): RewardLedgerEvent[] {
-  const { rule, intervalMinutes, intervalSeconds, fixedXp } =
-    getTaskRunProgressRewardCadence();
-  const earnedBuckets = Math.floor(
-    Math.max(0, creditedSeconds) / intervalSeconds
-  );
-  if (earnedBuckets <= 0) {
-    return [];
-  }
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const { rule, intervalMinutes, intervalSeconds, fixedXp } =
+      getTaskRunProgressRewardCadence();
+    const earnedBuckets = Math.floor(
+      Math.max(0, creditedSeconds) / intervalSeconds
+    );
+    if (earnedBuckets <= 0) {
+      return [];
+    }
 
-  const existingCount = (
-    getDatabase()
-      .prepare(
-        `SELECT COUNT(*) AS count
-         FROM reward_ledger
-         WHERE entity_type = 'task_run'
-           AND entity_id = ?
-           AND reversible_group LIKE ?`
-      )
-      .get(taskRunId, `task_run_progress:${taskRunId}:%`) as { count: number }
-  ).count;
+    const existingCount = (
+      getDatabase()
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM reward_ledger
+           WHERE entity_type = 'task_run'
+             AND entity_id = ?
+             AND reversible_group LIKE ?`
+        )
+        .get(taskRunId, `task_run_progress:${taskRunId}:%`) as { count: number }
+    ).count;
 
-  if (existingCount >= earnedBuckets) {
-    return [];
-  }
+    if (existingCount >= earnedBuckets) {
+      return [];
+    }
 
-  const rewards: RewardLedgerEvent[] = [];
-  for (
-    let bucketIndex = existingCount + 1;
-    bucketIndex <= earnedBuckets;
-    bucketIndex += 1
-  ) {
-    const creditedMinutes = bucketIndex * intervalMinutes;
-    const eventLog = recordEventLog({
-      eventKind: "reward.task_run_progress",
-      entityType: "task_run",
-      entityId: taskRunId,
-      actor,
-      source,
-      metadata: {
-        taskId,
-        taskRunId,
-        bucketIndex,
-        creditedMinutes
-      }
-    });
-
-    rewards.push(
-      insertLedgerEvent({
-        ruleId: rule?.id ?? null,
-        eventLogId: eventLog.id,
+    const rewards: RewardLedgerEvent[] = [];
+    for (
+      let bucketIndex = existingCount + 1;
+      bucketIndex <= earnedBuckets;
+      bucketIndex += 1
+    ) {
+      const creditedMinutes = bucketIndex * intervalMinutes;
+      const eventLog = recordEventLog({
+        eventKind: "reward.task_run_progress",
         entityType: "task_run",
         entityId: taskRunId,
         actor,
         source,
-        deltaXp: fixedXp,
-        reasonTitle: rule?.title ?? "Work time bounty",
-        reasonSummary: `Awarded after ${creditedMinutes} credited minutes of active work.`,
-        reversibleGroup: `task_run_progress:${taskRunId}:${bucketIndex}`,
         metadata: {
           taskId,
           taskRunId,
           bucketIndex,
           creditedMinutes
         }
-      })
-    );
-  }
+      });
 
-  return rewards;
+      rewards.push(
+        insertLedgerEvent({
+          ruleId: rule?.id ?? null,
+          eventLogId: eventLog.id,
+          entityType: "task_run",
+          entityId: taskRunId,
+          actor,
+          source,
+          deltaXp: fixedXp,
+          reasonTitle: rule?.title ?? "Work time bounty",
+          reasonSummary:
+            fixedXp > 0
+              ? `Awarded after ${creditedMinutes} credited minutes of active work.`
+              : "The work-time rule was disabled, so this milestone earned no XP.",
+          reversibleGroup: `task_run_progress:${taskRunId}:${bucketIndex}`,
+          metadata: {
+            taskId,
+            taskRunId,
+            bucketIndex,
+            creditedMinutes,
+            ruleActive: rule?.active ?? true,
+            qualifiesForStreak: fixedXp > 0
+          }
+        })
+      );
+    }
+
+    return rewards;
+  });
 }
 
 export function recordEntityCreationReward(input: {
@@ -975,66 +1354,74 @@ export function recordEntityCreationReward(input: {
   source?: ActivitySource;
   createdAt: string;
 }): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const reversibleGroup = `entity_created:${input.entityType}:${input.entityId}`;
-  const existing = getDatabase()
-    .prepare(
-      `SELECT
-         id, rule_id, event_log_id, entity_type, entity_id, actor, source,
-         delta_xp, reason_title, reason_summary, reversible_group,
-         reversed_by_reward_id, metadata_json, created_at
-       FROM reward_ledger
-       WHERE reversible_group = ?
-       ORDER BY created_at ASC
-       LIMIT 1`
-    )
-    .get(reversibleGroup) as RewardLedgerRow | undefined;
-  if (existing) {
-    return mapLedger(existing);
-  }
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `entity_created:${input.entityType}:${input.entityId}`;
+    const existing = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+           delta_xp, reason_title, reason_summary, reversible_group,
+           reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+         ORDER BY created_at ASC, id ASC
+         LIMIT 1`
+      )
+      .get(reversibleGroup) as RewardLedgerRow | undefined;
+    if (existing) {
+      return mapLedger(existing);
+    }
 
-  const createdAtDate = Number.isNaN(Date.parse(input.createdAt))
-    ? new Date()
-    : new Date(input.createdAt);
-  const rule = getRuleByCode("entity_created");
-  const readableType = input.entityType.replaceAll("_", " ");
-  const title = input.title?.trim() || readableType;
-  const eventLog = recordEventLog(
-    {
-      eventKind: "reward.entity_created",
-      entityType: input.entityType,
-      entityId: input.entityId,
-      actor: input.actor ?? null,
-      source: input.source ?? "system",
-      metadata: {
+    const createdAtDate = Number.isNaN(Date.parse(input.createdAt))
+      ? new Date()
+      : new Date(input.createdAt);
+    const rule = getRuleByCode("entity_created");
+    const deltaXp = effectiveFixedXp(rule, 2);
+    const readableType = input.entityType.replaceAll("_", " ");
+    const title = input.title?.trim() || readableType;
+    const eventLog = recordEventLog(
+      {
+        eventKind: "reward.entity_created",
         entityType: input.entityType,
         entityId: input.entityId,
-        title,
-        createdAt: input.createdAt
-      }
-    },
-    createdAtDate
-  );
+        actor: input.actor ?? null,
+        source: input.source ?? "system",
+        metadata: {
+          entityType: input.entityType,
+          entityId: input.entityId,
+          title,
+          createdAt: input.createdAt
+        }
+      },
+      createdAtDate
+    );
 
-  return insertLedgerEvent(
-    {
-      ruleId: rule?.id ?? null,
-      eventLogId: eventLog.id,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      actor: input.actor ?? null,
-      source: input.source ?? "system",
-      deltaXp: Number(rule?.config.fixedXp ?? 2),
-      reasonTitle: `Created ${readableType}: ${title}`,
-      reasonSummary: "Small Forge activity XP for creating something concrete.",
-      reversibleGroup,
-      metadata: {
+    return insertLedgerEvent(
+      {
+        ruleId: rule?.id ?? null,
+        eventLogId: eventLog.id,
         entityType: input.entityType,
-        title
-      }
-    },
-    createdAtDate
-  );
+        entityId: input.entityId,
+        actor: input.actor ?? null,
+        source: input.source ?? "system",
+        deltaXp,
+        reasonTitle: `Created ${readableType}: ${title}`,
+        reasonSummary:
+          deltaXp > 0
+            ? "Small Forge activity XP for creating something concrete."
+            : "The entity-creation rule was disabled, so this event earned no XP.",
+        reversibleGroup,
+        metadata: {
+          entityType: input.entityType,
+          title,
+          ruleActive: rule?.active ?? true,
+          qualifiesForStreak: deltaXp > 0
+        }
+      },
+      createdAtDate
+    );
+  });
 }
 
 export function recordWorkAdjustmentReward(input: {
@@ -1049,6 +1436,7 @@ export function recordWorkAdjustmentReward(input: {
   nextCreditedSeconds: number;
   adjustmentId: string;
 }): RewardLedgerEvent | null {
+  ensureDefaultRewardRules();
   const { rule, intervalMinutes, intervalSeconds, fixedXp } =
     getTaskRunProgressRewardCadence();
   const entityType = workAdjustmentEntityTypeSchema.parse(input.entityType);
@@ -1067,45 +1455,53 @@ export function recordWorkAdjustmentReward(input: {
   const deltaXp = bucketDelta * fixedXp;
   const direction = bucketDelta > 0 ? "added" : "removed";
   const appliedMinutes = Math.abs(input.appliedDeltaMinutes);
-  const eventLog = recordEventLog({
-    eventKind: "reward.work_adjustment",
-    entityType,
-    entityId: input.entityId,
-    actor: input.actor ?? null,
-    source: input.source,
-    metadata: {
-      adjustmentId: input.adjustmentId,
-      requestedDeltaMinutes: input.requestedDeltaMinutes,
-      appliedDeltaMinutes: input.appliedDeltaMinutes,
-      bucketDelta,
-      deltaXp
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType,
-    entityId: input.entityId,
-    actor: input.actor ?? null,
-    source: input.source,
-    deltaXp,
-    reasonTitle:
-      bucketDelta > 0
-        ? "Manual work minutes added"
-        : "Manual work minutes removed",
-    reasonSummary: `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`,
-    reversibleGroup: `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`,
-    metadata: {
-      adjustmentId: input.adjustmentId,
-      requestedDeltaMinutes: input.requestedDeltaMinutes,
-      appliedDeltaMinutes: input.appliedDeltaMinutes,
-      previousCreditedSeconds: input.previousCreditedSeconds,
-      nextCreditedSeconds: input.nextCreditedSeconds,
-      bucketDelta,
-      intervalMinutes,
-      rewardCategory: "manual_work_adjustment"
-    }
+  const reversibleGroup = `work_adjustment:${entityType}:${input.entityId}:${input.adjustmentId}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    const eventLog = recordEventLog({
+      eventKind: "reward.work_adjustment",
+      entityType,
+      entityId: input.entityId,
+      actor: input.actor ?? null,
+      source: input.source,
+      metadata: {
+        adjustmentId: input.adjustmentId,
+        requestedDeltaMinutes: input.requestedDeltaMinutes,
+        appliedDeltaMinutes: input.appliedDeltaMinutes,
+        bucketDelta,
+        deltaXp
+      }
+    });
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType,
+      entityId: input.entityId,
+      actor: input.actor ?? null,
+      source: input.source,
+      deltaXp,
+      reasonTitle:
+        bucketDelta > 0
+          ? "Manual work minutes added"
+          : "Manual work minutes removed",
+      reasonSummary:
+        fixedXp > 0
+          ? `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}, shifting ${Math.abs(bucketDelta)} ${intervalMinutes}-minute reward bucket${Math.abs(bucketDelta) === 1 ? "" : "s"} for ${input.targetTitle}.`
+          : `${appliedMinutes} manual minute${appliedMinutes === 1 ? "" : "s"} ${direction}; the work-time reward rule is disabled, so XP did not change.`,
+      reversibleGroup,
+      metadata: {
+        adjustmentId: input.adjustmentId,
+        requestedDeltaMinutes: input.requestedDeltaMinutes,
+        appliedDeltaMinutes: input.appliedDeltaMinutes,
+        previousCreditedSeconds: input.previousCreditedSeconds,
+        nextCreditedSeconds: input.nextCreditedSeconds,
+        bucketDelta,
+        intervalMinutes,
+        rewardCategory: "manual_work_adjustment",
+        manual: true,
+        qualifiesForStreak: false,
+        ruleActive: rule?.active ?? true
+      }
+    });
   });
 }
 
@@ -1113,90 +1509,139 @@ export function recordSessionEvent(
   input: {
     sessionId: string;
     eventType: string;
+    timezone?: string;
     metrics: Record<string, MetadataValue>;
   },
   activity: { actor?: string | null; source: ActivitySource },
   now = new Date()
 ): { sessionEvent: SessionEvent; rewardEvent: RewardLedgerEvent | null } {
-  ensureDefaultRewardRules();
-  const sessionEvent = sessionEventSchema.parse({
-    id: `ses_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
-    sessionId: input.sessionId,
-    eventType: input.eventType,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metrics: input.metrics,
-    createdAt: now.toISOString()
-  });
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const actor = activity.actor ?? null;
+    const existingRow = getDatabase()
+      .prepare(
+        `SELECT id, session_id, event_type, actor, source, metrics_json, created_at
+         FROM session_events
+         WHERE session_id = ? AND event_type = ? AND actor IS ? AND source = ?
+         ORDER BY created_at ASC, id ASC
+         LIMIT 1`
+      )
+      .get(input.sessionId, input.eventType, actor, activity.source) as
+      | SessionEventRow
+      | undefined;
+    if (existingRow) {
+      const sessionEvent = mapSession(existingRow);
+      const rewardRow = getDatabase()
+        .prepare(
+          `SELECT
+             id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+             delta_xp, reason_title, reason_summary, reversible_group,
+             reversed_by_reward_id, metadata_json, created_at
+           FROM reward_ledger
+           WHERE reversible_group LIKE ?
+           ORDER BY created_at ASC, id ASC
+           LIMIT 1`
+        )
+        .get(`session:${sessionEvent.id}:%`) as RewardLedgerRow | undefined;
+      return {
+        sessionEvent,
+        rewardEvent: rewardRow ? mapLedger(rewardRow) : null
+      };
+    }
 
-  getDatabase()
-    .prepare(
-      `INSERT INTO session_events (id, session_id, event_type, actor, source, metrics_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      sessionEvent.id,
-      sessionEvent.sessionId,
-      sessionEvent.eventType,
-      sessionEvent.actor,
-      sessionEvent.source,
-      JSON.stringify(sessionEvent.metrics),
-      sessionEvent.createdAt
+    const sessionEvent = sessionEventSchema.parse({
+      id: `ses_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
+      sessionId: input.sessionId,
+      eventType: input.eventType,
+      actor,
+      source: activity.source,
+      metrics: input.metrics,
+      createdAt: now.toISOString()
+    });
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO session_events (id, session_id, event_type, actor, source, metrics_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        sessionEvent.id,
+        sessionEvent.sessionId,
+        sessionEvent.eventType,
+        sessionEvent.actor,
+        sessionEvent.source,
+        JSON.stringify(sessionEvent.metrics),
+        sessionEvent.createdAt
+      );
+
+    recordEventLog(
+      {
+        eventKind: `session.${sessionEvent.eventType}`,
+        entityType: "session",
+        entityId: sessionEvent.id,
+        actor: sessionEvent.actor,
+        source: sessionEvent.source,
+        metadata: {
+          sessionId: sessionEvent.sessionId
+        }
+      },
+      now
     );
 
-  recordEventLog(
-    {
-      eventKind: `session.${sessionEvent.eventType}`,
-      entityType: "session",
-      entityId: sessionEvent.id,
-      actor: sessionEvent.actor,
-      source: sessionEvent.source,
-      metadata: {
-        sessionId: sessionEvent.sessionId
-      }
-    },
-    now
-  );
+    const timezone = resolveRewardTimezone(input.timezone);
+    const day = dateKeyInTimezone(sessionEvent.createdAt, timezone);
+    const currentAmbientXp = getDailyAmbientXp(day, actor, timezone);
+    const active =
+      sessionEvent.metrics.visible === true &&
+      sessionEvent.metrics.interacted === true;
+    const ruleCode =
+      sessionEvent.eventType === "dwell_120_seconds"
+        ? "session_dwell_120"
+        : sessionEvent.eventType === "scroll_depth_75"
+          ? "scroll_depth_75"
+          : null;
+    const rule = ruleCode ? getRuleByCode(ruleCode) : null;
+    const configuredCap = Number(rule?.config.dailyCap ?? 12);
+    const dailyCap = Number.isFinite(configuredCap)
+      ? Math.max(0, Math.trunc(configuredCap))
+      : 12;
+    const awardXp = effectiveFixedXp(rule ?? undefined, 0);
 
-  const day = sessionEvent.createdAt.slice(0, 10);
-  const currentAmbientXp = getDailyAmbientXp(day);
-  const active =
-    sessionEvent.metrics.visible === true &&
-    sessionEvent.metrics.interacted === true;
-  const ruleCode =
-    sessionEvent.eventType === "dwell_120_seconds"
-      ? "session_dwell_120"
-      : sessionEvent.eventType === "scroll_depth_75"
-        ? "scroll_depth_75"
-        : null;
-  const rule = ruleCode ? getRuleByCode(ruleCode) : null;
-  const dailyCap = Number(rule?.config.dailyCap ?? 12);
-  const awardXp = Number(rule?.config.fixedXp ?? 0);
+    if (
+      !rule ||
+      !rule.active ||
+      !active ||
+      awardXp <= 0 ||
+      currentAmbientXp >= dailyCap
+    ) {
+      return { sessionEvent, rewardEvent: null };
+    }
 
-  if (!rule || !active || currentAmbientXp >= dailyCap) {
-    return { sessionEvent, rewardEvent: null };
-  }
+    const rewardEvent = insertLedgerEvent(
+      {
+        ruleId: rule.id,
+        entityType: "session",
+        entityId: sessionEvent.id,
+        actor,
+        source: activity.source,
+        deltaXp: Math.max(0, Math.min(awardXp, dailyCap - currentAmbientXp)),
+        reasonTitle: rule.title,
+        reasonSummary: rule.description,
+        reversibleGroup: `session:${sessionEvent.id}:${rule.code}`,
+        metadata: {
+          sessionId: sessionEvent.sessionId,
+          eventType: sessionEvent.eventType,
+          ruleActive: true,
+          qualifiesForStreak: true,
+          timezone,
+          dateKey: day
+        }
+      },
+      now
+    );
 
-  const rewardEvent = insertLedgerEvent(
-    {
-      ruleId: rule.id,
-      entityType: "session",
-      entityId: sessionEvent.id,
-      actor: activity.actor ?? null,
-      source: activity.source,
-      deltaXp: Math.max(0, Math.min(awardXp, dailyCap - currentAmbientXp)),
-      reasonTitle: rule.title,
-      reasonSummary: rule.description,
-      reversibleGroup: `session:${sessionEvent.id}:${rule.code}`,
-      metadata: {
-        sessionId: sessionEvent.sessionId,
-        eventType: sessionEvent.eventType
-      }
-    },
-    now
-  );
-
-  return { sessionEvent, rewardEvent };
+    return { sessionEvent, rewardEvent };
+  });
 }
 
 export function recordHabitCheckInReward(
@@ -1205,52 +1650,84 @@ export function recordHabitCheckInReward(
   dateKey: string,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const aligned =
-    (habit.polarity === "positive" && status === "done") ||
-    (habit.polarity === "negative" && status === "missed");
-  const rule = getRuleByCode(aligned ? "habit_aligned" : "habit_misaligned");
-  const deltaXp = aligned ? habit.rewardXp : -Math.abs(habit.penaltyXp);
-  const actionLabel =
-    habit.polarity === "positive"
-      ? status === "done"
-        ? "completed"
-        : "missed"
-      : status === "done"
-        ? "performed"
-        : "resisted";
-  const eventLog = recordEventLog({
-    eventKind: aligned ? "reward.habit_aligned" : "reward.habit_misaligned",
-    entityType: "habit",
-    entityId: habit.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      habitId: habit.id,
-      status,
-      polarity: habit.polarity,
-      dateKey,
-      deltaXp
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `habit:${habit.id}:${dateKey}`;
+    const existing = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source,
+           delta_xp, reason_title, reason_summary, reversible_group,
+           reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+           AND reversed_by_reward_id IS NULL
+           AND json_extract(metadata_json, '$.status') = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`
+      )
+      .get(reversibleGroup, status) as RewardLedgerRow | undefined;
+    if (existing) {
+      return mapLedger(existing);
     }
-  });
 
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "habit",
-    entityId: habit.id,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp,
-    reasonTitle: aligned ? `${habit.title} aligned` : `${habit.title} slipped`,
-    reasonSummary: `Habit ${actionLabel} on ${dateKey}.`,
-    reversibleGroup: `habit:${habit.id}:${dateKey}`,
-    metadata: {
-      habitId: habit.id,
-      status,
-      polarity: habit.polarity,
-      dateKey
-    }
+    const aligned =
+      (habit.polarity === "positive" && status === "done") ||
+      (habit.polarity === "negative" && status === "missed");
+    const rule = getRuleByCode(aligned ? "habit_aligned" : "habit_misaligned");
+    const ruleActive = rule?.active ?? true;
+    const deltaXp = ruleActive
+      ? aligned
+        ? habit.rewardXp
+        : -Math.abs(habit.penaltyXp)
+      : 0;
+    const actionLabel =
+      habit.polarity === "positive"
+        ? status === "done"
+          ? "completed"
+          : "missed"
+        : status === "done"
+          ? "performed"
+          : "resisted";
+    const eventLog = recordEventLog({
+      eventKind: aligned ? "reward.habit_aligned" : "reward.habit_misaligned",
+      entityType: "habit",
+      entityId: habit.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        habitId: habit.id,
+        status,
+        polarity: habit.polarity,
+        dateKey,
+        deltaXp
+      }
+    });
+
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "habit",
+      entityId: habit.id,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: aligned
+        ? `${habit.title} aligned`
+        : `${habit.title} slipped`,
+      reasonSummary: ruleActive
+        ? `Habit ${actionLabel} on ${dateKey}.`
+        : `Habit ${actionLabel} on ${dateKey}; the matching reward rule was disabled, so XP did not change.`,
+      reversibleGroup,
+      metadata: {
+        habitId: habit.id,
+        status,
+        polarity: habit.polarity,
+        dateKey,
+        ruleActive,
+        qualifiesForStreak: aligned && deltaXp > 0
+      }
+    });
   });
 }
 
@@ -1265,59 +1742,62 @@ export function recordHabitGeneratedWorkoutReward(
   },
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent | null {
-  ensureDefaultRewardRules();
   if (input.xpReward <= 0) {
     return null;
   }
 
-  const reversibleGroup = `habit_generated_workout:${input.checkInId}`;
-  const existing = getDatabase()
-    .prepare(
-      `SELECT
-         id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
-         reversible_group, reversed_by_reward_id, metadata_json, created_at
-       FROM reward_ledger
-       WHERE reversible_group = ?
-       LIMIT 1`
-    )
-    .get(reversibleGroup) as RewardLedgerRow | undefined;
-  if (existing) {
-    return mapLedger(existing);
-  }
-
-  const eventLog = recordEventLog({
-    eventKind: "reward.habit_generated_workout",
-    entityType: "habit",
-    entityId: input.habitId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      habitId: input.habitId,
-      checkInId: input.checkInId,
-      workoutId: input.workoutId,
-      workoutType: input.workoutType,
-      xpReward: input.xpReward
+  return runInTransaction(() => {
+    ensureDefaultRewardRules();
+    const reversibleGroup = `habit_generated_workout:${input.checkInId}`;
+    const existing = getDatabase()
+      .prepare(
+        `SELECT
+           id, rule_id, event_log_id, entity_type, entity_id, actor, source, delta_xp, reason_title, reason_summary,
+           reversible_group, reversed_by_reward_id, metadata_json, created_at
+         FROM reward_ledger
+         WHERE reversible_group = ?
+         LIMIT 1`
+      )
+      .get(reversibleGroup) as RewardLedgerRow | undefined;
+    if (existing) {
+      return mapLedger(existing);
     }
-  });
 
-  return insertLedgerEvent({
-    ruleId: null,
-    eventLogId: eventLog.id,
-    entityType: "habit",
-    entityId: input.habitId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: input.xpReward,
-    reasonTitle: `Generated workout: ${input.habitTitle}`,
-    reasonSummary: `Created a ${input.workoutType} session from a completed habit.`,
-    reversibleGroup,
-    metadata: {
-      habitId: input.habitId,
-      checkInId: input.checkInId,
-      workoutId: input.workoutId,
-      workoutType: input.workoutType,
-      rewardCategory: "habit_generated_workout"
-    }
+    const eventLog = recordEventLog({
+      eventKind: "reward.habit_generated_workout",
+      entityType: "habit",
+      entityId: input.habitId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        habitId: input.habitId,
+        checkInId: input.checkInId,
+        workoutId: input.workoutId,
+        workoutType: input.workoutType,
+        xpReward: input.xpReward
+      }
+    });
+
+    return insertLedgerEvent({
+      ruleId: null,
+      eventLogId: eventLog.id,
+      entityType: "habit",
+      entityId: input.habitId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp: input.xpReward,
+      reasonTitle: `Generated workout: ${input.habitTitle}`,
+      reasonSummary: `Created a ${input.workoutType} session from a completed habit.`,
+      reversibleGroup,
+      metadata: {
+        habitId: input.habitId,
+        checkInId: input.checkInId,
+        workoutId: input.workoutId,
+        workoutType: input.workoutType,
+        rewardCategory: "habit_generated_workout",
+        qualifiesForStreak: true
+      }
+    });
   });
 }
 
@@ -1329,41 +1809,49 @@ export function recordWeeklyReviewCompletionReward(
   },
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
-  const rule = getRuleByCode("weekly_review_completed");
-  const deltaXp = Math.max(0, Number(rule?.config.fixedXp ?? input.rewardXp));
-  const eventLog = recordEventLog({
-    eventKind: "reward.weekly_review_completed",
-    entityType: "system",
-    entityId: input.weekKey,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
-      weekKey: input.weekKey,
-      windowLabel: input.windowLabel,
-      deltaXp
-    }
-  });
-
-  return insertLedgerEvent({
-    ruleId: rule?.id ?? null,
-    eventLogId: eventLog.id,
-    entityType: "system",
-    entityId: input.weekKey,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp,
-    reasonTitle: rule?.title ?? "Weekly review completed",
-    reasonSummary: `Closed the review for ${input.windowLabel}.`,
-    reversibleGroup: `weekly_review_completed:${input.weekKey}`,
-    metadata: {
-      weekKey: input.weekKey,
-      windowLabel: input.windowLabel
-    }
+  const reversibleGroup = `weekly_review_completed:${input.weekKey}`;
+  return runIdempotentRewardOperation(reversibleGroup, () => {
+    ensureDefaultRewardRules();
+    const rule = getRuleByCode("weekly_review_completed");
+    const deltaXp = effectiveFixedXp(rule, input.rewardXp);
+    const eventLog = recordEventLog({
+      eventKind: "reward.weekly_review_completed",
+      entityType: "system",
+      entityId: input.weekKey,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        weekKey: input.weekKey,
+        windowLabel: input.windowLabel,
+        deltaXp
+      }
+    });
+    return insertLedgerEvent({
+      ruleId: rule?.id ?? null,
+      eventLogId: eventLog.id,
+      entityType: "system",
+      entityId: input.weekKey,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      deltaXp,
+      reasonTitle: rule?.title ?? "Weekly review completed",
+      reasonSummary:
+        deltaXp > 0
+          ? `Closed the review for ${input.windowLabel}.`
+          : `Closed the review for ${input.windowLabel}; the weekly-review reward rule was disabled.`,
+      reversibleGroup,
+      metadata: {
+        weekKey: input.weekKey,
+        windowLabel: input.windowLabel,
+        ruleActive: rule?.active ?? true,
+        qualifiesForStreak: deltaXp > 0
+      }
+    });
   });
 }
 
 export function listSessionEvents(limit = 50): SessionEvent[] {
+  const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
   const rows = getDatabase()
     .prepare(
       `SELECT id, session_id, event_type, actor, source, metrics_json, created_at
@@ -1371,7 +1859,7 @@ export function listSessionEvents(limit = 50): SessionEvent[] {
        ORDER BY created_at DESC
        LIMIT ?`
     )
-    .all(limit) as SessionEventRow[];
+    .all(boundedLimit) as SessionEventRow[];
   return rows.map(mapSession);
 }
 
@@ -1379,34 +1867,67 @@ export function createManualRewardGrant(
   input: CreateManualRewardGrantInput,
   activity: { actor?: string | null; source: ActivitySource }
 ): RewardLedgerEvent {
-  ensureDefaultRewardRules();
   const parsed = createManualRewardGrantSchema.parse(input);
-  const eventLog = recordEventLog({
-    eventKind: "reward.manual_bonus",
-    entityType: parsed.entityType,
-    entityId: parsed.entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    metadata: {
+  const idempotencyKey =
+    typeof parsed.metadata.idempotencyKey === "string" &&
+    parsed.metadata.idempotencyKey.trim()
+      ? parsed.metadata.idempotencyKey.trim()
+      : null;
+  const fingerprint = manualRewardFingerprint(parsed);
+  const reversibleGroup = idempotencyKey
+    ? manualRewardIdempotencyGroup(parsed, idempotencyKey, activity)
+    : null;
+  const legacyReversibleGroup = idempotencyKey
+    ? `manual_bonus:${parsed.entityType}:${parsed.entityId}:${idempotencyKey}`
+    : null;
+  const createReward = () => {
+    const eventLog = recordEventLog({
+      eventKind: "reward.manual_bonus",
+      entityType: parsed.entityType,
+      entityId: parsed.entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
+      metadata: {
+        deltaXp: parsed.deltaXp,
+        reasonTitle: parsed.reasonTitle
+      }
+    });
+    return insertLedgerEvent({
+      ruleId: null,
+      eventLogId: eventLog.id,
+      entityType: parsed.entityType,
+      entityId: parsed.entityId,
+      actor: activity.actor ?? null,
+      source: activity.source,
       deltaXp: parsed.deltaXp,
-      reasonTitle: parsed.reasonTitle
+      reasonTitle: parsed.reasonTitle,
+      reasonSummary: parsed.reasonSummary,
+      reversibleGroup:
+        reversibleGroup ??
+        `manual_bonus:${parsed.entityType}:${parsed.entityId}:${eventLog.id}`,
+      metadata: {
+        ...parsed.metadata,
+        manual: true,
+        qualifiesForStreak: false,
+        ...(idempotencyKey ? { idempotencyFingerprint: fingerprint } : {})
+      }
+    });
+  };
+  if (!reversibleGroup) {
+    return runInTransaction(createReward);
+  }
+  return runInTransaction(() => {
+    const existing =
+      getLedgerEventByReversibleGroup(reversibleGroup) ??
+      (legacyReversibleGroup
+        ? getLedgerEventByReversibleGroup(legacyReversibleGroup)
+        : null);
+    if (!existing) {
+      return createReward();
     }
-  });
-
-  return insertLedgerEvent({
-    ruleId: null,
-    eventLogId: eventLog.id,
-    entityType: parsed.entityType,
-    entityId: parsed.entityId,
-    actor: activity.actor ?? null,
-    source: activity.source,
-    deltaXp: parsed.deltaXp,
-    reasonTitle: parsed.reasonTitle,
-    reasonSummary: parsed.reasonSummary,
-    reversibleGroup: `manual_bonus:${parsed.entityType}:${parsed.entityId}:${eventLog.id}`,
-    metadata: {
-      manual: true,
-      ...parsed.metadata
+    if (fingerprintStoredManualReward(existing) !== fingerprint) {
+      throw new RewardIdempotencyConflictError(existing);
     }
+    return existing;
   });
 }

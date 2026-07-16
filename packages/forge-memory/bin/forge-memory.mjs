@@ -10,6 +10,10 @@ import readline from "node:readline";
 import { pathToFileURL } from "node:url";
 import { TextDecoder, TextEncoder } from "node:util";
 import { createRequire } from "node:module";
+import {
+  inspectForgePeerRuntime,
+  prepareForgePeerRuntime
+} from "../lib/peer-runtime-install.mjs";
 import YAML from "yaml";
 import qrcode from "qrcode-terminal";
 import open from "open";
@@ -58,9 +62,14 @@ function parseArgs(argv) {
     removeAdapters: false,
     manualHttp: false,
     repair: false,
-    noDoctor: false
+    noDoctor: false,
+    enablePeer: false,
+    disablePeer: false,
+    enablePeerIroh: false,
+    disablePeerIroh: false,
+    allowLoopbackPeer: false
   };
-  const values = {};
+  const values = { peerEndpoints: [] };
   const positionals = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -85,6 +94,11 @@ function parseArgs(argv) {
       flags.manualHttp = true;
     else if (arg === "--repair") flags.repair = true;
     else if (arg === "--no-doctor") flags.noDoctor = true;
+    else if (arg === "--enable-peer") flags.enablePeer = true;
+    else if (arg === "--disable-peer") flags.disablePeer = true;
+    else if (arg === "--enable-peer-iroh") flags.enablePeerIroh = true;
+    else if (arg === "--disable-peer-iroh") flags.disablePeerIroh = true;
+    else if (arg === "--allow-loopback-peer") flags.allowLoopbackPeer = true;
     else if (arg.startsWith("--output="))
       values.output = arg.slice("--output=".length);
     else if (arg === "--output") values.output = argv[++index];
@@ -110,9 +124,24 @@ function parseArgs(argv) {
       values.publicUrl = arg.slice("--public-url=".length);
     else if (arg === "--public-url" || arg === "--phone-url")
       values.publicUrl = argv[++index];
+    else if (arg.startsWith("--peer-endpoint="))
+      values.peerEndpoints.push(arg.slice("--peer-endpoint=".length));
+    else if (arg === "--peer-endpoint")
+      values.peerEndpoints.push(argv[++index]);
     else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--version" || arg === "-v") flags.version = true;
     else throw new Error(`Unknown option: ${arg}`);
+  }
+
+  if (flags.enablePeer && flags.disablePeer) {
+    throw new Error(
+      "--enable-peer and --disable-peer cannot be used together."
+    );
+  }
+  if (flags.enablePeerIroh && flags.disablePeerIroh) {
+    throw new Error(
+      "--enable-peer-iroh and --disable-peer-iroh cannot be used together."
+    );
   }
 
   return {
@@ -160,6 +189,111 @@ function normalizePort(value, fallback = DEFAULT_PORT) {
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535
     ? parsed
     : fallback;
+}
+
+function parsePeerDirectEndpoint(value, { allowLoopback = false } = {}) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 96 ||
+    value.trim() !== value ||
+    value.includes("\0")
+  ) {
+    throw new Error("A peer endpoint must be a bounded IP address and port.");
+  }
+  let host;
+  let portText;
+  if (value.startsWith("[")) {
+    const match = /^\[([^\]]+)\]:(\d{1,5})$/.exec(value);
+    if (!match || net.isIP(match[1]) !== 6) {
+      throw new Error("A peer endpoint must use an IPv6 address in brackets.");
+    }
+    host = match[1].toLowerCase();
+    portText = match[2];
+  } else {
+    const separator = value.lastIndexOf(":");
+    if (separator <= 0 || net.isIP(value.slice(0, separator)) !== 4) {
+      throw new Error("A peer endpoint must use an IPv4 address and port.");
+    }
+    host = value.slice(0, separator);
+    portText = value.slice(separator + 1);
+  }
+  const port = Number(portText);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error("A peer endpoint port must be between 1 and 65535.");
+  }
+  const loopback = host === "::1" || host.startsWith("127.");
+  const unspecified = host === "::" || host === "0.0.0.0";
+  if (unspecified) {
+    throw new Error(
+      "A peer endpoint must be an advertised host address, not wildcard."
+    );
+  }
+  if (loopback && !allowLoopback) {
+    throw new Error(
+      "A loopback peer endpoint requires --allow-loopback-peer and is only useful for local testing."
+    );
+  }
+  return net.isIP(host) === 6 ? `[${host}]:${port}` : `${host}:${port}`;
+}
+
+function normalizePeerDirectEndpoints(values, options = {}) {
+  if (!Array.isArray(values)) {
+    throw new Error("Peer endpoints must be a list.");
+  }
+  const endpoints = [
+    ...new Set(values.map((value) => parsePeerDirectEndpoint(value, options)))
+  ];
+  if (endpoints.length > 8) {
+    throw new Error("Forge supports at most eight direct peer endpoints.");
+  }
+  return endpoints;
+}
+
+function peerAddressCandidates() {
+  const candidates = [];
+  const interfaces = os.networkInterfaces();
+  for (const interfaceName of Object.keys(interfaces).sort()) {
+    for (const address of interfaces[interfaceName] ?? []) {
+      const family = net.isIP(address.address);
+      const normalized = address.address.toLowerCase();
+      if (
+        address.internal ||
+        (family !== 4 && family !== 6) ||
+        normalized === "0.0.0.0" ||
+        normalized === "::" ||
+        normalized.startsWith("169.254.") ||
+        normalized.startsWith("fe80:")
+      ) {
+        continue;
+      }
+      candidates.push({ interfaceName, address: normalized, family });
+    }
+  }
+  return candidates;
+}
+
+async function isAddressPortAvailable(host, port) {
+  return await new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.listen({ host, port, exclusive: true }, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+async function discoverPeerDirectEndpoint() {
+  for (const candidate of peerAddressCandidates()) {
+    for (let port = 4318; port <= 4347; port += 1) {
+      if (await isAddressPortAvailable(candidate.address, port)) {
+        return candidate.family === 6
+          ? `[${candidate.address}]:${port}`
+          : `${candidate.address}:${port}`;
+      }
+    }
+  }
+  return null;
 }
 
 function normalizeAdapterList(value) {
@@ -271,6 +405,8 @@ async function writeText(
 
 async function readConfig() {
   const config = await readJson(configPath(), {});
+  const peerAllowLoopbackDirect = config?.peer?.allowLoopbackDirect === true;
+  const peerIrohConfigured = typeof config?.peer?.irohEnabled === "boolean";
   return {
     version: VERSION,
     mode: config?.mode === "dev" ? "dev" : "packaged",
@@ -285,7 +421,17 @@ async function readConfig() {
       ? config.adapters.filter((entry) => ADAPTERS.includes(entry))
       : [],
     updatedAt: typeof config?.updatedAt === "string" ? config.updatedAt : null,
-    repo: typeof config?.repo === "string" ? config.repo : null
+    repo: typeof config?.repo === "string" ? config.repo : null,
+    peerEnabled: config?.peer?.enabled === true,
+    peerIrohEnabled: peerIrohConfigured && config?.peer?.irohEnabled === true,
+    peerIrohConfigured,
+    peerDirectEndpoints: normalizePeerDirectEndpoints(
+      Array.isArray(config?.peer?.directEndpoints)
+        ? config.peer.directEndpoints
+        : [],
+      { allowLoopback: peerAllowLoopbackDirect }
+    ),
+    peerAllowLoopbackDirect
   };
 }
 
@@ -299,6 +445,15 @@ async function writeConfig(next, options) {
     dataRoot: path.resolve(next.dataRoot),
     adapters: next.adapters,
     repo: next.repo ?? null,
+    peer: {
+      enabled: next.peerEnabled === true,
+      irohEnabled: next.peerIrohEnabled === true,
+      directEndpoints: normalizePeerDirectEndpoints(
+        next.peerDirectEndpoints ?? [],
+        { allowLoopback: next.peerAllowLoopbackDirect === true }
+      ),
+      allowLoopbackDirect: next.peerAllowLoopbackDirect === true
+    },
     updatedAt: new Date().toISOString()
   };
   return writeJson(configPath(), payload, options);
@@ -659,7 +814,10 @@ function refreshCargoPath() {
   }
 }
 
-async function maybeInstallRustToolchain(flags) {
+async function maybeInstallRustToolchain(
+  flags,
+  purpose = "Forge Companion Iroh"
+) {
   refreshCargoPath();
   if (commandExists("cargo")) {
     return { ok: true, installed: false };
@@ -685,7 +843,7 @@ async function maybeInstallRustToolchain(flags) {
   const shouldInstall = flags?.yes
     ? true
     : await promptYesNo(
-        "Forge Companion Iroh needs Rust/Cargo to build the local transport host. Install the minimal Rust toolchain now?",
+        `${purpose} needs Rust/Cargo for its local native component. Install the minimal Rust toolchain now?`,
         true
       );
   if (!shouldInstall) {
@@ -787,6 +945,158 @@ async function ensureIrohTransportPrepared(config, flags = {}) {
     );
   }
   return { ok: true, built: true, binary: binary ?? null, manifestPath };
+}
+
+async function ensureForgePeerPrepared(config, flags = null) {
+  if (!config.peerEnabled) {
+    return { ok: true, enabled: false, built: false, binaryPath: null };
+  }
+  if (
+    config.peerIrohEnabled !== true &&
+    (!Array.isArray(config.peerDirectEndpoints) ||
+      config.peerDirectEndpoints.length === 0)
+  ) {
+    throw new Error(
+      "Forge peer sharing needs at least one transport. Enable Iroh with --enable-peer-iroh or configure a direct --peer-endpoint <ip:port>."
+    );
+  }
+
+  const pluginRoot =
+    config.mode === "packaged" ? await ensurePackagedRuntimeInstalled() : null;
+  const runCargo = async ({ args, cwd, env: cargoEnv }) => {
+    refreshCargoPath();
+    if (!commandExists("cargo") && flags) {
+      await maybeInstallRustToolchain(flags, "Forge peer sharing");
+      refreshCargoPath();
+    }
+    if (!commandExists("cargo")) return { ok: false, missingCargo: true };
+    return await runLoggedCommand("cargo", args, {
+      cwd,
+      dryRun: flags?.dryRun === true,
+      env: cargoEnv,
+      logFile: logPath()
+    });
+  };
+
+  try {
+    const result = await prepareForgePeerRuntime({
+      mode: config.mode,
+      pluginRoot,
+      repoRoot: config.repo,
+      nativeRoot: path.join(forgeHome(), "native"),
+      runtimePackageVersion: RUNTIME_PACKAGE_VERSION,
+      environment: process.env,
+      runCargo
+    });
+    return { ...result, enabled: true };
+  } catch (error) {
+    throw new Error(
+      [
+        "Forge could not prepare the verified forge-peer runtime.",
+        error instanceof Error ? error.message : String(error),
+        `Log: ${logPath()}`,
+        "Run npx forge-memory doctor --repair after checking Rust/Cargo and the packaged source signature.",
+        "Your Forge data folder was not changed by this build failure."
+      ].join(" "),
+      { cause: error }
+    );
+  }
+}
+
+async function inspectConfiguredForgePeer(config) {
+  if (!config.peerEnabled) {
+    return {
+      ok: true,
+      enabled: false,
+      sourceVerified: null,
+      binaryVerified: null,
+      binaryPath: null,
+      reason: null
+    };
+  }
+  if (
+    config.peerIrohEnabled !== true &&
+    config.peerDirectEndpoints.length === 0
+  ) {
+    return {
+      ok: false,
+      enabled: true,
+      sourceVerified: false,
+      binaryVerified: false,
+      binaryPath: null,
+      reason: "No Iroh or direct peer transport is configured."
+    };
+  }
+  const pluginRoot =
+    config.mode === "packaged"
+      ? resolveOpenClawPluginRoot({ installedOnly: true })
+      : null;
+  if (config.mode === "packaged" && !pluginRoot) {
+    return {
+      ok: false,
+      enabled: true,
+      sourceVerified: false,
+      binaryVerified: false,
+      binaryPath: null,
+      reason: "The installed Forge runtime package is unavailable."
+    };
+  }
+  try {
+    const inspection = await inspectForgePeerRuntime({
+      mode: config.mode,
+      pluginRoot,
+      repoRoot: config.repo,
+      nativeRoot: path.join(forgeHome(), "native"),
+      runtimePackageVersion: RUNTIME_PACKAGE_VERSION,
+      now: new Date()
+    });
+    return { ...inspection, enabled: true };
+  } catch (error) {
+    return {
+      ok: false,
+      enabled: true,
+      sourceVerified: false,
+      binaryVerified: false,
+      binaryPath: null,
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function forgeRuntimeEnvironment(config, peerPreparation) {
+  const environment = { ...process.env };
+  for (const name of [
+    "FORGE_RUNTIME_PACKAGE_NAME",
+    "FORGE_RUNTIME_PACKAGE_VERSION",
+    "FORGE_PEER_ENABLED",
+    "FORGE_PEER_REQUIRED",
+    "FORGE_PEER_BIN",
+    "FORGE_PEER_ENABLE_IROH",
+    "FORGE_PEER_DIRECT_ENDPOINTS",
+    "FORGE_PEER_ALLOW_LOOPBACK_DIRECT",
+    "FORGE_PEER_SOCKET_PATH",
+    "FORGE_PEER_STATE_DIR"
+  ]) {
+    delete environment[name];
+  }
+  if (config.mode === "packaged") {
+    environment.FORGE_RUNTIME_PACKAGE_NAME = RUNTIME_PACKAGE;
+    environment.FORGE_RUNTIME_PACKAGE_VERSION = RUNTIME_PACKAGE_VERSION;
+  }
+  environment.FORGE_PEER_ENABLED = config.peerEnabled ? "1" : "0";
+  environment.FORGE_PEER_REQUIRED = "0";
+  if (config.peerEnabled) {
+    if (!peerPreparation?.binaryPath) {
+      throw new Error("The enabled forge-peer runtime has no verified binary.");
+    }
+    environment.FORGE_PEER_BIN = peerPreparation.binaryPath;
+    environment.FORGE_PEER_ENABLE_IROH = config.peerIrohEnabled ? "1" : "0";
+    environment.FORGE_PEER_DIRECT_ENDPOINTS =
+      config.peerDirectEndpoints.join(",");
+    environment.FORGE_PEER_ALLOW_LOOPBACK_DIRECT =
+      config.peerAllowLoopbackDirect ? "1" : "0";
+  }
+  return environment;
 }
 
 function detectOpenClaw() {
@@ -1312,6 +1622,56 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
     dataRoot,
     dataRootWasExplicit: typeof parsed.values.dataRoot === "string"
   });
+  const peerEnabled = parsed.flags.enablePeer
+    ? true
+    : parsed.flags.disablePeer
+      ? false
+      : parsed.flags.yes
+        ? currentConfig.peerEnabled
+        : await promptYesNo(
+            "Enable secure Forge-to-Forge sharing on this host?",
+            currentConfig.updatedAt ? currentConfig.peerEnabled : false
+          );
+  const enablingPeerNow = peerEnabled && !currentConfig.peerEnabled;
+  const peerIrohEnabled = parsed.flags.enablePeerIroh
+    ? true
+    : parsed.flags.disablePeerIroh
+      ? false
+      : parsed.flags.yes
+        ? enablingPeerNow
+          ? true
+          : currentConfig.peerIrohConfigured
+            ? currentConfig.peerIrohEnabled
+            : false
+        : peerEnabled
+          ? await promptYesNo(
+              "Use Iroh for secure peer connectivity across different networks?",
+              currentConfig.peerIrohConfigured
+                ? currentConfig.peerIrohEnabled
+                : true
+            )
+          : false;
+  if (!peerEnabled && parsed.flags.enablePeerIroh) {
+    throw new Error("--enable-peer-iroh requires --enable-peer.");
+  }
+  const peerAllowLoopbackDirect = parsed.flags.allowLoopbackPeer
+    ? true
+    : currentConfig.peerAllowLoopbackDirect;
+  let peerDirectEndpoints =
+    parsed.values.peerEndpoints.length > 0
+      ? normalizePeerDirectEndpoints(parsed.values.peerEndpoints, {
+          allowLoopback: peerAllowLoopbackDirect
+        })
+      : currentConfig.peerDirectEndpoints;
+  if (peerEnabled && !peerIrohEnabled && peerDirectEndpoints.length === 0) {
+    const discoveredEndpoint = await discoverPeerDirectEndpoint();
+    if (discoveredEndpoint) peerDirectEndpoints = [discoveredEndpoint];
+  }
+  if (peerEnabled && !peerIrohEnabled && peerDirectEndpoints.length === 0) {
+    throw new Error(
+      "Forge peer sharing has no transport. Enable Iroh, pass --peer-endpoint <ip:port>, or use --allow-loopback-peer only for a local test endpoint."
+    );
+  }
 
   return {
     version: VERSION,
@@ -1322,7 +1682,11 @@ async function buildInstallConfig(parsed, currentConfig, discovery, command) {
     dataRoot: runtimeTarget.dataRoot,
     adapters,
     repo,
-    command
+    command,
+    peerEnabled,
+    peerIrohEnabled,
+    peerDirectEndpoints,
+    peerAllowLoopbackDirect
   };
 }
 
@@ -1879,9 +2243,69 @@ function resolveOpenClawPluginRoot(options = {}) {
   return null;
 }
 
+function readRuntimePackageIdentity(pluginRoot) {
+  if (!pluginRoot) return null;
+  const manifest = readJsonSync(path.join(pluginRoot, "package.json"));
+  if (
+    manifest?.name !== RUNTIME_PACKAGE ||
+    typeof manifest.version !== "string" ||
+    !manifest.version.trim()
+  ) {
+    return null;
+  }
+  return {
+    name: manifest.name,
+    version: manifest.version,
+    pluginRoot
+  };
+}
+
+function resolveInstalledRuntimePackageIdentity() {
+  return readRuntimePackageIdentity(
+    resolveOpenClawPluginRoot({ installedOnly: true })
+  );
+}
+
+function healthRuntimePackageIdentity(result) {
+  const name = result?.payload?.runtime?.packageName;
+  const version = result?.payload?.runtime?.packageVersion;
+  if (typeof name !== "string" || typeof version !== "string") return null;
+  return { name, version };
+}
+
+function runtimePackageIdentityMatches(identity) {
+  return (
+    identity?.name === RUNTIME_PACKAGE &&
+    identity?.version === RUNTIME_PACKAGE_VERSION
+  );
+}
+
+function runtimeStateOwnsHealthProcess(state, healthResult) {
+  const runtimePid = Number(healthResult?.payload?.runtime?.pid);
+  return (
+    Number.isInteger(runtimePid) &&
+    runtimePid > 0 &&
+    Array.isArray(state?.children) &&
+    state.children.some(
+      (child) => child?.role === "server" && child.pid === runtimePid
+    )
+  );
+}
+
+function runtimeStateMatchesPackage(state, config) {
+  if (config.mode !== "packaged") return true;
+  if (!state) return true;
+  return runtimePackageIdentityMatches({
+    name: state.runtimePackageName,
+    version: state.runtimePackageVersion
+  });
+}
+
 async function ensurePackagedRuntimeInstalled(options = {}) {
-  const existing = options.forceInstall ? null : resolveOpenClawPluginRoot();
-  if (existing) return existing;
+  const existing = options.forceInstall
+    ? null
+    : resolveInstalledRuntimePackageIdentity();
+  if (runtimePackageIdentityMatches(existing)) return existing.pluginRoot;
   const installRoot = runtimeInstallRoot();
   await fsp.mkdir(installRoot, { recursive: true });
   const packageJsonPath = path.join(installRoot, "package.json");
@@ -1916,18 +2340,23 @@ async function ensurePackagedRuntimeInstalled(options = {}) {
       ].join(" ")
     );
   }
-  const installed = resolveOpenClawPluginRoot({ installedOnly: true });
+  const installed = resolveInstalledRuntimePackageIdentity();
   if (!installed)
     throw new Error(
       `${RUNTIME_PACKAGE} installed but its runtime entry could not be resolved. Log: ${logPath()}`
     );
-  const entry = path.join(installed, "server", "index.js");
+  if (!runtimePackageIdentityMatches(installed)) {
+    throw new Error(
+      `${RUNTIME_PACKAGE} installed version ${installed.version}, expected ${RUNTIME_PACKAGE_VERSION}. Log: ${logPath()}`
+    );
+  }
+  const entry = path.join(installed.pluginRoot, "server", "index.js");
   if (!fs.existsSync(entry)) {
     throw new Error(
       `${RUNTIME_PACKAGE} installed but ${entry} is missing. Log: ${logPath()}`
     );
   }
-  return installed;
+  return installed.pluginRoot;
 }
 
 async function rotateRuntimeLog(reason) {
@@ -1985,10 +2414,63 @@ async function repairPackagedRuntimeCache(config) {
   return { ...record, repairRecordPath };
 }
 
-async function startRuntime(config) {
-  const current = await health(config);
+function runtimeStateMatchesPeerConfig(state, config) {
+  if (!state?.peer) return !config.peerEnabled;
+  return (
+    state.peer.enabled === config.peerEnabled &&
+    (!config.peerEnabled ||
+      (state.peer.irohEnabled === config.peerIrohEnabled &&
+        state.peer.allowLoopbackDirect === config.peerAllowLoopbackDirect &&
+        JSON.stringify(state.peer.directEndpoints ?? []) ===
+          JSON.stringify(config.peerDirectEndpoints)))
+  );
+}
+
+async function startRuntime(config, options = {}) {
+  let current = await health(config);
+  let existing = await readRuntimeState();
   if (isHealthyForgeRuntime(current)) {
-    const existing = await readRuntimeState();
+    const packageMatches =
+      config.mode !== "packaged" ||
+      (runtimePackageIdentityMatches(healthRuntimePackageIdentity(current)) &&
+        runtimeStateMatchesPackage(existing, config));
+    if (!packageMatches) {
+      if (runtimeStateOwnsHealthProcess(existing, current)) {
+        await stopRuntime(config);
+        current = await health(config);
+        existing = null;
+      } else {
+        return {
+          ok: false,
+          started: false,
+          adopted: false,
+          runtimeVersionMismatch: true,
+          expectedRuntimePackage: {
+            name: RUNTIME_PACKAGE,
+            version: RUNTIME_PACKAGE_VERSION
+          },
+          runningRuntimePackage: healthRuntimePackageIdentity(current),
+          state: existing,
+          health: current,
+          message:
+            "The healthy Forge runtime package version could not be verified. Stop it or run npx forge-memory restart before continuing."
+        };
+      }
+    }
+  }
+  if (isHealthyForgeRuntime(current)) {
+    if (!runtimeStateMatchesPeerConfig(existing, config)) {
+      return {
+        ok: false,
+        started: false,
+        adopted: false,
+        configurationMismatch: true,
+        state: existing,
+        health: current,
+        message:
+          "The healthy Forge runtime was started with different peer-sharing settings. Run npx forge-memory restart."
+      };
+    }
     return {
       ok: true,
       started: false,
@@ -2017,10 +2499,12 @@ async function startRuntime(config) {
       message: `Port ${config.port || DEFAULT_PORT} is already in use.`
     };
   }
-  const existing = await readRuntimeState();
   if (existing?.pid && processExists(existing.pid)) {
     const existingHealth = await health(config);
-    if (isHealthyForgeRuntime(existingHealth))
+    if (
+      isHealthyForgeRuntime(existingHealth) &&
+      runtimeStateMatchesPeerConfig(existing, config)
+    )
       return {
         ok: true,
         started: false,
@@ -2029,6 +2513,10 @@ async function startRuntime(config) {
         health: existingHealth
       };
   }
+
+  const peerPreparation =
+    options.peerPreparation ?? (await ensureForgePeerPrepared(config));
+  const runtimeEnvironment = forgeRuntimeEnvironment(config, peerPreparation);
 
   await fsp.mkdir(path.dirname(logPath()), { recursive: true });
   await fsp.mkdir(path.dirname(runtimeStatePath()), { recursive: true });
@@ -2067,7 +2555,7 @@ async function startRuntime(config) {
         detached: true,
         stdio: ["ignore", out, out],
         env: {
-          ...process.env,
+          ...runtimeEnvironment,
           HOST: "127.0.0.1",
           PORT: String(config.port),
           FORGE_BASE_PATH: "/forge/",
@@ -2094,7 +2582,7 @@ async function startRuntime(config) {
             detached: true,
             stdio: ["ignore", out, out],
             env: {
-              ...process.env,
+              ...runtimeEnvironment,
               FORGE_API_ORIGIN: `http://127.0.0.1:${config.port}`,
               FORGE_BASE_PATH: "/forge/"
             }
@@ -2111,7 +2599,7 @@ async function startRuntime(config) {
         detached: true,
         stdio: ["ignore", out, out],
         env: {
-          ...process.env,
+          ...runtimeEnvironment,
           HOST: "127.0.0.1",
           PORT: String(config.port),
           FORGE_BASE_PATH: "/forge/",
@@ -2137,10 +2625,21 @@ async function startRuntime(config) {
 
   const state = {
     mode: config.mode,
+    runtimePackageName: config.mode === "packaged" ? RUNTIME_PACKAGE : null,
+    runtimePackageVersion:
+      config.mode === "packaged" ? RUNTIME_PACKAGE_VERSION : null,
     baseUrl: baseUrl(config),
     webUrl: webUrl(config),
     dataRoot: config.dataRoot,
     logPath: logPath(),
+    peer: {
+      enabled: config.peerEnabled,
+      irohEnabled: config.peerIrohEnabled,
+      binaryPath: peerPreparation.binaryPath,
+      sourceIdentity: peerPreparation.sourceIdentity ?? null,
+      directEndpoints: config.peerDirectEndpoints,
+      allowLoopbackDirect: config.peerAllowLoopbackDirect
+    },
     children,
     startedAt: new Date().toISOString()
   };
@@ -3387,6 +3886,16 @@ async function printPairing(pairing) {
   }
 }
 
+function peerRuntimeConfigChanged(left, right) {
+  return (
+    left.peerEnabled !== right.peerEnabled ||
+    left.peerIrohEnabled !== right.peerIrohEnabled ||
+    left.peerAllowLoopbackDirect !== right.peerAllowLoopbackDirect ||
+    JSON.stringify(left.peerDirectEndpoints) !==
+      JSON.stringify(right.peerDirectEndpoints)
+  );
+}
+
 async function runInstall(parsed, command) {
   const currentConfig = await readConfig();
   if (!parsed.flags.yes) {
@@ -3418,6 +3927,18 @@ async function runInstall(parsed, command) {
         dryRun: parsed.flags.dryRun
       })
   );
+  if (
+    peerRuntimeConfigChanged(currentConfig, config) &&
+    !parsed.flags.noStart &&
+    !parsed.flags.dryRun
+  ) {
+    await withProgress(
+      "Applying Forge peer runtime settings",
+      "restarting only the managed runtime process",
+      parsed.flags,
+      () => stopRuntime(currentConfig)
+    );
+  }
   await withProgress(
     "Preparing Forge data folder",
     config.dataRoot,
@@ -3440,6 +3961,21 @@ async function runInstall(parsed, command) {
         dryRun: parsed.flags.dryRun
       })
   );
+  let peerPreparation = {
+    ok: true,
+    enabled: config.peerEnabled,
+    built: false,
+    binaryPath: null,
+    dryRun: parsed.flags.dryRun
+  };
+  if (config.peerEnabled && !parsed.flags.dryRun) {
+    peerPreparation = await withProgress(
+      "Preparing secure Forge peer sharing",
+      "verifying signed source and the owner-only native runtime",
+      parsed.flags,
+      () => ensureForgePeerPrepared(config, parsed.flags)
+    );
+  }
   const shouldPair =
     parsed.flags.pairIos ||
     (!parsed.flags.skipPairIos &&
@@ -3454,7 +3990,7 @@ async function runInstall(parsed, command) {
         : "Installing and starting Forge runtime",
       `logs: ${logPath()}`,
       parsed.flags,
-      () => startRuntime(config)
+      () => startRuntime(config, { peerPreparation })
     );
   } else if (parsed.flags.noStart) {
     printStep(
@@ -3506,7 +4042,7 @@ async function runInstall(parsed, command) {
         "Starting Forge runtime for iOS pairing",
         `logs: ${logPath()}`,
         parsed.flags,
-        () => startRuntime(config)
+        () => startRuntime(config, { peerPreparation })
       );
     }
     assertRuntimeStartedForPairing(runtimeResult, config);
@@ -3539,6 +4075,7 @@ async function runInstall(parsed, command) {
     adapterResults,
     runtimeResult,
     doctorResult,
+    peerPreparation,
     irohTransportResult,
     pairing: Boolean(pairing)
   };
@@ -3547,6 +4084,15 @@ async function runInstall(parsed, command) {
     console.log(color.green("Forge Memory configured and checked."));
     console.log(`UI: ${webUrl(config)}`);
     console.log(`Data: ${config.dataRoot}`);
+    console.log(
+      `Peer sharing: ${
+        config.peerEnabled
+          ? peerPreparation.ok
+            ? color.green("enabled")
+            : color.yellow("needs attention")
+          : "disabled"
+      }`
+    );
     console.log(
       `Doctor: ${
         parsed.flags.dryRun
@@ -3669,6 +4215,22 @@ async function runUpdate(parsed) {
         : refreshPackagedRuntimeCache(parsed)
   );
 
+  let peerPreparation = {
+    ok: true,
+    enabled: config.peerEnabled,
+    built: false,
+    binaryPath: null,
+    dryRun: parsed.flags.dryRun
+  };
+  if (config.peerEnabled && !parsed.flags.dryRun) {
+    peerPreparation = await withProgress(
+      "Verifying secure Forge peer sharing",
+      "signed source, owner-only build cache, and executable receipt",
+      parsed.flags,
+      () => ensureForgePeerPrepared(config, parsed.flags)
+    );
+  }
+
   const adapterResults = await withProgress(
     parsed.flags.skipAdapters || config.adapters.length === 0
       ? "Skipping host adapter updates"
@@ -3697,7 +4259,7 @@ async function runUpdate(parsed) {
       "Starting updated Forge runtime",
       `logs: ${logPath()}`,
       parsed.flags,
-      () => startRuntime(config)
+      () => startRuntime(config, { peerPreparation })
     );
   } else if (parsed.flags.noStart) {
     printStep(
@@ -3730,6 +4292,7 @@ async function runUpdate(parsed) {
     writeResult,
     stopResult,
     runtimeUpdateResult,
+    peerPreparation,
     adapterResults,
     runtimeResult,
     doctorResult,
@@ -3745,6 +4308,7 @@ async function runUpdate(parsed) {
   console.log(`Backup: ${backup.outputPath}`);
   console.log(`Data: ${currentConfig.dataRoot}`);
   console.log(`UI: ${webUrl(config)}`);
+  console.log(`Peer sharing: ${config.peerEnabled ? "enabled" : "disabled"}`);
   if (skillPlan.backups.length > 0) {
     console.log("Skill backups:");
     for (const backupEntry of skillPlan.backups) {
@@ -3764,6 +4328,7 @@ async function runStatus(parsed) {
   const config = await readConfig();
   const state = await readRuntimeState();
   const currentHealth = await health(config);
+  const peerRuntime = await inspectConfiguredForgePeer(config);
   const stateExists = fs.existsSync(runtimeStatePath());
   const running = isHealthyForgeRuntime(currentHealth);
   const payload = {
@@ -3774,6 +4339,13 @@ async function runStatus(parsed) {
     webUrl: webUrl(config),
     dataRoot: config.dataRoot,
     adapters: config.adapters,
+    peer: {
+      enabled: config.peerEnabled,
+      irohEnabled: config.peerIrohEnabled,
+      directEndpoints: config.peerDirectEndpoints,
+      allowLoopbackDirect: config.peerAllowLoopbackDirect,
+      runtime: peerRuntime
+    },
     health: currentHealth,
     runtimeStatePath: runtimeStatePath(),
     runtimeStateExists: stateExists,
@@ -3795,6 +4367,30 @@ async function runStatus(parsed) {
     console.log(
       `Adapters: ${config.adapters.length ? config.adapters.join(", ") : "none configured"}`
     );
+    console.log(
+      `Peer sharing: ${
+        config.peerEnabled
+          ? peerRuntime.ok
+            ? color.green("ready")
+            : color.yellow("needs attention")
+          : "disabled"
+      }`
+    );
+    if (config.peerEnabled) {
+      console.log(
+        `Peer transports: ${[
+          config.peerIrohEnabled ? "Iroh" : null,
+          config.peerDirectEndpoints.length > 0
+            ? `${config.peerDirectEndpoints.length} direct endpoint${config.peerDirectEndpoints.length === 1 ? "" : "s"}`
+            : null
+        ]
+          .filter(Boolean)
+          .join(", ")}`
+      );
+      if (!peerRuntime.ok && peerRuntime.reason) {
+        console.log(color.dim(`   ${peerRuntime.reason}`));
+      }
+    }
     if (state?.logPath) console.log(`Logs: ${state.logPath}`);
   }
 }
@@ -3833,6 +4429,61 @@ async function doctorCheckRuntime(config, options) {
       : result.ok && result.forge === false
         ? `Port ${config.port || DEFAULT_PORT} responded, but not with Forge runtime health. Stop the conflicting process or choose another --port.`
         : `Run npx forge-memory doctor --repair, then inspect ${logPath()} if the runtime still does not start. Repair reinstalls only the owned runtime cache and preserves the data folder.`
+  };
+}
+
+async function doctorCheckPeerRuntime(parsed, config, options) {
+  if (!config.peerEnabled) {
+    return {
+      id: "peerRuntime",
+      ok: true,
+      detail: "disabled",
+      enabled: false,
+      repaired: false,
+      guidance:
+        "Peer sharing is opt-in. Run npx forge-memory configure --enable-peer to enable it."
+    };
+  }
+
+  let result;
+  let repaired = false;
+  try {
+    if (options.repair && !options.dryRun) {
+      result = await ensureForgePeerPrepared(config, parsed.flags);
+      repaired = result.built === true;
+      result = {
+        ...result,
+        sourceVerified: true,
+        binaryVerified: Boolean(result.binaryPath),
+        reason: null
+      };
+    } else {
+      result = await inspectConfiguredForgePeer(config);
+    }
+  } catch (error) {
+    result = {
+      ok: false,
+      sourceVerified: false,
+      binaryVerified: false,
+      binaryPath: null,
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+
+  return {
+    id: "peerRuntime",
+    ok: result.ok === true,
+    detail: result.ok
+      ? `${config.peerIrohEnabled ? "Iroh" : "direct-only"}; ${config.peerDirectEndpoints.length} direct endpoint${config.peerDirectEndpoints.length === 1 ? "" : "s"}; verified executable`
+      : (result.reason ?? "not ready"),
+    enabled: true,
+    repaired,
+    sourceVerified: result.sourceVerified === true,
+    binaryVerified: result.binaryVerified === true,
+    binaryPath: result.binaryPath ?? null,
+    guidance: result.ok
+      ? "The signed peer source and owner-only native executable are ready."
+      : "Run npx forge-memory doctor --repair after checking the peer transports, Rust/Cargo, and the packaged source signature. Existing Forge data is not changed by peer runtime repair."
   };
 }
 
@@ -3901,6 +4552,7 @@ async function runDoctorChecks(parsed, config, options = {}) {
       "Forge data is preserved here. Doctor verifies that this is a readable, writable directory and can create it when missing, but it will not delete existing data."
   });
 
+  checks.push(await doctorCheckPeerRuntime(parsed, config, options));
   checks.push(await doctorCheckRuntime(config, options));
 
   for (const adapter of discovery.adapters) {
@@ -4546,6 +5198,13 @@ Options:
   --skip-pair-ios       Do not prompt or create iOS pairing
   --manual-http         Force direct HTTP/TCP for iOS pairing
   --public-url <url>    Phone-facing Tailscale/LAN/fixed URL for direct pairing; never localhost
+  --enable-peer         Enable secure Forge-to-Forge sharing for this install
+  --disable-peer        Disable Forge-to-Forge sharing for this install
+  --enable-peer-iroh    Use Iroh for peer connectivity across different networks (default for new peer installs)
+  --disable-peer-iroh   Disable Iroh and require an explicit/discovered direct endpoint
+  --peer-endpoint <ip:port>
+                        Advertise a literal IPv4 or bracketed IPv6 peer endpoint; repeat up to 8 times
+  --allow-loopback-peer Allow 127.0.0.0/8 or ::1 peer endpoints for local tests only
   --no-start            Configure without starting runtime
   --no-doctor           Skip install-time doctor checks
   --repair              Let doctor create missing folders and restart unhealthy runtime

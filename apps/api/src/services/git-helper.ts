@@ -2,13 +2,15 @@ import { execFile as execFileCallback } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { HttpError } from "../errors.js";
 import {
+  TASK_CLOSEOUT_LIMITS,
   gitHelperOverviewSchema,
-  gitHelperSearchKindSchema,
+  gitHelperSearchQuerySchema,
   gitHelperSearchResponseSchema,
   type GitHelperOverview,
   type GitHelperRef,
-  type GitHelperSearchKind,
+  type GitHelperSearchInput,
   type GitHelperSearchResponse
 } from "../types.js";
 
@@ -18,12 +20,15 @@ const repoRoot = path.resolve(
   "..",
   "..",
   "..",
-  "..",
   ".."
 );
 
 function trim(value: string | null | undefined) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function truncate(value: string | null | undefined, maxLength: number) {
+  return trim(value).slice(0, maxLength);
 }
 
 async function runCommand(command: string, args: string[]) {
@@ -36,14 +41,13 @@ async function runCommand(command: string, args: string[]) {
 }
 
 function parseGithubRepository(remote: string) {
-  const sshMatch = remote.match(/github\.com:([^/]+\/[^/.]+)(?:\.git)?$/);
-  if (sshMatch) {
-    return sshMatch[1] ?? "";
-  }
-  const httpsMatch = remote.match(
-    /github\.com\/([^/]+\/[^/.]+)(?:\.git)?$/
+  const match = remote.match(
+    /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/?$/
   );
-  return httpsMatch?.[1] ?? "";
+  const repository = (match?.[1] ?? "").replace(/\.git$/, "");
+  return repository.length <= TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength
+    ? repository
+    : "";
 }
 
 function buildBranchUrl(repository: string, branch: string) {
@@ -78,11 +82,10 @@ async function getRepositoryContext() {
   }
 
   try {
-    currentBranch = await runCommand("git", [
-      "rev-parse",
-      "--abbrev-ref",
-      "HEAD"
-    ]);
+    currentBranch = truncate(
+      await runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"]),
+      TASK_CLOSEOUT_LIMITS.gitRefValueLength
+    );
   } catch {
     warnings.push("Forge could not resolve the current branch.");
   }
@@ -132,9 +135,9 @@ async function searchBranches(
       if (!normalizedQuery) {
         return true;
       }
-      return `${entry.branch} ${entry.subject}`.toLowerCase().includes(
-        normalizedQuery
-      );
+      return `${entry.branch} ${entry.subject}`
+        .toLowerCase()
+        .includes(normalizedQuery);
     })
     .slice(0, limit)
     .map((entry) => ({
@@ -142,10 +145,16 @@ async function searchBranches(
       refType: "branch",
       provider: repository ? "github" : "git",
       repository,
-      refValue: entry.branch,
+      refValue: truncate(entry.branch, TASK_CLOSEOUT_LIMITS.gitRefValueLength),
       url: buildBranchUrl(repository, entry.branch),
-      displayTitle: entry.branch,
-      subtitle: [entry.dateLabel, entry.subject].filter(Boolean).join(" · ")
+      displayTitle: truncate(
+        entry.branch,
+        TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      ),
+      subtitle: truncate(
+        [entry.dateLabel, entry.subject].filter(Boolean).join(" · "),
+        TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      )
     }));
 }
 
@@ -169,8 +178,13 @@ async function searchCommits(
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [sha = "", shortSha = "", subject = "", dateLabel = "", author = ""] =
-        line.split("\t");
+      const [
+        sha = "",
+        shortSha = "",
+        subject = "",
+        dateLabel = "",
+        author = ""
+      ] = line.split("\t");
       return {
         sha,
         shortSha,
@@ -195,8 +209,14 @@ async function searchCommits(
       repository,
       refValue: entry.sha,
       url: buildCommitUrl(repository, entry.sha),
-      displayTitle: `${entry.shortSha} ${entry.subject}`.trim(),
-      subtitle: [entry.dateLabel, entry.author].filter(Boolean).join(" · ")
+      displayTitle: truncate(
+        `${entry.shortSha} ${entry.subject}`,
+        TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      ),
+      subtitle: truncate(
+        [entry.dateLabel, entry.author].filter(Boolean).join(" · "),
+        TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      )
     }));
 }
 
@@ -242,15 +262,21 @@ async function searchPullRequests(
         repository,
         refValue: String(entry.number),
         url: entry.url,
-        displayTitle: `PR #${entry.number} ${entry.title}`.trim(),
-        subtitle: [
-          entry.headRefName,
-          entry.state.toLowerCase(),
-          entry.isDraft ? "draft" : "",
-          entry.author?.login ?? ""
-        ]
-          .filter(Boolean)
-          .join(" · ")
+        displayTitle: truncate(
+          `PR #${entry.number} ${entry.title}`,
+          TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+        ),
+        subtitle: truncate(
+          [
+            entry.headRefName,
+            entry.state.toLowerCase(),
+            entry.isDraft ? "draft" : "",
+            entry.author?.login ?? ""
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+        )
       })),
       warnings: []
     };
@@ -273,7 +299,6 @@ export async function getGitHelperOverview(): Promise<GitHelperOverview> {
   ]);
 
   return gitHelperOverviewSchema.parse({
-    repoRoot,
     provider: context.provider,
     repository: context.repository,
     currentBranch: context.currentBranch,
@@ -285,23 +310,45 @@ export async function getGitHelperOverview(): Promise<GitHelperOverview> {
   });
 }
 
-export async function searchGitHelperRefs(input: {
-  kind: GitHelperSearchKind;
-  query?: string;
-  repository?: string;
-}): Promise<GitHelperSearchResponse> {
-  const parsedKind = gitHelperSearchKindSchema.parse(input.kind);
+export async function searchGitHelperRefs(
+  input: GitHelperSearchInput
+): Promise<GitHelperSearchResponse> {
+  const parsedInput = gitHelperSearchQuerySchema.parse(input);
   const context = await getRepositoryContext();
-  const repository = trim(input.repository) || context.repository;
+  const repository = parsedInput.repository ?? context.repository;
   let refs: GitHelperRef[] = [];
   let warnings = [...context.warnings];
 
-  if (parsedKind === "branch") {
-    refs = await searchBranches(repository, input.query);
-  } else if (parsedKind === "commit") {
-    refs = await searchCommits(repository, input.query);
+  if (
+    parsedInput.kind !== "pull_request" &&
+    parsedInput.repository !== undefined &&
+    parsedInput.repository !== context.repository
+  ) {
+    throw new HttpError(
+      400,
+      "git_helper_repository_mismatch",
+      "Local branch and commit searches are limited to the configured Forge repository"
+    );
+  }
+
+  if (parsedInput.kind === "branch") {
+    refs = await searchBranches(
+      context.repository,
+      parsedInput.query,
+      parsedInput.limit
+    );
+  } else if (parsedInput.kind === "commit") {
+    refs = await searchCommits(
+      context.repository,
+      parsedInput.query,
+      parsedInput.limit
+    );
   } else {
-    const prResult = await searchPullRequests(repository, input.query);
+    const prResult = await searchPullRequests(
+      repository,
+      parsedInput.query,
+      parsedInput.limit
+    );
     refs = prResult.refs;
     warnings = [...warnings, ...prResult.warnings];
   }
@@ -309,7 +356,7 @@ export async function searchGitHelperRefs(input: {
   return gitHelperSearchResponseSchema.parse({
     provider: repository ? "github" : context.provider,
     repository,
-    kind: parsedKind,
+    kind: parsedInput.kind,
     refs,
     warnings
   });

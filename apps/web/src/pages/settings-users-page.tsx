@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { UserRelationshipGraph } from "@/components/users/user-relationship-graph";
 import {
@@ -149,24 +152,28 @@ export function SettingsUsersPage() {
 
   if (directoryQuery.isLoading) {
     return (
-      <LoadingState
-        eyebrow="Settings · Users"
-        title="Loading identity directory"
-        description="Reading human and bot identities, ownership counts, and directional access."
-      />
+      <SettingsStateFrame>
+        <LoadingState
+          eyebrow="Settings · Users"
+          title="Loading identity directory"
+          description="Reading human and bot identities, ownership counts, and directional access."
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (directoryQuery.isError || !directory) {
     return (
-      <ErrorState
-        eyebrow="Settings · Users"
-        error={
-          directoryQuery.error ??
-          new Error("Forge returned an empty user directory.")
-        }
-        onRetry={() => void directoryQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Users"
+          error={
+            directoryQuery.error ??
+            new Error("Forge returned an empty user directory.")
+          }
+          onRetry={() => void directoryQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

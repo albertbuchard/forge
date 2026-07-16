@@ -13,7 +13,10 @@ import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -851,23 +854,27 @@ export function SettingsLogsPage() {
 
   if (logsQuery.isPending) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings"
-        title="Loading diagnostics"
-        description="Collecting the latest frontend, backend, and runtime traces."
-        columns={1}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Settings"
+          title="Loading diagnostics"
+          description="Collecting the latest frontend, backend, and runtime traces."
+          columns={1}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (logsQuery.isError && !logsQuery.data) {
     return (
-      <ErrorState
-        eyebrow="Settings"
-        error={logsQuery.error}
-        onRetry={() => void logsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings"
+          error={logsQuery.error}
+          onRetry={() => void logsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

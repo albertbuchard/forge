@@ -1,5 +1,5 @@
-Forge Companion 1.0.154 adds shared pinned records across Forge.
+Forge Companion 1.0.155 adds People and selective Forge-to-Forge sharing.
 
-Pin important records from iPhone and open them directly from Apple Watch. Forge keeps the same pinned set across the web app, iPhone, watch, and trusted agents.
+Create and link Person records, pair another Forge by QR code, and review exactly what each person can receive. Shared information keeps its source, freshness, precision, and revocation state.
 
-Pairing tokens, HealthKit data, watch action persistence, and stored user data are unchanged.
+iPhone handles pairing and human approvals. Apple Watch can open deliberately pinned People records. Existing Forge data and companion pairing are preserved.

@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode
+} from "react";
 import {
   ArchiveRestore,
   BookCopy,
   Bot,
   CalendarDays,
+  ChevronRight,
   Cpu,
   Database,
   ScrollText,
@@ -17,13 +25,14 @@ import { createPortal } from "react-dom";
 import { NavLink, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { prefetchRouteModule } from "@/routes/route-prefetch";
 
 export const SETTINGS_SECTIONS = [
   {
     to: "/settings",
     label: "Runtime",
     description:
-      "Operator session, execution policy, appearance, and Doctor checks.",
+      "Operator session, execution policy, appearance, locale, and Doctor checks.",
     icon: Settings2
   },
   {
@@ -41,7 +50,7 @@ export const SETTINGS_SECTIONS = [
   {
     to: "/settings/calendar",
     label: "Calendar",
-    description: "Calendar providers, connection state, and sync defaults.",
+    description: "Provider connections, calendar selection, and sync defaults.",
     icon: CalendarDays
   },
   {
@@ -63,9 +72,15 @@ export const SETTINGS_SECTIONS = [
     icon: Bot
   },
   {
+    to: "/settings/rewards",
+    label: "Rewards",
+    description: "Progression rules, assets, and reward controls.",
+    icon: Trophy
+  },
+  {
     to: "/settings/wiki",
     label: "KarpaWiki",
-    description: "Wiki spaces, retrieval profiles, and ingest configuration.",
+    description: "Wiki spaces, index health, ingest behavior, and reindexing.",
     icon: BookCopy
   },
   {
@@ -75,18 +90,19 @@ export const SETTINGS_SECTIONS = [
     icon: ScrollText
   },
   {
-    to: "/settings/rewards",
-    label: "Rewards",
-    description: "Progression rules, assets, and reward controls.",
-    icon: Trophy
-  },
-  {
     to: "/settings/bin",
     label: "Bin",
     description: "Soft-deleted records available for deliberate recovery.",
     icon: ArchiveRestore
   }
 ] as const;
+
+type SettingsRouteFocusRequest = {
+  pathname: string;
+  target: "desktop-link" | "mobile-trigger";
+};
+
+let pendingSettingsRouteFocus: SettingsRouteFocusRequest | null = null;
 
 function sectionMatches(pathname: string, to: string) {
   if (to === "/settings") {
@@ -95,9 +111,29 @@ function sectionMatches(pathname: string, to: string) {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
+export function SettingsStateFrame({
+  children,
+  className
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("mx-auto grid w-full max-w-[1220px] gap-5", className)}>
+      <SettingsSectionNav />
+      {children}
+    </div>
+  );
+}
+
 export function SettingsSectionNav({ className }: { className?: string }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const desktopLinkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileDialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const isSettingsIndex = location.pathname === "/settings";
   const activeSection = useMemo(() => {
     return (
       [...SETTINGS_SECTIONS]
@@ -108,15 +144,106 @@ export function SettingsSectionNav({ className }: { className?: string }) {
   }, [location.pathname]);
 
   useEffect(() => {
+    setMobileOpen(false);
+    const focusRequest = pendingSettingsRouteFocus;
+    if (!focusRequest || focusRequest.pathname !== location.pathname) {
+      return undefined;
+    }
+
+    pendingSettingsRouteFocus = null;
+    const focusTimer = window.setTimeout(() => {
+      if (focusRequest.target === "mobile-trigger") {
+        mobileTriggerRef.current?.focus();
+      } else {
+        desktopLinkRefs.current[focusRequest.pathname]?.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [location.pathname]);
+
+  const prepareRouteFocus = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    pathname: string,
+    target: SettingsRouteFocusRequest["target"]
+  ) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    if (pathname === location.pathname) {
+      pendingSettingsRouteFocus = null;
+      window.setTimeout(() => {
+        if (target === "mobile-trigger") {
+          mobileTriggerRef.current?.focus();
+        } else {
+          desktopLinkRefs.current[pathname]?.focus();
+        }
+      }, 0);
+      return;
+    }
+
+    pendingSettingsRouteFocus = { pathname, target };
+  };
+
+  useEffect(() => {
     if (!mobileOpen) {
       return undefined;
     }
 
     const previousOverflow = document.body.style.overflow;
     const previousTouchAction = document.body.style.touchAction;
+    const fallbackTrigger = mobileTriggerRef.current;
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusTimer = window.setTimeout(() => {
+      const firstControl =
+        mobileDialogRef.current?.querySelector<HTMLElement>(focusableSelector);
+      (firstControl ?? mobileDialogRef.current)?.focus();
+    }, 0);
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMobileOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab" || !mobileDialogRef.current) {
+        return;
+      }
+
+      const controls = Array.from(
+        mobileDialogRef.current.querySelectorAll<HTMLElement>(focusableSelector)
+      ).filter((element) => element.getAttribute("aria-hidden") !== "true");
+      if (controls.length === 0) {
+        event.preventDefault();
+        mobileDialogRef.current.focus();
+        return;
+      }
+
+      const firstControl = controls[0];
+      const lastControl = controls[controls.length - 1];
+      const activeElement = document.activeElement;
+      if (event.shiftKey && activeElement === firstControl) {
+        event.preventDefault();
+        lastControl.focus();
+      } else if (!event.shiftKey && activeElement === lastControl) {
+        event.preventDefault();
+        firstControl.focus();
+      } else if (!mobileDialogRef.current.contains(activeElement)) {
+        event.preventDefault();
+        firstControl.focus();
       }
     };
 
@@ -125,9 +252,22 @@ export function SettingsSectionNav({ className }: { className?: string }) {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      window.clearTimeout(focusTimer);
       document.body.style.overflow = previousOverflow;
       document.body.style.touchAction = previousTouchAction;
       window.removeEventListener("keydown", handleKeyDown);
+
+      const previousFocus = previousFocusRef.current;
+      if (pendingSettingsRouteFocus?.target === "mobile-trigger") {
+        return;
+      }
+      window.setTimeout(() => {
+        if (previousFocus?.isConnected && previousFocus !== document.body) {
+          previousFocus.focus();
+        } else {
+          fallbackTrigger?.focus();
+        }
+      }, 0);
     };
   }, [mobileOpen]);
 
@@ -136,42 +276,107 @@ export function SettingsSectionNav({ className }: { className?: string }) {
       <Card
         className={cn("surface-shell-panel overflow-hidden p-2", className)}
       >
-        <nav
-          aria-label="Settings sections"
-          className="hidden items-center gap-3 lg:flex"
-        >
-          <div className="flex flex-wrap gap-2">
-            {SETTINGS_SECTIONS.map((section) => (
-              <NavLink
-                key={section.to}
-                to={section.to}
-                end={section.to === "/settings"}
-                title={section.description}
-                className={({ isActive }) =>
-                  cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition",
-                    isActive || sectionMatches(location.pathname, section.to)
-                      ? "border border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] text-[var(--primary)]"
-                      : "border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                  )
-                }
-              >
-                <section.icon className="size-3.5" />
-                <span>{section.label}</span>
-              </NavLink>
-            ))}
+        <nav aria-label="Settings sections" className="hidden lg:block">
+          <div
+            className={cn(
+              "gap-2",
+              isSettingsIndex
+                ? "grid lg:grid-cols-2 xl:grid-cols-3"
+                : "flex flex-wrap"
+            )}
+          >
+            {SETTINGS_SECTIONS.map((section) => {
+              const isActive = sectionMatches(location.pathname, section.to);
+              const labelId = `settings-desktop-${section.label.toLowerCase()}-label`;
+              const descriptionId = `settings-desktop-${section.label.toLowerCase()}-description`;
+
+              return (
+                <NavLink
+                  key={section.to}
+                  ref={(node) => {
+                    desktopLinkRefs.current[section.to] = node;
+                  }}
+                  to={section.to}
+                  end={section.to === "/settings"}
+                  title={isSettingsIndex ? undefined : section.description}
+                  aria-labelledby={labelId}
+                  aria-describedby={isSettingsIndex ? descriptionId : undefined}
+                  aria-current={isActive ? "page" : undefined}
+                  onPointerEnter={() => void prefetchRouteModule(section.to)}
+                  onFocus={() => void prefetchRouteModule(section.to)}
+                  onTouchStart={() => void prefetchRouteModule(section.to)}
+                  onClick={(event) =>
+                    prepareRouteFocus(event, section.to, "desktop-link")
+                  }
+                  className={cn(
+                    "group transition",
+                    isSettingsIndex
+                      ? "flex min-h-[88px] min-w-0 items-center gap-3 rounded-[18px] border px-3 py-3 text-left"
+                      : "inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                    isActive
+                      ? "border-[var(--primary)]/14 bg-[var(--ui-accent-soft)] text-[var(--primary)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                  )}
+                >
+                  {isSettingsIndex ? (
+                    <>
+                      <span
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-[14px] border transition",
+                          isActive
+                            ? "border-[var(--primary)]/18 bg-[var(--primary)]/14 text-[var(--primary)]"
+                            : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] group-hover:border-[var(--ui-border-strong)] group-hover:text-[var(--ui-ink-strong)]"
+                        )}
+                      >
+                        <section.icon className="size-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          id={labelId}
+                          className="block text-sm font-semibold text-[var(--ui-ink-strong)]"
+                        >
+                          {section.label}
+                        </span>
+                        <span
+                          id={descriptionId}
+                          className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-faint)]"
+                        >
+                          {section.description}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        className="size-4 shrink-0 text-[var(--ui-ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ui-ink-strong)]"
+                        aria-hidden="true"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <section.icon className="size-3.5" aria-hidden="true" />
+                      <span id={labelId}>{section.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </div>
         </nav>
 
         <div className="flex items-center justify-between gap-3 lg:hidden">
           <button
+            ref={mobileTriggerRef}
             type="button"
+            aria-haspopup="dialog"
+            aria-expanded={mobileOpen}
+            aria-controls="settings-section-dialog"
             className="surface-shell-panel inline-flex min-w-0 flex-1 items-center justify-between gap-3 rounded-[22px] border px-3.5 py-2.5 text-left transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             onClick={() => setMobileOpen(true)}
           >
             <span className="flex min-w-0 items-center gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--primary)]/20 bg-[var(--primary)]/12">
-                <activeSection.icon className="size-4 text-[var(--primary)]" />
+                <activeSection.icon
+                  className="size-4 text-[var(--primary)]"
+                  aria-hidden="true"
+                />
               </span>
               <span className="min-w-0">
                 <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--ui-ink-faint)]">
@@ -193,9 +398,8 @@ export function SettingsSectionNav({ className }: { className?: string }) {
         ? createPortal(
             <div className="lg:hidden">
               <div className="surface-overlay fixed inset-0 z-50 backdrop-blur-xl" />
-              <button
-                type="button"
-                aria-label="Close settings sections"
+              <div
+                aria-hidden="true"
                 className="fixed inset-0 z-[51]"
                 onClick={() => setMobileOpen(false)}
               />
@@ -213,9 +417,12 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                 }}
               >
                 <div
+                  id="settings-section-dialog"
+                  ref={mobileDialogRef}
                   role="dialog"
                   aria-modal="true"
                   aria-label="Settings sections"
+                  tabIndex={-1}
                   className="surface-modal-panel pointer-events-auto flex max-h-[min(34rem,calc(100dvh-var(--forge-mobile-nav-clearance)-1rem))] w-full max-w-xl min-h-0 flex-col overflow-hidden rounded-[30px] border"
                 >
                   <div className="shrink-0 border-b border-[var(--ui-border-subtle)] px-4 pb-3 pt-4 sm:px-5">
@@ -243,7 +450,7 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                         className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
                         onClick={() => setMobileOpen(false)}
                       >
-                        <X className="size-4" />
+                        <X className="size-4" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -261,7 +468,24 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                             key={section.to}
                             to={section.to}
                             end={section.to === "/settings"}
-                            onClick={() => setMobileOpen(false)}
+                            aria-label={section.label}
+                            aria-describedby={`settings-mobile-${section.label.toLowerCase()}-description`}
+                            aria-current={isActive ? "page" : undefined}
+                            onPointerEnter={() =>
+                              void prefetchRouteModule(section.to)
+                            }
+                            onFocus={() => void prefetchRouteModule(section.to)}
+                            onTouchStart={() =>
+                              void prefetchRouteModule(section.to)
+                            }
+                            onClick={(event) => {
+                              prepareRouteFocus(
+                                event,
+                                section.to,
+                                "mobile-trigger"
+                              );
+                              setMobileOpen(false);
+                            }}
                             className={cn(
                               "group flex items-center justify-between gap-3 rounded-[22px] border px-3.5 py-3 transition-[transform,border-color,background-color,color] duration-150 hover:-translate-y-[1px] hover:text-[var(--ui-ink-strong)]",
                               isActive
@@ -278,13 +502,19 @@ export function SettingsSectionNav({ className }: { className?: string }) {
                                     : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] group-hover:border-[var(--ui-border-strong)] group-hover:text-[var(--ui-ink-strong)]"
                                 )}
                               >
-                                <section.icon className="size-4" />
+                                <section.icon
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
                               </span>
                               <span className="min-w-0">
                                 <span className="block truncate text-sm font-semibold text-[var(--ui-ink-strong)]">
                                   {section.label}
                                 </span>
-                                <span className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-faint)]">
+                                <span
+                                  id={`settings-mobile-${section.label.toLowerCase()}-description`}
+                                  className="mt-0.5 block text-xs leading-5 text-[var(--ui-ink-faint)]"
+                                >
                                   {section.description}
                                 </span>
                               </span>

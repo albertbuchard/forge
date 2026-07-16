@@ -2572,7 +2572,6 @@ export function ensureLegacyProcessorsMigrated() {
 }
 
 export function listAiConnectors() {
-  ensureLegacyProcessorsMigrated();
   const rows = getDatabase()
     .prepare(`SELECT * FROM ai_connectors ORDER BY created_at ASC`)
     .all() as AiConnectorRow[];
@@ -2580,7 +2579,6 @@ export function listAiConnectors() {
 }
 
 export function getAiConnectorById(connectorId: string) {
-  ensureLegacyProcessorsMigrated();
   const row = getDatabase()
     .prepare(`SELECT * FROM ai_connectors WHERE id = ?`)
     .get(connectorId) as AiConnectorRow | undefined;
@@ -2588,7 +2586,6 @@ export function getAiConnectorById(connectorId: string) {
 }
 
 export function getAiConnectorBySlug(slug: string) {
-  ensureLegacyProcessorsMigrated();
   const row = getDatabase()
     .prepare(`SELECT * FROM ai_connectors WHERE slug = ?`)
     .get(slug) as AiConnectorRow | undefined;

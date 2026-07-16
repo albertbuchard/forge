@@ -1,0 +1,2020 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Forge Connectivity Service",
+    "description": "Content-blind presence, mailbox, and key-package transport for independently operated Forge peers.",
+    "version": "0.1.0",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ForgeChannelSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Ed25519 possession proof: ForgeChannel v1.<SPKI>.<unix-seconds>.<nonce>.<signature>. It is unrelated to Forge bearer tokens."
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {
+    "/.well-known/forge-connectivity": {
+      "get": {
+        "operationId": "getForgeConnectivityDiscovery",
+        "summary": "Discover the Forge connectivity service contract and limits.",
+        "tags": [
+          "Discovery"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "protocol",
+                    "service",
+                    "version",
+                    "auth",
+                    "capabilities",
+                    "limits",
+                    "routes"
+                  ],
+                  "properties": {
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "forge-connectivity/1"
+                      ]
+                    },
+                    "service": {
+                      "type": "string",
+                      "enum": [
+                        "forge-connectivity-service"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "scheme",
+                        "algorithm",
+                        "channelDerivation",
+                        "replayProtection"
+                      ],
+                      "properties": {
+                        "scheme": {
+                          "type": "string",
+                          "enum": [
+                            "ForgeChannel"
+                          ]
+                        },
+                        "algorithm": {
+                          "type": "string",
+                          "enum": [
+                            "Ed25519"
+                          ]
+                        },
+                        "channelDerivation": {
+                          "type": "string",
+                          "enum": [
+                            "sha256-spki-v1"
+                          ]
+                        },
+                        "replayProtection": {
+                          "type": "string",
+                          "enum": [
+                            "timestamp-nonce-v1"
+                          ]
+                        }
+                      }
+                    },
+                    "capabilities": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "presence",
+                        "envelopes",
+                        "keyPackages",
+                        "longPoll",
+                        "ciphertextOnly"
+                      ],
+                      "properties": {
+                        "presence": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "envelopes": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "keyPackages": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "longPoll": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "ciphertextOnly": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "maxEnvelopeBytes",
+                        "maxPresenceBytes",
+                        "maxKeyPackageBytes",
+                        "maxChannelEnvelopeCount",
+                        "maxChannelEnvelopeBytes",
+                        "maxChannelRetainedEnvelopeCount",
+                        "maxChannelKeyPackageCount",
+                        "maxChannelKeyPackageBytes",
+                        "channelRequestsPerMinute",
+                        "channelBurstRequests",
+                        "maxCursorPageSize",
+                        "maxLongPollSeconds",
+                        "maxEnvelopeTtlSeconds",
+                        "maxPresenceTtlSeconds",
+                        "maxKeyPackageTtlSeconds"
+                      ],
+                      "properties": {
+                        "maxEnvelopeBytes": {
+                          "type": "integer"
+                        },
+                        "maxPresenceBytes": {
+                          "type": "integer"
+                        },
+                        "maxKeyPackageBytes": {
+                          "type": "integer"
+                        },
+                        "maxChannelEnvelopeCount": {
+                          "type": "integer"
+                        },
+                        "maxChannelEnvelopeBytes": {
+                          "type": "integer"
+                        },
+                        "maxChannelRetainedEnvelopeCount": {
+                          "type": "integer"
+                        },
+                        "maxChannelKeyPackageCount": {
+                          "type": "integer"
+                        },
+                        "maxChannelKeyPackageBytes": {
+                          "type": "integer"
+                        },
+                        "channelRequestsPerMinute": {
+                          "type": "integer"
+                        },
+                        "channelBurstRequests": {
+                          "type": "integer"
+                        },
+                        "maxCursorPageSize": {
+                          "type": "integer"
+                        },
+                        "maxLongPollSeconds": {
+                          "type": "integer"
+                        },
+                        "maxEnvelopeTtlSeconds": {
+                          "type": "integer"
+                        },
+                        "maxPresenceTtlSeconds": {
+                          "type": "integer"
+                        },
+                        "maxKeyPackageTtlSeconds": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "routes": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "presence",
+                        "envelopes",
+                        "envelopeAck",
+                        "keyPackages",
+                        "health"
+                      ],
+                      "properties": {
+                        "presence": {
+                          "type": "string"
+                        },
+                        "envelopes": {
+                          "type": "string"
+                        },
+                        "envelopeAck": {
+                          "type": "string"
+                        },
+                        "keyPackages": {
+                          "type": "string"
+                        },
+                        "health": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Check process and SQLite readiness without exposing mailbox metrics.",
+        "tags": [
+          "Operations"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "service",
+                    "version",
+                    "storage"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "degraded"
+                      ]
+                    },
+                    "service": {
+                      "type": "string",
+                      "enum": [
+                        "forge-connectivity-service"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "storage": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status",
+                        "schemaVersion"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "unavailable"
+                          ]
+                        },
+                        "schemaVersion": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "service",
+                    "version",
+                    "storage"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "degraded"
+                      ]
+                    },
+                    "service": {
+                      "type": "string",
+                      "enum": [
+                        "forge-connectivity-service"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "storage": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status",
+                        "schemaVersion"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "unavailable"
+                          ]
+                        },
+                        "schemaVersion": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/presence/{opaqueChannel}": {
+      "put": {
+        "operationId": "putPresence",
+        "summary": "Create or replace an encrypted presence descriptor.",
+        "tags": [
+          "Presence"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ciphertext"
+                ],
+                "properties": {
+                  "ciphertext": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 21846,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                  },
+                  "expiresInSeconds": {
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 900
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "description": "Exactly one mutation idempotency key."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "stored",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "stored": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "stored",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "stored": {
+                      "type": "boolean"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getPresence",
+        "summary": "Fetch the active encrypted presence descriptor.",
+        "tags": [
+          "Presence"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ciphertext",
+                    "updatedAt",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "ciphertext": {
+                      "type": "string",
+                      "minLength": 43,
+                      "maxLength": 21846,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePresence",
+        "summary": "Delete the encrypted presence descriptor.",
+        "tags": [
+          "Presence"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "description": "Exactly one mutation idempotency key."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "deleted"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{opaqueChannel}": {
+      "post": {
+        "operationId": "postEnvelope",
+        "summary": "Store one bounded opaque encrypted envelope.",
+        "tags": [
+          "Envelopes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "messageId",
+                  "ciphertext"
+                ],
+                "properties": {
+                  "messageId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                  },
+                  "ciphertext": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 349526,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                  },
+                  "expiresInSeconds": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 604800
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "description": "Exactly one mutation idempotency key."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "accepted",
+                    "duplicate",
+                    "messageId",
+                    "state",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "messageId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "acked",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "accepted",
+                    "duplicate",
+                    "messageId",
+                    "state",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "messageId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "acked",
+                        "expired"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getEnvelopes",
+        "summary": "Read a cursor page, optionally waiting for a new encrypted envelope.",
+        "tags": [
+          "Envelopes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{11}$"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 25,
+              "default": 0
+            },
+            "in": "query",
+            "name": "waitSeconds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "envelopes",
+                    "nextCursor",
+                    "pollTimedOut"
+                  ],
+                  "properties": {
+                    "envelopes": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "messageId",
+                          "ciphertext",
+                          "createdAt",
+                          "expiresAt"
+                        ],
+                        "properties": {
+                          "messageId": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                          },
+                          "ciphertext": {
+                            "type": "string",
+                            "minLength": 43,
+                            "maxLength": 349526,
+                            "pattern": "^[A-Za-z0-9_-]+$",
+                            "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{11}$"
+                    },
+                    "pollTimedOut": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/envelopes/{opaqueChannel}/ack": {
+      "post": {
+        "operationId": "ackEnvelopes",
+        "summary": "Acknowledge encrypted envelopes and erase their ciphertext bytes.",
+        "tags": [
+          "Envelopes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "messageIds"
+                ],
+                "properties": {
+                  "messageIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "description": "Exactly one mutation idempotency key."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "acknowledged",
+                    "alreadyFinalized",
+                    "unknown"
+                  ],
+                  "properties": {
+                    "acknowledged": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "alreadyFinalized": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unknown": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/key-packages/{opaqueChannel}": {
+      "put": {
+        "operationId": "putKeyPackage",
+        "summary": "Store one bounded opaque encrypted key package.",
+        "tags": [
+          "Key packages"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "packageId",
+                  "ciphertext"
+                ],
+                "properties": {
+                  "packageId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                  },
+                  "ciphertext": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 87382,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                  },
+                  "expiresInSeconds": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 604800
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "description": "Exactly one mutation idempotency key."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "stored",
+                    "duplicate",
+                    "packageId",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "stored": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "packageId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Default Response",
+            "headers": {
+              "idempotency-replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "Whether this response was replayed from a committed idempotency record."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "stored",
+                    "duplicate",
+                    "packageId",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "stored": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "packageId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getKeyPackages",
+        "summary": "Read a bounded cursor page of active encrypted key packages.",
+        "tags": [
+          "Key packages"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{11}$"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            },
+            "in": "path",
+            "name": "opaqueChannel",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ForgeChannel v1\\.[A-Za-z0-9_-]{59}\\.[0-9]{10,12}\\.[A-Za-z0-9_-]{22,43}\\.[A-Za-z0-9_-]{86}$"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "description": "Exactly one ForgeChannel authorization header."
+          }
+        ],
+        "security": [
+          {
+            "ForgeChannelSignature": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "keyPackages",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "keyPackages": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "packageId",
+                          "ciphertext",
+                          "createdAt",
+                          "expiresAt"
+                        ],
+                        "properties": {
+                          "packageId": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]{16,128}$"
+                          },
+                          "ciphertext": {
+                            "type": "string",
+                            "minLength": 43,
+                            "maxLength": 87382,
+                            "pattern": "^[A-Za-z0-9_-]+$",
+                            "description": "Unpadded base64url end-to-end ciphertext. The service does not decrypt or inspect it."
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{11}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "AMBIGUOUS_REQUEST_HEADERS",
+                            "AUTH_INVALID",
+                            "AUTH_REPLAYED",
+                            "AUTH_STALE",
+                            "BLOB_INVALID",
+                            "BLOB_TOO_LARGE",
+                            "CONTENT_ENCODING_UNSUPPORTED",
+                            "CONTENT_TYPE_UNSUPPORTED",
+                            "CREDENTIAL_NOT_ALLOWED",
+                            "CURSOR_INVALID",
+                            "IDEMPOTENCY_CONFLICT",
+                            "IDEMPOTENCY_REQUIRED",
+                            "INTERNAL_ERROR",
+                            "NOT_FOUND",
+                            "POLL_LIMIT_EXCEEDED",
+                            "QUOTA_EXCEEDED",
+                            "RATE_LIMITED",
+                            "REPLAY_CONFLICT",
+                            "REQUEST_BODY_NOT_ALLOWED",
+                            "SENSITIVE_METADATA_NOT_ALLOWED",
+                            "SERVICE_CLOSING",
+                            "STORAGE_UNAVAILABLE",
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Discovery"
+    },
+    {
+      "name": "Presence"
+    },
+    {
+      "name": "Envelopes"
+    },
+    {
+      "name": "Key packages"
+    },
+    {
+      "name": "Operations"
+    }
+  ],
+  "externalDocs": {
+    "description": "forge-connectivity/1 self-hosting and security documentation",
+    "url": "https://github.com/albertbuchard/forge/tree/main/packages/forge-connectivity-service/docs"
+  }
+}

@@ -46,6 +46,10 @@ final class WatchNavigationModel: ObservableObject {
         selectedCardIndexes[surface] ?? 0
     }
 
+    func selectCard(_ index: Int, for surface: WatchSurface) {
+        setCardIndex(index, for: surface)
+    }
+
     func cardCount(for surface: WatchSurface) -> Int {
         cardCounts[surface] ?? 1
     }
@@ -69,7 +73,35 @@ struct WatchCommandModalAction: Identifiable {
     let title: String
     let systemImage: String
     let tint: Color
+    var confirmation: WatchCommandConfirmation? = nil
+    var accessibilityHint: String? = nil
     let perform: () -> Void
+}
+
+struct WatchCommandConfirmation: Hashable {
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let accessibilityLabel: String
+    let accessibilityHint: String
+}
+
+enum WatchTaskCloseoutPresentation {
+    static let taskCompletion = WatchCommandConfirmation(
+        title: "Complete this task?",
+        message: "Completing closes the task. Files, Git references, and the completion note will remain deferred until you add them in Forge.",
+        confirmTitle: "Complete",
+        accessibilityLabel: "Complete task and defer evidence",
+        accessibilityHint: "Closes the task now. Completion evidence must be added later in Forge."
+    )
+
+    static let runCompletion = WatchCommandConfirmation(
+        title: "Complete this run?",
+        message: "Completing closes the run and its task. Files, Git references, and the completion note will remain deferred until you add them in Forge.",
+        confirmTitle: "Complete",
+        accessibilityLabel: "Complete run and defer evidence",
+        accessibilityHint: "Closes the run and task now. Completion evidence must be added later in Forge."
+    )
 }
 
 struct WatchCommandModalItem: Identifiable {
@@ -82,6 +114,7 @@ struct WatchCommandModalItem: Identifiable {
 struct WatchCommandModalView: View {
     @Environment(\.dismiss) private var dismiss
     let item: WatchCommandModalItem
+    @State private var pendingConfirmationActionId: String?
 
     var body: some View {
         WatchSurfaceBackground()
@@ -99,19 +132,58 @@ struct WatchCommandModalView: View {
 
                         ForEach(item.actions) { action in
                             Button {
-                                action.perform()
-                                dismiss()
+                                if action.confirmation == nil {
+                                    action.perform()
+                                    dismiss()
+                                } else {
+                                    pendingConfirmationActionId = action.id
+                                }
                             } label: {
                                 Label(action.title, systemImage: action.systemImage)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(action.tint)
+                            .accessibilityLabel(
+                                action.confirmation?.accessibilityLabel ?? action.title
+                            )
+                            .accessibilityHint(
+                                action.confirmation?.accessibilityHint
+                                    ?? action.accessibilityHint
+                                    ?? "Runs this Forge action"
+                            )
                         }
                     }
                     .padding(10)
                 }
             }
+            .alert(
+                pendingConfirmationAction?.confirmation?.title ?? "Confirm action",
+                isPresented: Binding(
+                    get: { pendingConfirmationAction != nil },
+                    set: { if $0 == false { pendingConfirmationActionId = nil } }
+                ),
+                presenting: pendingConfirmationAction
+            ) { action in
+                Button("Cancel", role: .cancel) {
+                    pendingConfirmationActionId = nil
+                }
+                Button(action.confirmation?.confirmTitle ?? "Confirm", role: .destructive) {
+                    pendingConfirmationActionId = nil
+                    action.perform()
+                    dismiss()
+                }
+                .accessibilityLabel(action.confirmation?.accessibilityLabel ?? "Confirm action")
+                .accessibilityHint(action.confirmation?.accessibilityHint ?? "Runs this Forge action")
+            } message: { action in
+                Text(action.confirmation?.message ?? "Confirm this Forge action.")
+            }
+    }
+
+    private var pendingConfirmationAction: WatchCommandModalAction? {
+        guard let pendingConfirmationActionId else { return nil }
+        return item.actions.first { $0.id == pendingConfirmationActionId }
     }
 }
 
@@ -142,6 +214,69 @@ struct SurfaceCarousel<Content: View>: View {
         }
         .onAppear(perform: clampSelection)
         .onChange(of: count) { _, _ in clampSelection() }
+    }
+
+    private func clampSelection() {
+        selection = min(max(selection, 0), max(0, count - 1))
+    }
+}
+
+struct IndexedSurfaceCarousel<Content: View>: View {
+    @Binding var selection: Int
+    let count: Int
+    private let content: (Int) -> Content
+
+    @State private var scrollPosition: Int?
+
+    init(
+        selection: Binding<Int>,
+        count: Int,
+        @ViewBuilder content: @escaping (Int) -> Content
+    ) {
+        self._selection = selection
+        self.count = count
+        self.content = content
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(0..<max(1, count), id: \.self) { index in
+                        content(index)
+                            .containerRelativeFrame(.horizontal)
+                            .id(index)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $scrollPosition)
+
+            if count > 1 {
+                WatchPageIndicator(selection: selection, count: count)
+                    .padding(.top, -7)
+                    .padding(.trailing, 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .onAppear {
+            clampSelection()
+            scrollPosition = selection
+        }
+        .onChange(of: count) { _, _ in
+            clampSelection()
+            scrollPosition = selection
+        }
+        .onChange(of: selection) { _, value in
+            guard scrollPosition != value else { return }
+            scrollPosition = value
+        }
+        .onChange(of: scrollPosition) { _, value in
+            guard let value else { return }
+            selection = min(max(value, 0), max(0, count - 1))
+        }
     }
 
     private func clampSelection() {

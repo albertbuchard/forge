@@ -33,6 +33,8 @@ import { SecretsManager } from "../managers/platform/secrets-manager.js";
 import { getSettings } from "../repositories/settings.js";
 import {
   createCalendarConnectionRecord,
+  claimTaskTimeboxProviderOperation,
+  completeTaskTimeboxProviderOperation,
   deleteCalendarConnectionRecord,
   deleteEncryptedSecret,
   deleteExternalEventsForConnection,
@@ -41,25 +43,27 @@ import {
   getCalendarConnectionById,
   getCalendarEventStorageRecord,
   getCalendarOverview,
+  getTaskTimeboxByIdIncludingPendingDeletion,
   isSupersededCalendarConnection,
   listCalendarConnections,
   listCalendarEventSources,
   listCalendars,
-  listTaskTimeboxes,
+  listTaskTimeboxProjectionCandidateIds,
   markCalendarEventSourcesSyncState,
   readEncryptedSecret,
-  registerCalendarEventSourceProjection,
+  failTaskTimeboxProviderOperation,
   recordCalendarActivity,
-  storeEncryptedSecret,
+  registerCalendarEventSourceProjection,
   rehomeCalendarConnectionReferences,
+  storeEncryptedSecret,
   updateCalendarConnectionRecord,
-  updateTaskTimebox,
   upsertCalendarEventRecord,
   upsertCalendarRecord,
   type CalendarConnectionRecord,
   type CalendarConnectionCredentialsRecord,
   type CalendarSyncCalendarInput,
-  type CalendarSyncEventInput
+  type CalendarSyncEventInput,
+  type TaskTimeboxProjectionClaim
 } from "../repositories/calendar.js";
 import type {
   ActivitySource,
@@ -73,6 +77,7 @@ import type {
   DiscoverCalendarConnectionInput,
   StartGoogleCalendarOauthInput,
   StartMicrosoftCalendarOauthInput,
+  TaskTimebox,
   TestMicrosoftCalendarOauthConfigurationInput
 } from "../types.js";
 
@@ -2384,12 +2389,160 @@ function mapMacOSLocalEventToSyncInput(
   };
 }
 
-async function publishTaskTimeboxes(
-  state: ProviderState,
-  forgeCalendarUrl: string | null,
+export function selectTaskTimeboxesForConnectionProjection(
+  timeboxes: TaskTimebox[],
   connectionId: string
 ) {
-  if (!forgeCalendarUrl) {
+  return timeboxes.filter(
+    (timebox) =>
+      timebox.connectionId === null || timebox.connectionId === connectionId
+  );
+}
+
+function findLocalForgeCalendar(
+  connectionId: string,
+  forgeCalendarUrl: string
+) {
+  return listCalendars(connectionId).find(
+    (entry) => normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendarUrl)
+  );
+}
+
+async function deleteProjectedTaskTimeboxRemote(
+  state: ProviderState,
+  forgeCalendarUrl: string,
+  remoteEventId: string
+) {
+  if (state.mode === "macos_local") {
+    const forgeCalendar = state.calendars.find(
+      (calendar) =>
+        normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
+    );
+    if (!forgeCalendar || !forgeCalendar.canWrite) {
+      throw new Error(
+        "The Forge calendar write target is read-only or unavailable."
+      );
+    }
+    await deleteMacOSLocalEvent(remoteEventId);
+    return;
+  }
+  if (state.mode !== "dav") {
+    throw new Error(
+      "This calendar provider is read-only and cannot publish timeboxes."
+    );
+  }
+  const forgeCalendar = state.calendars.find(
+    (calendar) => normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
+  );
+  if (!forgeCalendar || !canWriteDavCalendar(forgeCalendar)) {
+    throw new Error(
+      "The Forge calendar write target is read-only or unavailable."
+    );
+  }
+  await state.client.deleteCalendarObject({
+    calendarObject: {
+      url: new URL(`${remoteEventId}.ics`, forgeCalendar.url).toString()
+    }
+  });
+}
+
+function taskTimeboxProjectionMarker(timeboxId: string) {
+  return `Forge-Timebox-ID: ${timeboxId}`;
+}
+
+function taskTimeboxProjectionNotes(timebox: TaskTimebox) {
+  return [
+    timebox.overrideReason?.trim(),
+    taskTimeboxProjectionMarker(timebox.id)
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join("\n\n");
+}
+
+async function recoverMacOSLocalTimeboxEventId(input: {
+  calendarId: string;
+  timebox: TaskTimebox;
+}) {
+  const start = new Date(
+    Date.parse(input.timebox.startsAt) - 24 * 60 * 60 * 1000
+  );
+  const end = new Date(Date.parse(input.timebox.endsAt) + 24 * 60 * 60 * 1000);
+  const { events } = await listMacOSLocalEvents({
+    calendarIds: [input.calendarId],
+    start: start.toISOString(),
+    end: end.toISOString()
+  });
+  const marker = taskTimeboxProjectionMarker(input.timebox.id);
+  return events.find((event) => event.notes.includes(marker))?.eventId ?? null;
+}
+
+function isIdempotentProviderDeleteError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("404") ||
+    message.includes("not found") ||
+    message.includes("does not exist")
+  );
+}
+
+async function projectClaimedTaskTimebox(
+  state: ProviderState,
+  forgeCalendarUrl: string,
+  connectionId: string,
+  claim: TaskTimeboxProjectionClaim
+) {
+  const timebox = claim.timebox;
+
+  const localForgeCalendar = findLocalForgeCalendar(
+    connectionId,
+    forgeCalendarUrl
+  );
+
+  if (claim.operation === "delete") {
+    let remoteEventId = claim.remoteEventId ?? timebox.remoteEventId;
+    if (state.mode === "macos_local" && !remoteEventId) {
+      const forgeCalendar = state.calendars.find(
+        (calendar) =>
+          normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
+      );
+      if (forgeCalendar) {
+        remoteEventId = await recoverMacOSLocalTimeboxEventId({
+          calendarId: forgeCalendar.calendarId,
+          timebox
+        });
+      }
+    }
+    if (!remoteEventId && state.mode === "dav") {
+      remoteEventId = `forge-${timebox.id}`;
+    }
+    if (remoteEventId) {
+      try {
+        await deleteProjectedTaskTimeboxRemote(
+          state,
+          forgeCalendarUrl,
+          remoteEventId
+        );
+      } catch (error) {
+        if (!isIdempotentProviderDeleteError(error)) {
+          throw error;
+        }
+      }
+    }
+    if (
+      !completeTaskTimeboxProviderOperation({
+        timeboxId: timebox.id,
+        operation: "delete",
+        claimToken: claim.claimToken,
+        claimVersion: claim.claimVersion,
+        connectionId,
+        calendarId: localForgeCalendar?.id ?? null,
+        remoteEventId
+      })
+    ) {
+      throw new Error(
+        `Task timebox ${timebox.id} changed while its provider deletion was in flight.`
+      );
+    }
     return;
   }
 
@@ -2399,86 +2552,170 @@ async function publishTaskTimeboxes(
         normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
     );
     if (!forgeCalendar || !forgeCalendar.canWrite) {
-      return;
-    }
-
-    const horizon = {
-      from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      to: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
-    };
-    const timeboxes = listTaskTimeboxes(horizon);
-    for (const timebox of timeboxes) {
-      const { event } = await upsertMacOSLocalEvent({
-        calendarId: forgeCalendar.calendarId,
-        eventId: timebox.remoteEventId,
-        title: timebox.title,
-        startAt: timebox.startsAt,
-        endAt: timebox.endsAt,
-        notes: timebox.overrideReason ?? ""
-      });
-      const localForgeCalendar = listCalendars(connectionId).find(
-        (entry) =>
-          normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
+      throw new Error(
+        "The Forge calendar write target is read-only or unavailable."
       );
-      updateTaskTimebox(timebox.id, {
-        connectionId,
-        calendarId: localForgeCalendar?.id ?? null,
-        remoteEventId: event.eventId
-      });
+    }
+    const recoveredEventId =
+      claim.remoteEventId ??
+      timebox.remoteEventId ??
+      (await recoverMacOSLocalTimeboxEventId({
+        calendarId: forgeCalendar.calendarId,
+        timebox
+      }));
+    const { event } = await upsertMacOSLocalEvent({
+      calendarId: forgeCalendar.calendarId,
+      eventId: recoveredEventId,
+      title: timebox.title,
+      startAt: timebox.startsAt,
+      endAt: timebox.endsAt,
+      notes: taskTimeboxProjectionNotes(timebox)
+    });
+    const applied = completeTaskTimeboxProviderOperation({
+      timeboxId: timebox.id,
+      operation: "upsert",
+      claimToken: claim.claimToken,
+      claimVersion: claim.claimVersion,
+      connectionId,
+      calendarId: localForgeCalendar?.id ?? null,
+      remoteEventId: event.eventId
+    });
+    if (!applied && !recoveredEventId) {
+      await deleteMacOSLocalEvent(event.eventId);
+    }
+    if (!applied) {
+      throw new Error(
+        `Task timebox ${timebox.id} changed while its provider projection was in flight.`
+      );
     }
     return;
   }
 
   if (state.mode !== "dav") {
-    return;
+    throw new Error(
+      "This calendar provider is read-only and cannot publish timeboxes."
+    );
   }
   const forgeCalendar = state.calendars.find(
     (calendar) => normalizeUrl(calendar.url) === normalizeUrl(forgeCalendarUrl)
   );
-  if (!forgeCalendar) {
-    return;
+  if (!forgeCalendar || !canWriteDavCalendar(forgeCalendar)) {
+    throw new Error(
+      "The Forge calendar write target is read-only or unavailable."
+    );
   }
-
-  const horizon = {
-    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    to: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
-  };
-  const timeboxes = listTaskTimeboxes(horizon);
-
-  for (const timebox of timeboxes) {
-    const remoteEventId = timebox.remoteEventId ?? `forge-${timebox.id}`;
-    const iCalString = buildEventIcs({
-      uid: remoteEventId,
-      title: timebox.title,
-      startsAt: timebox.startsAt,
-      endsAt: timebox.endsAt,
-      description: timebox.overrideReason ?? ""
+  const existingRemoteEventId = claim.remoteEventId ?? timebox.remoteEventId;
+  const remoteEventId = existingRemoteEventId ?? `forge-${timebox.id}`;
+  const iCalString = buildEventIcs({
+    uid: remoteEventId,
+    title: timebox.title,
+    startsAt: timebox.startsAt,
+    endsAt: timebox.endsAt,
+    description: timebox.overrideReason ?? ""
+  });
+  let createdRemote = false;
+  if (existingRemoteEventId) {
+    await state.client.updateCalendarObject({
+      calendarObject: {
+        url: new URL(`${remoteEventId}.ics`, forgeCalendar.url).toString(),
+        data: iCalString
+      }
     });
-
-    if (timebox.remoteEventId) {
-      await state.client.updateCalendarObject({
-        calendarObject: {
-          url: new URL(`${remoteEventId}.ics`, forgeCalendar.url).toString(),
-          data: iCalString
-        }
-      });
-    } else {
+  } else {
+    try {
       await state.client.createCalendarObject({
         calendar: forgeCalendar,
         iCalString,
         filename: `${remoteEventId}.ics`
       });
+      createdRemote = true;
+    } catch (createError) {
+      try {
+        await state.client.updateCalendarObject({
+          calendarObject: {
+            url: new URL(`${remoteEventId}.ics`, forgeCalendar.url).toString(),
+            data: iCalString
+          }
+        });
+      } catch {
+        throw createError;
+      }
     }
-
-    const localForgeCalendar = listCalendars(connectionId).find(
-      (entry) =>
-        normalizeUrl(entry.remoteId) === normalizeUrl(forgeCalendar.url)
-    );
-    updateTaskTimebox(timebox.id, {
-      connectionId,
-      calendarId: localForgeCalendar?.id ?? null,
+  }
+  const applied = completeTaskTimeboxProviderOperation({
+    timeboxId: timebox.id,
+    operation: "upsert",
+    claimToken: claim.claimToken,
+    claimVersion: claim.claimVersion,
+    connectionId,
+    calendarId: localForgeCalendar?.id ?? null,
+    remoteEventId
+  });
+  if (!applied && createdRemote) {
+    await deleteProjectedTaskTimeboxRemote(
+      state,
+      forgeCalendarUrl,
       remoteEventId
+    );
+  }
+  if (!applied) {
+    throw new Error(
+      `Task timebox ${timebox.id} changed while its provider projection was in flight.`
+    );
+  }
+}
+
+async function publishTaskTimeboxes(
+  state: ProviderState,
+  forgeCalendarUrl: string | null,
+  connectionId: string
+) {
+  if (!forgeCalendarUrl) {
+    return;
+  }
+  const horizon = {
+    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    to: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
+  };
+  const timeboxIds = listTaskTimeboxProjectionCandidateIds({
+    connectionId,
+    ...horizon
+  });
+  const failures: Error[] = [];
+  for (const timeboxId of timeboxIds) {
+    const claim = claimTaskTimeboxProviderOperation({
+      timeboxId,
+      connectionId
     });
+    if (!claim) {
+      continue;
+    }
+    try {
+      await projectClaimedTaskTimebox(
+        state,
+        forgeCalendarUrl,
+        connectionId,
+        claim
+      );
+    } catch (error) {
+      failTaskTimeboxProviderOperation({
+        timeboxId,
+        claimToken: claim.claimToken,
+        claimVersion: claim.claimVersion,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      failures.push(
+        error instanceof Error
+          ? error
+          : new Error(`Timebox projection failed for ${timeboxId}.`)
+      );
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      `Forge could not project ${failures.length} task timebox${failures.length === 1 ? "" : "es"}.`
+    );
   }
 }
 
@@ -3953,6 +4190,165 @@ export function classifyCalendarProjectionError(
       "Forge saved the local event, but could not update the provider copy. The local record is intact; retry after the provider connection is available.",
     retryable: true
   };
+}
+
+function selectTaskTimeboxProjectionConnection(timebox: TaskTimebox) {
+  if (timebox.connectionId) {
+    const assigned = getCalendarConnectionById(timebox.connectionId);
+    if (!assigned || isSupersededCalendarConnection(assigned.id)) {
+      throw new Error(
+        "The calendar connection assigned to this timebox is unavailable."
+      );
+    }
+    return assigned;
+  }
+  return (
+    listCalendarConnections().find(
+      (connection) =>
+        connection.status === "connected" &&
+        connection.provider !== "microsoft" &&
+        Boolean(connection.forgeCalendarId) &&
+        !isSupersededCalendarConnection(connection.id)
+    ) ?? null
+  );
+}
+
+function taskTimeboxForgeCalendarUrl(connection: CalendarConnectionRecord) {
+  if (!connection.forgeCalendarId) {
+    return null;
+  }
+  return getCalendarById(connection.forgeCalendarId)?.remoteId ?? null;
+}
+
+export async function pushTaskTimeboxProjection(
+  timeboxId: string,
+  secrets: SecretsManager
+): Promise<CalendarProjectionResult> {
+  const timebox = getTaskTimeboxByIdIncludingPendingDeletion(timeboxId);
+  if (!timebox) {
+    throw new Error(`Unknown task timebox ${timeboxId}`);
+  }
+  try {
+    const connection = selectTaskTimeboxProjectionConnection(timebox);
+    if (!connection) {
+      return {
+        state: "not_requested",
+        code: null,
+        message: null,
+        retryable: false
+      };
+    }
+    const forgeCalendarUrl = taskTimeboxForgeCalendarUrl(connection);
+    if (!forgeCalendarUrl) {
+      throw new Error(
+        "The connected provider does not have a writable Forge calendar target."
+      );
+    }
+    const { state } = await resolveProviderStateForConnection(
+      connection.id,
+      secrets
+    );
+    const claim = claimTaskTimeboxProviderOperation({
+      timeboxId,
+      connectionId: connection.id
+    });
+    if (!claim) {
+      return {
+        state: "synced",
+        code: null,
+        message: null,
+        retryable: false
+      };
+    }
+    try {
+      await projectClaimedTaskTimebox(
+        state,
+        forgeCalendarUrl,
+        connection.id,
+        claim
+      );
+    } catch (error) {
+      failTaskTimeboxProviderOperation({
+        timeboxId,
+        claimToken: claim.claimToken,
+        claimVersion: claim.claimVersion,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+    return {
+      state: "synced",
+      code: null,
+      message: null,
+      retryable: false
+    };
+  } catch (error) {
+    return classifyCalendarProjectionError(error);
+  }
+}
+
+export async function deleteTaskTimeboxProjection(
+  timeboxId: string,
+  secrets: SecretsManager
+): Promise<CalendarProjectionResult> {
+  const timebox = getTaskTimeboxByIdIncludingPendingDeletion(timeboxId);
+  if (!timebox) {
+    throw new Error(`Unknown task timebox ${timeboxId}`);
+  }
+  try {
+    const connection = selectTaskTimeboxProjectionConnection(timebox);
+    if (!connection) {
+      throw new Error(
+        "The calendar connection assigned to this timebox is unavailable."
+      );
+    }
+    const forgeCalendarUrl = taskTimeboxForgeCalendarUrl(connection);
+    if (!forgeCalendarUrl) {
+      throw new Error(
+        "The connected provider does not have a writable Forge calendar target."
+      );
+    }
+    const { state } = await resolveProviderStateForConnection(
+      connection.id,
+      secrets
+    );
+    const claim = claimTaskTimeboxProviderOperation({
+      timeboxId,
+      connectionId: connection.id
+    });
+    if (!claim) {
+      return {
+        state: "synced",
+        code: null,
+        message: null,
+        retryable: false
+      };
+    }
+    try {
+      await projectClaimedTaskTimebox(
+        state,
+        forgeCalendarUrl,
+        connection.id,
+        claim
+      );
+    } catch (error) {
+      failTaskTimeboxProviderOperation({
+        timeboxId,
+        claimToken: claim.claimToken,
+        claimVersion: claim.claimVersion,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+    return {
+      state: "synced",
+      code: null,
+      message: null,
+      retryable: false
+    };
+  } catch (error) {
+    return classifyCalendarProjectionError(error);
+  }
 }
 
 export async function pushCalendarEventUpdate(

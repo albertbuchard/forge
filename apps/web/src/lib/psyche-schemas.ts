@@ -233,8 +233,9 @@ export const triggerReportSchema = z.object({
   status: z.enum(["draft", "reviewed", "integrated"]).default("draft"),
   eventTypeId: z.string().nullable(),
   customEventType: trimmed,
-  eventSituation: nonEmpty,
+  eventSituation: trimmed,
   occurredAt: z.string().trim().nullable(),
+  bodyCues: z.array(trimmed).max(40).default([]),
   emotions: z.array(triggerEmotionSchema).default([]),
   thoughts: z.array(triggerThoughtSchema).default([]),
   behaviors: z.array(triggerBehaviorSchema).default([]),
@@ -256,6 +257,16 @@ export const triggerReportSchema = z.object({
   schemaLinks: z.array(trimmed).default([]),
   modeTimeline: z.array(modeTimelineEntrySchema).default([]),
   nextMoves: z.array(trimmed).default([]),
+  memoryClarity: z
+    .enum(["unspecified", "clear", "partial", "uncertain"])
+    .default("unspecified"),
+  reflection: trimmed,
+  hypothesis: trimmed,
+  hypothesisFit: z
+    .enum(["not_reviewed", "fits", "partly_fits", "does_not_fit"])
+    .default("not_reviewed"),
+  hypothesisCorrection: trimmed,
+  interpretationConsent: z.boolean().default(false),
   userId: ownedUserId
 });
 

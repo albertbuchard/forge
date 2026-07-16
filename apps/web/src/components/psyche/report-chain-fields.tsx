@@ -186,13 +186,21 @@ export function EmotionRowsEditor({
                       const definition = definitions.find(
                         (entry) => entry.id === event.target.value
                       );
+                      const previousDefinition = definitions.find(
+                        (entry) => entry.id === item.emotionDefinitionId
+                      );
                       onChange(
                         items.map((entry) =>
                           entry.id === item.id
                             ? {
                                 ...entry,
                                 emotionDefinitionId: event.target.value || null,
-                                label: definition?.label ?? entry.label
+                                label:
+                                  definition &&
+                                  (!entry.label.trim() ||
+                                    entry.label === previousDefinition?.label)
+                                    ? definition.label
+                                    : entry.label
                               }
                             : entry
                         )

@@ -1,12 +1,194 @@
 import SwiftUI
 import WebKit
 
+enum ForgeWebReloadKind: Equatable {
+    case standard
+    case clearCache
+}
+
+struct ForgeWebReloadRequest: Equatable {
+    let id: UUID
+    let kind: ForgeWebReloadKind
+
+    init(id: UUID = UUID(), kind: ForgeWebReloadKind) {
+        self.id = id
+        self.kind = kind
+    }
+}
+
+struct ForgeWebFailure: Equatable {
+    let title: String
+    let detail: String
+    let isOffline: Bool
+
+    static func from(_ error: Error) -> ForgeWebFailure {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            let code = URLError.Code(rawValue: nsError.code)
+            switch code {
+            case .notConnectedToInternet, .internationalRoamingOff, .dataNotAllowed:
+                return ForgeWebFailure(
+                    title: "Forge is offline",
+                    detail: "The last loaded page is still available. Reconnect, then try again.",
+                    isOffline: true
+                )
+            case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
+                 .dnsLookupFailed, .secureConnectionFailed:
+                return ForgeWebFailure(
+                    title: "Forge is unreachable",
+                    detail: "Check the paired Forge runtime and your network, then try again.",
+                    isOffline: false
+                )
+            default:
+                break
+            }
+        }
+        return ForgeWebFailure(
+            title: "Forge could not load",
+            detail: "The web experience stopped loading. Try again or open Companion settings.",
+            isOffline: false
+        )
+    }
+
+    static func httpStatus(_ statusCode: Int) -> ForgeWebFailure {
+        ForgeWebFailure(
+            title: "Forge returned an error",
+            detail: "The runtime returned HTTP \(statusCode). Try again or check Companion diagnostics.",
+            isOffline: false
+        )
+    }
+
+    static let webProcessStopped = ForgeWebFailure(
+        title: "Forge needs to reload",
+        detail: "The embedded web process stopped. Reload to restore the web experience.",
+        isOffline: false
+    )
+}
+
+struct ForgeWebLayoutMetrics: Equatable {
+    let width: Int
+    let height: Int
+    let top: Int
+    let right: Int
+    let bottom: Int
+    let left: Int
+
+    static func resolve(bounds: CGRect, safeAreaInsets: UIEdgeInsets) -> ForgeWebLayoutMetrics? {
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return ForgeWebLayoutMetrics(
+            width: max(0, Int(bounds.width.rounded(.down))),
+            height: max(0, Int(bounds.height.rounded(.down))),
+            top: max(0, Int(safeAreaInsets.top.rounded(.down))),
+            right: max(0, Int(safeAreaInsets.right.rounded(.down))),
+            bottom: max(0, Int(safeAreaInsets.bottom.rounded(.down))),
+            left: max(0, Int(safeAreaInsets.left.rounded(.down)))
+        )
+    }
+}
+
+enum ForgeWebNavigationDisposition: Equatable {
+    case allow
+    case download
+    case openExternally
+    case cancel
+}
+
+enum ForgeWebNavigationPolicy {
+    static func disposition(
+        for candidateURL: URL,
+        relativeTo forgeURL: URL,
+        isUserActivated: Bool,
+        isPrimaryNavigation: Bool,
+        shouldPerformDownload: Bool
+    ) -> ForgeWebNavigationDisposition {
+        guard let scheme = candidateURL.scheme?.lowercased() else {
+            return .cancel
+        }
+        switch scheme {
+        case "about":
+            return candidateURL.absoluteString == "about:blank" ? .allow : .cancel
+        case "blob":
+            return isUserActivated &&
+                shouldPerformDownload &&
+                blobOriginMatches(candidateURL, forgeURL) ? .download : .cancel
+        case "data":
+            return .cancel
+        case "mailto", "tel", "sms", "facetime", "facetime-audio":
+            return isUserActivated && isPrimaryNavigation ? .openExternally : .cancel
+        case "http", "https", "forge-iroh":
+            if sameOrigin(candidateURL, forgeURL) {
+                if shouldPerformDownload {
+                    return isUserActivated ? .download : .cancel
+                }
+                return .allow
+            }
+            return isUserActivated && isPrimaryNavigation ? .openExternally : .cancel
+        default:
+            return .cancel
+        }
+    }
+
+    private static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.scheme?.caseInsensitiveCompare(rhs.scheme ?? "") == .orderedSame
+            && lhs.host?.caseInsensitiveCompare(rhs.host ?? "") == .orderedSame
+            && normalizedPort(lhs) == normalizedPort(rhs)
+    }
+
+    private static func blobOriginMatches(_ blobURL: URL, _ forgeURL: URL) -> Bool {
+        let value = blobURL.absoluteString
+        guard value.lowercased().hasPrefix("blob:") else {
+            return false
+        }
+        let serializedOrigin = String(value.dropFirst("blob:".count))
+        if forgeURL.scheme?.lowercased() == "forge-iroh",
+           serializedOrigin.lowercased().hasPrefix("null/")
+        {
+            return true
+        }
+        guard let originURL = URL(string: serializedOrigin) else { return false }
+        return sameOrigin(originURL, forgeURL)
+    }
+
+    private static func normalizedPort(_ url: URL) -> Int? {
+        if let port = url.port {
+            return port
+        }
+        switch url.scheme?.lowercased() {
+        case "http":
+            return 80
+        case "https":
+            return 443
+        default:
+            return nil
+        }
+    }
+}
+
+enum ForgeWebDownloadPolicy {
+    static func safeFilename(_ suggestedFilename: String) -> String {
+        let basename = suggestedFilename
+            .replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .last
+            .map(String.init) ?? ""
+        let sanitized = basename.replacingOccurrences(
+            of: #"[^A-Za-z0-9._ -]"#,
+            with: "_",
+            options: .regularExpression
+        )
+        let bounded = String(sanitized.prefix(160))
+        return bounded.isEmpty || bounded == "." || bounded == ".."
+            ? "Forge download"
+            : bounded
+    }
+}
+
 struct ForgeWebView: UIViewRepresentable {
     let url: URL
     let transport: PairingTransport?
-    let reloadToken: UUID
+    let reloadRequest: ForgeWebReloadRequest
     @Binding var isLoading: Bool
-    @Binding var errorMessage: String?
+    @Binding var failure: ForgeWebFailure?
 
     static var cacheDataTypesForHardRefresh: Set<String> {
         var types: Set<String> = [
@@ -26,19 +208,30 @@ struct ForgeWebView: UIViewRepresentable {
     static let companionBootstrapScript = """
     window.__forgeCompanionEmbedded = true;
     document.documentElement.dataset.forgeCompanionEmbedded = 'true';
-    window.__forgeCompanionApplyLayout = function(width, height, top, bottom) {
+    window.__forgeCompanionSyncVisualViewport = function() {
+        const viewport = window.visualViewport;
+        const height = Math.max(0, viewport ? viewport.height : window.innerHeight);
+        const top = Math.max(0, viewport ? viewport.offsetTop : 0);
+        const bottom = Math.max(0, window.innerHeight - height - top);
+        document.documentElement.style.setProperty('--forge-visual-viewport-height', height + 'px');
+        document.documentElement.style.setProperty('--forge-visual-viewport-top', top + 'px');
+        document.documentElement.style.setProperty('--forge-visual-viewport-bottom', bottom + 'px');
+        document.documentElement.style.setProperty('--forge-keyboard-inset-bottom', bottom + 'px');
+    };
+    window.__forgeCompanionApplyLayout = function(width, height, top, right, bottom, left) {
         const widthPx = width + 'px';
         const heightPx = height + 'px';
         const topPx = top + 'px';
+        const rightPx = right + 'px';
         const bottomPx = bottom + 'px';
-        window.__forgeCompanionViewportInsets = { top, bottom };
+        const leftPx = left + 'px';
+        window.__forgeCompanionViewportInsets = { top, right, bottom, left };
         document.documentElement.style.setProperty('--forge-companion-webview-width', widthPx);
         document.documentElement.style.setProperty('--forge-companion-webview-height', heightPx);
-        document.documentElement.style.setProperty('--forge-visual-viewport-height', heightPx);
-        document.documentElement.style.setProperty('--forge-visual-viewport-top', topPx);
-        document.documentElement.style.setProperty('--forge-visual-viewport-bottom', bottomPx);
         document.documentElement.style.setProperty('--forge-safe-area-top', topPx);
+        document.documentElement.style.setProperty('--forge-safe-area-right', rightPx);
         document.documentElement.style.setProperty('--forge-safe-area-bottom', bottomPx);
+        document.documentElement.style.setProperty('--forge-safe-area-left', leftPx);
         document.body.style.minHeight = heightPx;
         document.body.style.margin = '0';
 
@@ -46,7 +239,19 @@ struct ForgeWebView: UIViewRepresentable {
         if (root) {
             root.style.minHeight = heightPx;
         }
+        window.__forgeCompanionSyncVisualViewport();
     };
+    window.addEventListener('resize', window.__forgeCompanionSyncVisualViewport, { passive: true });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', window.__forgeCompanionSyncVisualViewport, { passive: true });
+        window.visualViewport.addEventListener('scroll', window.__forgeCompanionSyncVisualViewport, { passive: true });
+    }
+    document.addEventListener('focusin', function() {
+        window.requestAnimationFrame(window.__forgeCompanionSyncVisualViewport);
+    });
+    document.addEventListener('focusout', function() {
+        window.requestAnimationFrame(window.__forgeCompanionSyncVisualViewport);
+    });
     const style = document.createElement('style');
     style.innerHTML = `
     html {
@@ -60,7 +265,7 @@ struct ForgeWebView: UIViewRepresentable {
 
     static func freshRequest(
         for url: URL,
-        cachePolicy: URLRequest.CachePolicy = .reloadIgnoringLocalCacheData,
+        cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
         reloadToken: UUID? = nil
     ) -> URLRequest {
         let resolvedURL: URL
@@ -79,9 +284,19 @@ struct ForgeWebView: UIViewRepresentable {
         var request = URLRequest(url: resolvedURL)
         request.cachePolicy = cachePolicy
         request.timeoutInterval = 45
-        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        if cachePolicy != .useProtocolCachePolicy {
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+            request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        }
         return request
+    }
+
+    static func configureEmbeddedInteraction(on webView: WKWebView) {
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.bounces = true
+        webView.scrollView.alwaysBounceVertical = true
+        webView.scrollView.keyboardDismissMode = .interactive
+        webView.allowsBackForwardNavigationGestures = true
     }
 
     func makeCoordinator() -> Coordinator {
@@ -91,7 +306,7 @@ struct ForgeWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         companionDebugLog(
             "ForgeWebView",
-            "makeUIView url=\(url.absoluteString) reloadToken=\(reloadToken.uuidString)"
+            "makeUIView url=\(url.absoluteString) reloadRequest=\(reloadRequest.id.uuidString)"
         )
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -113,20 +328,19 @@ struct ForgeWebView: UIViewRepresentable {
 
         let webView = LayoutAwareWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.isOpaque = true
         webView.backgroundColor = UIColor(red: 11 / 255, green: 19 / 255, blue: 38 / 255, alpha: 1)
         webView.scrollView.backgroundColor = UIColor(red: 11 / 255, green: 19 / 255, blue: 38 / 255, alpha: 1)
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.bounces = true
-        webView.scrollView.alwaysBounceVertical = true
+        Self.configureEmbeddedInteraction(on: webView)
         webView.onLayout = { [weak coordinator = context.coordinator, weak webView] bounds, safeAreaInsets in
             guard let webView else { return }
             coordinator?.applyNativeBounds(bounds, safeAreaInsets: safeAreaInsets, to: webView)
         }
 
         context.coordinator.lastURL = url
-        context.coordinator.lastReloadToken = reloadToken
-        context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
+        context.coordinator.lastReloadRequest = reloadRequest
+        context.coordinator.updateViewState(isLoading: true, failure: nil)
         companionDebugLog("ForgeWebView", "makeUIView load request url=\(url.absoluteString)")
         webView.load(Self.freshRequest(for: url))
         return webView
@@ -137,20 +351,34 @@ struct ForgeWebView: UIViewRepresentable {
 
         if context.coordinator.lastURL != url {
             context.coordinator.lastURL = url
-            context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
+            context.coordinator.updateViewState(isLoading: true, failure: nil)
             companionDebugLog("ForgeWebView", "updateUIView load new url=\(url.absoluteString)")
             webView.load(Self.freshRequest(for: url))
             return
         }
 
-        if context.coordinator.lastReloadToken != reloadToken {
-            context.coordinator.lastReloadToken = reloadToken
-            context.coordinator.updateViewState(isLoading: true, errorMessage: nil)
-            companionDebugLog("ForgeWebView", "updateUIView hard refresh token=\(reloadToken.uuidString)")
-            webView.stopLoading()
-            context.coordinator.clearWebViewCaches {
-                companionDebugLog("ForgeWebView", "updateUIView hard refresh load url=\(url.absoluteString)")
-                webView.load(Self.freshRequest(for: url, reloadToken: reloadToken))
+        if context.coordinator.lastReloadRequest != reloadRequest {
+            context.coordinator.lastReloadRequest = reloadRequest
+            context.coordinator.updateViewState(isLoading: true, failure: nil)
+            switch reloadRequest.kind {
+            case .standard:
+                companionDebugLog("ForgeWebView", "updateUIView standard reload id=\(reloadRequest.id.uuidString)")
+                if webView.url == nil {
+                    webView.load(Self.freshRequest(for: url))
+                } else {
+                    webView.reload()
+                }
+            case .clearCache:
+                companionDebugLog("ForgeWebView", "updateUIView clear cache id=\(reloadRequest.id.uuidString)")
+                webView.stopLoading()
+                context.coordinator.clearWebViewCaches {
+                    companionDebugLog("ForgeWebView", "updateUIView cache reset load url=\(url.absoluteString)")
+                    webView.load(Self.freshRequest(
+                        for: url,
+                        cachePolicy: .reloadIgnoringLocalCacheData,
+                        reloadToken: reloadRequest.id
+                    ))
+                }
             }
         }
 
@@ -165,14 +393,36 @@ struct ForgeWebView: UIViewRepresentable {
         )
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
         var parent: ForgeWebView
         var lastURL: URL?
-        var lastReloadToken: UUID
+        var lastReloadRequest: ForgeWebReloadRequest
+        private var downloadDestinations: [ObjectIdentifier: URL] = [:]
+        private var pendingDownloadShares: [URL] = []
+        private var downloadShareInFlight = false
+        private var didBecomeActiveObserver: NSObjectProtocol?
 
         init(parent: ForgeWebView) {
             self.parent = parent
-            self.lastReloadToken = parent.reloadToken
+            self.lastReloadRequest = parent.reloadRequest
+            super.init()
+            didBecomeActiveObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.presentNextDownloadShareIfPossible()
+            }
+        }
+
+        deinit {
+            if let didBecomeActiveObserver {
+                NotificationCenter.default.removeObserver(didBecomeActiveObserver)
+            }
+            let unfinishedFiles = Array(downloadDestinations.values) + pendingDownloadShares
+            for fileURL in unfinishedFiles {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
         }
 
         private func isBenignNavigationCancellation(_ error: Error) -> Bool {
@@ -190,14 +440,14 @@ struct ForgeWebView: UIViewRepresentable {
             }
         }
 
-        func updateViewState(isLoading: Bool, errorMessage: String?) {
+        func updateViewState(isLoading: Bool, failure: ForgeWebFailure?) {
             companionDebugLog(
                 "ForgeWebView",
-                "updateViewState isLoading=\(isLoading) error=\(errorMessage ?? "nil")"
+                "updateViewState isLoading=\(isLoading) failure=\(failure?.title ?? "nil")"
             )
             DispatchQueue.main.async {
                 self.parent.isLoading = isLoading
-                self.parent.errorMessage = errorMessage
+                self.parent.failure = failure
             }
         }
 
@@ -206,19 +456,68 @@ struct ForgeWebView: UIViewRepresentable {
             safeAreaInsets: UIEdgeInsets,
             to webView: WKWebView
         ) {
-            guard bounds.width > 0, bounds.height > 0 else { return }
-            let width = Int(bounds.width.rounded(.down))
-            let height = Int(bounds.height.rounded(.down))
-            let top = Int(safeAreaInsets.top.rounded(.down))
-            let bottom = 0
+            guard let metrics = ForgeWebLayoutMetrics.resolve(
+                bounds: bounds,
+                safeAreaInsets: safeAreaInsets
+            ) else { return }
             companionDebugLog(
                 "ForgeWebView",
-                "applyNativeBounds width=\(width) height=\(height) top=\(top) bottom=\(bottom) rawBottom=\(Int(safeAreaInsets.bottom.rounded(.down)))"
+                "applyNativeBounds width=\(metrics.width) height=\(metrics.height) insets=\(metrics.top),\(metrics.right),\(metrics.bottom),\(metrics.left)"
             )
             webView.evaluateJavaScript(
-                "window.__forgeCompanionApplyLayout && window.__forgeCompanionApplyLayout(\(width), \(height), \(top), \(bottom));",
+                "window.__forgeCompanionApplyLayout && window.__forgeCompanionApplyLayout(\(metrics.width), \(metrics.height), \(metrics.top), \(metrics.right), \(metrics.bottom), \(metrics.left));",
                 completionHandler: nil
             )
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let candidateURL = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+            let disposition = ForgeWebNavigationPolicy.disposition(
+                for: candidateURL,
+                relativeTo: parent.url,
+                isUserActivated: navigationAction.navigationType == .linkActivated,
+                isPrimaryNavigation: navigationAction.targetFrame == nil || navigationAction.targetFrame?.isMainFrame == true,
+                shouldPerformDownload: navigationAction.shouldPerformDownload
+            )
+            switch disposition {
+            case .allow:
+                if navigationAction.targetFrame == nil {
+                    webView.load(navigationAction.request)
+                    decisionHandler(.cancel)
+                } else {
+                    decisionHandler(.allow)
+                }
+            case .download:
+                decisionHandler(.download)
+            case .openExternally:
+                UIApplication.shared.open(candidateURL)
+                decisionHandler(.cancel)
+            case .cancel:
+                decisionHandler(.cancel)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            if navigationResponse.isForMainFrame,
+               let response = navigationResponse.response as? HTTPURLResponse,
+               response.statusCode >= 400
+            {
+                updateViewState(isLoading: false, failure: .httpStatus(response.statusCode))
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -226,7 +525,7 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didStartProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil")"
             )
-            updateViewState(isLoading: true, errorMessage: nil)
+            updateViewState(isLoading: true, failure: nil)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -234,7 +533,7 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFinish url=\(webView.url?.absoluteString ?? "nil") title=\(webView.title ?? "nil")"
             )
-            updateViewState(isLoading: false, errorMessage: nil)
+            updateViewState(isLoading: false, failure: nil)
             applyNativeBounds(
                 webView.bounds,
                 safeAreaInsets: webView.safeAreaInsets,
@@ -259,7 +558,7 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFail url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
             )
-            updateViewState(isLoading: false, errorMessage: error.localizedDescription)
+            updateViewState(isLoading: false, failure: .from(error))
         }
 
         func webView(
@@ -278,7 +577,187 @@ struct ForgeWebView: UIViewRepresentable {
                 "ForgeWebView",
                 "didFailProvisionalNavigation url=\(webView.url?.absoluteString ?? "nil") error=\(error.localizedDescription)"
             )
-            updateViewState(isLoading: false, errorMessage: error.localizedDescription)
+            updateViewState(isLoading: false, failure: .from(error))
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            companionDebugLog("ForgeWebView", "web content process terminated")
+            updateViewState(isLoading: false, failure: .webProcessStopped)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            guard navigationAction.targetFrame == nil,
+                  let candidateURL = navigationAction.request.url
+            else {
+                return nil
+            }
+            switch ForgeWebNavigationPolicy.disposition(
+                for: candidateURL,
+                relativeTo: parent.url,
+                isUserActivated: navigationAction.navigationType == .linkActivated,
+                isPrimaryNavigation: true,
+                shouldPerformDownload: navigationAction.shouldPerformDownload
+            ) {
+            case .allow:
+                webView.load(navigationAction.request)
+            case .download:
+                webView.startDownload(using: navigationAction.request) { [weak self] download in
+                    self?.attachDownload(download)
+                }
+            case .openExternally:
+                UIApplication.shared.open(candidateURL)
+            case .cancel:
+                break
+            }
+            return nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationAction: WKNavigationAction,
+            didBecome download: WKDownload
+        ) {
+            attachDownload(download)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            navigationResponse: WKNavigationResponse,
+            didBecome download: WKDownload
+        ) {
+            attachDownload(download)
+        }
+
+        private func attachDownload(_ download: WKDownload) {
+            download.delegate = self
+        }
+
+        func download(
+            _ download: WKDownload,
+            decideDestinationUsing response: URLResponse,
+            suggestedFilename: String,
+            completionHandler: @escaping (URL?) -> Void
+        ) {
+            do {
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("ForgeDownloads", isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true
+                )
+                let filename = ForgeWebDownloadPolicy.safeFilename(suggestedFilename)
+                var destination = directory.appendingPathComponent(filename, isDirectory: false)
+                if FileManager.default.fileExists(atPath: destination.path) ||
+                    downloadDestinations.values.contains(destination)
+                {
+                    let base = destination.deletingPathExtension().lastPathComponent
+                    let pathExtension = destination.pathExtension
+                    let uniqueName = "\(base)-\(UUID().uuidString.prefix(8))"
+                    let uniqueDestination = directory
+                        .appendingPathComponent(uniqueName, isDirectory: false)
+                    destination = pathExtension.isEmpty
+                        ? uniqueDestination
+                        : uniqueDestination.appendingPathExtension(pathExtension)
+                }
+                downloadDestinations[ObjectIdentifier(download)] = destination
+                completionHandler(destination)
+            } catch {
+                companionDebugLog(
+                    "ForgeWebView",
+                    "download destination failed error=\(error.localizedDescription)"
+                )
+                completionHandler(nil)
+            }
+        }
+
+        func downloadDidFinish(_ download: WKDownload) {
+            guard let destination = downloadDestinations.removeValue(
+                forKey: ObjectIdentifier(download)
+            ) else { return }
+            DispatchQueue.main.async {
+                self.pendingDownloadShares.append(destination)
+                self.presentNextDownloadShareIfPossible()
+            }
+        }
+
+        func download(
+            _ download: WKDownload,
+            didFailWithError error: Error,
+            resumeData: Data?
+        ) {
+            if let destination = downloadDestinations.removeValue(
+                forKey: ObjectIdentifier(download)
+            ) {
+                try? FileManager.default.removeItem(at: destination)
+            }
+            companionDebugLog(
+                "ForgeWebView",
+                "download failed error=\(error.localizedDescription) resumable=\(resumeData != nil)"
+            )
+        }
+
+        private func presentNextDownloadShareIfPossible() {
+            guard downloadShareInFlight == false,
+                  let destination = pendingDownloadShares.first,
+                  let presenter = activePresenter()
+            else {
+                return
+            }
+            pendingDownloadShares.removeFirst()
+            downloadShareInFlight = true
+
+            let activity = UIActivityViewController(
+                activityItems: [destination],
+                applicationActivities: nil
+            )
+            activity.completionWithItemsHandler = { [weak self] _, _, _, _ in
+                try? FileManager.default.removeItem(at: destination)
+                DispatchQueue.main.async {
+                    self?.downloadShareInFlight = false
+                    self?.presentNextDownloadShareIfPossible()
+                }
+            }
+            if let popover = activity.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(
+                    x: presenter.view.bounds.midX,
+                    y: presenter.view.bounds.midY,
+                    width: 1,
+                    height: 1
+                )
+            }
+            presenter.present(activity, animated: true)
+        }
+
+        private func activePresenter() -> UIViewController? {
+            guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+                let window = scene.windows.first(where: \.isKeyWindow),
+                var presenter = window.rootViewController
+            else {
+                companionDebugLog(
+                    "ForgeWebView",
+                    "download share deferred until an active presentation window is available"
+                )
+                return nil
+            }
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            guard presenter.viewIfLoaded?.window != nil else {
+                companionDebugLog(
+                    "ForgeWebView",
+                    "download share deferred because the presenter is not visible"
+                )
+                return nil
+            }
+            return presenter
         }
 
         private func debugInspectDocument(on webView: WKWebView) {

@@ -19,6 +19,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "README.md",
     "package.json"
   ],
@@ -32,7 +33,7 @@
     "yaml": "^2.8.1"
   },
   "scripts": {
-    "test": "node ./tests/cli-smoke.mjs"
+    "test": "node --test ./tests/*.test.mjs && node ./tests/cli-smoke.mjs"
   },
   "engines": {
     "node": ">=22"

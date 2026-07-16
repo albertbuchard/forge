@@ -88,6 +88,7 @@ export type CrudEntityType =
   | "habit"
   | "tag"
   | "note"
+  | "person"
   | "insight"
   | "calendar_event"
   | "work_block_template"
@@ -178,7 +179,7 @@ export interface ArtifactScanResult {
   extensionAllowed: boolean;
   byteSize: number;
   findings: ArtifactScanFinding[];
-  extractedTextSample: string;
+  extractedTextAvailable: boolean;
   extractedTextTruncated: boolean;
 }
 
@@ -201,8 +202,6 @@ export interface Artifact {
   shortDescription: string;
   description: string;
   originalFileName: string;
-  storageKey: string;
-  storagePath: string;
   contentSha256: string;
   byteSize: number;
   storedContentSha256: string;
@@ -263,7 +262,6 @@ export interface ArtifactVersion {
   artifactId: string;
   versionNumber: number;
   contentSha256: string;
-  storageKey: string;
   byteSize: number;
   storedContentSha256: string;
   storedByteSize: number;
@@ -293,6 +291,7 @@ export interface EntityLinkInput {
 }
 
 export interface ArtifactUploadInput {
+  idempotencyKey?: string;
   title?: string;
   shortDescription?: string;
   description?: string;
@@ -323,8 +322,6 @@ export interface ArtifactMetadataPatchInput {
   shortDescription?: string;
   description?: string;
   sourceLabel?: string;
-  artifactState?: ArtifactState;
-  downloadPolicy?: ArtifactDownloadPolicy;
   links?: EntityLinkInput[];
   metadata?: Record<string, unknown>;
 }
@@ -651,6 +648,12 @@ export interface WikiLinkEdge {
   updatedAt: string;
 }
 
+export interface WikiOutboundLink extends WikiLinkEdge {
+  status: "available" | "missing" | "unavailable" | "unverified";
+  targetPage: WikiPageSummary | null;
+  isSelfLink: boolean;
+}
+
 export interface WikiMediaAsset {
   id: string;
   spaceId: string;
@@ -756,25 +759,56 @@ export interface WikiHealthPayload {
 
 export interface WikiPageDetailPayload {
   page: Note;
+  outboundLinks: WikiOutboundLink[];
+  outboundLinksTruncated: boolean;
+  outboundLinkLimit: number;
   backlinks: WikiLinkEdge[];
-  backlinkSourceNotes: Note[];
+  backlinksTruncated: boolean;
+  backlinkLimit: number;
+  backlinkSourceNotes: WikiPageSummary[];
   assets: WikiMediaAsset[];
-  backlinksBySourceId: Record<string, Note | null>;
+  backlinksBySourceId: Record<string, WikiPageSummary | null>;
 }
 
+export type WikiPageSummary = Pick<
+  Note,
+  | "id"
+  | "kind"
+  | "title"
+  | "slug"
+  | "spaceId"
+  | "parentSlug"
+  | "indexOrder"
+  | "showInIndex"
+  | "aliases"
+  | "summary"
+  | "author"
+  | "source"
+  | "tags"
+  | "createdAt"
+  | "updatedAt"
+>;
+
 export interface WikiTreeNode {
-  page: Note;
+  page: WikiPageSummary;
   children: WikiTreeNode[];
 }
 
 export interface WikiSearchResult {
-  page: Note;
+  page: WikiPageSummary;
   score: number;
+  matchKind: "title" | "alias" | "content" | "entity" | "semantic" | "recent";
+  snippet: string;
 }
 
 export interface WikiSearchResponse {
   mode: "text" | "semantic" | "entity" | "hybrid";
   profileId: string | null;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+  warnings: string[];
   results: WikiSearchResult[];
 }
 
@@ -941,6 +975,17 @@ export interface WorkItemGitRef {
   updatedAt: string;
 }
 
+export interface WorkItemGitRefInput {
+  id?: string;
+  workItemId?: string;
+  refType: WorkItemGitRefType;
+  provider: string;
+  repository: string;
+  refValue: string;
+  url?: string | null;
+  displayTitle: string;
+}
+
 export interface WorkItemCompletionReport {
   modifiedFiles: string[];
   workSummary: string;
@@ -972,6 +1017,7 @@ export interface Task extends OwnedEntity {
   acceptanceCriteria: string[];
   blockerLinks: WorkItemBlockerLink[];
   completionReport: WorkItemCompletionReport | null;
+  closeoutState?: "not_applicable" | "complete" | "deferred";
   gitRefs: WorkItemGitRef[];
   completedAt: string | null;
   createdAt: string;
@@ -1531,6 +1577,61 @@ export interface TaskTimebox extends OwnedEntity {
   actionProfile: ActionProfile | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type TodayEvidenceState =
+  | "fresh"
+  | "stale"
+  | "missing"
+  | "loading"
+  | "error";
+
+export interface TodayPriorityEvidence {
+  key: "urgency" | "schedule" | "capacity" | "active-context";
+  label: string;
+  state: TodayEvidenceState;
+  detail: string;
+}
+
+export interface TodayRankedCandidate {
+  task: Task;
+  score: number;
+  urgencyScore: number;
+  scheduleScore: number;
+  capacityScore: number;
+  activeContextScore: number;
+  hasActiveRun: boolean;
+  capacityFit: boolean | null;
+  requiredAp: number;
+  requiredApEstimated: boolean;
+  timebox: TaskTimebox | null;
+  evidence: TodayPriorityEvidence[];
+  reason: string;
+}
+
+export interface TodayPriorityDecision {
+  contractVersion: 1;
+  generatedAt: string;
+  mode:
+    | "ready"
+    | "continue-active"
+    | "unresolved-active"
+    | "overloaded"
+    | "capacity-limited"
+    | "no-work";
+  confidence: "full" | "limited";
+  decisionUserId: string | null;
+  task: Task | null;
+  activeRun: TaskRun | null;
+  activeRunCount: number;
+  summary: string;
+  rankedCandidates: TodayRankedCandidate[];
+  selectedCandidate: TodayRankedCandidate | null;
+  alternatives: TodayRankedCandidate[];
+  evidence: TodayPriorityEvidence[];
+  blockedTaskCount: number;
+  needsRefresh: boolean;
+  isLoading: boolean;
 }
 
 export interface CalendarOverviewPayload {
@@ -3207,7 +3308,7 @@ export interface TaskRunHeartbeatInput {
   gitContext?: TaskRunGitContext | null;
 }
 
-export interface TaskRunFinishInput {
+export interface TaskRunReleaseInput {
   actor?: string;
   note: string;
   closeoutNote?: {
@@ -3216,6 +3317,13 @@ export interface TaskRunFinishInput {
     links?: NoteLink[];
   };
 }
+
+export interface TaskRunCompleteInput extends TaskRunReleaseInput {
+  completionReport?: WorkItemCompletionReport;
+  gitRefs?: WorkItemGitRefInput[];
+}
+
+export type TaskRunFinishInput = TaskRunReleaseInput;
 
 export interface AchievementSignal {
   id: string;
@@ -3894,6 +4002,9 @@ export interface ForgeBoxCatalogEntry {
   outputs?: ForgeBoxPortDefinition[];
   toolAdapters?: ForgeBoxToolAdapter[];
   snapshotResolverKey?: string;
+  source?: "forge" | "flow_output";
+  sourceFlowId?: string | null;
+  sourceFlowEnabled?: boolean | null;
 }
 
 export interface ForgeBoxSnapshot {
@@ -4121,6 +4232,64 @@ export interface AiConnector {
   legacyProcessorId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkbenchCatalogFacet {
+  value: string;
+  label: string;
+  count: number;
+}
+
+export interface WorkbenchFlowCatalogItem {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  descriptionTruncated: boolean;
+  kind: AiConnectorKind;
+  homeSurfaceId: string | null;
+  endpointEnabled: boolean;
+  status: "enabled" | "disabled";
+  nodeCount: number;
+  edgeCount: number;
+  publicInputCount: number;
+  publishedOutputCount: number;
+  lastRunStatus: "running" | "completed" | "failed" | null;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkbenchFlowCatalogPage {
+  flows: WorkbenchFlowCatalogItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  facets: {
+    kinds: WorkbenchCatalogFacet[];
+    homeSurfaces: WorkbenchCatalogFacet[];
+    statuses: WorkbenchCatalogFacet[];
+  };
+}
+
+export interface WorkbenchBoxCatalogItem extends ForgeBoxCatalogEntry {
+  source: "forge" | "flow_output";
+  sourceFlowId: string | null;
+  sourceFlowEnabled: boolean | null;
+}
+
+export interface WorkbenchBoxCatalogPage {
+  boxes: WorkbenchBoxCatalogItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  facets: {
+    categories: WorkbenchCatalogFacet[];
+    surfaces: WorkbenchCatalogFacet[];
+    sources: WorkbenchCatalogFacet[];
+  };
 }
 
 export interface InsightEvidence {
@@ -4510,6 +4679,7 @@ export interface XpMomentumPulse {
 }
 
 export interface XpMetricsPayload {
+  timezone: string;
   scope: GamificationScope;
   profile: ForgeSnapshot["metrics"];
   achievements: AchievementSignal[];
@@ -4785,6 +4955,17 @@ export interface AgentOnboardingPsychePlaybook {
   apiAccessHint: string;
 }
 
+export interface AgentOnboardingActionWorkflow {
+  classification: "action_workflow_entity";
+  aliases: string[];
+  summary: string;
+  routeKeys: string[];
+  routeTools: Record<string, string>;
+  methodRoutes: Record<string, string>;
+  notes: string[];
+  [key: string]: unknown;
+}
+
 export interface AgentOnboardingPayload {
   forgeBaseUrl: string;
   webAppUrl: string;
@@ -4906,12 +5087,13 @@ export interface AgentOnboardingPayload {
         >;
       }
     >;
-    actionEntities: Record<string, Record<string, unknown>>;
+    actionEntities: Record<string, AgentOnboardingActionWorkflow>;
     specializedDomainSurfaces: Record<
       string,
       {
         classification: "specialized_domain_surface";
         aliases: string[];
+        routeTool: string;
         summary: string;
         routeKeys: string[];
         methodRoutes: Record<string, string>;
@@ -5027,6 +5209,12 @@ export interface AgentOnboardingPayload {
     readModels: string[];
     uiWorkflow: string[];
     specializedDomainWorkflow: string[];
+    artifactWorkflow: string[];
+    attentionWorkflow: string[];
+    entityNavigationWorkflow: string[];
+    preferencesWorkflow: string[];
+    questionnaireWorkflow: string[];
+    selfObservationWorkflow: string[];
     entityWorkflow: string[];
     wikiWorkflow: string[];
     healthWorkflow: string[];
@@ -5264,6 +5452,12 @@ export type PreferenceDomain =
   | "custom";
 
 export type PreferenceCatalogSource = "seeded" | "custom";
+export type PreferenceCatalogCreatedSource =
+  | "ui"
+  | "openclaw"
+  | "agent"
+  | "system"
+  | "unknown";
 
 export type PreferenceContextShareMode = "shared" | "isolated" | "blended";
 export type PreferenceJudgmentOutcome = "left" | "right" | "tie" | "skip";
@@ -5356,6 +5550,7 @@ export interface PreferenceCatalogItem {
   tags: string[];
   featureWeights: PreferenceDimensionVector;
   position: number;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -5363,14 +5558,56 @@ export interface PreferenceCatalogItem {
 export interface PreferenceCatalog {
   id: string;
   profileId: string;
+  userId: string;
+  user: UserSummary | null;
   domain: PreferenceDomain;
   slug: string;
   title: string;
   description: string;
+  scopeIn: string;
+  scopeOut: string;
   source: PreferenceCatalogSource;
+  createdSource: PreferenceCatalogCreatedSource;
+  createdByActor: string | null;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
+  links: Array<{
+    sourceEntityType: string;
+    sourceEntityId: string;
+    targetEntityType: string;
+    targetEntityId: string;
+    anchorKey: string | null;
+    relationship: string;
+    createdByActor: string | null;
+    createdAt: string;
+  }>;
   items: PreferenceCatalogItem[];
+  itemCount: number;
+  matchingItemCount?: number;
+  itemsTruncated: boolean;
+}
+
+export interface PreferenceCatalogPage {
+  catalogs: PreferenceCatalog[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+  previousOffset: number | null;
+  snapshotAt: string;
+  nextCursor: string | null;
+}
+
+export interface PreferenceCatalogItemPage {
+  items: PreferenceCatalogItem[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+  previousOffset: number | null;
+  snapshotAt: string;
+  nextCursor: string | null;
 }
 
 export interface PairwiseJudgment {
@@ -5393,10 +5630,13 @@ export interface AbsoluteSignal {
   profileId: string;
   contextId: string;
   userId: string;
+  ownerUserId: string;
   itemId: string;
   signalType: PreferenceSignalType;
   strength: number;
+  modelWeight: number;
   source: string;
+  actor: string | null;
   createdAt: string;
 }
 
@@ -5413,6 +5653,7 @@ export interface PreferenceItemScore {
   pairwiseLosses: number;
   pairwiseTies: number;
   signalCount: number;
+  effectiveSignal: AbsoluteSignal | null;
   conflictCount: number;
   status: PreferenceItemStatus;
   dominantDimensions: PreferenceDimensionId[];
@@ -5488,6 +5729,27 @@ export interface PreferenceWorkspacePayload {
     staleItemIds: string[];
     flippedItemIds: string[];
   };
+  presentation: {
+    itemLimit: number;
+    itemOffset: number;
+    totalItems: number;
+    returnedItems: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+    historyLimit: number;
+  };
+  evidenceCoverage: {
+    judgmentLimitPerContext: number;
+    totalJudgments: number;
+    consideredJudgments: number;
+    truncated: boolean;
+    contexts: Array<{
+      contextId: string;
+      totalJudgments: number;
+      consideredJudgments: number;
+      truncated: boolean;
+    }>;
+  };
   compare: {
     nextPair: PreferenceComparePair | null;
     pendingCount: number;
@@ -5515,6 +5777,9 @@ export interface PreferenceWorkspaceQuery {
   userId?: string;
   domain?: PreferenceDomain;
   contextId?: string;
+  itemLimit?: number;
+  itemOffset?: number;
+  historyLimit?: number;
 }
 
 export interface PreferenceContextMutationInput {
@@ -5586,6 +5851,7 @@ export interface PreferenceJudgmentInput {
   strength?: number;
   responseTimeMs?: number | null;
   reasonTags?: string[];
+  idempotencyKey?: string;
 }
 
 export interface PreferenceSignalInput {
@@ -5595,6 +5861,7 @@ export interface PreferenceSignalInput {
   itemId: string;
   signalType: PreferenceSignalType;
   strength?: number;
+  idempotencyKey?: string;
 }
 
 export interface PreferenceScorePatchInput {
@@ -5614,13 +5881,30 @@ export interface PreferenceCatalogMutationInput {
   domain: PreferenceDomain;
   title: string;
   description?: string;
+  scopeIn?: string;
+  scopeOut?: string;
   slug?: string;
+  links?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string;
+    relationship?: string;
+  }>;
+  idempotencyKey?: string;
 }
 
 export interface PreferenceCatalogPatchInput {
   title?: string;
   description?: string;
+  scopeIn?: string;
+  scopeOut?: string;
   slug?: string;
+  links?: Array<{
+    entityType: CrudEntityType;
+    entityId: string;
+    anchorKey?: string;
+    relationship?: string;
+  }>;
 }
 
 export interface PreferenceCatalogItemMutationInput {

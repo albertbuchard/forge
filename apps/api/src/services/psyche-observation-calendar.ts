@@ -38,6 +38,7 @@ const ACTIVITY_ENTITY_LABELS: Record<ActivityEntityType, string> = {
   habit: "Habit",
   tag: "Tag",
   note: "Note",
+  person: "Person",
   insight: "Insight",
   psyche_value: "Psyche value",
   behavior_pattern: "Pattern",

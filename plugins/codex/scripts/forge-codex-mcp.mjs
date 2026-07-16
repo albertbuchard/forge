@@ -24,6 +24,7 @@ import {
   resolveMcpResponseLimits,
   toMcpContent
 } from "./mcp-response.mjs";
+import { buildPeoplePeerCompatibilityTools } from "./people-peer-tools.mjs";
 
 const SESSION_PROVIDER = "codex";
 const DEFAULT_RUNTIME_AGENT_LABEL = "Forge Codex";
@@ -279,6 +280,10 @@ function createToolRegistry(config) {
     }
   };
   registerForgePluginTools(api, config);
+  const registeredNames = new Set(tools.map((tool) => tool.name));
+  for (const tool of buildPeoplePeerCompatibilityTools(config)) {
+    if (!registeredNames.has(tool.name)) tools.push(tool);
+  }
   return tools;
 }
 
@@ -289,6 +294,12 @@ function getValidationErrorMessage(schema, value) {
   }
   const path = firstError.path || "input";
   return `${path}: ${firstError.message}`;
+}
+
+function toMcpInputSchema(parameters) {
+  return parameters.type === "object"
+    ? parameters
+    : { ...parameters, type: "object" };
 }
 
 async function main() {
@@ -337,7 +348,7 @@ async function main() {
       name: tool.name,
       title: tool.label,
       description: tool.description,
-      inputSchema: tool.parameters
+      inputSchema: toMcpInputSchema(tool.parameters)
     }))
   }));
 

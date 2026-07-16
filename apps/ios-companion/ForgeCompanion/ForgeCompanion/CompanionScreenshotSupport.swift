@@ -37,7 +37,14 @@ enum CompanionScreenshotScenario: String {
     }
 
     var usesForgeCanvasPlaceholder: Bool {
-        self != .pairing
+#if DEBUG
+        if self == .home,
+           ProcessInfo.processInfo.environment["FORGE_SCREENSHOT_USE_LIVE_WEB"] == "1"
+        {
+            return false
+        }
+#endif
+        return self != .pairing
     }
 }
 
@@ -60,7 +67,25 @@ enum CompanionScreenshotFixtures {
     }
 
     static func pairingPayload() -> PairingPayload {
-        PairingPayload(
+#if DEBUG
+        if ProcessInfo.processInfo.environment["FORGE_SCREENSHOT_USE_LIVE_WEB"] == "1" {
+            let environment = ProcessInfo.processInfo.environment
+            return PairingPayload(
+                kind: "forge-companion-pairing",
+                apiBaseUrl: environment["FORGE_SCREENSHOT_API_URL"]
+                    ?? "http://127.0.0.1:4017/api/v1",
+                uiBaseUrl: environment["FORGE_SCREENSHOT_WEB_URL"]
+                    ?? "http://127.0.0.1:4027/forge/",
+                sessionId: "pair_screenshot_live_web",
+                pairingToken: "forge-screenshot-live-web-token",
+                expiresAt: isoString(referenceDate.addingTimeInterval(60 * 60 * 24 * 30)),
+                capabilities: ["healthkit.sleep", "healthkit.fitness", "movement.timeline"],
+                transportMode: "manual-http",
+                transport: nil
+            )
+        }
+#endif
+        return PairingPayload(
             kind: "forge-companion-pairing",
             apiBaseUrl: "forge-iroh://fakednodeid/api/v1",
             uiBaseUrl: "forge-iroh://fakednodeid/forge/",

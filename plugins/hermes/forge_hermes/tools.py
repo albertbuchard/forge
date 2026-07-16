@@ -1156,6 +1156,12 @@ def _execute_spec(spec: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     if custom_handler == "doctor":
         return _resolve_doctor(config)
 
+    if spec.get("requires_agent_token") and not config.api_token.strip():
+        raise ForgePluginError(
+            "forge_scoped_agent_token_required",
+            "People and peer-sharing agent tools require a configured Forge agent token with the route's published local scopes; an operator session cannot substitute for that token.",
+        )
+
     path = _resolve_path(spec, args)
     method = _resolve_method(spec, args)
     body = None if method in {"GET", "DELETE"} else _resolve_body(spec, args, config)

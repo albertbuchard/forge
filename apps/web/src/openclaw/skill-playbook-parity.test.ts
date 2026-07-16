@@ -812,6 +812,9 @@ describe("forge skill playbook parity", () => {
       /favorite, veto,[\s\S]*must-have, bookmark, neutral, or compare-later/i
     );
     expect(entityPlaybook).toMatch(
+      /neutral[\s\S]*clears the current direct effect[\s\S]*no direct weight, evidence count, or confidence/i
+    );
+    expect(entityPlaybook).toMatch(
       /Movement, Life Events, Life Force, or Workbench work/i
     );
     expect(entityPlaybook).toMatch(

@@ -5,104 +5,161 @@ struct CompanionMenuSheet: View {
     @EnvironmentObject private var appModel: CompanionAppModel
 
     let openSettings: () -> Void
+    let openPeople: () -> Void
     let openLifeTimeline: () -> Void
     let openPinnedRecord: (String) -> Void
     let closeMenu: () -> Void
 
+    @State private var syncing = false
+    @State private var disconnectConfirmationVisible = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Companion")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textPrimary)
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(appModel.forgeHostLabel)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textMuted)
+                        .lineLimit(2)
 
-                Text(appModel.forgeHostLabel)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(CompanionStyle.textMuted)
-                    .lineLimit(1)
-            }
+                    CompanionSectionCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            compactStatusRow(
+                                "Status",
+                                value: appModel.companionOperationalStatusLabel,
+                                detail: appModel.companionOperationalDetailLabel
+                            )
+                            compactStatusRow("Last sync", value: appModel.lastSuccessfulSyncLabel)
+                            if let attention = appModel.watchSessionManager.latestBootstrap.inbox?.attention {
+                                compactStatusRow(
+                                    "Attention",
+                                    value: attention.activeCount == 0 ? "Clear" : "\(attention.activeCount) active",
+                                    detail: attention.items.first?.title
+                                )
+                            }
+                            if let pins = appModel.watchSessionManager.latestBootstrap.inbox?.pins,
+                               let firstPin = pins.items.first
+                            {
+                                Button {
+                                    closeMenu()
+                                    DispatchQueue.main.async {
+                                        openPinnedRecord(firstPin.targetPath)
+                                    }
+                                } label: {
+                                    compactStatusRow(
+                                        "Pinned",
+                                        value: "\(pins.total)",
+                                        detail: firstPin.title
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Open pinned record \(firstPin.title)")
+                            }
+                        }
+                    }
 
-            CompanionSectionCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    compactStatusRow(
-                        "Status",
-                        value: appModel.companionOperationalStatusLabel,
-                        detail: appModel.companionOperationalDetailLabel
-                    )
-                    compactStatusRow("Last sync", value: appModel.lastSuccessfulSyncLabel)
-                    if let attention = appModel.watchSessionManager.latestBootstrap.inbox?.attention {
-                        compactStatusRow(
-                            "Attention",
-                            value: attention.activeCount == 0 ? "Clear" : "\(attention.activeCount) active",
-                            detail: attention.items.first?.title
+                    if appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel {
+                        CompanionHistoricalWorkoutImportPanel(
+                            status: appModel.syncUploadStatus,
+                            style: .compact,
+                            syncInFlight: appModel.syncUploadStatus.isSyncing
                         )
                     }
-                    if let pins = appModel.watchSessionManager.latestBootstrap.inbox?.pins,
-                       let firstPin = pins.items.first
-                    {
-                        Button {
+
+                    VStack(spacing: 10) {
+                        syncButton
+
+                        actionButton("People", systemName: "person.2") {
+                            companionDebugLog("CompanionMenuSheet", "tap People")
+                            openPeople()
+                        }
+
+                        actionButton("Life Timeline", systemName: "point.3.connected.trianglepath.dotted") {
+                            companionDebugLog("CompanionMenuSheet", "tap Life Timeline")
                             closeMenu()
                             DispatchQueue.main.async {
-                                openPinnedRecord(firstPin.targetPath)
+                                openLifeTimeline()
                             }
-                        } label: {
-                            compactStatusRow(
-                                "Pinned",
-                                value: "\(pins.total)",
-                                detail: firstPin.title
-                            )
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open pinned record \(firstPin.title)")
+
+                        actionButton("Settings", systemName: "gearshape") {
+                            companionDebugLog("CompanionMenuSheet", "tap Settings")
+                            openSettings()
+                        }
+
+                        actionButton("Disconnect", systemName: "bolt.slash", destructive: true) {
+                            companionDebugLog("CompanionMenuSheet", "tap Disconnect")
+                            disconnectConfirmationVisible = true
+                        }
                     }
+
+                    if let error = appModel.latestError, error.isEmpty == false {
+                        Text(error)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(CompanionStyle.destructive)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(18)
+            }
+            .background(CompanionStyle.background.ignoresSafeArea())
+            .navigationTitle("Companion")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done", action: closeMenu)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(CompanionStyle.textPrimary)
                 }
             }
-
-            if appModel.syncUploadStatus.shouldShowHistoricalWorkoutImportPanel {
-                CompanionHistoricalWorkoutImportPanel(
-                    status: appModel.syncUploadStatus,
-                    style: .compact,
-                    syncInFlight: appModel.syncUploadStatus.isSyncing
-                )
-            }
-
-            VStack(spacing: 10) {
-                actionButton("Life Timeline", systemName: "point.3.connected.trianglepath.dotted") {
-                    companionDebugLog("CompanionMenuSheet", "tap Life Timeline")
-                    closeMenu()
-                    DispatchQueue.main.async {
-                        openLifeTimeline()
-                    }
-                }
-
-                actionButton("Settings", systemName: "slider.horizontal.3") {
-                    companionDebugLog("CompanionMenuSheet", "tap Settings")
-                    closeMenu()
-                    DispatchQueue.main.async {
-                        openSettings()
-                    }
-                }
-
-                actionButton("Disconnect", systemName: "bolt.slash", destructive: true) {
-                    companionDebugLog("CompanionMenuSheet", "tap Disconnect")
+            .confirmationDialog(
+                "Disconnect this iPhone from Forge?",
+                isPresented: $disconnectConfirmationVisible,
+                titleVisibility: .visible
+            ) {
+                Button("Disconnect", role: .destructive) {
                     closeMenu()
                     DispatchQueue.main.async {
                         appModel.disconnect()
                     }
                 }
-            }
-
-            if let error = appModel.latestError, error.isEmpty == false {
-                Text(error)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(CompanionStyle.destructive)
-                    .fixedSize(horizontal: false, vertical: true)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You will need to pair again before phone data can sync.")
             }
         }
-        .padding(18)
-        .frame(width: 248, alignment: .leading)
-        .background(CompanionStyle.sheetBackground(cornerRadius: 28))
-        .shadow(color: Color.black.opacity(0.28), radius: 26, x: 0, y: 14)
+        .accessibilityIdentifier("CompanionControlCenter")
+    }
+
+    private var syncButton: some View {
+        Button {
+            guard syncing == false, appModel.syncUploadStatus.isSyncing == false else { return }
+            syncing = true
+            Task {
+                await appModel.runManualSync()
+                syncing = false
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if syncing || appModel.syncUploadStatus.isSyncing {
+                    ProgressView()
+                        .tint(CompanionStyle.textPrimary)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 18)
+                }
+
+                Text(syncing || appModel.syncUploadStatus.isSyncing ? "Syncing" : "Sync now")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+                Spacer(minLength: 8)
+            }
+            .foregroundStyle(CompanionStyle.textPrimary)
+        }
+        .buttonStyle(CompanionGhostButtonStyle())
+        .disabled(syncing || appModel.syncUploadStatus.isSyncing)
+        .accessibilityIdentifier("CompanionControlCenterSyncButton")
     }
 
     private func compactStatusRow(

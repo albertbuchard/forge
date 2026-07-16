@@ -1,8 +1,43 @@
-import { Fragment, type ReactNode } from "react";
+import {
+  Fragment,
+  createElement,
+  useId,
+  useState,
+  type ReactNode
+} from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getEntityRoute } from "@/lib/note-helpers";
 import { resolveForgePath } from "@/lib/runtime-paths";
 import type { CrudEntityType } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function resolveSafeMarkdownHref(rawHref: string) {
+  const href = rawHref.trim();
+  if (!href) {
+    return null;
+  }
+  try {
+    const url = new URL(href, window.location.href);
+    if (url.protocol === "mailto:") {
+      return { href, external: false };
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return {
+      href,
+      external: url.origin !== window.location.origin
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveForgeHref(route: string) {
+  const parsed = new URL(route, window.location.origin);
+  return `${resolveForgePath(parsed.pathname)}${parsed.search}${parsed.hash}`;
+}
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -41,7 +76,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
           entityType && entityId
             ? getEntityRoute(entityType as CrudEntityType, entityId)
             : null;
-        const href = route ? resolveForgePath(route) : null;
+        const href = route ? resolveForgeHref(route) : null;
         nodes.push(
           href ? (
             <a
@@ -94,18 +129,26 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         );
       }
     } else if (match[3] && match[4]) {
-      const href = match[4].trim();
-      const external = /^https?:\/\//i.test(href);
+      const link = resolveSafeMarkdownHref(match[4]);
       nodes.push(
-        <a
-          key={`${keyPrefix}-link-${index}`}
-          href={href}
-          className="break-words text-[var(--secondary)] underline decoration-current/35 underline-offset-4 transition hover:text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]"
-          target={external ? "_blank" : undefined}
-          rel={external ? "noreferrer" : undefined}
-        >
-          {match[3]}
-        </a>
+        link ? (
+          <a
+            key={`${keyPrefix}-link-${index}`}
+            href={link.href}
+            className="break-words text-[var(--secondary)] underline decoration-current/35 underline-offset-4 transition hover:text-[var(--ui-ink-strong)] [overflow-wrap:anywhere]"
+            target={link.external ? "_blank" : undefined}
+            rel={link.external ? "noopener noreferrer" : undefined}
+          >
+            {match[3]}
+          </a>
+        ) : (
+          <span
+            key={`${keyPrefix}-blocked-link-${index}`}
+            className="break-words text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
+          >
+            {match[3]}
+          </span>
+        )
       );
     } else if (match[5]) {
       nodes.push(
@@ -201,12 +244,17 @@ function renderBlocks(markdown: string) {
               ? "text-base"
               : "text-sm";
       blocks.push(
-        <div
-          key={`heading-${index}`}
-          className={cn("font-semibold text-[var(--ui-ink-strong)]", sizeClass)}
-        >
-          {renderInline(headingMatch[2], `heading-${index}`)}
-        </div>
+        createElement(
+          `h${level}`,
+          {
+            key: `heading-${index}`,
+            className: cn(
+              "font-semibold text-[var(--ui-ink-strong)]",
+              sizeClass
+            )
+          },
+          renderInline(headingMatch[2], `heading-${index}`)
+        )
       );
       index += 1;
       continue;
@@ -301,6 +349,76 @@ export function NoteMarkdown({
   return (
     <div className={cn("grid min-w-0 max-w-full gap-3", className)}>
       {renderBlocks(markdown)}
+    </div>
+  );
+}
+
+const LONG_NOTE_CHARACTER_THRESHOLD = 560;
+const LONG_NOTE_LINE_THRESHOLD = 8;
+
+function buildNotePreview(markdown: string, plainText?: string) {
+  const source = plainText?.trim() || markdown;
+  const normalized = source.replace(/\s+/g, " ").trim();
+  if (normalized.length <= LONG_NOTE_CHARACTER_THRESHOLD) {
+    return normalized;
+  }
+  return `${normalized.slice(0, LONG_NOTE_CHARACTER_THRESHOLD - 1).trimEnd()}…`;
+}
+
+export function NoteMarkdownDisclosure({
+  markdown,
+  plainText,
+  title,
+  className
+}: {
+  markdown: string;
+  plainText?: string;
+  title: string;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const isLong =
+    markdown.length > LONG_NOTE_CHARACTER_THRESHOLD ||
+    markdown.replace(/\r/g, "").split("\n").length > LONG_NOTE_LINE_THRESHOLD;
+
+  if (!isLong) {
+    return <NoteMarkdown markdown={markdown} className={className} />;
+  }
+
+  return (
+    <div className={cn("grid min-w-0 gap-3", className)}>
+      {expanded ? (
+        <div id={contentId}>
+          <NoteMarkdown markdown={markdown} />
+        </div>
+      ) : (
+        <p
+          id={contentId}
+          className="min-h-[5.25rem] min-w-0 text-sm leading-7 text-[var(--ui-ink-soft)] [overflow-wrap:anywhere]"
+        >
+          {buildNotePreview(markdown, plainText)}
+        </p>
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="w-fit max-w-full"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        aria-label={
+          expanded ? `Show less of ${title}` : `Show full note: ${title}`
+        }
+        onClick={() => setExpanded((current) => !current)}
+      >
+        {expanded ? (
+          <ChevronUp className="size-4" />
+        ) : (
+          <ChevronDown className="size-4" />
+        )}
+        {expanded ? "Show less" : "Show full note"}
+      </Button>
     </div>
   );
 }

@@ -1,22 +1,35 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { computeWorkTime } from "../services/work-time.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { bindTaskRunToTimebox, evaluateSchedulingForTask, finalizeTaskRunTimebox, heartbeatTaskRunTimebox } from "./calendar.js";
+import {
+  bindTaskRunToTimebox,
+  evaluateSchedulingForTask,
+  finalizeTaskRunTimebox,
+  heartbeatTaskRunTimebox
+} from "./calendar.js";
 import { createLinkedNotes } from "./notes.js";
-import { recordTaskRunCompletionReward, recordTaskRunProgressRewards, recordTaskRunStartReward } from "./rewards.js";
+import {
+  recordTaskRunCompletionReward,
+  recordTaskRunProgressRewards,
+  recordTaskRunStartReward
+} from "./rewards.js";
 import { getTaskById, updateTaskInTransaction } from "./tasks.js";
 import {
+  getSafeHttpUrl,
   taskRunClaimSchema,
+  taskRunCompleteSchema,
+  taskRunReleaseSchema,
   taskRunSchema,
   type ActivitySource,
   type TaskRun,
   type TaskRunClaimInput,
-  type TaskRunFinishInput,
+  type TaskRunCompleteInput,
   type TaskRunFocusInput,
   type TaskRunHeartbeatInput,
   type TaskRunListQuery,
+  type TaskRunReleaseInput,
   type TimeAccountingMode
 } from "../types.js";
 
@@ -93,7 +106,10 @@ function normalizePullRequestNumber(
   return null;
 }
 
-function buildGithubBranchUrl(repository: string, branch: string): string | null {
+function buildGithubBranchUrl(
+  repository: string,
+  branch: string
+): string | null {
   if (!repository || !branch) {
     return null;
   }
@@ -181,7 +197,8 @@ function normalizeTaskRunGitContext(
     trimOrEmpty(input?.provider) || trimOrEmpty(fallback?.provider) || "";
   const repository =
     trimOrEmpty(input?.repository) || trimOrEmpty(fallback?.repository) || "";
-  const branch = trimOrEmpty(input?.branch) || trimOrEmpty(fallback?.branch) || "";
+  const branch =
+    trimOrEmpty(input?.branch) || trimOrEmpty(fallback?.branch) || "";
   const baseBranch = trimOrEmpty(input?.baseBranch) || "main";
   const pullRequestNumber =
     normalizePullRequestNumber(input?.pullRequestNumber) ??
@@ -189,9 +206,7 @@ function normalizeTaskRunGitContext(
   const branchUrl =
     input?.branchUrl ??
     fallback?.branchUrl ??
-    (provider === "github"
-      ? buildGithubBranchUrl(repository, branch)
-      : null);
+    (provider === "github" ? buildGithubBranchUrl(repository, branch) : null);
   const pullRequestUrl =
     input?.pullRequestUrl ??
     fallback?.pullRequestUrl ??
@@ -245,12 +260,12 @@ function mapTaskRunGitContext(
   const repository = trimOrEmpty(row.git_repository);
   const branch = trimOrEmpty(row.git_branch);
   const baseBranch = trimOrEmpty(row.git_base_branch) || "main";
-  const branchUrl = row.git_branch_url ?? null;
-  const pullRequestUrl = row.git_pull_request_url ?? null;
+  const branchUrl = getSafeHttpUrl(row.git_branch_url);
+  const pullRequestUrl = getSafeHttpUrl(row.git_pull_request_url);
   const pullRequestNumber = normalizePullRequestNumber(
     row.git_pull_request_number
   );
-  const compareUrl = row.git_compare_url ?? null;
+  const compareUrl = getSafeHttpUrl(row.git_compare_url);
 
   if (
     !provider &&
@@ -316,7 +331,9 @@ function readExecutionConfig(): ExecutionConfig {
          FROM app_settings
          WHERE id = 1`
       )
-      .get() as { max_active_tasks?: number; time_accounting_mode?: TimeAccountingMode } | undefined;
+      .get() as
+      | { max_active_tasks?: number; time_accounting_mode?: TimeAccountingMode }
+      | undefined;
     return {
       maxActiveTasks: Math.max(1, row?.max_active_tasks ?? 2),
       timeAccountingMode: row?.time_accounting_mode ?? "split"
@@ -329,7 +346,11 @@ function readExecutionConfig(): ExecutionConfig {
   }
 }
 
-function mapTaskRun(row: TaskRunRow, now = new Date(), cached = computeWorkTime(now)): TaskRun {
+function mapTaskRun(
+  row: TaskRunRow,
+  now = new Date(),
+  cached = computeWorkTime(now)
+): TaskRun {
   const metric = cached.runMetrics.get(row.id);
   const task = getTaskById(row.task_id);
   const gitContext = mapTaskRunGitContext(row);
@@ -354,7 +375,9 @@ function mapTaskRun(row: TaskRunRow, now = new Date(), cached = computeWorkTime(
     completedAt: row.completed_at,
     releasedAt: row.released_at,
     timedOutAt: row.timed_out_at,
-    overrideReason: (row as TaskRunRow & { override_reason?: string | null }).override_reason ?? null,
+    overrideReason:
+      (row as TaskRunRow & { override_reason?: string | null })
+        .override_reason ?? null,
     ...(gitContext ? { gitContext } : {}),
     updatedAt: row.updated_at,
     userId: task?.userId ?? null,
@@ -371,7 +394,19 @@ function getTaskRunRowById(taskRunId: string): TaskRunRow | undefined {
     .get(taskRunId) as TaskRunRow | undefined;
 }
 
-function listActiveRunRowsByActor(actor: string, now: Date, excludeRunId?: string): TaskRunRow[] {
+export function getTaskRunById(
+  taskRunId: string,
+  now = new Date()
+): TaskRun | undefined {
+  const row = getTaskRunRowById(taskRunId);
+  return row ? mapTaskRun(row, now) : undefined;
+}
+
+function listActiveRunRowsByActor(
+  actor: string,
+  now: Date,
+  excludeRunId?: string
+): TaskRunRow[] {
   const params: Array<string> = [actor, now.toISOString()];
   const excludeSql = excludeRunId ? "AND task_runs.id != ?" : "";
   if (excludeRunId) {
@@ -390,7 +425,10 @@ function listActiveRunRowsByActor(actor: string, now: Date, excludeRunId?: strin
     .all(...params) as TaskRunRow[];
 }
 
-function getActiveTaskRunRow(taskId: string, now: Date): TaskRunRow | undefined {
+function getActiveTaskRunRow(
+  taskId: string,
+  now: Date
+): TaskRunRow | undefined {
   return getDatabase()
     .prepare(
       `${selectClause()}
@@ -406,13 +444,20 @@ function getActiveTaskRunRow(taskId: string, now: Date): TaskRunRow | undefined 
 function requireRun(runId: string): TaskRunRow {
   const run = getTaskRunRowById(runId);
   if (!run) {
-    throw new HttpError(404, "task_run_not_found", `Task run ${runId} does not exist`);
+    throw new HttpError(
+      404,
+      "task_run_not_found",
+      `Task run ${runId} does not exist`
+    );
   }
   return run;
 }
 
 function secondsUntilLeaseExpiry(leaseExpiresAt: string, now: Date): number {
-  return Math.max(0, Math.ceil((Date.parse(leaseExpiresAt) - now.getTime()) / 1000));
+  return Math.max(
+    0,
+    Math.ceil((Date.parse(leaseExpiresAt) - now.getTime()) / 1000)
+  );
 }
 
 function buildTaskRunErrorDetails(
@@ -427,13 +472,20 @@ function buildTaskRunErrorDetails(
   };
 
   if (run?.status === "active" && response.retryAfterSeconds === undefined) {
-    response.retryAfterSeconds = secondsUntilLeaseExpiry(run.lease_expires_at, now);
+    response.retryAfterSeconds = secondsUntilLeaseExpiry(
+      run.lease_expires_at,
+      now
+    );
   }
 
   return response;
 }
 
-function assertActorMatch(run: TaskRunRow, actualActor: string | undefined, now: Date): void {
+function assertActorMatch(
+  run: TaskRunRow,
+  actualActor: string | undefined,
+  now: Date
+): void {
   if (actualActor && actualActor !== run.actor) {
     throw new HttpError(
       409,
@@ -489,7 +541,11 @@ function ensureCurrentRunExistsInTransaction(actor: string, now: Date): void {
   }
 }
 
-function touchTaskInProgress(taskId: string, actor: string, source: ActivitySource): void {
+function touchTaskInProgress(
+  taskId: string,
+  actor: string,
+  source: ActivitySource
+): void {
   const task = getTaskById(taskId);
   if (!task || task.status === "done" || task.status === "in_progress") {
     return;
@@ -516,7 +572,12 @@ function enforceActiveRunLimit(actor: string, taskId: string, now: Date): void {
   );
 }
 
-function maybeSetCurrentRun(actor: string, taskRunId: string, requestedIsCurrent: boolean, now: Date): void {
+function maybeSetCurrentRun(
+  actor: string,
+  taskRunId: string,
+  requestedIsCurrent: boolean,
+  now: Date
+): void {
   if (requestedIsCurrent) {
     setCurrentRunInTransaction(actor, taskRunId);
     return;
@@ -529,7 +590,10 @@ function promoteFallbackCurrentRun(actor: string, now: Date): void {
   ensureCurrentRunExistsInTransaction(actor, now);
 }
 
-function markExpiredRunsTimedOutInTransaction(now: Date, limit?: number): TaskRun[] {
+function markExpiredRunsTimedOutInTransaction(
+  now: Date,
+  limit?: number
+): TaskRun[] {
   const nowIso = now.toISOString();
   const params: Array<string | number> = [nowIso];
   const limitSql = limit ? "LIMIT ?" : "";
@@ -591,11 +655,21 @@ function markExpiredRunsTimedOutInTransaction(now: Date, limit?: number): TaskRu
   );
 }
 
-export function recoverTimedOutTaskRuns(options: { now?: Date; limit?: number } = {}): TaskRun[] {
-  return runInTransaction(() => markExpiredRunsTimedOutInTransaction(options.now ?? new Date(), options.limit));
+export function recoverTimedOutTaskRuns(
+  options: { now?: Date; limit?: number } = {}
+): TaskRun[] {
+  return runInTransaction(() =>
+    markExpiredRunsTimedOutInTransaction(
+      options.now ?? new Date(),
+      options.limit
+    )
+  );
 }
 
-export function listTaskRuns(filters: TaskRunListQuery = {}, now = new Date()): TaskRun[] {
+export function listTaskRuns(
+  filters: TaskRunListQuery = {},
+  now = new Date()
+): TaskRun[] {
   return runInTransaction(() => {
     markExpiredRunsTimedOutInTransaction(now);
 
@@ -614,7 +688,8 @@ export function listTaskRuns(filters: TaskRunListQuery = {}, now = new Date()): 
       params.push(filters.status);
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const whereSql =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
     const limitSql = filters.limit ? "LIMIT ?" : "";
     if (filters.limit) {
       params.push(filters.limit);
@@ -658,7 +733,11 @@ export function claimTaskRun(
     requireKnownTask(taskId);
     const task = getTaskById(taskId)!;
     const scheduling = evaluateSchedulingForTask(task, now);
-    if (scheduling.blocked && (!parsedInput.overrideReason || parsedInput.overrideReason.trim().length === 0)) {
+    if (
+      scheduling.blocked &&
+      (!parsedInput.overrideReason ||
+        parsedInput.overrideReason.trim().length === 0)
+    ) {
       throw new HttpError(
         409,
         "task_run_calendar_blocked",
@@ -680,12 +759,17 @@ export function claimTaskRun(
           409,
           "task_run_conflict",
           `Task ${taskId} already has an active timer owned by ${existing.actor}.`,
-          buildTaskRunErrorDetails(existing, now, { requestedActor: parsedInput.actor })
+          buildTaskRunErrorDetails(existing, now, {
+            requestedActor: parsedInput.actor
+          })
         );
       }
 
       const nextExpiry = leaseExpiry(now, parsedInput.leaseTtlSeconds);
-      const gitContext = normalizeTaskRunGitContext(taskId, parsedInput.gitContext);
+      const gitContext = normalizeTaskRunGitContext(
+        taskId,
+        parsedInput.gitContext
+      );
       getDatabase()
         .prepare(
           `UPDATE task_runs
@@ -715,7 +799,12 @@ export function claimTaskRun(
           existing.id
         );
 
-      maybeSetCurrentRun(parsedInput.actor, existing.id, parsedInput.isCurrent, now);
+      maybeSetCurrentRun(
+        parsedInput.actor,
+        existing.id,
+        parsedInput.isCurrent,
+        now
+      );
       touchTaskInProgress(taskId, parsedInput.actor, activity.source);
 
       recordActivityEvent({
@@ -753,7 +842,10 @@ export function claimTaskRun(
 
     const runId = `run_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const expiry = leaseExpiry(now, parsedInput.leaseTtlSeconds);
-    const gitContext = normalizeTaskRunGitContext(taskId, parsedInput.gitContext);
+    const gitContext = normalizeTaskRunGitContext(
+      taskId,
+      parsedInput.gitContext
+    );
     getDatabase()
       .prepare(
         `INSERT INTO task_runs (
@@ -921,7 +1013,13 @@ export function heartbeatTaskRun(
       endsAt: nextExpiry,
       overrideReason: input.overrideReason ?? null
     });
-    recordTaskRunProgressRewards(run.id, run.taskId, input.actor ?? run.actor, activity.source, run.creditedSeconds);
+    recordTaskRunProgressRewards(
+      run.id,
+      run.taskId,
+      input.actor ?? run.actor,
+      activity.source,
+      run.creditedSeconds
+    );
     return run;
   });
 }
@@ -963,63 +1061,250 @@ export function focusTaskRun(
   });
 }
 
-function finishTaskRun(
+function canonicalizeCloseoutValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeCloseoutValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalizeCloseoutValue(nested)])
+    );
+  }
+  return value;
+}
+
+type ParsedTaskRunCompleteInput = ReturnType<
+  typeof taskRunCompleteSchema.parse
+>;
+
+function taskRunCloseoutFingerprint(input: ParsedTaskRunCompleteInput): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(
+        canonicalizeCloseoutValue({
+          note: input.note,
+          completionReport: input.completionReport ?? null,
+          gitRefs: input.gitRefs ?? null,
+          closeoutNote: input.closeoutNote ?? null
+        })
+      )
+    )
+    .digest("hex");
+}
+
+function readTaskRunCloseoutFingerprint(taskRunId: string): string | null {
+  const row = getDatabase()
+    .prepare(
+      `SELECT metadata_json
+       FROM activity_events
+       WHERE entity_type = 'task_run'
+         AND entity_id = ?
+         AND event_type = 'task_run_completed'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .get(taskRunId) as { metadata_json: string } | undefined;
+  if (!row) {
+    return null;
+  }
+  try {
+    const metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+    return typeof metadata.closeoutFingerprint === "string"
+      ? metadata.closeoutFingerprint
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isMinimalLegacyCompletionReplay(
+  input: ParsedTaskRunCompleteInput,
+  current: TaskRunRow
+): boolean {
+  return (
+    input.completionReport === undefined &&
+    (input.gitRefs === undefined || input.gitRefs.length === 0) &&
+    input.closeoutNote === undefined &&
+    (input.note.length === 0 || input.note === current.note)
+  );
+}
+
+function throwTaskRunCloseoutConflict(
   taskRunId: string,
-  nextStatus: "completed" | "released",
-  timestampColumn: "completed_at" | "released_at",
-  input: TaskRunFinishInput,
-  now: Date,
-  activity: ActivityContext
+  current: TaskRunRow,
+  now: Date
+): never {
+  throw new HttpError(
+    409,
+    "task_run_closeout_conflict",
+    `Task run ${taskRunId} was already completed with different closeout evidence`,
+    buildTaskRunErrorDetails(current, now)
+  );
+}
+
+export function completeTaskRun(
+  taskRunId: string,
+  input: TaskRunCompleteInput,
+  now = new Date(),
+  activity: ActivityContext = { source: "ui" }
 ): TaskRun {
   return runInTransaction(() => {
+    const parsedInput = taskRunCompleteSchema.parse(input);
     markExpiredRunsTimedOutInTransaction(now);
     const current = requireRun(taskRunId);
-    if (current.status === nextStatus) {
-      assertActorMatch(current, input.actor, now);
+    if (current.status === "completed") {
+      assertActorMatch(current, parsedInput.actor, now);
+      const persistedFingerprint = readTaskRunCloseoutFingerprint(taskRunId);
+      if (persistedFingerprint) {
+        if (persistedFingerprint !== taskRunCloseoutFingerprint(parsedInput)) {
+          throwTaskRunCloseoutConflict(taskRunId, current, now);
+        }
+      } else if (!isMinimalLegacyCompletionReplay(parsedInput, current)) {
+        throwTaskRunCloseoutConflict(taskRunId, current, now);
+      }
       return mapTaskRun(current, now);
     }
     if (current.status !== "active") {
       throw new HttpError(
         409,
         "task_run_not_active",
-        `Task run ${taskRunId} is ${current.status} and cannot transition to ${nextStatus}`,
+        `Task run ${taskRunId} is ${current.status} and cannot transition to completed`,
         buildTaskRunErrorDetails(current, now)
       );
     }
-    assertActorMatch(current, input.actor, now);
+    assertActorMatch(current, parsedInput.actor, now);
 
     const nowIso = now.toISOString();
-    const note = input.note.length > 0 ? input.note : current.note;
+    const note = parsedInput.note.length > 0 ? parsedInput.note : current.note;
+    const closeoutFingerprint = taskRunCloseoutFingerprint(parsedInput);
     getDatabase()
       .prepare(
         `UPDATE task_runs
-         SET status = ?, note = ?, is_current = 0, ${timestampColumn} = ?, updated_at = ?
+         SET status = 'completed', note = ?, is_current = 0, completed_at = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(nextStatus, note, nowIso, nowIso, taskRunId);
+      .run(note, nowIso, nowIso, taskRunId);
     promoteFallbackCurrentRun(current.actor, now);
 
     const run = mapTaskRun(
       {
         ...current,
-        status: nextStatus,
+        status: "completed",
         note,
         is_current: 0,
-        [timestampColumn]: nowIso,
+        completed_at: nowIso,
         updated_at: nowIso
-      } as TaskRunRow,
+      },
       now
     );
-    finalizeTaskRunTimebox(taskRunId, nextStatus === "completed" ? "completed" : "cancelled", nowIso);
+    updateTaskInTransaction(
+      run.taskId,
+      {
+        status: "done",
+        ...(parsedInput.completionReport !== undefined
+          ? { completionReport: parsedInput.completionReport }
+          : {}),
+        ...(parsedInput.gitRefs !== undefined
+          ? { gitRefs: parsedInput.gitRefs }
+          : {}),
+        ...(parsedInput.closeoutNote
+          ? { notes: [parsedInput.closeoutNote] }
+          : {})
+      },
+      {
+        source: activity.source,
+        actor: parsedInput.actor ?? run.actor
+      }
+    );
+    finalizeTaskRunTimebox(taskRunId, "completed", nowIso);
     recordActivityEvent({
       entityType: "task_run",
       entityId: run.id,
-      eventType: nextStatus === "completed" ? "task_run_completed" : "task_run_released",
-      title: `${nextStatus === "completed" ? "Task timer completed" : "Task timer paused"}: ${run.taskTitle}`,
-      description:
-        nextStatus === "completed"
-          ? `${run.actor} completed the work timer.`
-          : `${run.actor} paused the work timer.`,
+      eventType: "task_run_completed",
+      title: `Task timer completed: ${run.taskTitle}`,
+      description: `${run.actor} completed the work timer.`,
+      actor: run.actor,
+      source: activity.source,
+      metadata: {
+        taskId: run.taskId,
+        status: run.status,
+        creditedSeconds: run.creditedSeconds,
+        closeoutFingerprint
+      }
+    });
+    recordTaskRunProgressRewards(
+      run.id,
+      run.taskId,
+      parsedInput.actor ?? run.actor,
+      activity.source,
+      run.creditedSeconds
+    );
+    recordTaskRunCompletionReward(
+      run.id,
+      run.taskId,
+      parsedInput.actor ?? run.actor,
+      activity.source
+    );
+
+    return run;
+  });
+}
+
+export function releaseTaskRun(
+  taskRunId: string,
+  input: TaskRunReleaseInput,
+  now = new Date(),
+  activity: ActivityContext = { source: "ui" }
+): TaskRun {
+  return runInTransaction(() => {
+    const parsedInput = taskRunReleaseSchema.parse(input);
+    markExpiredRunsTimedOutInTransaction(now);
+    const current = requireRun(taskRunId);
+    if (current.status === "released") {
+      assertActorMatch(current, parsedInput.actor, now);
+      return mapTaskRun(current, now);
+    }
+    if (current.status !== "active") {
+      throw new HttpError(
+        409,
+        "task_run_not_active",
+        `Task run ${taskRunId} is ${current.status} and cannot transition to released`,
+        buildTaskRunErrorDetails(current, now)
+      );
+    }
+    assertActorMatch(current, parsedInput.actor, now);
+
+    const nowIso = now.toISOString();
+    const note = parsedInput.note.length > 0 ? parsedInput.note : current.note;
+    getDatabase()
+      .prepare(
+        `UPDATE task_runs
+         SET status = 'released', note = ?, is_current = 0, released_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(note, nowIso, nowIso, taskRunId);
+    promoteFallbackCurrentRun(current.actor, now);
+
+    const run = mapTaskRun(
+      {
+        ...current,
+        status: "released",
+        note,
+        is_current: 0,
+        released_at: nowIso,
+        updated_at: nowIso
+      },
+      now
+    );
+    finalizeTaskRunTimebox(taskRunId, "cancelled", nowIso);
+    recordActivityEvent({
+      entityType: "task_run",
+      entityId: run.id,
+      eventType: "task_run_released",
+      title: `Task timer paused: ${run.taskTitle}`,
+      description: `${run.actor} paused the work timer.`,
       actor: run.actor,
       source: activity.source,
       metadata: {
@@ -1028,47 +1313,19 @@ function finishTaskRun(
         creditedSeconds: run.creditedSeconds
       }
     });
-    recordTaskRunProgressRewards(run.id, run.taskId, input.actor ?? run.actor, activity.source, run.creditedSeconds);
-
-    if (nextStatus === "completed") {
-      recordTaskRunCompletionReward(run.id, run.taskId, input.actor ?? run.actor, activity.source);
-      const task = getTaskById(run.taskId);
-      if (task && task.status !== "done") {
-        updateTaskInTransaction(
-          run.taskId,
-          { status: "done" },
-          {
-            source: activity.source,
-            actor: input.actor ?? run.actor
-          }
-        );
-      }
-    }
-
+    recordTaskRunProgressRewards(
+      run.id,
+      run.taskId,
+      parsedInput.actor ?? run.actor,
+      activity.source,
+      run.creditedSeconds
+    );
     createLinkedNotes(
-      input.closeoutNote ? [input.closeoutNote] : [],
+      parsedInput.closeoutNote ? [parsedInput.closeoutNote] : [],
       { entityType: "task", entityId: run.taskId, anchorKey: null },
-      { source: activity.source, actor: input.actor ?? run.actor }
+      { source: activity.source, actor: parsedInput.actor ?? run.actor }
     );
 
     return run;
   });
-}
-
-export function completeTaskRun(
-  taskRunId: string,
-  input: TaskRunFinishInput,
-  now = new Date(),
-  activity: ActivityContext = { source: "ui" }
-): TaskRun {
-  return finishTaskRun(taskRunId, "completed", "completed_at", input, now, activity);
-}
-
-export function releaseTaskRun(
-  taskRunId: string,
-  input: TaskRunFinishInput,
-  now = new Date(),
-  activity: ActivityContext = { source: "ui" }
-): TaskRun {
-  return finishTaskRun(taskRunId, "released", "released_at", input, now, activity);
 }

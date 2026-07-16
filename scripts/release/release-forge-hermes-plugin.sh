@@ -322,6 +322,11 @@ verify_version_alignment() {
 
 run_verification_suite() {
   rm -rf "${HERMES_PLUGIN_PYTHON_DIST}" "${HERMES_PLUGIN_BUILD_DIR}" "${HERMES_PLUGIN_EGG_INFO_DIR}"
+  if is_full_mode || is_publish_from_tag_mode; then
+    [[ -n "${FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH:-}" ]] \
+      || fail "FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH is required for a publishing release"
+    export FORGE_REQUIRE_SIGNED_NATIVE_SOURCE=1
+  fi
   echo "+ node ./plugins/hermes/scripts/build-package-runtime.mjs"
   (
     cd "${FORGE_DIR}"
@@ -529,6 +534,12 @@ main() {
   restore_openclaw_build_side_effects
   if ! is_publish_from_tag_mode; then
     create_release_commit "${next_version}"
+    if is_full_mode; then
+      echo "+ rebuilding signed publish artifacts against release commit"
+      run_verification_suite
+      run_temp_install_smoke
+      restore_openclaw_build_side_effects
+    fi
     push_release "${next_version}"
   fi
   if [[ "${SKIP_UPLOAD}" == "1" ]]; then

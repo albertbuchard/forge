@@ -187,8 +187,14 @@ export function VitalsPage() {
     staleTime: 15_000
   });
   const psycheMetricsQuery = useQuery({
-    queryKey: ["forge-psyche-metrics-vitals-view"],
-    queryFn: async () => (await getPsycheMetricsView()).metrics
+    queryKey: ["forge-psyche-metrics-vitals-view", ...shell.selectedUserIds],
+    queryFn: async () =>
+      (
+        await getPsycheMetricsView({
+          userIds: shell.selectedUserIds,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+        })
+      ).metrics
   });
 
   if (vitalsQuery.isLoading) {

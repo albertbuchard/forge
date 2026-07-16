@@ -77,6 +77,7 @@ import {
   startOfWeek
 } from "@/lib/calendar-ui";
 import { getEntityKindForCrudEntityType } from "@/lib/entity-visuals";
+import { localDateKeyInTimeZone } from "@/lib/timezone-datetime";
 import type {
   ActionProfile,
   CalendarEvent,
@@ -318,6 +319,10 @@ export function CalendarPage() {
     ? shell.selectedUserIds
     : [];
   const defaultUserId = getSingleSelectedUserId(selectedUserIds);
+  const browserTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
+    []
+  );
   const queryClient = useQueryClient();
   const clipboardEntry = useForgeClipboardStore((state) => state.entry);
   const setClipboardEntry = useForgeClipboardStore((state) => state.setEntry);
@@ -384,7 +389,10 @@ export function CalendarPage() {
       getCalendarOverview({
         ...range,
         userIds: selectedUserIds
-      })
+      }),
+    placeholderData: (previous) => previous,
+    retry: 1,
+    staleTime: 30_000
   });
   const lifeForceQuery = useQuery({
     queryKey: ["forge-life-force", ...selectedUserIds],
@@ -487,7 +495,23 @@ export function CalendarPage() {
         ...timebox,
         userId: defaultUserId
       }),
-    onSuccess: invalidateCalendar
+    onMutate: () => {
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Saving the task timebox…"
+      });
+    },
+    onError: (error) => {
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not save that task timebox."
+      });
+    },
+    onSuccess: () => setEventSyncStatus(null),
+    onSettled: invalidateCalendar
   });
 
   const moveTimeboxMutation = useMutation({
@@ -500,7 +524,42 @@ export function CalendarPage() {
       startsAt: string;
       endsAt: string;
     }) => patchTaskTimebox(timeboxId, { startsAt, endsAt }),
-    onSuccess: invalidateCalendar
+    onMutate: async ({ timeboxId, startsAt, endsAt }) => {
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Moving the task timebox…"
+      });
+      await queryClient.cancelQueries({ queryKey: calendarOverviewQueryKey });
+      const previous = queryClient.getQueryData<CalendarOverviewQueryData>(
+        calendarOverviewQueryKey
+      );
+      setCalendarOverviewData((current) => ({
+        ...current,
+        calendar: {
+          ...current.calendar,
+          timeboxes: current.calendar.timeboxes.map((timebox) =>
+            timebox.id === timeboxId
+              ? { ...timebox, startsAt, endsAt }
+              : timebox
+          )
+        }
+      }));
+      return { previous };
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(calendarOverviewQueryKey, context.previous);
+      }
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not move that task timebox."
+      });
+    },
+    onSuccess: () => setEventSyncStatus(null),
+    onSettled: invalidateCalendar
   });
   const patchTimeboxMutation = useMutation({
     mutationFn: ({
@@ -510,11 +569,43 @@ export function CalendarPage() {
       timeboxId: string;
       patch: Parameters<typeof patchTaskTimebox>[1];
     }) => patchTaskTimebox(timeboxId, patch),
-    onSuccess: invalidateCalendar
+    onMutate: () => {
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Saving the task timebox…"
+      });
+    },
+    onError: (error) => {
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not update that task timebox."
+      });
+    },
+    onSuccess: () => setEventSyncStatus(null),
+    onSettled: invalidateCalendar
   });
   const deleteTimeboxMutation = useMutation({
     mutationFn: deleteTaskTimebox,
+    onMutate: () => {
+      setEventSyncStatus({
+        tone: "saving",
+        message: "Removing the task timebox…"
+      });
+    },
+    onError: (error) => {
+      setEventSyncStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Forge could not remove that task timebox."
+      });
+    },
     onSuccess: async () => {
+      setEventSyncStatus(null);
       setSelectedTimebox(null);
       setTimeboxDialogOpen(false);
       await invalidateCalendar();
@@ -902,7 +993,11 @@ export function CalendarPage() {
   const eventSyncPending =
     createEventMutation.isPending ||
     patchEventMutation.isPending ||
-    deleteEventMutation.isPending;
+    deleteEventMutation.isPending ||
+    createTimeboxMutation.isPending ||
+    moveTimeboxMutation.isPending ||
+    patchTimeboxMutation.isPending ||
+    deleteTimeboxMutation.isPending;
   const plannedTimeboxes = overview.timeboxes.filter(
     (timebox) => timebox.status === "planned"
   );
@@ -1344,6 +1439,8 @@ export function CalendarPage() {
           status={
             eventSyncStatus ? (
               <div
+                role={eventSyncStatus.tone === "error" ? "alert" : "status"}
+                aria-live="polite"
                 className={`inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
                   eventSyncStatus.tone === "error"
                     ? "border border-[color-mix(in_srgb,var(--danger)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
@@ -1368,6 +1465,15 @@ export function CalendarPage() {
                 <Badge className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]">
                   <RefreshCcw className="mr-1 size-3.5 animate-spin" />
                   Syncing changes
+                </Badge>
+              ) : null}
+              {calendarQuery.isFetching && !calendarQuery.isLoading ? (
+                <Badge
+                  className="bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)]"
+                  aria-live="polite"
+                >
+                  <RefreshCcw className="mr-1 size-3.5 animate-spin" />
+                  Refreshing week
                 </Badge>
               ) : null}
               {clipboardEntry ? (
@@ -1397,7 +1503,11 @@ export function CalendarPage() {
               (block) => block.dateKey === dayKey
             );
             const dayTimeboxes = overview.timeboxes.filter(
-              (timebox) => timebox.startsAt.slice(0, 10) === dayKey
+              (timebox) =>
+                localDateKeyInTimeZone(
+                  timebox.startsAt,
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+                ) === dayKey
             );
 
             return (
@@ -1449,21 +1559,31 @@ export function CalendarPage() {
                   if (!timebox) {
                     return;
                   }
-                  const nextTiming = moveCalendarSpanToDate(
-                    {
-                      startAt: timebox.startsAt,
-                      endAt: timebox.endsAt,
-                      timezone:
-                        Intl.DateTimeFormat().resolvedOptions().timeZone ??
-                        "UTC"
-                    },
-                    dayKey
-                  );
-                  void moveTimeboxMutation.mutateAsync({
-                    timeboxId,
-                    startsAt: nextTiming.startAt,
-                    endsAt: nextTiming.endAt
-                  });
+                  try {
+                    const nextTiming = moveCalendarSpanToDate(
+                      {
+                        startAt: timebox.startsAt,
+                        endAt: timebox.endsAt,
+                        timezone: browserTimeZone
+                      },
+                      dayKey
+                    );
+                    void moveTimeboxMutation
+                      .mutateAsync({
+                        timeboxId,
+                        startsAt: nextTiming.startAt,
+                        endsAt: nextTiming.endAt
+                      })
+                      .catch(() => undefined);
+                  } catch (error) {
+                    setEventSyncStatus({
+                      tone: "error",
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "Forge could not resolve that day in your current time zone."
+                    });
+                  }
                   setDraggedTimeboxId(null);
                 }}
                 className="min-w-0 snap-start overflow-hidden rounded-[24px] border border-[var(--ui-border-subtle)] !bg-[var(--ui-surface-2)] p-3 transition hover:border-[var(--ui-border-strong)] hover:!bg-[var(--ui-surface-hover)]"
@@ -1777,6 +1897,9 @@ export function CalendarPage() {
                     <div
                       key={timebox.id}
                       data-calendar-item="true"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Edit ${timebox.title} timebox`}
                       draggable
                       onDragStart={(event) => {
                         setDraggedTimeboxId(timebox.id);
@@ -1785,7 +1908,16 @@ export function CalendarPage() {
                           timebox.id
                         );
                       }}
+                      onDragEnd={() => setDraggedTimeboxId(null)}
                       onClick={() => {
+                        setSelectedTimebox(timebox);
+                        setTimeboxDialogOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") {
+                          return;
+                        }
+                        event.preventDefault();
                         setSelectedTimebox(timebox);
                         setTimeboxDialogOpen(true);
                       }}
@@ -2179,6 +2311,8 @@ export function CalendarPage() {
         open={taskRulesDialogOpen}
         onOpenChange={setTaskRulesDialogOpen}
         tasks={shell.snapshot.tasks}
+        calendar={overview}
+        userIds={selectedUserIds}
         onSave={async ({ taskId, schedulingRules, plannedDurationSeconds }) => {
           await patchTask(taskId, {
             schedulingRules,
@@ -2196,6 +2330,7 @@ export function CalendarPage() {
         open={timeboxDialogOpen}
         onOpenChange={handleTimeboxDialogOpenChange}
         tasks={shell.snapshot.tasks}
+        userIds={selectedUserIds}
         editingTimebox={selectedTimebox}
         from={range.from}
         to={range.to}

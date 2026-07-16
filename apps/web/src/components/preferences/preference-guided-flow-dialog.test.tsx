@@ -55,6 +55,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     steps,
     submitLabel,
     error,
+    draftPersistenceKey,
     onSubmit
   }: {
     open: boolean;
@@ -62,6 +63,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     onChange: (value: unknown) => void;
     steps: Array<{
       id: string;
+      title: string;
       render: (
         value: unknown,
         setValue: (patch: Record<string, unknown>) => void
@@ -69,13 +71,21 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
     }>;
     submitLabel: string;
     error?: string | null;
+    draftPersistenceKey?: string;
     onSubmit: () => Promise<void>;
   }) =>
     open ? (
-      <div>
+      <div
+        data-testid="mock-question-flow"
+        data-draft-persistence-key={draftPersistenceKey}
+        data-idempotency-key={
+          (value as { idempotencyKey?: string }).idempotencyKey
+        }
+      >
         {error ? <div role="alert">{error}</div> : null}
         {steps.map((step) => (
           <section key={step.id}>
+            <h2>{step.title}</h2>
             {step.render(value, (patch) =>
               onChange({ ...(value as Record<string, unknown>), ...patch })
             )}
@@ -91,6 +101,7 @@ vi.mock("@/components/flows/question-flow-dialog", () => ({
 import { PreferenceGuidedFlowDialog } from "./preference-guided-flow-dialog";
 import type {
   PreferenceCatalog,
+  PreferenceItemScore,
   PreferenceWorkspacePayload,
   UserSummary
 } from "@/lib/types";
@@ -109,13 +120,32 @@ const user = {
 const catalog = {
   id: "catalog_1",
   profileId: "profile_1",
+  userId: user.id,
+  user,
   domain: "projects",
   slug: "travel",
   title: "Travel",
   description: "Trip shapes",
+  scopeIn: "Leisure travel",
+  scopeOut: "Daily commuting",
   source: "custom",
+  createdSource: "ui",
+  createdByActor: "Albert",
+  archived: false,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
+  links: [
+    {
+      sourceEntityType: "preference_catalog",
+      sourceEntityId: "catalog_1",
+      targetEntityType: "goal",
+      targetEntityId: "goal_trip",
+      anchorKey: "decision-context",
+      relationship: "supports",
+      createdByActor: "Albert",
+      createdAt: "2026-01-01T00:00:00.000Z"
+    }
+  ],
   items: [
     {
       id: "concept_1",
@@ -134,10 +164,13 @@ const catalog = {
         surprise: 0
       },
       position: 0,
+      archived: false,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     }
-  ]
+  ],
+  itemCount: 1,
+  itemsTruncated: false
 } satisfies PreferenceCatalog;
 
 function buildWorkspace(): PreferenceWorkspacePayload {
@@ -201,6 +234,29 @@ function buildWorkspace(): PreferenceWorkspacePayload {
       staleItemIds: [],
       flippedItemIds: []
     },
+    presentation: {
+      itemLimit: 50,
+      itemOffset: 0,
+      totalItems: 0,
+      returnedItems: 0,
+      hasMore: false,
+      nextOffset: null,
+      historyLimit: 50
+    },
+    evidenceCoverage: {
+      judgmentLimitPerContext: 1000,
+      totalJudgments: 0,
+      consideredJudgments: 0,
+      truncated: false,
+      contexts: [
+        {
+          contextId: "context_default",
+          totalJudgments: 0,
+          consideredJudgments: 0,
+          truncated: false
+        }
+      ]
+    },
     compare: { nextPair: null, pendingCount: 0, candidateCount: 0 },
     summary: {
       totalItems: 0,
@@ -221,6 +277,68 @@ function buildWorkspace(): PreferenceWorkspacePayload {
   };
 }
 
+const signalScore = {
+  id: "score_signal",
+  profileId: "profile_1",
+  contextId: "context_default",
+  itemId: "item_signal",
+  latentScore: 0.3,
+  confidence: 0.4,
+  uncertainty: 0.6,
+  evidenceCount: 1,
+  pairwiseWins: 0,
+  pairwiseLosses: 0,
+  pairwiseTies: 0,
+  signalCount: 1,
+  effectiveSignal: {
+    id: "signal_favorite",
+    profileId: "profile_1",
+    contextId: "context_default",
+    userId: user.id,
+    ownerUserId: user.id,
+    itemId: "item_signal",
+    signalType: "favorite",
+    strength: 1,
+    modelWeight: 1.25,
+    source: "agent",
+    actor: "Preference assistant",
+    createdAt: "2026-01-02T00:00:00.000Z"
+  },
+  conflictCount: 0,
+  status: "favorite",
+  dominantDimensions: [],
+  explanation: [],
+  manualStatus: null,
+  manualScore: null,
+  confidenceLock: null,
+  bookmarked: false,
+  compareLater: false,
+  frozen: false,
+  lastInferredAt: "2026-01-02T00:00:00.000Z",
+  lastJudgmentAt: null,
+  updatedAt: "2026-01-02T00:00:00.000Z",
+  item: {
+    id: "item_signal",
+    profileId: "profile_1",
+    label: "Quiet breakfast cafe",
+    description: "A calm place for a focused morning.",
+    tags: [],
+    featureWeights: {
+      novelty: 0,
+      simplicity: 0,
+      rigor: 0,
+      aesthetics: 0,
+      depth: 0,
+      structure: 0,
+      familiarity: 0,
+      surprise: 0
+    },
+    metadata: {},
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z"
+  }
+} satisfies PreferenceItemScore;
+
 const baseProps = {
   onOpenChange: vi.fn(),
   pending: false,
@@ -230,7 +348,50 @@ const baseProps = {
 };
 
 describe("PreferenceGuidedFlowDialog", () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  it("reviews and clears an arbitrary item's direct effect with exact context and provenance", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace();
+    workspace.scores = [signalScore];
+    render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        workspace={workspace}
+        flow={{ kind: "signal", score: signalScore }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(screen.getByText(/current mark: favorite/i)).toBeInTheDocument();
+    expect(screen.getByText(/preference assistant/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/all active contexts contribute at full weight/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /clear effect/i }));
+    expect(
+      screen.getAllByText(/clears the current direct effect/i)
+    ).not.toHaveLength(0);
+    expect(
+      screen.getByText(/replaces the current favorite signal/i)
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear direct effect" })
+    );
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        kind: "signal",
+        itemId: signalScore.itemId,
+        signalType: "neutral",
+        strength: 1
+      })
+    );
+  });
 
   it("blocks a duplicate catalog title inside the same owner and domain", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -251,6 +412,146 @@ describe("PreferenceGuidedFlowDialog", () => {
       await screen.findAllByText(/concept list with this title already exists/i)
     ).not.toHaveLength(0);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits catalog purpose, boundaries, generic links, and a stable retry key", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 20,
+          y: 100,
+          width: 320,
+          height: 48,
+          top: 100,
+          right: 340,
+          bottom: 148,
+          left: 20,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        flow={{ kind: "catalog" }}
+        linkOptions={[
+          {
+            value: "goal:goal_1",
+            label: "Choose a breakfast venue",
+            kind: "goal"
+          }
+        ]}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Catalog title"), {
+      target: { value: "Breakfast options" }
+    });
+    fireEvent.change(screen.getByLabelText("Decision purpose"), {
+      target: { value: "Compare practical breakfast meeting venues." }
+    });
+    fireEvent.change(screen.getByLabelText("Include"), {
+      target: { value: "Quiet cafes within walking distance." }
+    });
+    fireEvent.change(screen.getByLabelText("Exclude"), {
+      target: { value: "Takeaway-only counters." }
+    });
+    const linkSearch = screen.getByPlaceholderText("Search Forge records");
+    fireEvent.focus(linkSearch);
+    fireEvent.change(linkSearch, { target: { value: "breakfast" } });
+    fireEvent.click(
+      screen.getByRole("option", { name: /choose a breakfast venue/i })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create catalog" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "catalog",
+          title: "Breakfast options",
+          description: "Compare practical breakfast meeting venues.",
+          scopeIn: "Quiet cafes within walking distance.",
+          scopeOut: "Takeaway-only counters.",
+          links: [
+            {
+              entityType: "goal",
+              entityId: "goal_1",
+              relationship: "related"
+            }
+          ],
+          idempotencyKey: expect.any(String)
+        })
+      )
+    );
+  });
+
+  it("keeps the catalog draft baseline stable across a full remount", () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const firstRender = render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        flow={{ kind: "catalog" }}
+        onSubmit={onSubmit}
+      />
+    );
+    const firstFlow = screen.getByTestId("mock-question-flow");
+    const firstKey = firstFlow.getAttribute("data-idempotency-key");
+    expect(firstKey).toBeTruthy();
+    expect(firstFlow).toHaveAttribute(
+      "data-draft-persistence-key",
+      "preference-catalog:user_1:projects"
+    );
+
+    firstRender.unmount();
+    render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        flow={{ kind: "catalog" }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(screen.getByTestId("mock-question-flow")).toHaveAttribute(
+      "data-idempotency-key",
+      firstKey
+    );
+  });
+
+  it("uses the guided catalog flow for edits and preserves existing boundaries", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        flow={{ kind: "catalog", catalog }}
+        onSubmit={onSubmit}
+      />
+    );
+    expect(screen.getByLabelText("Catalog title")).toHaveValue("Travel");
+    expect(screen.getByLabelText("Include")).toHaveValue("Leisure travel");
+    expect(
+      screen.getByText("Confirm ownership and provenance")
+    ).toBeInTheDocument();
+    expect(screen.getByText("goal: goal_trip")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save catalog" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "catalog",
+          catalogId: catalog.id,
+          scopeIn: "Leisure travel",
+          scopeOut: "Daily commuting",
+          links: [
+            {
+              entityType: "goal",
+              entityId: "goal_trip",
+              anchorKey: "decision-context",
+              relationship: "supports"
+            }
+          ]
+        })
+      )
+    );
   });
 
   it("warns but allows distinct direct items with the same label", async () => {
@@ -310,6 +611,35 @@ describe("PreferenceGuidedFlowDialog", () => {
         label: "Mountain retreat",
         description: "",
         tags: ["quiet", "nature"]
+      })
+    );
+  });
+
+  it("edits an existing reusable concept through the guided flow", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const item = catalog.items[0]!;
+    render(
+      <PreferenceGuidedFlowDialog
+        {...baseProps}
+        flow={{ kind: "catalog-item", catalog, item }}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(screen.getByLabelText("Concept label")).toHaveValue("City break");
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "A short city trip with museums." }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save concept" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        kind: "catalog-item",
+        catalogId: catalog.id,
+        catalogItemId: item.id,
+        label: "City break",
+        description: "A short city trip with museums.",
+        tags: []
       })
     );
   });

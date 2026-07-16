@@ -13,7 +13,16 @@ export const gamificationThemeSchema = z.enum([
 
 export const inlineCreateNoteSchema = z.object({
   contentMarkdown: z.string().trim().min(1, "Note content is required"),
-  author: z.string().trim()
+  author: z.string().trim(),
+  links: z
+    .array(
+      z.object({
+        entityType: z.string().trim().min(1),
+        entityId: z.string().trim().min(1),
+        anchorKey: z.string().trim().nullable().optional()
+      })
+    )
+    .optional()
 });
 
 export const goalMutationSchema = z.object({
@@ -36,7 +45,13 @@ export const projectMutationSchema = z.object({
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim(),
   status: z.enum(["active", "paused", "completed"]),
-  workflowStatus: z.enum(["backlog", "focus", "in_progress", "blocked", "done"]),
+  workflowStatus: z.enum([
+    "backlog",
+    "focus",
+    "in_progress",
+    "blocked",
+    "done"
+  ]),
   userId: z.string().trim().nullable().optional(),
   assigneeUserIds: z.array(z.string().trim()),
   targetPoints: z.coerce.number().int().min(25).max(10000),
@@ -204,7 +219,13 @@ export const quickTaskSchema = z.object({
   energy: z.enum(["low", "steady", "high"]),
   dueDate: z.string().trim(),
   points: z.coerce.number().int().min(5).max(500),
-  plannedDurationSeconds: z.coerce.number().int().min(60).max(7 * 86_400).nullable().optional(),
+  plannedDurationSeconds: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(7 * 86_400)
+    .nullable()
+    .optional(),
   actionCostBand: z
     .enum(["tiny", "light", "standard", "heavy", "brutal"])
     .optional(),
@@ -272,7 +293,11 @@ export const habitMutationSchema = z
       enabled: z.boolean(),
       workoutType: z.string().trim(),
       title: z.string().trim(),
-      durationMinutes: z.coerce.number().int().min(1).max(24 * 60),
+      durationMinutes: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(24 * 60),
       xpReward: z.coerce.number().int().min(0).max(500),
       tags: z.array(z.string().trim()),
       links: z.array(

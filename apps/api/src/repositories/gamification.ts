@@ -118,15 +118,17 @@ function dailyActivityRowsEqual(
 
 export function replaceGamificationDailyActivity(
   userId: string,
-  rows: DailyActivityInput[]
+  rows: DailyActivityInput[],
+  timezone: string
 ) {
-  const existingRows = listGamificationDailyActivity(userId);
+  const existingRows = listGamificationDailyActivity(userId, timezone);
   if (dailyActivityRowsEqual(existingRows, rows)) {
     return;
   }
   const database = getDatabase();
   const deleteRows = database.prepare(
-    `DELETE FROM gamification_daily_activity WHERE user_id = ?`
+    `DELETE FROM gamification_daily_activity
+     WHERE user_id = ? AND timezone = ?`
   );
   const insertRow = database.prepare(
     `INSERT INTO gamification_daily_activity (
@@ -143,7 +145,7 @@ export function replaceGamificationDailyActivity(
   const now = new Date().toISOString();
   database.exec("BEGIN");
   try {
-    deleteRows.run(userId);
+    deleteRows.run(userId, timezone);
     for (const row of rows) {
       insertRow.run(
         row.userId,
@@ -164,7 +166,10 @@ export function replaceGamificationDailyActivity(
   }
 }
 
-export function listGamificationDailyActivity(userId: string): Array<{
+export function listGamificationDailyActivity(
+  userId: string,
+  timezone?: string
+): Array<{
   userId: string;
   dateKey: string;
   timezone: string;
@@ -178,10 +183,10 @@ export function listGamificationDailyActivity(userId: string): Array<{
       `SELECT user_id, date_key, timezone, qualifying_xp, event_count,
               first_reward_event_id, last_reward_event_id
        FROM gamification_daily_activity
-       WHERE user_id = ?
+       WHERE user_id = ?${timezone ? " AND timezone = ?" : ""}
        ORDER BY date_key DESC`
     )
-    .all(userId) as Array<{
+    .all(...(timezone ? [userId, timezone] : [userId])) as Array<{
     user_id: string;
     date_key: string;
     timezone: string;
@@ -277,30 +282,43 @@ export function markGamificationCelebrationSeen(
   celebrationId: string,
   seenAt = new Date().toISOString()
 ): GamificationCelebration | null {
-  getDatabase()
-    .prepare(
-      `UPDATE gamification_celebrations
-       SET seen_at = COALESCE(seen_at, ?)
-       WHERE id = ?`
-    )
-    .run(seenAt, celebrationId);
-  const row = getDatabase()
-    .prepare(
-      `SELECT id, user_id, kind, item_id, title, summary, asset_key, metadata_json, created_at, seen_at
-       FROM gamification_celebrations
-       WHERE id = ?`
-    )
-    .get(celebrationId) as CelebrationRow | undefined;
-  if (row?.item_id) {
-    getDatabase()
+  const database = getDatabase();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database
       .prepare(
-        `UPDATE gamification_item_unlocks
-         SET celebration_seen_at = COALESCE(celebration_seen_at, ?)
-         WHERE user_id = ? AND item_id = ?`
+        `UPDATE gamification_celebrations
+         SET seen_at = COALESCE(seen_at, ?)
+         WHERE id = ?`
       )
-      .run(seenAt, row.user_id, row.item_id);
+      .run(seenAt, celebrationId);
+    const row = database
+      .prepare(
+        `SELECT id, user_id, kind, item_id, title, summary, asset_key, metadata_json, created_at, seen_at
+         FROM gamification_celebrations
+         WHERE id = ?`
+      )
+      .get(celebrationId) as CelebrationRow | undefined;
+    if (row?.item_id) {
+      const unlockUpdate = database
+        .prepare(
+          `UPDATE gamification_item_unlocks
+           SET celebration_seen_at = COALESCE(celebration_seen_at, ?)
+           WHERE user_id = ? AND item_id = ?`
+        )
+        .run(seenAt, row.user_id, row.item_id);
+      if (unlockUpdate.changes !== 1) {
+        throw new Error(
+          `Expected one unlock for celebration ${celebrationId}, found ${unlockUpdate.changes}.`
+        );
+      }
+    }
+    database.exec("COMMIT");
+    return row ? mapCelebration(row) : null;
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
   }
-  return row ? mapCelebration(row) : null;
 }
 
 type EquipmentRow = {
@@ -324,7 +342,9 @@ function mapEquipment(row: EquipmentRow | undefined): GamificationEquipment {
   });
 }
 
-export function getGamificationEquipment(userId: string): GamificationEquipment {
+export function getGamificationEquipment(
+  userId: string
+): GamificationEquipment {
   const row = getDatabase()
     .prepare(
       `SELECT user_id, selected_mascot_skin, selected_hud_treatment,

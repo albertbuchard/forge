@@ -34,8 +34,8 @@ class MockEventSource {
   }
 }
 
-function Harness() {
-  useLiveEvents();
+function Harness({ enabled = true }: { enabled?: boolean }) {
+  useLiveEvents(enabled);
   useEffect(() => undefined, []);
   return null;
 }
@@ -52,7 +52,9 @@ describe("useLiveEvents", () => {
     globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
 
     const queryClient = new QueryClient();
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
 
     const view = render(
       <QueryClientProvider client={queryClient}>
@@ -66,12 +68,36 @@ describe("useLiveEvents", () => {
     stream?.emit("snapshot");
     stream?.emit("activity");
 
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["forge-snapshot"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["task-context"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["forge-snapshot"]
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["task-context"]
+    });
 
     stream?.onerror?.();
     expect(stream?.closed).toBe(true);
 
     view.unmount();
+  });
+
+  it("waits for authenticated shell bootstrap before opening the stream", () => {
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+
+    const queryClient = new QueryClient();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <Harness enabled={false} />
+      </QueryClientProvider>
+    );
+
+    expect(MockEventSource.instance).toBeNull();
+
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <Harness enabled />
+      </QueryClientProvider>
+    );
+    expect(MockEventSource.instance?.url).toBe("/api/v1/events/stream");
   });
 });

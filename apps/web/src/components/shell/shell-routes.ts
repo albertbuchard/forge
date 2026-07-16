@@ -27,6 +27,7 @@ import {
   Target,
   Trophy,
   Utensils,
+  UsersRound,
   Zap,
   type LucideIcon
 } from "lucide-react";
@@ -100,6 +101,13 @@ export const PRIMARY_ROUTES: ShellRouteDefinition[] = [
     labelKey: "common.routeLabels.preferences",
     detailKey: "common.routeDetails.preferences",
     icon: SlidersHorizontal
+  },
+  {
+    id: "people",
+    to: "/people",
+    label: "People",
+    detail: ROUTE_VIEW_CATALOG["people-index"].description,
+    icon: UsersRound
   },
   {
     id: "calendar",

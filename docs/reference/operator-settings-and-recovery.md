@@ -2,8 +2,29 @@
 
 Forge keeps operator controls under one settings index. Every settings page can
 return directly to Runtime, Data, Users, Calendar, Mobile, Models, Agents,
-KarpaWiki, Logs, Rewards, or Bin without returning to the main application
+Rewards, KarpaWiki, Logs, or Bin without returning to the main application
 navigation first.
+
+## Settings Index
+
+Open `/settings` for the full descriptive index. On desktop, every destination
+and its purpose are visible together. On a phone, the current section opens the
+same index as a scrollable settings sheet. The index remains available while a
+section is loading or when that section has a retryable error.
+
+| Section   | Route                | Operator control                                                           |
+| --------- | -------------------- | -------------------------------------------------------------------------- |
+| Runtime   | `/settings`          | Operator session, execution policy, appearance, locale, and Doctor checks. |
+| Data      | `/settings/data`     | Active data root, backups, exports, and recovery candidates.               |
+| Users     | `/settings/users`    | Human and bot identities, ownership, and directional access.               |
+| Calendar  | `/settings/calendar` | Provider connections, calendar selection, and sync defaults.               |
+| Mobile    | `/settings/mobile`   | iPhone and watch pairing, permissions, sync, and recovery.                 |
+| Models    | `/settings/models`   | Model providers, credentials, defaults, and health checks.                 |
+| Agents    | `/settings/agents`   | Agent identities, sessions, scopes, tokens, and approvals.                 |
+| Rewards   | `/settings/rewards`  | Progression rules, assets, and reward controls.                            |
+| KarpaWiki | `/settings/wiki`     | Wiki spaces, index health, ingest behavior, and reindexing.                 |
+| Logs      | `/settings/logs`     | Bounded runtime diagnostics and recovery evidence.                         |
+| Bin       | `/settings/bin`      | Soft-deleted records available for deliberate recovery.                    |
 
 ## Data Root And Backups
 

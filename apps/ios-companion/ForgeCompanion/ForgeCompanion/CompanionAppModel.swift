@@ -728,6 +728,7 @@ final class CompanionAppModel: ObservableObject {
 
     private enum StorageKeys {
         static let pairingPayload = "forge_companion_pairing_payload"
+        static let pairingOwner = "forge_companion_pairing_owner_v1"
         static let latestSyncReport = "forge_companion_latest_sync_report"
         static let latestSyncPayloadSummary = "forge_companion_latest_sync_payload_summary"
         static let lastSuccessfulSyncAt = "forge_companion_last_successful_sync_at"
@@ -741,6 +742,11 @@ final class CompanionAppModel: ObservableObject {
         static let activeHealthSyncCheckpoint = "forge_companion_active_health_sync_checkpoint"
     }
 
+    private struct PersistedPairingOwner: Codable {
+        let sessionId: String
+        let userId: String
+    }
+
     @Published var pairing: PairingPayload? {
         didSet {
             companionDebugLog(
@@ -749,6 +755,7 @@ final class CompanionAppModel: ObservableObject {
             )
         }
     }
+    @Published private(set) var pairingOwnerUserId: String?
     @Published var syncState: SyncState = .disconnected {
         didSet {
             companionDebugLog("CompanionAppModel", "syncState -> \(syncState.rawValue)")
@@ -1086,6 +1093,7 @@ final class CompanionAppModel: ObservableObject {
         )
         cancelHistoricalWorkoutImport(reason: "disconnect")
         pairing = nil
+        pairingOwnerUserId = nil
         syncState = .disconnected
         lastSyncMessage = "Not paired"
         latestError = nil
@@ -1096,6 +1104,7 @@ final class CompanionAppModel: ObservableObject {
         deferredStartupRefreshTask?.cancel()
         remoteSourceReconciliationTask?.cancel()
         keychain.delete(forKey: StorageKeys.pairingPayload)
+        keychain.delete(forKey: StorageKeys.pairingOwner)
         UserDefaults.standard.removeObject(forKey: StorageKeys.pairingPayload)
         UserDefaults.standard.removeObject(forKey: StorageKeys.deferredHealthPrompt)
         UserDefaults.standard.removeObject(forKey: StorageKeys.workoutBackfillCompletedAt)
@@ -1432,6 +1441,13 @@ final class CompanionAppModel: ObservableObject {
         }
         let normalized = normalizedPairingPayload(payload)
         pairing = normalized
+        if
+            let ownerData = keychain.load(forKey: StorageKeys.pairingOwner),
+            let persistedOwner = try? JSONDecoder().decode(PersistedPairingOwner.self, from: ownerData),
+            persistedOwner.sessionId == normalized.sessionId
+        {
+            pairingOwnerUserId = persistedOwner.userId
+        }
         lastSyncMessage = "Pairing restored"
         let normalizedData = try? JSONEncoder().encode(normalized)
         if Self.PairingRestorePersistencePolicy.shouldPersistRestoredPairing(
@@ -1799,6 +1815,8 @@ final class CompanionAppModel: ObservableObject {
                 userMessage: "Switching Forge pairing"
             )
             cancelHistoricalWorkoutImport(reason: "new pairing \(payload.sessionId)")
+            pairingOwnerUserId = nil
+            keychain.delete(forKey: StorageKeys.pairingOwner)
         }
         pairing = normalizedPairingPayload(payload, preferredUiBaseUrl: preferredUiBaseUrl)
         if let activePairing = pairing,
@@ -4339,6 +4357,12 @@ final class CompanionAppModel: ObservableObject {
         _ session: CompanionPairingSessionState,
         reason: String
     ) {
+        pairingOwnerUserId = session.userId
+        if let ownerData = try? JSONEncoder().encode(
+            PersistedPairingOwner(sessionId: session.id, userId: session.userId)
+        ) {
+            _ = keychain.save(ownerData, forKey: StorageKeys.pairingOwner)
+        }
         if let currentPairing = pairing, currentPairing.sessionId == session.id {
             let refreshedPairing = CompanionPairingURLResolver.payload(
                 currentPairing,

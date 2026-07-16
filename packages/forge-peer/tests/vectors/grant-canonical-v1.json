@@ -1,0 +1,107 @@
+{
+  "description": "Generated with Node.js crypto and the TypeScript forge peer canonicalization contract on 2026-07-15.",
+  "grant": {
+    "id": "grant_vector_1",
+    "ownerUserId": "user_owner",
+    "relationshipId": "relationship_peer",
+    "direction": "local_to_remote",
+    "sequence": 2,
+    "previousVersionHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "status": "active",
+    "label": "Cross-language vector",
+    "purpose": "Canonical consent interoperability",
+    "issuedAt": "2026-07-15T09:00:00.000Z",
+    "effectiveAt": "2026-07-15T09:05:00.000Z",
+    "expiresAt": "2026-08-15T09:00:00.000Z",
+    "revokedAt": null,
+    "cachePolicy": {
+      "mode": "until_revoked",
+      "maximumRetentionSeconds": 2592000,
+      "purgeOnRevocation": true
+    },
+    "rules": [
+      {
+        "id": "z_selected",
+        "effect": "allow",
+        "projectionId": "calendar.selected_events.v1",
+        "entitySelector": {
+          "mode": "selected",
+          "entityType": "calendar_event",
+          "entityIds": ["event_z", "event_a"]
+        },
+        "fields": {
+          "include": ["title", "startsAt", "endsAt"],
+          "exclude": ["location", "description"]
+        },
+        "time": {
+          "startsAt": null,
+          "endsAt": null,
+          "rollingPastDays": 7,
+          "rollingFutureDays": 30
+        },
+        "precision": "exact",
+        "aggregation": null,
+        "approvedDeviceIds": ["peer_tablet", "peer_phone"],
+        "devicePolicy": "explicit",
+        "maximumResultCount": 50,
+        "maximumPayloadBytes": 131072
+      },
+      {
+        "id": "a_availability",
+        "effect": "deny",
+        "projectionId": "calendar.availability.v1",
+        "entitySelector": null,
+        "fields": {
+          "include": ["state", "startsAt", "endsAt"],
+          "exclude": ["title"]
+        },
+        "time": {
+          "startsAt": null,
+          "endsAt": null,
+          "rollingPastDays": 0,
+          "rollingFutureDays": 60
+        },
+        "precision": "free_busy",
+        "aggregation": {
+          "minimumRecords": 3,
+          "granularity": "week",
+          "privacyBudget": 12.5,
+          "maximumQueriesPerDay": 20
+        },
+        "approvedDeviceIds": ["peer_phone", "peer_tablet"],
+        "devicePolicy": "explicit",
+        "maximumResultCount": 100,
+        "maximumPayloadBytes": 262144
+      }
+    ],
+    "signatures": [
+      {
+        "deviceId": "peer_phone",
+        "party": "grantee",
+        "algorithm": "ed25519",
+        "signedAt": "2026-07-15T09:02:00.000Z",
+        "signature": "A-YfRFxCv9UwqqobQou1GKHNfV1wXgBRmHueb03tIi1m_9X2DBbNqW7kDvGCn3YiBw4K1nk5DmM4fOTTQXGaBA"
+      },
+      {
+        "deviceId": "owner_mac",
+        "party": "grantor",
+        "algorithm": "ed25519",
+        "signedAt": "2026-07-15T09:01:00.000Z",
+        "signature": "nsl8YEUqDPy_ypBaIxMJHLS0ISm5kunLUhiLi4QlM8_l2yDGyocey0W_LAilh-zo7Km8DJl0NpQSit2hT4k4AQ"
+      }
+    ],
+    "protocolVersion": "forge-peer/1",
+    "schemaVersion": 1
+  },
+  "verifiedGrantHash": "4887466d79ee27cf1ba4c5318da3ada9ed5a89786874c1aa12f4ae1e3d1cc6ec",
+  "signers": [
+    {
+      "deviceId": "owner_mac",
+      "publicKeyBase64url": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
+    },
+    {
+      "deviceId": "peer_phone",
+      "publicKeyBase64url": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc"
+    }
+  ]
+}

@@ -18,8 +18,11 @@ const MAX_FRAME_BYTES: usize = 50 * 1024 * 1024;
 const IROH_CLIENT_TIMING_HEADER: &str = "x-forge-iroh-client-timing-ms";
 const IROH_CLIENT_CONNECTION_REUSED_HEADER: &str = "x-forge-iroh-client-connection-reused";
 const FFI_RUNTIME_WORKER_THREADS: usize = 6;
-#[cfg(test)]
 const FOREGROUND_HEALTH_SYNC_STREAMS: usize = 6;
+const _: () = assert!(
+    FFI_RUNTIME_WORKER_THREADS >= FOREGROUND_HEALTH_SYNC_STREAMS,
+    "Iroh FFI runtime workers should not be narrower than foreground HealthKit streams"
+);
 
 struct FfiIrohState {
     runtime: tokio::runtime::Runtime,
@@ -186,7 +189,11 @@ pub extern "C" fn forge_iroh_http_request_json(input_json: *const c_char) -> *mu
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn forge_iroh_free_string(value: *mut c_char) {
+/// # Safety
+///
+/// `value` must be null or a pointer returned by `forge_iroh_http_request_json`
+/// that has not already been released.
+pub unsafe extern "C" fn forge_iroh_free_string(value: *mut c_char) {
     if value.is_null() {
         return;
     }
@@ -458,7 +465,7 @@ mod tests {
         let ptr = forge_iroh_http_request_json(std::ptr::null());
         assert!(!ptr.is_null());
         let response = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
-        forge_iroh_free_string(ptr);
+        unsafe { forge_iroh_free_string(ptr) };
         assert!(response.contains("input JSON pointer was null"));
     }
 
@@ -525,14 +532,6 @@ mod tests {
         assert_eq!(
             timing.to_header_value(),
             "reused=1,total=15,connection=1,openStream=2,bridgeAck=3,writeRequest=4,responseWait=5"
-        );
-    }
-
-    #[test]
-    fn ffi_runtime_keeps_up_with_foreground_health_sync_window() {
-        assert!(
-            FFI_RUNTIME_WORKER_THREADS >= FOREGROUND_HEALTH_SYNC_STREAMS,
-            "Iroh FFI runtime workers should not be narrower than foreground HealthKit streams"
         );
     }
 }

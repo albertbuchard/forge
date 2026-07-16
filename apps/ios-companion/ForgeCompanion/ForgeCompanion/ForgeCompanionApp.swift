@@ -18,11 +18,13 @@ final class ForgeCompanionAppDelegate: NSObject, UIApplicationDelegate {
 struct ForgeCompanionApp: App {
     @UIApplicationDelegateAdaptor(ForgeCompanionAppDelegate.self) private var appDelegate
     @StateObject private var appModel = CompanionAppModel()
+    @StateObject private var peoplePeerStore = PeoplePeerStore()
 
     var body: some Scene {
         WindowGroup {
             CompanionAppRoot()
                 .environmentObject(appModel)
+                .environmentObject(peoplePeerStore)
                 .preferredColorScheme(.dark)
         }
     }

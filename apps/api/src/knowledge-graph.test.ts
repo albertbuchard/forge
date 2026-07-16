@@ -6,6 +6,20 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 
+type TestApp = Awaited<ReturnType<typeof buildServer>>;
+
+async function issueOperatorCookie(app: TestApp) {
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/v1/auth/operator-session",
+    headers: { host: "127.0.0.1:4317" }
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const cookie = response.cookies[0];
+  assert.ok(cookie);
+  return `${cookie.name}=${cookie.value}`;
+}
+
 test("knowledge graph route applies filters before limiting and returns matching facets", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-knowledge-graph-")
@@ -13,9 +27,11 @@ test("knowledge graph route applies filters before limiting and returns matching
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const cookie = await issueOperatorCookie(app);
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/knowledge-graph?entityKind=goal&limit=40"
+      url: "/api/v1/knowledge-graph?entityKind=goal&limit=40",
+      headers: { cookie }
     });
 
     assert.equal(response.statusCode, 200);
@@ -55,13 +71,16 @@ test("knowledge graph route keeps deterministic visible-node ordering across rep
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const cookie = await issueOperatorCookie(app);
     const firstResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/knowledge-graph?limit=8&focusNodeId=goal%3Agoal_build_forge"
+      url: "/api/v1/knowledge-graph?limit=8&focusNodeId=goal%3Agoal_build_forge",
+      headers: { cookie }
     });
     const secondResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/knowledge-graph?limit=8&focusNodeId=goal%3Agoal_build_forge"
+      url: "/api/v1/knowledge-graph?limit=8&focusNodeId=goal%3Agoal_build_forge",
+      headers: { cookie }
     });
 
     assert.equal(firstResponse.statusCode, 200);
@@ -119,6 +138,7 @@ test("knowledge graph includes shared wiki pages when scoped to the operator use
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: false });
 
   try {
+    const cookie = await issueOperatorCookie(app);
     const now = new Date().toISOString();
     getDatabase()
       .prepare(
@@ -143,7 +163,8 @@ test("knowledge graph includes shared wiki pages when scoped to the operator use
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/v1/knowledge-graph?userIds=user_operator&entityKind=wiki_page&q=buried%20constellation&limit=20"
+      url: "/api/v1/knowledge-graph?userIds=user_operator&entityKind=wiki_page&q=buried%20constellation&limit=20",
+      headers: { cookie }
     });
 
     assert.equal(response.statusCode, 200);

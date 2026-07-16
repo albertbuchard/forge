@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, LibraryBig } from "lucide-react";
 import { Link } from "react-router-dom";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -95,32 +98,40 @@ export function SettingsWikiPage() {
 
   if (settingsQuery.isLoading) {
     return (
-      <LoadingState
-        eyebrow="KarpaWiki settings"
-        title="Loading KarpaWiki controls"
-        description="Fetching spaces and profile configuration for KarpaWiki."
-      />
+      <SettingsStateFrame>
+        <LoadingState
+          eyebrow="KarpaWiki settings"
+          title="Loading KarpaWiki controls"
+          description="Fetching spaces and profile configuration for KarpaWiki."
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (settingsQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="KarpaWiki settings"
-        error={settingsQuery.error}
-        onRetry={() => void settingsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="KarpaWiki settings"
+          error={settingsQuery.error}
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
   const settings = settingsQuery.data?.settings;
   if (!settings) {
     return (
-      <ErrorState
-        eyebrow="KarpaWiki settings"
-        error={new Error("Forge returned an empty KarpaWiki settings payload.")}
-        onRetry={() => void settingsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="KarpaWiki settings"
+          error={
+            new Error("Forge returned an empty KarpaWiki settings payload.")
+          }
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
   const enabledEmbeddingProfiles = settings.embeddingProfiles.filter(

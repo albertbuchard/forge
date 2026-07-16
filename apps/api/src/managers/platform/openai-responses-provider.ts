@@ -6,6 +6,17 @@ import type {
   WikiLlmProvider
 } from "./llm-manager.js";
 
+export class OpenAiTextPromptError extends Error {
+  readonly code = "openai_text_prompt_failed";
+  readonly statusCode: number;
+
+  constructor(statusCode: number) {
+    super(`OpenAI text prompt failed (${statusCode}).`);
+    this.name = "OpenAiTextPromptError";
+    this.statusCode = statusCode;
+  }
+}
+
 function emitDiagnostic(
   logger: WikiLlmDiagnosticLogger | undefined,
   input: Parameters<WikiLlmDiagnosticLogger>[0]
@@ -782,14 +793,39 @@ export class OpenAiResponsesProvider implements WikiLlmProvider {
       })
     });
     if (!response.ok) {
-      const message = await response.text();
-      throw new Error(
-        `OpenAI text prompt failed (${response.status})${
-          message ? `: ${message}` : ""
-        }`
-      );
+      await response.body?.cancel().catch(() => undefined);
+      emitDiagnostic(logger, {
+        level: "error",
+        message: `OpenAI text prompt failed (${response.status}).`,
+        details: {
+          scope: "ai_processor",
+          eventKey: "prompt_run_failed",
+          provider: profile.provider,
+          model: profile.model,
+          status: response.status,
+          responseBodyPersisted: false
+        }
+      });
+      throw new OpenAiTextPromptError(response.status);
     }
-    const payload = await readProviderPayload(response, profile);
+    let payload: Record<string, unknown>;
+    try {
+      payload = await readProviderPayload(response, profile);
+    } catch {
+      emitDiagnostic(logger, {
+        level: "error",
+        message: "OpenAI text prompt returned an unusable response.",
+        details: {
+          scope: "ai_processor",
+          eventKey: "prompt_response_failed",
+          provider: profile.provider,
+          model: profile.model,
+          status: response.status,
+          responseBodyPersisted: false
+        }
+      });
+      throw new OpenAiTextPromptError(response.status);
+    }
     return {
       outputText: parseOutputText(payload)?.trim() || ""
     };

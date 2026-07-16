@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { recordSessionEvent } from "@/lib/api";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 
 export function useShellSessionTelemetry(enabled: boolean) {
   const sessionIdRef = useRef(
@@ -26,6 +27,7 @@ export function useShellSessionTelemetry(enabled: boolean) {
       recordSessionEvent({
         sessionId: sessionIdRef.current,
         eventType,
+        timezone: getRuntimeTimeZone(),
         metrics
       }).catch(() => undefined);
 

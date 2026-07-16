@@ -15,6 +15,8 @@ provides_tools:
   - forge_call_workbench_route
   - forge_call_artifact_route
   - forge_call_life_event_route
+  - forge_call_people_route
+  - forge_call_peer_route
   - forge_get_doctor
   - forge_get_user_directory
   - forge_get_wiki_settings
@@ -67,6 +69,7 @@ provides_tools:
   - forge_get_xp_metrics
   - forge_get_weekly_review
   - forge_get_current_work
+  - forge_get_today_priority
   - forge_search_entities
   - forge_create_entities
   - forge_update_entities

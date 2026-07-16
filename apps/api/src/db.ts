@@ -91,7 +91,9 @@ export function resolveDatabasePathForDataRoot(root = dataRoot): string {
   return resolveCanonicalDatabasePath(root);
 }
 
-export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()): string {
+export function resolveDefaultDataRoot(
+  currentWorkingDir = process.cwd()
+): string {
   const configured = process.env.FORGE_DATA_ROOT?.trim();
   if (configured) {
     return path.resolve(configured);
@@ -101,7 +103,10 @@ export function resolveDefaultDataRoot(currentWorkingDir = process.cwd()): strin
     try {
       const raw = readFileSync(getMonorepoRuntimePreferencePath(), "utf8");
       const parsed = JSON.parse(raw) as { dataRoot?: unknown };
-      if (typeof parsed.dataRoot === "string" && parsed.dataRoot.trim().length > 0) {
+      if (
+        typeof parsed.dataRoot === "string" &&
+        parsed.dataRoot.trim().length > 0
+      ) {
         return path.resolve(parsed.dataRoot);
       }
     } catch {
@@ -159,6 +164,11 @@ function getDatabasePath(): string {
 export function getDatabase(): DatabaseSync {
   if (!db) {
     db = new DatabaseSync(getDatabasePath());
+    db.function(
+      "forge_nfkc_lower",
+      { deterministic: true },
+      (value: unknown) => String(value ?? "").normalize("NFKC").toLowerCase()
+    );
     db.exec("PRAGMA foreign_keys = ON;");
     db.exec("PRAGMA busy_timeout = 5000;");
     db.exec("PRAGMA synchronous = FULL;");
@@ -198,7 +208,9 @@ export function runInTransaction<T>(operation: () => T): T {
   }
 }
 
-export function configureDatabase(options: { dataRoot?: string; seedDemoData?: boolean } = {}): void {
+export function configureDatabase(
+  options: { dataRoot?: string; seedDemoData?: boolean } = {}
+): void {
   if (options.dataRoot) {
     dataRoot = path.resolve(options.dataRoot);
     closeDatabase();
@@ -218,7 +230,9 @@ async function listMigrationFiles(): Promise<string[]> {
 }
 
 function countRows(tableName: string): number {
-  const row = getDatabase().prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get() as {
+  const row = getDatabase()
+    .prepare(`SELECT COUNT(*) as count FROM ${tableName}`)
+    .get() as {
     count: number;
   };
   return row.count;
@@ -262,7 +276,8 @@ function seedData(): void {
     {
       id: "goal_be_a_good_person",
       title: "Be a good person",
-      description: "Live in a way that is kind, honest, and helpful to other people.",
+      description:
+        "Live in a way that is kind, honest, and helpful to other people.",
       horizon: "lifetime",
       status: "active",
       targetPoints: 1000,
@@ -271,7 +286,8 @@ function seedData(): void {
     {
       id: "goal_build_forge",
       title: "Build Forge into a premium operating system",
-      description: "Turn Forge into a sharp, trustworthy life system with strong daily execution.",
+      description:
+        "Turn Forge into a sharp, trustworthy life system with strong daily execution.",
       horizon: "year",
       status: "active",
       targetPoints: 720,
@@ -280,7 +296,8 @@ function seedData(): void {
     {
       id: "goal_train_body",
       title: "Train with consistency",
-      description: "Keep health, training, and recovery visible in the weekly operating rhythm.",
+      description:
+        "Keep health, training, and recovery visible in the weekly operating rhythm.",
       horizon: "quarter",
       status: "active",
       targetPoints: 360,
@@ -303,12 +320,48 @@ function seedData(): void {
   }
 
   const tags = [
-    ["tag_vitality", "Vitality", "value", "#f59e0b", "Health, training, and physical energy."],
-    ["tag_deep_work", "Deep Work", "execution", "#8b5cf6", "Protected focus and cognitively demanding work."],
-    ["tag_relationships", "Relationships", "value", "#ef4444", "Important human connection and maintenance."],
-    ["tag_systems", "Systems", "category", "#14b8a6", "Operational scaffolding, review, and maintenance."],
-    ["tag_craft", "Craft", "category", "#60a5fa", "Making the product sharper and more intentional."],
-    ["tag_recovery", "Recovery", "execution", "#22c55e", "Recovery, decompression, and reset work."]
+    [
+      "tag_vitality",
+      "Vitality",
+      "value",
+      "#f59e0b",
+      "Health, training, and physical energy."
+    ],
+    [
+      "tag_deep_work",
+      "Deep Work",
+      "execution",
+      "#8b5cf6",
+      "Protected focus and cognitively demanding work."
+    ],
+    [
+      "tag_relationships",
+      "Relationships",
+      "value",
+      "#ef4444",
+      "Important human connection and maintenance."
+    ],
+    [
+      "tag_systems",
+      "Systems",
+      "category",
+      "#14b8a6",
+      "Operational scaffolding, review, and maintenance."
+    ],
+    [
+      "tag_craft",
+      "Craft",
+      "category",
+      "#60a5fa",
+      "Making the product sharper and more intentional."
+    ],
+    [
+      "tag_recovery",
+      "Recovery",
+      "execution",
+      "#22c55e",
+      "Recovery, decompression, and reset work."
+    ]
   ] as const;
 
   for (const [id, name, kind, color, description] of tags) {
@@ -359,7 +412,8 @@ function seedData(): void {
     {
       id: "task_flagship_review",
       title: "Review the Forge flagship flow",
-      description: "Walk Overview, Today, Kanban, and Psyche to identify friction before the next pass.",
+      description:
+        "Walk Overview, Today, Kanban, and Psyche to identify friction before the next pass.",
       status: "focus",
       priority: "high",
       owner: "Albert",
@@ -375,7 +429,8 @@ function seedData(): void {
     {
       id: "task_plugin_surface",
       title: "Slim the OpenClaw plugin surface",
-      description: "Keep the plugin focused on overview, batch entities, insights, and UI entry.",
+      description:
+        "Keep the plugin focused on overview, batch entities, insights, and UI entry.",
       status: "in_progress",
       priority: "high",
       owner: "Albert",
@@ -391,7 +446,8 @@ function seedData(): void {
     {
       id: "task_weekly_review",
       title: "Prepare the weekly review ritual",
-      description: "Make sure the review captures drift, signals, and visible wins.",
+      description:
+        "Make sure the review captures drift, signals, and visible wins.",
       status: "backlog",
       priority: "medium",
       owner: "Albert",
@@ -521,10 +577,10 @@ export async function initializeDatabase(): Promise<void> {
 
   ensureQuestionnaireSeeds();
   if (legacyWikiAutoImportEnabled) {
-    const { importLegacyWikiMarkdownOnStartup } = await import(
-      "./services/legacy-wiki-markdown-import.js"
-    );
-    const legacyWikiImport = await importLegacyWikiMarkdownOnStartup(getDataDir());
+    const { importLegacyWikiMarkdownOnStartup } =
+      await import("./services/legacy-wiki-markdown-import.js");
+    const legacyWikiImport =
+      await importLegacyWikiMarkdownOnStartup(getDataDir());
     if (legacyWikiImport.scanned > 0) {
       logForgeDebug(
         `[forge-db] imported legacy wiki markdown scanned=${legacyWikiImport.scanned} inserted=${legacyWikiImport.inserted} updated=${legacyWikiImport.updated} backed_up=${legacyWikiImport.backedUp} backup_path=${legacyWikiImport.backupPath}`

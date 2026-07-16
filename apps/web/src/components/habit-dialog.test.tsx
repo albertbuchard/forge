@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HabitDialog } from "@/components/habit-dialog";
 
 function renderHabitDialog(onSubmit = vi.fn().mockResolvedValue(undefined)) {
@@ -25,6 +25,8 @@ function renderHabitDialog(onSubmit = vi.fn().mockResolvedValue(undefined)) {
 }
 
 describe("HabitDialog", () => {
+  afterEach(cleanup);
+
   it("offers explicit travel boundaries and keeps negative habits out of workout generation", async () => {
     renderHabitDialog();
     const dialog = screen.getByRole("dialog");

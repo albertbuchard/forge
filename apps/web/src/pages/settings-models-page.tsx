@@ -9,7 +9,10 @@ import {
   Sparkles,
   Trash2
 } from "lucide-react";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -468,24 +471,28 @@ export function SettingsModelsPage() {
 
   if (settingsQuery.isLoading) {
     return (
-      <LoadingState
-        eyebrow="Models"
-        title="Loading model settings"
-        description="Fetching Forge agent defaults and configured AI connections."
-      />
+      <SettingsStateFrame>
+        <LoadingState
+          eyebrow="Models"
+          title="Loading model settings"
+          description="Fetching Forge agent defaults and configured AI connections."
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (settingsQuery.isError || !settingsQuery.data?.settings) {
     return (
-      <ErrorState
-        eyebrow="Models"
-        error={
-          settingsQuery.error ??
-          new Error("Forge returned an empty model settings payload.")
-        }
-        onRetry={() => void settingsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Models"
+          error={
+            settingsQuery.error ??
+            new Error("Forge returned an empty model settings payload.")
+          }
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

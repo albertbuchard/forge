@@ -1,10 +1,21 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
+import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { filterDeletedEntities, filterDeletedIds, isEntityDeleted } from "./deleted-entities.js";
+import {
+  filterDeletedEntities,
+  filterDeletedIds,
+  isEntityDeleted
+} from "./deleted-entities.js";
+import {
+  replaceEntityLinksForSource,
+  replaceEntityLinksForSourceRelationships,
+  type EntityLinkInput
+} from "./entity-links.js";
 import {
   clearEntityOwner,
   decorateOwnedEntity,
+  getEntityOwnerId,
   setEntityOwner
 } from "./entity-ownership.js";
 import { recordEventLog } from "./event-log.js";
@@ -83,6 +94,7 @@ import {
   type UpdateTriggerReportInput
 } from "../psyche-types.js";
 import type { ActivitySource } from "../types.js";
+import { resolveUserForMutation } from "./users.js";
 
 type RowBase = {
   id: string;
@@ -238,6 +250,7 @@ type TriggerReportRow = RowBase & {
   custom_event_type: string;
   event_situation: string;
   occurred_at: string | null;
+  body_cues_json: string;
   emotions_json: string;
   thoughts_json: string;
   behaviors_json: string;
@@ -254,12 +267,23 @@ type TriggerReportRow = RowBase & {
   schema_links_json: string;
   mode_timeline_json: string;
   next_moves_json: string;
+  memory_clarity: TriggerReport["memoryClarity"];
+  reflection: string;
+  hypothesis: string;
+  hypothesis_fit: TriggerReport["hypothesisFit"];
+  hypothesis_correction: string;
+  interpretation_consent: number;
+  revision: number;
 };
 
-type PsycheContext = {
+export type PsycheContext = {
   source: ActivitySource;
   actor?: string | null;
+  userIds?: string[];
+  idempotencyKey?: string | null;
 };
+
+export type PsycheVocabularyEntityType = "event_type" | "emotion_definition";
 
 const PSYCHE_DOMAIN_ID = "domain_psyche";
 
@@ -269,6 +293,446 @@ function parseJson<T>(value: string): T {
 
 function buildId(prefix: string) {
   return `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+}
+
+// Unicode 17 full case-fold mappings not reproduced by locale-independent
+// lowercasing after NFKC. Remaining mappings are identical to toLowerCase().
+const UNICODE_FULL_CASE_FOLD_OVERRIDES = new Map<string, string>([
+  ["\u00df", "ss"],
+  ["\u0345", "\u03b9"],
+  ["\u03c2", "\u03c3"],
+  ["\u1c80", "\u0432"],
+  ["\u1c81", "\u0434"],
+  ["\u1c82", "\u043e"],
+  ["\u1c83", "\u0441"],
+  ["\u1c84", "\u0442"],
+  ["\u1c85", "\u0442"],
+  ["\u1c86", "\u044a"],
+  ["\u1c87", "\u0463"],
+  ["\u1c88", "\ua64b"],
+  ["\u1e9e", "ss"],
+  ["\u1fb2", "\u1f70\u03b9"],
+  ["\u1fb3", "\u03b1\u03b9"],
+  ["\u1fb4", "\u03ac\u03b9"],
+  ["\u1fb7", "\u1fb6\u03b9"],
+  ["\u1fbc", "\u03b1\u03b9"],
+  ["\u1fc2", "\u1f74\u03b9"],
+  ["\u1fc3", "\u03b7\u03b9"],
+  ["\u1fc4", "\u03ae\u03b9"],
+  ["\u1fc7", "\u1fc6\u03b9"],
+  ["\u1fcc", "\u03b7\u03b9"],
+  ["\u1ff2", "\u1f7c\u03b9"],
+  ["\u1ff3", "\u03c9\u03b9"],
+  ["\u1ff4", "\u03ce\u03b9"],
+  ["\u1ff7", "\u1ff6\u03b9"],
+  ["\u1ffc", "\u03c9\u03b9"]
+]);
+
+function unicodeDefaultCaseFoldCharacter(character: string) {
+  const codePoint = character.codePointAt(0)!;
+
+  // Unicode default folding uses Cherokee uppercase as the stable form.
+  if (codePoint >= 0x13a0 && codePoint <= 0x13f5) {
+    return character;
+  }
+  if (codePoint >= 0x13f8 && codePoint <= 0x13fd) {
+    return String.fromCodePoint(codePoint - 0x8);
+  }
+  if (codePoint >= 0xab70 && codePoint <= 0xabbf) {
+    return String.fromCodePoint(codePoint - 0x97d0);
+  }
+
+  // Greek prosgegrammeni folds to the base vowel followed by iota.
+  if (codePoint >= 0x1f80 && codePoint <= 0x1f8f) {
+    return `${String.fromCodePoint(0x1f00 + ((codePoint - 0x1f80) % 8))}\u03b9`;
+  }
+  if (codePoint >= 0x1f90 && codePoint <= 0x1f9f) {
+    return `${String.fromCodePoint(0x1f20 + ((codePoint - 0x1f90) % 8))}\u03b9`;
+  }
+  if (codePoint >= 0x1fa0 && codePoint <= 0x1faf) {
+    return `${String.fromCodePoint(0x1f60 + ((codePoint - 0x1fa0) % 8))}\u03b9`;
+  }
+
+  return (
+    UNICODE_FULL_CASE_FOLD_OVERRIDES.get(character) ?? character.toLowerCase()
+  );
+}
+
+export function normalizePsycheVocabularyLabel(label: string) {
+  const caseFoldKey = [...label.normalize("NFKC")]
+    .map(unicodeDefaultCaseFoldCharacter)
+    .join("")
+    .normalize("NFKC")
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, "");
+
+  return caseFoldKey
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolvePsycheVocabularyOwner(
+  entityType: PsycheVocabularyEntityType,
+  requestedUserId: string | null | undefined,
+  context: PsycheContext
+) {
+  const allowedUserIds = [...new Set(context.userIds ?? [])];
+  if (
+    requestedUserId &&
+    allowedUserIds.length > 0 &&
+    !allowedUserIds.includes(requestedUserId)
+  ) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The requested vocabulary owner is outside this token's allowed users."
+    );
+  }
+  if (!requestedUserId && allowedUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "psyche_vocabulary_owner_required",
+      "Choose one owner for this reusable Psyche vocabulary entry."
+    );
+  }
+  const owner = resolveUserForMutation(
+    requestedUserId ?? allowedUserIds[0],
+    context.actor
+  );
+  if (allowedUserIds.length > 0 && !allowedUserIds.includes(owner.id)) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The reusable Psyche vocabulary owner is outside this token's allowed users.",
+      { entityType }
+    );
+  }
+  return owner;
+}
+
+function buildPsycheVocabularyId(
+  prefix: "evt" | "emo",
+  ownerUserId: string,
+  idempotencyKey: string | null | undefined
+) {
+  const key = idempotencyKey?.trim();
+  if (!key) {
+    return buildId(prefix);
+  }
+  return `${prefix}_${createHash("sha256")
+    .update(`${ownerUserId}:${key}`)
+    .digest("hex")
+    .slice(0, 16)}`;
+}
+
+type PsycheVocabularyCreatePayload = {
+  label: string;
+  description: string;
+  category: string;
+};
+
+type PsycheVocabularyIdempotencyRow = {
+  receipt_id: string;
+  owner_user_id: string;
+  entity_type: PsycheVocabularyEntityType;
+  idempotency_key: string | null;
+  request_fingerprint: string | null;
+  entity_id: string;
+  payload_label: string;
+  payload_description: string;
+  payload_category: string;
+  lifecycle_state: "active" | "deleted";
+};
+
+function fingerprintPsycheVocabularyCreate(input: {
+  entityType: PsycheVocabularyEntityType;
+  ownerUserId: string;
+  payload: PsycheVocabularyCreatePayload;
+}) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        entityType: input.entityType,
+        ownerUserId: input.ownerUserId,
+        ...input.payload
+      })
+    )
+    .digest("hex");
+}
+
+function getPsycheVocabularyIdempotencyReceipt(input: {
+  entityType: PsycheVocabularyEntityType;
+  ownerUserId: string;
+  idempotencyKey: string;
+  entityId: string;
+}) {
+  const database = getDatabase();
+  const byKey = database
+    .prepare(
+      `SELECT receipt_id, owner_user_id, entity_type, idempotency_key,
+              request_fingerprint, entity_id, payload_label,
+              payload_description, payload_category, lifecycle_state
+       FROM psyche_vocabulary_create_idempotency
+       WHERE owner_user_id = ? AND entity_type = ? AND idempotency_key = ?`
+    )
+    .get(input.ownerUserId, input.entityType, input.idempotencyKey) as
+    | PsycheVocabularyIdempotencyRow
+    | undefined;
+  return (
+    byKey ??
+    (database
+      .prepare(
+        `SELECT receipt_id, owner_user_id, entity_type, idempotency_key,
+                request_fingerprint, entity_id, payload_label,
+                payload_description, payload_category, lifecycle_state
+         FROM psyche_vocabulary_create_idempotency
+         WHERE entity_type = ? AND entity_id = ?`
+      )
+      .get(input.entityType, input.entityId) as
+      | PsycheVocabularyIdempotencyRow
+      | undefined)
+  );
+}
+
+function resolvePsycheVocabularyIdempotencyReplay(input: {
+  entityType: PsycheVocabularyEntityType;
+  ownerUserId: string;
+  idempotencyKey: string | null;
+  entityId: string;
+  payload: PsycheVocabularyCreatePayload;
+  fingerprint: string;
+}) {
+  if (!input.idempotencyKey) {
+    return undefined;
+  }
+  const receipt = getPsycheVocabularyIdempotencyReceipt({
+    entityType: input.entityType,
+    ownerUserId: input.ownerUserId,
+    idempotencyKey: input.idempotencyKey,
+    entityId: input.entityId
+  });
+  if (!receipt) {
+    return undefined;
+  }
+  if (
+    receipt.owner_user_id !== input.ownerUserId ||
+    (receipt.idempotency_key !== null &&
+      receipt.idempotency_key !== input.idempotencyKey)
+  ) {
+    throw new HttpError(
+      409,
+      "idempotency_conflict",
+      "This idempotency key collides with an existing vocabulary receipt."
+    );
+  }
+  const payloadMatches = receipt.request_fingerprint
+    ? receipt.request_fingerprint === input.fingerprint
+    : receipt.owner_user_id === input.ownerUserId &&
+      receipt.entity_type === input.entityType &&
+      receipt.payload_label === input.payload.label &&
+      receipt.payload_description === input.payload.description &&
+      receipt.payload_category === input.payload.category;
+  if (!payloadMatches) {
+    throw new HttpError(
+      409,
+      "idempotency_conflict",
+      `This idempotency key was already used for a different ${
+        input.entityType === "event_type" ? "event type" : "emotion definition"
+      }.`
+    );
+  }
+  if (receipt.lifecycle_state === "deleted") {
+    throw new HttpError(
+      409,
+      "psyche_vocabulary_idempotency_target_deleted",
+      "The original vocabulary entry was permanently deleted. This idempotency key remains consumed and cannot recreate it.",
+      { entityType: input.entityType, entityId: receipt.entity_id }
+    );
+  }
+  if (isEntityDeleted(input.entityType, receipt.entity_id)) {
+    throw new HttpError(
+      409,
+      "psyche_vocabulary_idempotency_target_in_bin",
+      "The original vocabulary entry is in the bin. Restore it instead of retrying create.",
+      { entityType: input.entityType, entityId: receipt.entity_id }
+    );
+  }
+  if (!receipt.idempotency_key) {
+    getDatabase()
+      .prepare(
+        `UPDATE psyche_vocabulary_create_idempotency
+         SET idempotency_key = ?, request_fingerprint = ?
+         WHERE receipt_id = ? AND idempotency_key IS NULL`
+      )
+      .run(input.idempotencyKey, input.fingerprint, receipt.receipt_id);
+  }
+  return receipt;
+}
+
+function recordPsycheVocabularyIdempotencyReceipt(input: {
+  entityType: PsycheVocabularyEntityType;
+  ownerUserId: string;
+  idempotencyKey: string | null;
+  fingerprint: string;
+  entityId: string;
+  payload: PsycheVocabularyCreatePayload;
+  createdAt: string;
+}) {
+  if (!input.idempotencyKey) {
+    return;
+  }
+  const receiptId = `psy_vocab_${createHash("sha256")
+    .update(
+      `${input.ownerUserId}\0${input.entityType}\0${input.idempotencyKey}`
+    )
+    .digest("hex")}`;
+  getDatabase()
+    .prepare(
+      `INSERT INTO psyche_vocabulary_create_idempotency (
+        receipt_id, owner_user_id, entity_type, idempotency_key,
+        request_fingerprint, entity_id, payload_label, payload_description,
+        payload_category, lifecycle_state, created_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, NULL)`
+    )
+    .run(
+      receiptId,
+      input.ownerUserId,
+      input.entityType,
+      input.idempotencyKey,
+      input.fingerprint,
+      input.entityId,
+      input.payload.label,
+      input.payload.description,
+      input.payload.category,
+      input.createdAt
+    );
+}
+
+function listPsycheVocabularyLabelCandidates(
+  entityType: PsycheVocabularyEntityType
+) {
+  const table =
+    entityType === "event_type" ? "event_types" : "emotion_definitions";
+  return getDatabase()
+    .prepare(`SELECT id, label, system FROM ${table} WHERE domain_id = ?`)
+    .all(PSYCHE_DOMAIN_ID) as Array<{
+    id: string;
+    label: string;
+    system: number;
+  }>;
+}
+
+function requireUniquePsycheVocabularyLabel(input: {
+  entityType: PsycheVocabularyEntityType;
+  label: string;
+  ownerUserId: string | null;
+  excludeId?: string;
+}) {
+  const normalizedLabel = normalizePsycheVocabularyLabel(input.label);
+  const duplicate = listPsycheVocabularyLabelCandidates(input.entityType).find(
+    (candidate) => {
+      if (
+        candidate.id === input.excludeId ||
+        normalizePsycheVocabularyLabel(candidate.label) !== normalizedLabel
+      ) {
+        return false;
+      }
+      const candidateOwnerId = getEntityOwnerId(input.entityType, candidate.id);
+      return (
+        candidate.system === 1 ||
+        candidateOwnerId === null ||
+        candidateOwnerId === input.ownerUserId
+      );
+    }
+  );
+  if (!duplicate) {
+    return;
+  }
+  throw new HttpError(
+    409,
+    isEntityDeleted(input.entityType, duplicate.id)
+      ? "psyche_vocabulary_label_in_bin"
+      : "psyche_vocabulary_duplicate",
+    isEntityDeleted(input.entityType, duplicate.id)
+      ? "A matching reusable label is already in the bin. Restore it instead of creating a duplicate."
+      : "A matching reusable label already exists for this owner.",
+    {
+      entityType: input.entityType,
+      existingId: duplicate.id,
+      normalizedLabel
+    }
+  );
+}
+
+export function requirePsycheVocabularyWriteScope(
+  entityType: PsycheVocabularyEntityType,
+  entityId: string,
+  context: PsycheContext,
+  snapshot?: Record<string, unknown>
+) {
+  const stored = getDatabase()
+    .prepare(
+      `SELECT system FROM ${
+        entityType === "event_type" ? "event_types" : "emotion_definitions"
+      } WHERE id = ?`
+    )
+    .get(entityId) as { system: number } | undefined;
+  const system =
+    typeof snapshot?.system === "boolean"
+      ? snapshot.system
+      : stored?.system === 1;
+  if (system) {
+    throw new HttpError(
+      409,
+      "system_vocabulary_immutable",
+      "Built-in Psyche vocabulary is read-only. Create a custom label when the built-in wording does not fit."
+    );
+  }
+  const allowedUserIds = context.userIds ?? [];
+  if (allowedUserIds.length === 0) {
+    return;
+  }
+  const ownerUserId =
+    getEntityOwnerId(entityType, entityId) ??
+    (typeof snapshot?.userId === "string" ? snapshot.userId : null);
+  if (!ownerUserId || !allowedUserIds.includes(ownerUserId)) {
+    throw new HttpError(
+      404,
+      "psyche_vocabulary_not_found",
+      "Reusable Psyche vocabulary entry not found."
+    );
+  }
+}
+
+function requireReadablePsycheVocabularyReference(
+  entityType: PsycheVocabularyEntityType,
+  entityId: string,
+  context: PsycheContext
+) {
+  const entity =
+    entityType === "event_type"
+      ? getEventTypeById(entityId)
+      : getEmotionDefinitionById(entityId);
+  if (!entity) {
+    throw new HttpError(
+      400,
+      "psyche_vocabulary_reference_invalid",
+      "The selected reusable Psyche label is unavailable. Keep the user's own wording or choose another label."
+    );
+  }
+  const allowedUserIds = context.userIds ?? [];
+  if (
+    allowedUserIds.length > 0 &&
+    !entity.system &&
+    !allowedUserIds.includes(entity.userId ?? "")
+  ) {
+    throw new HttpError(
+      404,
+      "psyche_vocabulary_not_found",
+      "Reusable Psyche vocabulary entry not found."
+    );
+  }
+  return entity;
 }
 
 function assignOwnedEntity<
@@ -283,11 +747,19 @@ function assignOwnedEntity<
     | "mode_guide_session"
     | "flashcard"
     | "trigger_report"
->(entityType: EntityType, entityId: string, userId: string | null | undefined, actor?: string | null) {
+>(
+  entityType: EntityType,
+  entityId: string,
+  userId: string | null | undefined,
+  actor?: string | null
+) {
   return setEntityOwner(entityType, entityId, userId, actor ?? null);
 }
 
-function enrichTriggerItems<T extends { id?: string }>(items: T[], prefix: string): Array<Omit<T, "id"> & { id: string }> {
+function enrichTriggerItems<T extends { id?: string }>(
+  items: T[],
+  prefix: string
+): Array<Omit<T, "id"> & { id: string }> {
   return items.map((item) => ({
     ...item,
     id: item.id ?? buildId(prefix)
@@ -353,10 +825,21 @@ function mapPsycheValue(row: PsycheValueRow): PsycheValue {
     description: row.description,
     valuedDirection: row.valued_direction,
     whyItMatters: row.why_it_matters,
-    linkedGoalIds: filterDeletedIds("goal", parseJson<string[]>(row.linked_goal_ids_json)),
-    linkedProjectIds: filterDeletedIds("project", parseJson<string[]>(row.linked_project_ids_json)),
-    linkedTaskIds: filterDeletedIds("task", parseJson<string[]>(row.linked_task_ids_json)),
-    committedActions: parseJson<PsycheValue["committedActions"]>(row.committed_actions_json),
+    linkedGoalIds: filterDeletedIds(
+      "goal",
+      parseJson<string[]>(row.linked_goal_ids_json)
+    ),
+    linkedProjectIds: filterDeletedIds(
+      "project",
+      parseJson<string[]>(row.linked_project_ids_json)
+    ),
+    linkedTaskIds: filterDeletedIds(
+      "task",
+      parseJson<string[]>(row.linked_task_ids_json)
+    ),
+    committedActions: parseJson<PsycheValue["committedActions"]>(
+      row.committed_actions_json
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -373,11 +856,20 @@ function mapBehaviorPattern(row: BehaviorPatternRow): BehaviorPattern {
     shortTermPayoff: row.short_term_payoff,
     longTermCost: row.long_term_cost,
     preferredResponse: row.preferred_response,
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
+    linkedValueIds: filterDeletedIds(
+      "psyche_value",
+      parseJson<string[]>(row.linked_value_ids_json)
+    ),
     linkedSchemaLabels: parseJson<string[]>(row.linked_schema_labels_json),
     linkedModeLabels: parseJson<string[]>(row.linked_mode_labels_json),
-    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
-    linkedBeliefIds: filterDeletedIds("belief_entry", parseJson<string[]>(row.linked_belief_ids_json)),
+    linkedModeIds: filterDeletedIds(
+      "mode_profile",
+      parseJson<string[]>(row.linked_mode_ids_json)
+    ),
+    linkedBeliefIds: filterDeletedIds(
+      "belief_entry",
+      parseJson<string[]>(row.linked_belief_ids_json)
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -396,10 +888,19 @@ function mapBehavior(row: BehaviorRow): Behavior {
     longTermCost: row.long_term_cost,
     replacementMove: row.replacement_move,
     repairPlan: row.repair_plan,
-    linkedPatternIds: filterDeletedIds("behavior_pattern", parseJson<string[]>(row.linked_pattern_ids_json)),
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
+    linkedPatternIds: filterDeletedIds(
+      "behavior_pattern",
+      parseJson<string[]>(row.linked_pattern_ids_json)
+    ),
+    linkedValueIds: filterDeletedIds(
+      "psyche_value",
+      parseJson<string[]>(row.linked_value_ids_json)
+    ),
     linkedSchemaIds: parseJson<string[]>(row.linked_schema_ids_json),
-    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
+    linkedModeIds: filterDeletedIds(
+      "mode_profile",
+      parseJson<string[]>(row.linked_mode_ids_json)
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -417,10 +918,22 @@ function mapBeliefEntry(row: BeliefEntryRow): BeliefEntry {
     evidenceFor: parseJson<string[]>(row.evidence_for_json),
     evidenceAgainst: parseJson<string[]>(row.evidence_against_json),
     flexibleAlternative: row.flexible_alternative,
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
-    linkedBehaviorIds: filterDeletedIds("behavior", parseJson<string[]>(row.linked_behavior_ids_json)),
-    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
-    linkedReportIds: filterDeletedIds("trigger_report", parseJson<string[]>(row.linked_report_ids_json)),
+    linkedValueIds: filterDeletedIds(
+      "psyche_value",
+      parseJson<string[]>(row.linked_value_ids_json)
+    ),
+    linkedBehaviorIds: filterDeletedIds(
+      "behavior",
+      parseJson<string[]>(row.linked_behavior_ids_json)
+    ),
+    linkedModeIds: filterDeletedIds(
+      "mode_profile",
+      parseJson<string[]>(row.linked_mode_ids_json)
+    ),
+    linkedReportIds: filterDeletedIds(
+      "trigger_report",
+      parseJson<string[]>(row.linked_report_ids_json)
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -442,9 +955,18 @@ function mapModeProfile(row: ModeProfileRow): ModeProfile {
     protectiveJob: row.protective_job,
     originContext: row.origin_context,
     firstAppearanceAt: row.first_appearance_at,
-    linkedPatternIds: filterDeletedIds("behavior_pattern", parseJson<string[]>(row.linked_pattern_ids_json)),
-    linkedBehaviorIds: filterDeletedIds("behavior", parseJson<string[]>(row.linked_behavior_ids_json)),
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
+    linkedPatternIds: filterDeletedIds(
+      "behavior_pattern",
+      parseJson<string[]>(row.linked_pattern_ids_json)
+    ),
+    linkedBehaviorIds: filterDeletedIds(
+      "behavior",
+      parseJson<string[]>(row.linked_behavior_ids_json)
+    ),
+    linkedValueIds: filterDeletedIds(
+      "psyche_value",
+      parseJson<string[]>(row.linked_value_ids_json)
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -478,70 +1000,130 @@ function mapFlashcard(row: FlashcardRow): Flashcard {
     imageAlt: row.image_alt,
     layout: row.layout,
     visualStyle: row.visual_style,
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
-    linkedBehaviorIds: filterDeletedIds("behavior", parseJson<string[]>(row.linked_behavior_ids_json)),
-    linkedPatternIds: filterDeletedIds("behavior_pattern", parseJson<string[]>(row.linked_pattern_ids_json)),
-    linkedBeliefIds: filterDeletedIds("belief_entry", parseJson<string[]>(row.linked_belief_ids_json)),
-    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
-    linkedReportIds: filterDeletedIds("trigger_report", parseJson<string[]>(row.linked_report_ids_json)),
+    linkedValueIds: filterDeletedIds(
+      "psyche_value",
+      parseJson<string[]>(row.linked_value_ids_json)
+    ),
+    linkedBehaviorIds: filterDeletedIds(
+      "behavior",
+      parseJson<string[]>(row.linked_behavior_ids_json)
+    ),
+    linkedPatternIds: filterDeletedIds(
+      "behavior_pattern",
+      parseJson<string[]>(row.linked_pattern_ids_json)
+    ),
+    linkedBeliefIds: filterDeletedIds(
+      "belief_entry",
+      parseJson<string[]>(row.linked_belief_ids_json)
+    ),
+    linkedModeIds: filterDeletedIds(
+      "mode_profile",
+      parseJson<string[]>(row.linked_mode_ids_json)
+    ),
+    linkedReportIds: filterDeletedIds(
+      "trigger_report",
+      parseJson<string[]>(row.linked_report_ids_json)
+    ),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
 }
 
-function mapTriggerReport(row: TriggerReportRow): TriggerReport {
-  const emotions = parseJson<TriggerReport["emotions"]>(row.emotions_json).map((emotion) =>
-    emotion.emotionDefinitionId && isEntityDeleted("emotion_definition", emotion.emotionDefinitionId)
-      ? { ...emotion, emotionDefinitionId: null }
-      : emotion
-  );
-  const thoughts = parseJson<TriggerReport["thoughts"]>(row.thoughts_json).map((thought) =>
-    thought.beliefId && isEntityDeleted("belief_entry", thought.beliefId)
-      ? { ...thought, beliefId: null }
-      : thought
-  );
-  const behaviors = parseJson<TriggerReport["behaviors"]>(row.behaviors_json).map((behavior) =>
-    behavior.behaviorId && isEntityDeleted("behavior", behavior.behaviorId)
-      ? { ...behavior, behaviorId: null }
-      : behavior
-  );
-  const modeTimeline = parseJson<TriggerReport["modeTimeline"]>(row.mode_timeline_json).map((entry) =>
-    entry.modeId && isEntityDeleted("mode_profile", entry.modeId)
-      ? { ...entry, modeId: null }
-      : entry
-  );
+function mapPersistedTriggerReport(row: TriggerReportRow): TriggerReport {
   return triggerReportSchema.parse({
     id: row.id,
     domainId: row.domain_id,
     title: row.title,
     status: row.status,
-    eventTypeId: row.event_type_id && isEntityDeleted("event_type", row.event_type_id) ? null : row.event_type_id,
+    eventTypeId: row.event_type_id,
     customEventType: row.custom_event_type,
     eventSituation: row.event_situation,
     occurredAt: row.occurred_at,
-    emotions,
-    thoughts,
-    behaviors,
-    consequences: parseJson<TriggerReport["consequences"]>(row.consequences_json),
-    linkedPatternIds: filterDeletedIds("behavior_pattern", parseJson<string[]>(row.linked_pattern_ids_json)),
-    linkedValueIds: filterDeletedIds("psyche_value", parseJson<string[]>(row.linked_value_ids_json)),
-    linkedGoalIds: filterDeletedIds("goal", parseJson<string[]>(row.linked_goal_ids_json)),
-    linkedProjectIds: filterDeletedIds("project", parseJson<string[]>(row.linked_project_ids_json)),
-    linkedTaskIds: filterDeletedIds("task", parseJson<string[]>(row.linked_task_ids_json)),
-    linkedBehaviorIds: filterDeletedIds("behavior", parseJson<string[]>(row.linked_behavior_ids_json)),
-    linkedBeliefIds: filterDeletedIds("belief_entry", parseJson<string[]>(row.linked_belief_ids_json)),
-    linkedModeIds: filterDeletedIds("mode_profile", parseJson<string[]>(row.linked_mode_ids_json)),
+    bodyCues: parseJson<string[]>(row.body_cues_json),
+    emotions: parseJson<TriggerReport["emotions"]>(row.emotions_json),
+    thoughts: parseJson<TriggerReport["thoughts"]>(row.thoughts_json),
+    behaviors: parseJson<TriggerReport["behaviors"]>(row.behaviors_json),
+    consequences: parseJson<TriggerReport["consequences"]>(
+      row.consequences_json
+    ),
+    linkedPatternIds: parseJson<string[]>(row.linked_pattern_ids_json),
+    linkedValueIds: parseJson<string[]>(row.linked_value_ids_json),
+    linkedGoalIds: parseJson<string[]>(row.linked_goal_ids_json),
+    linkedProjectIds: parseJson<string[]>(row.linked_project_ids_json),
+    linkedTaskIds: parseJson<string[]>(row.linked_task_ids_json),
+    linkedBehaviorIds: parseJson<string[]>(row.linked_behavior_ids_json),
+    linkedBeliefIds: parseJson<string[]>(row.linked_belief_ids_json),
+    linkedModeIds: parseJson<string[]>(row.linked_mode_ids_json),
     modeOverlays: parseJson<string[]>(row.mode_overlays_json),
     schemaLinks: parseJson<string[]>(row.schema_links_json),
-    modeTimeline,
+    modeTimeline: parseJson<TriggerReport["modeTimeline"]>(
+      row.mode_timeline_json
+    ),
     nextMoves: parseJson<string[]>(row.next_moves_json),
+    memoryClarity: row.memory_clarity,
+    reflection: row.reflection,
+    hypothesis: row.hypothesis,
+    hypothesisFit: row.hypothesis_fit,
+    hypothesisCorrection: row.hypothesis_correction,
+    interpretationConsent: row.interpretation_consent === 1,
+    revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
 }
 
-function scoreModeGuideSession(input: CreateModeGuideSessionInput): ModeGuideSession["results"] {
-  const answers = new Map(input.answers.map((answer) => [answer.questionKey, answer.value]));
+function serializeTriggerReport(report: TriggerReport): TriggerReport {
+  return triggerReportSchema.parse({
+    ...report,
+    eventTypeId:
+      report.eventTypeId && isEntityDeleted("event_type", report.eventTypeId)
+        ? null
+        : report.eventTypeId,
+    emotions: report.emotions.map((emotion) =>
+      emotion.emotionDefinitionId &&
+      isEntityDeleted("emotion_definition", emotion.emotionDefinitionId)
+        ? { ...emotion, emotionDefinitionId: null }
+        : emotion
+    ),
+    thoughts: report.thoughts.map((thought) =>
+      thought.beliefId && isEntityDeleted("belief_entry", thought.beliefId)
+        ? { ...thought, beliefId: null }
+        : thought
+    ),
+    behaviors: report.behaviors.map((behavior) =>
+      behavior.behaviorId && isEntityDeleted("behavior", behavior.behaviorId)
+        ? { ...behavior, behaviorId: null }
+        : behavior
+    ),
+    linkedPatternIds: filterDeletedIds(
+      "behavior_pattern",
+      report.linkedPatternIds
+    ),
+    linkedValueIds: filterDeletedIds("psyche_value", report.linkedValueIds),
+    linkedGoalIds: filterDeletedIds("goal", report.linkedGoalIds),
+    linkedProjectIds: filterDeletedIds("project", report.linkedProjectIds),
+    linkedTaskIds: filterDeletedIds("task", report.linkedTaskIds),
+    linkedBehaviorIds: filterDeletedIds("behavior", report.linkedBehaviorIds),
+    linkedBeliefIds: filterDeletedIds("belief_entry", report.linkedBeliefIds),
+    linkedModeIds: filterDeletedIds("mode_profile", report.linkedModeIds),
+    modeTimeline: report.modeTimeline.map((entry) =>
+      entry.modeId && isEntityDeleted("mode_profile", entry.modeId)
+        ? { ...entry, modeId: null }
+        : entry
+    )
+  });
+}
+
+function mapTriggerReport(row: TriggerReportRow): TriggerReport {
+  return serializeTriggerReport(mapPersistedTriggerReport(row));
+}
+
+function scoreModeGuideSession(
+  input: CreateModeGuideSessionInput
+): ModeGuideSession["results"] {
+  const answers = new Map(
+    input.answers.map((answer) => [answer.questionKey, answer.value])
+  );
   const results: ModeGuideSession["results"] = [];
 
   const coping = answers.get("coping_response");
@@ -623,7 +1205,8 @@ function scoreModeGuideSession(input: CreateModeGuideSessionInput): ModeGuideSes
         archetype: "undifferentiated",
         label: "Mixed state",
         confidence: 0.41,
-        reasoning: "The questionnaire suggests a mixed or unclear state; name the mode manually after reflection."
+        reasoning:
+          "The questionnaire suggests a mixed or unclear state; name the mode manually after reflection."
       })
     );
   }
@@ -674,14 +1257,24 @@ function getRow<T>(sql: string, id: string): T | undefined {
 }
 
 function unlinkEntityNotes(entityType: string, entityId: string): void {
-  unlinkNotesForEntity(entityType as Parameters<typeof unlinkNotesForEntity>[0], entityId, { source: "system", actor: null });
+  unlinkNotesForEntity(
+    entityType as Parameters<typeof unlinkNotesForEntity>[0],
+    entityId,
+    { source: "system", actor: null }
+  );
 }
 
-function rewriteJsonColumn<T>(table: string, column: string, transform: (value: T) => T): void {
+function rewriteJsonColumn<T>(
+  table: string,
+  column: string,
+  transform: (value: T) => T
+): void {
   const rows = getDatabase()
     .prepare(`SELECT id, ${column} AS payload FROM ${table}`)
     .all() as Array<{ id: string; payload: string }>;
-  const update = getDatabase().prepare(`UPDATE ${table} SET ${column} = ?, updated_at = ? WHERE id = ?`);
+  const update = getDatabase().prepare(
+    `UPDATE ${table} SET ${column} = ?, updated_at = ? WHERE id = ?`
+  );
   for (const row of rows) {
     const current = parseJson<T>(row.payload);
     const next = transform(current);
@@ -693,37 +1286,68 @@ function rewriteJsonColumn<T>(table: string, column: string, transform: (value: 
   }
 }
 
-function removeIdFromStringArrayColumn(table: string, column: string, targetId: string): void {
-  rewriteJsonColumn<string[]>(table, column, (values) => values.filter((value) => value !== targetId));
+function removeIdFromStringArrayColumn(
+  table: string,
+  column: string,
+  targetId: string
+): void {
+  rewriteJsonColumn<string[]>(table, column, (values) =>
+    values.filter((value) => value !== targetId)
+  );
 }
 
 function nullifyTriggerThoughtBeliefReferences(beliefId: string): void {
-  rewriteJsonColumn<TriggerReport["thoughts"]>("trigger_reports", "thoughts_json", (thoughts) =>
-    thoughts.map((thought) => (thought.beliefId === beliefId ? { ...thought, beliefId: null } : thought))
+  rewriteJsonColumn<TriggerReport["thoughts"]>(
+    "trigger_reports",
+    "thoughts_json",
+    (thoughts) =>
+      thoughts.map((thought) =>
+        thought.beliefId === beliefId ? { ...thought, beliefId: null } : thought
+      )
   );
 }
 
 function nullifyTriggerBehaviorReferences(behaviorId: string): void {
-  rewriteJsonColumn<TriggerReport["behaviors"]>("trigger_reports", "behaviors_json", (behaviors) =>
-    behaviors.map((behavior) => (behavior.behaviorId === behaviorId ? { ...behavior, behaviorId: null } : behavior))
+  rewriteJsonColumn<TriggerReport["behaviors"]>(
+    "trigger_reports",
+    "behaviors_json",
+    (behaviors) =>
+      behaviors.map((behavior) =>
+        behavior.behaviorId === behaviorId
+          ? { ...behavior, behaviorId: null }
+          : behavior
+      )
   );
 }
 
 function nullifyTriggerEmotionReferences(emotionId: string): void {
-  rewriteJsonColumn<TriggerReport["emotions"]>("trigger_reports", "emotions_json", (emotions) =>
-    emotions.map((emotion) =>
-      emotion.emotionDefinitionId === emotionId ? { ...emotion, emotionDefinitionId: null } : emotion
-    )
+  rewriteJsonColumn<TriggerReport["emotions"]>(
+    "trigger_reports",
+    "emotions_json",
+    (emotions) =>
+      emotions.map((emotion) =>
+        emotion.emotionDefinitionId === emotionId
+          ? { ...emotion, emotionDefinitionId: null }
+          : emotion
+      )
   );
 }
 
 function nullifyTriggerTimelineModeReferences(modeId: string): void {
-  rewriteJsonColumn<TriggerReport["modeTimeline"]>("trigger_reports", "mode_timeline_json", (entries) =>
-    entries.map((entry) => (entry.modeId === modeId ? { ...entry, modeId: null } : entry))
+  rewriteJsonColumn<TriggerReport["modeTimeline"]>(
+    "trigger_reports",
+    "mode_timeline_json",
+    (entries) =>
+      entries.map((entry) =>
+        entry.modeId === modeId ? { ...entry, modeId: null } : entry
+      )
   );
 }
 
-export function pruneLinkedEntityReferences(entityType: "goal" | "project" | "task", entityId: string): void {
+export function pruneLinkedEntityReferences(
+  entityType: "goal" | "project" | "task",
+  entityId: string
+): void {
   const columnByEntityType = {
     goal: "linked_goal_ids_json",
     project: "linked_project_ids_json",
@@ -781,11 +1405,31 @@ export function getEventTypeById(eventTypeId: string): EventType | undefined {
   return row ? decorateOwnedEntity("event_type", mapEventType(row)) : undefined;
 }
 
-export function createEventType(input: CreateEventTypeInput, context: PsycheContext): EventType {
+export function createEventType(
+  input: CreateEventTypeInput,
+  context: PsycheContext
+): EventType {
   const parsed = createEventTypeSchema.parse(input);
+  const owner = resolvePsycheVocabularyOwner(
+    "event_type",
+    parsed.userId,
+    context
+  );
+  const idempotencyKey = context.idempotencyKey?.trim() || null;
+  const payload: PsycheVocabularyCreatePayload = {
+    label: parsed.label,
+    description: parsed.description,
+    category: ""
+  };
+  const entityId = buildPsycheVocabularyId("evt", owner.id, idempotencyKey);
+  const fingerprint = fingerprintPsycheVocabularyCreate({
+    entityType: "event_type",
+    ownerUserId: owner.id,
+    payload
+  });
   const now = new Date().toISOString();
   const eventType = eventTypeSchema.parse({
-    id: buildId("evt"),
+    id: entityId,
     domainId: PSYCHE_DOMAIN_ID,
     label: parsed.label,
     description: parsed.description,
@@ -793,67 +1437,163 @@ export function createEventType(input: CreateEventTypeInput, context: PsycheCont
     createdAt: now,
     updatedAt: now
   });
-  getDatabase()
-    .prepare(
-      `INSERT INTO event_types (id, domain_id, label, description, system, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`
-    )
-    .run(eventType.id, eventType.domainId, eventType.label, eventType.description, eventType.createdAt, eventType.updatedAt);
-  assignOwnedEntity("event_type", eventType.id, parsed.userId, context.actor);
-  mapCreateUpdateContext({
-    entityType: "event_type",
-    entityId: eventType.id,
-    title: "Event type added",
-    eventKind: "event_type.created",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: { domainId: eventType.domainId }
+  return runInTransaction(() => {
+    const receipt = resolvePsycheVocabularyIdempotencyReplay({
+      entityType: "event_type",
+      ownerUserId: owner.id,
+      idempotencyKey,
+      entityId,
+      payload,
+      fingerprint
+    });
+    if (receipt) {
+      const replayRow = getRow<EventTypeRow>(
+        `SELECT id, domain_id, label, description, system, created_at, updated_at
+         FROM event_types
+         WHERE id = ?`,
+        receipt.entity_id
+      );
+      if (
+        !replayRow ||
+        getEntityOwnerId("event_type", receipt.entity_id) !== owner.id
+      ) {
+        throw new HttpError(
+          409,
+          "psyche_vocabulary_idempotency_target_deleted",
+          "The original vocabulary entry is unavailable. This idempotency key remains consumed and cannot recreate it.",
+          { entityType: "event_type", entityId: receipt.entity_id }
+        );
+      }
+      return decorateOwnedEntity("event_type", mapEventType(replayRow));
+    }
+    if (
+      getRow<EventTypeRow>(
+        `SELECT id, domain_id, label, description, system, created_at, updated_at
+         FROM event_types
+         WHERE id = ?`,
+        eventType.id
+      )
+    ) {
+      throw new HttpError(
+        409,
+        "idempotency_conflict",
+        "The event type id collides with an existing record."
+      );
+    }
+    requireUniquePsycheVocabularyLabel({
+      entityType: "event_type",
+      label: eventType.label,
+      ownerUserId: owner.id
+    });
+    getDatabase()
+      .prepare(
+        `INSERT INTO event_types (id, domain_id, label, description, system, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`
+      )
+      .run(
+        eventType.id,
+        eventType.domainId,
+        eventType.label,
+        eventType.description,
+        eventType.createdAt,
+        eventType.updatedAt
+      );
+    assignOwnedEntity("event_type", eventType.id, owner.id, context.actor);
+    recordPsycheVocabularyIdempotencyReceipt({
+      entityType: "event_type",
+      ownerUserId: owner.id,
+      idempotencyKey,
+      fingerprint,
+      entityId: eventType.id,
+      payload,
+      createdAt: now
+    });
+    mapCreateUpdateContext({
+      entityType: "event_type",
+      entityId: eventType.id,
+      title: "Event type added",
+      eventKind: "event_type.created",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { domainId: eventType.domainId }
+    });
+    return decorateOwnedEntity("event_type", eventType);
   });
-  return decorateOwnedEntity("event_type", eventType);
 }
 
-export function updateEventType(eventTypeId: string, patch: UpdateEventTypeInput, context: PsycheContext): EventType | undefined {
+export function updateEventType(
+  eventTypeId: string,
+  patch: UpdateEventTypeInput,
+  context: PsycheContext
+): EventType | undefined {
   const existing = getEventTypeById(eventTypeId);
   if (!existing) {
     return undefined;
   }
+  requirePsycheVocabularyWriteScope(
+    "event_type",
+    eventTypeId,
+    context,
+    existing as unknown as Record<string, unknown>
+  );
 
   const parsed = updateEventTypeSchema.parse(patch);
+  const nextOwner =
+    parsed.userId !== undefined
+      ? resolvePsycheVocabularyOwner("event_type", parsed.userId, context)
+      : null;
   const updated = eventTypeSchema.parse({
     ...existing,
     ...parsed,
     updatedAt: new Date().toISOString()
   });
 
-  getDatabase()
-    .prepare(
-      `UPDATE event_types
-       SET label = ?, description = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(updated.label, updated.description, updated.updatedAt, eventTypeId);
-  if (parsed.userId !== undefined) {
-    assignOwnedEntity("event_type", eventTypeId, parsed.userId, context.actor);
-  }
+  return runInTransaction(() => {
+    requireUniquePsycheVocabularyLabel({
+      entityType: "event_type",
+      label: updated.label,
+      ownerUserId: nextOwner?.id ?? getEntityOwnerId("event_type", eventTypeId),
+      excludeId: eventTypeId
+    });
+    getDatabase()
+      .prepare(
+        `UPDATE event_types
+         SET label = ?, description = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(updated.label, updated.description, updated.updatedAt, eventTypeId);
+    if (nextOwner) {
+      assignOwnedEntity("event_type", eventTypeId, nextOwner.id, context.actor);
+    }
 
-  mapCreateUpdateContext({
-    entityType: "event_type",
-    entityId: eventTypeId,
-    title: "Event type updated",
-    eventKind: "event_type.updated",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: { domainId: updated.domainId }
+    mapCreateUpdateContext({
+      entityType: "event_type",
+      entityId: eventTypeId,
+      title: "Event type updated",
+      eventKind: "event_type.updated",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { domainId: updated.domainId }
+    });
+
+    return decorateOwnedEntity("event_type", updated);
   });
-
-  return decorateOwnedEntity("event_type", updated);
 }
 
-export function deleteEventType(eventTypeId: string, context: PsycheContext): EventType | undefined {
+export function deleteEventType(
+  eventTypeId: string,
+  context: PsycheContext
+): EventType | undefined {
   const existing = getEventTypeById(eventTypeId);
   if (!existing) {
     return undefined;
   }
+  requirePsycheVocabularyWriteScope(
+    "event_type",
+    eventTypeId,
+    context,
+    existing as unknown as Record<string, unknown>
+  );
 
   return runInTransaction(() => {
     unlinkEntityNotes("event_type", eventTypeId);
@@ -884,10 +1624,15 @@ export function listEmotionDefinitions(): EmotionDefinition[] {
        ORDER BY system DESC, label`
     )
     .all(PSYCHE_DOMAIN_ID) as EmotionDefinitionRow[];
-  return filterDeletedEntities("emotion_definition", rows.map(mapEmotionDefinition));
+  return filterDeletedEntities(
+    "emotion_definition",
+    rows.map(mapEmotionDefinition)
+  );
 }
 
-export function getEmotionDefinitionById(emotionId: string): EmotionDefinition | undefined {
+export function getEmotionDefinitionById(
+  emotionId: string
+): EmotionDefinition | undefined {
   if (isEntityDeleted("emotion_definition", emotionId)) {
     return undefined;
   }
@@ -902,11 +1647,31 @@ export function getEmotionDefinitionById(emotionId: string): EmotionDefinition |
     : undefined;
 }
 
-export function createEmotionDefinition(input: CreateEmotionDefinitionInput, context: PsycheContext): EmotionDefinition {
+export function createEmotionDefinition(
+  input: CreateEmotionDefinitionInput,
+  context: PsycheContext
+): EmotionDefinition {
   const parsed = createEmotionDefinitionSchema.parse(input);
+  const owner = resolvePsycheVocabularyOwner(
+    "emotion_definition",
+    parsed.userId,
+    context
+  );
+  const idempotencyKey = context.idempotencyKey?.trim() || null;
+  const payload: PsycheVocabularyCreatePayload = {
+    label: parsed.label,
+    description: parsed.description,
+    category: parsed.category
+  };
+  const entityId = buildPsycheVocabularyId("emo", owner.id, idempotencyKey);
+  const fingerprint = fingerprintPsycheVocabularyCreate({
+    entityType: "emotion_definition",
+    ownerUserId: owner.id,
+    payload
+  });
   const now = new Date().toISOString();
   const emotion = emotionDefinitionSchema.parse({
-    id: buildId("emo"),
+    id: entityId,
     domainId: PSYCHE_DOMAIN_ID,
     label: parsed.label,
     description: parsed.description,
@@ -915,28 +1680,97 @@ export function createEmotionDefinition(input: CreateEmotionDefinitionInput, con
     createdAt: now,
     updatedAt: now
   });
-  getDatabase()
-    .prepare(
-      `INSERT INTO emotion_definitions (id, domain_id, label, description, category, system, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
-    )
-    .run(emotion.id, emotion.domainId, emotion.label, emotion.description, emotion.category, emotion.createdAt, emotion.updatedAt);
-  assignOwnedEntity(
-    "emotion_definition",
-    emotion.id,
-    parsed.userId,
-    context.actor
-  );
-  mapCreateUpdateContext({
-    entityType: "emotion_definition",
-    entityId: emotion.id,
-    title: "Emotion definition added",
-    eventKind: "emotion_definition.created",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: { domainId: emotion.domainId }
+  return runInTransaction(() => {
+    const receipt = resolvePsycheVocabularyIdempotencyReplay({
+      entityType: "emotion_definition",
+      ownerUserId: owner.id,
+      idempotencyKey,
+      entityId,
+      payload,
+      fingerprint
+    });
+    if (receipt) {
+      const replayRow = getRow<EmotionDefinitionRow>(
+        `SELECT id, domain_id, label, description, category, system, created_at, updated_at
+         FROM emotion_definitions
+         WHERE id = ?`,
+        receipt.entity_id
+      );
+      if (
+        !replayRow ||
+        getEntityOwnerId("emotion_definition", receipt.entity_id) !== owner.id
+      ) {
+        throw new HttpError(
+          409,
+          "psyche_vocabulary_idempotency_target_deleted",
+          "The original vocabulary entry is unavailable. This idempotency key remains consumed and cannot recreate it.",
+          { entityType: "emotion_definition", entityId: receipt.entity_id }
+        );
+      }
+      return decorateOwnedEntity(
+        "emotion_definition",
+        mapEmotionDefinition(replayRow)
+      );
+    }
+    if (
+      getRow<EmotionDefinitionRow>(
+        `SELECT id, domain_id, label, description, category, system, created_at, updated_at
+         FROM emotion_definitions
+         WHERE id = ?`,
+        emotion.id
+      )
+    ) {
+      throw new HttpError(
+        409,
+        "idempotency_conflict",
+        "The emotion definition id collides with an existing record."
+      );
+    }
+    requireUniquePsycheVocabularyLabel({
+      entityType: "emotion_definition",
+      label: emotion.label,
+      ownerUserId: owner.id
+    });
+    getDatabase()
+      .prepare(
+        `INSERT INTO emotion_definitions (id, domain_id, label, description, category, system, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
+      )
+      .run(
+        emotion.id,
+        emotion.domainId,
+        emotion.label,
+        emotion.description,
+        emotion.category,
+        emotion.createdAt,
+        emotion.updatedAt
+      );
+    assignOwnedEntity(
+      "emotion_definition",
+      emotion.id,
+      owner.id,
+      context.actor
+    );
+    recordPsycheVocabularyIdempotencyReceipt({
+      entityType: "emotion_definition",
+      ownerUserId: owner.id,
+      idempotencyKey,
+      fingerprint,
+      entityId: emotion.id,
+      payload,
+      createdAt: now
+    });
+    mapCreateUpdateContext({
+      entityType: "emotion_definition",
+      entityId: emotion.id,
+      title: "Emotion definition added",
+      eventKind: "emotion_definition.created",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { domainId: emotion.domainId }
+    });
+    return decorateOwnedEntity("emotion_definition", emotion);
   });
-  return decorateOwnedEntity("emotion_definition", emotion);
 }
 
 export function updateEmotionDefinition(
@@ -948,48 +1782,86 @@ export function updateEmotionDefinition(
   if (!existing) {
     return undefined;
   }
+  requirePsycheVocabularyWriteScope(
+    "emotion_definition",
+    emotionId,
+    context,
+    existing as unknown as Record<string, unknown>
+  );
 
   const parsed = updateEmotionDefinitionSchema.parse(patch);
+  const nextOwner =
+    parsed.userId !== undefined
+      ? resolvePsycheVocabularyOwner(
+          "emotion_definition",
+          parsed.userId,
+          context
+        )
+      : null;
   const updated = emotionDefinitionSchema.parse({
     ...existing,
     ...parsed,
     updatedAt: new Date().toISOString()
   });
 
-  getDatabase()
-    .prepare(
-      `UPDATE emotion_definitions
-       SET label = ?, description = ?, category = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(updated.label, updated.description, updated.category, updated.updatedAt, emotionId);
-  if (parsed.userId !== undefined) {
-    assignOwnedEntity(
-      "emotion_definition",
-      emotionId,
-      parsed.userId,
-      context.actor
-    );
-  }
+  return runInTransaction(() => {
+    requireUniquePsycheVocabularyLabel({
+      entityType: "emotion_definition",
+      label: updated.label,
+      ownerUserId:
+        nextOwner?.id ?? getEntityOwnerId("emotion_definition", emotionId),
+      excludeId: emotionId
+    });
+    getDatabase()
+      .prepare(
+        `UPDATE emotion_definitions
+         SET label = ?, description = ?, category = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        updated.label,
+        updated.description,
+        updated.category,
+        updated.updatedAt,
+        emotionId
+      );
+    if (nextOwner) {
+      assignOwnedEntity(
+        "emotion_definition",
+        emotionId,
+        nextOwner.id,
+        context.actor
+      );
+    }
 
-  mapCreateUpdateContext({
-    entityType: "emotion_definition",
-    entityId: emotionId,
-    title: "Emotion definition updated",
-    eventKind: "emotion_definition.updated",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: { domainId: updated.domainId }
+    mapCreateUpdateContext({
+      entityType: "emotion_definition",
+      entityId: emotionId,
+      title: "Emotion definition updated",
+      eventKind: "emotion_definition.updated",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { domainId: updated.domainId }
+    });
+
+    return decorateOwnedEntity("emotion_definition", updated);
   });
-
-  return decorateOwnedEntity("emotion_definition", updated);
 }
 
-export function deleteEmotionDefinition(emotionId: string, context: PsycheContext): EmotionDefinition | undefined {
+export function deleteEmotionDefinition(
+  emotionId: string,
+  context: PsycheContext
+): EmotionDefinition | undefined {
   const existing = getEmotionDefinitionById(emotionId);
   if (!existing) {
     return undefined;
   }
+  requirePsycheVocabularyWriteScope(
+    "emotion_definition",
+    emotionId,
+    context,
+    existing as unknown as Record<string, unknown>
+  );
 
   return runInTransaction(() => {
     nullifyTriggerEmotionReferences(emotionId);
@@ -1038,10 +1910,15 @@ export function getPsycheValueById(valueId: string): PsycheValue | undefined {
      WHERE id = ?`,
     valueId
   );
-  return row ? decorateOwnedEntity("psyche_value", mapPsycheValue(row)) : undefined;
+  return row
+    ? decorateOwnedEntity("psyche_value", mapPsycheValue(row))
+    : undefined;
 }
 
-export function createPsycheValue(input: CreatePsycheValueInput, context: PsycheContext): PsycheValue {
+export function createPsycheValue(
+  input: CreatePsycheValueInput,
+  context: PsycheContext
+): PsycheValue {
   const parsed = createPsycheValueSchema.parse(input);
   const now = new Date().toISOString();
   const value = psycheValueSchema.parse({
@@ -1091,11 +1968,21 @@ export function createPsycheValue(input: CreatePsycheValueInput, context: Psyche
     actor: context.actor ?? null,
     metadata: { domainId: value.domainId }
   });
-  recordPsycheClarityReward("psyche_value", value.id, value.title, "psyche_value_defined", context);
+  recordPsycheClarityReward(
+    "psyche_value",
+    value.id,
+    value.title,
+    "psyche_value_defined",
+    context
+  );
   return decorateOwnedEntity("psyche_value", value);
 }
 
-export function updatePsycheValue(valueId: string, patch: UpdatePsycheValueInput, context: PsycheContext): PsycheValue | undefined {
+export function updatePsycheValue(
+  valueId: string,
+  patch: UpdatePsycheValueInput,
+  context: PsycheContext
+): PsycheValue | undefined {
   const existing = getPsycheValueById(valueId);
   if (!existing) {
     return undefined;
@@ -1143,19 +2030,46 @@ export function updatePsycheValue(valueId: string, patch: UpdatePsycheValueInput
   return decorateOwnedEntity("psyche_value", updated);
 }
 
-export function deletePsycheValue(valueId: string, context: PsycheContext): PsycheValue | undefined {
+export function deletePsycheValue(
+  valueId: string,
+  context: PsycheContext
+): PsycheValue | undefined {
   const existing = getPsycheValueById(valueId);
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("behavior_patterns", "linked_value_ids_json", valueId);
-    removeIdFromStringArrayColumn("psyche_behaviors", "linked_value_ids_json", valueId);
-    removeIdFromStringArrayColumn("belief_entries", "linked_value_ids_json", valueId);
-    removeIdFromStringArrayColumn("mode_profiles", "linked_value_ids_json", valueId);
-    removeIdFromStringArrayColumn("trigger_reports", "linked_value_ids_json", valueId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_value_ids_json", valueId);
+    removeIdFromStringArrayColumn(
+      "behavior_patterns",
+      "linked_value_ids_json",
+      valueId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_behaviors",
+      "linked_value_ids_json",
+      valueId
+    );
+    removeIdFromStringArrayColumn(
+      "belief_entries",
+      "linked_value_ids_json",
+      valueId
+    );
+    removeIdFromStringArrayColumn(
+      "mode_profiles",
+      "linked_value_ids_json",
+      valueId
+    );
+    removeIdFromStringArrayColumn(
+      "trigger_reports",
+      "linked_value_ids_json",
+      valueId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_value_ids_json",
+      valueId
+    );
     unlinkEntityNotes("psyche_value", valueId);
     clearEntityOwner("psyche_value", valueId);
     getDatabase()
@@ -1187,10 +2101,15 @@ export function listBehaviorPatterns(): BehaviorPattern[] {
        ORDER BY updated_at DESC`
     )
     .all(PSYCHE_DOMAIN_ID) as BehaviorPatternRow[];
-  return filterDeletedEntities("behavior_pattern", rows.map(mapBehaviorPattern));
+  return filterDeletedEntities(
+    "behavior_pattern",
+    rows.map(mapBehaviorPattern)
+  );
 }
 
-export function getBehaviorPatternById(patternId: string): BehaviorPattern | undefined {
+export function getBehaviorPatternById(
+  patternId: string
+): BehaviorPattern | undefined {
   if (isEntityDeleted("behavior_pattern", patternId)) {
     return undefined;
   }
@@ -1208,7 +2127,10 @@ export function getBehaviorPatternById(patternId: string): BehaviorPattern | und
     : undefined;
 }
 
-export function createBehaviorPattern(input: CreateBehaviorPatternInput, context: PsycheContext): BehaviorPattern {
+export function createBehaviorPattern(
+  input: CreateBehaviorPatternInput,
+  context: PsycheContext
+): BehaviorPattern {
   const parsed = createBehaviorPatternSchema.parse(input);
   const now = new Date().toISOString();
   const pattern = behaviorPatternSchema.parse({
@@ -1256,7 +2178,12 @@ export function createBehaviorPattern(input: CreateBehaviorPatternInput, context
       pattern.createdAt,
       pattern.updatedAt
     );
-  assignOwnedEntity("behavior_pattern", pattern.id, parsed.userId, context.actor);
+  assignOwnedEntity(
+    "behavior_pattern",
+    pattern.id,
+    parsed.userId,
+    context.actor
+  );
 
   mapCreateUpdateContext({
     entityType: "behavior_pattern",
@@ -1267,11 +2194,21 @@ export function createBehaviorPattern(input: CreateBehaviorPatternInput, context
     actor: context.actor ?? null,
     metadata: { domainId: pattern.domainId }
   });
-  recordPsycheClarityReward("behavior_pattern", pattern.id, pattern.title, "psyche_pattern_defined", context);
+  recordPsycheClarityReward(
+    "behavior_pattern",
+    pattern.id,
+    pattern.title,
+    "psyche_pattern_defined",
+    context
+  );
   return decorateOwnedEntity("behavior_pattern", pattern);
 }
 
-export function updateBehaviorPattern(patternId: string, patch: UpdateBehaviorPatternInput, context: PsycheContext): BehaviorPattern | undefined {
+export function updateBehaviorPattern(
+  patternId: string,
+  patch: UpdateBehaviorPatternInput,
+  context: PsycheContext
+): BehaviorPattern | undefined {
   const existing = getBehaviorPatternById(patternId);
   if (!existing) {
     return undefined;
@@ -1328,17 +2265,36 @@ export function updateBehaviorPattern(patternId: string, patch: UpdateBehaviorPa
   return decorateOwnedEntity("behavior_pattern", updated);
 }
 
-export function deleteBehaviorPattern(patternId: string, context: PsycheContext): BehaviorPattern | undefined {
+export function deleteBehaviorPattern(
+  patternId: string,
+  context: PsycheContext
+): BehaviorPattern | undefined {
   const existing = getBehaviorPatternById(patternId);
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("psyche_behaviors", "linked_pattern_ids_json", patternId);
-    removeIdFromStringArrayColumn("mode_profiles", "linked_pattern_ids_json", patternId);
-    removeIdFromStringArrayColumn("trigger_reports", "linked_pattern_ids_json", patternId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_pattern_ids_json", patternId);
+    removeIdFromStringArrayColumn(
+      "psyche_behaviors",
+      "linked_pattern_ids_json",
+      patternId
+    );
+    removeIdFromStringArrayColumn(
+      "mode_profiles",
+      "linked_pattern_ids_json",
+      patternId
+    );
+    removeIdFromStringArrayColumn(
+      "trigger_reports",
+      "linked_pattern_ids_json",
+      patternId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_pattern_ids_json",
+      patternId
+    );
     unlinkEntityNotes("behavior_pattern", patternId);
     clearEntityOwner("behavior_pattern", patternId);
     getDatabase()
@@ -1389,7 +2345,10 @@ export function getBehaviorById(behaviorId: string): Behavior | undefined {
   return row ? decorateOwnedEntity("behavior", mapBehavior(row)) : undefined;
 }
 
-export function createBehavior(input: CreateBehaviorInput, context: PsycheContext): Behavior {
+export function createBehavior(
+  input: CreateBehaviorInput,
+  context: PsycheContext
+): Behavior {
   const parsed = createBehaviorSchema.parse(input);
   const now = new Date().toISOString();
   const behavior = behaviorSchema.parse({
@@ -1438,11 +2397,21 @@ export function createBehavior(input: CreateBehaviorInput, context: PsycheContex
     actor: context.actor ?? null,
     metadata: { kind: behavior.kind, domainId: behavior.domainId }
   });
-  recordPsycheClarityReward("behavior", behavior.id, behavior.title, "psyche_behavior_defined", context);
+  recordPsycheClarityReward(
+    "behavior",
+    behavior.id,
+    behavior.title,
+    "psyche_behavior_defined",
+    context
+  );
   return decorateOwnedEntity("behavior", behavior);
 }
 
-export function updateBehavior(behaviorId: string, patch: UpdateBehaviorInput, context: PsycheContext): Behavior | undefined {
+export function updateBehavior(
+  behaviorId: string,
+  patch: UpdateBehaviorInput,
+  context: PsycheContext
+): Behavior | undefined {
   const existing = getBehaviorById(behaviorId);
   if (!existing) {
     return undefined;
@@ -1495,17 +2464,36 @@ export function updateBehavior(behaviorId: string, patch: UpdateBehaviorInput, c
   return decorateOwnedEntity("behavior", updated);
 }
 
-export function deleteBehavior(behaviorId: string, context: PsycheContext): Behavior | undefined {
+export function deleteBehavior(
+  behaviorId: string,
+  context: PsycheContext
+): Behavior | undefined {
   const existing = getBehaviorById(behaviorId);
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("belief_entries", "linked_behavior_ids_json", behaviorId);
-    removeIdFromStringArrayColumn("mode_profiles", "linked_behavior_ids_json", behaviorId);
-    removeIdFromStringArrayColumn("trigger_reports", "linked_behavior_ids_json", behaviorId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_behavior_ids_json", behaviorId);
+    removeIdFromStringArrayColumn(
+      "belief_entries",
+      "linked_behavior_ids_json",
+      behaviorId
+    );
+    removeIdFromStringArrayColumn(
+      "mode_profiles",
+      "linked_behavior_ids_json",
+      behaviorId
+    );
+    removeIdFromStringArrayColumn(
+      "trigger_reports",
+      "linked_behavior_ids_json",
+      behaviorId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_behavior_ids_json",
+      behaviorId
+    );
     nullifyTriggerBehaviorReferences(behaviorId);
     unlinkEntityNotes("behavior", behaviorId);
     clearEntityOwner("behavior", behaviorId);
@@ -1554,10 +2542,15 @@ export function getBeliefEntryById(beliefId: string): BeliefEntry | undefined {
      WHERE id = ?`,
     beliefId
   );
-  return row ? decorateOwnedEntity("belief_entry", mapBeliefEntry(row)) : undefined;
+  return row
+    ? decorateOwnedEntity("belief_entry", mapBeliefEntry(row))
+    : undefined;
 }
 
-export function createBeliefEntry(input: CreateBeliefEntryInput, context: PsycheContext): BeliefEntry {
+export function createBeliefEntry(
+  input: CreateBeliefEntryInput,
+  context: PsycheContext
+): BeliefEntry {
   const parsed = createBeliefEntrySchema.parse(input);
   const now = new Date().toISOString();
   const belief = beliefEntrySchema.parse({
@@ -1605,11 +2598,21 @@ export function createBeliefEntry(input: CreateBeliefEntryInput, context: Psyche
     actor: context.actor ?? null,
     metadata: { schemaId: belief.schemaId ?? "" }
   });
-  recordPsycheClarityReward("belief_entry", belief.id, belief.statement, "psyche_belief_captured", context);
+  recordPsycheClarityReward(
+    "belief_entry",
+    belief.id,
+    belief.statement,
+    "psyche_belief_captured",
+    context
+  );
   return decorateOwnedEntity("belief_entry", belief);
 }
 
-export function updateBeliefEntry(beliefId: string, patch: UpdateBeliefEntryInput, context: PsycheContext): BeliefEntry | undefined {
+export function updateBeliefEntry(
+  beliefId: string,
+  patch: UpdateBeliefEntryInput,
+  context: PsycheContext
+): BeliefEntry | undefined {
   const existing = getBeliefEntryById(beliefId);
   if (!existing) {
     return undefined;
@@ -1661,16 +2664,31 @@ export function updateBeliefEntry(beliefId: string, patch: UpdateBeliefEntryInpu
   return decorateOwnedEntity("belief_entry", updated);
 }
 
-export function deleteBeliefEntry(beliefId: string, context: PsycheContext): BeliefEntry | undefined {
+export function deleteBeliefEntry(
+  beliefId: string,
+  context: PsycheContext
+): BeliefEntry | undefined {
   const existing = getBeliefEntryById(beliefId);
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("behavior_patterns", "linked_belief_ids_json", beliefId);
-    removeIdFromStringArrayColumn("trigger_reports", "linked_belief_ids_json", beliefId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_belief_ids_json", beliefId);
+    removeIdFromStringArrayColumn(
+      "behavior_patterns",
+      "linked_belief_ids_json",
+      beliefId
+    );
+    removeIdFromStringArrayColumn(
+      "trigger_reports",
+      "linked_belief_ids_json",
+      beliefId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_belief_ids_json",
+      beliefId
+    );
     nullifyTriggerThoughtBeliefReferences(beliefId);
     unlinkEntityNotes("belief_entry", beliefId);
     clearEntityOwner("belief_entry", beliefId);
@@ -1717,10 +2735,15 @@ export function getModeProfileById(modeId: string): ModeProfile | undefined {
      WHERE id = ?`,
     modeId
   );
-  return row ? decorateOwnedEntity("mode_profile", mapModeProfile(row)) : undefined;
+  return row
+    ? decorateOwnedEntity("mode_profile", mapModeProfile(row))
+    : undefined;
 }
 
-export function createModeProfile(input: CreateModeProfileInput, context: PsycheContext): ModeProfile {
+export function createModeProfile(
+  input: CreateModeProfileInput,
+  context: PsycheContext
+): ModeProfile {
   const parsed = createModeProfileSchema.parse(input);
   const now = new Date().toISOString();
   const mode = modeProfileSchema.parse({
@@ -1770,11 +2793,21 @@ export function createModeProfile(input: CreateModeProfileInput, context: Psyche
     actor: context.actor ?? null,
     metadata: { family: mode.family }
   });
-  recordPsycheClarityReward("mode_profile", mode.id, mode.title, "psyche_mode_named", context);
+  recordPsycheClarityReward(
+    "mode_profile",
+    mode.id,
+    mode.title,
+    "psyche_mode_named",
+    context
+  );
   return decorateOwnedEntity("mode_profile", mode);
 }
 
-export function updateModeProfile(modeId: string, patch: UpdateModeProfileInput, context: PsycheContext): ModeProfile | undefined {
+export function updateModeProfile(
+  modeId: string,
+  patch: UpdateModeProfileInput,
+  context: PsycheContext
+): ModeProfile | undefined {
   const existing = getModeProfileById(modeId);
   if (!existing) {
     return undefined;
@@ -1832,24 +2865,45 @@ export function updateModeProfile(modeId: string, patch: UpdateModeProfileInput,
   return decorateOwnedEntity("mode_profile", updated);
 }
 
-export function deleteModeProfile(modeId: string, context: PsycheContext): ModeProfile | undefined {
+export function deleteModeProfile(
+  modeId: string,
+  context: PsycheContext
+): ModeProfile | undefined {
   const existing = getModeProfileById(modeId);
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("behavior_patterns", "linked_mode_ids_json", modeId);
-    removeIdFromStringArrayColumn("psyche_behaviors", "linked_mode_ids_json", modeId);
-    removeIdFromStringArrayColumn("belief_entries", "linked_mode_ids_json", modeId);
-    removeIdFromStringArrayColumn("trigger_reports", "linked_mode_ids_json", modeId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_mode_ids_json", modeId);
+    removeIdFromStringArrayColumn(
+      "behavior_patterns",
+      "linked_mode_ids_json",
+      modeId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_behaviors",
+      "linked_mode_ids_json",
+      modeId
+    );
+    removeIdFromStringArrayColumn(
+      "belief_entries",
+      "linked_mode_ids_json",
+      modeId
+    );
+    removeIdFromStringArrayColumn(
+      "trigger_reports",
+      "linked_mode_ids_json",
+      modeId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_mode_ids_json",
+      modeId
+    );
     nullifyTriggerTimelineModeReferences(modeId);
     unlinkEntityNotes("mode_profile", modeId);
     clearEntityOwner("mode_profile", modeId);
-    getDatabase()
-      .prepare(`DELETE FROM mode_profiles WHERE id = ?`)
-      .run(modeId);
+    getDatabase().prepare(`DELETE FROM mode_profiles WHERE id = ?`).run(modeId);
 
     mapCreateUpdateContext({
       entityType: "mode_profile",
@@ -1873,10 +2927,15 @@ export function listModeGuideSessions(limit = 20): ModeGuideSession[] {
        LIMIT ?`
     )
     .all(limit) as ModeGuideSessionRow[];
-  return filterDeletedEntities("mode_guide_session", rows.map(mapModeGuideSession));
+  return filterDeletedEntities(
+    "mode_guide_session",
+    rows.map(mapModeGuideSession)
+  );
 }
 
-export function getModeGuideSessionById(sessionId: string): ModeGuideSession | undefined {
+export function getModeGuideSessionById(
+  sessionId: string
+): ModeGuideSession | undefined {
   if (isEntityDeleted("mode_guide_session", sessionId)) {
     return undefined;
   }
@@ -1891,7 +2950,10 @@ export function getModeGuideSessionById(sessionId: string): ModeGuideSession | u
     : undefined;
 }
 
-export function createModeGuideSession(input: CreateModeGuideSessionInput, context: PsycheContext): ModeGuideSession {
+export function createModeGuideSession(
+  input: CreateModeGuideSessionInput,
+  context: PsycheContext
+): ModeGuideSession {
   const parsed = createModeGuideSessionSchema.parse(input);
   const now = new Date().toISOString();
   const session = modeGuideSessionSchema.parse({
@@ -1908,7 +2970,14 @@ export function createModeGuideSession(input: CreateModeGuideSessionInput, conte
       `INSERT INTO mode_guide_sessions (id, summary, answers_json, results_json, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(session.id, session.summary, JSON.stringify(session.answers), JSON.stringify(session.results), session.createdAt, session.updatedAt);
+    .run(
+      session.id,
+      session.summary,
+      JSON.stringify(session.answers),
+      JSON.stringify(session.results),
+      session.createdAt,
+      session.updatedAt
+    );
   assignOwnedEntity(
     "mode_guide_session",
     session.id,
@@ -1955,7 +3024,13 @@ export function updateModeGuideSession(
        SET summary = ?, answers_json = ?, results_json = ?, updated_at = ?
        WHERE id = ?`
     )
-    .run(updated.summary, JSON.stringify(updated.answers), JSON.stringify(updated.results), updated.updatedAt, sessionId);
+    .run(
+      updated.summary,
+      JSON.stringify(updated.answers),
+      JSON.stringify(updated.results),
+      updated.updatedAt,
+      sessionId
+    );
   if (parsed.userId !== undefined) {
     assignOwnedEntity(
       "mode_guide_session",
@@ -1977,7 +3052,10 @@ export function updateModeGuideSession(
   return decorateOwnedEntity("mode_guide_session", updated);
 }
 
-export function deleteModeGuideSession(sessionId: string, context: PsycheContext): ModeGuideSession | undefined {
+export function deleteModeGuideSession(
+  sessionId: string,
+  context: PsycheContext
+): ModeGuideSession | undefined {
   const existing = getModeGuideSessionById(sessionId);
   if (!existing) {
     return undefined;
@@ -2032,7 +3110,10 @@ export function getFlashcardById(flashcardId: string): Flashcard | undefined {
   return row ? decorateOwnedEntity("flashcard", mapFlashcard(row)) : undefined;
 }
 
-export function createFlashcard(input: CreateFlashcardInput, context: PsycheContext): Flashcard {
+export function createFlashcard(
+  input: CreateFlashcardInput,
+  context: PsycheContext
+): Flashcard {
   const parsed = createFlashcardSchema.parse(input);
   const now = new Date().toISOString();
   const flashcard = flashcardSchema.parse({
@@ -2158,7 +3239,10 @@ export function updateFlashcard(
   return decorateOwnedEntity("flashcard", updated);
 }
 
-export function deleteFlashcard(flashcardId: string, context: PsycheContext): Flashcard | undefined {
+export function deleteFlashcard(
+  flashcardId: string,
+  context: PsycheContext
+): Flashcard | undefined {
   const existing = getFlashcardById(flashcardId);
   if (!existing) {
     return undefined;
@@ -2184,45 +3268,567 @@ export function deleteFlashcard(flashcardId: string, context: PsycheContext): Fl
   });
 }
 
-export function listTriggerReports(limit?: number): TriggerReport[] {
-  const limitSql = limit ? "LIMIT ?" : "";
-  const rows = getDatabase()
-    .prepare(
-      `SELECT
-         id, domain_id, title, status, event_type_id, custom_event_type, event_situation, occurred_at, emotions_json, thoughts_json,
-         behaviors_json, consequences_json, linked_pattern_ids_json, linked_value_ids_json, linked_goal_ids_json, linked_project_ids_json,
-         linked_task_ids_json, linked_behavior_ids_json, linked_belief_ids_json, linked_mode_ids_json, mode_overlays_json,
-         schema_links_json, mode_timeline_json, next_moves_json, created_at, updated_at
-       FROM trigger_reports
-       WHERE domain_id = ?
-       ORDER BY updated_at DESC
-       ${limitSql}`
-    )
-    .all(...(limit ? [PSYCHE_DOMAIN_ID, limit] : [PSYCHE_DOMAIN_ID])) as TriggerReportRow[];
-  return filterDeletedEntities("trigger_report", rows.map(mapTriggerReport));
+const TRIGGER_REPORT_SELECT = `SELECT
+  trigger_reports.id, trigger_reports.domain_id, trigger_reports.title,
+  trigger_reports.status, trigger_reports.event_type_id,
+  trigger_reports.custom_event_type, trigger_reports.event_situation,
+  trigger_reports.occurred_at, trigger_reports.body_cues_json,
+  trigger_reports.emotions_json, trigger_reports.thoughts_json,
+  trigger_reports.behaviors_json, trigger_reports.consequences_json,
+  trigger_reports.linked_pattern_ids_json,
+  trigger_reports.linked_value_ids_json,
+  trigger_reports.linked_goal_ids_json,
+  trigger_reports.linked_project_ids_json,
+  trigger_reports.linked_task_ids_json,
+  trigger_reports.linked_behavior_ids_json,
+  trigger_reports.linked_belief_ids_json,
+  trigger_reports.linked_mode_ids_json,
+  trigger_reports.mode_overlays_json, trigger_reports.schema_links_json,
+  trigger_reports.mode_timeline_json, trigger_reports.next_moves_json,
+  trigger_reports.memory_clarity, trigger_reports.reflection,
+  trigger_reports.hypothesis, trigger_reports.hypothesis_fit,
+  trigger_reports.hypothesis_correction,
+  trigger_reports.interpretation_consent, trigger_reports.revision,
+  trigger_reports.created_at, trigger_reports.updated_at
+ FROM trigger_reports`;
+
+type TriggerReportCursor = {
+  createdAt: string;
+  id: string;
+};
+
+function encodeTriggerReportCursor(cursor: TriggerReportCursor) {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
-export function getTriggerReportById(reportId: string): TriggerReport | undefined {
+function decodeTriggerReportCursor(cursor: string): TriggerReportCursor {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8")
+    ) as Partial<TriggerReportCursor>;
+    if (
+      typeof parsed.createdAt !== "string" ||
+      !Number.isFinite(Date.parse(parsed.createdAt)) ||
+      typeof parsed.id !== "string" ||
+      parsed.id.length === 0
+    ) {
+      throw new Error("invalid cursor");
+    }
+    return { createdAt: parsed.createdAt, id: parsed.id };
+  } catch {
+    throw new HttpError(
+      400,
+      "trigger_report_cursor_invalid",
+      "The trigger report cursor is invalid."
+    );
+  }
+}
+
+function triggerReportScopeSql(userIds: readonly string[]) {
+  if (userIds.length === 0) {
+    return { sql: "", params: [] as string[] };
+  }
+  return {
+    sql: `AND EXISTS (
+      SELECT 1
+      FROM entity_owners
+      WHERE entity_owners.entity_type = 'trigger_report'
+        AND entity_owners.entity_id = trigger_reports.id
+        AND entity_owners.user_id IN (${userIds.map(() => "?").join(", ")})
+        AND entity_owners.role = 'owner'
+    )`,
+    params: [...userIds]
+  };
+}
+
+export function listTriggerReportsPage(
+  options: {
+    limit?: number;
+    cursor?: string;
+    userIds?: string[];
+  } = {}
+) {
+  const limit = Math.min(Math.max(options.limit ?? 25, 1), 100);
+  const userIds = [...new Set(options.userIds ?? [])];
+  const scope = triggerReportScopeSql(userIds);
+  const cursor = options.cursor
+    ? decodeTriggerReportCursor(options.cursor)
+    : null;
+  const cursorSql = cursor
+    ? `AND (
+        trigger_reports.created_at < ?
+        OR (
+          trigger_reports.created_at = ?
+          AND trigger_reports.id < ?
+        )
+      )`
+    : "";
+  const cursorParams = cursor
+    ? [cursor.createdAt, cursor.createdAt, cursor.id]
+    : [];
+  const baseWhere = `trigger_reports.domain_id = ?
+    AND NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE deleted_entities.entity_type = 'trigger_report'
+        AND deleted_entities.entity_id = trigger_reports.id
+    )
+    ${scope.sql}`;
+  const rows = getDatabase()
+    .prepare(
+      `${TRIGGER_REPORT_SELECT}
+       WHERE ${baseWhere}
+       ${cursorSql}
+       ORDER BY trigger_reports.created_at DESC, trigger_reports.id DESC
+       LIMIT ?`
+    )
+    .all(
+      PSYCHE_DOMAIN_ID,
+      ...scope.params,
+      ...cursorParams,
+      limit + 1
+    ) as TriggerReportRow[];
+  const hasMore = rows.length > limit;
+  const pageRows = rows.slice(0, limit);
+  const reports = pageRows.map((row) =>
+    decorateOwnedEntity("trigger_report", mapTriggerReport(row))
+  );
+  const total = (
+    getDatabase()
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM trigger_reports
+         WHERE ${baseWhere}`
+      )
+      .get(PSYCHE_DOMAIN_ID, ...scope.params) as { count: number }
+  ).count;
+  const last = pageRows.at(-1);
+  return {
+    reports,
+    total,
+    limit,
+    nextCursor:
+      hasMore && last
+        ? encodeTriggerReportCursor({
+            createdAt: last.created_at,
+            id: last.id
+          })
+        : null,
+    hasMore
+  };
+}
+
+export function listTriggerReports(limit = 200): TriggerReport[] {
+  const boundedLimit = Math.min(Math.max(limit, 1), 1_000);
+  const reports: TriggerReport[] = [];
+  let cursor: string | undefined;
+
+  while (reports.length < boundedLimit) {
+    const page = listTriggerReportsPage({
+      limit: Math.min(100, boundedLimit - reports.length),
+      cursor
+    });
+    reports.push(...page.reports);
+    if (!page.nextCursor) {
+      break;
+    }
+    cursor = page.nextCursor;
+  }
+
+  return reports;
+}
+
+function escapeTriggerReportLike(value: string) {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+}
+
+export function searchTriggerReports(options: {
+  userIds?: string[];
+  ids?: string[];
+  query?: string;
+  statuses?: string[];
+  linkedTo?: { entityType: string; id: string };
+  limit?: number;
+}): TriggerReport[] {
+  const userIds = [...new Set(options.userIds ?? [])];
+  const ids = [...new Set(options.ids ?? [])];
+  const statuses = [...new Set(options.statuses ?? [])];
+  const limit = Math.min(Math.max(options.limit ?? 25, 1), 200);
+  const scope = triggerReportScopeSql(userIds);
+  const clauses = [
+    "trigger_reports.domain_id = ?",
+    `NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE deleted_entities.entity_type = 'trigger_report'
+        AND deleted_entities.entity_id = trigger_reports.id
+    )`
+  ];
+  const params: Array<string | number> = [PSYCHE_DOMAIN_ID];
+
+  if (scope.sql) {
+    clauses.push(scope.sql.replace(/^AND\s+/, ""));
+    params.push(...scope.params);
+  }
+  if (ids.length > 0) {
+    clauses.push(`trigger_reports.id IN (${ids.map(() => "?").join(", ")})`);
+    params.push(...ids);
+  }
+  if (statuses.length > 0) {
+    clauses.push(
+      `trigger_reports.status IN (${statuses.map(() => "?").join(", ")})`
+    );
+    params.push(...statuses);
+  }
+  const query = options.query?.trim().toLowerCase();
+  if (query) {
+    const searchableColumns = [
+      "trigger_reports.id",
+      "trigger_reports.title",
+      "trigger_reports.status",
+      "trigger_reports.custom_event_type",
+      "trigger_reports.event_situation",
+      "trigger_reports.body_cues_json",
+      "trigger_reports.emotions_json",
+      "trigger_reports.thoughts_json",
+      "trigger_reports.behaviors_json",
+      "trigger_reports.consequences_json",
+      "trigger_reports.mode_overlays_json",
+      "trigger_reports.schema_links_json",
+      "trigger_reports.next_moves_json",
+      "trigger_reports.reflection",
+      "trigger_reports.hypothesis",
+      "trigger_reports.hypothesis_correction"
+    ];
+    const pattern = `%${escapeTriggerReportLike(query)}%`;
+    clauses.push(
+      `(${searchableColumns
+        .map((column) => `LOWER(COALESCE(${column}, '')) LIKE ? ESCAPE '\\'`)
+        .join(" OR ")})`
+    );
+    params.push(...searchableColumns.map(() => pattern));
+  }
+  if (options.linkedTo) {
+    clauses.push(
+      `EXISTS (
+        SELECT 1
+        FROM entity_links
+        WHERE (
+          entity_links.source_entity_type = 'trigger_report'
+          AND entity_links.source_entity_id = trigger_reports.id
+          AND entity_links.target_entity_type = ?
+          AND entity_links.target_entity_id = ?
+        ) OR (
+          entity_links.target_entity_type = 'trigger_report'
+          AND entity_links.target_entity_id = trigger_reports.id
+          AND entity_links.source_entity_type = ?
+          AND entity_links.source_entity_id = ?
+        )
+      )`
+    );
+    params.push(
+      options.linkedTo.entityType,
+      options.linkedTo.id,
+      options.linkedTo.entityType,
+      options.linkedTo.id
+    );
+  }
+
+  const rows = getDatabase()
+    .prepare(
+      `${TRIGGER_REPORT_SELECT}
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY trigger_reports.created_at DESC, trigger_reports.id DESC
+       LIMIT ?`
+    )
+    .all(...params, limit) as TriggerReportRow[];
+  return rows.map((row) =>
+    decorateOwnedEntity("trigger_report", mapTriggerReport(row))
+  );
+}
+
+export function getTriggerReportById(
+  reportId: string,
+  options: { userIds?: string[] } = {}
+): TriggerReport | undefined {
+  const report = getPersistedTriggerReportById(reportId, options);
+  return report ? serializeTriggerReport(report) : undefined;
+}
+
+function getPersistedTriggerReportById(
+  reportId: string,
+  options: { userIds?: string[] } = {}
+): TriggerReport | undefined {
   if (isEntityDeleted("trigger_report", reportId)) {
     return undefined;
   }
   const row = getRow<TriggerReportRow>(
-    `SELECT
-       id, domain_id, title, status, event_type_id, custom_event_type, event_situation, occurred_at, emotions_json, thoughts_json,
-       behaviors_json, consequences_json, linked_pattern_ids_json, linked_value_ids_json, linked_goal_ids_json, linked_project_ids_json,
-       linked_task_ids_json, linked_behavior_ids_json, linked_belief_ids_json, linked_mode_ids_json, mode_overlays_json,
-       schema_links_json, mode_timeline_json, next_moves_json, created_at, updated_at
-     FROM trigger_reports
-     WHERE id = ?`,
+    `${TRIGGER_REPORT_SELECT}
+     WHERE trigger_reports.id = ?`,
     reportId
   );
-  return row
-    ? decorateOwnedEntity("trigger_report", mapTriggerReport(row))
-    : undefined;
+  if (!row) {
+    return undefined;
+  }
+  const report = decorateOwnedEntity(
+    "trigger_report",
+    mapPersistedTriggerReport(row)
+  );
+  return options.userIds?.length &&
+    !options.userIds.includes(report.userId ?? "")
+    ? undefined
+    : report;
 }
 
-export function createTriggerReport(input: CreateTriggerReportInput, context: PsycheContext): TriggerReport {
+function resolveTriggerReportOwner(
+  requestedUserId: string | null | undefined,
+  context: PsycheContext
+) {
+  const allowedUserIds = [...new Set(context.userIds ?? [])];
+  if (
+    requestedUserId &&
+    allowedUserIds.length > 0 &&
+    !allowedUserIds.includes(requestedUserId)
+  ) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The requested trigger report owner is outside this token's allowed users."
+    );
+  }
+  if (!requestedUserId && allowedUserIds.length > 1) {
+    throw new HttpError(
+      400,
+      "trigger_report_owner_required",
+      "Choose one owner for this trigger report."
+    );
+  }
+  const owner = resolveUserForMutation(
+    requestedUserId ?? allowedUserIds[0],
+    context.actor
+  );
+  if (allowedUserIds.length > 0 && !allowedUserIds.includes(owner.id)) {
+    throw new HttpError(
+      403,
+      "user_scope_forbidden",
+      "The trigger report owner is outside this token's allowed users."
+    );
+  }
+  return owner;
+}
+
+function requireTriggerReportWriteScope(
+  reportId: string,
+  context: PsycheContext
+) {
+  const allowedUserIds = context.userIds ?? [];
+  if (allowedUserIds.length === 0) {
+    return;
+  }
+  const ownerUserId = getEntityOwnerId("trigger_report", reportId);
+  if (!ownerUserId || !allowedUserIds.includes(ownerUserId)) {
+    throw new HttpError(
+      404,
+      "trigger_report_not_found",
+      "Trigger report not found."
+    );
+  }
+}
+
+const TRIGGER_LINK_TARGETS = {
+  event_type: "event_types",
+  behavior_pattern: "behavior_patterns",
+  psyche_value: "psyche_values",
+  goal: "goals",
+  project: "projects",
+  task: "tasks",
+  behavior: "psyche_behaviors",
+  belief_entry: "belief_entries",
+  mode_profile: "mode_profiles",
+  emotion_definition: "emotion_definitions"
+} as const;
+
+const TRIGGER_REPORT_MANAGED_RELATIONSHIPS = new Set([
+  "event_context",
+  "pattern_context",
+  "value_context",
+  "goal_context",
+  "project_context",
+  "task_context",
+  "behavior_context",
+  "belief_context",
+  "mode_context",
+  "emotion_context",
+  "thought_belief",
+  "observed_behavior",
+  "mode_timeline"
+]);
+
+function buildTriggerReportLinks(
+  report: Pick<
+    TriggerReport,
+    | "eventTypeId"
+    | "linkedPatternIds"
+    | "linkedValueIds"
+    | "linkedGoalIds"
+    | "linkedProjectIds"
+    | "linkedTaskIds"
+    | "linkedBehaviorIds"
+    | "linkedBeliefIds"
+    | "linkedModeIds"
+    | "emotions"
+    | "thoughts"
+    | "behaviors"
+    | "modeTimeline"
+  >
+): EntityLinkInput[] {
+  const links: EntityLinkInput[] = [];
+  const add = (
+    entityType: keyof typeof TRIGGER_LINK_TARGETS,
+    ids: Array<string | null | undefined>,
+    relationship: string
+  ) => {
+    for (const entityId of ids) {
+      if (entityId) {
+        links.push({ entityType, entityId, relationship });
+      }
+    }
+  };
+  add("event_type", [report.eventTypeId], "event_context");
+  add("behavior_pattern", report.linkedPatternIds, "pattern_context");
+  add("psyche_value", report.linkedValueIds, "value_context");
+  add("goal", report.linkedGoalIds, "goal_context");
+  add("project", report.linkedProjectIds, "project_context");
+  add("task", report.linkedTaskIds, "task_context");
+  add("behavior", report.linkedBehaviorIds, "behavior_context");
+  add("belief_entry", report.linkedBeliefIds, "belief_context");
+  add("mode_profile", report.linkedModeIds, "mode_context");
+  add(
+    "emotion_definition",
+    report.emotions.map((entry) => entry.emotionDefinitionId),
+    "emotion_context"
+  );
+  add(
+    "belief_entry",
+    report.thoughts.map((entry) => entry.beliefId),
+    "thought_belief"
+  );
+  add(
+    "behavior",
+    report.behaviors.map((entry) => entry.behaviorId),
+    "observed_behavior"
+  );
+  add(
+    "mode_profile",
+    report.modeTimeline.map((entry) => entry.modeId),
+    "mode_timeline"
+  );
+  return links;
+}
+
+function validateTriggerReportLinks(
+  links: EntityLinkInput[],
+  context: PsycheContext,
+  allowedDeletedKeys: ReadonlySet<string> = new Set()
+) {
+  const allowedUserIds = new Set(context.userIds ?? []);
+  const seen = new Set<string>();
+  for (const link of links) {
+    const entityType = link.entityType as keyof typeof TRIGGER_LINK_TARGETS;
+    const key = `${entityType}:${link.entityId}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const table = TRIGGER_LINK_TARGETS[entityType];
+    const exists = getDatabase()
+      .prepare(`SELECT 1 AS present FROM ${table} WHERE id = ? LIMIT 1`)
+      .get(link.entityId) as { present: number } | undefined;
+    if (
+      !exists ||
+      (isEntityDeleted(entityType, link.entityId) &&
+        !allowedDeletedKeys.has(key))
+    ) {
+      throw new HttpError(
+        400,
+        "trigger_report_link_invalid",
+        `Linked ${entityType} record ${link.entityId} was not found.`
+      );
+    }
+    const ownerUserId = getEntityOwnerId(entityType, link.entityId);
+    if (
+      allowedUserIds.size > 0 &&
+      ownerUserId &&
+      !allowedUserIds.has(ownerUserId)
+    ) {
+      throw new HttpError(
+        404,
+        "trigger_report_link_not_found",
+        "One linked record was not found in the allowed user scope."
+      );
+    }
+  }
+}
+
+function validateTriggerInterpretation(
+  report: Pick<
+    TriggerReport,
+    | "hypothesis"
+    | "hypothesisFit"
+    | "hypothesisCorrection"
+    | "interpretationConsent"
+  >
+) {
+  const hasHypothesis = report.hypothesis.trim().length > 0;
+  const hasCorrection = report.hypothesisCorrection.trim().length > 0;
+  const hasInterpretation =
+    hasHypothesis || hasCorrection || report.hypothesisFit !== "not_reviewed";
+  if (hasInterpretation && !report.interpretationConsent) {
+    throw new HttpError(
+      400,
+      "trigger_report_interpretation_consent_required",
+      "Confirm or correct the tentative interpretation before storing it."
+    );
+  }
+  if (
+    !hasHypothesis &&
+    (hasCorrection || report.hypothesisFit !== "not_reviewed")
+  ) {
+    throw new HttpError(
+      400,
+      "trigger_report_hypothesis_required",
+      "A hypothesis fit or correction cannot be recorded without a tentative hypothesis."
+    );
+  }
+}
+
+export function createTriggerReport(
+  input: CreateTriggerReportInput,
+  context: PsycheContext
+): TriggerReport {
   const parsed = createTriggerReportSchema.parse(input);
+  const owner = resolveTriggerReportOwner(parsed.userId, context);
+  const selectedEventType = parsed.eventTypeId
+    ? requireReadablePsycheVocabularyReference(
+        "event_type",
+        parsed.eventTypeId,
+        context
+      )
+    : null;
+  for (const emotion of parsed.emotions) {
+    if (emotion.emotionDefinitionId) {
+      requireReadablePsycheVocabularyReference(
+        "emotion_definition",
+        emotion.emotionDefinitionId,
+        context
+      );
+    }
+  }
+  const customEventType =
+    parsed.customEventType.trim() || selectedEventType?.label || "";
   const now = new Date().toISOString();
   const report = triggerReportSchema.parse({
     id: buildId("trg"),
@@ -2230,9 +3836,10 @@ export function createTriggerReport(input: CreateTriggerReportInput, context: Ps
     title: parsed.title,
     status: parsed.status,
     eventTypeId: parsed.eventTypeId,
-    customEventType: parsed.customEventType,
+    customEventType,
     eventSituation: parsed.eventSituation,
     occurredAt: parsed.occurredAt,
+    bodyCues: parsed.bodyCues,
     emotions: enrichTriggerItems(parsed.emotions, "emo"),
     thoughts: enrichTriggerItems(parsed.thoughts, "tht"),
     behaviors: enrichTriggerItems(parsed.behaviors, "beh"),
@@ -2247,146 +3854,369 @@ export function createTriggerReport(input: CreateTriggerReportInput, context: Ps
     linkedModeIds: parsed.linkedModeIds,
     modeOverlays: parsed.modeOverlays,
     schemaLinks: parsed.schemaLinks,
-    modeTimeline: enrichTriggerItems(parsed.modeTimeline, "mdl").map((entry) => modeTimelineEntrySchema.parse(entry)),
+    modeTimeline: enrichTriggerItems(parsed.modeTimeline, "mdl").map((entry) =>
+      modeTimelineEntrySchema.parse(entry)
+    ),
     nextMoves: parsed.nextMoves,
+    memoryClarity: parsed.memoryClarity,
+    reflection: parsed.reflection,
+    hypothesis: parsed.hypothesis,
+    hypothesisFit: parsed.hypothesisFit,
+    hypothesisCorrection: parsed.hypothesisCorrection,
+    interpretationConsent: parsed.interpretationConsent,
+    revision: 1,
     createdAt: now,
     updatedAt: now
   });
+  const links = buildTriggerReportLinks(report);
+  const idempotencyKey = context.idempotencyKey?.trim() || null;
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify({ ownerUserId: owner.id, report: parsed }))
+    .digest("hex");
 
-  getDatabase()
-    .prepare(
-      `INSERT INTO trigger_reports (
-        id, domain_id, title, status, event_type_id, custom_event_type, event_situation, occurred_at, emotions_json, thoughts_json, behaviors_json, consequences_json,
-        linked_pattern_ids_json, linked_value_ids_json, linked_goal_ids_json, linked_project_ids_json, linked_task_ids_json,
-        linked_behavior_ids_json, linked_belief_ids_json, linked_mode_ids_json, mode_overlays_json, schema_links_json, mode_timeline_json,
-        next_moves_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      report.id,
-      report.domainId,
-      report.title,
-      report.status,
-      report.eventTypeId,
-      report.customEventType,
-      report.eventSituation,
-      report.occurredAt,
-      JSON.stringify(report.emotions),
-      JSON.stringify(report.thoughts),
-      JSON.stringify(report.behaviors),
-      JSON.stringify(report.consequences),
-      JSON.stringify(report.linkedPatternIds),
-      JSON.stringify(report.linkedValueIds),
-      JSON.stringify(report.linkedGoalIds),
-      JSON.stringify(report.linkedProjectIds),
-      JSON.stringify(report.linkedTaskIds),
-      JSON.stringify(report.linkedBehaviorIds),
-      JSON.stringify(report.linkedBeliefIds),
-      JSON.stringify(report.linkedModeIds),
-      JSON.stringify(report.modeOverlays),
-      JSON.stringify(report.schemaLinks),
-      JSON.stringify(report.modeTimeline),
-      JSON.stringify(report.nextMoves),
-      report.createdAt,
-      report.updatedAt
-    );
-  assignOwnedEntity("trigger_report", report.id, parsed.userId, context.actor);
-
-  mapCreateUpdateContext({
-    entityType: "trigger_report",
-    entityId: report.id,
-    title: "Trigger report captured",
-    eventKind: "trigger_report.created",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: {
-      domainId: report.domainId,
-      status: report.status
+  return runInTransaction(() => {
+    if (idempotencyKey) {
+      const existingReceipt = getDatabase()
+        .prepare(
+          `SELECT request_fingerprint, report_id
+           FROM trigger_report_create_idempotency
+           WHERE owner_user_id = ? AND idempotency_key = ?`
+        )
+        .get(owner.id, idempotencyKey) as
+        | { request_fingerprint: string; report_id: string }
+        | undefined;
+      if (existingReceipt) {
+        if (existingReceipt.request_fingerprint !== fingerprint) {
+          throw new HttpError(
+            409,
+            "idempotency_conflict",
+            "This idempotency key was already used for a different trigger report."
+          );
+        }
+        const replay = getTriggerReportById(existingReceipt.report_id, {
+          userIds: context.userIds
+        });
+        if (!replay) {
+          throw new HttpError(
+            409,
+            "idempotency_target_missing",
+            "The original trigger report for this idempotency key is unavailable."
+          );
+        }
+        return replay;
+      }
     }
+
+    validateTriggerReportLinks(links, context);
+    validateTriggerInterpretation(report);
+
+    getDatabase()
+      .prepare(
+        `INSERT INTO trigger_reports (
+          id, domain_id, title, status, event_type_id, custom_event_type,
+          event_situation, occurred_at, body_cues_json, emotions_json,
+          thoughts_json, behaviors_json, consequences_json,
+          linked_pattern_ids_json, linked_value_ids_json,
+          linked_goal_ids_json, linked_project_ids_json,
+          linked_task_ids_json, linked_behavior_ids_json,
+          linked_belief_ids_json, linked_mode_ids_json, mode_overlays_json,
+          schema_links_json, mode_timeline_json, next_moves_json,
+          memory_clarity, reflection, hypothesis, hypothesis_fit,
+          hypothesis_correction, interpretation_consent, revision,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        report.id,
+        report.domainId,
+        report.title,
+        report.status,
+        report.eventTypeId,
+        report.customEventType,
+        report.eventSituation,
+        report.occurredAt,
+        JSON.stringify(report.bodyCues),
+        JSON.stringify(report.emotions),
+        JSON.stringify(report.thoughts),
+        JSON.stringify(report.behaviors),
+        JSON.stringify(report.consequences),
+        JSON.stringify(report.linkedPatternIds),
+        JSON.stringify(report.linkedValueIds),
+        JSON.stringify(report.linkedGoalIds),
+        JSON.stringify(report.linkedProjectIds),
+        JSON.stringify(report.linkedTaskIds),
+        JSON.stringify(report.linkedBehaviorIds),
+        JSON.stringify(report.linkedBeliefIds),
+        JSON.stringify(report.linkedModeIds),
+        JSON.stringify(report.modeOverlays),
+        JSON.stringify(report.schemaLinks),
+        JSON.stringify(report.modeTimeline),
+        JSON.stringify(report.nextMoves),
+        report.memoryClarity,
+        report.reflection,
+        report.hypothesis,
+        report.hypothesisFit,
+        report.hypothesisCorrection,
+        report.interpretationConsent ? 1 : 0,
+        report.revision,
+        report.createdAt,
+        report.updatedAt
+      );
+    assignOwnedEntity("trigger_report", report.id, owner.id, context.actor);
+    replaceEntityLinksForSource({
+      sourceEntityType: "trigger_report",
+      sourceEntityId: report.id,
+      links,
+      actor: context.actor
+    });
+    mapCreateUpdateContext({
+      entityType: "trigger_report",
+      entityId: report.id,
+      title: "Trigger report captured",
+      eventKind: "trigger_report.created",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: {
+        domainId: report.domainId,
+        status: report.status,
+        revision: report.revision
+      }
+    });
+    recordPsycheReflectionReward(report.id, report.title, {
+      actor: context.actor ?? null,
+      source: context.source
+    });
+    if (idempotencyKey) {
+      getDatabase()
+        .prepare(
+          `INSERT INTO trigger_report_create_idempotency (
+            owner_user_id, idempotency_key, request_fingerprint, report_id,
+            created_at
+          ) VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(owner.id, idempotencyKey, fingerprint, report.id, now);
+    }
+    return decorateOwnedEntity("trigger_report", report);
   });
-  recordPsycheReflectionReward(report.id, report.title, { actor: context.actor ?? null, source: context.source });
-  return decorateOwnedEntity("trigger_report", report);
 }
 
-export function updateTriggerReport(reportId: string, patch: UpdateTriggerReportInput, context: PsycheContext): TriggerReport | undefined {
-  const existing = getTriggerReportById(reportId);
+export function updateTriggerReport(
+  reportId: string,
+  patch: UpdateTriggerReportInput,
+  context: PsycheContext
+): TriggerReport | undefined {
+  requireTriggerReportWriteScope(reportId, context);
+  const existing = getPersistedTriggerReportById(reportId, {
+    userIds: context.userIds
+  });
   if (!existing) {
     return undefined;
   }
   const parsed = updateTriggerReportSchema.parse(patch);
+  if (
+    parsed.expectedRevision !== undefined &&
+    parsed.expectedRevision !== existing.revision
+  ) {
+    throw new HttpError(
+      409,
+      "trigger_report_revision_conflict",
+      "This trigger report changed after it was opened. Read the latest version before applying the correction.",
+      {
+        expectedRevision: parsed.expectedRevision,
+        actualRevision: existing.revision
+      }
+    );
+  }
+  const { expectedRevision: _expectedRevision, ...parsedPatch } = parsed;
+  const nextEventTypeId =
+    parsed.eventTypeId === undefined
+      ? existing.eventTypeId
+      : parsed.eventTypeId;
+  const selectedEventType =
+    parsed.eventTypeId === undefined || parsed.eventTypeId === null
+      ? null
+      : requireReadablePsycheVocabularyReference(
+          "event_type",
+          parsed.eventTypeId,
+          context
+        );
+  if (parsed.emotions) {
+    for (const emotion of parsed.emotions) {
+      if (emotion.emotionDefinitionId) {
+        requireReadablePsycheVocabularyReference(
+          "emotion_definition",
+          emotion.emotionDefinitionId,
+          context
+        );
+      }
+    }
+  }
+  const nextCustomEventType =
+    parsed.customEventType === undefined
+      ? existing.customEventType
+      : parsed.customEventType.trim();
+  const preservedEventWording =
+    nextCustomEventType ||
+    selectedEventType?.label ||
+    (parsed.eventTypeId === undefined && nextEventTypeId
+      ? (getEventTypeById(nextEventTypeId)?.label ?? "")
+      : "");
   const updated = triggerReportSchema.parse({
     ...existing,
-    ...parsed,
-    emotions: parsed.emotions ? enrichTriggerItems(parsed.emotions, "emo") : existing.emotions,
-    thoughts: parsed.thoughts ? enrichTriggerItems(parsed.thoughts, "tht") : existing.thoughts,
-    behaviors: parsed.behaviors ? enrichTriggerItems(parsed.behaviors, "beh") : existing.behaviors,
+    ...parsedPatch,
+    customEventType: preservedEventWording,
+    emotions: parsed.emotions
+      ? enrichTriggerItems(parsed.emotions, "emo")
+      : existing.emotions,
+    thoughts: parsed.thoughts
+      ? enrichTriggerItems(parsed.thoughts, "tht")
+      : existing.thoughts,
+    behaviors: parsed.behaviors
+      ? enrichTriggerItems(parsed.behaviors, "beh")
+      : existing.behaviors,
     modeTimeline: parsed.modeTimeline
-      ? enrichTriggerItems(parsed.modeTimeline, "mdl").map((entry) => modeTimelineEntrySchema.parse(entry))
+      ? enrichTriggerItems(parsed.modeTimeline, "mdl").map((entry) =>
+          modeTimelineEntrySchema.parse(entry)
+        )
       : existing.modeTimeline,
+    revision: existing.revision + 1,
     updatedAt: new Date().toISOString()
   });
-
-  getDatabase()
-    .prepare(
-      `UPDATE trigger_reports
-       SET title = ?, status = ?, event_type_id = ?, custom_event_type = ?, event_situation = ?, occurred_at = ?, emotions_json = ?, thoughts_json = ?, behaviors_json = ?,
-           consequences_json = ?, linked_pattern_ids_json = ?, linked_value_ids_json = ?, linked_goal_ids_json = ?, linked_project_ids_json = ?, linked_task_ids_json = ?,
-           linked_behavior_ids_json = ?, linked_belief_ids_json = ?, linked_mode_ids_json = ?, mode_overlays_json = ?, schema_links_json = ?, mode_timeline_json = ?,
-           next_moves_json = ?, updated_at = ?
-       WHERE id = ?`
+  const links = buildTriggerReportLinks(updated);
+  const preservedDeletedLinkKeys = new Set(
+    buildTriggerReportLinks(existing).map(
+      (link) => `${link.entityType}:${link.entityId}`
     )
-    .run(
-      updated.title,
-      updated.status,
-      updated.eventTypeId,
-      updated.customEventType,
-      updated.eventSituation,
-      updated.occurredAt,
-      JSON.stringify(updated.emotions),
-      JSON.stringify(updated.thoughts),
-      JSON.stringify(updated.behaviors),
-      JSON.stringify(updated.consequences),
-      JSON.stringify(updated.linkedPatternIds),
-      JSON.stringify(updated.linkedValueIds),
-      JSON.stringify(updated.linkedGoalIds),
-      JSON.stringify(updated.linkedProjectIds),
-      JSON.stringify(updated.linkedTaskIds),
-      JSON.stringify(updated.linkedBehaviorIds),
-      JSON.stringify(updated.linkedBeliefIds),
-      JSON.stringify(updated.linkedModeIds),
-      JSON.stringify(updated.modeOverlays),
-      JSON.stringify(updated.schemaLinks),
-      JSON.stringify(updated.modeTimeline),
-      JSON.stringify(updated.nextMoves),
-      updated.updatedAt,
-      reportId
-    );
-  if (parsed.userId !== undefined) {
-    assignOwnedEntity("trigger_report", reportId, parsed.userId, context.actor);
-  }
+  );
+  validateTriggerReportLinks(links, context, preservedDeletedLinkKeys);
+  validateTriggerInterpretation(updated);
+  const nextOwner =
+    parsed.userId !== undefined
+      ? resolveTriggerReportOwner(parsed.userId, context)
+      : null;
 
-  mapCreateUpdateContext({
-    entityType: "trigger_report",
-    entityId: reportId,
-    title: "Trigger report updated",
-    eventKind: "trigger_report.updated",
-    source: context.source,
-    actor: context.actor ?? null,
-    metadata: { status: updated.status }
+  return runInTransaction(() => {
+    const result = getDatabase()
+      .prepare(
+        `UPDATE trigger_reports
+         SET title = ?, status = ?, event_type_id = ?,
+             custom_event_type = ?, event_situation = ?, occurred_at = ?,
+             body_cues_json = ?, emotions_json = ?, thoughts_json = ?,
+             behaviors_json = ?, consequences_json = ?,
+             linked_pattern_ids_json = ?, linked_value_ids_json = ?,
+             linked_goal_ids_json = ?, linked_project_ids_json = ?,
+             linked_task_ids_json = ?, linked_behavior_ids_json = ?,
+             linked_belief_ids_json = ?, linked_mode_ids_json = ?,
+             mode_overlays_json = ?, schema_links_json = ?,
+             mode_timeline_json = ?, next_moves_json = ?,
+             memory_clarity = ?, reflection = ?, hypothesis = ?,
+             hypothesis_fit = ?, hypothesis_correction = ?,
+             interpretation_consent = ?, revision = ?, updated_at = ?
+         WHERE id = ? AND revision = ?`
+      )
+      .run(
+        updated.title,
+        updated.status,
+        updated.eventTypeId,
+        updated.customEventType,
+        updated.eventSituation,
+        updated.occurredAt,
+        JSON.stringify(updated.bodyCues),
+        JSON.stringify(updated.emotions),
+        JSON.stringify(updated.thoughts),
+        JSON.stringify(updated.behaviors),
+        JSON.stringify(updated.consequences),
+        JSON.stringify(updated.linkedPatternIds),
+        JSON.stringify(updated.linkedValueIds),
+        JSON.stringify(updated.linkedGoalIds),
+        JSON.stringify(updated.linkedProjectIds),
+        JSON.stringify(updated.linkedTaskIds),
+        JSON.stringify(updated.linkedBehaviorIds),
+        JSON.stringify(updated.linkedBeliefIds),
+        JSON.stringify(updated.linkedModeIds),
+        JSON.stringify(updated.modeOverlays),
+        JSON.stringify(updated.schemaLinks),
+        JSON.stringify(updated.modeTimeline),
+        JSON.stringify(updated.nextMoves),
+        updated.memoryClarity,
+        updated.reflection,
+        updated.hypothesis,
+        updated.hypothesisFit,
+        updated.hypothesisCorrection,
+        updated.interpretationConsent ? 1 : 0,
+        updated.revision,
+        updated.updatedAt,
+        reportId,
+        existing.revision
+      );
+    if (result.changes !== 1) {
+      throw new HttpError(
+        409,
+        "trigger_report_revision_conflict",
+        "This trigger report changed while the correction was being saved."
+      );
+    }
+    if (nextOwner) {
+      assignOwnedEntity(
+        "trigger_report",
+        reportId,
+        nextOwner.id,
+        context.actor
+      );
+    }
+    replaceEntityLinksForSourceRelationships({
+      sourceEntityType: "trigger_report",
+      sourceEntityId: reportId,
+      relationships: [...TRIGGER_REPORT_MANAGED_RELATIONSHIPS],
+      links,
+      actor: context.actor
+    });
+    mapCreateUpdateContext({
+      entityType: "trigger_report",
+      entityId: reportId,
+      title: "Trigger report updated",
+      eventKind: "trigger_report.updated",
+      source: context.source,
+      actor: context.actor ?? null,
+      metadata: { status: updated.status, revision: updated.revision }
+    });
+    return decorateOwnedEntity(
+      "trigger_report",
+      serializeTriggerReport(updated)
+    );
   });
-  return decorateOwnedEntity("trigger_report", updated);
 }
 
-export function deleteTriggerReport(reportId: string, context: PsycheContext): TriggerReport | undefined {
-  const existing = getTriggerReportById(reportId);
+export function deleteTriggerReport(
+  reportId: string,
+  context: PsycheContext
+): TriggerReport | undefined {
+  requireTriggerReportWriteScope(reportId, context);
+  const existing = getTriggerReportById(reportId, {
+    userIds: context.userIds
+  });
   if (!existing) {
     return undefined;
   }
 
   return runInTransaction(() => {
-    removeIdFromStringArrayColumn("belief_entries", "linked_report_ids_json", reportId);
-    removeIdFromStringArrayColumn("psyche_flashcards", "linked_report_ids_json", reportId);
+    removeIdFromStringArrayColumn(
+      "belief_entries",
+      "linked_report_ids_json",
+      reportId
+    );
+    removeIdFromStringArrayColumn(
+      "psyche_flashcards",
+      "linked_report_ids_json",
+      reportId
+    );
     unlinkEntityNotes("trigger_report", reportId);
+    replaceEntityLinksForSource({
+      sourceEntityType: "trigger_report",
+      sourceEntityId: reportId,
+      links: [],
+      actor: context.actor
+    });
     clearEntityOwner("trigger_report", reportId);
     getDatabase()
       .prepare(`DELETE FROM trigger_reports WHERE id = ?`)

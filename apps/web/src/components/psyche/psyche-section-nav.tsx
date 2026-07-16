@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BrainCircuit,
   ChartNoAxesCombined,
@@ -58,6 +58,9 @@ function sectionMatches(pathname: string, to: string) {
 export function PsycheSectionNav({ className }: { className?: string }) {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileDialogRef = useRef<HTMLDivElement>(null);
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const activeSection = useMemo(() => {
     return (
       [...PSYCHE_SECTIONS]
@@ -74,20 +77,49 @@ export function PsycheSectionNav({ className }: { className?: string }) {
 
     const previousOverflow = document.body.style.overflow;
     const previousTouchAction = document.body.style.touchAction;
+    const mobileTrigger = mobileTriggerRef.current;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMobileOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusable = Array.from(
+        mobileDialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((element) => !element.hasAttribute("disabled"));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        mobileDialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     };
 
     document.body.style.overflow = "hidden";
     document.body.style.touchAction = "none";
     window.addEventListener("keydown", handleKeyDown);
+    const focusHandle = window.requestAnimationFrame(() => {
+      mobileCloseRef.current?.focus();
+    });
 
     return () => {
+      window.cancelAnimationFrame(focusHandle);
       document.body.style.overflow = previousOverflow;
       document.body.style.touchAction = previousTouchAction;
       window.removeEventListener("keydown", handleKeyDown);
+      mobileTrigger?.focus();
     };
   }, [mobileOpen]);
 
@@ -124,7 +156,11 @@ export function PsycheSectionNav({ className }: { className?: string }) {
 
         <div className="flex items-center justify-between gap-3 lg:hidden">
           <button
+            ref={mobileTriggerRef}
             type="button"
+            aria-haspopup="dialog"
+            aria-expanded={mobileOpen}
+            aria-controls="psyche-section-dialog"
             className="inline-flex min-w-0 flex-1 items-center gap-3 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3.5 py-2.5 text-left shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
             onClick={() => setMobileOpen(true)}
           >
@@ -151,6 +187,7 @@ export function PsycheSectionNav({ className }: { className?: string }) {
               <div className="fixed inset-0 z-50 bg-[var(--overlay)] backdrop-blur-xl" />
               <button
                 type="button"
+                tabIndex={-1}
                 aria-label="Close psyche sections"
                 className="fixed inset-0 z-[51]"
                 onClick={() => setMobileOpen(false)}
@@ -168,7 +205,10 @@ export function PsycheSectionNav({ className }: { className?: string }) {
                     "calc(var(--forge-mobile-nav-clearance) - 0.25rem)"
                 }}
               >
-                <div
+              <div
+                id="psyche-section-dialog"
+                ref={mobileDialogRef}
+                tabIndex={-1}
 	                  role="dialog"
 	                  aria-modal="true"
 	                  aria-label="Psyche sections"
@@ -190,6 +230,7 @@ export function PsycheSectionNav({ className }: { className?: string }) {
                         </div>
                       </div>
 	                      <button
+	                        ref={mobileCloseRef}
 	                        type="button"
 	                        aria-label="Close psyche sections"
 	                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"

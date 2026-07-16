@@ -10,6 +10,9 @@ enum ForgeWatchStorage {
     nonisolated static let actionMessageKey = "forge_watch_action_message"
     nonisolated static let ackMessageKey = "forge_watch_ack_message"
     nonisolated static let syncRequestMessageKey = "forge_watch_sync_request_message"
+    nonisolated static let syncResponseMessageKey = "forge_watch_sync_response_message"
+    nonisolated static let phoneHandoffRequestMessageKey = "forge_watch_phone_handoff_request"
+    nonisolated static let phoneHandoffResponseMessageKey = "forge_watch_phone_handoff_response"
     nonisolated static let bootstrapContextKey = "forge_watch_bootstrap_context"
 
     nonisolated static func sharedDefaults() -> UserDefaults {
@@ -244,6 +247,7 @@ enum WatchSurface: String, CaseIterable, Codable {
     case health
     case movement
     case psyche
+    case people
     case inbox
     case sync
 }
@@ -329,6 +333,7 @@ struct ForgeWatchTaskSummary: Codable, Identifiable, Hashable {
     let points: Int
     let effort: String
     let energy: String
+    var closeoutState: String? = nil
     let updatedAt: String
 }
 
@@ -396,6 +401,371 @@ struct ForgeWatchTodaySnapshot: Codable, Hashable {
     let dueTasks: [ForgeWatchTaskSummary]
     let dueCount: Int
     let recentDone: [ForgeWatchTaskSummary]
+}
+
+enum ForgeWatchRefreshState: String, Hashable {
+    case idle
+    case refreshing
+    case failed
+}
+
+enum ForgeWatchCompactNotice: Hashable {
+    case none
+    case loading
+    case stale
+    case clockSkew
+    case unavailable
+    case failed
+}
+
+enum ForgeWatchCompactSurfacePolicy {
+    nonisolated static func notice(
+        hasPayload: Bool,
+        freshness: ForgeWatchSnapshotFreshness,
+        refreshState: ForgeWatchRefreshState
+    ) -> ForgeWatchCompactNotice {
+        if refreshState == .failed {
+            return .failed
+        }
+        if hasPayload == false {
+            return refreshState == .refreshing ? .loading : .unavailable
+        }
+        switch freshness.state {
+        case .fresh:
+            return .none
+        case .stale:
+            return .stale
+        case .clockSkew:
+            return .clockSkew
+        case .unavailable:
+            return .stale
+        }
+    }
+}
+
+struct ForgeWatchGoalsPresentation: Hashable {
+    nonisolated static let maximumGoalCount = 3
+    nonisolated static let maximumProjectCount = 3
+
+    let goals: [ForgeWatchGoalSummary]
+    let projects: [ForgeWatchProjectSummary]
+    let totalGoalCount: Int
+    let totalProjectCount: Int
+
+    nonisolated init(
+        goals: [ForgeWatchGoalSummary],
+        projects: [ForgeWatchProjectSummary],
+        totalGoalCount: Int? = nil,
+        totalProjectCount: Int? = nil
+    ) {
+        self.totalGoalCount = max(totalGoalCount ?? goals.count, goals.count)
+        self.totalProjectCount = max(totalProjectCount ?? projects.count, projects.count)
+        self.goals = Array(
+            goals.sorted(by: Self.goalPrecedes).prefix(Self.maximumGoalCount)
+        )
+        self.projects = Array(
+            projects.sorted(by: Self.projectPrecedes).prefix(Self.maximumProjectCount)
+        )
+    }
+
+    var hiddenGoalCount: Int {
+        max(0, totalGoalCount - goals.count)
+    }
+
+    var hiddenProjectCount: Int {
+        max(0, totalProjectCount - projects.count)
+    }
+
+    var cardCount: Int {
+        1 + goals.count + projects.count
+    }
+
+    private nonisolated static func goalPrecedes(
+        _ left: ForgeWatchGoalSummary,
+        _ right: ForgeWatchGoalSummary
+    ) -> Bool {
+        let horizonRank = ["quarter": 0, "year": 1, "lifetime": 2]
+        let leftRank = horizonRank[left.horizon.lowercased()] ?? Int.max
+        let rightRank = horizonRank[right.horizon.lowercased()] ?? Int.max
+        if leftRank != rightRank {
+            return leftRank < rightRank
+        }
+        if left.targetPoints != right.targetPoints {
+            return left.targetPoints > right.targetPoints
+        }
+        return stableTitlePrecedes(left.title, right.title, leftId: left.id, rightId: right.id)
+    }
+
+    private nonisolated static func projectPrecedes(
+        _ left: ForgeWatchProjectSummary,
+        _ right: ForgeWatchProjectSummary
+    ) -> Bool {
+        let workflowRank = [
+            "focus": 0,
+            "in_progress": 1,
+            "building": 1,
+            "blocked": 2,
+            "backlog": 3,
+            "done": 4
+        ]
+        let leftRank = workflowRank[left.workflowStatus.lowercased()] ?? Int.max
+        let rightRank = workflowRank[right.workflowStatus.lowercased()] ?? Int.max
+        if leftRank != rightRank {
+            return leftRank < rightRank
+        }
+        if left.activeRunCount != right.activeRunCount {
+            return left.activeRunCount > right.activeRunCount
+        }
+        if left.openTaskCount != right.openTaskCount {
+            return left.openTaskCount > right.openTaskCount
+        }
+        return stableTitlePrecedes(left.title, right.title, leftId: left.id, rightId: right.id)
+    }
+}
+
+struct ForgeWatchTodayPresentation: Hashable {
+    nonisolated static let maximumDueTaskCount = 4
+
+    let dueTasks: [ForgeWatchTaskSummary]
+    let snapshotDueCount: Int
+    let recentDoneCount: Int
+
+    nonisolated init(today: ForgeWatchTodaySnapshot) {
+        let orderedTasks = today.dueTasks.sorted(by: Self.taskPrecedes)
+        dueTasks = Array(orderedTasks.prefix(Self.maximumDueTaskCount))
+        snapshotDueCount = max(today.dueCount, today.dueTasks.count)
+        recentDoneCount = today.recentDone.count
+    }
+
+    var hiddenDueTaskCount: Int {
+        max(0, snapshotDueCount - dueTasks.count)
+    }
+
+    var cardCount: Int {
+        1 + dueTasks.count
+    }
+
+    private nonisolated static func taskPrecedes(
+        _ left: ForgeWatchTaskSummary,
+        _ right: ForgeWatchTaskSummary
+    ) -> Bool {
+        let statusRank = [
+            "focus": 0,
+            "in_progress": 1,
+            "blocked": 2,
+            "backlog": 3,
+            "done": 4
+        ]
+        let priorityRank = ["critical": 0, "high": 1, "medium": 2, "low": 3]
+        let leftStatus = statusRank[left.status.lowercased()] ?? Int.max
+        let rightStatus = statusRank[right.status.lowercased()] ?? Int.max
+        if leftStatus != rightStatus {
+            return leftStatus < rightStatus
+        }
+        let leftPriority = priorityRank[left.priority.lowercased()] ?? Int.max
+        let rightPriority = priorityRank[right.priority.lowercased()] ?? Int.max
+        if leftPriority != rightPriority {
+            return leftPriority < rightPriority
+        }
+        if left.points != right.points {
+            return left.points > right.points
+        }
+        return stableTitlePrecedes(left.title, right.title, leftId: left.id, rightId: right.id)
+    }
+}
+
+enum ForgeWatchPhoneDestination: Hashable, Codable {
+    case goals
+    case goal(String)
+    case project(String)
+    case today
+    case task(String)
+
+    private enum Kind: String, Codable {
+        case goals
+        case goal
+        case project
+        case today
+        case task
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case entityId
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(Kind.self, forKey: .kind)
+        let entityId = try container.decodeIfPresent(String.self, forKey: .entityId)
+        switch (kind, entityId) {
+        case (.goals, nil):
+            self = .goals
+        case (.goal, .some(let id)) where Self.validatedPath(id: id) != nil:
+            self = .goal(id)
+        case (.project, .some(let id)) where Self.validatedPath(id: id) != nil:
+            self = .project(id)
+        case (.today, nil):
+            self = .today
+        case (.task, .some(let id)) where Self.validatedPath(id: id) != nil:
+            self = .task(id)
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .entityId,
+                in: container,
+                debugDescription: "Invalid Forge phone destination"
+            )
+        }
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        guard pathComponents != nil else {
+            throw EncodingError.invalidValue(
+                self,
+                EncodingError.Context(
+                    codingPath: encoder.codingPath,
+                    debugDescription: "Invalid Forge phone destination"
+                )
+            )
+        }
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .goals:
+            try container.encode(Kind.goals, forKey: .kind)
+        case .goal(let id):
+            try container.encode(Kind.goal, forKey: .kind)
+            try container.encode(id, forKey: .entityId)
+        case .project(let id):
+            try container.encode(Kind.project, forKey: .kind)
+            try container.encode(id, forKey: .entityId)
+        case .today:
+            try container.encode(Kind.today, forKey: .kind)
+        case .task(let id):
+            try container.encode(Kind.task, forKey: .kind)
+            try container.encode(id, forKey: .entityId)
+        }
+    }
+
+    fileprivate var pathComponents: [String]? {
+        switch self {
+        case .goals:
+            return ["goals"]
+        case .goal(let id):
+            return Self.validatedPath(id: id).map { ["goals", $0] }
+        case .project(let id):
+            return Self.validatedPath(id: id).map { ["projects", $0] }
+        case .today:
+            return ["today"]
+        case .task(let id):
+            return Self.validatedPath(id: id).map { ["tasks", $0] }
+        }
+    }
+
+    private nonisolated static func validatedPath(id: String) -> String? {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        guard
+            id.isEmpty == false,
+            id.rangeOfCharacter(from: allowed.inverted) == nil
+        else {
+            return nil
+        }
+        return id
+    }
+}
+
+enum ForgeWatchPhoneHandoff {
+    nonisolated static func url(
+        uiBaseUrl: String?,
+        destination: ForgeWatchPhoneDestination
+    ) -> URL? {
+        resolvedURL(
+            uiBaseUrl: uiBaseUrl,
+            destination: destination,
+            allowedSchemes: ["https", "http"]
+        )
+    }
+
+    nonisolated static func iPhoneURL(
+        uiBaseUrl: String?,
+        destination: ForgeWatchPhoneDestination
+    ) -> URL? {
+        resolvedURL(
+            uiBaseUrl: uiBaseUrl,
+            destination: destination,
+            allowedSchemes: ["https", "http", "forge-iroh"]
+        )
+    }
+
+    private nonisolated static func resolvedURL(
+        uiBaseUrl: String?,
+        destination: ForgeWatchPhoneDestination,
+        allowedSchemes: Set<String>
+    ) -> URL? {
+        guard
+            let uiBaseUrl,
+            var components = URLComponents(string: uiBaseUrl),
+            let scheme = components.scheme?.lowercased(),
+            allowedSchemes.contains(scheme),
+            components.host?.isEmpty == false,
+            let pathComponents = destination.pathComponents
+        else {
+            return nil
+        }
+
+        components.user = nil
+        components.password = nil
+        components.query = nil
+        components.fragment = nil
+        guard var url = components.url else {
+            return nil
+        }
+        for component in pathComponents {
+            url.appendPathComponent(component)
+        }
+        return url
+    }
+}
+
+struct ForgeWatchPhoneHandoffRequest: Codable, Hashable {
+    let id: String
+    let createdAt: String
+    let destination: ForgeWatchPhoneDestination
+
+    nonisolated init?(
+        id: String = UUID().uuidString,
+        createdAt: String = ISO8601DateFormatter().string(from: Date()),
+        destination: ForgeWatchPhoneDestination
+    ) {
+        guard destination.pathComponents != nil else { return nil }
+        self.id = id
+        self.createdAt = createdAt
+        self.destination = destination
+    }
+}
+
+enum ForgeWatchPhoneHandoffStatus: String, Codable, Hashable {
+    case ready
+    case unavailable
+}
+
+struct ForgeWatchPhoneHandoffResponse: Codable, Hashable {
+    let requestId: String
+    let completedAt: String
+    let status: ForgeWatchPhoneHandoffStatus
+    let message: String
+}
+
+nonisolated private func stableTitlePrecedes(
+    _ leftTitle: String,
+    _ rightTitle: String,
+    leftId: String,
+    rightId: String
+) -> Bool {
+    let titleComparison = leftTitle.localizedCaseInsensitiveCompare(rightTitle)
+    if titleComparison != .orderedSame {
+        return titleComparison == .orderedAscending
+    }
+    return leftId < rightId
 }
 
 struct ForgeWatchHealthSnapshot: Codable, Hashable {
@@ -495,6 +865,182 @@ struct ForgeWatchPinsSnapshot: Codable, Hashable {
     let items: [Item]
 }
 
+struct ForgeWatchPeopleGlanceSnapshot: Codable, Hashable {
+    enum Selection: String, Codable, Hashable {
+        case selected
+        case chooseOnIPhone = "choose_on_iphone"
+    }
+
+    struct SharedEvent: Codable, Hashable {
+        let title: String?
+        let startsAt: String
+        let sharedAt: String
+        let validUntil: String?
+    }
+
+    let selection: Selection
+    let generatedAt: String
+    let personName: String?
+    let lastConnectedAt: String?
+    let nextSharedEvent: SharedEvent?
+
+    static func chooseOnIPhone(generatedAt: String) -> ForgeWatchPeopleGlanceSnapshot {
+        ForgeWatchPeopleGlanceSnapshot(
+            selection: .chooseOnIPhone,
+            generatedAt: generatedAt,
+            personName: nil,
+            lastConnectedAt: nil,
+            nextSharedEvent: nil
+        )
+    }
+}
+
+enum ForgeWatchPeoplePrivacyContext: String, CaseIterable, Codable, Hashable {
+    case unlockedActive = "unlocked_active"
+    case locked
+    case wristDown = "wrist_down"
+    case alwaysOn = "always_on"
+    case notification
+    case screenshotFixture = "screenshot_fixture"
+    case inactive
+}
+
+struct ForgeWatchPeoplePresentation: Hashable {
+    let title: String
+    let indicator: String
+    let personName: String?
+    let connectivity: String?
+    let eventTitle: String?
+    let eventTiming: String?
+    let eventStatus: String?
+
+    var isDetailed: Bool { personName != nil }
+}
+
+enum ForgeWatchPeopleDisplayPolicy {
+    static let staleSnapshotAge: TimeInterval = 15 * 60
+    static let staleEventAgeWithoutExpiry: TimeInterval = 30 * 60
+
+    static func presentation(
+        snapshot: ForgeWatchPeopleGlanceSnapshot?,
+        context: ForgeWatchPeoplePrivacyContext,
+        now: Date = Date()
+    ) -> ForgeWatchPeoplePresentation {
+        guard context == .unlockedActive else {
+            return redactedPresentation
+        }
+        guard let snapshot else {
+            return ForgeWatchPeoplePresentation(
+                title: "Forge People",
+                indicator: "iPhone snapshot unavailable",
+                personName: nil,
+                connectivity: nil,
+                eventTitle: nil,
+                eventTiming: nil,
+                eventStatus: nil
+            )
+        }
+        guard snapshot.selection == .selected,
+              let personName = nonEmpty(snapshot.personName)
+        else {
+            return ForgeWatchPeoplePresentation(
+                title: "Forge People",
+                indicator: "Choose a Person on iPhone",
+                personName: nil,
+                connectivity: nil,
+                eventTitle: nil,
+                eventTiming: nil,
+                eventStatus: nil
+            )
+        }
+
+        let generatedAt = date(from: snapshot.generatedAt)
+        let snapshotIsStale = generatedAt.map {
+            now.timeIntervalSince($0) > staleSnapshotAge || now.timeIntervalSince($0) < -300
+        } ?? true
+        let connectivity = snapshot.lastConnectedAt
+            .flatMap(date(from:))
+            .map { "Last connected \(relativePastLabel(from: $0, now: now))" }
+            ?? "Connectivity unavailable"
+
+        let eventPresentation = sharedEventPresentation(
+            snapshot.nextSharedEvent,
+            now: now
+        )
+        return ForgeWatchPeoplePresentation(
+            title: "Forge People",
+            indicator: snapshotIsStale ? "iPhone snapshot stale" : "iPhone snapshot fresh",
+            personName: personName,
+            connectivity: connectivity,
+            eventTitle: eventPresentation.title,
+            eventTiming: eventPresentation.timing,
+            eventStatus: eventPresentation.status
+        )
+    }
+
+    private static let redactedPresentation = ForgeWatchPeoplePresentation(
+        title: "Forge People",
+        indicator: "Private",
+        personName: nil,
+        connectivity: nil,
+        eventTitle: nil,
+        eventTiming: nil,
+        eventStatus: nil
+    )
+
+    private static func sharedEventPresentation(
+        _ event: ForgeWatchPeopleGlanceSnapshot.SharedEvent?,
+        now: Date
+    ) -> (title: String?, timing: String?, status: String) {
+        guard let event,
+              let startsAt = date(from: event.startsAt),
+              let sharedAt = date(from: event.sharedAt)
+        else {
+            return (nil, nil, "Next shared event unavailable")
+        }
+        let expiry = event.validUntil.flatMap(date(from:))
+        let expired = expiry.map { $0 <= now } ??
+            (now.timeIntervalSince(sharedAt) > staleEventAgeWithoutExpiry)
+        guard expired == false, startsAt >= now.addingTimeInterval(-300) else {
+            return (nil, nil, "Shared event stale")
+        }
+        return (
+            nonEmpty(event.title) ?? "Shared event",
+            relativeFutureLabel(from: startsAt, now: now),
+            "Explicitly shared"
+        )
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              value.isEmpty == false
+        else { return nil }
+        return value
+    }
+
+    private static func date(from value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
+    private static func relativePastLabel(from date: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "now" }
+        if seconds < 3_600 { return "\(seconds / 60)m ago" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h ago" }
+        return "\(seconds / 86_400)d ago"
+    }
+
+    private static func relativeFutureLabel(from date: Date, now: Date) -> String {
+        let seconds = max(0, Int(date.timeIntervalSince(now)))
+        if seconds < 60 { return "Starts now" }
+        if seconds < 3_600 { return "Starts in \(max(1, seconds / 60))m" }
+        if seconds < 86_400 { return "Starts in \(max(1, seconds / 3_600))h" }
+        return "Starts in \(max(1, seconds / 86_400))d"
+    }
+}
+
 struct ForgeWatchAttentionSnapshot: Codable, Hashable {
     struct Item: Codable, Identifiable, Hashable {
         let id: String
@@ -537,16 +1083,63 @@ struct ForgeWatchBootstrap: Codable, Hashable {
     let now: ForgeWatchNowSnapshot?
     let work: ForgeWatchWorkSnapshot?
     let goals: [ForgeWatchGoalSummary]?
+    let goalCount: Int?
     let projects: [ForgeWatchProjectSummary]?
+    let projectCount: Int?
     let today: ForgeWatchTodaySnapshot?
     let health: ForgeWatchHealthSnapshot?
     let movement: ForgeWatchMovementSnapshot?
     let psyche: ForgeWatchPsycheSnapshot?
     let inbox: ForgeWatchInboxSnapshot?
     let sync: ForgeWatchSyncSnapshot?
+    let people: ForgeWatchPeopleGlanceSnapshot?
     var habits: [ForgeWatchHabitSummary]
     let checkInOptions: ForgeWatchQuickOptions
     var pendingPrompts: [ForgeWatchPrompt]
+
+    init(
+        schemaVersion: Int?,
+        generatedAt: String,
+        connection: ForgeWatchConnection?,
+        surfaces: [ForgeWatchSurfaceSummary]?,
+        now: ForgeWatchNowSnapshot?,
+        work: ForgeWatchWorkSnapshot?,
+        goals: [ForgeWatchGoalSummary]?,
+        goalCount: Int?,
+        projects: [ForgeWatchProjectSummary]?,
+        projectCount: Int?,
+        today: ForgeWatchTodaySnapshot?,
+        health: ForgeWatchHealthSnapshot?,
+        movement: ForgeWatchMovementSnapshot?,
+        psyche: ForgeWatchPsycheSnapshot?,
+        inbox: ForgeWatchInboxSnapshot?,
+        sync: ForgeWatchSyncSnapshot?,
+        people: ForgeWatchPeopleGlanceSnapshot? = nil,
+        habits: [ForgeWatchHabitSummary],
+        checkInOptions: ForgeWatchQuickOptions,
+        pendingPrompts: [ForgeWatchPrompt]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.generatedAt = generatedAt
+        self.connection = connection
+        self.surfaces = surfaces
+        self.now = now
+        self.work = work
+        self.goals = goals
+        self.goalCount = goalCount
+        self.projects = projects
+        self.projectCount = projectCount
+        self.today = today
+        self.health = health
+        self.movement = movement
+        self.psyche = psyche
+        self.inbox = inbox
+        self.sync = sync
+        self.people = people
+        self.habits = habits
+        self.checkInOptions = checkInOptions
+        self.pendingPrompts = pendingPrompts
+    }
 
     static let empty = ForgeWatchBootstrap(
         schemaVersion: 2,
@@ -556,13 +1149,16 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         now: nil,
         work: nil,
         goals: nil,
+        goalCount: nil,
         projects: nil,
+        projectCount: nil,
         today: nil,
         health: nil,
         movement: nil,
         psyche: nil,
         inbox: nil,
         sync: nil,
+        people: nil,
         habits: [],
         checkInOptions: ForgeWatchQuickOptions(
             activities: [],
@@ -579,7 +1175,15 @@ struct ForgeWatchBootstrap: Codable, Hashable {
         connection != nil
             || now != nil
             || work != nil
+            || goals != nil
+            || projects != nil
+            || today != nil
+            || health != nil
+            || movement != nil
+            || psyche != nil
+            || inbox != nil
             || sync != nil
+            || people != nil
             || habits.isEmpty == false
             || pendingPrompts.isEmpty == false
     }
@@ -593,17 +1197,53 @@ struct ForgeWatchBootstrap: Codable, Hashable {
             now: now,
             work: work,
             goals: goals,
+            goalCount: goalCount,
             projects: projects,
+            projectCount: projectCount,
             today: today,
             health: health,
             movement: movement,
             psyche: psyche,
             inbox: inbox,
             sync: sync,
+            people: people,
             habits: habits,
             checkInOptions: checkInOptions,
             pendingPrompts: pendingPrompts
         )
+    }
+
+    func withPeople(_ people: ForgeWatchPeopleGlanceSnapshot?) -> ForgeWatchBootstrap {
+        ForgeWatchBootstrap(
+            schemaVersion: schemaVersion,
+            generatedAt: generatedAt,
+            connection: connection,
+            surfaces: surfaces,
+            now: now,
+            work: work,
+            goals: goals,
+            goalCount: goalCount,
+            projects: projects,
+            projectCount: projectCount,
+            today: today,
+            health: health,
+            movement: movement,
+            psyche: psyche,
+            inbox: inbox,
+            sync: sync,
+            people: people,
+            habits: habits,
+            checkInOptions: checkInOptions,
+            pendingPrompts: pendingPrompts
+        )
+    }
+
+    func preservingPeople(from cached: ForgeWatchBootstrap) -> ForgeWatchBootstrap {
+        guard people == nil,
+              connection?.sessionId != nil,
+              connection?.sessionId == cached.connection?.sessionId
+        else { return self }
+        return withPeople(cached.people)
     }
 }
 
@@ -664,7 +1304,7 @@ struct ForgeWatchAckEnvelope: Codable, Hashable {
     let kind: String?
     let processedAt: String
     let status: String?
-    let error: [String: String]?
+    let error: [String: ForgeWatchJSONValue]?
     let bootstrap: ForgeWatchBootstrap?
 
     init(
@@ -672,7 +1312,7 @@ struct ForgeWatchAckEnvelope: Codable, Hashable {
         kind: String? = nil,
         processedAt: String,
         status: String?,
-        error: [String: String]?,
+        error: [String: ForgeWatchJSONValue]?,
         bootstrap: ForgeWatchBootstrap?
     ) {
         self.actionId = actionId
@@ -681,6 +1321,78 @@ struct ForgeWatchAckEnvelope: Codable, Hashable {
         self.status = status
         self.error = error
         self.bootstrap = bootstrap
+    }
+}
+
+enum ForgeWatchJSONValue: Codable, Hashable,
+    ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
+    ExpressibleByFloatLiteral, ExpressibleByBooleanLiteral, CustomStringConvertible
+{
+    case string(String)
+    case number(Double)
+    case boolean(Bool)
+    case object([String: ForgeWatchJSONValue])
+    case array([ForgeWatchJSONValue])
+    case null
+
+    init(stringLiteral value: String) { self = .string(value) }
+    init(integerLiteral value: Int) { self = .number(Double(value)) }
+    init(floatLiteral value: Double) { self = .number(value) }
+    init(booleanLiteral value: Bool) { self = .boolean(value) }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .boolean(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: ForgeWatchJSONValue].self) {
+            self = .object(value)
+        } else if let value = try? container.decode([ForgeWatchJSONValue].self) {
+            self = .array(value)
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported Forge Watch JSON value"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .boolean(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+
+    var stringValue: String? {
+        guard case .string(let value) = self else { return nil }
+        return value
+    }
+
+    var integerValue: Int? {
+        guard case .number(let value) = self, value.rounded() == value else { return nil }
+        return Int(value)
+    }
+
+    var description: String {
+        switch self {
+        case .string(let value): value
+        case .number(let value): value.rounded() == value ? String(Int(value)) : String(value)
+        case .boolean(let value): String(value)
+        case .object, .array:
+            (try? String(data: JSONEncoder().encode(self), encoding: .utf8)) ?? "Invalid value"
+        case .null: "null"
+        }
     }
 }
 
@@ -797,6 +1509,7 @@ struct ForgeWatchCommandReceipt: Codable, Hashable {
     let kind: String
     let status: String
     let processedAt: String
+    var error: [String: ForgeWatchJSONValue]? = nil
 }
 
 struct ForgeWatchStoredReceipt: Codable, Identifiable, Hashable {
@@ -807,6 +1520,7 @@ struct ForgeWatchStoredReceipt: Codable, Identifiable, Hashable {
     let status: String
     let processedAt: String
     let errorMessage: String?
+    var structuredError: [String: ForgeWatchJSONValue]? = nil
 }
 
 enum ForgeWatchReceiptHistoryPolicy {
@@ -854,8 +1568,9 @@ enum ForgeWatchReceiptLifecycle {
                 kind: $0,
                 status: ack.status ?? "processed",
                 processedAt: ack.processedAt,
-                errorMessage: ack.error?["message"]
-                    ?? (ack.status == "failed" ? "Forge rejected this action" : nil)
+                errorMessage: ack.error?["message"]?.stringValue
+                    ?? (ack.status == "failed" ? "Forge rejected this action" : nil),
+                structuredError: ack.error
             )
         }
         let remainingQueue = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
@@ -886,6 +1601,60 @@ struct ForgeWatchControlRequest: Codable, Hashable {
     let id: String
     let createdAt: String
     let reason: String
+    let deadlineAt: String?
+
+    nonisolated init(
+        id: String,
+        createdAt: String,
+        reason: String,
+        deadlineAt: String? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.reason = reason
+        self.deadlineAt = deadlineAt
+    }
+}
+
+enum ForgeWatchRefreshResponseStatus: String, Codable, Hashable {
+    case refreshed
+    case failed
+    case expired
+}
+
+struct ForgeWatchRefreshResponse: Codable, Hashable {
+    let requestId: String
+    let completedAt: String
+    let status: ForgeWatchRefreshResponseStatus
+    let message: String
+}
+
+enum ForgeWatchRefreshRequestPolicy {
+    nonisolated static let timeoutSeconds: TimeInterval = 12
+
+    nonisolated static func deadline(for createdAt: Date) -> Date {
+        createdAt.addingTimeInterval(timeoutSeconds)
+    }
+
+    nonisolated static func isExpired(
+        _ request: ForgeWatchControlRequest,
+        now: Date = Date()
+    ) -> Bool {
+        guard
+            let deadlineAt = request.deadlineAt,
+            let deadline = ISO8601DateFormatter().date(from: deadlineAt)
+        else {
+            return false
+        }
+        return now >= deadline
+    }
+
+    nonisolated static func accepts(
+        _ response: ForgeWatchRefreshResponse,
+        activeRequestId: String?
+    ) -> Bool {
+        activeRequestId == response.requestId
+    }
 }
 
 enum ForgeWatchLaunchDestination: String, Codable, CaseIterable {

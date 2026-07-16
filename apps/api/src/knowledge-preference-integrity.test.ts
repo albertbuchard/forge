@@ -19,6 +19,26 @@ async function issueOperatorSessionCookie(
   return `${cookie.name}=${cookie.value}`;
 }
 
+async function issuePreferenceToken(
+  app: Awaited<ReturnType<typeof buildServer>>,
+  cookie: string,
+  userIds: string[]
+) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v1/settings/tokens",
+    headers: { cookie },
+    payload: {
+      label: "Preference owner resolution test",
+      agentLabel: "Preference owner resolver",
+      scopes: ["read", "write"],
+      scopePolicy: { userIds, projectIds: [], tagIds: [] }
+    }
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  return (response.json() as { token: { token: string } }).token.token;
+}
+
 test("wiki page updates compare and swap the persisted revision atomically", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "forge-wiki-cas-"));
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
@@ -173,6 +193,199 @@ test("linked preference identity is reused while direct duplicate labels stay di
   }
 });
 
+test("preference catalog reads remove links after source ACL revocation", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-preference-link-revocation-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const token = await issuePreferenceToken(app, cookie, ["user_operator"]);
+    const tokenHeaders = { authorization: `Bearer ${token}` };
+    const createSpace = async (
+      label: string,
+      visibility: "personal" | "shared"
+    ) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/wiki/spaces",
+        headers: { cookie },
+        payload: {
+          label,
+          ownerUserId: "user_forge_bot",
+          visibility
+        }
+      });
+      assert.equal(response.statusCode, 201, response.body);
+      return response.json().space.id as string;
+    };
+    const sharedSpaceId = await createSpace(
+      "Preference link initially shared",
+      "shared"
+    );
+    const privateSpaceId = await createSpace(
+      "Preference link revoked",
+      "personal"
+    );
+    const pageResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/wiki/pages",
+      headers: { cookie },
+      payload: {
+        spaceId: sharedSpaceId,
+        title: "Revocable preference source",
+        contentMarkdown: "# Revocable preference source",
+        links: []
+      }
+    });
+    assert.equal(pageResponse.statusCode, 201, pageResponse.body);
+    const page = pageResponse.json().page as {
+      id: string;
+      revisionHash: string;
+    };
+
+    const catalogResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/catalogs",
+      headers: tokenHeaders,
+      payload: {
+        userId: "user_operator",
+        domain: "projects",
+        title: "Revocable source catalog",
+        links: [
+          {
+            entityType: "note",
+            entityId: page.id,
+            relationship: "related"
+          }
+        ]
+      }
+    });
+    assert.equal(catalogResponse.statusCode, 201, catalogResponse.body);
+    const catalogId = catalogResponse.json().catalog.id as string;
+    assert.equal(catalogResponse.json().catalog.links.length, 1);
+
+    const revokeResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/wiki/pages/${page.id}`,
+      headers: { cookie },
+      payload: {
+        spaceId: privateSpaceId,
+        expectedRevisionHash: page.revisionHash
+      }
+    });
+    assert.equal(revokeResponse.statusCode, 200, revokeResponse.body);
+    const revokedSource = await app.inject({
+      method: "GET",
+      url: `/api/v1/wiki/pages/${page.id}`,
+      headers: tokenHeaders
+    });
+    assert.equal(revokedSource.statusCode, 404);
+
+    const directRead = await app.inject({
+      method: "GET",
+      url: `/api/v1/preferences/catalogs/${catalogId}`,
+      headers: tokenHeaders
+    });
+    assert.equal(directRead.statusCode, 200, directRead.body);
+    assert.deepEqual(directRead.json().catalog.links, []);
+
+    const listRead = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/catalogs?domain=projects",
+      headers: tokenHeaders
+    });
+    assert.equal(listRead.statusCode, 200, listRead.body);
+    const listedCatalog = listRead
+      .json()
+      .catalogs.find((catalog: { id: string }) => catalog.id === catalogId);
+    assert.ok(listedCatalog);
+    assert.deepEqual(listedCatalog.links, []);
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("preference routes use preference-specific single-owner errors", async () => {
+  const rootDir = await mkdtemp(
+    path.join(os.tmpdir(), "forge-preference-owner-resolution-")
+  );
+  const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
+  try {
+    const cookie = await issueOperatorSessionCookie(app);
+    const token = await issuePreferenceToken(app, cookie, [
+      "user_operator",
+      "user_forge_bot"
+    ]);
+    const headers = { authorization: `Bearer ${token}` };
+
+    const required = await app.inject({
+      method: "GET",
+      url: "/api/v1/preferences/workspace?domain=projects",
+      headers
+    });
+    assert.equal(required.statusCode, 400);
+    assert.deepEqual(required.json(), {
+      code: "preferences_user_selection_required",
+      error:
+        "This token can read preferences for several Forge users; select exactly one user.",
+      statusCode: 400
+    });
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/game/start?userId=user_operator",
+      headers,
+      payload: { userId: "user_forge_bot", domain: "projects" }
+    });
+    assert.equal(conflict.statusCode, 400);
+    assert.deepEqual(conflict.json(), {
+      code: "preferences_user_selection_conflict",
+      error:
+        "The selected query user and body userId must identify the same Forge user for Preferences.",
+      statusCode: 400
+    });
+
+    const ambiguous = await app.inject({
+      method: "POST",
+      url:
+        "/api/v1/preferences/catalogs" +
+        "?userIds=user_operator&userIds=user_forge_bot",
+      headers,
+      payload: {
+        userId: "user_operator",
+        domain: "projects",
+        title: "Ambiguous owner catalog"
+      }
+    });
+    assert.equal(ambiguous.statusCode, 400);
+    assert.deepEqual(ambiguous.json(), {
+      code: "preferences_user_selection_ambiguous",
+      error: "Preference operations require exactly one selected Forge user.",
+      statusCode: 400
+    });
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/workspace/refresh",
+      headers: { cookie },
+      payload: { userId: "user_missing", domain: "projects" }
+    });
+    assert.equal(missing.statusCode, 404);
+    assert.deepEqual(missing.json(), {
+      code: "preferences_user_not_found",
+      error: "Forge user user_missing does not exist.",
+      statusCode: 404
+    });
+  } finally {
+    await app.close();
+    closeDatabase();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
 test("preference identity migration deterministically repairs duplicates and preserves evidence", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-preference-repair-")
@@ -185,12 +398,30 @@ test("preference identity migration deterministically repairs duplicates and pre
       .prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1")
       .get() as { id: string };
     const cookie = await issueOperatorSessionCookie(app);
+    const initializeResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/workspace/refresh",
+      headers: { cookie },
+      payload: { userId: seededUser.id, domain: "projects" }
+    });
+    assert.equal(initializeResponse.statusCode, 200, initializeResponse.body);
+    const readOnlyCounts = () =>
+      database
+        .prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM preference_profiles) AS profiles,
+             (SELECT COUNT(*) FROM preference_contexts) AS contexts,
+             (SELECT COUNT(*) FROM preference_snapshots) AS snapshots`
+        )
+        .get() as { profiles: number; contexts: number; snapshots: number };
+    const countsBeforeRead = readOnlyCounts();
     const workspaceResponse = await app.inject({
       method: "GET",
       url: `/api/v1/preferences/workspace?userId=${seededUser.id}&domain=projects`,
       headers: { cookie }
     });
     assert.equal(workspaceResponse.statusCode, 200);
+    assert.deepEqual(readOnlyCounts(), countsBeforeRead);
     const noteResponse = await app.inject({
       method: "POST",
       url: "/api/v1/wiki/pages",

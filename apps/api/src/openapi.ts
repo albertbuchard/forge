@@ -1,3 +1,9 @@
+import {
+  buildPeerOpenApiComponents,
+  buildPeerOpenApiPaths
+} from "./peer-openapi.js";
+import { TASK_CLOSEOUT_LIMITS } from "./types.js";
+
 function arrayOf(items: Record<string, unknown>) {
   return {
     type: "array",
@@ -19,6 +25,35 @@ function jsonResponse(schema: Record<string, unknown>, description: string) {
         schema
       }
     }
+  };
+}
+
+function stringQueryParameter(name: string) {
+  return {
+    name,
+    in: "query",
+    required: false,
+    schema: { type: "string" }
+  };
+}
+
+function repeatedStringQueryParameter(name: string) {
+  return {
+    name,
+    in: "query",
+    required: false,
+    schema: { type: "array", items: { type: "string" } },
+    style: "form",
+    explode: true
+  };
+}
+
+function integerQueryParameter(name: string, minimum: number, maximum: number) {
+  return {
+    name,
+    in: "query",
+    required: false,
+    schema: { type: "integer", minimum, maximum }
   };
 }
 
@@ -113,6 +148,24 @@ const PREFERENCE_ITEM_STATUS_VALUES = [
   "neutral"
 ];
 
+const REWARDABLE_ENTITY_TYPE_VALUES = [
+  "system",
+  "goal",
+  "project",
+  "task",
+  "habit",
+  "tag",
+  "note",
+  "insight",
+  "psyche_value",
+  "behavior_pattern",
+  "behavior",
+  "belief_entry",
+  "mode_profile",
+  "flashcard",
+  "trigger_report"
+];
+
 const API_TAGS = [
   {
     name: "Meta",
@@ -199,6 +252,10 @@ const API_TAGS = [
     description: "Live task timer and timed work-session operations."
   },
   {
+    name: "Git",
+    description: "Bounded operator-only Git reference discovery."
+  },
+  {
     name: "Habits",
     description: "Recurring commitments and habit check-ins."
   },
@@ -220,6 +277,16 @@ const API_TAGS = [
     name: "Wiki",
     description:
       "SQLite-backed wiki settings, pages, ingest, sync, health, and search."
+  },
+  {
+    name: "People",
+    description:
+      "Person records, bounded context reads, Wiki association review, and typed questions."
+  },
+  {
+    name: "Peer sharing",
+    description:
+      "Human-approved Forge-to-Forge pairing, directional grants, devices, synchronization, and diagnostics."
   },
   {
     name: "Artifacts",
@@ -301,11 +368,25 @@ const API_TAG_GROUPS = [
   },
   {
     name: "Knowledge And Reflection",
-    tags: ["Wiki", "Artifacts", "Preferences", "Psyche", "Questionnaires"]
+    tags: [
+      "People",
+      "Wiki",
+      "Artifacts",
+      "Preferences",
+      "Psyche",
+      "Questionnaires"
+    ]
   },
   {
     name: "Platform And Agents",
-    tags: ["Users", "Settings", "Agents", "Approvals", "Entity Batch"]
+    tags: [
+      "Users",
+      "Settings",
+      "Agents",
+      "Approvals",
+      "Peer sharing",
+      "Entity Batch"
+    ]
   }
 ] as const;
 
@@ -370,6 +451,12 @@ function resolveTagsForPath(path: string) {
   if (path.startsWith("/api/v1/wiki")) {
     return ["Wiki"];
   }
+  if (path.startsWith("/api/v1/people")) {
+    return ["People"];
+  }
+  if (path.startsWith("/api/v1/peers")) {
+    return ["Peer sharing"];
+  }
   if (path.startsWith("/api/v1/artifacts")) {
     return ["Artifacts"];
   }
@@ -410,8 +497,12 @@ function resolveTagsForPath(path: string) {
   if (path.startsWith("/api/v1/task-runs")) {
     return ["Task Runs"];
   }
+  if (path.startsWith("/api/v1/git-helper")) {
+    return ["Git"];
+  }
   if (
     path.startsWith("/api/v1/tasks") ||
+    path.startsWith("/api/v1/work-items") ||
     path.startsWith("/api/v1/work-adjustments")
   ) {
     return ["Tasks"];
@@ -515,6 +606,15 @@ export function buildOpenApiDocument() {
       }
     }
   };
+  const preferenceErrorResponses = (
+    ...statuses: Array<400 | 401 | 403 | 404 | 409 | 500>
+  ) =>
+    Object.fromEntries(
+      statuses.map((status) => [
+        String(status),
+        { $ref: "#/components/responses/Error" }
+      ])
+    );
 
   const userSummary = {
     type: "object",
@@ -697,6 +797,245 @@ export function buildOpenApiDocument() {
     ]
   };
 
+  const closeoutNoteLinkInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: { type: "string", maxLength: 80 },
+      entityId: { type: "string", minLength: 1, maxLength: 256 },
+      anchorKey: nullable({ type: "string", maxLength: 256 })
+    }
+  };
+
+  const closeoutNoteInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["contentMarkdown"],
+    properties: {
+      kind: { type: "string", enum: ["evidence", "wiki"], default: "evidence" },
+      title: { type: "string", maxLength: 512 },
+      slug: { type: "string", maxLength: 256 },
+      spaceId: { type: "string", maxLength: 256 },
+      parentSlug: nullable({ type: "string", maxLength: 256 }),
+      indexOrder: { type: "integer", default: 0 },
+      showInIndex: { type: "boolean" },
+      aliases: {
+        type: "array",
+        maxItems: 32,
+        uniqueItems: true,
+        items: { type: "string", maxLength: 160 }
+      },
+      summary: { type: "string", maxLength: 2000, default: "" },
+      contentMarkdown: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.closeoutNoteLength
+      },
+      author: nullable({
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.closeoutNoteAuthorLength
+      }),
+      links: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.closeoutNoteLinks,
+        items: { $ref: "#/components/schemas/CloseoutNoteLinkInput" }
+      },
+      tags: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.closeoutNoteTags,
+        uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: 80 }
+      },
+      destroyAt: nullable({ type: "string", format: "date-time" }),
+      sourcePath: { type: "string", maxLength: 1024, default: "" },
+      frontmatter: {
+        type: "object",
+        additionalProperties: true,
+        description: "JSON object limited to 4096 serialized characters."
+      }
+    }
+  };
+
+  const completionReport = {
+    type: "object",
+    additionalProperties: false,
+    required: ["modifiedFiles", "workSummary", "linkedGitRefIds"],
+    properties: {
+      modifiedFiles: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.modifiedFiles,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          minLength: 1,
+          maxLength: TASK_CLOSEOUT_LIMITS.modifiedFileLength,
+          description: "Safe repository-relative path without traversal."
+        }
+      },
+      workSummary: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.workSummaryLength,
+        default: ""
+      },
+      linkedGitRefIds: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.linkedGitRefIds,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          minLength: 1,
+          maxLength: TASK_CLOSEOUT_LIMITS.gitRefIdLength
+        }
+      }
+    }
+  };
+  const completionReportInput = {
+    type: completionReport.type,
+    additionalProperties: completionReport.additionalProperties,
+    properties: completionReport.properties
+  };
+
+  const safeGitUrl = nullable({
+    type: "string",
+    format: "uri",
+    pattern: "^https?://",
+    maxLength: TASK_CLOSEOUT_LIMITS.gitUrlLength
+  });
+  const workItemGitRefInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["refType", "refValue"],
+    properties: {
+      id: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefIdLength,
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      },
+      refType: {
+        type: "string",
+        enum: ["commit", "branch", "pull_request"]
+      },
+      provider: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitProviderLength,
+        default: "git"
+      },
+      repository: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRepositoryLength,
+        default: ""
+      },
+      refValue: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      },
+      url: safeGitUrl,
+      displayTitle: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength,
+        default: ""
+      }
+    }
+  };
+  const workItemGitRef = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "workItemId",
+      "refType",
+      "provider",
+      "repository",
+      "refValue",
+      "url",
+      "rawUrl",
+      "urlSafety",
+      "displayTitle",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      ...workItemGitRefInput.properties,
+      id: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefIdLength
+      },
+      workItemId: { type: "string", minLength: 1 },
+      rawUrl: nullable({
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitUrlLength
+      }),
+      urlSafety: {
+        type: "string",
+        enum: ["absent", "safe", "unsafe"]
+      },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workItemBlockerLink = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.blockerEntityTypeLength
+      },
+      entityId: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.blockerEntityIdLength
+      },
+      label: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.blockerLabelLength
+      }
+    }
+  };
+
+  const taskActionPointSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "costBand",
+      "totalCostAp",
+      "expectedDurationSeconds",
+      "sustainRateApPerHour",
+      "spentTodayAp",
+      "spentTotalAp",
+      "remainingAp"
+    ],
+    properties: {
+      costBand: {
+        type: "string",
+        enum: ["tiny", "light", "standard", "heavy", "brutal"]
+      },
+      totalCostAp: { type: "number", minimum: 0 },
+      expectedDurationSeconds: { type: "integer", minimum: 1 },
+      sustainRateApPerHour: { type: "number", minimum: 0 },
+      spentTodayAp: { type: "number", minimum: 0 },
+      spentTotalAp: { type: "number", minimum: 0 },
+      remainingAp: { type: "number", minimum: 0 }
+    }
+  };
+  const taskSplitSuggestion = {
+    type: "object",
+    additionalProperties: false,
+    required: ["shouldSplit", "reason", "thresholdSeconds"],
+    properties: {
+      shouldSplit: { type: "boolean" },
+      reason: nullable({ type: "string" }),
+      thresholdSeconds: { type: "integer", minimum: 1 }
+    }
+  };
+
   const task = {
     type: "object",
     additionalProperties: false,
@@ -704,51 +1043,164 @@ export function buildOpenApiDocument() {
       "id",
       "title",
       "description",
+      "level",
       "status",
       "priority",
       "owner",
       "goalId",
       "projectId",
+      "parentWorkItemId",
       "dueDate",
       "effort",
       "energy",
       "points",
+      "sortOrder",
       "plannedDurationSeconds",
       "schedulingRules",
-      "sortOrder",
+      "resolutionKind",
+      "splitParentTaskId",
+      "aiInstructions",
+      "executionMode",
+      "acceptanceCriteria",
+      "blockerLinks",
+      "completionReport",
+      "closeoutState",
+      "gitRefs",
       "completedAt",
       "createdAt",
       "updatedAt",
       "tagIds",
-      "time"
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees",
+      "time",
+      "actionPointSummary",
+      "splitSuggestion"
     ],
     properties: {
       id: { type: "string" },
-      title: { type: "string" },
+      title: { type: "string", minLength: 1 },
       description: { type: "string" },
+      level: { type: "string", enum: ["issue", "task", "subtask"] },
       status: {
         type: "string",
         enum: ["backlog", "focus", "in_progress", "blocked", "done"]
       },
-      priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
-      owner: { type: "string" },
+      priority: {
+        type: "string",
+        enum: ["low", "medium", "high", "critical"]
+      },
+      owner: { type: "string", minLength: 1 },
       goalId: nullable({ type: "string" }),
       projectId: nullable({ type: "string" }),
+      parentWorkItemId: nullable({ type: "string" }),
       dueDate: nullable({ type: "string", format: "date" }),
       effort: { type: "string", enum: ["light", "deep", "marathon"] },
       energy: { type: "string", enum: ["low", "steady", "high"] },
-      points: { type: "integer" },
-      plannedDurationSeconds: nullable({ type: "integer" }),
+      points: { type: "integer", minimum: 0 },
+      sortOrder: { type: "integer", minimum: 0 },
+      plannedDurationSeconds: nullable({
+        type: "integer",
+        minimum: 60,
+        maximum: 604800
+      }),
       schedulingRules: nullable({
         $ref: "#/components/schemas/CalendarSchedulingRules"
       }),
-      sortOrder: { type: "integer" },
+      resolutionKind: nullable({
+        type: "string",
+        enum: ["completed", "split"]
+      }),
+      splitParentTaskId: nullable({ type: "string" }),
+      aiInstructions: { type: "string" },
+      executionMode: nullable({ type: "string", enum: ["afk", "hitl"] }),
+      acceptanceCriteria: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.acceptanceCriteria,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          maxLength: TASK_CLOSEOUT_LIMITS.acceptanceCriterionLength
+        }
+      },
+      blockerLinks: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.blockerLinks,
+        items: { $ref: "#/components/schemas/WorkItemBlockerLink" }
+      },
+      completionReport: nullable({
+        $ref: "#/components/schemas/CompletionReport"
+      }),
+      closeoutState: {
+        type: "string",
+        enum: ["not_applicable", "complete", "deferred"]
+      },
+      gitRefs: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitRefs,
+        items: { $ref: "#/components/schemas/WorkItemGitRef" }
+      },
       completedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" },
       tagIds: arrayOf({ type: "string" }),
-      time: { $ref: "#/components/schemas/TaskTimeSummary" }
+      userId: nullable({ type: "string" }),
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" }),
+      time: { $ref: "#/components/schemas/TaskTimeSummary" },
+      actionPointSummary: {
+        $ref: "#/components/schemas/TaskActionPointSummary"
+      },
+      splitSuggestion: { $ref: "#/components/schemas/TaskSplitSuggestion" }
     }
+  };
+
+  const taskRunGitContext = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "provider",
+      "repository",
+      "branch",
+      "baseBranch",
+      "branchUrl",
+      "pullRequestUrl",
+      "pullRequestNumber",
+      "compareUrl"
+    ],
+    properties: {
+      provider: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitProviderLength
+      },
+      repository: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRepositoryLength
+      },
+      branch: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      },
+      baseBranch: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      },
+      branchUrl: safeGitUrl,
+      pullRequestUrl: safeGitUrl,
+      pullRequestNumber: nullable({ type: "integer", minimum: 1 }),
+      compareUrl: safeGitUrl
+    }
+  };
+  const taskRunGitContextInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: taskRunGitContext.properties
   };
 
   const taskRun = {
@@ -760,6 +1212,13 @@ export function buildOpenApiDocument() {
       "taskTitle",
       "actor",
       "status",
+      "timerMode",
+      "plannedDurationSeconds",
+      "elapsedWallSeconds",
+      "creditedSeconds",
+      "remainingSeconds",
+      "overtimeSeconds",
+      "isCurrent",
       "note",
       "leaseTtlSeconds",
       "claimedAt",
@@ -768,42 +1227,51 @@ export function buildOpenApiDocument() {
       "completedAt",
       "releasedAt",
       "timedOutAt",
+      "overrideReason",
       "updatedAt",
-      "timerMode",
-      "plannedDurationSeconds",
-      "elapsedWallSeconds",
-      "creditedSeconds",
-      "remainingSeconds",
-      "overtimeSeconds",
-      "isCurrent",
-      "overrideReason"
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees"
     ],
     properties: {
       id: { type: "string" },
       taskId: { type: "string" },
-      taskTitle: { type: "string" },
-      actor: { type: "string" },
+      taskTitle: { type: "string", minLength: 1 },
+      actor: { type: "string", minLength: 1, maxLength: 160 },
       status: {
         type: "string",
         enum: ["active", "completed", "released", "timed_out"]
       },
-      note: { type: "string" },
-      leaseTtlSeconds: { type: "integer" },
+      timerMode: { type: "string", enum: ["planned", "unlimited"] },
+      plannedDurationSeconds: nullable({ type: "integer", minimum: 1 }),
+      elapsedWallSeconds: { type: "integer", minimum: 0 },
+      creditedSeconds: { type: "number", minimum: 0 },
+      remainingSeconds: nullable({ type: "integer", minimum: 0 }),
+      overtimeSeconds: { type: "integer", minimum: 0 },
+      isCurrent: { type: "boolean" },
+      note: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.runNoteLength
+      },
+      leaseTtlSeconds: { type: "integer", minimum: 1 },
       claimedAt: { type: "string", format: "date-time" },
       heartbeatAt: { type: "string", format: "date-time" },
       leaseExpiresAt: { type: "string", format: "date-time" },
       completedAt: nullable({ type: "string", format: "date-time" }),
       releasedAt: nullable({ type: "string", format: "date-time" }),
       timedOutAt: nullable({ type: "string", format: "date-time" }),
+      overrideReason: nullable({ type: "string", maxLength: 1000 }),
+      gitContext: nullable({ $ref: "#/components/schemas/TaskRunGitContext" }),
       updatedAt: { type: "string", format: "date-time" },
-      timerMode: { type: "string", enum: ["planned", "unlimited"] },
-      plannedDurationSeconds: nullable({ type: "integer" }),
-      elapsedWallSeconds: { type: "integer" },
-      creditedSeconds: { type: "number" },
-      remainingSeconds: nullable({ type: "integer" }),
-      overtimeSeconds: { type: "integer" },
-      isCurrent: { type: "boolean" },
-      overrideReason: nullable({ type: "string" })
+      userId: nullable({ type: "string" }),
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" })
     }
   };
 
@@ -1311,8 +1779,15 @@ export function buildOpenApiDocument() {
       "startsAt",
       "endsAt",
       "overrideReason",
+      "actionProfile",
       "createdAt",
-      "updatedAt"
+      "updatedAt",
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees"
     ],
     properties: {
       id: { type: "string" },
@@ -1331,8 +1806,104 @@ export function buildOpenApiDocument() {
       startsAt: { type: "string", format: "date-time" },
       endsAt: { type: "string", format: "date-time" },
       overrideReason: nullable({ type: "string" }),
+      actionProfile: nullable({
+        type: "object",
+        additionalProperties: true
+      }),
       createdAt: { type: "string", format: "date-time" },
-      updatedAt: { type: "string", format: "date-time" }
+      updatedAt: { type: "string", format: "date-time" },
+      userId: nullable({ type: "string" }),
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" })
+    }
+  };
+
+  const taskTimeboxCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["taskId", "title", "startsAt", "endsAt"],
+    properties: {
+      taskId: { type: "string", minLength: 1 },
+      projectId: nullable({ type: "string", minLength: 1 }),
+      title: { type: "string", minLength: 1 },
+      startsAt: { type: "string", format: "date-time" },
+      endsAt: { type: "string", format: "date-time" },
+      source: {
+        type: "string",
+        enum: ["manual", "suggested", "live_run"],
+        default: "manual"
+      },
+      status: {
+        type: "string",
+        enum: ["planned", "active", "completed", "cancelled"],
+        default: "planned"
+      },
+      overrideReason: nullable({ type: "string", default: null }),
+      activityPresetKey: nullable({
+        type: "string",
+        enum: [
+          "deep_work",
+          "admin",
+          "maintenance",
+          "meeting",
+          "recovery_break",
+          "holiday_leisure",
+          "light_context",
+          "task_inherited"
+        ]
+      }),
+      customSustainRateApPerHour: nullable({ type: "number", minimum: 0 }),
+      userId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const taskTimeboxPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      title: { type: "string", minLength: 1 },
+      startsAt: { type: "string", format: "date-time" },
+      endsAt: { type: "string", format: "date-time" },
+      status: {
+        type: "string",
+        enum: ["planned", "active", "completed", "cancelled"]
+      },
+      overrideReason: nullable({ type: "string" }),
+      activityPresetKey: nullable({
+        type: "string",
+        enum: [
+          "deep_work",
+          "admin",
+          "maintenance",
+          "meeting",
+          "recovery_break",
+          "holiday_leisure",
+          "light_context",
+          "task_inherited"
+        ]
+      }),
+      customSustainRateApPerHour: nullable({ type: "number", minimum: 0 }),
+      userId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const taskTimeboxRecommendationInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["taskId"],
+    properties: {
+      taskId: { type: "string", minLength: 1 },
+      from: { type: "string" },
+      to: { type: "string" },
+      limit: { type: "integer", minimum: 1, maximum: 12, default: 6 },
+      timezone: {
+        type: "string",
+        description:
+          "Valid IANA timezone used to construct fallback wall-time windows."
+      }
     }
   };
 
@@ -1612,27 +2183,430 @@ export function buildOpenApiDocument() {
     additionalProperties: false,
     required: [
       "id",
+      "kind",
+      "title",
+      "slug",
+      "spaceId",
+      "parentSlug",
+      "indexOrder",
+      "showInIndex",
+      "aliases",
+      "summary",
       "contentMarkdown",
       "contentPlain",
       "author",
       "source",
+      "sourcePath",
+      "frontmatter",
+      "revisionHash",
+      "lastSyncedAt",
       "createdAt",
       "updatedAt",
       "links",
       "tags",
-      "destroyAt"
+      "destroyAt",
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees"
     ],
     properties: {
       id: { type: "string" },
+      kind: { type: "string", enum: ["wiki", "evidence"] },
+      title: { type: "string" },
+      slug: { type: "string" },
+      spaceId: { type: "string" },
+      parentSlug: nullable({ type: "string" }),
+      indexOrder: { type: "integer" },
+      showInIndex: { type: "boolean" },
+      aliases: arrayOf({ type: "string" }),
+      summary: { type: "string" },
       contentMarkdown: { type: "string" },
       contentPlain: { type: "string" },
       author: nullable({ type: "string" }),
       source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+      sourcePath: { type: "string" },
+      frontmatter: { type: "object", additionalProperties: true },
+      revisionHash: { type: "string" },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" },
       links: arrayOf({ $ref: "#/components/schemas/NoteLink" }),
       tags: arrayOf({ type: "string" }),
-      destroyAt: nullable({ type: "string", format: "date-time" })
+      destroyAt: nullable({ type: "string", format: "date-time" }),
+      userId: nullable({ type: "string" }),
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" })
+    }
+  };
+
+  const noteMutationProperties = {
+    kind: { type: "string", enum: ["wiki", "evidence"] },
+    title: { type: "string" },
+    slug: { type: "string" },
+    spaceId: { type: "string" },
+    parentSlug: nullable({ type: "string" }),
+    indexOrder: { type: "integer" },
+    showInIndex: { type: "boolean" },
+    aliases: arrayOf({ type: "string" }),
+    summary: { type: "string" },
+    contentMarkdown: { type: "string", minLength: 1 },
+    author: nullable({ type: "string" }),
+    links: {
+      type: "array",
+      maxItems: 64,
+      items: { $ref: "#/components/schemas/NoteLink" }
+    },
+    tags: {
+      type: "array",
+      maxItems: 24,
+      items: { type: "string", minLength: 1, maxLength: 80 }
+    },
+    destroyAt: nullable({ type: "string", format: "date-time" }),
+    sourcePath: { type: "string" },
+    frontmatter: { type: "object", additionalProperties: true },
+    userId: nullable({ type: "string", minLength: 1 })
+  };
+
+  const noteCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["contentMarkdown"],
+    properties: noteMutationProperties
+  };
+
+  const notePatchInput = {
+    type: "object",
+    additionalProperties: false,
+    minProperties: 1,
+    properties: {
+      ...noteMutationProperties,
+      expectedRevisionHash: { type: "string" },
+      revisionHash: { type: "string" },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" })
+    }
+  };
+
+  const wikiPageSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "kind",
+      "title",
+      "slug",
+      "spaceId",
+      "parentSlug",
+      "indexOrder",
+      "showInIndex",
+      "aliases",
+      "summary",
+      "author",
+      "source",
+      "tags",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      kind: { type: "string", enum: ["wiki", "evidence"] },
+      title: { type: "string" },
+      slug: { type: "string" },
+      spaceId: { type: "string" },
+      parentSlug: nullable({ type: "string" }),
+      indexOrder: { type: "integer" },
+      showInIndex: { type: "boolean" },
+      aliases: arrayOf({ type: "string" }),
+      summary: { type: "string" },
+      author: nullable({ type: "string" }),
+      source: { type: "string", enum: ["ui", "openclaw", "agent", "system"] },
+      tags: arrayOf({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const wikiPageListResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: ["pages", "limit", "offset", "hasMore", "nextOffset"],
+    properties: {
+      pages: arrayOf({ $ref: "#/components/schemas/WikiPageSummary" }),
+      limit: { type: "integer", minimum: 1, maximum: 500 },
+      offset: { type: "integer", minimum: 0, maximum: 9999 },
+      hasMore: { type: "boolean" },
+      nextOffset: nullable({ type: "integer", minimum: 0, maximum: 9999 })
+    }
+  };
+
+  const wikiPageLinkInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["entityType", "entityId"],
+    properties: {
+      entityType: { type: "string", minLength: 1 },
+      entityId: { type: "string", minLength: 1 },
+      anchorKey: nullable({ type: "string" })
+    }
+  };
+
+  const wikiPageCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["contentMarkdown"],
+    properties: {
+      kind: { type: "string", enum: ["wiki", "evidence"], default: "wiki" },
+      title: { type: "string" },
+      slug: { type: "string" },
+      spaceId: { type: "string" },
+      parentSlug: nullable({ type: "string" }),
+      indexOrder: { type: "integer", default: 0 },
+      showInIndex: { type: "boolean" },
+      aliases: arrayOf({ type: "string" }),
+      summary: { type: "string", default: "" },
+      contentMarkdown: { type: "string", minLength: 1 },
+      author: nullable({ type: "string" }),
+      links: arrayOf(wikiPageLinkInput),
+      tags: arrayOf({ type: "string" }),
+      destroyAt: nullable({ type: "string", format: "date-time" }),
+      sourcePath: { type: "string" },
+      frontmatter: { type: "object", additionalProperties: true },
+      revisionHash: { type: "string" },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+      userId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const wikiPagePatchInput = {
+    type: "object",
+    additionalProperties: false,
+    minProperties: 1,
+    properties: {
+      kind: { type: "string", enum: ["wiki", "evidence"] },
+      title: { type: "string" },
+      slug: { type: "string" },
+      spaceId: { type: "string" },
+      parentSlug: nullable({ type: "string" }),
+      indexOrder: { type: "integer" },
+      showInIndex: { type: "boolean" },
+      aliases: arrayOf({ type: "string" }),
+      summary: { type: "string" },
+      contentMarkdown: { type: "string", minLength: 1 },
+      author: nullable({ type: "string" }),
+      links: arrayOf(wikiPageLinkInput),
+      tags: arrayOf({ type: "string" }),
+      destroyAt: nullable({ type: "string", format: "date-time" }),
+      sourcePath: { type: "string" },
+      frontmatter: { type: "object", additionalProperties: true },
+      expectedRevisionHash: { type: "string" },
+      revisionHash: { type: "string" },
+      lastSyncedAt: nullable({ type: "string", format: "date-time" }),
+      userId: nullable({ type: "string", minLength: 1 })
+    }
+  };
+
+  const todayPriorityEvidence = {
+    type: "object",
+    additionalProperties: false,
+    required: ["key", "label", "state", "detail"],
+    properties: {
+      key: {
+        type: "string",
+        enum: ["urgency", "schedule", "capacity", "active-context"]
+      },
+      label: { type: "string", minLength: 1 },
+      state: {
+        type: "string",
+        enum: ["fresh", "stale", "missing", "loading", "error"]
+      },
+      detail: { type: "string", minLength: 1 }
+    }
+  };
+
+  const todayRankedCandidate = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "task",
+      "score",
+      "urgencyScore",
+      "scheduleScore",
+      "capacityScore",
+      "activeContextScore",
+      "hasActiveRun",
+      "capacityFit",
+      "requiredAp",
+      "requiredApEstimated",
+      "timebox",
+      "evidence",
+      "reason"
+    ],
+    properties: {
+      task: { $ref: "#/components/schemas/Task" },
+      score: { type: "number" },
+      urgencyScore: { type: "number" },
+      scheduleScore: { type: "number" },
+      capacityScore: { type: "number" },
+      activeContextScore: { type: "number" },
+      hasActiveRun: { type: "boolean" },
+      capacityFit: nullable({ type: "boolean" }),
+      requiredAp: { type: "number", minimum: 0 },
+      requiredApEstimated: { type: "boolean" },
+      timebox: nullable({ $ref: "#/components/schemas/TaskTimebox" }),
+      evidence: {
+        type: "array",
+        minItems: 4,
+        maxItems: 4,
+        items: { $ref: "#/components/schemas/TodayPriorityEvidence" }
+      },
+      reason: { type: "string", minLength: 1 }
+    }
+  };
+
+  const todayPriorityDecision = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "contractVersion",
+      "generatedAt",
+      "mode",
+      "confidence",
+      "decisionUserId",
+      "task",
+      "activeRun",
+      "activeRunCount",
+      "summary",
+      "rankedCandidates",
+      "selectedCandidate",
+      "alternatives",
+      "evidence",
+      "blockedTaskCount",
+      "needsRefresh",
+      "isLoading"
+    ],
+    properties: {
+      contractVersion: { type: "integer", enum: [1] },
+      generatedAt: { type: "string", format: "date-time" },
+      mode: {
+        type: "string",
+        enum: [
+          "ready",
+          "continue-active",
+          "unresolved-active",
+          "overloaded",
+          "capacity-limited",
+          "no-work"
+        ]
+      },
+      confidence: { type: "string", enum: ["full", "limited"] },
+      decisionUserId: nullable({ type: "string" }),
+      task: nullable({ $ref: "#/components/schemas/Task" }),
+      activeRun: nullable({ $ref: "#/components/schemas/TaskRun" }),
+      activeRunCount: { type: "integer", minimum: 0 },
+      summary: { type: "string", minLength: 1 },
+      rankedCandidates: {
+        type: "array",
+        maxItems: 100,
+        items: { $ref: "#/components/schemas/TodayRankedCandidate" }
+      },
+      selectedCandidate: nullable({
+        $ref: "#/components/schemas/TodayRankedCandidate"
+      }),
+      alternatives: {
+        type: "array",
+        maxItems: 3,
+        items: { $ref: "#/components/schemas/TodayRankedCandidate" }
+      },
+      evidence: {
+        type: "array",
+        minItems: 4,
+        maxItems: 4,
+        items: { $ref: "#/components/schemas/TodayPriorityEvidence" }
+      },
+      blockedTaskCount: { type: "integer", minimum: 0 },
+      needsRefresh: { type: "boolean" },
+      isLoading: { type: "boolean" }
+    }
+  };
+
+  const wikiSearchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      spaceId: { type: "string" },
+      kind: { type: "string", enum: ["wiki", "evidence"] },
+      mode: {
+        type: "string",
+        enum: ["text", "semantic", "entity", "hybrid"],
+        default: "hybrid"
+      },
+      query: {
+        type: "string",
+        maxLength: 500,
+        default: "",
+        description:
+          "Free-text query. Full-text retrieval uses at most the first 20 alphanumeric tokens."
+      },
+      profileId: { type: "string" },
+      linkedEntity: {
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "entityId"],
+        properties: {
+          entityType: { type: "string" },
+          entityId: { type: "string", minLength: 1 }
+        }
+      },
+      limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+      offset: { type: "integer", minimum: 0, maximum: 999, default: 0 }
+    }
+  };
+
+  const wikiSearchResult = {
+    type: "object",
+    additionalProperties: false,
+    required: ["page", "score", "matchKind", "snippet"],
+    properties: {
+      page: { $ref: "#/components/schemas/WikiPageSummary" },
+      score: { type: "number" },
+      matchKind: {
+        type: "string",
+        enum: ["title", "alias", "content", "entity", "semantic", "recent"]
+      },
+      snippet: { type: "string", maxLength: 240 }
+    }
+  };
+
+  const wikiSearchResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "mode",
+      "profileId",
+      "limit",
+      "offset",
+      "hasMore",
+      "nextOffset",
+      "warnings",
+      "results"
+    ],
+    properties: {
+      mode: {
+        type: "string",
+        enum: ["text", "semantic", "entity", "hybrid"]
+      },
+      profileId: nullable({ type: "string" }),
+      limit: { type: "integer", minimum: 1, maximum: 50 },
+      offset: { type: "integer", minimum: 0, maximum: 999 },
+      hasMore: { type: "boolean" },
+      nextOffset: nullable({ type: "integer", minimum: 0, maximum: 999 }),
+      warnings: arrayOf({ type: "string" }),
+      results: arrayOf({ $ref: "#/components/schemas/WikiSearchResult" })
     }
   };
 
@@ -2324,12 +3298,204 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const nestedTaskNoteInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["contentMarkdown"],
+    properties: {
+      kind: { type: "string", enum: ["evidence", "wiki"], default: "evidence" },
+      title: { type: "string" },
+      slug: { type: "string" },
+      spaceId: { type: "string" },
+      parentSlug: nullable({ type: "string" }),
+      indexOrder: { type: "integer", default: 0 },
+      showInIndex: { type: "boolean" },
+      aliases: { type: "array", uniqueItems: true, items: { type: "string" } },
+      summary: { type: "string", default: "" },
+      contentMarkdown: { type: "string", minLength: 1 },
+      author: nullable({ type: "string" }),
+      links: {
+        type: "array",
+        maxItems: 64,
+        items: { $ref: "#/components/schemas/CloseoutNoteLinkInput" }
+      },
+      tags: {
+        type: "array",
+        maxItems: 24,
+        uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: 80 }
+      },
+      destroyAt: nullable({ type: "string", format: "date-time" }),
+      sourcePath: { type: "string", default: "" },
+      frontmatter: { type: "object", additionalProperties: true }
+    }
+  };
+
+  const taskMutationProperties = {
+    title: { type: "string", minLength: 1 },
+    description: { type: "string", default: "" },
+    level: {
+      type: "string",
+      enum: ["issue", "task", "subtask"],
+      default: "task"
+    },
+    status: {
+      type: "string",
+      enum: ["backlog", "focus", "in_progress", "blocked", "done"],
+      default: "backlog"
+    },
+    priority: {
+      type: "string",
+      enum: ["low", "medium", "high", "critical"],
+      default: "medium"
+    },
+    owner: { type: "string", minLength: 1, default: "Albert" },
+    userId: nullable({ type: "string", minLength: 1 }),
+    assigneeUserIds: {
+      type: "array",
+      uniqueItems: true,
+      items: { type: "string", minLength: 1 }
+    },
+    goalId: nullable({ type: "string", minLength: 1 }),
+    projectId: nullable({ type: "string", minLength: 1 }),
+    parentWorkItemId: nullable({ type: "string", minLength: 1 }),
+    dueDate: nullable({ type: "string", format: "date" }),
+    effort: {
+      type: "string",
+      enum: ["light", "deep", "marathon"],
+      default: "deep"
+    },
+    energy: {
+      type: "string",
+      enum: ["low", "steady", "high"],
+      default: "steady"
+    },
+    points: { type: "integer", minimum: 5, maximum: 500, default: 40 },
+    plannedDurationSeconds: nullable({
+      type: "integer",
+      minimum: 60,
+      maximum: 604800
+    }),
+    schedulingRules: nullable({
+      $ref: "#/components/schemas/CalendarSchedulingRules"
+    }),
+    sortOrder: { type: "integer", minimum: 0 },
+    aiInstructions: { type: "string", default: "" },
+    executionMode: nullable({ type: "string", enum: ["afk", "hitl"] }),
+    acceptanceCriteria: {
+      type: "array",
+      maxItems: TASK_CLOSEOUT_LIMITS.acceptanceCriteria,
+      uniqueItems: true,
+      items: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.acceptanceCriterionLength
+      }
+    },
+    blockerLinks: {
+      type: "array",
+      maxItems: TASK_CLOSEOUT_LIMITS.blockerLinks,
+      items: { $ref: "#/components/schemas/WorkItemBlockerLink" }
+    },
+    completionReport: nullable({
+      $ref: "#/components/schemas/CompletionReportInput"
+    }),
+    gitRefs: {
+      type: "array",
+      maxItems: TASK_CLOSEOUT_LIMITS.gitRefs,
+      items: { $ref: "#/components/schemas/WorkItemGitRefInput" }
+    },
+    tagIds: {
+      type: "array",
+      uniqueItems: true,
+      items: { type: "string" }
+    },
+    actionCostBand: {
+      type: "string",
+      enum: ["tiny", "light", "standard", "heavy", "brutal"],
+      default: "standard"
+    },
+    notes: {
+      type: "array",
+      items: { $ref: "#/components/schemas/NestedTaskNoteInput" }
+    }
+  };
+  const taskCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["title"],
+    properties: taskMutationProperties
+  };
+  const taskPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ...taskMutationProperties,
+      completedAt: { type: "string", format: "date-time" },
+      resolutionKind: nullable({
+        type: "string",
+        enum: ["completed", "split"]
+      }),
+      splitParentTaskId: nullable({ type: "string" }),
+      enforceTodayWorkLog: { type: "boolean" },
+      completedTodayWorkSeconds: {
+        type: "integer",
+        minimum: 0,
+        maximum: 604800
+      }
+    }
+  };
+
+  const operatorLogWorkInput = {
+    type: "object",
+    additionalProperties: false,
+    anyOf: [{ required: ["taskId"] }, { required: ["title"] }],
+    properties: {
+      taskId: { type: "string", minLength: 1, maxLength: 256 },
+      title: { type: "string", maxLength: 1000 },
+      description: { type: "string", maxLength: 16000 },
+      summary: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.workSummaryLength,
+        default: ""
+      },
+      goalId: nullable({ type: "string", minLength: 1 }),
+      projectId: nullable({ type: "string", minLength: 1 }),
+      owner: { type: "string", minLength: 1 },
+      userId: nullable({ type: "string", minLength: 1 }),
+      status: {
+        type: "string",
+        enum: ["backlog", "focus", "in_progress", "blocked", "done"]
+      },
+      priority: {
+        type: "string",
+        enum: ["low", "medium", "high", "critical"]
+      },
+      dueDate: nullable({ type: "string", format: "date" }),
+      effort: { type: "string", enum: ["light", "deep", "marathon"] },
+      energy: { type: "string", enum: ["low", "steady", "high"] },
+      points: { type: "integer", minimum: 5, maximum: 500 },
+      tagIds: {
+        type: "array",
+        maxItems: 64,
+        uniqueItems: true,
+        items: { type: "string", maxLength: 256 }
+      },
+      completionReport: { $ref: "#/components/schemas/CompletionReportInput" },
+      gitRefs: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitRefs,
+        items: { $ref: "#/components/schemas/WorkItemGitRefInput" }
+      },
+      closeoutNote: { $ref: "#/components/schemas/CloseoutNoteInput" }
+    }
+  };
+
   const taskRunClaimInput = {
     type: "object",
     additionalProperties: false,
     required: ["actor"],
     properties: {
-      actor: { type: "string" },
+      actor: { type: "string", minLength: 1, maxLength: 160 },
       timerMode: {
         type: "string",
         enum: ["planned", "unlimited"],
@@ -2340,7 +3506,7 @@ export function buildOpenApiDocument() {
         minimum: 60,
         maximum: 86400
       }),
-      overrideReason: nullable({ type: "string" }),
+      overrideReason: { type: "string", maxLength: 1000 },
       isCurrent: { type: "boolean", default: true },
       leaseTtlSeconds: {
         type: "integer",
@@ -2348,7 +3514,14 @@ export function buildOpenApiDocument() {
         maximum: 14400,
         default: 900
       },
-      note: { type: "string", default: "" }
+      note: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.runNoteLength,
+        default: ""
+      },
+      gitContext: nullable({
+        $ref: "#/components/schemas/TaskRunGitContextInput"
+      })
     }
   };
 
@@ -2356,32 +3529,46 @@ export function buildOpenApiDocument() {
     type: "object",
     additionalProperties: false,
     properties: {
-      actor: { type: "string" },
+      actor: { type: "string", minLength: 1, maxLength: 160 },
       leaseTtlSeconds: {
         type: "integer",
         minimum: 1,
         maximum: 14400,
         default: 900
       },
-      note: { type: "string" }
+      note: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.runNoteLength
+      },
+      overrideReason: { type: "string", maxLength: 1000 },
+      gitContext: nullable({
+        $ref: "#/components/schemas/TaskRunGitContextInput"
+      })
     }
   };
 
-  const taskRunFinishInput = {
+  const taskRunReleaseInput = {
     type: "object",
     additionalProperties: false,
     properties: {
-      actor: { type: "string" },
-      note: { type: "string", default: "" },
-      closeoutNote: {
-        type: "object",
-        additionalProperties: false,
-        required: ["contentMarkdown"],
-        properties: {
-          contentMarkdown: { type: "string" },
-          author: nullable({ type: "string" }),
-          links: arrayOf({ $ref: "#/components/schemas/NoteLink" })
-        }
+      actor: { type: "string", minLength: 1, maxLength: 160 },
+      note: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.runNoteLength,
+        default: ""
+      },
+      closeoutNote: { $ref: "#/components/schemas/CloseoutNoteInput" }
+    }
+  };
+  const taskRunCompleteInput = {
+    ...taskRunReleaseInput,
+    properties: {
+      ...taskRunReleaseInput.properties,
+      completionReport: { $ref: "#/components/schemas/CompletionReportInput" },
+      gitRefs: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitRefs,
+        items: { $ref: "#/components/schemas/WorkItemGitRefInput" }
       }
     }
   };
@@ -2390,7 +3577,136 @@ export function buildOpenApiDocument() {
     type: "object",
     additionalProperties: false,
     properties: {
-      actor: { type: "string" }
+      actor: { type: "string", minLength: 1 }
+    }
+  };
+
+  const gitHelperRef = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "key",
+      "refType",
+      "provider",
+      "repository",
+      "refValue",
+      "url",
+      "displayTitle",
+      "subtitle"
+    ],
+    properties: {
+      key: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength + 32
+      },
+      refType: {
+        type: "string",
+        enum: ["commit", "branch", "pull_request"]
+      },
+      provider: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitProviderLength
+      },
+      repository: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRepositoryLength
+      },
+      refValue: {
+        type: "string",
+        minLength: 1,
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      },
+      url: safeGitUrl,
+      displayTitle: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      },
+      subtitle: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitDisplayTitleLength
+      }
+    }
+  };
+  const gitHelperOverview = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "provider",
+      "repository",
+      "currentBranch",
+      "baseBranch",
+      "branches",
+      "commits",
+      "pullRequests",
+      "warnings"
+    ],
+    properties: {
+      provider: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitProviderLength
+      },
+      repository: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength
+      },
+      currentBranch: nullable({
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      }),
+      baseBranch: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitRefValueLength
+      },
+      branches: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperResults,
+        items: { $ref: "#/components/schemas/GitHelperRef" }
+      },
+      commits: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperResults,
+        items: { $ref: "#/components/schemas/GitHelperRef" }
+      },
+      pullRequests: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperResults,
+        items: { $ref: "#/components/schemas/GitHelperRef" }
+      },
+      warnings: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperWarnings,
+        items: { type: "string", maxLength: 512 }
+      }
+    }
+  };
+  const gitHelperSearchResponse = {
+    type: "object",
+    additionalProperties: false,
+    required: ["provider", "repository", "kind", "refs", "warnings"],
+    properties: {
+      provider: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitProviderLength
+      },
+      repository: {
+        type: "string",
+        maxLength: TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength
+      },
+      kind: {
+        type: "string",
+        enum: ["branch", "commit", "pull_request"]
+      },
+      refs: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperResults,
+        items: { $ref: "#/components/schemas/GitHelperRef" }
+      },
+      warnings: {
+        type: "array",
+        maxItems: TASK_CLOSEOUT_LIMITS.gitHelperWarnings,
+        items: { type: "string", maxLength: 512 }
+      }
     }
   };
 
@@ -3557,6 +4873,7 @@ export function buildOpenApiDocument() {
     type: "object",
     additionalProperties: false,
     required: [
+      "timezone",
       "scope",
       "profile",
       "achievements",
@@ -3577,6 +4894,11 @@ export function buildOpenApiDocument() {
       "dailyAmbientCap"
     ],
     properties: {
+      timezone: {
+        type: "string",
+        description:
+          "Validated IANA timezone used for daily streak and weekly XP boundaries."
+      },
       scope: { $ref: "#/components/schemas/GamificationScope" },
       profile: { $ref: "#/components/schemas/GamificationProfile" },
       achievements: arrayOf({ $ref: "#/components/schemas/AchievementSignal" }),
@@ -4314,7 +5636,34 @@ export function buildOpenApiDocument() {
             type: "object",
             additionalProperties: {
               type: "object",
-              additionalProperties: true
+              additionalProperties: true,
+              required: [
+                "classification",
+                "aliases",
+                "summary",
+                "routeKeys",
+                "routeTools",
+                "methodRoutes",
+                "notes"
+              ],
+              properties: {
+                classification: {
+                  type: "string",
+                  enum: ["action_workflow_entity"]
+                },
+                aliases: arrayOf({ type: "string" }),
+                summary: { type: "string" },
+                routeKeys: arrayOf({ type: "string" }),
+                routeTools: {
+                  type: "object",
+                  additionalProperties: { type: "string" }
+                },
+                methodRoutes: {
+                  type: "object",
+                  additionalProperties: { type: "string" }
+                },
+                notes: arrayOf({ type: "string" })
+              }
             }
           },
           specializedDomainSurfaces: {
@@ -4525,6 +5874,7 @@ export function buildOpenApiDocument() {
         additionalProperties: false,
         required: [
           "context",
+          "todayPriority",
           "xpMetrics",
           "weeklyReview",
           "sleepOverview",
@@ -4589,6 +5939,7 @@ export function buildOpenApiDocument() {
         ],
         properties: {
           context: { type: "string" },
+          todayPriority: { type: "string" },
           xpMetrics: { type: "string" },
           weeklyReview: { type: "string" },
           sleepOverview: { type: "string" },
@@ -4831,26 +6182,138 @@ export function buildOpenApiDocument() {
     }
   };
 
-  const batchEntityResult = {
+  const batchEntityValidationIssue = {
     type: "object",
-    additionalProperties: true,
+    additionalProperties: false,
+    required: ["path", "message"],
+    properties: {
+      path: { type: "string" },
+      message: { type: "string" },
+      code: { type: "string" },
+      allowedValues: arrayOf({})
+    }
+  };
+
+  const batchEntityInvalidValueGuidance = {
+    type: "object",
+    additionalProperties: false,
+    required: ["path", "allowedValues", "message"],
+    properties: {
+      path: { type: "string" },
+      allowedValues: arrayOf({}),
+      message: { type: "string" }
+    }
+  };
+
+  const batchEntityOperationError = {
+    type: "object",
+    additionalProperties: false,
+    required: ["code", "message"],
+    properties: {
+      code: {
+        type: "string",
+        description:
+          "Machine-readable operation error. Atomic batches use rolled_back for earlier successful operations whose transaction effects were undone and not_executed for later operations skipped after the failure.",
+        examples: [
+          "validation_failed",
+          "not_found",
+          "rolled_back",
+          "not_executed"
+        ]
+      },
+      message: { type: "string" },
+      operationType: {
+        type: "string",
+        enum: ["create", "update", "delete", "restore", "search"]
+      },
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      clientRef: { type: "string" },
+      routeHint: { type: "string" },
+      toolHint: { type: "string" },
+      summary: { type: "string" },
+      issues: arrayOf({
+        $ref: "#/components/schemas/BatchEntityValidationIssue"
+      }),
+      missingRequiredFields: arrayOf({ type: "string" }),
+      invalidValueGuidance: arrayOf({
+        $ref: "#/components/schemas/BatchEntityInvalidValueGuidance"
+      }),
+      allowedTopLevelFields: arrayOf({ type: "string" }),
+      minimalExamplePayload: {
+        type: "object",
+        additionalProperties: true
+      }
+    }
+  };
+
+  const batchEntityMutationResult = {
+    type: "object",
+    additionalProperties: false,
     required: ["ok", "entityType"],
     properties: {
       ok: { type: "boolean" },
-      entityType: { type: "string" },
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
       id: { type: "string" },
       clientRef: { type: "string" },
-      entity: { type: "object", additionalProperties: true },
-      matches: arrayOf({ type: "object", additionalProperties: true }),
-      deletedRecord: { $ref: "#/components/schemas/DeletedEntityRecord" },
-      error: {
+      entity: {
+        description:
+          "The created, updated, deleted, or restored entity returned by a successful mutation.",
         type: "object",
-        additionalProperties: false,
-        properties: {
-          code: { type: "string" },
-          message: { type: "string" }
-        }
+        additionalProperties: true
+      },
+      deletedRecord: {
+        description:
+          "A canonical deleted-record snapshot when a mutation surface returns one explicitly.",
+        $ref: "#/components/schemas/DeletedEntityRecord"
+      },
+      projection: {
+        description:
+          "Downstream calendar projection outcome, present only for successful calendar-event mutations that request projection work.",
+        $ref: "#/components/schemas/CalendarProjectionResult"
+      },
+      error: { $ref: "#/components/schemas/BatchEntityOperationError" }
+    },
+    oneOf: [
+      {
+        title: "Mutation success",
+        description:
+          "The mutation committed. id and entity identify the resulting stored record; projection may accompany calendar-event mutations.",
+        required: ["id", "entity"],
+        properties: { ok: { const: true } }
+      },
+      {
+        title: "Mutation failure",
+        description:
+          "The mutation did not commit. The error may be the original operation error, rolled_back, or not_executed for an atomic batch.",
+        required: ["error"],
+        properties: { ok: { const: false } }
       }
+    ]
+  };
+
+  const batchEntitySearchMatch = {
+    type: "object",
+    additionalProperties: false,
+    required: ["deleted", "entityType", "id", "entity"],
+    properties: {
+      deleted: { type: "boolean" },
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      id: { type: "string" },
+      entity: { type: "object", additionalProperties: true },
+      deletedRecord: { $ref: "#/components/schemas/DeletedEntityRecord" }
+    }
+  };
+
+  const batchEntitySearchResult = {
+    type: "object",
+    additionalProperties: false,
+    required: ["ok", "matches"],
+    properties: {
+      ok: { type: "boolean", const: true },
+      clientRef: { type: "string" },
+      matches: arrayOf({
+        $ref: "#/components/schemas/BatchEntitySearchMatch"
+      })
     }
   };
 
@@ -4993,6 +6456,12 @@ export function buildOpenApiDocument() {
       "label",
       "description",
       "system",
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees",
       "createdAt",
       "updatedAt"
     ],
@@ -5002,6 +6471,16 @@ export function buildOpenApiDocument() {
       label: { type: "string" },
       description: { type: "string" },
       system: { type: "boolean" },
+      userId: {
+        ...nullable({ type: "string" }),
+        description:
+          "Effective owner of a custom event type. Built-in entries are unowned and return null."
+      },
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
     }
@@ -5017,6 +6496,12 @@ export function buildOpenApiDocument() {
       "description",
       "category",
       "system",
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees",
       "createdAt",
       "updatedAt"
     ],
@@ -5027,9 +6512,62 @@ export function buildOpenApiDocument() {
       description: { type: "string" },
       category: { type: "string" },
       system: { type: "boolean" },
+      userId: {
+        ...nullable({ type: "string" }),
+        description:
+          "Effective owner of a custom emotion definition. Built-in entries are unowned and return null."
+      },
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
     }
+  };
+
+  const eventTypeCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["label"],
+    properties: {
+      label: { type: "string", minLength: 1, maxLength: 160 },
+      description: { type: "string", maxLength: 2000, default: "" },
+      userId: {
+        ...nullable({ type: "string", minLength: 1 }),
+        description:
+          "Owner for the custom entry. Omit only when the effective token scope resolves to one user."
+      }
+    }
+  };
+
+  const eventTypePatchInput = {
+    ...eventTypeCreateInput,
+    required: [],
+    minProperties: 1
+  };
+
+  const emotionDefinitionCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["label"],
+    properties: {
+      label: { type: "string", minLength: 1, maxLength: 160 },
+      description: { type: "string", maxLength: 2000, default: "" },
+      category: { type: "string", maxLength: 160, default: "" },
+      userId: {
+        ...nullable({ type: "string", minLength: 1 }),
+        description:
+          "Owner for the custom entry. Omit only when the effective token scope resolves to one user."
+      }
+    }
+  };
+
+  const emotionDefinitionPatchInput = {
+    ...emotionDefinitionCreateInput,
+    required: [],
+    minProperties: 1
   };
 
   const behavior = {
@@ -5226,6 +6764,7 @@ export function buildOpenApiDocument() {
       "customEventType",
       "eventSituation",
       "occurredAt",
+      "bodyCues",
       "emotions",
       "thoughts",
       "behaviors",
@@ -5242,6 +6781,19 @@ export function buildOpenApiDocument() {
       "schemaLinks",
       "modeTimeline",
       "nextMoves",
+      "memoryClarity",
+      "reflection",
+      "hypothesis",
+      "hypothesisFit",
+      "hypothesisCorrection",
+      "interpretationConsent",
+      "revision",
+      "userId",
+      "user",
+      "ownerUserId",
+      "ownerUser",
+      "assigneeUserIds",
+      "assignees",
       "createdAt",
       "updatedAt"
     ],
@@ -5254,6 +6806,7 @@ export function buildOpenApiDocument() {
       customEventType: { type: "string" },
       eventSituation: { type: "string" },
       occurredAt: nullable({ type: "string", format: "date-time" }),
+      bodyCues: arrayOf({ type: "string" }),
       emotions: arrayOf({
         type: "object",
         additionalProperties: false,
@@ -5328,8 +6881,232 @@ export function buildOpenApiDocument() {
         }
       }),
       nextMoves: arrayOf({ type: "string" }),
+      memoryClarity: {
+        type: "string",
+        enum: ["unspecified", "clear", "partial", "uncertain"]
+      },
+      reflection: { type: "string" },
+      hypothesis: { type: "string" },
+      hypothesisFit: {
+        type: "string",
+        enum: ["not_reviewed", "fits", "partly_fits", "does_not_fit"]
+      },
+      hypothesisCorrection: { type: "string" },
+      interpretationConsent: { type: "boolean" },
+      revision: { type: "integer", minimum: 1 },
+      userId: nullable({ type: "string" }),
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      ownerUserId: nullable({ type: "string" }),
+      ownerUser: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      assigneeUserIds: arrayOf({ type: "string" }),
+      assignees: arrayOf({ $ref: "#/components/schemas/UserSummary" }),
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const triggerReportMutationProperties = {
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    status: {
+      type: "string",
+      enum: ["draft", "reviewed", "integrated"]
+    },
+    eventTypeId: nullable({ type: "string", maxLength: 160 }),
+    customEventType: { type: "string", maxLength: 500 },
+    eventSituation: { type: "string", maxLength: 6000 },
+    occurredAt: nullable({ type: "string", format: "date-time" }),
+    bodyCues: {
+      type: "array",
+      maxItems: 40,
+      items: { type: "string", maxLength: 500 }
+    },
+    emotions: {
+      type: "array",
+      maxItems: 40,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "intensity"],
+        properties: {
+          id: { type: "string", maxLength: 160 },
+          emotionDefinitionId: nullable({ type: "string", maxLength: 160 }),
+          label: { type: "string", minLength: 1, maxLength: 500 },
+          intensity: { type: "integer", minimum: 0, maximum: 100 },
+          note: { type: "string", maxLength: 500 }
+        }
+      }
+    },
+    thoughts: {
+      type: "array",
+      maxItems: 40,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text"],
+        properties: {
+          id: { type: "string", maxLength: 160 },
+          text: { type: "string", minLength: 1, maxLength: 2000 },
+          parentMode: { type: "string", maxLength: 500 },
+          criticMode: { type: "string", maxLength: 500 },
+          beliefId: nullable({ type: "string", maxLength: 160 })
+        }
+      }
+    },
+    behaviors: {
+      type: "array",
+      maxItems: 40,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text"],
+        properties: {
+          id: { type: "string", maxLength: 160 },
+          text: { type: "string", minLength: 1, maxLength: 2000 },
+          mode: { type: "string", maxLength: 500 },
+          behaviorId: nullable({ type: "string", maxLength: 160 })
+        }
+      }
+    },
+    consequences: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        selfShortTerm: {
+          type: "array",
+          maxItems: 40,
+          items: { type: "string", maxLength: 500 }
+        },
+        selfLongTerm: {
+          type: "array",
+          maxItems: 40,
+          items: { type: "string", maxLength: 500 }
+        },
+        othersShortTerm: {
+          type: "array",
+          maxItems: 40,
+          items: { type: "string", maxLength: 500 }
+        },
+        othersLongTerm: {
+          type: "array",
+          maxItems: 40,
+          items: { type: "string", maxLength: 500 }
+        }
+      }
+    },
+    linkedPatternIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedValueIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedGoalIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedProjectIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedTaskIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedBehaviorIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedBeliefIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    linkedModeIds: {
+      type: "array",
+      maxItems: 100,
+      items: { type: "string", maxLength: 160 }
+    },
+    modeOverlays: {
+      type: "array",
+      maxItems: 40,
+      items: { type: "string", maxLength: 500 }
+    },
+    schemaLinks: {
+      type: "array",
+      maxItems: 40,
+      items: { type: "string", maxLength: 500 }
+    },
+    modeTimeline: {
+      type: "array",
+      maxItems: 40,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["stage", "modeId", "label"],
+        properties: {
+          id: { type: "string", maxLength: 160 },
+          stage: { type: "string", minLength: 1, maxLength: 80 },
+          modeId: nullable({ type: "string", maxLength: 160 }),
+          label: { type: "string", minLength: 1, maxLength: 160 },
+          note: { type: "string", maxLength: 500 }
+        }
+      }
+    },
+    nextMoves: {
+      type: "array",
+      maxItems: 40,
+      items: { type: "string", maxLength: 500 }
+    },
+    memoryClarity: {
+      type: "string",
+      enum: ["unspecified", "clear", "partial", "uncertain"],
+      default: "unspecified"
+    },
+    reflection: { type: "string", maxLength: 6000 },
+    hypothesis: { type: "string", maxLength: 6000 },
+    hypothesisFit: {
+      type: "string",
+      enum: ["not_reviewed", "fits", "partly_fits", "does_not_fit"]
+    },
+    hypothesisCorrection: { type: "string", maxLength: 6000 },
+    interpretationConsent: { type: "boolean" },
+    userId: nullable({ type: "string", maxLength: 160 })
+  };
+
+  const triggerReportCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["title"],
+    properties: triggerReportMutationProperties
+  };
+
+  const triggerReportPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["expectedRevision"],
+    properties: {
+      ...triggerReportMutationProperties,
+      expectedRevision: { type: "integer", minimum: 1 }
+    }
+  };
+
+  const triggerReportPage = {
+    type: "object",
+    additionalProperties: false,
+    required: ["reports", "total", "limit", "nextCursor", "hasMore"],
+    properties: {
+      reports: arrayOf({ $ref: "#/components/schemas/TriggerReport" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      nextCursor: nullable({ type: "string" }),
+      hasMore: { type: "boolean" }
     }
   };
 
@@ -5443,6 +7220,38 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const psycheMetricSourceRecord = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "sourceType",
+      "sourceId",
+      "label",
+      "href",
+      "observedAt",
+      "recordedAt",
+      "ownerUserId",
+      "ownerDisplayName",
+      "value",
+      "sampleCount"
+    ],
+    properties: {
+      sourceType: {
+        type: "string",
+        enum: ["trigger_report", "conversation"]
+      },
+      sourceId: { type: "string" },
+      label: { type: "string" },
+      href: nullable({ type: "string" }),
+      observedAt: { type: "string", format: "date-time" },
+      recordedAt: { type: "string", format: "date-time" },
+      ownerUserId: nullable({ type: "string" }),
+      ownerDisplayName: nullable({ type: "string" }),
+      value: nullable({ type: "number" }),
+      sampleCount: { type: "integer", minimum: 0 }
+    }
+  };
+
   const dailyMetricDayRecord = {
     type: "object",
     additionalProperties: false,
@@ -5454,7 +7263,8 @@ export function buildOpenApiDocument() {
       "latest",
       "total",
       "sampleCount",
-      "latestSampleAt"
+      "latestSampleAt",
+      "sourceRecords"
     ],
     properties: {
       dateKey: { type: "string" },
@@ -5463,8 +7273,9 @@ export function buildOpenApiDocument() {
       maximum: nullable({ type: "number" }),
       latest: nullable({ type: "number" }),
       total: nullable({ type: "number" }),
-      sampleCount: { type: "integer" },
-      latestSampleAt: nullable({ type: "string", format: "date-time" })
+      sampleCount: { type: "integer", minimum: 0 },
+      latestSampleAt: nullable({ type: "string", format: "date-time" }),
+      sourceRecords: arrayOf(psycheMetricSourceRecord)
     }
   };
 
@@ -5474,9 +7285,15 @@ export function buildOpenApiDocument() {
     required: [
       "metric",
       "label",
+      "family",
       "category",
       "unit",
       "aggregation",
+      "cadence",
+      "sampleUnit",
+      "definition",
+      "confidence",
+      "source",
       "latestValue",
       "latestDateKey",
       "baselineValue",
@@ -5487,14 +7304,62 @@ export function buildOpenApiDocument() {
     properties: {
       metric: { type: "string" },
       label: { type: "string" },
+      family: {
+        type: "string",
+        enum: ["mood", "urges", "selfRegulation", "conversation", "other"]
+      },
       category: { type: "string" },
       unit: { type: "string" },
       aggregation: { type: "string", enum: ["discrete", "cumulative"] },
+      cadence: { type: "string", enum: ["daily", "event_based"] },
+      sampleUnit: { type: "string" },
+      definition: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "description",
+          "calculation",
+          "interpretation",
+          "missingness"
+        ],
+        properties: {
+          description: { type: "string" },
+          calculation: { type: "string" },
+          interpretation: { type: "string" },
+          missingness: { type: "string" }
+        }
+      },
+      confidence: {
+        type: "object",
+        additionalProperties: false,
+        required: ["status", "rationale"],
+        properties: {
+          status: { type: "string", enum: ["not_estimated"] },
+          rationale: { type: "string" }
+        }
+      },
+      source: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "label", "href", "ownerAttribution"],
+        properties: {
+          kind: {
+            type: "string",
+            enum: ["trigger_reports", "conversation_scanner"]
+          },
+          label: { type: "string" },
+          href: nullable({ type: "string" }),
+          ownerAttribution: {
+            type: "string",
+            enum: ["attributed", "unattributed", "mixed"]
+          }
+        }
+      },
       latestValue: nullable({ type: "number" }),
       latestDateKey: nullable({ type: "string" }),
       baselineValue: nullable({ type: "number" }),
       deltaValue: nullable({ type: "number" }),
-      coverageDays: { type: "integer" },
+      coverageDays: { type: "integer", minimum: 0 },
       days: arrayOf(dailyMetricDayRecord)
     }
   };
@@ -5513,7 +7378,8 @@ export function buildOpenApiDocument() {
           "metricCount",
           "latestDateKey",
           "latestMetricCount",
-          "categoryBreakdown"
+          "categoryBreakdown",
+          "familyAvailability"
         ],
         properties: {
           hasData: { type: "boolean" },
@@ -5530,6 +7396,23 @@ export function buildOpenApiDocument() {
               metricCount: { type: "integer" },
               coverageDays: { type: "integer" }
             }
+          }),
+          familyAvailability: arrayOf({
+            type: "object",
+            additionalProperties: false,
+            required: ["family", "status", "metricCount", "reason"],
+            properties: {
+              family: {
+                type: "string",
+                enum: ["mood", "urges", "selfRegulation", "conversation"]
+              },
+              status: {
+                type: "string",
+                enum: ["available", "no_data", "unsupported"]
+              },
+              metricCount: { type: "integer", minimum: 0 },
+              reason: { type: "string" }
+            }
           })
         }
       },
@@ -5545,7 +7428,11 @@ export function buildOpenApiDocument() {
           "totalSwears",
           "dailyAverage",
           "weeklyAverage",
-          "sync"
+          "sync",
+          "freshness",
+          "ownerScope",
+          "sources",
+          "dataQualityWarnings"
         ],
         properties: {
           generatedAt: { type: "string", format: "date-time" },
@@ -5605,7 +7492,105 @@ export function buildOpenApiDocument() {
               }),
               lastSyncedDateKey: nullable({ type: "string" })
             }
-          }
+          },
+          freshness: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "status",
+              "lastSuccessfulAt",
+              "lastAttemptAt",
+              "warningCount",
+              "warnings"
+            ],
+            properties: {
+              status: {
+                type: "string",
+                enum: [
+                  "current",
+                  "stale",
+                  "partial",
+                  "not_synced",
+                  "not_applicable"
+                ]
+              },
+              lastSuccessfulAt: nullable({
+                type: "string",
+                format: "date-time"
+              }),
+              lastAttemptAt: nullable({
+                type: "string",
+                format: "date-time"
+              }),
+              warningCount: { type: "integer", minimum: 0 },
+              warnings: arrayOf({ type: "string" })
+            }
+          },
+          ownerScope: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "mode",
+              "effectiveUserIds",
+              "availableOwners",
+              "filterMode",
+              "serverEnforced",
+              "unattributedRecordCount",
+              "limitation"
+            ],
+            properties: {
+              mode: {
+                type: "string",
+                enum: ["unscoped_all_data", "scoped"]
+              },
+              effectiveUserIds: arrayOf({ type: "string" }),
+              availableOwners: arrayOf({
+                type: "object",
+                additionalProperties: false,
+                required: ["userId", "displayName"],
+                properties: {
+                  userId: { type: "string" },
+                  displayName: { type: "string" }
+                }
+              }),
+              filterMode: {
+                type: "string",
+                enum: ["all_data", "server_attribution"]
+              },
+              serverEnforced: { type: "boolean" },
+              unattributedRecordCount: { type: "integer", minimum: 0 },
+              limitation: { type: "string" }
+            }
+          },
+          sources: arrayOf({
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "sourceId",
+              "label",
+              "kind",
+              "recordCount",
+              "linkedRecordCount",
+              "href",
+              "ownerAttribution"
+            ],
+            properties: {
+              sourceId: { type: "string" },
+              label: { type: "string" },
+              kind: {
+                type: "string",
+                enum: ["trigger_reports", "conversation_scanner"]
+              },
+              recordCount: { type: "integer", minimum: 0 },
+              linkedRecordCount: { type: "integer", minimum: 0 },
+              href: nullable({ type: "string" }),
+              ownerAttribution: {
+                type: "string",
+                enum: ["attributed", "unattributed", "mixed"]
+              }
+            }
+          }),
+          dataQualityWarnings: arrayOf({ type: "string" })
         }
       },
       metrics: arrayOf(dailyMetricRecord)
@@ -6535,6 +8520,7 @@ export function buildOpenApiDocument() {
       "task_timebox",
       "life_event",
       "artifact",
+      "person",
       "psyche_value",
       "behavior_pattern",
       "behavior",
@@ -6553,6 +8539,1015 @@ export function buildOpenApiDocument() {
       "sleep_session",
       "workout_session"
     ]
+  };
+
+  const batchCreateEntitiesInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["operations"],
+    properties: {
+      atomic: { type: "boolean", default: false },
+      operations: {
+        type: "array",
+        minItems: 1,
+        maxItems: 100,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["entityType", "data"],
+          properties: {
+            entityType: { $ref: "#/components/schemas/CrudEntityType" },
+            clientRef: { type: "string" },
+            idempotencyKey: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              description:
+                "Stable key for one intended create. Reuse only for an exact retry. Event and emotion vocabulary keys remain consumed after hard deletion."
+            },
+            data: { type: "object", additionalProperties: true }
+          }
+        }
+      }
+    }
+  };
+
+  const batchUpdateEntitiesInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["operations"],
+    properties: {
+      atomic: { type: "boolean", default: false },
+      operations: {
+        type: "array",
+        minItems: 1,
+        maxItems: 100,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["entityType", "id", "patch"],
+          properties: {
+            entityType: { $ref: "#/components/schemas/CrudEntityType" },
+            id: { type: "string", minLength: 1 },
+            clientRef: { type: "string" },
+            patch: { type: "object", additionalProperties: true }
+          }
+        }
+      }
+    }
+  };
+
+  const batchDeleteEntitiesInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["operations"],
+    properties: {
+      atomic: { type: "boolean", default: false },
+      operations: {
+        type: "array",
+        minItems: 1,
+        maxItems: 100,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["entityType", "id"],
+          properties: {
+            entityType: { $ref: "#/components/schemas/CrudEntityType" },
+            id: { type: "string", minLength: 1 },
+            clientRef: { type: "string" },
+            mode: {
+              type: "string",
+              enum: ["soft", "hard"],
+              default: "soft"
+            },
+            reason: { type: "string", default: "" }
+          }
+        }
+      }
+    }
+  };
+
+  const batchRestoreEntitiesInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["operations"],
+    properties: {
+      atomic: { type: "boolean", default: false },
+      operations: {
+        type: "array",
+        minItems: 1,
+        maxItems: 100,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["entityType", "id"],
+          properties: {
+            entityType: { $ref: "#/components/schemas/CrudEntityType" },
+            id: { type: "string", minLength: 1 },
+            clientRef: { type: "string" }
+          }
+        }
+      }
+    }
+  };
+
+  const batchSearchEntitiesInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["searches"],
+    properties: {
+      searches: {
+        type: "array",
+        minItems: 1,
+        maxItems: 50,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            entityTypes: arrayOf({
+              $ref: "#/components/schemas/CrudEntityType"
+            }),
+            query: { type: "string" },
+            ids: arrayOf({ type: "string" }),
+            status: arrayOf({ type: "string" }),
+            linkedTo: {
+              type: "object",
+              additionalProperties: false,
+              required: ["entityType", "id"],
+              properties: {
+                entityType: {
+                  $ref: "#/components/schemas/CrudEntityType"
+                },
+                id: { type: "string", minLength: 1 }
+              }
+            },
+            userIds: {
+              ...arrayOf({ type: "string" }),
+              description:
+                "Optional effective owner scope. For event_type and emotion_definition, custom entries are filtered to these owners while built-ins remain visible."
+            },
+            includeDeleted: { type: "boolean", default: false },
+            limit: {
+              type: "integer",
+              minimum: 1,
+              maximum: 200,
+              default: 25
+            },
+            clientRef: { type: "string" }
+          }
+        }
+      }
+    }
+  };
+
+  const preferenceCatalogLinkInputs = {
+    ...arrayOf({ $ref: "#/components/schemas/EntityLinkInput" }),
+    maxItems: 100,
+    default: []
+  };
+
+  const preferenceCatalogCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "title"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      title: { type: "string", minLength: 1, maxLength: 200 },
+      description: { type: "string", maxLength: 4000, default: "" },
+      scopeIn: { type: "string", maxLength: 4000, default: "" },
+      scopeOut: { type: "string", maxLength: 4000, default: "" },
+      slug: { type: "string", maxLength: 64 },
+      links: preferenceCatalogLinkInputs
+    }
+  };
+
+  const preferenceCatalogPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      title: { type: "string", minLength: 1, maxLength: 200 },
+      description: { type: "string", maxLength: 4000 },
+      scopeIn: { type: "string", maxLength: 4000 },
+      scopeOut: { type: "string", maxLength: 4000 },
+      slug: { type: "string", maxLength: 64 },
+      links: {
+        ...arrayOf({ $ref: "#/components/schemas/EntityLinkInput" }),
+        maxItems: 100
+      }
+    }
+  };
+
+  const preferenceDimensionVector = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "novelty",
+      "simplicity",
+      "rigor",
+      "aesthetics",
+      "depth",
+      "structure",
+      "familiarity",
+      "surprise"
+    ],
+    properties: Object.fromEntries(
+      [
+        "novelty",
+        "simplicity",
+        "rigor",
+        "aesthetics",
+        "depth",
+        "structure",
+        "familiarity",
+        "surprise"
+      ].map((key) => [key, { type: "number", minimum: -1, maximum: 1 }])
+    )
+  };
+
+  const preferenceDimensionVectorInput = {
+    ...preferenceDimensionVector,
+    required: []
+  };
+
+  const preferenceCatalogItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "catalogId",
+      "label",
+      "description",
+      "tags",
+      "featureWeights",
+      "position",
+      "archived",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      catalogId: { type: "string", minLength: 1 },
+      label: { type: "string", minLength: 1, maxLength: 200 },
+      description: { type: "string", maxLength: 4000 },
+      tags: {
+        ...arrayOf({ type: "string", minLength: 1, maxLength: 100 }),
+        maxItems: 100
+      },
+      featureWeights: {
+        $ref: "#/components/schemas/PreferenceDimensionVector"
+      },
+      position: { type: "integer", minimum: 0 },
+      archived: { type: "boolean" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const preferenceCatalogItemCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["catalogId", "label"],
+    properties: {
+      catalogId: { type: "string", minLength: 1 },
+      label: { type: "string", minLength: 1, maxLength: 200 },
+      description: { type: "string", maxLength: 4000, default: "" },
+      tags: {
+        ...arrayOf({ type: "string", minLength: 1, maxLength: 100 }),
+        maxItems: 100,
+        default: []
+      },
+      featureWeights: {
+        $ref: "#/components/schemas/PreferenceDimensionVectorInput"
+      },
+      position: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const preferenceCatalogItemPatchInput = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      label: { type: "string", minLength: 1, maxLength: 200 },
+      description: { type: "string", maxLength: 4000 },
+      tags: {
+        ...arrayOf({ type: "string", minLength: 1, maxLength: 100 }),
+        maxItems: 100
+      },
+      featureWeights: {
+        $ref: "#/components/schemas/PreferenceDimensionVectorInput"
+      },
+      position: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const preferenceCatalog = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "userId",
+      "user",
+      "domain",
+      "slug",
+      "title",
+      "description",
+      "scopeIn",
+      "scopeOut",
+      "source",
+      "createdSource",
+      "createdByActor",
+      "archived",
+      "createdAt",
+      "updatedAt",
+      "links",
+      "items",
+      "itemCount",
+      "itemsTruncated"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string" },
+      userId: { type: "string" },
+      user: nullable({ $ref: "#/components/schemas/UserSummary" }),
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      slug: { type: "string" },
+      title: { type: "string" },
+      description: { type: "string" },
+      scopeIn: { type: "string" },
+      scopeOut: { type: "string" },
+      source: { type: "string", enum: ["seeded", "custom"] },
+      createdSource: {
+        type: "string",
+        enum: ["ui", "openclaw", "agent", "system", "unknown"]
+      },
+      createdByActor: nullable({ type: "string" }),
+      archived: { type: "boolean" },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      links: arrayOf({ $ref: "#/components/schemas/EntityLink" }),
+      items: arrayOf({ $ref: "#/components/schemas/PreferenceCatalogItem" }),
+      itemCount: { type: "integer", minimum: 0 },
+      matchingItemCount: { type: "integer", minimum: 0 },
+      itemsTruncated: { type: "boolean" }
+    }
+  };
+
+  const preferenceProfile = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "userId",
+      "domain",
+      "defaultContextId",
+      "modelVersion",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      defaultContextId: nullable({ type: "string" }),
+      modelVersion: { type: "string", minLength: 1 },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" },
+      user: nullable({ $ref: "#/components/schemas/UserSummary" })
+    }
+  };
+
+  const preferenceContext = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "name",
+      "description",
+      "shareMode",
+      "active",
+      "isDefault",
+      "decayDays",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string", minLength: 1 },
+      name: { type: "string", minLength: 1 },
+      description: { type: "string" },
+      shareMode: {
+        type: "string",
+        enum: ["shared", "isolated", "blended"]
+      },
+      active: { type: "boolean" },
+      isDefault: { type: "boolean" },
+      decayDays: { type: "integer", minimum: 7, maximum: 365 },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const preferenceItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "label",
+      "description",
+      "tags",
+      "featureWeights",
+      "metadata",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string", minLength: 1 },
+      label: { type: "string", minLength: 1 },
+      description: { type: "string" },
+      tags: arrayOf({ type: "string", minLength: 1 }),
+      featureWeights: {
+        $ref: "#/components/schemas/PreferenceDimensionVector"
+      },
+      sourceEntityType: nullable({
+        $ref: "#/components/schemas/CrudEntityType"
+      }),
+      sourceEntityId: nullable({ type: "string" }),
+      linkedEntity: nullable({
+        type: "object",
+        additionalProperties: false,
+        required: ["entityType", "entityId"],
+        properties: {
+          entityType: { $ref: "#/components/schemas/CrudEntityType" },
+          entityId: { type: "string", minLength: 1 }
+        }
+      }),
+      metadata: { type: "object", additionalProperties: true },
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const pairwisePreferenceJudgment = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "contextId",
+      "userId",
+      "leftItemId",
+      "rightItemId",
+      "outcome",
+      "strength",
+      "responseTimeMs",
+      "source",
+      "reasonTags",
+      "createdAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string", minLength: 1 },
+      contextId: { type: "string", minLength: 1 },
+      userId: { type: "string", minLength: 1 },
+      leftItemId: { type: "string", minLength: 1 },
+      rightItemId: { type: "string", minLength: 1 },
+      outcome: { type: "string", enum: ["left", "right", "tie", "skip"] },
+      strength: { type: "number", minimum: 0.5, maximum: 2 },
+      responseTimeMs: nullable({ type: "integer", minimum: 0 }),
+      source: { type: "string", minLength: 1 },
+      reasonTags: arrayOf({ type: "string", minLength: 1 }),
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const absolutePreferenceSignal = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "contextId",
+      "userId",
+      "ownerUserId",
+      "itemId",
+      "signalType",
+      "strength",
+      "modelWeight",
+      "source",
+      "actor",
+      "createdAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string", minLength: 1 },
+      contextId: { type: "string", minLength: 1 },
+      userId: { type: "string", minLength: 1 },
+      ownerUserId: { type: "string", minLength: 1 },
+      itemId: { type: "string", minLength: 1 },
+      signalType: {
+        type: "string",
+        enum: [
+          "favorite",
+          "veto",
+          "must_have",
+          "bookmark",
+          "neutral",
+          "compare_later"
+        ]
+      },
+      strength: { type: "number", minimum: 0.5, maximum: 2 },
+      modelWeight: { type: "number" },
+      source: { type: "string", minLength: 1 },
+      actor: nullable({ type: "string" }),
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const preferenceItemScore = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "contextId",
+      "itemId",
+      "latentScore",
+      "confidence",
+      "uncertainty",
+      "evidenceCount",
+      "pairwiseWins",
+      "pairwiseLosses",
+      "pairwiseTies",
+      "signalCount",
+      "effectiveSignal",
+      "conflictCount",
+      "status",
+      "dominantDimensions",
+      "explanation",
+      "bookmarked",
+      "compareLater",
+      "frozen",
+      "lastInferredAt",
+      "lastJudgmentAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string", minLength: 1 },
+      contextId: { type: "string", minLength: 1 },
+      itemId: { type: "string", minLength: 1 },
+      latentScore: { type: "number" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      uncertainty: { type: "number", minimum: 0, maximum: 1 },
+      evidenceCount: { type: "integer", minimum: 0 },
+      pairwiseWins: { type: "integer", minimum: 0 },
+      pairwiseLosses: { type: "integer", minimum: 0 },
+      pairwiseTies: { type: "integer", minimum: 0 },
+      signalCount: { type: "integer", minimum: 0 },
+      effectiveSignal: nullable({
+        $ref: "#/components/schemas/AbsolutePreferenceSignal"
+      }),
+      conflictCount: { type: "integer", minimum: 0 },
+      status: { type: "string", enum: PREFERENCE_ITEM_STATUS_VALUES },
+      dominantDimensions: arrayOf({
+        type: "string",
+        enum: Object.keys(preferenceDimensionVector.properties)
+      }),
+      explanation: arrayOf({ type: "string" }),
+      manualStatus: nullable({
+        type: "string",
+        enum: PREFERENCE_ITEM_STATUS_VALUES
+      }),
+      manualScore: nullable({ type: "number" }),
+      confidenceLock: nullable({ type: "number", minimum: 0, maximum: 1 }),
+      bookmarked: { type: "boolean" },
+      compareLater: { type: "boolean" },
+      frozen: { type: "boolean" },
+      lastInferredAt: { type: "string", format: "date-time" },
+      lastJudgmentAt: nullable({ type: "string", format: "date-time" }),
+      updatedAt: { type: "string", format: "date-time" },
+      item: { $ref: "#/components/schemas/PreferenceItem" }
+    }
+  };
+
+  const preferenceDimensionSummary = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "contextId",
+      "dimensionId",
+      "leaning",
+      "confidence",
+      "movement",
+      "contextSensitivity",
+      "evidenceCount",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string" },
+      contextId: { type: "string" },
+      dimensionId: {
+        type: "string",
+        enum: Object.keys(preferenceDimensionVector.properties)
+      },
+      leaning: { type: "number", minimum: -1, maximum: 1 },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      movement: { type: "number", minimum: -1, maximum: 1 },
+      contextSensitivity: { type: "number", minimum: 0, maximum: 1 },
+      evidenceCount: { type: "integer", minimum: 0 },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const preferenceSnapshot = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "profileId",
+      "contextId",
+      "summaryMetrics",
+      "serializedModelState",
+      "createdAt"
+    ],
+    properties: {
+      id: { type: "string" },
+      profileId: { type: "string" },
+      contextId: { type: "string" },
+      summaryMetrics: { type: "object", additionalProperties: true },
+      serializedModelState: { type: "object", additionalProperties: true },
+      createdAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const preferenceMapPoint = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "itemId",
+      "label",
+      "x",
+      "y",
+      "score",
+      "confidence",
+      "uncertainty",
+      "status",
+      "clusterKey",
+      "tags"
+    ],
+    properties: {
+      itemId: { type: "string" },
+      label: { type: "string" },
+      x: { type: "number" },
+      y: { type: "number" },
+      score: { type: "number" },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      uncertainty: { type: "number", minimum: 0, maximum: 1 },
+      status: { type: "string", enum: PREFERENCE_ITEM_STATUS_VALUES },
+      clusterKey: { type: "string" },
+      tags: arrayOf({ type: "string" }),
+      sourceEntityType: nullable({
+        $ref: "#/components/schemas/CrudEntityType"
+      }),
+      sourceEntityId: nullable({ type: "string" })
+    }
+  };
+
+  const preferenceWorkspace = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "profile",
+      "selectedContext",
+      "contexts",
+      "catalogs",
+      "dimensions",
+      "scores",
+      "map",
+      "history",
+      "presentation",
+      "evidenceCoverage",
+      "compare",
+      "summary",
+      "libraries"
+    ],
+    properties: {
+      profile: { $ref: "#/components/schemas/PreferenceProfile" },
+      selectedContext: { $ref: "#/components/schemas/PreferenceContext" },
+      contexts: arrayOf({ $ref: "#/components/schemas/PreferenceContext" }),
+      catalogs: arrayOf({ $ref: "#/components/schemas/PreferenceCatalog" }),
+      dimensions: arrayOf({
+        $ref: "#/components/schemas/PreferenceDimensionSummary"
+      }),
+      scores: arrayOf({ $ref: "#/components/schemas/PreferenceItemScore" }),
+      map: arrayOf({ $ref: "#/components/schemas/PreferenceMapPoint" }),
+      history: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "judgments",
+          "signals",
+          "snapshots",
+          "staleItemIds",
+          "flippedItemIds"
+        ],
+        properties: {
+          judgments: arrayOf({
+            $ref: "#/components/schemas/PairwisePreferenceJudgment"
+          }),
+          signals: arrayOf({
+            $ref: "#/components/schemas/AbsolutePreferenceSignal"
+          }),
+          snapshots: arrayOf({
+            $ref: "#/components/schemas/PreferenceSnapshot"
+          }),
+          staleItemIds: arrayOf({ type: "string" }),
+          flippedItemIds: arrayOf({ type: "string" })
+        }
+      },
+      presentation: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "itemLimit",
+          "itemOffset",
+          "totalItems",
+          "returnedItems",
+          "hasMore",
+          "nextOffset",
+          "historyLimit"
+        ],
+        properties: {
+          itemLimit: { type: "integer", minimum: 1, maximum: 100 },
+          itemOffset: { type: "integer", minimum: 0 },
+          totalItems: { type: "integer", minimum: 0 },
+          returnedItems: { type: "integer", minimum: 0 },
+          hasMore: { type: "boolean" },
+          nextOffset: nullable({ type: "integer", minimum: 0 }),
+          historyLimit: { type: "integer", minimum: 1, maximum: 100 }
+        }
+      },
+      evidenceCoverage: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "judgmentLimitPerContext",
+          "totalJudgments",
+          "consideredJudgments",
+          "truncated",
+          "contexts"
+        ],
+        properties: {
+          judgmentLimitPerContext: { type: "integer", minimum: 1 },
+          totalJudgments: { type: "integer", minimum: 0 },
+          consideredJudgments: { type: "integer", minimum: 0 },
+          truncated: { type: "boolean" },
+          contexts: arrayOf({
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "contextId",
+              "totalJudgments",
+              "consideredJudgments",
+              "truncated"
+            ],
+            properties: {
+              contextId: { type: "string" },
+              totalJudgments: { type: "integer", minimum: 0 },
+              consideredJudgments: { type: "integer", minimum: 0 },
+              truncated: { type: "boolean" }
+            }
+          })
+        }
+      },
+      compare: {
+        type: "object",
+        additionalProperties: false,
+        required: ["nextPair", "pendingCount", "candidateCount"],
+        properties: {
+          nextPair: nullable({
+            type: "object",
+            additionalProperties: false,
+            required: ["left", "right", "rationale", "score"],
+            properties: {
+              left: { $ref: "#/components/schemas/PreferenceItem" },
+              right: { $ref: "#/components/schemas/PreferenceItem" },
+              rationale: arrayOf({ type: "string" }),
+              score: { type: "number" }
+            }
+          }),
+          pendingCount: { type: "integer", minimum: 0 },
+          candidateCount: { type: "integer", minimum: 0 }
+        }
+      },
+      summary: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "totalItems",
+          "likedCount",
+          "dislikedCount",
+          "uncertainCount",
+          "bookmarkedCount",
+          "vetoedCount",
+          "averageConfidence",
+          "pendingComparisons"
+        ],
+        properties: {
+          totalItems: { type: "integer", minimum: 0 },
+          likedCount: { type: "integer", minimum: 0 },
+          dislikedCount: { type: "integer", minimum: 0 },
+          uncertainCount: { type: "integer", minimum: 0 },
+          bookmarkedCount: { type: "integer", minimum: 0 },
+          vetoedCount: { type: "integer", minimum: 0 },
+          averageConfidence: { type: "number", minimum: 0, maximum: 1 },
+          pendingComparisons: { type: "integer", minimum: 0 }
+        }
+      },
+      libraries: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "totalCatalogs",
+          "totalCatalogItems",
+          "seededCatalogCount",
+          "customCatalogCount"
+        ],
+        properties: {
+          totalCatalogs: { type: "integer", minimum: 0 },
+          totalCatalogItems: { type: "integer", minimum: 0 },
+          seededCatalogCount: { type: "integer", minimum: 0 },
+          customCatalogCount: { type: "integer", minimum: 0 }
+        }
+      }
+    }
+  };
+
+  const preferenceContextCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "name"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      name: { type: "string", minLength: 1 },
+      description: { type: "string", default: "" },
+      shareMode: {
+        type: "string",
+        enum: ["shared", "isolated", "blended"],
+        default: "blended"
+      },
+      active: { type: "boolean", default: true },
+      isDefault: { type: "boolean", default: false },
+      decayDays: { type: "integer", minimum: 7, maximum: 365, default: 90 }
+    }
+  };
+  const preferenceContextPatchInput = {
+    ...preferenceContextCreateInput,
+    required: [],
+    properties: Object.fromEntries(
+      Object.entries(preferenceContextCreateInput.properties).filter(
+        ([key]) => key !== "userId" && key !== "domain"
+      )
+    )
+  };
+  const preferenceItemCreateInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "label"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      label: { type: "string", minLength: 1 },
+      description: { type: "string", default: "" },
+      tags: arrayOf({ type: "string", minLength: 1 }),
+      featureWeights: {
+        $ref: "#/components/schemas/PreferenceDimensionVectorInput"
+      },
+      sourceEntityType: nullable({
+        $ref: "#/components/schemas/CrudEntityType"
+      }),
+      sourceEntityId: nullable({ type: "string", minLength: 1 }),
+      metadata: { type: "object", additionalProperties: true },
+      queueForCompare: { type: "boolean", default: true }
+    }
+  };
+  const preferenceItemPatchInput = {
+    ...preferenceItemCreateInput,
+    required: [],
+    properties: Object.fromEntries(
+      Object.entries(preferenceItemCreateInput.properties).filter(
+        ([key]) => key !== "userId" && key !== "domain"
+      )
+    )
+  };
+  const preferenceEntityEnqueueInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "entityType", "entityId"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      entityType: { $ref: "#/components/schemas/CrudEntityType" },
+      entityId: { type: "string", minLength: 1 },
+      label: { type: "string" },
+      description: { type: "string" },
+      tags: arrayOf({ type: "string", minLength: 1 })
+    }
+  };
+  const preferenceJudgmentInput = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "userId",
+      "domain",
+      "contextId",
+      "leftItemId",
+      "rightItemId",
+      "outcome"
+    ],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      contextId: { type: "string", minLength: 1 },
+      leftItemId: { type: "string", minLength: 1 },
+      rightItemId: { type: "string", minLength: 1 },
+      outcome: { type: "string", enum: ["left", "right", "tie", "skip"] },
+      strength: { type: "number", minimum: 0.5, maximum: 2, default: 1 },
+      responseTimeMs: nullable({ type: "integer", minimum: 0 }),
+      reasonTags: {
+        ...arrayOf({ type: "string", minLength: 1 }),
+        maxItems: 100
+      }
+    }
+  };
+  const preferenceSignalInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "contextId", "itemId", "signalType"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      contextId: { type: "string", minLength: 1 },
+      itemId: { type: "string", minLength: 1 },
+      signalType: {
+        ...absolutePreferenceSignal.properties.signalType,
+        description:
+          "The direct mark to make effective in this context. neutral clears the current direct effect while preserving prior signal history."
+      },
+      strength: { type: "number", minimum: 0.5, maximum: 2, default: 1 }
+    }
+  };
+  const preferenceScorePatchInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain", "contextId"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      contextId: { type: "string", minLength: 1 },
+      manualStatus: nullable({
+        type: "string",
+        enum: PREFERENCE_ITEM_STATUS_VALUES
+      }),
+      manualScore: nullable({ type: "number" }),
+      confidenceLock: nullable({ type: "number", minimum: 0, maximum: 1 }),
+      bookmarked: { type: "boolean" },
+      compareLater: { type: "boolean" },
+      frozen: { type: "boolean" }
+    }
+  };
+  const preferenceWorkspaceRefreshInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      contextId: { type: "string", minLength: 1 },
+      itemLimit: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+      itemOffset: { type: "integer", minimum: 0, default: 0 },
+      historyLimit: { type: "integer", minimum: 1, maximum: 100, default: 50 }
+    }
+  };
+  const preferenceGameStartInput = {
+    type: "object",
+    additionalProperties: false,
+    required: ["userId", "domain"],
+    properties: {
+      userId: { type: "string", minLength: 1 },
+      domain: { type: "string", enum: PREFERENCE_DOMAIN_VALUES },
+      contextId: { type: "string", minLength: 1 },
+      catalogId: { type: "string", minLength: 1 }
+    }
   };
 
   const lifeEventSegment = {
@@ -6901,10 +9896,10 @@ export function buildOpenApiDocument() {
 
   const lifeEventTicketImportInput = {
     type: "object",
+    additionalProperties: false,
     required: ["artifactId"],
     properties: {
       artifactId: { type: "string" },
-      extractedText: { type: "string" },
       createDraft: { type: "boolean", default: false },
       useLlm: { type: "boolean", default: false },
       llmProfileId: { type: "string" }
@@ -6913,6 +9908,7 @@ export function buildOpenApiDocument() {
 
   const artifactScanFinding = {
     type: "object",
+    additionalProperties: false,
     required: ["code", "severity", "message"],
     properties: {
       code: { type: "string" },
@@ -6926,6 +9922,7 @@ export function buildOpenApiDocument() {
 
   const artifactScanResult = {
     type: "object",
+    additionalProperties: false,
     required: [
       "scannedAt",
       "scannerVersion",
@@ -6934,7 +9931,7 @@ export function buildOpenApiDocument() {
       "extensionAllowed",
       "byteSize",
       "findings",
-      "extractedTextSample",
+      "extractedTextAvailable",
       "extractedTextTruncated"
     ],
     properties: {
@@ -6945,13 +9942,18 @@ export function buildOpenApiDocument() {
       extensionAllowed: { type: "boolean" },
       byteSize: { type: "integer" },
       findings: arrayOf(artifactScanFinding),
-      extractedTextSample: { type: "string" },
+      extractedTextAvailable: {
+        type: "boolean",
+        description:
+          "Whether static scanning found text that may be used transiently by internal enrichment. Extracted plaintext is never persisted or returned."
+      },
       extractedTextTruncated: { type: "boolean" }
     }
   };
 
   const artifactContentProtection = {
     type: "object",
+    additionalProperties: false,
     required: [
       "mode",
       "encryptedAt",
@@ -6970,6 +9972,7 @@ export function buildOpenApiDocument() {
       kdf: nullable({ type: "string", enum: ["argon2id"] }),
       kdfParams: nullable({
         type: "object",
+        additionalProperties: false,
         required: ["memlimit", "opslimit", "parallelism"],
         properties: {
           memlimit: { type: "integer", minimum: 19922944 },
@@ -6985,14 +9988,13 @@ export function buildOpenApiDocument() {
 
   const artifact = {
     type: "object",
+    additionalProperties: false,
     required: [
       "id",
       "title",
       "shortDescription",
       "description",
       "originalFileName",
-      "storageKey",
-      "storagePath",
       "contentSha256",
       "byteSize",
       "storedContentSha256",
@@ -7024,8 +10026,6 @@ export function buildOpenApiDocument() {
       shortDescription: { type: "string" },
       description: { type: "string" },
       originalFileName: { type: "string" },
-      storageKey: { type: "string" },
-      storagePath: { type: "string" },
       contentSha256: { type: "string" },
       byteSize: { type: "integer" },
       storedContentSha256: { type: "string" },
@@ -7121,11 +10121,12 @@ export function buildOpenApiDocument() {
       updatedAt: artifact.properties.updatedAt
     },
     description:
-      "Compact artifact metadata for bounded list responses. Read /api/v1/artifacts/{id} for full hashes, storage metadata, scanner evidence, enrichment, and user metadata."
+      "Compact artifact metadata for bounded list responses. Read /api/v1/artifacts/{id} for full hashes, scanner evidence, enrichment, and user metadata. Physical storage paths and byte locators are never part of this public contract."
   };
 
   const artifactListResponse = {
     type: "object",
+    additionalProperties: false,
     required: ["artifacts", "total", "limit", "offset", "hasMore"],
     properties: {
       artifacts: arrayOf({ $ref: "#/components/schemas/ArtifactSummary" }),
@@ -7138,8 +10139,17 @@ export function buildOpenApiDocument() {
 
   const artifactUploadInput = {
     type: "object",
+    additionalProperties: false,
     required: ["originalFileName", "contentBase64"],
     properties: {
+      idempotencyKey: {
+        type: "string",
+        minLength: 8,
+        maxLength: 200,
+        pattern: "^[A-Za-z0-9._:-]+$",
+        description:
+          "Stable per-file retry key for MCP and plugin wrappers that cannot set request headers. When both forms are present it must equal Idempotency-Key."
+      },
       title: { type: "string" },
       shortDescription: { type: "string" },
       description: { type: "string" },
@@ -7147,8 +10157,11 @@ export function buildOpenApiDocument() {
       declaredMimeType: { type: "string" },
       contentBase64: {
         type: "string",
+        minLength: 4,
+        pattern:
+          "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
         description:
-          "Base64 file bytes. Forge stores and statically scans bytes; agents must not execute or open file contents."
+          "Non-empty canonical base64 file bytes without whitespace. Malformed, non-canonical, or zero-byte payloads return 400 artifact_invalid_base64. Forge stores and statically scans bytes; agents must not execute or open file contents."
       },
       sourceKind: {
         type: "string",
@@ -7171,6 +10184,7 @@ export function buildOpenApiDocument() {
         oneOf: [
           {
             type: "object",
+            additionalProperties: false,
             properties: {
               mode: {
                 type: "string",
@@ -7181,6 +10195,7 @@ export function buildOpenApiDocument() {
           },
           {
             type: "object",
+            additionalProperties: false,
             required: ["mode", "password"],
             properties: {
               mode: { type: "string", enum: ["password_encrypted"] },
@@ -7271,12 +10286,12 @@ export function buildOpenApiDocument() {
 
   const artifactVersion = {
     type: "object",
+    additionalProperties: false,
     required: [
       "id",
       "artifactId",
       "versionNumber",
       "contentSha256",
-      "storageKey",
       "byteSize",
       "storedContentSha256",
       "storedByteSize",
@@ -7292,13 +10307,12 @@ export function buildOpenApiDocument() {
       artifactId: { type: "string" },
       versionNumber: { type: "integer" },
       contentSha256: { type: "string" },
-      storageKey: { type: "string" },
       byteSize: { type: "integer" },
       storedContentSha256: { type: "string" },
       storedByteSize: { type: "integer" },
       contentProtection: artifactContentProtection,
       originalFileName: { type: "string" },
-      scanResults: { type: "object", additionalProperties: true },
+      scanResults: artifactScanResult,
       enrichmentResults: { type: "object", additionalProperties: true },
       createdByActor: nullable({ type: "string" }),
       createdAt: { type: "string", format: "date-time" }
@@ -7307,6 +10321,7 @@ export function buildOpenApiDocument() {
 
   const artifactAuditEvent = {
     type: "object",
+    additionalProperties: false,
     required: [
       "id",
       "artifactId",
@@ -7329,6 +10344,7 @@ export function buildOpenApiDocument() {
 
   const artifactVersionPage = {
     type: "object",
+    additionalProperties: false,
     required: ["versions", "total", "limit", "offset", "hasMore"],
     properties: {
       versions: arrayOf({ $ref: "#/components/schemas/ArtifactVersion" }),
@@ -7341,6 +10357,7 @@ export function buildOpenApiDocument() {
 
   const artifactAuditEventPage = {
     type: "object",
+    additionalProperties: false,
     required: ["events", "total", "limit", "offset", "hasMore"],
     properties: {
       events: arrayOf({ $ref: "#/components/schemas/ArtifactAuditEvent" }),
@@ -7508,6 +10525,202 @@ export function buildOpenApiDocument() {
     }
   };
 
+  const workbenchCatalogFacet = {
+    type: "object",
+    additionalProperties: false,
+    required: ["value", "label", "count"],
+    properties: {
+      value: { type: "string" },
+      label: { type: "string" },
+      count: { type: "integer", minimum: 0 }
+    }
+  };
+
+  const workbenchFlowCatalogItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "slug",
+      "title",
+      "description",
+      "descriptionTruncated",
+      "kind",
+      "homeSurfaceId",
+      "endpointEnabled",
+      "status",
+      "nodeCount",
+      "edgeCount",
+      "publicInputCount",
+      "publishedOutputCount",
+      "lastRunStatus",
+      "lastRunAt",
+      "createdAt",
+      "updatedAt"
+    ],
+    properties: {
+      id: { type: "string", minLength: 1 },
+      slug: { type: "string", minLength: 1 },
+      title: { type: "string", minLength: 1 },
+      description: { type: "string", maxLength: 601 },
+      descriptionTruncated: { type: "boolean" },
+      kind: { type: "string", enum: ["functor", "chat"] },
+      homeSurfaceId: nullable({ type: "string" }),
+      endpointEnabled: { type: "boolean" },
+      status: { type: "string", enum: ["enabled", "disabled"] },
+      nodeCount: { type: "integer", minimum: 0 },
+      edgeCount: { type: "integer", minimum: 0 },
+      publicInputCount: { type: "integer", minimum: 0 },
+      publishedOutputCount: { type: "integer", minimum: 0 },
+      lastRunStatus: nullable({
+        type: "string",
+        enum: ["running", "completed", "failed"]
+      }),
+      lastRunAt: nullable({ type: "string", format: "date-time" }),
+      createdAt: { type: "string", format: "date-time" },
+      updatedAt: { type: "string", format: "date-time" }
+    }
+  };
+
+  const workbenchFlowCatalogPage = {
+    type: "object",
+    additionalProperties: false,
+    required: ["flows", "total", "limit", "offset", "hasMore", "facets"],
+    properties: {
+      flows: arrayOf({ $ref: "#/components/schemas/WorkbenchFlowCatalogItem" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" },
+      facets: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kinds", "homeSurfaces", "statuses"],
+        properties: {
+          kinds: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          }),
+          homeSurfaces: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          }),
+          statuses: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          })
+        }
+      }
+    }
+  };
+
+  const workbenchBoxPort = {
+    type: "object",
+    additionalProperties: false,
+    required: ["key", "label", "kind", "required", "expandableKeys", "shape"],
+    properties: {
+      key: { type: "string", minLength: 1 },
+      label: { type: "string", minLength: 1 },
+      kind: { type: "string" },
+      description: { type: "string" },
+      required: { type: "boolean" },
+      expandableKeys: arrayOf({ type: "string" }),
+      modelName: { type: "string" },
+      itemKind: { type: "string" },
+      shape: arrayOf({ type: "object", additionalProperties: true }),
+      exampleValue: { type: "string" }
+    }
+  };
+
+  const workbenchBoxTool = {
+    type: "object",
+    additionalProperties: false,
+    required: ["key", "label", "description", "accessMode"],
+    properties: {
+      key: { type: "string", minLength: 1 },
+      label: { type: "string", minLength: 1 },
+      description: { type: "string" },
+      accessMode: {
+        type: "string",
+        enum: ["read", "write", "read_write", "exec"]
+      },
+      argsSchema: { type: "object", additionalProperties: true }
+    }
+  };
+
+  const workbenchBoxCatalogItem = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "surfaceId",
+      "routePath",
+      "title",
+      "description",
+      "category",
+      "tags",
+      "inputs",
+      "params",
+      "output",
+      "tools",
+      "source",
+      "sourceFlowId",
+      "sourceFlowEnabled"
+    ],
+    properties: {
+      id: { type: "string", minLength: 1 },
+      boxId: { type: "string" },
+      surfaceId: nullable({ type: "string" }),
+      routePath: nullable({ type: "string" }),
+      title: { type: "string", minLength: 1 },
+      label: { type: "string" },
+      icon: nullable({ type: "string" }),
+      description: { type: "string" },
+      category: { type: "string", minLength: 1 },
+      tags: arrayOf({ type: "string" }),
+      capabilityModes: arrayOf({
+        type: "string",
+        enum: ["content", "tool", "action", "mcp"]
+      }),
+      inputs: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxPort" }),
+      params: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxPort" }),
+      output: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxPort" }),
+      tools: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxTool" }),
+      outputs: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxPort" }),
+      toolAdapters: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxTool" }),
+      snapshotResolverKey: { type: "string" },
+      source: { type: "string", enum: ["forge", "flow_output"] },
+      sourceFlowId: nullable({ type: "string" }),
+      sourceFlowEnabled: nullable({ type: "boolean" })
+    }
+  };
+
+  const workbenchBoxCatalogPage = {
+    type: "object",
+    additionalProperties: false,
+    required: ["boxes", "total", "limit", "offset", "hasMore", "facets"],
+    properties: {
+      boxes: arrayOf({ $ref: "#/components/schemas/WorkbenchBoxCatalogItem" }),
+      total: { type: "integer", minimum: 0 },
+      limit: { type: "integer", minimum: 1, maximum: 100 },
+      offset: { type: "integer", minimum: 0 },
+      hasMore: { type: "boolean" },
+      facets: {
+        type: "object",
+        additionalProperties: false,
+        required: ["categories", "surfaces", "sources"],
+        properties: {
+          categories: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          }),
+          surfaces: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          }),
+          sources: arrayOf({
+            $ref: "#/components/schemas/WorkbenchCatalogFacet"
+          })
+        }
+      }
+    }
+  };
+
   const movementUserIdsParameter = {
     name: "userIds",
     in: "query",
@@ -7570,7 +10783,22 @@ export function buildOpenApiDocument() {
       }
     ],
     components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          description:
+            "Forge agent token. Task routes enforce token user, project, and tag scope."
+        },
+        operatorSession: {
+          type: "apiKey",
+          in: "cookie",
+          name: "forge_operator_session",
+          description: "Trusted local operator session cookie."
+        }
+      },
       schemas: {
+        ...buildPeerOpenApiComponents(),
         ValidationIssue: validationIssue,
         ValidationExpectedShape: validationExpectedShape,
         ErrorResponse: errorResponse,
@@ -7594,11 +10822,32 @@ export function buildOpenApiDocument() {
         WorkBlockTemplate: workBlockTemplate,
         WorkBlockInstance: workBlockInstance,
         TaskTimebox: taskTimebox,
+        TaskTimeboxCreateInput: taskTimeboxCreateInput,
+        TaskTimeboxPatchInput: taskTimeboxPatchInput,
+        TaskTimeboxRecommendationInput: taskTimeboxRecommendationInput,
         CalendarOverviewPayload: calendarOverviewPayload,
         TaskTimeSummary: taskTimeSummary,
         ProjectSummary: projectSummary,
+        CloseoutNoteLinkInput: closeoutNoteLinkInput,
+        CloseoutNoteInput: closeoutNoteInput,
+        CompletionReport: completionReport,
+        CompletionReportInput: completionReportInput,
+        WorkItemGitRefInput: workItemGitRefInput,
+        WorkItemGitRef: workItemGitRef,
+        WorkItemBlockerLink: workItemBlockerLink,
+        TaskActionPointSummary: taskActionPointSummary,
+        TaskSplitSuggestion: taskSplitSuggestion,
         Task: task,
+        TaskCreateInput: taskCreateInput,
+        TaskPatchInput: taskPatchInput,
+        NestedTaskNoteInput: nestedTaskNoteInput,
         TaskRun: taskRun,
+        TaskRunGitContext: taskRunGitContext,
+        TaskRunGitContextInput: taskRunGitContextInput,
+        OperatorLogWorkInput: operatorLogWorkInput,
+        GitHelperRef: gitHelperRef,
+        GitHelperOverview: gitHelperOverview,
+        GitHelperSearchResponse: gitHelperSearchResponse,
         HabitCheckIn: habitCheckIn,
         Habit: habit,
         ActivityEvent: activityEvent,
@@ -7623,7 +10872,8 @@ export function buildOpenApiDocument() {
         ExecutionSettings: executionSettings,
         TaskRunClaimInput: taskRunClaimInput,
         TaskRunHeartbeatInput: taskRunHeartbeatInput,
-        TaskRunFinishInput: taskRunFinishInput,
+        TaskRunCompleteInput: taskRunCompleteInput,
+        TaskRunReleaseInput: taskRunReleaseInput,
         TaskRunFocusInput: taskRunFocusInput,
         HabitCheckInInput: habitCheckInInput,
         WorkAdjustment: workAdjustment,
@@ -7634,7 +10884,17 @@ export function buildOpenApiDocument() {
         AgentOnboardingPayload: agentOnboardingPayload,
         DeletedEntityRecord: deletedEntityRecord,
         SettingsBinPayload: settingsBinPayload,
-        BatchEntityResult: batchEntityResult,
+        BatchEntityValidationIssue: batchEntityValidationIssue,
+        BatchEntityInvalidValueGuidance: batchEntityInvalidValueGuidance,
+        BatchEntityOperationError: batchEntityOperationError,
+        BatchEntityMutationResult: batchEntityMutationResult,
+        BatchEntitySearchMatch: batchEntitySearchMatch,
+        BatchEntitySearchResult: batchEntitySearchResult,
+        BatchCreateEntitiesInput: batchCreateEntitiesInput,
+        BatchUpdateEntitiesInput: batchUpdateEntitiesInput,
+        BatchDeleteEntitiesInput: batchDeleteEntitiesInput,
+        BatchRestoreEntitiesInput: batchRestoreEntitiesInput,
+        BatchSearchEntitiesInput: batchSearchEntitiesInput,
         AgentIdentity: agentIdentity,
         AgentRuntimeReconnectPlan: agentRuntimeReconnectPlan,
         AgentRuntimeSessionEvent: agentRuntimeSessionEvent,
@@ -7647,7 +10907,11 @@ export function buildOpenApiDocument() {
         Domain: domain,
         SchemaCatalogEntry: schemaCatalogEntry,
         EventType: eventType,
+        EventTypeCreateInput: eventTypeCreateInput,
+        EventTypePatchInput: eventTypePatchInput,
         EmotionDefinition: emotionDefinition,
+        EmotionDefinitionCreateInput: emotionDefinitionCreateInput,
+        EmotionDefinitionPatchInput: emotionDefinitionPatchInput,
         PsycheValue: psycheValue,
         BehaviorPattern: behaviorPattern,
         Behavior: behavior,
@@ -7655,13 +10919,65 @@ export function buildOpenApiDocument() {
         ModeProfile: modeProfile,
         ModeGuideSession: modeGuideSession,
         TriggerReport: triggerReport,
+        TriggerReportCreateInput: triggerReportCreateInput,
+        TriggerReportPatchInput: triggerReportPatchInput,
+        TriggerReportPage: triggerReportPage,
         NoteLink: noteLink,
         Note: note,
+        NoteCreateInput: noteCreateInput,
+        NotePatchInput: notePatchInput,
+        WikiPageSummary: wikiPageSummary,
+        WikiPageListResponse: wikiPageListResponse,
+        WikiPageCreateInput: wikiPageCreateInput,
+        WikiPagePatchInput: wikiPagePatchInput,
+        TodayPriorityEvidence: todayPriorityEvidence,
+        TodayRankedCandidate: todayRankedCandidate,
+        TodayPriorityDecision: todayPriorityDecision,
+        WikiSearchInput: wikiSearchInput,
+        WikiSearchResult: wikiSearchResult,
+        WikiSearchResponse: wikiSearchResponse,
+        WikiTreeNode: {
+          type: "object",
+          additionalProperties: false,
+          required: ["page", "children"],
+          properties: {
+            page: { $ref: "#/components/schemas/WikiPageSummary" },
+            children: arrayOf({ $ref: "#/components/schemas/WikiTreeNode" })
+          }
+        },
         NoteSummary: noteSummary,
         NotesSummaryByEntity: notesSummaryByEntity,
         CrudEntityType: crudEntityType,
         EntityLink: entityLink,
         EntityLinkInput: entityLinkInput,
+        PreferenceCatalog: preferenceCatalog,
+        PreferenceCatalogCreateInput: preferenceCatalogCreateInput,
+        PreferenceCatalogPatchInput: preferenceCatalogPatchInput,
+        PreferenceDimensionVector: preferenceDimensionVector,
+        PreferenceDimensionVectorInput: preferenceDimensionVectorInput,
+        PreferenceCatalogItem: preferenceCatalogItem,
+        PreferenceCatalogItemCreateInput: preferenceCatalogItemCreateInput,
+        PreferenceCatalogItemPatchInput: preferenceCatalogItemPatchInput,
+        PreferenceProfile: preferenceProfile,
+        PreferenceContext: preferenceContext,
+        PreferenceContextCreateInput: preferenceContextCreateInput,
+        PreferenceContextPatchInput: preferenceContextPatchInput,
+        PreferenceItem: preferenceItem,
+        PreferenceItemCreateInput: preferenceItemCreateInput,
+        PreferenceItemPatchInput: preferenceItemPatchInput,
+        PreferenceEntityEnqueueInput: preferenceEntityEnqueueInput,
+        PairwisePreferenceJudgment: pairwisePreferenceJudgment,
+        PreferenceJudgmentInput: preferenceJudgmentInput,
+        AbsolutePreferenceSignal: absolutePreferenceSignal,
+        PreferenceSignalInput: preferenceSignalInput,
+        PreferenceItemScore: preferenceItemScore,
+        PreferenceScorePatchInput: preferenceScorePatchInput,
+        PreferenceDimensionSummary: preferenceDimensionSummary,
+        PreferenceSnapshot: preferenceSnapshot,
+        PreferenceMapPoint: preferenceMapPoint,
+        PreferenceWorkspace: preferenceWorkspace,
+        PreferenceWorkspaceRefreshInput: preferenceWorkspaceRefreshInput,
+        PreferenceGameStartInput: preferenceGameStartInput,
         LifeEventSegment: lifeEventSegment,
         LifeEvent: lifeEvent,
         LifeEventTimelinePayload: lifeEventTimelinePayload,
@@ -7689,6 +11005,13 @@ export function buildOpenApiDocument() {
         WorkbenchRunPage: workbenchRunPage,
         WorkbenchReadMetadata: workbenchReadMetadata,
         WorkbenchNodeResultSummary: workbenchNodeResultSummary,
+        WorkbenchCatalogFacet: workbenchCatalogFacet,
+        WorkbenchFlowCatalogItem: workbenchFlowCatalogItem,
+        WorkbenchFlowCatalogPage: workbenchFlowCatalogPage,
+        WorkbenchBoxPort: workbenchBoxPort,
+        WorkbenchBoxTool: workbenchBoxTool,
+        WorkbenchBoxCatalogItem: workbenchBoxCatalogItem,
+        WorkbenchBoxCatalogPage: workbenchBoxCatalogPage,
         HealthLink: healthLink,
         SleepSession: sleepSession,
         WorkoutSession: workoutSession,
@@ -7745,11 +11068,12 @@ export function buildOpenApiDocument() {
       }
     },
     paths: {
+      ...buildPeerOpenApiPaths(),
       "/api/v1/artifacts": {
         get: {
           summary: "List artifact metadata",
           description:
-            "Lists compact artifact metadata, danger state, and generic entity links. Read one artifact for full scanner, enrichment, hash, storage, provenance, and user metadata. This route does not return file bytes.",
+            "Lists compact artifact metadata, danger state, and generic entity links within the authenticated token's user scope before counting or pagination. Read one artifact for full scanner, enrichment, hash, provenance, and user metadata. Public Artifact responses contain neither file bytes nor physical storage paths or byte locators.",
           parameters: [
             {
               name: "query",
@@ -7827,7 +11151,22 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Upload a trusted file artifact",
           description:
-            "Stores base64 file bytes only for trusted human sessions or trusted/autonomous agent tokens with artifact upload scopes. Human operator uploads may include optional password encryption. Forge scans plaintext before encryption, stores only ciphertext for encrypted uploads, and never returns or persists the password.",
+            "Stores one non-empty canonical-base64 file only for an authenticated human operator or a trusted/autonomous agent token with both artifact.create and artifact.uploadBytes. The canonical owner is actingForUserId, then uploadedByUserId, then the single scoped user; multi-user agent scopes must specify an owner and cannot name a user outside scope. Use one stable Idempotency-Key header or matching body idempotencyKey per queued file. Exact replays return the original artifact with Idempotency-Replayed: true; changed payloads return 409. An encrypted replay succeeds only after the supplied transient password decrypts the existing ciphertext; a wrong password returns 403 artifact_wrong_password and is never fingerprinted or persisted. Different artifacts with identical plaintext keep separate metadata rows and one logical plaintext identity. Plaintext uploads may reuse one verified physical blob, while encrypted uploads use independent randomized ciphertext representations. Forge scans plaintext before encryption, stores only ciphertext for encrypted uploads, and never returns or persists the password, extracted plaintext, a physical storage path, or a byte locator.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              description:
+                "Stable actor-scoped retry key for one file. Use the same key after a timeout or canceled client request.",
+              schema: {
+                type: "string",
+                minLength: 8,
+                maxLength: 200,
+                pattern: "^[A-Za-z0-9._:-]+$"
+              }
+            }
+          ],
           requestBody: {
             required: true,
             content: {
@@ -7837,16 +11176,45 @@ export function buildOpenApiDocument() {
             }
           },
           responses: {
-            "201": jsonResponse(
-              {
-                type: "object",
-                required: ["artifact"],
-                properties: {
-                  artifact: { $ref: "#/components/schemas/Artifact" }
+            "200": {
+              ...jsonResponse(
+                {
+                  type: "object",
+                  required: ["artifact"],
+                  properties: {
+                    artifact: { $ref: "#/components/schemas/Artifact" }
+                  }
+                },
+                "Idempotent replay of an already-created artifact"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["true"] }
                 }
-              },
-              "Created artifact"
-            ),
+              }
+            },
+            "201": {
+              ...jsonResponse(
+                {
+                  type: "object",
+                  required: ["artifact"],
+                  properties: {
+                    artifact: { $ref: "#/components/schemas/Artifact" }
+                  }
+                },
+                "Created artifact"
+              ),
+              headers: {
+                "Idempotency-Replayed": {
+                  schema: { type: "string", enum: ["false"] }
+                }
+              }
+            },
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
+            "413": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -8048,7 +11416,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Use a configured LLM to fill missing artifact metadata",
           description:
-            "LLM enrichment receives only safe metadata, scan findings, and static text samples. It may propose title, short description, description, tags, and a danger score, but Forge never lowers the deterministic scanner danger score.",
+            "LLM enrichment receives safe metadata, scan findings, and a transient in-memory static text sample when plaintext storage permits rescanning. The underlying byte buffer is zeroed after use, and the sample is never persisted or returned. Enrichment may propose title, short description, description, tags, and a danger score, but Forge never lowers the deterministic scanner danger score.",
           requestBody: {
             required: false,
             content: {
@@ -8334,6 +11702,7 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: [
                   "lifeEvent",
                   "calendarEvent",
@@ -8393,7 +11762,7 @@ export function buildOpenApiDocument() {
         post: {
           summary: "Draft or create a travel Life Event from a ticket artifact",
           description:
-            "Uses an existing Artifact Store artifact as the ticket source. Agents must upload through Artifact Store first and must not download, execute, or parse stored bytes directly. Optional LLM extraction is only used when configured and approved.",
+            "Uses only transient text from a fresh integrity-verified static scan of an active, plaintext, non-quarantined Artifact. Caller-supplied extracted text, Artifact descriptions, blocked, quarantined, archived, metadata-only, encrypted, or integrity-mismatched content is rejected. Agents must upload through Artifact Store first and must not download, execute, or parse stored bytes directly. Optional LLM extraction is only used when configured and approved.",
           requestBody: {
             required: true,
             content: {
@@ -8408,6 +11777,7 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["draft", "artifact", "lifeEvent", "action"],
                 properties: {
                   draft: { type: "object", additionalProperties: true },
@@ -10070,43 +13440,143 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/workbench/catalog/boxes": {
         get: {
-          summary: "List registered Workbench boxes and their contracts",
+          summary: "Search the bounded Workbench box catalog",
+          description:
+            "Returns one page of Forge node boxes and saved-flow published outputs. Full typed contracts are retained inside the bounded page; follow hasMore with offset to continue.",
+          parameters: [
+            {
+              name: "q",
+              in: "query",
+              schema: { type: "string", maxLength: 200 }
+            },
+            {
+              name: "category",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", minLength: 1, maxLength: 100 }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "surfaceId",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", minLength: 1, maxLength: 100 }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "source",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 2,
+                items: { type: "string", enum: ["forge", "flow_output"] }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 24
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["boxes"],
-                properties: {
-                  boxes: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
-                }
-              },
-              "Workbench box catalog"
+              { $ref: "#/components/schemas/WorkbenchBoxCatalogPage" },
+              "Bounded Workbench box catalog page"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/workbench/flows": {
         get: {
-          summary: "List Workbench flows and recent execution summaries",
+          summary: "Search the bounded Workbench flow catalog",
+          description:
+            "Returns compact flow summaries without graph bodies or run payloads. endpointEnabled describes the callable endpoint state; disabled flows remain discoverable and can still be opened for review or editing.",
+          parameters: [
+            {
+              name: "q",
+              in: "query",
+              schema: { type: "string", maxLength: 200 }
+            },
+            {
+              name: "kind",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 2,
+                items: { type: "string", enum: ["functor", "chat"] }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "homeSurfaceId",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", minLength: 1, maxLength: 100 }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "status",
+              in: "query",
+              schema: {
+                type: "array",
+                maxItems: 2,
+                items: { type: "string", enum: ["enabled", "disabled"] }
+              },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 24
+              }
+            },
+            {
+              name: "offset",
+              in: "query",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["flows"],
-                properties: {
-                  flows: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
-                }
-              },
-              "Workbench flow collection"
+              { $ref: "#/components/schemas/WorkbenchFlowCatalogPage" },
+              "Bounded Workbench flow catalog page"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         },
         post: {
@@ -10473,27 +13943,57 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/wiki/pages": {
         get: {
-          summary: "List wiki or evidence pages inside one space",
+          summary:
+            "List compact wiki or evidence page summaries inside one space",
+          parameters: [
+            { in: "query", name: "spaceId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "kind",
+              schema: { type: "string", enum: ["wiki", "evidence"] }
+            },
+            {
+              in: "query",
+              name: "limit",
+              schema: { type: "integer", minimum: 1, maximum: 500, default: 50 }
+            },
+            {
+              in: "query",
+              name: "offset",
+              schema: {
+                type: "integer",
+                minimum: 0,
+                maximum: 9999,
+                default: 0
+              }
+            },
+            {
+              in: "query",
+              name: "includeHidden",
+              schema: { type: "boolean", default: false }
+            }
+          ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["pages"],
-                properties: {
-                  pages: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/WikiPageListResponse" },
               "Wiki page list"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a wiki page through the SQLite-backed wiki surface",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WikiPageCreateInput" }
+              }
+            }
+          },
           responses: {
-            "200": jsonResponse(
+            "201": jsonResponse(
               {
                 type: "object",
                 required: ["page"],
@@ -10507,9 +14007,76 @@ export function buildOpenApiDocument() {
           }
         }
       },
+      "/api/v1/wiki/home": {
+        get: {
+          summary: "Read the home document for one readable wiki space",
+          parameters: [
+            { in: "query", name: "spaceId", schema: { type: "string" } }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["page"],
+                properties: {
+                  page: { type: "object", additionalProperties: true }
+                }
+              },
+              "Wiki home page detail"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/tree": {
+        get: {
+          summary: "Browse a bounded hierarchy of compact wiki page summaries",
+          parameters: [
+            { in: "query", name: "spaceId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "kind",
+              schema: { type: "string", enum: ["wiki", "evidence"] }
+            },
+            {
+              in: "query",
+              name: "limit",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 500,
+                default: 500
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["tree", "truncated"],
+                properties: {
+                  tree: arrayOf({ $ref: "#/components/schemas/WikiTreeNode" }),
+                  truncated: { type: "boolean" }
+                }
+              },
+              "Wiki page tree"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
       "/api/v1/wiki/pages/{id}": {
         get: {
           summary: "Read one wiki page with backlinks and attached metadata",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -10527,6 +14094,22 @@ export function buildOpenApiDocument() {
         patch: {
           summary:
             "Update an existing wiki page through the SQLite-backed surface",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WikiPagePatchInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -10543,13 +14126,27 @@ export function buildOpenApiDocument() {
         },
         delete: {
           summary: "Delete or hide one wiki page from the wiki surface",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["ok"],
+                additionalProperties: false,
+                required: ["deleted"],
                 properties: {
-                  ok: { type: "boolean" }
+                  deleted: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["id"],
+                    properties: { id: { type: "string" } }
+                  }
                 }
               },
               "Deleted wiki page"
@@ -10561,6 +14158,15 @@ export function buildOpenApiDocument() {
       "/api/v1/wiki/by-slug/{slug}": {
         get: {
           summary: "Read one wiki page by slug or title-like slug",
+          parameters: [
+            {
+              in: "path",
+              name: "slug",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            },
+            { in: "query", name: "spaceId", schema: { type: "string" } }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -10579,27 +14185,31 @@ export function buildOpenApiDocument() {
       "/api/v1/wiki/search": {
         post: {
           summary:
-            "Search the wiki with text, semantic, entity, or hybrid retrieval",
+            "Search compact wiki page summaries with ranked title, alias, content, entity, or semantic retrieval",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/WikiSearchInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["results"],
-                properties: {
-                  results: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/WikiSearchResponse" },
               "Wiki search results"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/wiki/health": {
         get: {
           summary: "Read wiki health signals for one space",
+          parameters: [
+            { in: "query", name: "spaceId", schema: { type: "string" } }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -10644,17 +14254,159 @@ export function buildOpenApiDocument() {
         }
       },
       "/api/v1/wiki/ingest-jobs": {
+        get: {
+          summary: "List bounded wiki ingest jobs in accessible spaces",
+          parameters: [
+            { in: "query", name: "spaceId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "limit",
+              schema: { type: "integer", minimum: 1, maximum: 200, default: 20 }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["jobs", "total"],
+                properties: {
+                  jobs: arrayOf({ type: "object", additionalProperties: true }),
+                  total: { type: "integer", minimum: 0 }
+                }
+              },
+              "Wiki ingest jobs"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
         post: {
           summary:
             "Queue a wiki ingest job from raw text, local files, or a URL",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true }
+              }
+            }
+          },
           responses: {
-            "200": jsonResponse(
+            "201": jsonResponse(
               {
                 type: "object",
                 additionalProperties: true
               },
               "Queued wiki ingest job"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs/uploads": {
+        post: {
+          summary: "Queue a wiki ingest job from multipart uploads",
+          requestBody: {
+            required: true,
+            content: {
+              "multipart/form-data": {
+                schema: { type: "object", additionalProperties: true }
+              }
+            }
+          },
+          responses: {
+            "201": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Queued uploaded wiki ingest job"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs/{id}": {
+        get: {
+          summary: "Read one accessible wiki ingest job",
+          responses: {
+            "200": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Wiki ingest job"
+            ),
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete one eligible accessible wiki ingest job",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["deleted"],
+                properties: {
+                  deleted: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["id"],
+                    properties: { id: { type: "string" } }
+                  }
+                }
+              },
+              "Deleted wiki ingest job"
+            ),
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs/{id}/rerun": {
+        post: {
+          summary: "Queue a rerun of one completed accessible wiki ingest job",
+          responses: {
+            "201": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Queued wiki ingest rerun"
+            ),
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs/{id}/resume": {
+        post: {
+          summary: "Resume one recoverable accessible wiki ingest job",
+          responses: {
+            "200": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Wiki ingest resume status"
+            ),
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/wiki/ingest-jobs/{id}/review": {
+        post: {
+          summary: "Review candidates from one accessible wiki ingest job",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", additionalProperties: true }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Reviewed wiki ingest job"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -10667,6 +14419,58 @@ export function buildOpenApiDocument() {
               "Forge snapshot"
             ),
             default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/today/priority": {
+        get: {
+          summary:
+            "Read the canonical deterministic Today work-priority decision",
+          parameters: [
+            {
+              name: "userIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated user scope. Capacity evidence is applied only when exactly one authorized user is selected."
+            },
+            {
+              name: "timeZone",
+              in: "query",
+              schema: { type: "string", minLength: 1, maxLength: 100 },
+              description:
+                "IANA timezone used for due dates, local-day capacity, and timeboxes."
+            },
+            {
+              name: "candidateLimit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 24
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["decision"],
+                properties: {
+                  decision: {
+                    $ref: "#/components/schemas/TodayPriorityDecision"
+                  }
+                }
+              },
+              "Canonical Today priority decision"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -10714,22 +14518,78 @@ export function buildOpenApiDocument() {
       "/api/v1/preferences/workspace": {
         get: {
           summary:
-            "Get the inferred Preferences workspace for one user, domain, and optional context",
+            "Read the stored Preferences workspace without mutating or refreshing it",
+          parameters: [
+            { in: "query", name: "userId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "domain",
+              schema: { type: "string", enum: PREFERENCE_DOMAIN_VALUES }
+            },
+            { in: "query", name: "contextId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "itemLimit",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 }
+            },
+            {
+              in: "query",
+              name: "itemOffset",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            },
+            {
+              in: "query",
+              name: "historyLimit",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["workspace"],
                 properties: {
                   workspace: {
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PreferenceWorkspace"
                   }
                 }
               },
               "Preferences workspace"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
+          }
+        }
+      },
+      "/api/v1/preferences/workspace/refresh": {
+        post: {
+          summary:
+            "Initialize or refresh one Preferences workspace with authenticated write provenance",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceWorkspaceRefreshInput"
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["workspace"],
+                properties: {
+                  workspace: {
+                    $ref: "#/components/schemas/PreferenceWorkspace"
+                  }
+                }
+              },
+              "Initialized or refreshed Preferences workspace"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
@@ -10742,18 +14602,7 @@ export function buildOpenApiDocument() {
             content: {
               "application/json": {
                 schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["userId", "domain"],
-                  properties: {
-                    userId: { type: "string", minLength: 1 },
-                    domain: {
-                      type: "string",
-                      enum: PREFERENCE_DOMAIN_VALUES
-                    },
-                    contextId: { type: "string", minLength: 1 },
-                    catalogId: { type: "string", minLength: 1 }
-                  }
+                  $ref: "#/components/schemas/PreferenceGameStartInput"
                 }
               }
             }
@@ -10762,314 +14611,554 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["workspace"],
                 properties: {
                   workspace: {
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PreferenceWorkspace"
                   }
                 }
               },
               "Refreshed Preferences workspace"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/catalogs": {
         get: {
           summary: "List Preferences concept lists",
+          description:
+            "Returns an authenticated, owner-scoped, bounded catalog page. Normal agent reads should use POST /api/v1/entities/search with entityType preference_catalog.",
+          parameters: [
+            {
+              in: "query",
+              name: "domain",
+              schema: { type: "string", enum: PREFERENCE_DOMAIN_VALUES }
+            },
+            {
+              in: "query",
+              name: "query",
+              schema: { type: "string", maxLength: 200 }
+            },
+            {
+              in: "query",
+              name: "limit",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 24 }
+            },
+            {
+              in: "query",
+              name: "offset",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            },
+            {
+              in: "query",
+              name: "cursor",
+              schema: { type: "string", minLength: 1, maxLength: 2048 },
+              description:
+                "Opaque snapshot cursor returned by the preceding page. Do not combine it with a positive offset."
+            },
+            { in: "query", name: "userId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "userIds",
+              schema: arrayOf({ type: "string" })
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["catalogs"],
+                additionalProperties: false,
+                required: [
+                  "catalogs",
+                  "limit",
+                  "offset",
+                  "hasMore",
+                  "nextOffset",
+                  "previousOffset",
+                  "snapshotAt",
+                  "nextCursor"
+                ],
                 properties: {
                   catalogs: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
+                    $ref: "#/components/schemas/PreferenceCatalog"
+                  }),
+                  limit: { type: "integer", minimum: 1, maximum: 100 },
+                  offset: { type: "integer", minimum: 0 },
+                  hasMore: { type: "boolean" },
+                  nextOffset: nullable({ type: "integer", minimum: 0 }),
+                  previousOffset: nullable({ type: "integer", minimum: 0 }),
+                  snapshotAt: { type: "string", format: "date-time" },
+                  nextCursor: nullable({ type: "string" })
                 }
               },
               "Preferences catalogs"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 500)
           }
         },
         post: {
           summary: "Create a Preferences concept list",
+          description:
+            "Creates one owner-scoped catalog atomically with immutable creator provenance, general entity links, and deterministic duplicate handling. Accepts Idempotency-Key for safe retries. Agents should normally use POST /api/v1/entities/create.",
+          parameters: [
+            {
+              in: "header",
+              name: "Idempotency-Key",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceCatalogCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["catalog"],
                 properties: {
-                  catalog: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  catalog: { $ref: "#/components/schemas/PreferenceCatalog" }
                 }
               },
               "Created Preferences catalog"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }
       },
       "/api/v1/preferences/catalogs/{id}": {
         get: {
           summary: "Get one Preferences concept list",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["catalog"],
                 properties: {
-                  catalog: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  catalog: { $ref: "#/components/schemas/PreferenceCatalog" }
                 }
               },
               "Preferences catalog"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         },
         patch: {
           summary: "Update a Preferences concept list",
+          description:
+            "Updates mutable purpose, boundary, slug, and general-link fields. Owner and creator provenance remain immutable.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceCatalogPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["catalog"],
                 properties: {
-                  catalog: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  catalog: { $ref: "#/components/schemas/PreferenceCatalog" }
                 }
               },
               "Updated Preferences catalog"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         },
         delete: {
-          summary: "Delete a Preferences concept list",
+          summary: "Archive a Preferences concept list",
+          description:
+            "Idempotently moves the catalog to Forge's reversible settings bin. Repeating the request returns the same archived catalog. Existing preference evidence is preserved; concepts that were active at archive time are restored with the catalog.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["catalog"],
                 properties: {
-                  catalog: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  catalog: { $ref: "#/components/schemas/PreferenceCatalog" }
                 }
               },
-              "Deleted Preferences catalog"
+              "Archived Preferences catalog"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/catalog-items": {
         get: {
           summary: "List Preferences concept entries",
+          description:
+            "Returns an authenticated, owner-scoped, bounded page. Use the returned cursor to traverse one insertion-stable snapshot; offset remains available for legacy callers.",
+          parameters: [
+            {
+              in: "query",
+              name: "catalogId",
+              schema: { type: "string", minLength: 1 }
+            },
+            {
+              in: "query",
+              name: "query",
+              schema: { type: "string", maxLength: 200 }
+            },
+            {
+              in: "query",
+              name: "limit",
+              schema: { type: "integer", minimum: 1, maximum: 200, default: 24 }
+            },
+            {
+              in: "query",
+              name: "offset",
+              schema: { type: "integer", minimum: 0, default: 0 }
+            },
+            {
+              in: "query",
+              name: "cursor",
+              schema: { type: "string", minLength: 1, maxLength: 2048 },
+              description:
+                "Opaque snapshot cursor returned by the preceding page. Do not combine it with a positive offset."
+            },
+            { in: "query", name: "userId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "userIds",
+              schema: arrayOf({ type: "string" })
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["items"],
+                additionalProperties: false,
+                required: [
+                  "items",
+                  "limit",
+                  "offset",
+                  "hasMore",
+                  "nextOffset",
+                  "previousOffset",
+                  "snapshotAt",
+                  "nextCursor"
+                ],
                 properties: {
                   items: arrayOf({
-                    type: "object",
-                    additionalProperties: true
-                  })
+                    $ref: "#/components/schemas/PreferenceCatalogItem"
+                  }),
+                  limit: { type: "integer", minimum: 1, maximum: 200 },
+                  offset: { type: "integer", minimum: 0 },
+                  hasMore: { type: "boolean" },
+                  nextOffset: nullable({ type: "integer", minimum: 0 }),
+                  previousOffset: nullable({ type: "integer", minimum: 0 }),
+                  snapshotAt: { type: "string", format: "date-time" },
+                  nextCursor: nullable({ type: "string" })
                 }
               },
               "Preferences catalog items"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 500)
           }
         },
         post: {
           summary: "Create a Preferences concept entry",
+          description:
+            "Creates one owner-scoped reusable concept. Active labels are unique within a catalog after trimming and case normalization.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceCatalogItemCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceCatalogItem" }
                 }
               },
               "Created Preferences catalog item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }
       },
       "/api/v1/preferences/catalog-items/{id}": {
         get: {
           summary: "Get one Preferences concept entry",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceCatalogItem" }
                 }
               },
               "Preferences catalog item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         },
         patch: {
           summary: "Update a Preferences concept entry",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceCatalogItemPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceCatalogItem" }
                 }
               },
               "Updated Preferences catalog item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         },
         delete: {
-          summary: "Delete a Preferences concept entry",
+          summary: "Move a Preferences concept entry to the bin",
+          description:
+            "Idempotently archives the reusable concept in Forge's reversible settings bin. Its ownership, general entity links, and preference evidence are preserved. Restore it through POST /api/v1/entities/restore; permanent deletion remains an explicit bin action.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceCatalogItem" }
                 }
               },
-              "Deleted Preferences catalog item"
+              "Archived Preferences catalog item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/contexts": {
         get: {
           summary: "List Preferences contexts",
+          parameters: [
+            { in: "query", name: "userId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "userIds",
+              schema: arrayOf({ type: "string" })
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["contexts"],
                 properties: {
                   contexts: arrayOf({
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PreferenceContext"
                   })
                 }
               },
               "Preferences contexts"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 500)
           }
         },
         post: {
           summary: "Create a Preferences context",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceContextCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["context"],
                 properties: {
-                  context: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  context: { $ref: "#/components/schemas/PreferenceContext" }
                 }
               },
               "Created Preferences context"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/contexts/{id}": {
         get: {
           summary: "Get one Preferences context",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["context"],
                 properties: {
-                  context: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  context: { $ref: "#/components/schemas/PreferenceContext" }
                 }
               },
               "Preferences context"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         },
         patch: {
           summary: "Update a Preferences context",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceContextPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["context"],
                 properties: {
-                  context: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  context: { $ref: "#/components/schemas/PreferenceContext" }
                 }
               },
               "Updated Preferences context"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         },
         delete: {
           summary: "Delete a Preferences context",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["context"],
                 properties: {
-                  context: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  context: { $ref: "#/components/schemas/PreferenceContext" }
                 }
               },
               "Deleted Preferences context"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
@@ -11098,116 +15187,168 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["merge"],
                 properties: {
                   merge: {
                     type: "object",
-                    additionalProperties: true
+                    additionalProperties: false,
+                    required: ["source", "target"],
+                    properties: {
+                      source: {
+                        $ref: "#/components/schemas/PreferenceContext"
+                      },
+                      target: { $ref: "#/components/schemas/PreferenceContext" }
+                    }
                   }
                 }
               },
               "Merged Preferences contexts"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/items": {
         get: {
           summary: "List Preferences items",
+          parameters: [
+            { in: "query", name: "userId", schema: { type: "string" } },
+            {
+              in: "query",
+              name: "userIds",
+              schema: arrayOf({ type: "string" })
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["items"],
                 properties: {
                   items: arrayOf({
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PreferenceItem"
                   })
                 }
               },
               "Preferences items"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 500)
           }
         },
         post: {
           summary: "Create a standalone Preferences item",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceItemCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceItem" }
                 }
               },
               "Created Preferences item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }
       },
       "/api/v1/preferences/items/{id}": {
         get: {
           summary: "Get one Preferences item",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceItem" }
                 }
               },
               "Preferences item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         },
         patch: {
           summary: "Update a Preferences item",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/PreferenceItemPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceItem" }
                 }
               },
               "Updated Preferences item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         },
         delete: {
           summary: "Delete a Preferences item",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceItem" }
                 }
               },
               "Deleted Preferences item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(401, 403, 404, 500)
           }
         }
       },
@@ -11220,21 +15361,7 @@ export function buildOpenApiDocument() {
             content: {
               "application/json": {
                 schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["userId", "domain", "entityType", "entityId"],
-                  properties: {
-                    userId: { type: "string", minLength: 1 },
-                    domain: {
-                      type: "string",
-                      enum: PREFERENCE_DOMAIN_VALUES
-                    },
-                    entityType: { type: "string", minLength: 1 },
-                    entityId: { type: "string", minLength: 1 },
-                    label: { type: "string" },
-                    description: { type: "string" },
-                    tags: arrayOf({ type: "string", minLength: 1 })
-                  }
+                  $ref: "#/components/schemas/PreferenceEntityEnqueueInput"
                 }
               }
             }
@@ -11243,59 +15370,36 @@ export function buildOpenApiDocument() {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["item"],
                 properties: {
-                  item: {
-                    type: "object",
-                    additionalProperties: true
-                  }
+                  item: { $ref: "#/components/schemas/PreferenceItem" }
                 }
               },
               "Queued entity-backed Preferences item"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
       "/api/v1/preferences/judgments": {
         post: {
           summary: "Submit a pairwise Preferences judgment",
+          description:
+            "Judgment, activity, projection refresh, and an optional retry receipt commit atomically. Reuse the same Idempotency-Key only for an identical retry.",
+          parameters: [
+            {
+              in: "header",
+              name: "Idempotency-Key",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
           requestBody: {
             required: true,
             content: {
               "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: [
-                    "userId",
-                    "domain",
-                    "contextId",
-                    "leftItemId",
-                    "rightItemId",
-                    "outcome"
-                  ],
-                  properties: {
-                    userId: { type: "string", minLength: 1 },
-                    domain: {
-                      type: "string",
-                      enum: PREFERENCE_DOMAIN_VALUES
-                    },
-                    contextId: { type: "string", minLength: 1 },
-                    leftItemId: { type: "string", minLength: 1 },
-                    rightItemId: { type: "string", minLength: 1 },
-                    outcome: {
-                      type: "string",
-                      enum: ["left", "right", "tie", "skip"]
-                    },
-                    strength: { type: "number", minimum: 0.5, maximum: 2 },
-                    responseTimeMs: nullable({
-                      type: "integer",
-                      minimum: 0
-                    }),
-                    reasonTags: arrayOf({ type: "string", minLength: 1 })
-                  }
-                }
+                schema: { $ref: "#/components/schemas/PreferenceJudgmentInput" }
               }
             }
           },
@@ -11303,77 +15407,75 @@ export function buildOpenApiDocument() {
             "201": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["judgment"],
                 properties: {
                   judgment: {
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PairwisePreferenceJudgment"
                   }
                 }
               },
               "Created pairwise judgment"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }
       },
       "/api/v1/preferences/signals": {
         post: {
           summary: "Submit an absolute Preferences signal",
+          description:
+            "Records or replaces the effective direct mark for one item in one context and returns the recomputed score. Use one stable Idempotency-Key for an exact transport retry. The receipt binds the owner, domain, context, item, signal type, and strength; changed-payload key reuse returns 409 and an exact replay never replaces newer preference intent. neutral is a removal tombstone: it preserves prior signal history but contributes no direct weight, evidence count, or confidence.",
+          parameters: [
+            {
+              in: "header",
+              name: "Idempotency-Key",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
           requestBody: {
             required: true,
             content: {
               "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: [
-                    "userId",
-                    "domain",
-                    "contextId",
-                    "itemId",
-                    "signalType"
-                  ],
-                  properties: {
-                    userId: { type: "string", minLength: 1 },
-                    domain: {
-                      type: "string",
-                      enum: PREFERENCE_DOMAIN_VALUES
-                    },
-                    contextId: { type: "string", minLength: 1 },
-                    itemId: { type: "string", minLength: 1 },
-                    signalType: {
-                      type: "string",
-                      enum: [
-                        "favorite",
-                        "veto",
-                        "must_have",
-                        "bookmark",
-                        "neutral",
-                        "compare_later"
-                      ]
-                    },
-                    strength: { type: "number", minimum: 0.5, maximum: 2 }
-                  }
-                }
+                schema: { $ref: "#/components/schemas/PreferenceSignalInput" }
               }
             }
           },
           responses: {
-            "201": jsonResponse(
+            "200": jsonResponse(
               {
                 type: "object",
-                required: ["signal"],
+                additionalProperties: false,
+                required: ["signal", "score"],
                 properties: {
                   signal: {
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/AbsolutePreferenceSignal"
+                  },
+                  score: {
+                    $ref: "#/components/schemas/PreferenceItemScore"
                   }
                 }
               },
-              "Created absolute signal"
+              "Exact idempotent replay with the current recomputed item score"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "201": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["signal", "score"],
+                properties: {
+                  signal: {
+                    $ref: "#/components/schemas/AbsolutePreferenceSignal"
+                  },
+                  score: {
+                    $ref: "#/components/schemas/PreferenceItemScore"
+                  }
+                }
+              },
+              "Created absolute signal and recomputed item score"
+            ),
+            ...preferenceErrorResponses(400, 401, 403, 404, 409, 500)
           }
         }
       },
@@ -11381,35 +15483,22 @@ export function buildOpenApiDocument() {
         patch: {
           summary:
             "Patch manual score state for a Preferences item and return the refreshed workspace",
+          description:
+            "Omitted override fields are unchanged. Explicit null clears manualStatus, manualScore, or confidenceLock.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["userId", "domain", "contextId"],
-                  properties: {
-                    userId: { type: "string", minLength: 1 },
-                    domain: {
-                      type: "string",
-                      enum: PREFERENCE_DOMAIN_VALUES
-                    },
-                    contextId: { type: "string", minLength: 1 },
-                    manualStatus: nullable({
-                      type: "string",
-                      enum: PREFERENCE_ITEM_STATUS_VALUES
-                    }),
-                    manualScore: nullable({ type: "number" }),
-                    confidenceLock: nullable({
-                      type: "number",
-                      minimum: 0,
-                      maximum: 1
-                    }),
-                    bookmarked: { type: "boolean" },
-                    compareLater: { type: "boolean" },
-                    frozen: { type: "boolean" }
-                  }
+                  $ref: "#/components/schemas/PreferenceScorePatchInput"
                 }
               }
             }
@@ -11418,17 +15507,17 @@ export function buildOpenApiDocument() {
             "200": jsonResponse(
               {
                 type: "object",
+                additionalProperties: false,
                 required: ["workspace"],
                 properties: {
                   workspace: {
-                    type: "object",
-                    additionalProperties: true
+                    $ref: "#/components/schemas/PreferenceWorkspace"
                   }
                 }
               },
               "Refreshed Preferences workspace"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            ...preferenceErrorResponses(400, 401, 403, 404, 500)
           }
         }
       },
@@ -11836,6 +15925,9 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Get the one-shot operator overview with full current state, route guidance, and optional Psyche summary",
+          description:
+            "Returns only Notes visible through the caller's effective user, Wiki-space, and Psyche read scope.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -11848,7 +15940,83 @@ export function buildOpenApiDocument() {
                 }
               },
               "Operator overview"
-            )
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/knowledge-graph": {
+        get: {
+          summary: "Read the authorized Forge knowledge graph",
+          description:
+            "Builds the graph from the caller's effective user scope. Note, Wiki, and Psyche nodes use the same owner, Wiki-space, and Psyche visibility contract as their direct read routes.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          parameters: [
+            repeatedStringQueryParameter("userIds"),
+            repeatedStringQueryParameter("entityKind"),
+            repeatedStringQueryParameter("relationKind"),
+            repeatedStringQueryParameter("tag"),
+            repeatedStringQueryParameter("owner"),
+            stringQueryParameter("q"),
+            stringQueryParameter("updatedFrom"),
+            stringQueryParameter("updatedTo"),
+            stringQueryParameter("focusNodeId"),
+            integerQueryParameter("limit", 1, 2000)
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["graph"],
+                properties: {
+                  graph: { type: "object", additionalProperties: true }
+                }
+              },
+              "Authorized knowledge graph"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/knowledge-graph/focus": {
+        get: {
+          summary: "Read one authorized knowledge-graph neighborhood",
+          description:
+            "Returns a focused neighborhood only after applying the same user, Wiki-space, and Psyche visibility contract as the full graph.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          parameters: [
+            {
+              name: "entityType",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "entityId",
+              in: "query",
+              required: true,
+              schema: { type: "string" }
+            },
+            repeatedStringQueryParameter("userIds")
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["focus"],
+                properties: {
+                  focus: { type: "object", additionalProperties: true }
+                }
+              },
+              "Authorized focused graph neighborhood"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -11892,7 +16060,26 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/psyche/metrics": {
         get: {
-          summary: "Get daily Psyche metric history",
+          summary:
+            "Get owner-scoped Psyche metrics with provenance and data-quality context",
+          parameters: [
+            {
+              name: "userIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated owner scope. Trigger-report evidence is limited to the effective authorized users. Conversation-scanner evidence is excluded from scoped responses because it has no canonical owner attribution."
+            },
+            {
+              name: "timeZone",
+              in: "query",
+              schema: { type: "string", minLength: 1, maxLength: 100 },
+              description:
+                "IANA timezone used to assign dated trigger-report observations to local days."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12441,6 +16628,25 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/event-types": {
         get: {
           summary: "List seeded and custom Psyche event types",
+          description:
+            "Requires psyche.read for an agent token when Psyche authentication is enabled. Returns immutable built-in labels plus custom labels inside the effective owner scope. Agents should normally search event_type through the shared batch route POST /api/v1/entities/search, which additionally requires base read or write; this dedicated route powers the Psyche report vocabulary UI.",
+          parameters: [
+            {
+              name: "userId",
+              in: "query",
+              schema: { type: "string", maxLength: 160 }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                items: { type: "string", maxLength: 160 }
+              }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12454,11 +16660,30 @@ export function buildOpenApiDocument() {
               },
               "Event type collection"
             ),
+            "403": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a custom Psyche event type",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Creates one owner-scoped reusable label. Built-ins remain read-only. Labels are compared after Unicode NFKC default case folding plus punctuation and whitespace normalization. Duplicate active labels return 409 psyche_vocabulary_duplicate; matching labels in the bin return 409 psyche_vocabulary_label_in_bin. Reuse Idempotency-Key only for an identical retry: changed payload reuse returns 409 idempotency_conflict, a soft-deleted target returns 409 psyche_vocabulary_idempotency_target_in_bin, and a hard-deleted target returns terminal 409 psyche_vocabulary_idempotency_target_deleted without recreation. Agents should normally use POST /api/v1/entities/create with entityType event_type, which additionally requires base write.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EventTypeCreateInput" }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12470,6 +16695,9 @@ export function buildOpenApiDocument() {
               },
               "Created event type"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -12477,6 +16705,23 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/event-types/{id}": {
         get: {
           summary: "Get a Psyche event type",
+          description:
+            "Requires psyche.read for an agent token when Psyche authentication is enabled. Returns an immutable built-in or an owner-visible custom label. A custom label outside the effective user scope is returned as 404.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: { type: "array", items: { type: "string" } }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12488,11 +16733,31 @@ export function buildOpenApiDocument() {
               },
               "Event type detail"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         patch: {
           summary: "Update a custom Psyche event type",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Updates an owner-visible custom label. Built-ins return 409 system_vocabulary_immutable. Existing trigger reports retain their own stored event wording when a reusable label changes.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/EventTypePatchInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -12504,11 +16769,39 @@ export function buildOpenApiDocument() {
               },
               "Updated event type"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
           summary: "Delete a custom Psyche event type",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Soft-deletes by default so the custom label can be restored. Hard deletion removes the reusable record and permanently consumes any create idempotency key; a delayed identical retry returns 409 psyche_vocabulary_idempotency_target_deleted instead of recreating it. Trigger reports retain the user's stored event wording. Built-ins cannot be deleted and return 409 system_vocabulary_immutable.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "mode",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["soft", "hard"],
+                default: "soft"
+              }
+            },
+            {
+              name: "reason",
+              in: "query",
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12520,6 +16813,9 @@ export function buildOpenApiDocument() {
               },
               "Deleted event type"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -12527,6 +16823,25 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/emotions": {
         get: {
           summary: "List seeded and custom Psyche emotions",
+          description:
+            "Requires psyche.read for an agent token when Psyche authentication is enabled. Returns immutable built-in emotion labels plus custom labels inside the effective owner scope. Reports still accept the user's own emotion words. Agents should normally search emotion_definition through the shared batch route POST /api/v1/entities/search, which additionally requires base read or write; this dedicated route powers the Psyche report vocabulary UI.",
+          parameters: [
+            {
+              name: "userId",
+              in: "query",
+              schema: { type: "string", maxLength: 160 }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                items: { type: "string", maxLength: 160 }
+              }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12540,11 +16855,32 @@ export function buildOpenApiDocument() {
               },
               "Emotion collection"
             ),
+            "403": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a custom Psyche emotion",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Creates one owner-scoped reusable emotion label. Built-ins remain read-only. Labels are compared after Unicode NFKC default case folding plus punctuation and whitespace normalization. Duplicate active labels return 409 psyche_vocabulary_duplicate; matching labels in the bin return 409 psyche_vocabulary_label_in_bin. Reuse Idempotency-Key only for an identical retry: changed payload reuse returns 409 idempotency_conflict, a soft-deleted target returns 409 psyche_vocabulary_idempotency_target_in_bin, and a hard-deleted target returns terminal 409 psyche_vocabulary_idempotency_target_deleted without recreation. Agents should normally use POST /api/v1/entities/create with entityType emotion_definition, which additionally requires base write.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/EmotionDefinitionCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12556,6 +16892,9 @@ export function buildOpenApiDocument() {
               },
               "Created emotion"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -12563,6 +16902,23 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/emotions/{id}": {
         get: {
           summary: "Get a Psyche emotion definition",
+          description:
+            "Requires psyche.read for an agent token when Psyche authentication is enabled. Returns an immutable built-in or an owner-visible custom emotion definition. A custom label outside the effective user scope is returned as 404.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: { type: "array", items: { type: "string" } }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12574,11 +16930,33 @@ export function buildOpenApiDocument() {
               },
               "Emotion detail"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         patch: {
           summary: "Update a custom Psyche emotion definition",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Updates an owner-visible custom emotion definition. Built-ins return 409 system_vocabulary_immutable. Trigger reports preserve each stored raw emotion label when a reusable definition changes.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/EmotionDefinitionPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -12590,11 +16968,39 @@ export function buildOpenApiDocument() {
               },
               "Updated emotion"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
           summary: "Delete a custom Psyche emotion definition",
+          description:
+            "Requires psyche.write for an agent token when Psyche authentication is enabled. Soft-deletes by default so the custom definition can be restored. Hard deletion clears reusable definition references and permanently consumes any create idempotency key; a delayed identical retry returns 409 psyche_vocabulary_idempotency_target_deleted instead of recreating it. Reports retain every stored raw emotion word. Built-ins cannot be deleted and return 409 system_vocabulary_immutable.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "mode",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["soft", "hard"],
+                default: "soft"
+              }
+            },
+            {
+              name: "reason",
+              in: "query",
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12606,6 +17012,9 @@ export function buildOpenApiDocument() {
               },
               "Deleted emotion"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -12613,24 +17022,72 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/reports": {
         get: {
           summary: "List trigger reports",
+          description:
+            "Returns one newest-first, owner-scoped keyset page. Agents normally read trigger_report through shared batch entity tools; this direct route powers the Psyche report view and exposes its exact pagination contract.",
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 25
+              }
+            },
+            {
+              name: "cursor",
+              in: "query",
+              schema: { type: "string", maxLength: 1024 }
+            },
+            {
+              name: "userId",
+              in: "query",
+              schema: { type: "string", maxLength: 160 }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                items: { type: "string", maxLength: 160 }
+              }
+            }
+          ],
           responses: {
             "200": jsonResponse(
-              {
-                type: "object",
-                required: ["reports"],
-                properties: {
-                  reports: arrayOf({
-                    $ref: "#/components/schemas/TriggerReport"
-                  })
-                }
-              },
+              { $ref: "#/components/schemas/TriggerReportPage" },
               "Trigger report collection"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a trigger report",
+          description:
+            "Creates one owner-scoped report atomically with canonical general entity links. Reuse an Idempotency-Key only for an identical retry; a changed payload returns 409. A tentative hypothesis is accepted only after explicit interpretationConsent.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              schema: { type: "string", minLength: 1, maxLength: 128 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/TriggerReportCreateInput"
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12642,6 +17099,9 @@ export function buildOpenApiDocument() {
               },
               "Created trigger report"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -12649,6 +17109,23 @@ export function buildOpenApiDocument() {
       "/api/v1/psyche/reports/{id}": {
         get: {
           summary: "Get a trigger report with linked notes and insights",
+          description:
+            "Returns the report only when it is inside the effective owner scope. Linked Wiki notes are filtered through Wiki ACLs before they are returned.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: { type: "array", items: { type: "string" } }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12662,11 +17139,33 @@ export function buildOpenApiDocument() {
               },
               "Trigger report detail"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         patch: {
           summary: "Update a trigger report",
+          description:
+            "Applies a revision-checked owner-scoped update and refreshes canonical general entity links in the same transaction. A stale expectedRevision returns 409.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/TriggerReportPatchInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -12678,11 +17177,25 @@ export function buildOpenApiDocument() {
               },
               "Updated trigger report"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
           summary: "Delete a trigger report",
+          description:
+            "Soft-deletes one report inside the effective owner scope. The general entity lifecycle routes remain the canonical batch path for agent-managed records.",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12694,14 +17207,33 @@ export function buildOpenApiDocument() {
               },
               "Deleted trigger report"
             ),
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/notes": {
         get: {
-          summary: "List notes linked to Forge entities",
+          summary: "Search and page accessible notes",
+          description:
+            "Returns newest-first keyset pages. linkedTo and textTerms use OR semantics within their own groups; tags use exact case-insensitive AND semantics. query tokenizes one full-text expression. Ownership, Wiki-space access, deleted/expired state, and Psyche scope are applied before total and pagination.",
           parameters: [
+            {
+              name: "kind",
+              in: "query",
+              schema: { $ref: "#/components/schemas/NoteKind" }
+            },
+            {
+              name: "spaceId",
+              in: "query",
+              schema: { type: "string", maxLength: 128 }
+            },
+            {
+              name: "slug",
+              in: "query",
+              schema: { type: "string", maxLength: 240 }
+            },
             {
               name: "linkedEntityType",
               in: "query",
@@ -12714,21 +17246,74 @@ export function buildOpenApiDocument() {
               schema: { type: "string", nullable: true }
             },
             {
+              name: "includeAnchorless",
+              in: "query",
+              description:
+                "When true with anchorKey, includes notes linked to the same entity without an anchor as well as notes on the requested anchor.",
+              schema: { type: "boolean", default: false }
+            },
+            {
               name: "linkedTo",
               in: "query",
-              schema: { type: "array", items: { type: "string" } }
+              description:
+                "Repeat up to 24 entityType:entityId values. A note matching any supplied link is included.",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                maxItems: 24,
+                items: { type: "string", maxLength: 512 }
+              }
             },
             {
               name: "tags",
               in: "query",
-              schema: { type: "array", items: { type: "string" } }
+              description:
+                "Repeat up to 24 exact tags. A note must contain every supplied tag.",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                maxItems: 24,
+                items: { type: "string", maxLength: 80 }
+              }
             },
             {
               name: "textTerms",
               in: "query",
-              schema: { type: "array", items: { type: "string" } }
+              description:
+                "Repeat up to 12 alternatives with at most 12 searchable tokens each. A note matches when every token in any one term is found across body, author, title, summary, or tags.",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                maxItems: 12,
+                items: { type: "string", maxLength: 160 }
+              }
             },
-            { name: "author", in: "query", schema: { type: "string" } },
+            {
+              name: "query",
+              in: "query",
+              description:
+                "One full-text expression with at most 16 searchable tokens; every token must match.",
+              schema: { type: "string", maxLength: 512 }
+            },
+            {
+              name: "author",
+              in: "query",
+              schema: { type: "string", maxLength: 160 }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              style: "form",
+              explode: true,
+              schema: {
+                type: "array",
+                maxItems: 32,
+                items: { type: "string", maxLength: 128 }
+              }
+            },
             {
               name: "updatedFrom",
               in: "query",
@@ -12740,27 +17325,67 @@ export function buildOpenApiDocument() {
               schema: { type: "string", format: "date" }
             },
             {
+              name: "observedFrom",
+              in: "query",
+              description:
+                "Inclusive lower date bound using frontmatter.observedAt, falling back to createdAt.",
+              schema: { type: "string", format: "date" }
+            },
+            {
+              name: "observedTo",
+              in: "query",
+              description:
+                "Inclusive upper date bound using frontmatter.observedAt, falling back to createdAt.",
+              schema: { type: "string", format: "date" }
+            },
+            {
               name: "limit",
               in: "query",
-              schema: { type: "integer", minimum: 1, maximum: 200 }
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 40
+              }
+            },
+            {
+              name: "cursor",
+              in: "query",
+              description:
+                "Opaque nextCursor from the preceding response. Cursors are stable over createdAt and id ordering.",
+              schema: { type: "string", maxLength: 1024 }
             }
           ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
-                required: ["notes"],
+                additionalProperties: false,
+                required: ["notes", "total", "limit", "nextCursor", "hasMore"],
                 properties: {
-                  notes: arrayOf({ $ref: "#/components/schemas/Note" })
+                  notes: arrayOf({ $ref: "#/components/schemas/Note" }),
+                  total: { type: "integer", minimum: 0 },
+                  limit: { type: "integer", minimum: 1, maximum: 100 },
+                  nextCursor: nullable({ type: "string" }),
+                  hasMore: { type: "boolean" }
                 }
               },
-              "Note collection"
+              "Bounded note page"
             ),
+            "400": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a note linked to one or more Forge entities",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/NoteCreateInput" }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -12777,6 +17402,14 @@ export function buildOpenApiDocument() {
       "/api/v1/notes/{id}": {
         get: {
           summary: "Get a note",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -12791,6 +17424,24 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update a note",
+          description:
+            "Use expectedRevisionHash from the last read to prevent a stale editor from overwriting a newer revision.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/NotePatchInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -12800,11 +17451,31 @@ export function buildOpenApiDocument() {
               },
               "Updated note"
             ),
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
-          summary: "Delete a note",
+          summary: "Soft-delete or permanently delete a note",
+          description:
+            "The default soft delete moves the note to the Forge bin and preserves its snapshot for the shared entity restore route.",
+          parameters: [
+            {
+              in: "path",
+              name: "id",
+              required: true,
+              schema: { type: "string", minLength: 1 }
+            },
+            {
+              in: "query",
+              name: "mode",
+              schema: {
+                type: "string",
+                enum: ["soft", "hard"],
+                default: "soft"
+              }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -13250,25 +17921,67 @@ export function buildOpenApiDocument() {
       },
       "/api/v1/calendar/timeboxes": {
         get: {
-          summary: "List task timeboxes",
+          summary: "List a bounded, owner-scoped task-timebox range",
+          parameters: [
+            {
+              name: "from",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Inclusive ISO instant or YYYY-MM-DD range start. Defaults to seven days before now."
+            },
+            {
+              name: "to",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Exclusive ISO instant or YYYY-MM-DD range end. Defaults to 21 days after now; a range may span at most 732 days."
+            },
+            {
+              name: "userIds",
+              in: "query",
+              required: false,
+              schema: arrayOf({ type: "string" }),
+              style: "form",
+              explode: true,
+              description:
+                "Optional repeated user scope, intersected with the authenticated token's allowed users."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
                 required: ["timeboxes"],
                 properties: {
-                  timeboxes: arrayOf({
-                    $ref: "#/components/schemas/TaskTimebox"
-                  })
+                  timeboxes: {
+                    type: "array",
+                    maxItems: 5000,
+                    items: { $ref: "#/components/schemas/TaskTimebox" }
+                  }
                 }
               },
               "Task timeboxes"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         },
         post: {
           summary: "Create a planned task timebox",
+          description:
+            "The task must exist in the caller's user scope. Project and owner must match the task. Calendar pressure or scheduling-rule conflicts require a specific overrideReason.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskTimeboxCreateInput" }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -13280,13 +17993,25 @@ export function buildOpenApiDocument() {
               },
               "Created task timebox"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/calendar/timeboxes/{id}": {
         get: {
-          summary: "Get one task timebox",
+          summary: "Get one owner-scoped task timebox",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -13298,29 +18023,111 @@ export function buildOpenApiDocument() {
               },
               "Task timebox"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
+          }
+        },
+        patch: {
+          summary: "Update one owner-scoped task timebox",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskTimeboxPatchInput" }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["timebox"],
+                properties: {
+                  timebox: { $ref: "#/components/schemas/TaskTimebox" }
+                }
+              },
+              "Updated task timebox"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        },
+        delete: {
+          summary: "Delete one owner-scoped task timebox",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["timebox", "projection"],
+                properties: {
+                  timebox: { $ref: "#/components/schemas/TaskTimebox" },
+                  projection: {
+                    $ref: "#/components/schemas/CalendarProjectionResult"
+                  }
+                }
+              },
+              "Task timebox deletion request and provider outcome"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/calendar/timeboxes/recommend": {
         post: {
-          summary: "Suggest future timeboxes for a task",
+          summary: "Suggest bounded, conflict-free future timeboxes for a task",
           description:
-            "Recommendations consider provider events, work blocks, scheduling rules, and planned duration.",
+            "Recommendations require read access to the task and consider provider events, work blocks, existing timeboxes, owner scope, scheduling rules, planned duration, and the requested IANA timezone. The search range is capped at 31 days and the result at 12 suggestions.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/TaskTimeboxRecommendationInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
                 type: "object",
                 required: ["timeboxes"],
                 properties: {
-                  timeboxes: arrayOf({
-                    $ref: "#/components/schemas/TaskTimebox"
-                  })
+                  timeboxes: {
+                    type: "array",
+                    maxItems: 12,
+                    items: { $ref: "#/components/schemas/TaskTimebox" }
+                  }
                 }
               },
               "Suggested task timeboxes"
             ),
-            default: { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -13820,6 +18627,62 @@ export function buildOpenApiDocument() {
       "/api/v1/tasks": {
         get: {
           summary: "List tasks",
+          description:
+            "When a token is supplied, results are intersected with its user, project, and tag scope.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }, {}],
+          parameters: [
+            {
+              name: "status",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["backlog", "focus", "in_progress", "blocked", "done"]
+              }
+            },
+            {
+              name: "levels",
+              in: "query",
+              schema: {
+                type: "array",
+                items: { type: "string", enum: ["issue", "task", "subtask"] }
+              },
+              style: "form",
+              explode: false
+            },
+            { name: "owner", in: "query", schema: { type: "string" } },
+            { name: "goalId", in: "query", schema: { type: "string" } },
+            { name: "projectId", in: "query", schema: { type: "string" } },
+            {
+              name: "parentWorkItemId",
+              in: "query",
+              schema: { type: "string" }
+            },
+            { name: "tagId", in: "query", schema: { type: "string" } },
+            {
+              name: "due",
+              in: "query",
+              schema: { type: "string", enum: ["overdue", "today", "week"] }
+            },
+            {
+              name: "userIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "assigneeIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 100 }
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -13835,7 +18698,28 @@ export function buildOpenApiDocument() {
         },
         post: {
           summary: "Create a task",
+          description:
+            "The created task must remain within the token's user, project, and tag scope. Forbidden targets return 403 and are rolled back.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskCreateInput" }
+              }
+            }
+          },
           responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["task"],
+                properties: {
+                  task: { $ref: "#/components/schemas/Task" }
+                }
+              },
+              "Exact idempotent replay of a previously created task"
+            ),
             "201": jsonResponse(
               {
                 type: "object",
@@ -13846,6 +18730,10 @@ export function buildOpenApiDocument() {
               },
               "Created task"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -13854,6 +18742,17 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Log work that already happened by creating or updating a task and returning fresh XP state",
+          description:
+            "Atomically stores bounded completionReport, Git refs, and an optional closeout note. Summary text is not fabricated into completion evidence.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OperatorLogWorkInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -13877,7 +18776,11 @@ export function buildOpenApiDocument() {
               },
               "Created task and XP state"
             ),
-            "404": { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -13898,6 +18801,9 @@ export function buildOpenApiDocument() {
               { $ref: "#/components/schemas/WorkAdjustmentResult" },
               "Created work adjustment and refreshed XP state"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         }
@@ -13905,6 +18811,9 @@ export function buildOpenApiDocument() {
       "/api/v1/tasks/{id}": {
         get: {
           summary: "Get a task",
+          description:
+            "An existing task outside token scope is reported as not found.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }, {}],
           responses: {
             "200": jsonResponse(
               {
@@ -13921,6 +18830,17 @@ export function buildOpenApiDocument() {
         },
         patch: {
           summary: "Update a task",
+          description:
+            "The current task must be in scope; moving the resulting task outside token user, project, or tag scope returns 403 and rolls back.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaskPatchInput" }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -13932,11 +18852,16 @@ export function buildOpenApiDocument() {
               },
               "Updated task"
             ),
-            "404": { $ref: "#/components/responses/Error" }
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         },
         delete: {
           summary: "Delete a task",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -13948,6 +18873,8 @@ export function buildOpenApiDocument() {
               },
               "Deleted task"
             ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         }
@@ -13956,11 +18883,14 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Get task detail context including project, goal, runs, and evidence",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               { $ref: "#/components/schemas/TaskContextPayload" },
               "Task detail payload"
             ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         }
@@ -13968,6 +18898,7 @@ export function buildOpenApiDocument() {
       "/api/v1/tasks/{id}/runs": {
         post: {
           summary: "Start or renew a live task timer for a task",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -13997,6 +18928,11 @@ export function buildOpenApiDocument() {
               },
               "Created task timer"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -14004,6 +18940,7 @@ export function buildOpenApiDocument() {
       "/api/v1/tasks/{id}/uncomplete": {
         post: {
           summary: "Reopen a completed task and remove its completion XP",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -14015,6 +18952,8 @@ export function buildOpenApiDocument() {
               },
               "Reopened task"
             ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         }
@@ -14023,6 +18962,9 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "List task timers with optional task and active-state filters",
+          description:
+            "When a token is supplied, runs are filtered through the owning task's user, project, and tag scope.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }, {}],
           parameters: [
             { name: "taskId", in: "query", schema: { type: "string" } },
             {
@@ -14034,6 +18976,13 @@ export function buildOpenApiDocument() {
               }
             },
             { name: "active", in: "query", schema: { type: "boolean" } },
+            {
+              name: "userIds",
+              in: "query",
+              schema: { type: "array", items: { type: "string" } },
+              style: "form",
+              explode: true
+            },
             {
               name: "limit",
               in: "query",
@@ -14057,6 +19006,7 @@ export function buildOpenApiDocument() {
       "/api/v1/task-runs/{id}/heartbeat": {
         post: {
           summary: "Renew a live task timer heartbeat",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
             content: {
@@ -14076,6 +19026,11 @@ export function buildOpenApiDocument() {
               },
               "Updated task timer heartbeat"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -14083,6 +19038,7 @@ export function buildOpenApiDocument() {
       "/api/v1/task-runs/{id}/focus": {
         post: {
           summary: "Mark one live task timer as the current primary timer",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
             content: {
@@ -14102,6 +19058,11 @@ export function buildOpenApiDocument() {
               },
               "Focused task timer"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -14109,11 +19070,14 @@ export function buildOpenApiDocument() {
       "/api/v1/task-runs/{id}/complete": {
         post: {
           summary: "Complete a live task timer and complete the task",
+          description:
+            "Atomically stores completionReport, Git refs, closeout note, task completion, timer transition, timebox, rewards, and activity. Exact terminal replays succeed; changed closeout evidence returns 409 task_run_closeout_conflict.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/TaskRunFinishInput" }
+                schema: { $ref: "#/components/schemas/TaskRunCompleteInput" }
               }
             }
           },
@@ -14128,6 +19092,15 @@ export function buildOpenApiDocument() {
               },
               "Completed task timer"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": {
+              $ref: "#/components/responses/Error",
+              description:
+                "Run is not active, actor differs, or closeout fingerprint conflicts (task_run_closeout_conflict)."
+            },
             default: { $ref: "#/components/responses/Error" }
           }
         }
@@ -14136,11 +19109,14 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Pause or release a live task timer without completing the task",
+          description:
+            "Release accepts only a handoff note; it does not write completionReport or Git refs and does not complete the task.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           requestBody: {
             required: false,
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/TaskRunFinishInput" }
+                schema: { $ref: "#/components/schemas/TaskRunReleaseInput" }
               }
             }
           },
@@ -14155,13 +19131,186 @@ export function buildOpenApiDocument() {
               },
               "Released task timer"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" },
             default: { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/git-helper/overview": {
+        get: {
+          summary:
+            "Get bounded Git references for the configured Forge repository",
+          description:
+            "Operator-session only. The response intentionally omits the absolute repository root.",
+          security: [{ operatorSession: [] }],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["git"],
+                properties: {
+                  git: { $ref: "#/components/schemas/GitHelperOverview" }
+                }
+              },
+              "Configured repository Git overview"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/git-helper/search": {
+        get: {
+          summary: "Search bounded Git references",
+          description:
+            "Operator-session only. Branch and commit searches are restricted to the configured repository. Pull-request lookup accepts only canonical owner/repo.",
+          security: [{ operatorSession: [] }],
+          parameters: [
+            {
+              name: "kind",
+              in: "query",
+              required: true,
+              schema: {
+                type: "string",
+                enum: ["branch", "commit", "pull_request"]
+              }
+            },
+            {
+              name: "query",
+              in: "query",
+              schema: {
+                type: "string",
+                maxLength: TASK_CLOSEOUT_LIMITS.gitHelperQueryLength,
+                default: ""
+              }
+            },
+            {
+              name: "repository",
+              in: "query",
+              schema: {
+                type: "string",
+                maxLength: TASK_CLOSEOUT_LIMITS.gitHelperRepositoryLength,
+                pattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+              }
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: TASK_CLOSEOUT_LIMITS.gitHelperResults,
+                default: 12
+              }
+            }
+          ],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["git"],
+                properties: {
+                  git: { $ref: "#/components/schemas/GitHelperSearchResponse" }
+                }
+              },
+              "Bounded Git reference search result"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/task-runs/watchdog": {
+        get: {
+          tags: ["Task Runs"],
+          summary: "Read task-run watchdog status",
+          security: [{ operatorSession: [] }],
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["watchdog"],
+                properties: {
+                  watchdog: nullable({
+                    type: "object",
+                    additionalProperties: true
+                  })
+                }
+              },
+              "Watchdog status"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/task-runs/watchdog/reconcile": {
+        post: {
+          tags: ["Task Runs"],
+          summary: "Reconcile task-run watchdog state immediately",
+          security: [{ operatorSession: [] }],
+          responses: {
+            "200": jsonResponse(
+              { type: "object", additionalProperties: true },
+              "Watchdog reconciliation result"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/task-runs/recover": {
+        post: {
+          tags: ["Task Runs"],
+          summary: "Recover expired task runs",
+          security: [{ operatorSession: [] }],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    limit: { type: "integer", minimum: 1, maximum: 100 }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["timedOutRuns"],
+                properties: {
+                  timedOutRuns: arrayOf({
+                    $ref: "#/components/schemas/TaskRun"
+                  })
+                }
+              },
+              "Recovered expired task runs"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/activity": {
         get: {
           summary: "List visible activity events",
+          description:
+            "Filters Note-linked events through the caller's effective user, Wiki-space, and Psyche read scope before returning metadata.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -14174,7 +19323,29 @@ export function buildOpenApiDocument() {
                 }
               },
               "Activity archive"
-            )
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/events/stream": {
+        get: {
+          summary: "Stream authorized Forge activity changes",
+          description:
+            "The initial cursor and every activity event are selected only after applying the caller's effective user, Wiki-space, and Psyche Note visibility scope.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
+          responses: {
+            "200": {
+              description: "Authorized server-sent event stream",
+              content: {
+                "text/event-stream": {
+                  schema: { type: "string" }
+                }
+              }
+            },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -14200,6 +19371,28 @@ export function buildOpenApiDocument() {
       "/api/v1/metrics": {
         get: {
           summary: "Get gamification metrics",
+          description:
+            "Authenticated, read-only gamification summary. Token callers can read only the intersection of requested users and their configured user scope.",
+          parameters: [
+            {
+              name: "userIds",
+              in: "query",
+              required: false,
+              schema: arrayOf({ type: "string" }),
+              style: "form",
+              explode: true,
+              description:
+                "Selected Forge user IDs. Token callers are restricted to their allowed user scope."
+            },
+            {
+              name: "timezone",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Valid IANA timezone used for local-day progress calculations."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -14225,7 +19418,10 @@ export function buildOpenApiDocument() {
                 }
               },
               "Gamification metrics"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -14241,7 +19437,15 @@ export function buildOpenApiDocument() {
               style: "form",
               explode: true,
               description:
-                "Selected Forge user IDs. Exactly one valid ID returns selected-user progression; otherwise the API falls back to the active operator and then aggregate progression."
+                "Selected Forge user IDs. Token callers are restricted to their allowed user scope. Exactly one valid ID returns selected-user progression; an explicit invalid selection returns an empty scope rather than another user's progression."
+            },
+            {
+              name: "timezone",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Valid IANA timezone used for daily streak and Monday-through-Sunday XP boundaries. Defaults to the configured runtime timezone and then UTC."
             }
           ],
           responses: {
@@ -14254,7 +19458,10 @@ export function buildOpenApiDocument() {
                 }
               },
               "XP metrics payload"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -14262,6 +19469,8 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Get the source-controlled trophy and cosmetic unlock catalog with selected-user progress",
+          description:
+            "Authenticated, read-only catalog evaluation. This route never reconciles rewards, creates unlocks, or queues celebrations.",
           parameters: [
             {
               name: "userIds",
@@ -14271,7 +19480,15 @@ export function buildOpenApiDocument() {
               style: "form",
               explode: true,
               description:
-                "Selected Forge user IDs used to resolve catalog progress and unlock state."
+                "Selected Forge user IDs used to resolve catalog progress and unlock state. Token callers are restricted to their allowed user scope."
+            },
+            {
+              name: "timezone",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Valid IANA timezone used for local-day progress calculations."
             }
           ],
           responses: {
@@ -14286,13 +19503,215 @@ export function buildOpenApiDocument() {
                 }
               },
               "Gamification catalog payload"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/gamification/reconcile": {
+        post: {
+          summary: "Reconcile durable gamification progression",
+          description:
+            "Authenticated write command that reconciles reward evidence, timezone-specific daily activity, unlocks, and queued celebrations for the effective user scope. Gamification GET routes remain read-only.",
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    userIds: arrayOf({ type: "string", minLength: 1 }),
+                    timezone: {
+                      type: "string",
+                      description: "Valid IANA timezone."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                required: ["metrics"],
+                properties: {
+                  metrics: { $ref: "#/components/schemas/XpMetricsPayload" }
+                }
+              },
+              "Reconciled XP metrics"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/gamification/assets": {
+        get: {
+          summary: "Get validated optional gamification art-pack status",
+          description:
+            "Requires read authorization. Returns the exact configured release metadata and local validation status for each optional style without installing or changing files.",
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["assets"],
+                properties: {
+                  assets: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["version", "defaultStyle", "styles"],
+                    properties: {
+                      version: { type: "string" },
+                      defaultStyle: {
+                        type: "string",
+                        enum: [
+                          "dark-fantasy",
+                          "dramatic-smithie",
+                          "mind-locksmith"
+                        ]
+                      },
+                      styles: arrayOf({
+                        type: "object",
+                        additionalProperties: false,
+                        required: [
+                          "id",
+                          "label",
+                          "description",
+                          "previewUrl",
+                          "fileName",
+                          "downloadUrl",
+                          "sha256",
+                          "installed",
+                          "spriteCount",
+                          "expectedSpriteCount",
+                          "installedAt"
+                        ],
+                        properties: {
+                          id: {
+                            type: "string",
+                            enum: [
+                              "dark-fantasy",
+                              "dramatic-smithie",
+                              "mind-locksmith"
+                            ]
+                          },
+                          label: { type: "string" },
+                          description: { type: "string" },
+                          previewUrl: { type: "string" },
+                          fileName: { type: "string" },
+                          downloadUrl: { type: "string" },
+                          sha256: {
+                            type: "string",
+                            pattern: "^[a-f0-9]{64}$"
+                          },
+                          installed: { type: "boolean" },
+                          spriteCount: { type: "integer", minimum: 0 },
+                          expectedSpriteCount: {
+                            type: "integer",
+                            minimum: 1
+                          },
+                          installedAt: nullable({
+                            type: "string",
+                            format: "date-time"
+                          })
+                        }
+                      })
+                    }
+                  }
+                }
+              },
+              "Gamification asset status"
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
+          }
+        }
+      },
+      "/api/v1/gamification/assets/install": {
+        post: {
+          summary: "Install one validated optional gamification art pack",
+          description:
+            "Requires an operator session. Downloads the exact configured archive, verifies its checksum and complete file manifest in staging, then atomically commits the validated style.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["style"],
+                  properties: {
+                    style: {
+                      type: "string",
+                      enum: [
+                        "dark-fantasy",
+                        "dramatic-smithie",
+                        "mind-locksmith"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          responses: {
+            "200": jsonResponse(
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["style"],
+                properties: {
+                  style: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: [
+                      "id",
+                      "label",
+                      "description",
+                      "previewUrl",
+                      "fileName",
+                      "downloadUrl",
+                      "sha256",
+                      "installed",
+                      "spriteCount",
+                      "expectedSpriteCount",
+                      "installedAt"
+                    ],
+                    properties: {
+                      id: { type: "string" },
+                      label: { type: "string" },
+                      description: { type: "string" },
+                      previewUrl: { type: "string" },
+                      fileName: { type: "string" },
+                      downloadUrl: { type: "string" },
+                      sha256: { type: "string" },
+                      installed: { type: "boolean", const: true },
+                      spriteCount: { type: "integer", minimum: 1 },
+                      expectedSpriteCount: { type: "integer", minimum: 1 },
+                      installedAt: { type: "string", format: "date-time" }
+                    }
+                  }
+                }
+              },
+              "Installed and validated gamification art style"
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "502": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/gamification/equipment": {
         get: {
           summary: "Get selected-user equipped gamification cosmetics",
+          description:
+            "Authenticated, read-only equipment view. Token callers are restricted to their allowed user scope.",
           parameters: [
             {
               name: "userIds",
@@ -14300,7 +19719,17 @@ export function buildOpenApiDocument() {
               required: false,
               schema: arrayOf({ type: "string" }),
               style: "form",
-              explode: true
+              explode: true,
+              description:
+                "Selected Forge user IDs. Token callers are restricted to their allowed user scope."
+            },
+            {
+              name: "timezone",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Valid IANA timezone used for local-day progress calculations."
             }
           ],
           responses: {
@@ -14315,7 +19744,10 @@ export function buildOpenApiDocument() {
                 }
               },
               "Equipped cosmetics"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         },
         put: {
@@ -14328,6 +19760,14 @@ export function buildOpenApiDocument() {
               schema: arrayOf({ type: "string" }),
               style: "form",
               explode: true
+            },
+            {
+              name: "timezone",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description:
+                "Valid IANA timezone used for reconciliation and local-day progress calculations."
             }
           ],
           requestBody: {
@@ -14360,7 +19800,9 @@ export function buildOpenApiDocument() {
                 }
               },
               "Updated equipped cosmetics"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -14388,7 +19830,9 @@ export function buildOpenApiDocument() {
                 }
               },
               "Updated gamification celebration"
-            )
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15115,7 +20559,8 @@ export function buildOpenApiDocument() {
                 }
               },
               "Reward rules"
-            )
+            ),
+            "401": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15133,6 +20578,7 @@ export function buildOpenApiDocument() {
               },
               "Reward rule"
             ),
+            "401": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         },
@@ -15149,13 +20595,45 @@ export function buildOpenApiDocument() {
               },
               "Updated reward rule"
             ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
             "404": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/rewards/ledger": {
         get: {
-          summary: "List reward ledger events",
+          summary: "List a bounded reward ledger",
+          parameters: [
+            {
+              name: "entityType",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Exact Forge entity type filter."
+            },
+            {
+              name: "entityId",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Exact Forge entity ID filter."
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: {
+                type: "integer",
+                minimum: 1,
+                maximum: 200,
+                default: 50
+              },
+              description:
+                "Maximum newest-first ledger entries returned; hard-capped at 200."
+            }
+          ],
           responses: {
             "200": jsonResponse(
               {
@@ -15168,13 +20646,66 @@ export function buildOpenApiDocument() {
                 }
               },
               "Reward ledger"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" }
           }
         }
       },
       "/api/v1/rewards/bonus": {
         post: {
           summary: "Create a manual, explainable XP bonus entry",
+          description:
+            "Requires write and rewards.manage. Forge resolves the target owner from the stored target, applies token user/project/tag scope, ignores caller-supplied owner metadata, rejects server-owned manual, qualifiesForStreak, and idempotencyFingerprint metadata, and returns XP metrics for the authorized target owner.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "entityType",
+                    "entityId",
+                    "deltaXp",
+                    "reasonTitle"
+                  ],
+                  properties: {
+                    entityType: {
+                      type: "string",
+                      enum: REWARDABLE_ENTITY_TYPE_VALUES
+                    },
+                    entityId: { type: "string", minLength: 1 },
+                    deltaXp: {
+                      type: "integer",
+                      not: { const: 0 }
+                    },
+                    reasonTitle: { type: "string", minLength: 1 },
+                    reasonSummary: { type: "string", default: "" },
+                    metadata: {
+                      type: "object",
+                      not: {
+                        anyOf: [
+                          { required: ["manual"] },
+                          { required: ["qualifiesForStreak"] },
+                          { required: ["idempotencyFingerprint"] }
+                        ]
+                      },
+                      additionalProperties: {
+                        anyOf: [
+                          { type: "string" },
+                          { type: "number" },
+                          { type: "boolean" },
+                          { type: "null" }
+                        ]
+                      },
+                      default: {}
+                    }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -15186,7 +20717,12 @@ export function buildOpenApiDocument() {
                 }
               },
               "Manual reward bonus"
-            )
+            ),
+            "400": { $ref: "#/components/responses/Error" },
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" },
+            "404": { $ref: "#/components/responses/Error" },
+            "409": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15212,6 +20748,40 @@ export function buildOpenApiDocument() {
       "/api/v1/session-events": {
         post: {
           summary: "Record bounded ambient engagement telemetry",
+          description:
+            "Records one idempotent session event. Supply the same IANA timezone used by XP reads so ambient daily caps and reporting share one local-day boundary.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["sessionId", "eventType"],
+                  properties: {
+                    sessionId: { type: "string", minLength: 1 },
+                    eventType: { type: "string", minLength: 1 },
+                    timezone: {
+                      type: "string",
+                      description: "Valid IANA timezone."
+                    },
+                    metrics: {
+                      type: "object",
+                      additionalProperties: {
+                        anyOf: [
+                          { type: "string" },
+                          { type: "number" },
+                          { type: "boolean" },
+                          { type: "null" }
+                        ]
+                      },
+                      default: {}
+                    }
+                  }
+                }
+              }
+            }
+          },
           responses: {
             "201": jsonResponse(
               {
@@ -15399,6 +20969,9 @@ export function buildOpenApiDocument() {
         get: {
           summary:
             "Get the deleted-items bin with restore and hard-delete context",
+          description:
+            "Deleted Note snapshots are filtered through the same user, Wiki-space, and Psyche visibility contract as live Note reads.",
+          security: [{ operatorSession: [] }, { bearerAuth: [] }],
           responses: {
             "200": jsonResponse(
               {
@@ -15409,7 +20982,9 @@ export function buildOpenApiDocument() {
                 }
               },
               "Settings bin payload"
-            )
+            ),
+            "401": { $ref: "#/components/responses/Error" },
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15417,6 +20992,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Create multiple Forge entities in one ordered batch request",
+          description:
+            "The default create route for normal stored entities. Agent tokens require base write. Creating or mutating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Creating a note linked to a Psyche entity requires the psyche.note scope.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/BatchCreateEntitiesInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -15424,12 +21011,13 @@ export function buildOpenApiDocument() {
                 required: ["results"],
                 properties: {
                   results: arrayOf({
-                    $ref: "#/components/schemas/BatchEntityResult"
+                    $ref: "#/components/schemas/BatchEntityMutationResult"
                   })
                 }
               },
-              "Batch create results"
-            )
+              "Ordered batch create results. When atomic=true and one operation fails, earlier successful results use error.code rolled_back because their transaction effects were undone, the failing operation keeps its original error, and later skipped operations use error.code not_executed."
+            ),
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15437,6 +21025,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Update multiple Forge entities in one ordered batch request",
+          description:
+            "Updates are owner scoped. Agent tokens require base write. Updating event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/BatchUpdateEntitiesInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -15444,12 +21044,13 @@ export function buildOpenApiDocument() {
                 required: ["results"],
                 properties: {
                   results: arrayOf({
-                    $ref: "#/components/schemas/BatchEntityResult"
+                    $ref: "#/components/schemas/BatchEntityMutationResult"
                   })
                 }
               },
-              "Batch update results"
-            )
+              "Ordered batch update results. When atomic=true and one operation fails, earlier successful results use error.code rolled_back because their transaction effects were undone, the failing operation keeps its original error, and later skipped operations use error.code not_executed."
+            ),
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15457,6 +21058,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Delete multiple Forge entities in one ordered batch request. Soft delete is the default.",
+          description:
+            "Agent tokens require base write. Deleting event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Deleting a Psyche-linked note requires psyche.note.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/BatchDeleteEntitiesInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -15464,12 +21077,13 @@ export function buildOpenApiDocument() {
                 required: ["results"],
                 properties: {
                   results: arrayOf({
-                    $ref: "#/components/schemas/BatchEntityResult"
+                    $ref: "#/components/schemas/BatchEntityMutationResult"
                   })
                 }
               },
-              "Batch delete results"
-            )
+              "Ordered batch delete results. When atomic=true and one operation fails, earlier successful results use error.code rolled_back because their transaction effects were undone, the failing operation keeps its original error, and later skipped operations use error.code not_executed."
+            ),
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15477,6 +21091,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Restore multiple soft-deleted Forge entities in one ordered batch request",
+          description:
+            "Agent tokens require base write. Restoring event_type or emotion_definition additionally requires psyche.write when Psyche authentication is enabled. Restoring a Psyche-linked note requires psyche.note.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/BatchRestoreEntitiesInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -15484,12 +21110,13 @@ export function buildOpenApiDocument() {
                 required: ["results"],
                 properties: {
                   results: arrayOf({
-                    $ref: "#/components/schemas/BatchEntityResult"
+                    $ref: "#/components/schemas/BatchEntityMutationResult"
                   })
                 }
               },
-              "Batch restore results"
-            )
+              "Ordered batch restore results. When atomic=true and one operation fails, earlier successful results use error.code rolled_back because their transaction effects were undone, the failing operation keeps its original error, and later skipped operations use error.code not_executed."
+            ),
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },
@@ -15497,6 +21124,18 @@ export function buildOpenApiDocument() {
         post: {
           summary:
             "Search across multiple Forge entity types in one ordered batch request",
+          description:
+            "Agent tokens require base read or write. Explicit event_type or emotion_definition searches additionally require psyche.read when Psyche authentication is enabled; searches[].userIds selects the effective custom owner scope while built-ins remain visible. Normal note search uses the indexed Notes query and applies owner, Wiki-space, deleted/expired, and Psyche authorization before result limits. Psyche-linked notes require psyche.read.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/BatchSearchEntitiesInput"
+                }
+              }
+            }
+          },
           responses: {
             "200": jsonResponse(
               {
@@ -15504,12 +21143,13 @@ export function buildOpenApiDocument() {
                 required: ["results"],
                 properties: {
                   results: arrayOf({
-                    $ref: "#/components/schemas/BatchEntityResult"
+                    $ref: "#/components/schemas/BatchEntitySearchResult"
                   })
                 }
               },
               "Batch search results"
-            )
+            ),
+            "403": { $ref: "#/components/responses/Error" }
           }
         }
       },

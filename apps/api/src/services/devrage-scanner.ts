@@ -3,7 +3,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { createInterface } from "node:readline/promises";
 
 const require = createRequire(import.meta.url);
 
@@ -15,7 +14,12 @@ type BetterSqliteConstructor = new (
   close(): void;
 };
 
-export type MessageRole = "assistant" | "user" | "developer" | "system" | "unknown";
+export type MessageRole =
+  | "assistant"
+  | "user"
+  | "developer"
+  | "system"
+  | "unknown";
 
 export type DevrageSource =
   | "amp"
@@ -109,7 +113,12 @@ export interface DevrageReport {
   averageMaxCumulativeRage: number;
   maxCumulativeRage: number;
   maxSwearingStreak: number;
-  byAgent: Array<{ agent: string; messages: number; messagesWithSwears: number; swears: number }>;
+  byAgent: Array<{
+    agent: string;
+    messages: number;
+    messagesWithSwears: number;
+    swears: number;
+  }>;
   bySource: SourceStats[];
   conversations: ConversationStats[];
   daily: DailyStats[];
@@ -123,6 +132,8 @@ export interface DevrageReport {
     since?: string;
     until?: string;
   };
+  scanStatus?: "complete" | "partial";
+  failedSources?: DevrageSource[];
 }
 
 export interface ScanOptions {
@@ -132,6 +143,10 @@ export interface ScanOptions {
   since?: Date;
   until?: Date;
   timeZone?: string;
+  signal?: AbortSignal;
+  maxFileBytes?: number;
+  maxRecordChars?: number;
+  maxScanBytes?: number;
 }
 
 interface AdapterReadResult {
@@ -141,7 +156,15 @@ interface AdapterReadResult {
 
 interface Adapter {
   source: DevrageSource;
-  read(): Promise<AdapterReadResult>;
+  read(options: AdapterReadOptions): Promise<AdapterReadResult>;
+}
+
+interface AdapterReadOptions {
+  signal?: AbortSignal;
+  maxFileBytes: number;
+  maxRecordChars: number;
+  maxScanBytes: number;
+  scannedBytes: number;
 }
 
 interface SwearEntry {
@@ -158,18 +181,91 @@ interface PhraseVariant {
 type UnknownRecord = Record<string, unknown>;
 
 const tokenPattern = /[a-z][a-z0-9'*_-]*/gi;
+const DEFAULT_MAX_FILE_BYTES = 16 * 1024 * 1024;
+const DEFAULT_MAX_RECORD_CHARS = 512 * 1024;
+const DEFAULT_MAX_SCAN_BYTES = 32 * 1024 * 1024;
+const READ_STREAM_CHUNK_BYTES = 64 * 1024;
 
 const defaultSwearLexicon: SwearEntry[] = [
-  { root: "fuck", variants: ["fuck", "f*ck", "f**k", "fck", "fuk", "fucked", "fucker", "fuckers", "fuckin", "fucking", "fucks", "motherfuck", "motherfucked", "motherfucker", "motherfuckers", "motherfucking"] },
-  { root: "ffs", variants: ["ffs", "for fucks sake", "for fuck's sake", "for-fucks-sake", "for-fuck's-sake"] },
+  {
+    root: "fuck",
+    variants: [
+      "fuck",
+      "f*ck",
+      "f**k",
+      "fck",
+      "fuk",
+      "fucked",
+      "fucker",
+      "fuckers",
+      "fuckin",
+      "fucking",
+      "fucks",
+      "motherfuck",
+      "motherfucked",
+      "motherfucker",
+      "motherfuckers",
+      "motherfucking"
+    ]
+  },
+  {
+    root: "ffs",
+    variants: [
+      "ffs",
+      "for fucks sake",
+      "for fuck's sake",
+      "for-fucks-sake",
+      "for-fuck's-sake"
+    ]
+  },
   { root: "wtf", variants: ["wtf"] },
-  { root: "shit", variants: ["shit", "shitshow", "shits", "shitty", "bullshit", "bullshitting", "dipshit", "dipshits"] },
+  {
+    root: "shit",
+    variants: [
+      "shit",
+      "shitshow",
+      "shits",
+      "shitty",
+      "bullshit",
+      "bullshitting",
+      "dipshit",
+      "dipshits"
+    ]
+  },
   { root: "dick", variants: ["dick", "dicks", "dickhead", "dickheads"] },
-  { root: "ass", variants: ["ass", "asses", "asshole", "assholes", "ashole", "asholes", "dumbass", "dumbasses", "dumb ass", "dumb asses", "dumb-ass", "dumb-asses", "jackass", "jackasses", "jack ass", "jack asses", "jack-ass", "jack-asses"] },
-  { root: "damn", variants: ["damn", "damned", "dammit", "goddamn", "goddamned"] },
+  {
+    root: "ass",
+    variants: [
+      "ass",
+      "asses",
+      "asshole",
+      "assholes",
+      "ashole",
+      "asholes",
+      "dumbass",
+      "dumbasses",
+      "dumb ass",
+      "dumb asses",
+      "dumb-ass",
+      "dumb-asses",
+      "jackass",
+      "jackasses",
+      "jack ass",
+      "jack asses",
+      "jack-ass",
+      "jack-asses"
+    ]
+  },
+  {
+    root: "damn",
+    variants: ["damn", "damned", "dammit", "goddamn", "goddamned"]
+  },
   { root: "bitch", variants: ["bitch", "bitches", "bitching"] },
   { root: "hell", variants: ["hell"] },
-  { root: "crap", variants: ["crap", "crappy", "piece of crap", "piece-of-crap"] },
+  {
+    root: "crap",
+    variants: ["crap", "crappy", "piece of crap", "piece-of-crap"]
+  },
   { root: "moron", variants: ["moron", "morons", "morno", "mornos"] },
   { root: "idiot", variants: ["idiot", "idiots"] },
   { root: "stupid", variants: ["stupid"] },
@@ -180,7 +276,8 @@ const defaultSwearLexicon: SwearEntry[] = [
 ];
 
 const ADAPTER_FACTORIES: Record<string, () => Adapter> = {
-  amp: () => jsonThreadAdapter("amp", [join(dataHome(), "amp", "threads", "*.json")]),
+  amp: () =>
+    jsonThreadAdapter("amp", [join(dataHome(), "amp", "threads", "*.json")]),
   claude: claudeAdapter,
   cline: clineAdapter,
   codex: codexAdapter,
@@ -194,22 +291,56 @@ const ADAPTER_FACTORIES: Record<string, () => Adapter> = {
   zed: zedAdapter
 };
 
-export async function scanConversations(options: ScanOptions): Promise<DevrageReport> {
+export async function scanConversations(
+  options: ScanOptions
+): Promise<DevrageReport> {
   const adapters = options.sources?.size
     ? [...options.sources].map((source) => createAdapter(source))
     : allAdapters();
   const conversations: ConversationRecord[] = [];
   const warnings: ReaderWarning[] = [];
+  const failedSources = new Set<DevrageSource>();
+  const readOptions: AdapterReadOptions = {
+    signal: options.signal,
+    maxFileBytes: options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    maxRecordChars: options.maxRecordChars ?? DEFAULT_MAX_RECORD_CHARS,
+    maxScanBytes: options.maxScanBytes ?? DEFAULT_MAX_SCAN_BYTES,
+    scannedBytes: 0
+  };
 
   for (const adapter of adapters) {
-    const result = await adapter.read();
-    conversations.push(...result.conversations);
-    warnings.push(...result.warnings);
+    if (options.signal?.aborted) {
+      failedSources.add(adapter.source);
+      warnings.push(scanCancelledWarning(adapter.source, options.signal));
+      break;
+    }
+    try {
+      const result = await adapter.read(readOptions);
+      conversations.push(...result.conversations);
+      warnings.push(...result.warnings);
+      if (result.warnings.length > 0) {
+        failedSources.add(adapter.source);
+      }
+    } catch (error) {
+      failedSources.add(adapter.source);
+      warnings.push({
+        file: adapter.source,
+        line: 0,
+        reason: options.signal?.aborted
+          ? scanCancelledWarning(adapter.source, options.signal).reason
+          : `${adapter.source} adapter failed: ${errorMessage(error)}`
+      });
+      if (options.signal?.aborted) {
+        break;
+      }
+    }
   }
 
   const report = analyzeConversations(conversations, options);
   report.warnings = warnings;
   report.sourceFilter = adapters.map((adapter) => adapter.source).sort();
+  report.scanStatus = warnings.length > 0 ? "partial" : "complete";
+  report.failedSources = [...failedSources].sort();
   return report;
 }
 
@@ -220,7 +351,9 @@ export function availableSources(): DevrageSource[] {
 function createAdapter(source: string): Adapter {
   const factory = ADAPTER_FACTORIES[source.toLowerCase()];
   if (!factory) {
-    throw new Error(`unknown source: ${source} (available: ${availableSources().join(", ")})`);
+    throw new Error(
+      `unknown source: ${source} (available: ${availableSources().join(", ")})`
+    );
   }
   return factory();
 }
@@ -235,48 +368,95 @@ export function analyzeConversations(
   generatedAt = new Date().toISOString()
 ): DevrageReport {
   const { tokenIndex, phraseVariants } = buildLexiconIndexes();
-  const agentStats = new Map<string, { messages: number; messagesWithSwears: number; swears: number }>();
+  const agentStats = new Map<
+    string,
+    { messages: number; messagesWithSwears: number; swears: number }
+  >();
   const sourceStats = new Map<string, SourceStats>();
   const wordStats = new Map<string, WordStats>();
   const actualWordStats = new Map<string, ActualWordStats>();
   const filesScanned = new Set<string>();
   const conversationStats: ConversationStats[] = [];
+  const conversationMaxCumulativeRages: number[] = [];
+  const conversationMaxSwearingStreaks: number[] = [];
+  let conversationsScanned = 0;
   let messagesScanned = 0;
   let messagesWithSwears = 0;
   let totalSwears = 0;
 
   for (const conversation of conversations) {
-    if (!isConversationInDateRange(conversation, options)) {
+    const selectedMessages = conversation.messages
+      .flatMap((message, index) => {
+        if (!options.roles.has(message.role)) {
+          return [];
+        }
+        const timestamp = normalizedMessageTimestamp(message, conversation);
+        if (
+          !timestamp ||
+          !isTimestampInDateRange(timestamp.value, timestamp.time, options)
+        ) {
+          return [];
+        }
+        return [
+          {
+            message,
+            index,
+            ...timestamp,
+            dateKey: dayKey(timestamp.value, options.timeZone)
+          }
+        ];
+      })
+      .sort(
+        (left, right) => left.time - right.time || left.index - right.index
+      );
+
+    if (selectedMessages.length === 0) {
       continue;
     }
 
+    conversationsScanned += 1;
     filesScanned.add(conversation.sourceFile);
-    const dateKey = dayKey(conversation.updatedAt, options.timeZone);
-    let conversationMessages = 0;
-    let conversationMessagesWithSwears = 0;
-    let conversationSwears = 0;
     let cumulativeRage = 0;
     let maxCumulativeRage = 0;
     let swearingStreak = 0;
     let maxSwearingStreak = 0;
+    const dailyStats = new Map<
+      string,
+      ConversationStats & { cumulativeRage: number; swearingStreak: number }
+    >();
 
-    const currentSource =
-      sourceStats.get(conversation.source) ?? {
-        source: conversation.source,
-        conversations: 0,
-        messages: 0,
-        messagesWithSwears: 0,
-        swears: 0
-      };
+    const currentSource = sourceStats.get(conversation.source) ?? {
+      source: conversation.source,
+      conversations: 0,
+      messages: 0,
+      messagesWithSwears: 0,
+      swears: 0
+    };
     currentSource.conversations += 1;
 
-    for (const message of conversation.messages) {
-      if (!options.roles.has(message.role)) {
-        continue;
+    for (const selected of selectedMessages) {
+      const { message } = selected;
+      const currentDay = dailyStats.get(selected.dateKey) ?? {
+        source: conversation.source,
+        conversationId: conversation.conversationId,
+        project: conversation.project,
+        sourceFile: conversation.sourceFile,
+        updatedAt: selected.value,
+        dateKey: selected.dateKey,
+        messages: 0,
+        messagesWithSwears: 0,
+        swears: 0,
+        maxCumulativeRage: 0,
+        maxSwearingStreak: 0,
+        cumulativeRage: 0,
+        swearingStreak: 0
+      };
+      if (selected.time > Date.parse(currentDay.updatedAt)) {
+        currentDay.updatedAt = selected.value;
       }
 
       messagesScanned += 1;
-      conversationMessages += 1;
+      currentDay.messages += 1;
       currentSource.messages += 1;
 
       const agent = normalizeAgent(message.agent);
@@ -288,59 +468,70 @@ export function analyzeConversations(
       currentAgent.messages += 1;
 
       let swearsInMessage = 0;
-      for (const occurrence of findOccurrences(message.text, tokenIndex, phraseVariants)) {
+      for (const occurrence of findOccurrences(
+        message.text,
+        tokenIndex,
+        phraseVariants
+      )) {
         swearsInMessage += 1;
         totalSwears += 1;
-        conversationSwears += 1;
+        currentDay.swears += 1;
         currentSource.swears += 1;
         addOccurrence(wordStats, actualWordStats, occurrence);
       }
 
       if (swearsInMessage > 0) {
         messagesWithSwears += 1;
-        conversationMessagesWithSwears += 1;
+        currentDay.messagesWithSwears += 1;
         currentSource.messagesWithSwears += 1;
         currentAgent.messagesWithSwears += 1;
         currentAgent.swears += swearsInMessage;
         cumulativeRage += swearsInMessage;
         swearingStreak += 1;
+        currentDay.cumulativeRage += swearsInMessage;
+        currentDay.swearingStreak += 1;
       } else {
         cumulativeRage = Math.max(0, cumulativeRage - 1);
         swearingStreak = 0;
+        currentDay.cumulativeRage = Math.max(0, currentDay.cumulativeRage - 1);
+        currentDay.swearingStreak = 0;
       }
 
       maxCumulativeRage = Math.max(maxCumulativeRage, cumulativeRage);
       maxSwearingStreak = Math.max(maxSwearingStreak, swearingStreak);
+      currentDay.maxCumulativeRage = Math.max(
+        currentDay.maxCumulativeRage,
+        currentDay.cumulativeRage
+      );
+      currentDay.maxSwearingStreak = Math.max(
+        currentDay.maxSwearingStreak,
+        currentDay.swearingStreak
+      );
       agentStats.set(agent, currentAgent);
+      dailyStats.set(selected.dateKey, currentDay);
     }
 
     sourceStats.set(conversation.source, currentSource);
-    conversationStats.push({
-      source: conversation.source,
-      conversationId: conversation.conversationId,
-      project: conversation.project,
-      sourceFile: conversation.sourceFile,
-      updatedAt: conversation.updatedAt,
-      dateKey,
-      messages: conversationMessages,
-      messagesWithSwears: conversationMessagesWithSwears,
-      swears: conversationSwears,
-      maxCumulativeRage,
-      maxSwearingStreak
-    });
+    conversationMaxCumulativeRages.push(maxCumulativeRage);
+    conversationMaxSwearingStreaks.push(maxSwearingStreak);
+    conversationStats.push(
+      ...[...dailyStats.values()].map(
+        ({ cumulativeRage: _rage, swearingStreak: _streak, ...stats }) => stats
+      )
+    );
   }
-  const maxCumulativeRage = Math.max(0, ...conversationStats.map((conversation) => conversation.maxCumulativeRage));
-  const maxSwearingStreak = Math.max(0, ...conversationStats.map((conversation) => conversation.maxSwearingStreak));
+  const maxCumulativeRage = Math.max(0, ...conversationMaxCumulativeRages);
+  const maxSwearingStreak = Math.max(0, ...conversationMaxSwearingStreaks);
   const averageMaxCumulativeRage =
-    conversationStats.length === 0
+    conversationMaxCumulativeRages.length === 0
       ? 0
-      : conversationStats.reduce((sum, conversation) => sum + conversation.maxCumulativeRage, 0) /
-        conversationStats.length;
+      : conversationMaxCumulativeRages.reduce((sum, value) => sum + value, 0) /
+        conversationMaxCumulativeRages.length;
 
   return {
     generatedAt,
     filesScanned: [...filesScanned].sort(),
-    conversationsScanned: conversationStats.length,
+    conversationsScanned,
     messagesScanned,
     messagesWithSwears,
     totalSwears,
@@ -369,7 +560,8 @@ export function analyzeConversations(
     ),
     daily: buildDailyStats(conversationStats),
     topWords: [...wordStats.values()].sort(
-      (left, right) => right.count - left.count || left.root.localeCompare(right.root)
+      (left, right) =>
+        right.count - left.count || left.root.localeCompare(right.root)
     ),
     actualWords: [...actualWordStats.values()].sort(
       (left, right) =>
@@ -384,18 +576,24 @@ export function analyzeConversations(
       date: options.date,
       since: options.since?.toISOString(),
       until: options.until?.toISOString()
-    }
+    },
+    scanStatus: "complete",
+    failedSources: []
   };
 }
 
 function codexAdapter(): Adapter {
   return {
     source: "codex",
-    async read() {
+    async read(options) {
       return readJsonlTree(
         "codex",
-        [join(homedir(), ".codex", "sessions"), join(homedir(), ".codex", "archived_sessions")],
-        parseCodexLine
+        [
+          join(homedir(), ".codex", "sessions"),
+          join(homedir(), ".codex", "archived_sessions")
+        ],
+        parseCodexLine,
+        options
       );
     }
   };
@@ -404,8 +602,13 @@ function codexAdapter(): Adapter {
 function claudeAdapter(): Adapter {
   return {
     source: "claude",
-    async read() {
-      return readJsonlTree("claude", [join(homedir(), ".claude", "projects")], parseClaudeLine);
+    async read(options) {
+      return readJsonlTree(
+        "claude",
+        [join(homedir(), ".claude", "projects")],
+        parseClaudeLine,
+        options
+      );
     }
   };
 }
@@ -413,7 +616,7 @@ function claudeAdapter(): Adapter {
 function clineAdapter(): Adapter {
   return {
     source: "cline",
-    async read() {
+    async read(options) {
       const roots = getVSCodeGlobalStoragePaths()
         .flatMap((basePath) => [
           join(basePath, "saoudrizwan.claude-dev", "tasks"),
@@ -427,8 +630,17 @@ function clineAdapter(): Adapter {
         if (!existsSync(root)) {
           continue;
         }
-        const files = await globFiles(`${root.replace(/\/+$/, "")}/**/api_conversation_history.json`);
+        const files = await globFiles(
+          `${root.replace(/\/+$/, "")}/**/api_conversation_history.json`,
+          { signal: options.signal }
+        );
         for (const filePath of files) {
+          const sizeWarning = boundedFileWarning(filePath, options);
+          if (sizeWarning) {
+            warnings.push(sizeWarning);
+            continue;
+          }
+          throwIfAborted(options.signal);
           try {
             const raw = await readFile(filePath, "utf8");
             const parsed = JSON.parse(raw) as unknown;
@@ -439,7 +651,9 @@ function clineAdapter(): Adapter {
               compactMessage(
                 parseGenericMessage(entry, {
                   source: "cline",
-                  conversationId: basename(filePath.replace(/\/api_conversation_history\.json$/, "")),
+                  conversationId: basename(
+                    filePath.replace(/\/api_conversation_history\.json$/, "")
+                  ),
                   sourceFile: filePath,
                   fallbackTimestamp: fileTimestamp(filePath),
                   index
@@ -448,7 +662,11 @@ function clineAdapter(): Adapter {
             );
             pushConversation(conversations, "cline", filePath, messages);
           } catch {
-            warnings.push({ file: filePath, line: 0, reason: "Malformed Cline conversation skipped." });
+            warnings.push({
+              file: filePath,
+              line: 0,
+              reason: "Malformed Cline conversation skipped."
+            });
           }
         }
       }
@@ -461,20 +679,37 @@ function clineAdapter(): Adapter {
 function opencodeAdapter(): Adapter {
   return {
     source: "opencode",
-    async read() {
+    async read(options) {
       const dbPath = findFirstExisting([
         join(dataHome(), "opencode", "opencode.db"),
-        join(homedir(), "Library", "Application Support", "opencode", "opencode.db")
+        join(
+          homedir(),
+          "Library",
+          "Application Support",
+          "opencode",
+          "opencode.db"
+        )
       ]);
       if (!dbPath) {
         return { conversations: [], warnings: [] };
       }
+      const sizeWarning = boundedFileWarning(dbPath, options);
+      if (sizeWarning) {
+        return { conversations: [], warnings: [sizeWarning] };
+      }
+      throwIfAborted(options.signal);
 
       const Database = loadBetterSqlite();
       if (!Database) {
         return {
           conversations: [],
-          warnings: [{ file: dbPath, line: 0, reason: "better-sqlite3 unavailable; OpenCode database skipped." }]
+          warnings: [
+            {
+              file: dbPath,
+              line: 0,
+              reason: "better-sqlite3 unavailable; OpenCode database skipped."
+            }
+          ]
         };
       }
 
@@ -492,13 +727,25 @@ function opencodeAdapter(): Adapter {
              WHERE json_extract(p.data, '$.type') = 'text'
              ORDER BY m.time_created ASC`
           )
-          .all() as Array<{ sessionId: string; timeCreated: number; role: string; text: string | null }>;
+          .all() as Array<{
+          sessionId: string;
+          timeCreated: number;
+          role: string;
+          text: string | null;
+        }>;
 
         for (const row of rows) {
+          throwIfAborted(options.signal);
           const text = typeof row.text === "string" ? row.text.trim() : "";
           const role = normalizeRole(row.role);
           if (!text || isContextInjection(role, text)) {
             continue;
+          }
+          if (text.length > options.maxRecordChars) {
+            return {
+              conversations: [],
+              warnings: [boundedRecordWarning(dbPath, 0, options.maxRecordChars)]
+            };
           }
           const conversationId = String(row.sessionId || "unknown");
           const message: ConversationMessage = {
@@ -519,13 +766,15 @@ function opencodeAdapter(): Adapter {
       }
 
       return {
-        conversations: [...bySession.entries()].map(([conversationId, messages]) => ({
-          source: "opencode",
-          conversationId,
-          sourceFile: dbPath,
-          updatedAt: maxTimestamp(messages) ?? fileTimestamp(dbPath),
-          messages
-        })),
+        conversations: [...bySession.entries()].map(
+          ([conversationId, messages]) => ({
+            source: "opencode",
+            conversationId,
+            sourceFile: dbPath,
+            updatedAt: maxTimestamp(messages) ?? fileTimestamp(dbPath),
+            messages
+          })
+        ),
         warnings: []
       };
     }
@@ -535,16 +784,24 @@ function opencodeAdapter(): Adapter {
 function zedAdapter(): Adapter {
   return {
     source: "zed",
-    async read() {
+    async read(options) {
       const base =
         process.platform === "darwin"
           ? join(homedir(), "Library", "Application Support", "Zed")
           : join(dataHome(), "zed");
       const conversations: ConversationRecord[] = [];
       const warnings: ReaderWarning[] = [];
-      const jsonFiles = await globFiles(join(base, "conversations", "*.json"));
+      const jsonFiles = await globFiles(join(base, "conversations", "*.json"), {
+        signal: options.signal
+      });
 
       for (const filePath of jsonFiles) {
+        const sizeWarning = boundedFileWarning(filePath, options);
+        if (sizeWarning) {
+          warnings.push(sizeWarning);
+          continue;
+        }
+        throwIfAborted(options.signal);
         try {
           const raw = await readFile(filePath, "utf8");
           const parsed = JSON.parse(raw) as UnknownRecord;
@@ -562,7 +819,11 @@ function zedAdapter(): Adapter {
           );
           pushConversation(conversations, "zed", filePath, messages);
         } catch {
-          warnings.push({ file: filePath, line: 0, reason: "Malformed Zed conversation skipped." });
+          warnings.push({
+            file: filePath,
+            line: 0,
+            reason: "Malformed Zed conversation skipped."
+          });
         }
       }
 
@@ -574,12 +835,18 @@ function zedAdapter(): Adapter {
 function jsonThreadAdapter(source: DevrageSource, patterns: string[]): Adapter {
   return {
     source,
-    async read() {
-      const files = await globFiles(patterns);
+    async read(options) {
+      const files = await globFiles(patterns, { signal: options.signal });
       const conversations: ConversationRecord[] = [];
       const warnings: ReaderWarning[] = [];
 
       for (const filePath of files) {
+        const sizeWarning = boundedFileWarning(filePath, options);
+        if (sizeWarning) {
+          warnings.push(sizeWarning);
+          continue;
+        }
+        throwIfAborted(options.signal);
         try {
           const raw = await readFile(filePath, "utf8");
           const parsed = JSON.parse(raw) as UnknownRecord;
@@ -597,7 +864,11 @@ function jsonThreadAdapter(source: DevrageSource, patterns: string[]): Adapter {
           );
           pushConversation(conversations, source, filePath, messages);
         } catch {
-          warnings.push({ file: filePath, line: 0, reason: `Malformed ${source} conversation skipped.` });
+          warnings.push({
+            file: filePath,
+            line: 0,
+            reason: `Malformed ${source} conversation skipped.`
+          });
         }
       }
 
@@ -606,22 +877,40 @@ function jsonThreadAdapter(source: DevrageSource, patterns: string[]): Adapter {
   };
 }
 
-function genericLocalLogAdapter(source: DevrageSource, patterns: string[]): Adapter {
+function genericLocalLogAdapter(
+  source: DevrageSource,
+  patterns: string[]
+): Adapter {
   return {
     source,
-    async read() {
+    async read(options) {
       const candidateFiles = await globFiles(patterns, {
-        ignore: ["node_modules", ".git", "venv", "__pycache__"]
+        ignore: ["node_modules", ".git", "venv", "__pycache__"],
+        signal: options.signal
       });
-      const files = candidateFiles.filter((file) => /conversation|history|session|thread|transcript/i.test(file));
+      const files = candidateFiles.filter((file) =>
+        /conversation|history|session|thread|transcript/i.test(file)
+      );
       const conversations: ConversationRecord[] = [];
       const warnings: ReaderWarning[] = [];
 
       for (const filePath of files) {
+        throwIfAborted(options.signal);
         if (filePath.endsWith(".jsonl")) {
-          const result = await readJsonlFile(source, filePath, parseGenericJsonLine);
+          const result = await readJsonlFile(
+            source,
+            filePath,
+            parseGenericJsonLine,
+            options
+          );
           conversations.push(...result.conversations);
           warnings.push(...result.warnings);
+          continue;
+        }
+
+        const sizeWarning = boundedFileWarning(filePath, options);
+        if (sizeWarning) {
+          warnings.push(sizeWarning);
           continue;
         }
 
@@ -642,7 +931,11 @@ function genericLocalLogAdapter(source: DevrageSource, patterns: string[]): Adap
           );
           pushConversation(conversations, source, filePath, messages);
         } catch {
-          warnings.push({ file: filePath, line: 0, reason: `Malformed ${source} log skipped.` });
+          warnings.push({
+            file: filePath,
+            line: 0,
+            reason: `Malformed ${source} log skipped.`
+          });
         }
       }
 
@@ -654,24 +947,38 @@ function genericLocalLogAdapter(source: DevrageSource, patterns: string[]): Adap
 function openclawAdapter(): Adapter {
   return {
     source: "openclaw",
-    async read() {
+    async read(options) {
       const trajectoryResult = await readJsonlTree(
         "openclaw",
         [
           join(homedir(), ".openclaw", "agents"),
-          join(homedir(), "Library", "Application Support", "OpenClaw", "agents")
+          join(
+            homedir(),
+            "Library",
+            "Application Support",
+            "OpenClaw",
+            "agents"
+          )
         ],
-        parseOpenClawTrajectoryLine
+        parseOpenClawTrajectoryLine,
+        options
       );
       const genericResult = await genericLocalLogAdapter("openclaw", [
         join(homedir(), ".openclaw", "**/*.{json,jsonl}"),
-        join(homedir(), "Library", "Application Support", "OpenClaw", "**/*.{json,jsonl}")
-      ]).read();
+        join(
+          homedir(),
+          "Library",
+          "Application Support",
+          "OpenClaw",
+          "**/*.{json,jsonl}"
+        )
+      ]).read(options);
       return {
         conversations: [
           ...trajectoryResult.conversations,
           ...genericResult.conversations.filter(
-            (conversation) => !conversation.sourceFile.endsWith(".trajectory.jsonl")
+            (conversation) =>
+              !conversation.sourceFile.endsWith(".trajectory.jsonl")
           )
         ],
         warnings: [...trajectoryResult.warnings, ...genericResult.warnings]
@@ -683,12 +990,15 @@ function openclawAdapter(): Adapter {
 async function readJsonlTree(
   source: DevrageSource,
   roots: string[],
-  parser: JsonlParser
+  parser: JsonlParser,
+  options: AdapterReadOptions
 ): Promise<AdapterReadResult> {
   const files = (
     await Promise.all(
       roots.map((root) =>
-        globFiles(`${root.replace(/\/+$/, "")}/**/*.jsonl`)
+        globFiles(`${root.replace(/\/+$/, "")}/**/*.jsonl`, {
+          signal: options.signal
+        })
       )
     )
   )
@@ -698,7 +1008,8 @@ async function readJsonlTree(
   const conversations: ConversationRecord[] = [];
   const warnings: ReaderWarning[] = [];
   for (const filePath of files) {
-    const result = await readJsonlFile(source, filePath, parser);
+    throwIfAborted(options.signal);
+    const result = await readJsonlFile(source, filePath, parser, options);
     conversations.push(...result.conversations);
     warnings.push(...result.warnings);
   }
@@ -719,20 +1030,26 @@ type JsonlParser = (
 async function readJsonlFile(
   source: DevrageSource,
   filePath: string,
-  parser: JsonlParser
+  parser: JsonlParser,
+  options: AdapterReadOptions
 ): Promise<AdapterReadResult> {
+  const sizeWarning = boundedFileWarning(filePath, options);
+  if (sizeWarning) {
+    return { conversations: [], warnings: [sizeWarning] };
+  }
+
   const messages: ConversationMessage[] = [];
   const warnings: ReaderWarning[] = [];
   const fallbackTimestamp = fileTimestamp(filePath);
   const conversationId = basename(filePath, ".jsonl");
-  const lines = createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
-    crlfDelay: Infinity
-  });
-  let lineNumber = 0;
-
-  for await (const line of lines) {
-    lineNumber += 1;
+  for await (const record of readBoundedJsonlLines(filePath, options)) {
+    if (record.text === null) {
+      warnings.push(
+        boundedRecordWarning(filePath, record.lineNumber, options.maxRecordChars)
+      );
+      continue;
+    }
+    const line = record.text;
     if (!line.trim()) {
       continue;
     }
@@ -743,13 +1060,17 @@ async function readJsonlFile(
         conversationId,
         sourceFile: filePath,
         fallbackTimestamp,
-        line: lineNumber
+        line: record.lineNumber
       });
       if (message) {
         messages.push(message);
       }
     } catch {
-      warnings.push({ file: filePath, line: lineNumber, reason: "Invalid JSONL record skipped." });
+      warnings.push({
+        file: filePath,
+        line: record.lineNumber,
+        reason: "Invalid JSONL record skipped."
+      });
     }
   }
 
@@ -770,8 +1091,71 @@ async function readJsonlFile(
   };
 }
 
-function parseCodexLine(record: unknown, context: Parameters<JsonlParser>[1]): ConversationMessage | null {
-  if (!isObject(record) || record.type !== "response_item" || !isObject(record.payload)) {
+async function* readBoundedJsonlLines(
+  filePath: string,
+  options: AdapterReadOptions
+): AsyncGenerator<{ lineNumber: number; text: string | null }> {
+  const input = createReadStream(filePath, {
+    encoding: "utf8",
+    highWaterMark: READ_STREAM_CHUNK_BYTES,
+    signal: options.signal
+  });
+  let buffer = "";
+  let discarding = false;
+  let lineNumber = 0;
+
+  try {
+    for await (const value of input) {
+      throwIfAborted(options.signal);
+      const chunk = String(value);
+      let start = 0;
+
+      while (start < chunk.length) {
+        const newline = chunk.indexOf("\n", start);
+        const end = newline < 0 ? chunk.length : newline;
+        if (!discarding) {
+          const part = chunk.slice(start, end);
+          if (buffer.length + part.length > options.maxRecordChars) {
+            buffer = "";
+            discarding = true;
+          } else {
+            buffer += part;
+          }
+        }
+
+        if (newline < 0) {
+          break;
+        }
+
+        lineNumber += 1;
+        yield {
+          lineNumber,
+          text: discarding ? null : buffer.replace(/\r$/, "")
+        };
+        buffer = "";
+        discarding = false;
+        start = newline + 1;
+      }
+    }
+
+    if (buffer.length > 0 || discarding) {
+      lineNumber += 1;
+      yield { lineNumber, text: discarding ? null : buffer.replace(/\r$/, "") };
+    }
+  } finally {
+    input.destroy();
+  }
+}
+
+function parseCodexLine(
+  record: unknown,
+  context: Parameters<JsonlParser>[1]
+): ConversationMessage | null {
+  if (
+    !isObject(record) ||
+    record.type !== "response_item" ||
+    !isObject(record.payload)
+  ) {
     return null;
   }
   const payload = record.payload;
@@ -789,18 +1173,24 @@ function parseCodexLine(record: unknown, context: Parameters<JsonlParser>[1]): C
     conversationId: context.conversationId,
     role,
     text,
-    timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined,
+    timestamp:
+      typeof record.timestamp === "string" ? record.timestamp : undefined,
     sourceFile: context.sourceFile
   };
 }
 
-function parseClaudeLine(record: unknown, context: Parameters<JsonlParser>[1]): ConversationMessage | null {
+function parseClaudeLine(
+  record: unknown,
+  context: Parameters<JsonlParser>[1]
+): ConversationMessage | null {
   if (!isObject(record)) {
     return null;
   }
   const role = normalizeRole(record.role ?? record.type);
   const message = isObject(record.message) ? record.message : record;
-  const text = extractText(message.content ?? record.content).join("\n").trim();
+  const text = extractText(message.content ?? record.content)
+    .join("\n")
+    .trim();
   if (!text || isContextInjection(role, text)) {
     return null;
   }
@@ -820,7 +1210,10 @@ function parseClaudeLine(record: unknown, context: Parameters<JsonlParser>[1]): 
   };
 }
 
-function parseGenericJsonLine(record: unknown, context: Parameters<JsonlParser>[1]): ConversationMessage | null {
+function parseGenericJsonLine(
+  record: unknown,
+  context: Parameters<JsonlParser>[1]
+): ConversationMessage | null {
   return parseGenericMessage(record, {
     source: context.source,
     conversationId: context.conversationId,
@@ -834,7 +1227,11 @@ export function parseOpenClawTrajectoryLine(
   record: unknown,
   context: Parameters<JsonlParser>[1]
 ): ConversationMessage | null {
-  if (!isObject(record) || record.type !== "prompt.submitted" || !isObject(record.data)) {
+  if (
+    !isObject(record) ||
+    record.type !== "prompt.submitted" ||
+    !isObject(record.data)
+  ) {
     return null;
   }
 
@@ -869,10 +1266,15 @@ function latestOpenClawUserMessageText(messages: unknown): string {
   }
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (!isObject(message) || normalizeRole(message.role ?? message.type) !== "user") {
+    if (
+      !isObject(message) ||
+      normalizeRole(message.role ?? message.type) !== "user"
+    ) {
       continue;
     }
-    const text = extractText(message.content ?? message.text).join("\n").trim();
+    const text = extractText(message.content ?? message.text)
+      .join("\n")
+      .trim();
     if (text) {
       return text;
     }
@@ -895,7 +1297,11 @@ function parseGenericMessage(
   }
   const message = isObject(entry.message) ? entry.message : entry;
   const role = normalizeRole(message.role ?? entry.role ?? entry.type);
-  const text = extractText(message.content ?? entry.content ?? message.text ?? entry.text).join("\n").trim();
+  const text = extractText(
+    message.content ?? entry.content ?? message.text ?? entry.text
+  )
+    .join("\n")
+    .trim();
   if (!text || isContextInjection(role, text)) {
     return null;
   }
@@ -918,7 +1324,12 @@ function parseGenericMessage(
 }
 
 function normalizeRole(role: unknown): MessageRole {
-  if (role === "assistant" || role === "user" || role === "developer" || role === "system") {
+  if (
+    role === "assistant" ||
+    role === "user" ||
+    role === "developer" ||
+    role === "system"
+  ) {
     return role;
   }
   return "unknown";
@@ -933,7 +1344,8 @@ function isContextInjection(role: MessageRole, text: string): boolean {
     trimmed.startsWith("<environment_context>") ||
     trimmed.startsWith("<permissions instructions>") ||
     trimmed.startsWith("# AGENTS.md instructions for ") ||
-    (trimmed.includes("<environment_context>") && trimmed.includes("<INSTRUCTIONS>"))
+    (trimmed.includes("<environment_context>") &&
+      trimmed.includes("<INSTRUCTIONS>"))
   );
 }
 
@@ -978,7 +1390,9 @@ function buildLexiconIndexes(lexicon = defaultSwearLexicon): {
     }
   }
   phraseVariants.sort(
-    (left, right) => right.variant.length - left.variant.length || left.variant.localeCompare(right.variant)
+    (left, right) =>
+      right.variant.length - left.variant.length ||
+      left.variant.localeCompare(right.variant)
   );
   return { tokenIndex, phraseVariants };
 }
@@ -993,7 +1407,8 @@ function findOccurrences(
   tokenIndex: Map<string, string>,
   phraseVariants: PhraseVariant[]
 ): Array<{ root: string; variant: string; actual: string }> {
-  const occurrences: Array<{ root: string; variant: string; actual: string }> = [];
+  const occurrences: Array<{ root: string; variant: string; actual: string }> =
+    [];
   const phraseRanges: Array<{ start: number; end: number }> = [];
 
   for (const phrase of phraseVariants) {
@@ -1002,7 +1417,10 @@ function findOccurrences(
       const matchedText = match[0];
       const start = match.index ?? 0;
       const end = start + matchedText.length;
-      if (!/[\s-]/.test(matchedText) && tokenIndex.has(normalizeToken(matchedText))) {
+      if (
+        !/[\s-]/.test(matchedText) &&
+        tokenIndex.has(normalizeToken(matchedText))
+      ) {
         continue;
       }
       if (overlapsAny({ start, end }, phraseRanges)) {
@@ -1029,7 +1447,9 @@ function findOccurrences(
   return occurrences;
 }
 
-function tokenizeWithSpans(text: string): Array<{ token: string; start: number; end: number }> {
+function tokenizeWithSpans(
+  text: string
+): Array<{ token: string; start: number; end: number }> {
   const matches: Array<{ token: string; start: number; end: number }> = [];
   tokenPattern.lastIndex = 0;
   for (const match of text.matchAll(tokenPattern)) {
@@ -1055,7 +1475,8 @@ function addOccurrence(
     variants: {}
   };
   currentWord.count += 1;
-  currentWord.variants[occurrence.variant] = (currentWord.variants[occurrence.variant] ?? 0) + 1;
+  currentWord.variants[occurrence.variant] =
+    (currentWord.variants[occurrence.variant] ?? 0) + 1;
   wordStats.set(occurrence.root, currentWord);
 
   const actualKey = `${occurrence.root}\u0000${occurrence.actual}`;
@@ -1069,33 +1490,44 @@ function addOccurrence(
 }
 
 function buildDailyStats(conversations: ConversationStats[]): DailyStats[] {
-  const byDay = new Map<string, DailyStats & { maxCumulativeRageSum: number }>();
+  const byDay = new Map<
+    string,
+    DailyStats & { maxCumulativeRageSum: number }
+  >();
   for (const conversation of conversations) {
-    const current =
-      byDay.get(conversation.dateKey) ??
-      {
-        dateKey: conversation.dateKey,
-        conversations: 0,
-        messages: 0,
-        messagesWithSwears: 0,
-        swears: 0,
-        swearingMessagePercent: 0,
-        averageMaxCumulativeRage: 0,
-        maxCumulativeRage: 0,
-        maxSwearingStreak: 0,
-        maxCumulativeRageSum: 0
-      };
+    const current = byDay.get(conversation.dateKey) ?? {
+      dateKey: conversation.dateKey,
+      conversations: 0,
+      messages: 0,
+      messagesWithSwears: 0,
+      swears: 0,
+      swearingMessagePercent: 0,
+      averageMaxCumulativeRage: 0,
+      maxCumulativeRage: 0,
+      maxSwearingStreak: 0,
+      maxCumulativeRageSum: 0
+    };
     current.conversations += 1;
     current.messages += conversation.messages;
     current.messagesWithSwears += conversation.messagesWithSwears;
     current.swears += conversation.swears;
     current.maxCumulativeRageSum += conversation.maxCumulativeRage;
-    current.maxCumulativeRage = Math.max(current.maxCumulativeRage, conversation.maxCumulativeRage);
-    current.maxSwearingStreak = Math.max(current.maxSwearingStreak, conversation.maxSwearingStreak);
+    current.maxCumulativeRage = Math.max(
+      current.maxCumulativeRage,
+      conversation.maxCumulativeRage
+    );
+    current.maxSwearingStreak = Math.max(
+      current.maxSwearingStreak,
+      conversation.maxSwearingStreak
+    );
     current.swearingMessagePercent =
-      current.messages === 0 ? 0 : (current.messagesWithSwears / current.messages) * 100;
+      current.messages === 0
+        ? 0
+        : (current.messagesWithSwears / current.messages) * 100;
     current.averageMaxCumulativeRage =
-      current.conversations === 0 ? 0 : current.maxCumulativeRageSum / current.conversations;
+      current.conversations === 0
+        ? 0
+        : current.maxCumulativeRageSum / current.conversations;
     byDay.set(conversation.dateKey, current);
   }
   return [...byDay.values()]
@@ -1113,7 +1545,9 @@ function buildDailyStats(conversations: ConversationStats[]): DailyStats[] {
     .sort((left, right) => right.dateKey.localeCompare(left.dateKey));
 }
 
-function compactMessage(message: ConversationMessage | null): ConversationMessage[] {
+function compactMessage(
+  message: ConversationMessage | null
+): ConversationMessage[] {
   return message ? [message] : [];
 }
 
@@ -1144,7 +1578,8 @@ function pushConversation(
   }
   conversations.push({
     source,
-    conversationId: messages[0]?.conversationId ?? basename(filePath).replace(/\.[^.]+$/, ""),
+    conversationId:
+      messages[0]?.conversationId ?? basename(filePath).replace(/\.[^.]+$/, ""),
     sourceFile: filePath,
     updatedAt: maxTimestamp(messages) ?? fileTimestamp(filePath),
     messages
@@ -1168,24 +1603,107 @@ function dayKey(value: string, timeZone?: string): string {
   const year = parts.find((part) => part.type === "year")?.value;
   const month = parts.find((part) => part.type === "month")?.value;
   const day = parts.find((part) => part.type === "day")?.value;
-  return year && month && day ? `${year}-${month}-${day}` : date.toISOString().slice(0, 10);
+  return year && month && day
+    ? `${year}-${month}-${day}`
+    : date.toISOString().slice(0, 10);
 }
 
-function isConversationInDateRange(conversation: ConversationRecord, options: ScanOptions): boolean {
-  const updatedAtMs = Date.parse(conversation.updatedAt);
-  if (!Number.isFinite(updatedAtMs)) {
+function isTimestampInDateRange(
+  value: string,
+  timestamp: number,
+  options: ScanOptions
+): boolean {
+  if (options.date && dayKey(value, options.timeZone) !== options.date) {
     return false;
   }
-  if (options.date && dayKey(conversation.updatedAt, options.timeZone) !== options.date) {
+  if (options.since && timestamp < options.since.getTime()) {
     return false;
   }
-  if (options.since && updatedAtMs < options.since.getTime()) {
-    return false;
-  }
-  if (options.until && updatedAtMs >= options.until.getTime()) {
+  if (options.until && timestamp >= options.until.getTime()) {
     return false;
   }
   return true;
+}
+
+function normalizedMessageTimestamp(
+  message: ConversationMessage,
+  conversation: ConversationRecord
+): { value: string; time: number } | null {
+  for (const candidate of [message.timestamp, conversation.updatedAt]) {
+    if (!candidate) {
+      continue;
+    }
+    const time = Date.parse(candidate);
+    if (Number.isFinite(time)) {
+      return { value: new Date(time).toISOString(), time };
+    }
+  }
+  return null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error);
+}
+
+function scanCancelledWarning(
+  source: DevrageSource,
+  signal: AbortSignal
+): ReaderWarning {
+  return {
+    file: source,
+    line: 0,
+    reason: `Scan cancelled before completion: ${errorMessage(signal.reason ?? "aborted")}`
+  };
+}
+
+function boundedFileWarning(
+  filePath: string,
+  options: AdapterReadOptions
+): ReaderWarning | null {
+  try {
+    const fileBytes = statSync(filePath).size;
+    if (fileBytes > options.maxFileBytes) {
+      return {
+        file: filePath,
+        line: 0,
+        reason: `File is ${fileBytes} bytes and exceeds the ${options.maxFileBytes}-byte scan limit; file skipped.`
+      };
+    }
+    if (options.scannedBytes + fileBytes > options.maxScanBytes) {
+      return {
+        file: filePath,
+        line: 0,
+        reason: `Reading this file would exceed the ${options.maxScanBytes}-byte total scan limit; file skipped.`
+      };
+    }
+    options.scannedBytes += fileBytes;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function boundedRecordWarning(
+  filePath: string,
+  lineNumber: number,
+  maxRecordChars: number
+): ReaderWarning {
+  return {
+    file: filePath,
+    line: lineNumber,
+    reason: `Record exceeds the ${maxRecordChars}-character scan limit; record skipped.`
+  };
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) {
+    return;
+  }
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new Error("Devrage scan aborted.");
 }
 
 function maxTimestamp(messages: ConversationMessage[]): string | null {
@@ -1219,20 +1737,43 @@ function dataHome(): string {
 function getVSCodeGlobalStoragePaths(): string[] {
   if (process.platform === "darwin") {
     return [
-      join(homedir(), "Library", "Application Support", "Code", "User", "globalStorage"),
-      join(homedir(), "Library", "Application Support", "Code - Insiders", "User", "globalStorage"),
-      join(homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage")
+      join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "Code",
+        "User",
+        "globalStorage"
+      ),
+      join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "Code - Insiders",
+        "User",
+        "globalStorage"
+      ),
+      join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "Cursor",
+        "User",
+        "globalStorage"
+      )
     ];
   }
   if (process.platform === "linux") {
-    const configBase = process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config");
+    const configBase =
+      process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config");
     return [
       join(configBase, "Code", "User", "globalStorage"),
       join(configBase, "Code - Insiders", "User", "globalStorage"),
       join(configBase, "Cursor", "User", "globalStorage")
     ];
   }
-  const appData = process.env["APPDATA"] ?? join(homedir(), "AppData", "Roaming");
+  const appData =
+    process.env["APPDATA"] ?? join(homedir(), "AppData", "Roaming");
   return [
     join(appData, "Code", "User", "globalStorage"),
     join(appData, "Code - Insiders", "User", "globalStorage")
@@ -1245,17 +1786,22 @@ function findFirstExisting(paths: string[]): string | null {
 
 async function globFiles(
   patterns: string | string[],
-  options: { ignore?: string[] } = {}
+  options: { ignore?: string[]; signal?: AbortSignal } = {}
 ): Promise<string[]> {
   const results = new Set<string>();
   for (const pattern of Array.isArray(patterns) ? patterns : [patterns]) {
+    throwIfAborted(options.signal);
     const normalizedPattern = normalizePath(pattern);
     const root = globRoot(pattern);
     if (!root || !existsSync(root)) {
       continue;
     }
     const matcher = globPatternToRegExp(normalizedPattern);
-    for await (const filePath of walkFiles(root, options.ignore ?? [])) {
+    for await (const filePath of walkFiles(
+      root,
+      options.ignore ?? [],
+      options.signal
+    )) {
       if (matcher.test(normalizePath(filePath))) {
         results.add(filePath);
       }
@@ -1264,7 +1810,12 @@ async function globFiles(
   return [...results].sort();
 }
 
-async function* walkFiles(root: string, ignoredNames: string[]): AsyncGenerator<string> {
+async function* walkFiles(
+  root: string,
+  ignoredNames: string[],
+  signal?: AbortSignal
+): AsyncGenerator<string> {
+  throwIfAborted(signal);
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -1273,12 +1824,13 @@ async function* walkFiles(root: string, ignoredNames: string[]): AsyncGenerator<
   }
 
   for (const entry of entries) {
+    throwIfAborted(signal);
     if (ignoredNames.includes(entry.name)) {
       continue;
     }
     const fullPath = join(root, entry.name);
     if (entry.isDirectory()) {
-      yield* walkFiles(fullPath, ignoredNames);
+      yield* walkFiles(fullPath, ignoredNames, signal);
       continue;
     }
     if (entry.isFile()) {
@@ -1391,8 +1943,13 @@ function normalizeAgent(agent: string): string {
   return agent.trim().toLowerCase() || "unknown";
 }
 
-function overlapsAny(range: { start: number; end: number }, ranges: Array<{ start: number; end: number }>): boolean {
-  return ranges.some((other) => range.start < other.end && range.end > other.start);
+function overlapsAny(
+  range: { start: number; end: number },
+  ranges: Array<{ start: number; end: number }>
+): boolean {
+  return ranges.some(
+    (other) => range.start < other.end && range.end > other.start
+  );
 }
 
 function escapeRegExp(value: string): string {

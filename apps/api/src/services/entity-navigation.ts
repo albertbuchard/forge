@@ -183,6 +183,8 @@ export function buildEntityNavigationTargetPath(
       }
       return `/notes?focus=${id}`;
     }
+    case "person":
+      return `/people/${id}`;
     case "insight":
       return graphFocus("insight");
     case "calendar_event":
@@ -250,7 +252,8 @@ function addPreferenceNavigationContext(
   const profile = profileId ? getPreferenceProfileById(profileId) : null;
   return {
     ...entity,
-    domain: readString(entity.domain) ?? catalog?.domain ?? profile?.domain ?? null,
+    domain:
+      readString(entity.domain) ?? catalog?.domain ?? profile?.domain ?? null,
     userId: readString(entity.userId) ?? profile?.userId ?? null
   };
 }

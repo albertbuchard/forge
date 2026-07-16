@@ -38,6 +38,7 @@ export function PreferenceWorkspaceControls({
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <select
+              aria-label="Active preference user"
               value={selectedUserId}
               onChange={(event) =>
                 onPatchSearch({
@@ -46,7 +47,7 @@ export function PreferenceWorkspaceControls({
                   focusItem: null
                 })
               }
-              className="min-h-10 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
+              className="min-h-11 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)] outline-none transition focus:border-[var(--primary)]"
             >
               {users.map((entry) => (
                 <option key={entry.id} value={entry.id}>
@@ -64,13 +65,18 @@ export function PreferenceWorkspaceControls({
           <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--ui-ink-faint)]">
             Domain
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label="Preference domain"
+          >
             {DOMAIN_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
+                aria-pressed={option.value === selectedDomain}
                 className={cn(
-                  "rounded-full border px-3 py-2 text-sm transition",
+                  "min-h-11 rounded-full border px-3 py-2 text-sm transition",
                   option.value === selectedDomain
                     ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
                     : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
@@ -118,13 +124,18 @@ export function PreferenceWorkspaceTabNav({
   onSelectTab: (tab: PreferencesTab) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div
+      className="flex flex-wrap gap-2"
+      role="group"
+      aria-label="Preference views"
+    >
       {TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
+          aria-pressed={tab.id === selectedTab}
           className={cn(
-            "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
+            "inline-flex min-h-11 items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
             tab.id === selectedTab
               ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
               : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"

@@ -20,6 +20,8 @@ Forge is built as a production-grade monorepo application with:
 - SQLite
 - SQLite-backed wiki/evidence memory through `notes`, wiki spaces, FTS, link edges, and optional embeddings
 - generated OpenAPI
+- a Rust 2024 `forge-peer` daemon for the versioned encrypted peer protocol, direct connections, Iroh, and capability-gated Tor
+- a Node 24 Forge Connectivity Service that stores bounded end-to-end ciphertext for peers that do not overlap online
 - OpenClaw, Hermes, Codex, and Claude Code adapter layers
 - Swift iPhone companion
 - Swift 5 / SwiftUI watchOS companion command surface
@@ -51,6 +53,10 @@ Attention is a derived, actor-scoped operational surface. `GET /api/v1/attention
 Entity navigation is a canonical cross-surface convenience model. Active pins are shared or owned by one Forge user and retain an append-only pin/unpin audit trail. Recently viewed records are isolated by authenticated actor and store bounded presentation reads over durable first-view, last-view, and view-count state. Human operator sessions alone can pin or unpin. Trusted agents can list in-scope pins and their own recents or touch an exact record they actually viewed, but agent tools and HTTP mirrors must not expose pin mutation. Deleted pins remain understandable through the settings bin; deleted or missing recents are hidden. The web app reuses the existing Action Bar, the iPhone companion can reopen the leading pin in its embedded Forge view, and watchOS remains a bounded glance-only pin surface.
 
 Life Events are a first-class chronological memory surface. They store important personal events in a linear timeline with start/end interval, place, type, importance, calendar relationship, artifact relationship, travel details, segments, extraction state, and generic links to other Forge entities. A Life Event can be a short event or a span lasting days, weeks, or months, such as a stay, festival, retreat, visit, vacation, work phase, health episode, course, or custom period. The web view must be virtualized and must use Forge guided modal flows for event creation, event editing, and ticket import. Life Events use shared batch CRUD for normal `life_event` record create, update, search, delete, restore, and generic links; they use a dedicated `/api/v1/life-events/*` route family for timeline reads, one-event reads, calendar reconciliation, marking a calendar event as a Life Event, trusted ticket artifact import, and travel-status reads.
+
+People are first-class owner-scoped memory records. A `person` stores the accepted identity, relationship context, aliases, contact methods, facts, birthday precision, private notes, and general links that help the user remember and interact with someone. It does not store peer keys, devices, grants, or consent. Normal Person create, update, search, soft delete, restore, and link replacement use shared batch CRUD. Dedicated `/api/v1/people/*` routes provide bounded collection and context read models, reviewed Wiki association, and typed questions.
+
+Forge-to-Forge sharing is an optional peer protocol between independently operated Forge installations. Pairing uses a short-lived one-use invitation and human identity confirmation. Every direction has its own signed grant over registered projections, selected records, fields, filters, precision, expiry, cache policy, and approved devices. The peer protocol does not carry general Forge HTTP requests or database queries. Direct, Iroh, capability-gated Tor, and HTTPS mailbox providers implement the same encrypted transport boundary. The mailbox stores ciphertext and minimum routing metadata without Forge credentials, records, decryption keys, grant evaluation, or an administrative content-read route. Agents may inspect status and execute a typed question through an existing scoped grant. Pairing, request acceptance, device approval, grant creation or widening, and revocation remain human-only.
 
 ## Core Requirements
 
@@ -218,6 +224,18 @@ Agent skills must default to:
 - no pull request prompts
 
 Agent runtime identity is separate from Forge user ownership. OpenClaw, Hermes, Codex, and Claude Code each need one stable agent identity per machine/runtime installation, derived from provider, machine/data root, and persona rather than volatile session keys, cron IDs, WhatsApp threads, PIDs, or timestamps. Runtime sessions are history under that identity. Agent identities can link to one or several Forge users, including bot users with their own Kanban ownership, so spawned subagents are modeled as users or linked actors instead of duplicate top-level agents.
+
+### 9A. People And Selective Sharing
+
+- The People view must use the existing guided modal system for add, edit, Wiki association, pairing, sharing, and typed questions.
+- Person links must use the general entity-link model across planning, Psyche, Calendar, Movement, Life Force, Workbench, Wiki, Artifact, and Life Event records.
+- Private, contact, sensitive, and restricted Person fields need separate read scopes and owner isolation.
+- Peer invitations must be one-use, short-lived, bound to exact root and device identities, and confirmed by humans on both sides.
+- Share grants must be directional, signed, versioned, previewable at exact record and field level, narrowable, expiring, and revocable.
+- Typed questions must map to registered projections and report source, freshness, completeness, precision, and redaction.
+- Direct, Iroh, Tor, and HTTPS mailbox providers must never silently fall back to a mode that exposes more network metadata.
+- The iPhone companion manages invitations, identity confirmation, grants, and devices. The watch shows only a bounded redacted People glance from owner-scoped Entity Navigation pins and cannot widen access.
+- OpenAPI, OpenClaw, Hermes, Codex, Claude Code, Forge Memory, installers, and public docs must expose the same operation and permission boundaries.
 
 Separate code review and final audit skills are not part of this Forge PM workflow and should remain Codex concerns instead.
 

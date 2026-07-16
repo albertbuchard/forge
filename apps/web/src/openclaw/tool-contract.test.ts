@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calendarOverviewQuerySchema,
   createCalendarConnectionSchema
@@ -25,12 +25,22 @@ import {
 } from "../../../../apps/api/src/preferences-types";
 import { collectSupportedPluginApiRouteKeys, makeApiRouteKey } from "./parity";
 import { collectMirroredApiRouteKeys } from "./routes";
+import { callConfiguredForgeApi } from "./api-client";
 import { registerForgePluginTools } from "./tools";
+
+vi.mock("./api-client.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api-client.js")>();
+  return {
+    ...actual,
+    callConfiguredForgeApi: vi.fn()
+  };
+});
 
 type RegisteredTool = {
   name: string;
   description?: string;
   parameters?: Record<string, unknown>;
+  execute?: (toolCallId: string, params: unknown) => Promise<unknown>;
 };
 
 const TEST_CONFIG = {
@@ -128,7 +138,7 @@ async function loadOnboardingRouteContracts() {
   };
 }
 
-function collectRegisteredTools() {
+function collectRegisteredTools(apiToken: string = TEST_CONFIG.apiToken) {
   const tools: RegisteredTool[] = [];
   registerForgePluginTools(
     {
@@ -139,7 +149,7 @@ function collectRegisteredTools() {
         tools.push(tool as RegisteredTool);
       }
     } as never,
-    TEST_CONFIG
+    { ...TEST_CONFIG, apiToken }
   );
   return tools;
 }
@@ -149,6 +159,436 @@ function requireTool(tools: RegisteredTool[], name: string) {
   expect(tool, `Expected tool ${name} to be registered`).toBeDefined();
   return tool as RegisteredTool;
 }
+
+const mockedCallConfiguredForgeApi = vi.mocked(callConfiguredForgeApi);
+
+describe("batch entity tool contract", () => {
+  it("matches server operation bounds, search limit, and retry fields", () => {
+    const tools = collectRegisteredTools();
+    const expected = {
+      forge_create_entities: ["operations", 100],
+      forge_update_entities: ["operations", 100],
+      forge_delete_entities: ["operations", 100],
+      forge_restore_entities: ["operations", 100],
+      forge_search_entities: ["searches", 50]
+    } as const;
+
+    for (const [toolName, [arrayName, maxItems]] of Object.entries(expected)) {
+      const schema = requireTool(tools, toolName).parameters as {
+        properties: Record<
+          string,
+          {
+            minItems?: number;
+            maxItems?: number;
+            items?: { properties?: Record<string, Record<string, unknown>> };
+          }
+        >;
+      };
+      expect(schema.properties[arrayName]?.minItems).toBe(1);
+      expect(schema.properties[arrayName]?.maxItems).toBe(maxItems);
+    }
+
+    const create = requireTool(tools, "forge_create_entities").parameters as {
+      properties: {
+        operations: {
+          items: { properties: { idempotencyKey: { maxLength: number } } };
+        };
+      };
+    };
+    expect(
+      create.properties.operations.items.properties.idempotencyKey.maxLength
+    ).toBe(128);
+
+    const search = requireTool(tools, "forge_search_entities").parameters as {
+      properties: {
+        searches: {
+          items: {
+            properties: {
+              limit: { maximum: number };
+              userIds: { type: string; items: { type: string } };
+            };
+          };
+        };
+      };
+    };
+    expect(search.properties.searches.items.properties.limit.maximum).toBe(200);
+    expect(search.properties.searches.items.properties.userIds).toMatchObject({
+      type: "array",
+      items: { type: "string" }
+    });
+  });
+});
+
+describe("task timebox recommendation tool contract", () => {
+  it("is a read-only POST with the server limit and timezone payload", async () => {
+    mockedCallConfiguredForgeApi.mockReset();
+    mockedCallConfiguredForgeApi.mockResolvedValue({
+      status: 200,
+      body: { suggestions: [] }
+    });
+
+    const tool = requireTool(
+      collectRegisteredTools(""),
+      "forge_recommend_task_timeboxes"
+    );
+    const schema = tool.parameters as {
+      properties: {
+        limit: { maximum: number };
+        timezone: { anyOf?: unknown[]; type?: string };
+      };
+    };
+    expect(schema.properties.limit.maximum).toBe(12);
+    expect(schema.properties.timezone).toBeDefined();
+
+    await tool.execute?.("recommend", {
+      taskId: "task_123",
+      from: "2026-07-16T08:00:00.000Z",
+      to: "2026-07-16T18:00:00.000Z",
+      limit: 12,
+      timezone: "Europe/Zurich"
+    });
+
+    expect(mockedCallConfiguredForgeApi).toHaveBeenCalledWith(
+      expect.objectContaining({ apiToken: "" }),
+      {
+        method: "POST",
+        path: "/api/v1/calendar/timeboxes/recommend",
+        body: {
+          taskId: "task_123",
+          from: "2026-07-16T08:00:00.000Z",
+          to: "2026-07-16T18:00:00.000Z",
+          limit: 12,
+          timezone: "Europe/Zurich"
+        }
+      }
+    );
+  });
+
+  it("keeps direct create aligned with the closed server mutation contract", async () => {
+    mockedCallConfiguredForgeApi.mockReset();
+    mockedCallConfiguredForgeApi.mockResolvedValue({
+      status: 201,
+      body: { timebox: { id: "timebox_123" } }
+    });
+    const tool = requireTool(
+      collectRegisteredTools(""),
+      "forge_create_task_timebox"
+    );
+    const schema = tool.parameters as {
+      properties: Record<string, unknown>;
+      required: string[];
+      additionalProperties?: boolean;
+    };
+    expect(schema.required).toEqual(["taskId", "title", "startsAt", "endsAt"]);
+    expect(Object.keys(schema.properties).sort()).toEqual(
+      [
+        "taskId",
+        "projectId",
+        "title",
+        "startsAt",
+        "endsAt",
+        "source",
+        "status",
+        "overrideReason",
+        "activityPresetKey",
+        "customSustainRateApPerHour",
+        "userId"
+      ].sort()
+    );
+    expect(
+      readTypeBoxUnionValues(
+        tool.parameters as Record<string, unknown>,
+        "status"
+      )
+    ).toEqual(["active", "cancelled", "completed", "planned"]);
+    expect(
+      readTypeBoxUnionValues(
+        tool.parameters as Record<string, unknown>,
+        "activityPresetKey"
+      )
+    ).toEqual(
+      [
+        "deep_work",
+        "admin",
+        "maintenance",
+        "meeting",
+        "recovery_break",
+        "holiday_leisure",
+        "light_context",
+        "task_inherited"
+      ].sort()
+    );
+
+    const payload = {
+      taskId: "task_123",
+      projectId: "project_123",
+      title: "Focused block",
+      startsAt: "2026-07-16T08:00:00.000Z",
+      endsAt: "2026-07-16T09:00:00.000Z",
+      source: "suggested",
+      status: "planned",
+      overrideReason: "Deadline protection",
+      activityPresetKey: "deep_work",
+      customSustainRateApPerHour: 15,
+      userId: "user_123"
+    };
+    await tool.execute?.("create", payload);
+    expect(mockedCallConfiguredForgeApi).toHaveBeenCalledWith(
+      expect.objectContaining({ apiToken: "" }),
+      {
+        method: "POST",
+        path: "/api/v1/calendar/timeboxes",
+        body: payload
+      }
+    );
+  });
+});
+
+describe("task-run closeout tool contract", () => {
+  it("matches the bounded completion body and keeps release evidence-free", () => {
+    const tools = collectRegisteredTools();
+    const complete = requireTool(tools, "forge_complete_task_run");
+    const release = requireTool(tools, "forge_release_task_run");
+    const completeSchema = complete.parameters as {
+      additionalProperties?: boolean;
+      required?: string[];
+      properties: Record<string, Record<string, unknown>>;
+    };
+    const releaseSchema = release.parameters as {
+      additionalProperties?: boolean;
+      required?: string[];
+      properties: Record<string, Record<string, unknown>>;
+    };
+
+    expect(completeSchema.additionalProperties).toBe(false);
+    expect(completeSchema.required).toEqual(["taskRunId"]);
+    expect(Object.keys(completeSchema.properties).sort()).toEqual(
+      [
+        "taskRunId",
+        "actor",
+        "note",
+        "completionReport",
+        "gitRefs",
+        "closeoutNote"
+      ].sort()
+    );
+    expect(releaseSchema.additionalProperties).toBe(false);
+    expect(releaseSchema.required).toEqual(["taskRunId"]);
+    expect(Object.keys(releaseSchema.properties).sort()).toEqual(
+      ["taskRunId", "actor", "note", "closeoutNote"].sort()
+    );
+    expect(completeSchema.properties.actor).toMatchObject({
+      type: "string",
+      minLength: 1,
+      maxLength: 160
+    });
+    expect(completeSchema.properties.note).toMatchObject({
+      type: "string",
+      maxLength: 4_000
+    });
+    expect(releaseSchema.properties.actor).toEqual(
+      completeSchema.properties.actor
+    );
+    expect(releaseSchema.properties.note).toEqual(
+      completeSchema.properties.note
+    );
+
+    const report = completeSchema.properties.completionReport as {
+      additionalProperties?: boolean;
+      properties: Record<string, Record<string, unknown>>;
+    };
+    expect(report.additionalProperties).toBe(false);
+    expect(Object.keys(report.properties).sort()).toEqual(
+      ["modifiedFiles", "workSummary", "linkedGitRefIds"].sort()
+    );
+    expect(report.properties.modifiedFiles).toMatchObject({
+      type: "array",
+      maxItems: 256,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 512 }
+    });
+    expect(report.properties.workSummary).toMatchObject({
+      type: "string",
+      maxLength: 8_000,
+      default: ""
+    });
+    expect(report.properties.linkedGitRefIds).toMatchObject({
+      type: "array",
+      maxItems: 64,
+      uniqueItems: true,
+      items: { type: "string", minLength: 1, maxLength: 128 }
+    });
+
+    const gitRefs = completeSchema.properties.gitRefs as {
+      maxItems?: number;
+      items: {
+        additionalProperties?: boolean;
+        required?: string[];
+        properties: Record<string, Record<string, unknown>>;
+      };
+    };
+    expect(gitRefs.maxItems).toBe(64);
+    expect(gitRefs.items.additionalProperties).toBe(false);
+    expect(gitRefs.items.required).toEqual(["refType", "refValue"]);
+    expect(Object.keys(gitRefs.items.properties).sort()).toEqual(
+      [
+        "id",
+        "refType",
+        "provider",
+        "repository",
+        "refValue",
+        "url",
+        "displayTitle"
+      ].sort()
+    );
+    expect(gitRefs.items.properties.id).toMatchObject({
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    });
+    expect(
+      readTypeBoxUnionValues(
+        gitRefs.items as unknown as Record<string, unknown>,
+        "refType"
+      )
+    ).toEqual(["branch", "commit", "pull_request"]);
+    expect(gitRefs.items.properties.provider).toMatchObject({
+      type: "string",
+      maxLength: 64,
+      default: "git"
+    });
+    expect(gitRefs.items.properties.repository).toMatchObject({
+      type: "string",
+      maxLength: 255,
+      default: ""
+    });
+    expect(gitRefs.items.properties.refValue).toMatchObject({
+      type: "string",
+      minLength: 1,
+      maxLength: 512
+    });
+    expect(gitRefs.items.properties.url).toMatchObject({
+      anyOf: [
+        {
+          type: "string",
+          format: "uri",
+          pattern: "^https?://",
+          maxLength: 2_048
+        },
+        { type: "null" }
+      ]
+    });
+    expect(gitRefs.items.properties.displayTitle).toMatchObject({
+      type: "string",
+      maxLength: 512,
+      default: ""
+    });
+
+    const openApi = buildOpenApiDocument() as {
+      components: {
+        schemas: Record<
+          string,
+          { properties?: Record<string, Record<string, unknown>> }
+        >;
+      };
+    };
+    expect(
+      Object.keys(
+        openApi.components.schemas.TaskRunCompleteInput.properties ?? {}
+      ).sort()
+    ).toEqual(
+      Object.keys(completeSchema.properties)
+        .filter((key) => key !== "taskRunId")
+        .sort()
+    );
+    expect(
+      Object.keys(
+        openApi.components.schemas.TaskRunReleaseInput.properties ?? {}
+      ).sort()
+    ).toEqual(
+      Object.keys(releaseSchema.properties)
+        .filter((key) => key !== "taskRunId")
+        .sort()
+    );
+    expect(complete.description).toMatch(
+      /exact terminal replay is idempotent/i
+    );
+    expect(complete.description).toMatch(
+      /changed closeout evidence conflicts/i
+    );
+    expect(complete.description).toMatch(/closeoutState deferred/i);
+    expect(release.description).toMatch(
+      /never accepts completionReport or gitRefs/i
+    );
+  });
+
+  it("forwards every completion field and only release fields", async () => {
+    mockedCallConfiguredForgeApi.mockReset();
+    mockedCallConfiguredForgeApi.mockResolvedValue({
+      status: 200,
+      body: { taskRun: { id: "run_123" } }
+    });
+    const tools = collectRegisteredTools();
+    const complete = requireTool(tools, "forge_complete_task_run");
+    const release = requireTool(tools, "forge_release_task_run");
+    const completionBody = {
+      actor: "Albert",
+      note: "Completed",
+      completionReport: {
+        modifiedFiles: ["apps/web/src/openclaw/tools.ts"],
+        workSummary: "Forwarded the complete PLAN-17 evidence contract.",
+        linkedGitRefIds: ["commit_abc123"]
+      },
+      gitRefs: [
+        {
+          id: "commit_abc123",
+          refType: "commit",
+          provider: "github",
+          repository: "albertbuchard/forge",
+          refValue: "abc123",
+          url: "https://github.com/albertbuchard/forge/commit/abc123",
+          displayTitle: "PLAN-17 closeout"
+        }
+      ],
+      closeoutNote: {
+        contentMarkdown: "Closeout evidence is linked to the task.",
+        tags: ["closeout"]
+      }
+    };
+
+    await complete.execute?.("complete", {
+      taskRunId: "run_123",
+      ...completionBody
+    });
+    expect(mockedCallConfiguredForgeApi).toHaveBeenLastCalledWith(
+      expect.objectContaining({ apiToken: TEST_CONFIG.apiToken }),
+      {
+        method: "POST",
+        path: "/api/v1/task-runs/run_123/complete",
+        body: completionBody
+      }
+    );
+
+    const releaseBody = {
+      actor: "Albert",
+      note: "Paused for review",
+      closeoutNote: { contentMarkdown: "Resume after review." }
+    };
+    await release.execute?.("release", {
+      taskRunId: "run_123",
+      ...releaseBody
+    });
+    expect(mockedCallConfiguredForgeApi).toHaveBeenLastCalledWith(
+      expect.objectContaining({ apiToken: TEST_CONFIG.apiToken }),
+      {
+        method: "POST",
+        path: "/api/v1/task-runs/run_123/release",
+        body: releaseBody
+      }
+    );
+  });
+});
 
 function readTypeBoxUnionValues(schema: Record<string, unknown>, key: string) {
   const property = (schema.properties as Record<string, unknown> | undefined)?.[
@@ -270,11 +710,74 @@ function readHermesManifestToolNames() {
 }
 
 describe("openclaw tool contracts", () => {
+  it("keeps every onboarding input guide callable in both OpenClaw and Hermes", () => {
+    const openclawToolNames = new Set(
+      collectRegisteredTools().map((tool) => tool.name)
+    );
+    const hermesToolNames = new Set(readHermesCatalogToolNames());
+
+    for (const guide of AGENT_ONBOARDING_TOOL_INPUT_CATALOG) {
+      for (const toolName of guide.toolName.split(" | ")) {
+        expect(
+          openclawToolNames.has(toolName),
+          `${toolName} should be registered by OpenClaw`
+        ).toBe(true);
+        expect(
+          hermesToolNames.has(toolName),
+          `${toolName} should be registered by Hermes`
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("reads the bounded canonical Today decision with explicit scope and timezone", async () => {
+    mockedCallConfiguredForgeApi.mockReset();
+    mockedCallConfiguredForgeApi.mockResolvedValue({
+      status: 200,
+      body: { decision: { contractVersion: 1, mode: "ready" } }
+    });
+    const tool = requireTool(
+      collectRegisteredTools(""),
+      "forge_get_today_priority"
+    );
+    const schema = tool.parameters as {
+      properties: {
+        timeZone: { maxLength: number };
+        candidateLimit: {
+          minimum: number;
+          maximum: number;
+          default: number;
+        };
+      };
+    };
+    expect(schema.properties.timeZone.maxLength).toBe(100);
+    expect(schema.properties.candidateLimit).toMatchObject({
+      minimum: 1,
+      maximum: 100,
+      default: 24
+    });
+
+    await tool.execute?.("today", {
+      userIds: ["user_operator", "user_coach"],
+      timeZone: "Europe/Zurich",
+      candidateLimit: 12
+    });
+
+    expect(mockedCallConfiguredForgeApi).toHaveBeenCalledWith(
+      expect.objectContaining({ apiToken: "" }),
+      {
+        method: "GET",
+        path: "/api/v1/today/priority?userIds=user_operator&userIds=user_coach&timeZone=Europe%2FZurich&candidateLimit=12"
+      }
+    );
+  });
+
   it("keeps current-work and calendar tools backed by mirrored curated routes", () => {
     const supportedRoutes = collectSupportedPluginApiRouteKeys();
     const mirroredRoutes = collectMirroredApiRouteKeys();
     const expectedToolRoutes = [
       makeApiRouteKey("GET", "/api/v1/operator/context"),
+      makeApiRouteKey("GET", "/api/v1/today/priority"),
       makeApiRouteKey("GET", "/api/v1/calendar/overview"),
       makeApiRouteKey("POST", "/api/v1/calendar/connections"),
       makeApiRouteKey("POST", "/api/v1/calendar/connections/:id/sync"),
@@ -408,7 +911,16 @@ describe("openclaw tool contracts", () => {
 
   it("keeps every Preferences action body aligned across server, OpenAPI, onboarding, and plugins", () => {
     const tools = collectRegisteredTools();
+    type OpenApiActionSchema = {
+      $ref?: string;
+      properties?: Record<
+        string,
+        { enum?: string[]; anyOf?: Array<{ const?: string }> }
+      >;
+      required?: string[];
+    };
     const openApi = buildOpenApiDocument() as {
+      components: { schemas: Record<string, OpenApiActionSchema> };
       paths: Record<
         string,
         Record<
@@ -418,19 +930,22 @@ describe("openclaw tool contracts", () => {
               content?: Record<
                 string,
                 {
-                  schema?: {
-                    properties?: Record<
-                      string,
-                      { enum?: string[]; anyOf?: Array<{ const?: string }> }
-                    >;
-                    required?: string[];
-                  };
+                  schema?: OpenApiActionSchema;
                 }
               >;
             };
           }
         >
       >;
+    };
+    const resolveOpenApiSchema = (schema: OpenApiActionSchema | undefined) => {
+      const referencedSchemaName = schema?.$ref?.replace(
+        "#/components/schemas/",
+        ""
+      );
+      return referencedSchemaName
+        ? openApi.components.schemas[referencedSchemaName]
+        : schema;
     };
     const contracts = [
       {
@@ -492,10 +1007,11 @@ describe("openclaw tool contracts", () => {
       const toolRequired = Array.isArray(tool.parameters?.required)
         ? [...tool.parameters.required].sort()
         : [];
-      const openApiSchema =
+      const requestSchema =
         openApi.paths[contract.path]?.[contract.method]?.requestBody?.content?.[
           "application/json"
         ]?.schema;
+      const openApiSchema = resolveOpenApiSchema(requestSchema);
 
       expect(toolFields, `${contract.toolName} fields`).toEqual(
         expectedToolFields
@@ -531,10 +1047,11 @@ describe("openclaw tool contracts", () => {
       expect(readTypeBoxUnionValues(tool.parameters ?? {}, "domain")).toEqual(
         domainValues
       );
-      const domainSchema =
+      const domainSchema = resolveOpenApiSchema(
         openApi.paths[contract.path]?.[contract.method]?.requestBody?.content?.[
           "application/json"
-        ]?.schema?.properties?.domain;
+        ]?.schema
+      )?.properties?.domain;
       expect([...(domainSchema?.enum ?? [])].sort()).toEqual(domainValues);
     }
     expect(
@@ -588,6 +1105,12 @@ describe("openclaw tool contracts", () => {
       expect(block).not.toMatch(/"profileId"/);
       expect(block).not.toMatch(/"source"\s*:/);
     }
+    expect(requireTool(tools, "forge_delete_entities").description).toMatch(
+      /preference_catalog and preference_catalog_item use reversible soft deletion/i
+    );
+    expect(hermesCatalog).toMatch(
+      /preference_catalog and preference_catalog_item use reversible soft deletion/i
+    );
   });
 
   it("publishes the Psyche schema catalog as a read-only reference tool", () => {
@@ -865,6 +1388,11 @@ describe("openclaw tool contracts", () => {
     expect(artifact.description ?? "").toMatch(/password/i);
     expect(artifact.description ?? "").toMatch(/decrypt/i);
     expect(artifact.description ?? "").toMatch(/generic entity-link/i);
+    expect(artifact.description ?? "").toMatch(
+      /stable per-file idempotencyKey/i
+    );
+    expect(artifact.description ?? "").toMatch(/normalizes agent provenance/i);
+    expect(artifact.description ?? "").toMatch(/changed-payload key reuse/i);
     expect(lifeEvents.description ?? "").toMatch(/shared batch CRUD/i);
     expect(lifeEvents.description ?? "").toMatch(/generic entity_links/i);
     expect(attention.description ?? "").toMatch(/stable item id/i);
@@ -975,6 +1503,28 @@ describe("openclaw tool contracts", () => {
     expect(readHermesRouteSpecs("LIFE_EVENT_ROUTE_SPECS")).toEqual(
       onboardingSurfaces.lifeEvents.methodRoutes
     );
+  });
+
+  it("publishes bounded paginated wiki browse and search tool inputs", () => {
+    const tools = collectRegisteredTools();
+    const list = requireTool(tools, "forge_list_wiki_pages");
+    const search = requireTool(tools, "forge_search_wiki");
+    const listProperties = (list.parameters?.properties ?? {}) as Record<
+      string,
+      { maximum?: number; maxLength?: number }
+    >;
+    const searchProperties = (search.parameters?.properties ?? {}) as Record<
+      string,
+      { maximum?: number; maxLength?: number }
+    >;
+
+    expect(listProperties.limit?.maximum).toBe(500);
+    expect(listProperties.offset?.maximum).toBe(9_999);
+    expect(searchProperties.limit?.maximum).toBe(50);
+    expect(searchProperties.offset?.maximum).toBe(999);
+    expect(searchProperties.query?.maxLength).toBe(500);
+    expect(search.description).toMatch(/title, alias, content/i);
+    expect(search.description).toMatch(/offset pagination/i);
   });
 
   it("keeps Hermes plugin.yaml provides_tools aligned with the registered catalog", () => {

@@ -63,7 +63,50 @@ test("OpenAPI matches artifact bounds and bounded history response contracts", a
       "#/components/schemas/ArtifactSummary"
     );
     assert.equal(schemas.ArtifactSummary?.additionalProperties, false);
+    assert.equal(schemas.Artifact?.additionalProperties, false);
+    assert.equal(schemas.ArtifactScanFinding?.additionalProperties, false);
+    assert.equal(schemas.ArtifactScanResult?.additionalProperties, false);
+    assert.equal(schemas.ArtifactVersion?.additionalProperties, false);
+    assert.equal(schemas.ArtifactAuditEvent?.additionalProperties, false);
+    assert.equal(schemas.ArtifactVersionPage?.additionalProperties, false);
+    assert.equal(schemas.ArtifactAuditEventPage?.additionalProperties, false);
     assert.equal(schemas.ArtifactSummary?.properties?.scanResults, undefined);
+    assert.equal(schemas.Artifact?.properties?.storagePath, undefined);
+    assert.equal(schemas.Artifact?.required?.includes("storagePath"), false);
+    assert.equal(schemas.Artifact?.properties?.storageKey, undefined);
+    assert.equal(schemas.Artifact?.required?.includes("storageKey"), false);
+    assert.equal(schemas.ArtifactVersion?.properties?.storageKey, undefined);
+    assert.equal(
+      schemas.ArtifactVersion?.required?.includes("storageKey"),
+      false
+    );
+    assert.equal(
+      schemas.ArtifactScanResult?.properties?.extractedTextSample,
+      undefined
+    );
+    assert.equal(
+      schemas.ArtifactScanResult?.properties?.extractedTextAvailable?.enum,
+      undefined
+    );
+    assert.ok(
+      schemas.ArtifactScanResult?.required?.includes("extractedTextAvailable")
+    );
+    assert.deepEqual(
+      schemas.ArtifactVersion?.properties?.scanResults?.required,
+      schemas.ArtifactScanResult?.required
+    );
+    assert.equal(
+      schemas.LifeEventTicketImportInput?.additionalProperties,
+      false
+    );
+    assert.equal(
+      schemas.LifeEventTicketImportInput?.properties?.extractedText,
+      undefined
+    );
+    assert.deepEqual(
+      Object.keys(schemas.LifeEventTicketImportInput?.properties ?? {}).sort(),
+      ["artifactId", "createDraft", "llmProfileId", "useLlm"]
+    );
     const artifactListLimit = document.paths[
       "/api/v1/artifacts"
     ]?.get?.parameters?.find((parameter) => parameter.name === "limit")?.schema;

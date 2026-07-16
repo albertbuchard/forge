@@ -119,7 +119,12 @@ export interface BeliefEntry extends OwnedEntity {
 export interface ModeProfile extends OwnedEntity {
   id: string;
   domainId: string;
-  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  family:
+    | "coping"
+    | "child"
+    | "critic_parent"
+    | "healthy_adult"
+    | "happy_child";
   archetype: string;
   title: string;
   persona: string;
@@ -152,7 +157,12 @@ export interface ModeGuideAnswer {
 }
 
 export interface ModeGuideResult {
-  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  family:
+    | "coping"
+    | "child"
+    | "critic_parent"
+    | "healthy_adult"
+    | "happy_child";
   archetype: string;
   label: string;
   confidence: number;
@@ -233,6 +243,7 @@ export interface TriggerReport extends OwnedEntity {
   customEventType: string;
   eventSituation: string;
   occurredAt: string | null;
+  bodyCues: string[];
   emotions: TriggerEmotion[];
   thoughts: TriggerThought[];
   behaviors: TriggerBehavior[];
@@ -249,8 +260,23 @@ export interface TriggerReport extends OwnedEntity {
   schemaLinks: string[];
   modeTimeline: ModeTimelineEntry[];
   nextMoves: string[];
+  memoryClarity: "unspecified" | "clear" | "partial" | "uncertain";
+  reflection: string;
+  hypothesis: string;
+  hypothesisFit: "not_reviewed" | "fits" | "partly_fits" | "does_not_fit";
+  hypothesisCorrection: string;
+  interpretationConsent: boolean;
+  revision: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TriggerReportPage {
+  reports: TriggerReport[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export interface SchemaPressureEntry {
@@ -310,6 +336,27 @@ export interface PsycheMetricDayRecord {
   total: number | null;
   sampleCount: number;
   latestSampleAt: string | null;
+  sourceRecords: PsycheMetricSourceRecord[];
+}
+
+export type PsycheMetricFamily =
+  | "mood"
+  | "urges"
+  | "selfRegulation"
+  | "conversation"
+  | "other";
+
+export interface PsycheMetricSourceRecord {
+  sourceType: "trigger_report" | "conversation";
+  sourceId: string;
+  label: string;
+  href: string | null;
+  observedAt: string;
+  recordedAt: string;
+  ownerUserId: string | null;
+  ownerDisplayName: string | null;
+  value: number | null;
+  sampleCount: number;
 }
 
 export interface PsycheMetricsViewData {
@@ -323,6 +370,12 @@ export interface PsycheMetricsViewData {
       category: string;
       metricCount: number;
       coverageDays: number;
+    }>;
+    familyAvailability: Array<{
+      family: Exclude<PsycheMetricFamily, "other">;
+      status: "available" | "no_data" | "unsupported";
+      metricCount: number;
+      reason: string;
     }>;
   };
   context: {
@@ -349,13 +402,61 @@ export interface PsycheMetricsViewData {
       lastDailySyncAt: string | null;
       lastSyncedDateKey: string | null;
     };
+    freshness: {
+      status: "current" | "stale" | "partial" | "not_synced" | "not_applicable";
+      lastSuccessfulAt: string | null;
+      lastAttemptAt: string | null;
+      warningCount: number;
+      warnings: string[];
+    };
+    ownerScope: {
+      mode: "unscoped_all_data" | "scoped";
+      effectiveUserIds: string[];
+      availableOwners: Array<{
+        userId: string;
+        displayName: string;
+      }>;
+      filterMode: "all_data" | "server_attribution";
+      serverEnforced: boolean;
+      unattributedRecordCount: number;
+      limitation: string;
+    };
+    sources: Array<{
+      sourceId: string;
+      label: string;
+      kind: "trigger_reports" | "conversation_scanner";
+      recordCount: number;
+      linkedRecordCount: number;
+      href: string | null;
+      ownerAttribution: "attributed" | "unattributed" | "mixed";
+    }>;
+    dataQualityWarnings: string[];
   };
   metrics: Array<{
     metric: string;
     label: string;
+    family: PsycheMetricFamily;
     category: string;
     unit: string;
     aggregation: "discrete" | "cumulative";
+    cadence: "daily" | "event_based";
+    sampleUnit: string;
+    definition: {
+      description: string;
+      calculation: string;
+      interpretation: string;
+      missingness: string;
+    };
+    confidence: {
+      status: "not_estimated";
+      rationale: string;
+    };
+    source: {
+      kind: "trigger_reports" | "conversation_scanner";
+      label: string;
+      href: string | null;
+      ownerAttribution: "attributed" | "unattributed" | "mixed";
+    };
     latestValue: number | null;
     latestDateKey: string | null;
     baselineValue: number | null;
@@ -474,7 +575,12 @@ export interface BeliefEntryInput {
 }
 
 export interface ModeProfileInput {
-  family: "coping" | "child" | "critic_parent" | "healthy_adult" | "happy_child";
+  family:
+    | "coping"
+    | "child"
+    | "critic_parent"
+    | "healthy_adult"
+    | "happy_child";
   archetype: string;
   title: string;
   persona: string;
@@ -518,6 +624,7 @@ export interface TriggerReportInput {
   customEventType: string;
   eventSituation: string;
   occurredAt: string | null;
+  bodyCues: string[];
   emotions: TriggerEmotion[];
   thoughts: TriggerThought[];
   behaviors: TriggerBehavior[];
@@ -534,5 +641,11 @@ export interface TriggerReportInput {
   schemaLinks: string[];
   modeTimeline: ModeTimelineEntry[];
   nextMoves: string[];
+  memoryClarity: "unspecified" | "clear" | "partial" | "uncertain";
+  reflection: string;
+  hypothesis: string;
+  hypothesisFit: "not_reviewed" | "fits" | "partly_fits" | "does_not_fit";
+  hypothesisCorrection: string;
+  interpretationConsent: boolean;
   userId?: string | null;
 }

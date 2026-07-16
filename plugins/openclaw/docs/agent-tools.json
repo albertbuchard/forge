@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-13T20:40:16.765Z",
+  "generatedAt": "2026-07-16T12:30:41.541Z",
   "source": {
     "manifest": "plugins/openclaw/openclaw.plugin.json",
     "onboardingCatalog": "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"
@@ -226,6 +226,32 @@
       "catalogDocumented": true
     },
     {
+      "name": "forge_call_peer_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Peer Status And Query Route",
+      "summary": "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+      "whenToUse": "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+      "inputShape": "{}",
+      "requiredFields": [],
+      "notes": [],
+      "example": "{}",
+      "catalogDocumented": false
+    },
+    {
+      "name": "forge_call_people_route",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge People Route",
+      "summary": "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
+      "whenToUse": "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
+      "inputShape": "{}",
+      "requiredFields": [],
+      "notes": [],
+      "example": "{}",
+      "catalogDocumented": false
+    },
+    {
       "name": "forge_call_wiki_route",
       "groupId": "wiki",
       "groupTitle": "Wiki And Evidence Memory",
@@ -272,26 +298,36 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Clone Questionnaire",
-      "summary": "Clone one Psyche questionnaire instrument into a new user-owned copy.",
-      "whenToUse": "Clone one Psyche questionnaire instrument into a new user-owned copy.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Clone one questionnaire into a separate user-owned instrument.",
+      "whenToUse": "Use only when the user wants a distinct copy rather than an edit to the existing instrument.",
+      "inputShape": "{ questionnaireId: string, userId?: string|null }",
+      "requiredFields": [
+        "questionnaireId"
+      ],
+      "notes": [
+        "Read the source instrument first and confirm why a separate copy is needed.",
+        "userId optionally selects the owner of the clone."
+      ],
+      "example": "{\"questionnaireId\":\"questionnaire_instrument_123\",\"userId\":\"user_operator\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_complete_questionnaire_run",
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Complete Questionnaire Run",
-      "summary": "Complete one questionnaire run and finalize its scoring pass.",
-      "whenToUse": "Complete one questionnaire run and finalize its scoring pass.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Complete and score one questionnaire run.",
+      "whenToUse": "Use after reading the exact run and confirming that the respondent is finished.",
+      "inputShape": "{ runId: string }",
+      "requiredFields": [
+        "runId"
+      ],
+      "notes": [
+        "Completion persists the note-backed self-observation output.",
+        "Do not use completion merely to save partial answers."
+      ],
+      "example": "{\"runId\":\"questionnaire_run_123\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_complete_task_run",
@@ -300,15 +336,19 @@
       "label": "Forge Complete Task Run",
       "summary": "Finish an active run as completed work.",
       "whenToUse": "Use when the user has finished the live work block.",
-      "inputShape": "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, tags?: string[], destroyAt?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
+      "inputShape": "{ taskRunId: string, actor?: string<=160, note?: string<=4000, completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
       "requiredFields": [
         "taskRunId"
       ],
       "notes": [
         "This is the truthful way to finish live work and award completion effects.",
-        "closeoutNote persists a real linked note instead of only updating the transient run note."
+        "completionReport.linkedGitRefIds must all exist in the resulting task gitRefs; caller-supplied valid Git ref IDs are preserved.",
+        "closeoutNote persists a real linked note and may link generic visible Forge entities, including Artifacts.",
+        "Completion atomically stores the report, Git refs, closeout note, run transition, task done state, timebox, rewards, and activity.",
+        "The durable task_run_completed activity binds a canonical SHA-256 closeout fingerprint. Replaying the exact same terminal input succeeds; changed evidence returns 409 task_run_closeout_conflict.",
+        "A completed task returns closeoutState complete only when completionReport.workSummary is nonempty. Missing or empty structured evidence is not fabricated and returns deferred."
       ],
-      "example": "{\"taskRunId\":\"run_123\",\"actor\":\"aurel\",\"note\":\"Finished the review draft\",\"closeoutNote\":{\"contentMarkdown\":\"Completed the draft review and listed the follow-up fixes.\"}}",
+      "example": "{\"taskRunId\":\"run_123\",\"actor\":\"aurel\",\"note\":\"Finished the review draft\",\"completionReport\":{\"workSummary\":\"Completed the draft review and listed the follow-up fixes.\",\"modifiedFiles\":[\"apps/api/src/repositories/task-runs.ts\"],\"linkedGitRefIds\":[\"draft-ref-123\"]},\"gitRefs\":[{\"id\":\"draft-ref-123\",\"refType\":\"commit\",\"provider\":\"github\",\"repository\":\"albertbuchard/forge\",\"refValue\":\"abc123\",\"url\":\"https://github.com/albertbuchard/forge/commit/abc123\"}],\"closeoutNote\":{\"contentMarkdown\":\"Completed the draft review and listed the follow-up fixes.\"}}",
       "catalogDocumented": true
     },
     {
@@ -343,7 +383,7 @@
       "label": "Create Forge Entities",
       "summary": "Create one or more entities in one ordered batch.",
       "whenToUse": "Use after explicit save intent and after duplicate checks when needed. This is the default create path for simple Forge entities; do not spray one-off direct mutation routes when the batch contract already covers the record.",
-      "inputShape": "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, data: object }> }",
+      "inputShape": "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, idempotencyKey?: string, data: object }> }",
       "requiredFields": [
         "operations",
         "operations[].entityType",
@@ -352,7 +392,10 @@
       "notes": [
         "entityType alone is never enough; full data is required.",
         "Batch multiple related creates together when they come from one user ask.",
+        "Use one stable operations[].idempotencyKey for each intended event_type or emotion_definition create and reuse it only for an exact retry. Changed payload reuse conflicts; after hard deletion the key remains terminal and cannot recreate the entry.",
+        "Batch vocabulary create requires base write plus psyche.write when Psyche authentication is enabled; dedicated vocabulary creates require psyche.write.",
         "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }] and Forge will auto-link those notes to the newly created entity.",
+        "Creating a note linked to a Psyche entity requires psyche.note when Psyche authentication is enabled.",
         "The same batch create route also handles calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
         "Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
       ],
@@ -426,6 +469,7 @@
         "Delete defaults to soft.",
         "Use mode=hard only for explicit permanent removal.",
         "Restoration is only possible after soft delete.",
+        "Deleting a Psyche-linked note requires psyche.note when Psyche authentication is enabled.",
         "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
       ],
       "example": "{\"operations\":[{\"entityType\":\"task\",\"id\":\"task_123\",\"mode\":\"soft\",\"reason\":\"Merged into another task\"}]}",
@@ -458,13 +502,18 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Ensure Questionnaire Draft",
-      "summary": "Create or return the editable draft version for one questionnaire instrument.",
-      "whenToUse": "Create or return the editable draft version for one questionnaire instrument.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Create or return the editable draft for one questionnaire.",
+      "whenToUse": "Use after reading the exact instrument when the user wants an editable version-state change.",
+      "inputShape": "{ questionnaireId: string }",
+      "requiredFields": [
+        "questionnaireId"
+      ],
+      "notes": [
+        "This is a lifecycle action, not ordinary questionnaire field CRUD.",
+        "The operation is idempotent for an existing draft."
+      ],
+      "example": "{\"questionnaireId\":\"questionnaire_instrument_123\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_focus_task_run",
@@ -517,13 +566,16 @@
       "groupId": "work",
       "groupTitle": "Work, Tasks, And Time",
       "label": "Forge Current Work",
-      "summary": "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
-      "whenToUse": "Get the current live-work picture: active task runs, focus tasks, the recommended next task, and current XP state.",
-      "inputShape": "{}",
+      "summary": "Read a focused current-work view from the operator context.",
+      "whenToUse": "Use when the user asks what is running, what is in focus, or what work should happen next.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
+      "notes": [
+        "This is a narrower interpretation of the operator context, not a separate write model.",
+        "Read before starting another run when duplicate active work is plausible."
+      ],
       "example": "{}",
-      "catalogDocumented": false
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_doctor",
@@ -564,26 +616,32 @@
       "groupId": "operator",
       "groupTitle": "Operator, UI, And Runtime",
       "label": "Forge Operator Context",
-      "summary": "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
-      "whenToUse": "Read the current operational task board, focus queue, recent task runs, and XP state. Use this for current-work questions and work runtime decisions.",
-      "inputShape": "{}",
+      "summary": "Read the current operational work context.",
+      "whenToUse": "Use before task-run decisions, work adjustments, or questions about current focus, active runs, and the task board.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "This is the read model for task_run and work_adjustment action workflows.",
+        "Pass userIds only when the requested scope differs from the effective agent scope."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_operator_overview",
       "groupId": "operator",
       "groupTitle": "Operator, UI, And Runtime",
       "label": "Forge Operator Overview",
-      "summary": "Start here for most Forge work. Read the compact progressive overview with current priorities, today/yesterday context, health, calendar, psyche signals, note previews, IDs, and drill-down routes before searching or mutating.",
-      "whenToUse": "Start here for most Forge work. Read the compact progressive overview with current priorities, today/yesterday context, health, calendar, psyche signals, note previews, IDs, and drill-down routes before searching or mutating.",
-      "inputShape": "{}",
+      "summary": "Read the compact Forge operator overview.",
+      "whenToUse": "Use as the default first read for broad Forge questions before choosing a narrower entity, action, or domain workflow.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "Pass userIds only when the requested scope differs from the effective agent scope.",
+        "Use the returned ids and drill-down hints instead of guessing a write target."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_preferences_workspace",
@@ -606,65 +664,84 @@
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
       "label": "Forge Psyche Overview",
-      "summary": "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
-      "whenToUse": "Read the aggregate Psyche state across values, patterns, behaviors, beliefs, modes, and trigger reports before making Psyche recommendations or updates.",
-      "inputShape": "{}",
+      "summary": "Read the aggregate Psyche state.",
+      "whenToUse": "Use before cross-record Psyche review, recommendations, or updates when the relevant belief, mode, pattern, value, behavior, or trigger report is not already known.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "Do not substitute the overview for reading an exact existing record before patching it.",
+        "Keep agent interpretations tentative and separate from the user's accepted wording."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_psyche_schema_catalog",
       "groupId": "other",
       "groupTitle": "Other Forge Tools",
       "label": "Forge Psyche Schema Catalog",
-      "summary": "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
-      "whenToUse": "Read the read-only Psyche schema catalog before linking a belief_entry to schemaId or discussing a schema theme. Schema catalog entries are reference concepts, not user-owned belief records.",
+      "summary": "Read the reference-only Psyche schema catalog.",
+      "whenToUse": "Use before linking a belief entry to a schema or discussing schema concepts by id.",
       "inputShape": "{}",
       "requiredFields": [],
-      "notes": [],
+      "notes": [
+        "Schema catalog entries are reference concepts, not user-owned belief records.",
+        "Do not create or update catalog entries through normal entity CRUD."
+      ],
       "example": "{}",
-      "catalogDocumented": false
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_questionnaire",
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Get Questionnaire",
-      "summary": "Read one Psyche questionnaire instrument with versions and scoring detail.",
-      "whenToUse": "Read one Psyche questionnaire instrument with versions and scoring detail.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Read one questionnaire instrument and its versions.",
+      "whenToUse": "Use before changing lifecycle state, publishing a draft, or asking the user to reconstruct an existing instrument.",
+      "inputShape": "{ questionnaireId: string, userIds?: string[] }",
+      "requiredFields": [
+        "questionnaireId"
+      ],
+      "notes": [
+        "Read the exact instrument and current draft before publish confirmation.",
+        "questionnaireId identifies the instrument, not a questionnaire run."
+      ],
+      "example": "{\"questionnaireId\":\"questionnaire_instrument_123\",\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_questionnaire_run",
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Get Questionnaire Run",
-      "summary": "Read one questionnaire run with answers, scores, and completion state.",
-      "whenToUse": "Read one questionnaire run with answers, scores, and completion state.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Read one questionnaire run with answers and scoring context.",
+      "whenToUse": "Use before continuing, reviewing, updating, or completing an existing run.",
+      "inputShape": "{ runId: string, userIds?: string[] }",
+      "requiredFields": [
+        "runId"
+      ],
+      "notes": [
+        "Preserve accepted answers and progress; ask only for missing or corrected answers.",
+        "runId identifies the answer session, not the instrument."
+      ],
+      "example": "{\"runId\":\"questionnaire_run_123\",\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_self_observation_calendar",
       "groupId": "calendar",
       "groupTitle": "Calendar And Timeboxes",
       "label": "Forge Self Observation Calendar",
-      "summary": "Read the Psyche self-observation calendar with note-backed observations, linked patterns, linked reports, and available tags.",
-      "whenToUse": "Read the Psyche self-observation calendar with note-backed observations, linked patterns, linked reports, and available tags.",
-      "inputShape": "{}",
+      "summary": "Read note-backed self-observations over a bounded interval.",
+      "whenToUse": "Use before reviewing observations or updating an exact observed note.",
+      "inputShape": "{ userIds?: string[], from?: string, to?: string }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "Write self-observation through note batch CRUD with frontmatter.observedAt; do not invent a standalone self_observation mutation route.",
+        "Use from and to to keep the review interval bounded."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"],\"from\":\"2026-07-01T00:00:00.000Z\",\"to\":\"2026-07-07T23:59:59.999Z\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_sleep_overview",
@@ -700,6 +777,23 @@
       "catalogDocumented": true
     },
     {
+      "name": "forge_get_today_priority",
+      "groupId": "other",
+      "groupTitle": "Other Forge Tools",
+      "label": "Forge Today Priority",
+      "summary": "Read Forge's canonical decision about the next useful work.",
+      "whenToUse": "Use when the user asks what to do next, whether to continue active work, or whether current capacity and task timeboxes make a new start unsafe.",
+      "inputShape": "{ userIds?: string[], timeZone?: string, candidateLimit?: number }",
+      "requiredFields": [],
+      "notes": [
+        "The response distinguishes ready, continue-active, unresolved-active, overloaded, capacity-limited, and no-work states.",
+        "Schedule evidence comes from Forge task timeboxes. Read the calendar overview separately when meetings or other calendar events matter to the decision.",
+        "Use one selected user when Life Force capacity should affect the ranking."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"],\"timeZone\":\"Europe/Zurich\",\"candidateLimit\":24}",
+      "catalogDocumented": true
+    },
+    {
       "name": "forge_get_training_load_overview",
       "groupId": "health",
       "groupTitle": "Health, Food, And Training",
@@ -721,13 +815,15 @@
       "groupId": "operator",
       "groupTitle": "Operator, UI, And Runtime",
       "label": "Forge UI Entrypoint",
-      "summary": "Get the live Forge web UI URL and plugin redirect route. Use this only when visual review or editing is genuinely easier, not as a substitute for normal batch entity creation or updates.",
-      "whenToUse": "Get the live Forge web UI URL and plugin redirect route. Use this only when visual review or editing is genuinely easier, not as a substitute for normal batch entity creation or updates.",
+      "summary": "Get the live Forge web UI entrypoint.",
+      "whenToUse": "Use only when visual review or editing is genuinely easier than completing the operation through agent tools.",
       "inputShape": "{}",
       "requiredFields": [],
-      "notes": [],
+      "notes": [
+        "Do not use the UI as a fallback for normal entity batch CRUD or a known action tool."
+      ],
       "example": "{}",
-      "catalogDocumented": false
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_user_directory",
@@ -750,13 +846,16 @@
       "groupId": "operator",
       "groupTitle": "Operator, UI, And Runtime",
       "label": "Forge Weekly Review",
-      "summary": "Read the current weekly review payload with wins, trends, and reward framing.",
-      "whenToUse": "Read the current weekly review payload with wins, trends, and reward framing.",
-      "inputShape": "{}",
+      "summary": "Read the current weekly review.",
+      "whenToUse": "Use when the user wants a weekly reflection, trend review, wins, or reward framing.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
+      "notes": [
+        "Ask what decision or reflection the review should support before proposing new records.",
+        "Pass userIds only when the requested scope differs from the effective agent scope."
+      ],
       "example": "{}",
-      "catalogDocumented": false
+      "catalogDocumented": true
     },
     {
       "name": "forge_get_weight_loss_overview",
@@ -831,13 +930,15 @@
       "groupId": "operator",
       "groupTitle": "Operator, UI, And Runtime",
       "label": "Forge XP Metrics",
-      "summary": "Read the live XP, level, streak, momentum, and reward metrics.",
-      "whenToUse": "Read the live XP, level, streak, momentum, and reward metrics.",
+      "summary": "Read current XP, level, streak, momentum, and rewards.",
+      "whenToUse": "Use for a focused reward or progress read when the broader operator overview is unnecessary.",
       "inputShape": "{}",
       "requiredFields": [],
-      "notes": [],
+      "notes": [
+        "This is a read-only metrics tool."
+      ],
       "example": "{}",
-      "catalogDocumented": false
+      "catalogDocumented": true
     },
     {
       "name": "forge_grant_reward_bonus",
@@ -855,9 +956,10 @@
       ],
       "notes": [
         "Requires rewards.manage and write scopes.",
-        "Use this for explicit operator judgement, not as a substitute for normal task_run or habit check-in rewards."
+        "Use this for explicit operator judgement, not as a substitute for normal task_run or habit check-in rewards.",
+        "metadata.manual, metadata.qualifiesForStreak, and metadata.idempotencyFingerprint are server-owned and must not be sent. Use metadata.idempotencyKey for retry-safe requests."
       ],
-      "example": "{\"entityType\":\"habit\",\"entityId\":\"habit_morning_training\",\"deltaXp\":18,\"reasonTitle\":\"Operator bonus\",\"reasonSummary\":\"Stayed with the habit through unusual travel friction.\",\"metadata\":{\"manual\":true,\"source\":\"agent\"}}",
+      "example": "{\"entityType\":\"habit\",\"entityId\":\"habit_morning_training\",\"deltaXp\":18,\"reasonTitle\":\"Operator bonus\",\"reasonSummary\":\"Stayed with the habit through unusual travel friction.\",\"metadata\":{\"idempotencyKey\":\"travel-friction-2026-07-16\",\"source\":\"agent\"}}",
       "catalogDocumented": true
     },
     {
@@ -902,13 +1004,16 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge List Questionnaires",
-      "summary": "List the Psyche questionnaire library across the selected user scope.",
-      "whenToUse": "List the Psyche questionnaire library across the selected user scope.",
-      "inputShape": "{}",
+      "summary": "List the Psyche questionnaire library.",
+      "whenToUse": "Use to identify an instrument before review, clone, draft, publish, or run work.",
+      "inputShape": "{ userIds?: string[] }",
       "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "notes": [
+        "Use shared batch CRUD for ordinary questionnaire_instrument create, update, immediate delete, and search. Deletion is not restorable.",
+        "This dedicated read exposes instrument version and lifecycle state."
+      ],
+      "example": "{\"userIds\":[\"user_operator\"]}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_list_wiki_pages",
@@ -917,13 +1022,14 @@
       "label": "Forge List Wiki Pages",
       "summary": "List wiki and evidence pages inside one space.",
       "whenToUse": "Use when browsing a space catalog, choosing a page to open, or building a crawl plan without ranking search results yet.",
-      "inputShape": "{ spaceId?: string, kind?: \"wiki\"|\"evidence\", limit?: integer }",
+      "inputShape": "{ spaceId?: string, kind?: \"wiki\"|\"evidence\", limit?: integer, offset?: integer }",
       "requiredFields": [],
       "notes": [
-        "This returns the explicit page catalog, not a search-ranked result list.",
-        "Use forge_search_wiki when recall or ranking matters."
+        "This returns compact page summaries plus limit, offset, hasMore, and nextOffset; fetch full content with forge_get_wiki_page.",
+        "Use forge_search_wiki when recall or ranking matters.",
+        "Offsets are bounded from 0 through 9999; nextOffset is null at the 10000-row terminal window."
       ],
-      "example": "{\"spaceId\":\"wiki_space_shared\",\"kind\":\"wiki\",\"limit\":100}",
+      "example": "{\"spaceId\":\"wiki_space_shared\",\"kind\":\"wiki\",\"limit\":50,\"offset\":0}",
       "catalogDocumented": true
     },
     {
@@ -1026,7 +1132,7 @@
       "label": "Forge Log Work",
       "summary": "Log work that already happened.",
       "whenToUse": "Use for completion-style retroactive work, not for starting a live session or adjusting minutes on an existing record.",
-      "inputShape": "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[], closeoutNote?: { contentMarkdown: string, author?: string|null, tags?: string[], destroyAt?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
+      "inputShape": "{ taskId?: string, title?: string, description?: string, summary?: string<=8000, goalId?: string|null, projectId?: string|null, owner?: string, userId?: string|null, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[<=64], completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
       "requiredFields": [
         "taskId or title"
       ],
@@ -1034,9 +1140,11 @@
         "Use taskId when logging work against an existing task.",
         "Use title when a new completed work item should be created and logged.",
         "Use forge_adjust_work_minutes for signed minute corrections on existing tasks or projects.",
-        "closeoutNote persists the work summary as a real linked note."
+        "completionReport.linkedGitRefIds must all exist in the resulting gitRefs; caller-supplied valid Git ref IDs are preserved.",
+        "closeoutNote persists a real linked note and may link generic visible Forge entities, including Artifacts.",
+        "The task, completion report, Git refs, closeout note, rewards, and activity are committed atomically. A done task reports closeoutState complete only when completionReport.workSummary is nonempty; otherwise it reports deferred."
       ],
-      "example": "{\"taskId\":\"task_123\",\"summary\":\"Finished the review draft and cleaned the notes.\",\"points\":40,\"closeoutNote\":{\"contentMarkdown\":\"Finished the review draft, cleaned the note structure, and left one follow-up for QA.\"}}",
+      "example": "{\"taskId\":\"task_123\",\"summary\":\"Finished the review draft and cleaned the notes.\",\"points\":40,\"completionReport\":{\"workSummary\":\"Finished the review draft and cleaned the note structure.\",\"modifiedFiles\":[\"apps/api/src/app.ts\"],\"linkedGitRefIds\":[\"draft-ref-123\"]},\"gitRefs\":[{\"id\":\"draft-ref-123\",\"refType\":\"commit\",\"provider\":\"github\",\"repository\":\"albertbuchard/forge\",\"refValue\":\"abc123\",\"url\":\"https://github.com/albertbuchard/forge/commit/abc123\"}],\"closeoutNote\":{\"contentMarkdown\":\"Finished the review draft and left one follow-up for QA.\"}}",
       "catalogDocumented": true
     },
     {
@@ -1121,13 +1229,18 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Publish Questionnaire Draft",
-      "summary": "Publish the current questionnaire draft as the live readable version.",
-      "whenToUse": "Publish the current questionnaire draft as the live readable version.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Publish the current questionnaire draft.",
+      "whenToUse": "Use only after reading the current draft, summarizing material changes, and receiving explicit publish confirmation.",
+      "inputShape": "{ questionnaireId: string, label?: string }",
+      "requiredFields": [
+        "questionnaireId"
+      ],
+      "notes": [
+        "label is optional and names the published version.",
+        "Do not treat ordinary batch update intent as publish consent."
+      ],
+      "example": "{\"questionnaireId\":\"questionnaire_instrument_123\",\"label\":\"2026 review\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_recommend_task_timeboxes",
@@ -1176,7 +1289,8 @@
       ],
       "notes": [
         "Use this instead of faking a stop by only changing task status.",
-        "closeoutNote is useful for documenting blockers or handoff context."
+        "closeoutNote is useful for documenting blockers or handoff context.",
+        "Release accepts only actor, note, and closeoutNote. It never accepts completionReport or gitRefs and does not complete the task."
       ],
       "example": "{\"taskRunId\":\"run_123\",\"actor\":\"aurel\",\"note\":\"Stopping for now; blocked on feedback\",\"closeoutNote\":{\"contentMarkdown\":\"Blocked on feedback from design before I can continue.\"}}",
       "catalogDocumented": true
@@ -1195,7 +1309,8 @@
         "operations[].id"
       ],
       "notes": [
-        "Restore only works for soft-deleted entities."
+        "Restore only works for soft-deleted entities.",
+        "Restoring a Psyche-linked note requires psyche.note when Psyche authentication is enabled."
       ],
       "example": "{\"operations\":[{\"entityType\":\"goal\",\"id\":\"goal_123\",\"clientRef\":\"goal-restore-1\"}]}",
       "catalogDocumented": true
@@ -1207,13 +1322,16 @@
       "label": "Search Forge Entities",
       "summary": "Search Forge entities before create or update.",
       "whenToUse": "Use when duplicate risk exists or when you need ids before mutating.",
-      "inputShape": "{ searches: Array<{ entityTypes?: CrudEntityType[], query?: string, ids?: string[], status?: string[], linkedTo?: { entityType, id }, includeDeleted?: boolean, limit?: number, clientRef?: string }> }",
+      "inputShape": "{ searches: Array<{ entityTypes?: CrudEntityType[], query?: string, ids?: string[], status?: string[], userIds?: string[], linkedTo?: { entityType, id }, includeDeleted?: boolean, limit?: number, clientRef?: string }> }",
       "requiredFields": [
         "searches"
       ],
       "notes": [
         "searches is always an array, even for a single search.",
-        "linkedTo is useful when looking for items under one parent entity."
+        "linkedTo is useful when looking for items under one parent entity.",
+        "For event_type and emotion_definition, searches[].userIds selects the effective custom-vocabulary owner scope; built-ins remain visible.",
+        "Batch vocabulary search requires base read or write plus psyche.read when Psyche authentication is enabled; dedicated vocabulary reads require psyche.read.",
+        "Note search is indexed and owner/Wiki scoped. When Psyche authentication is enabled, Psyche-linked notes are returned only with psyche.read."
       ],
       "example": "{\"searches\":[{\"entityTypes\":[\"goal\"],\"query\":\"Create meaningfully\",\"limit\":10,\"clientRef\":\"goal-search-1\"}]}",
       "catalogDocumented": true
@@ -1263,13 +1381,15 @@
       "label": "Forge Search Wiki",
       "summary": "Search the wiki with text, entity, semantic, or hybrid retrieval.",
       "whenToUse": "Use when the agent needs recall across the explicit wiki memory surface instead of only structured entities.",
-      "inputShape": "{ spaceId?: string, kind?: \"wiki\"|\"evidence\", mode?: \"text\"|\"semantic\"|\"entity\"|\"hybrid\", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer }",
+      "inputShape": "{ spaceId?: string, kind?: \"wiki\"|\"evidence\", mode?: \"text\"|\"semantic\"|\"entity\"|\"hybrid\", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer, offset?: integer }",
       "requiredFields": [],
       "notes": [
-        "Hybrid search combines exact slug or title matches, FTS, entity links, and optional embeddings.",
-        "If no embedding profile is configured, semantic and hybrid fall back to non-vector signals."
+        "Exact titles rank above exact aliases and slugs, followed by title fragments, weighted full-text content, entity links, and optional embeddings.",
+        "Results include compact page summaries, matchKind, snippet, limit, offset, hasMore, nextOffset, and warnings.",
+        "Hybrid search falls back to text ranking with a warning when semantic ranking is unavailable; semantic-only failures remain errors.",
+        "Queries are limited to 500 characters and the first 20 FTS tokens; offsets are bounded from 0 through 999."
       ],
-      "example": "{\"spaceId\":\"wiki_space_shared\",\"mode\":\"hybrid\",\"query\":\"landing page inspiration\",\"limit\":12}",
+      "example": "{\"spaceId\":\"wiki_space_shared\",\"mode\":\"hybrid\",\"query\":\"landing page inspiration\",\"limit\":20,\"offset\":0}",
       "catalogDocumented": true
     },
     {
@@ -1317,13 +1437,19 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Start Questionnaire Run",
-      "summary": "Start one questionnaire answer session for a specific user.",
-      "whenToUse": "Start one questionnaire answer session for a specific user.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Start one answer run for a questionnaire and user.",
+      "whenToUse": "Use when the exact instrument and respondent are known and the user wants to begin a run.",
+      "inputShape": "{ questionnaireId: string, userId: string, versionId?: string|null }",
+      "requiredFields": [
+        "questionnaireId",
+        "userId"
+      ],
+      "notes": [
+        "versionId is optional; omit it to use the instrument's current runnable version.",
+        "Do not create questionnaire_run through shared batch CRUD."
+      ],
+      "example": "{\"questionnaireId\":\"questionnaire_instrument_123\",\"userId\":\"user_operator\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_start_task_run",
@@ -1398,13 +1524,18 @@
       "groupId": "calendar",
       "groupTitle": "Calendar And Timeboxes",
       "label": "Forge Sync Calendar Connection",
-      "summary": "Pull and push changes for one connected calendar provider.",
-      "whenToUse": "Pull and push changes for one connected calendar provider.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Synchronize one existing calendar connection.",
+      "whenToUse": "Use after reading the exact connection when the user wants Forge to pull and push the provider's current changes.",
+      "inputShape": "{ connectionId: string }",
+      "requiredFields": [
+        "connectionId"
+      ],
+      "notes": [
+        "Use the dedicated calendar connection lifecycle, not shared batch CRUD.",
+        "Read the returned sync result before claiming that remote projection succeeded."
+      ],
+      "example": "{\"connectionId\":\"calendar_connection_123\"}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_sync_wiki_vault",
@@ -1440,6 +1571,7 @@
         "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
         "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
         "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
+        "Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note when Psyche authentication is enabled.",
         "Use this same route to move or relink calendar_event records, edit work_block_template, task_timebox, sleep_session, or workout_session records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
       ],
       "example": "{\"operations\":[{\"entityType\":\"project\",\"id\":\"project_123\",\"patch\":{\"status\":\"completed\"},\"clientRef\":\"project-finish-1\"}]}",
@@ -1493,13 +1625,18 @@
       "groupId": "questionnaires",
       "groupTitle": "Questionnaires And Self-Observation",
       "label": "Forge Update Questionnaire Run",
-      "summary": "Patch one questionnaire run while the answers are still being filled.",
-      "whenToUse": "Patch one questionnaire run while the answers are still being filled.",
-      "inputShape": "{}",
-      "requiredFields": [],
-      "notes": [],
-      "example": "{}",
-      "catalogDocumented": false
+      "summary": "Save answers or progress on one in-progress questionnaire run.",
+      "whenToUse": "Use after reading the run when the user supplies new answers, corrections, or progress.",
+      "inputShape": "{ runId: string, answers?: object[], progressIndex?: integer|null }",
+      "requiredFields": [
+        "runId"
+      ],
+      "notes": [
+        "Send only the answer or progress changes that are newly true.",
+        "Do not complete the run unless the user has finished and wants completion."
+      ],
+      "example": "{\"runId\":\"questionnaire_run_123\",\"answers\":[{\"itemId\":\"item_1\",\"value\":3}],\"progressIndex\":1}",
+      "catalogDocumented": true
     },
     {
       "name": "forge_update_sleep_session",

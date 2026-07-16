@@ -65,6 +65,14 @@ vi.mock("@/pages/preferences-page", () => ({
   PreferencesPage: () => <div>Preferences route</div>
 }));
 
+vi.mock("@/pages/people-page", () => ({
+  PeoplePage: () => <div>People route</div>
+}));
+
+vi.mock("@/pages/person-detail-page", () => ({
+  PersonDetailPage: () => <div>Person detail route</div>
+}));
+
 vi.mock("@/pages/kanban-page", () => ({
   KanbanPage: () => <div>Kanban route</div>
 }));
@@ -218,6 +226,19 @@ describe("App routing", () => {
 
     expect(await screen.findByText("Forge shell")).toBeInTheDocument();
     expect(await screen.findByText("Preferences route")).toBeInTheDocument();
+  });
+
+  it("renders People collection and detail routes inside the shell", async () => {
+    renderApp("/people");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("People route")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/people/person_1");
+
+    expect(await screen.findByText("Forge shell")).toBeInTheDocument();
+    expect(await screen.findByText("Person detail route")).toBeInTheDocument();
   });
 
   it("renders psyche hub and detail routes inside the shell", async () => {

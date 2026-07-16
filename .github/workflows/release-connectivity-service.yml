@@ -1,0 +1,305 @@
+name: Release Forge Connectivity Service
+
+on:
+  push:
+    tags:
+      - "connectivity-v*"
+
+concurrency:
+  group: release-connectivity-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/forge-connectivity-service
+
+jobs:
+  people-release-gate:
+    name: Canonical People release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/people-sharing-release-gate.yml
+    with:
+      release: true
+      source_sha: ${{ github.sha }}
+    secrets:
+      FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY: ${{ secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY }}
+
+  release:
+    needs: people-release-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Verify admitted source commit
+        env:
+          VALIDATED_SHA: ${{ needs.people-release-gate.outputs.validated_sha }}
+        run: test "${VALIDATED_SHA}" = "${GITHUB_SHA}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag points at main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "Release tags must point to a commit on origin/main." >&2
+            exit 1
+          }
+
+      - name: Resolve and verify release version
+        id: release_meta
+        working-directory: packages/forge-connectivity-service
+        run: |
+          RELEASE_VERSION="${GITHUB_REF_NAME#connectivity-v}"
+          if ! printf '%s' "${RELEASE_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Unsupported connectivity release tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "${PACKAGE_VERSION}" != "${RELEASE_VERSION}" ]; then
+            echo "Package version ${PACKAGE_VERSION} does not match tag ${RELEASE_VERSION}." >&2
+            exit 1
+          fi
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "source_date_epoch=$(git show -s --format=%ct "${GITHUB_SHA}")" >> "${GITHUB_OUTPUT}"
+          echo "build_date=$(git show -s --format=%cI "${GITHUB_SHA}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24.18.0"
+          cache: npm
+          cache-dependency-path: packages/forge-connectivity-service/package-lock.json
+
+      - name: Set up Safe Chain
+        run: ./scripts/ci/setup-safe-chain-ci.sh
+
+      - name: Use the package-pinned npm release
+        run: npm install --global npm@11.12.1
+
+      - name: Install dependencies without lifecycle scripts
+        working-directory: packages/forge-connectivity-service
+        run: npm ci --ignore-scripts
+
+      - name: Run independent service release gate
+        working-directory: packages/forge-connectivity-service
+        run: |
+          npm run verify
+          npm run audit
+
+      - name: Build package, source archive, and SBOM
+        env:
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ steps.release_meta.outputs.source_date_epoch }}
+        run: |
+          mkdir -p release
+          npm pack ./packages/forge-connectivity-service \
+            --pack-destination "$PWD/release"
+          tar -xOf \
+            "release/forge-connectivity-service-${RELEASE_VERSION}.tgz" \
+            package/package.json \
+            | node -e '
+                let input = "";
+                process.stdin.setEncoding("utf8");
+                process.stdin.on("data", (chunk) => (input += chunk));
+                process.stdin.on("end", () => {
+                  const manifest = JSON.parse(input);
+                  if (
+                    manifest.name !== "forge-connectivity-service" ||
+                    manifest.version !== process.env.RELEASE_VERSION
+                  ) {
+                    throw new Error(
+                      `Packed ${manifest.name}@${manifest.version}; expected forge-connectivity-service@${process.env.RELEASE_VERSION}`
+                    );
+                  }
+                });
+              '
+          git archive \
+            --format=tar \
+            --prefix="forge-connectivity-service-${RELEASE_VERSION}/" \
+            "$GITHUB_SHA" \
+            packages/forge-connectivity-service \
+            | gzip -n > "release/forge-connectivity-service-${RELEASE_VERSION}-source.tar.gz"
+          npm --prefix packages/forge-connectivity-service run --silent sbom \
+            > "release/forge-connectivity-service-${RELEASE_VERSION}.cdx.json"
+
+      - name: Smoke-test the packed package and process lifecycle
+        env:
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          SMOKE_ROOT="$(mktemp -d)"
+          SERVICE_PID=""
+          cleanup() {
+            if [ -n "${SERVICE_PID}" ] && kill -0 "${SERVICE_PID}" 2>/dev/null; then
+              kill -TERM "${SERVICE_PID}"
+              wait "${SERVICE_PID}" || true
+            fi
+            rm -rf "${SMOKE_ROOT}"
+          }
+          trap cleanup EXIT
+
+          npm install \
+            --ignore-scripts \
+            --prefix "${SMOKE_ROOT}/install" \
+            "$PWD/release/forge-connectivity-service-${RELEASE_VERSION}.tgz"
+          node --input-type=module -e \
+            "await import('${SMOKE_ROOT}/install/node_modules/forge-connectivity-service/dist/index.js')"
+          PORT="$(node -e "const n=require('node:net');const s=n.createServer();s.listen(0,'127.0.0.1',()=>{process.stdout.write(String(s.address().port));s.close()})")"
+          FORGE_CONNECTIVITY_HOST=127.0.0.1 \
+          FORGE_CONNECTIVITY_PORT="${PORT}" \
+          FORGE_CONNECTIVITY_DATABASE_PATH="${SMOKE_ROOT}/data/connectivity.sqlite" \
+            "${SMOKE_ROOT}/install/node_modules/.bin/forge-connectivity-service" \
+            > "${SMOKE_ROOT}/service.log" 2>&1 &
+          SERVICE_PID=$!
+          for attempt in $(seq 1 50); do
+            if FORGE_CONNECTIVITY_PORT="${PORT}" \
+              node "${SMOKE_ROOT}/install/node_modules/forge-connectivity-service/scripts/healthcheck.mjs"; then
+              break
+            fi
+            if ! kill -0 "${SERVICE_PID}" 2>/dev/null; then
+              cat "${SMOKE_ROOT}/service.log" >&2
+              exit 1
+            fi
+            if [ "${attempt}" -eq 50 ]; then
+              cat "${SMOKE_ROOT}/service.log" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+          kill -TERM "${SERVICE_PID}"
+          wait "${SERVICE_PID}"
+          SERVICE_PID=""
+
+      - name: Generate release checksums
+        working-directory: release
+        run: sha256sum *.tgz *.tar.gz *.cdx.json > SHA256SUMS
+
+      - name: Attest package and source provenance
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release/SHA256SUMS
+
+      - name: Attest package SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: release/forge-connectivity-service-${{ steps.release_meta.outputs.version }}.tgz
+          sbom-path: release/forge-connectivity-service-${{ steps.release_meta.outputs.version }}.cdx.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign release files with keyless Sigstore certificates
+        env:
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release-connectivity-service.yml@${{ github.ref }}
+        run: |
+          for artifact in \
+            release/forge-connectivity-service-${{ steps.release_meta.outputs.version }}.tgz \
+            release/forge-connectivity-service-${{ steps.release_meta.outputs.version }}-source.tar.gz \
+            release/forge-connectivity-service-${{ steps.release_meta.outputs.version }}.cdx.json \
+            release/SHA256SUMS; do
+            cosign sign-blob --yes --bundle "${artifact}.sigstore.json" "${artifact}"
+            cosign verify-blob \
+              --bundle "${artifact}.sigstore.json" \
+              --certificate-identity "${CERTIFICATE_IDENTITY}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${artifact}"
+          done
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute container metadata
+        id: container_meta
+        uses: docker/metadata-action@v6.2.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.release_meta.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.release_meta.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.release_meta.outputs.version }}
+          flavor: latest=auto
+
+      - name: Build and publish multi-architecture image
+        id: image
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: packages/forge-connectivity-service
+          file: packages/forge-connectivity-service/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.container_meta.outputs.tags }}
+          labels: ${{ steps.container_meta.outputs.labels }}
+          annotations: ${{ steps.container_meta.outputs.annotations }}
+          build-args: |
+            SERVICE_VERSION=${{ steps.release_meta.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.release_meta.outputs.build_date }}
+          cache-from: type=gha,scope=forge-connectivity-service
+          cache-to: type=gha,mode=max,scope=forge-connectivity-service
+          provenance: mode=max
+          sbom: true
+
+      - name: Sign and verify the published image
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}@${{ steps.image.outputs.digest }}
+          CERTIFICATE_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release-connectivity-service.yml@${{ github.ref }}
+        run: |
+          cosign sign --yes "${IMAGE}"
+          cosign verify \
+            --certificate-identity "${CERTIFICATE_IDENTITY}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE}"
+
+      - name: Attest the published image
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          cat > release/RELEASE_NOTES.md <<EOF
+          Forge Connectivity Service ${RELEASE_VERSION}
+
+          Content-blind reference mailbox for independently operated Forge peers.
+
+          Container: ${IMAGE_NAME}@${IMAGE_DIGEST}
+
+          Verify release files with SHA256SUMS, the attached Sigstore bundles, and GitHub artifact attestations. The npm-compatible tarball is attached directly; no npm registry is required to install it.
+          EOF
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "Forge Connectivity Service ${RELEASE_VERSION}" \
+            --notes-file release/RELEASE_NOTES.md \
+            release/forge-connectivity-service-*.tgz \
+            release/forge-connectivity-service-*-source.tar.gz \
+            release/forge-connectivity-service-*.cdx.json \
+            release/*.sigstore.json \
+            release/SHA256SUMS

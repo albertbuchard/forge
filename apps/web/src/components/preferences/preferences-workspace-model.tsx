@@ -1,7 +1,13 @@
 import {
+  Ban,
+  Bookmark,
+  Clock3,
   Compass,
+  Heart,
   History,
   Map,
+  MinusCircle,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   TableProperties
@@ -67,6 +73,24 @@ export const DOMAIN_OPTIONS: Array<{
     label: "Habits",
     description: "Recurring behaviors and routines from Forge.",
     mode: "forge"
+  },
+  {
+    value: "calendar",
+    label: "Calendar",
+    description: "Events, time commitments, and scheduling preferences.",
+    mode: "concept"
+  },
+  {
+    value: "sleep",
+    label: "Sleep",
+    description: "Sleep routines, conditions, and recovery preferences.",
+    mode: "concept"
+  },
+  {
+    value: "sports",
+    label: "Sports",
+    description: "Training types, settings, and workout preferences.",
+    mode: "concept"
   },
   {
     value: "activities",
@@ -160,23 +184,161 @@ export const STATUS_CLASSES: Record<PreferenceItemStatus, string> = {
 export const SIGNAL_OPTIONS: Array<{
   signalType: PreferenceSignalType;
   label: string;
+  icon: typeof Heart;
+  modelWeight: number;
 }> = [
-  { signalType: "favorite", label: "Favorite" },
-  { signalType: "must_have", label: "Must-have" },
-  { signalType: "bookmark", label: "Bookmark" },
-  { signalType: "compare_later", label: "Later" },
-  { signalType: "neutral", label: "Neutral" },
-  { signalType: "veto", label: "Veto" }
+  {
+    signalType: "favorite",
+    label: "Favorite",
+    icon: Heart,
+    modelWeight: 1.25
+  },
+  {
+    signalType: "must_have",
+    label: "Must-have",
+    icon: ShieldCheck,
+    modelWeight: 1.5
+  },
+  {
+    signalType: "bookmark",
+    label: "Bookmark",
+    icon: Bookmark,
+    modelWeight: 0.35
+  },
+  {
+    signalType: "compare_later",
+    label: "Later",
+    icon: Clock3,
+    modelWeight: 0.2
+  },
+  {
+    signalType: "neutral",
+    label: "Clear effect",
+    icon: MinusCircle,
+    modelWeight: 0
+  },
+  { signalType: "veto", label: "Veto", icon: Ban, modelWeight: -1.6 }
 ];
 
 export const SIGNAL_MODEL_EFFECTS: Record<PreferenceSignalType, string> = {
-  favorite: "Strong positive evidence; inferred status becomes favorite.",
-  must_have: "Strongest positive evidence; inferred status becomes must-have.",
-  bookmark: "Light positive evidence and a bookmarked inferred status.",
-  compare_later: "Light positive evidence and priority for another comparison.",
-  neutral: "Zero score weight; records an explicit neutral observation.",
-  veto: "Strong negative evidence; inferred status becomes vetoed."
+  favorite:
+    "+1.25 raw weight at strength 1; status becomes favorite before any manual override.",
+  must_have:
+    "+1.50 raw weight at strength 1; status becomes must-have before any manual override.",
+  bookmark:
+    "+0.35 raw weight at strength 1; status becomes bookmarked and remains reviewable.",
+  compare_later:
+    "+0.20 raw weight at strength 1; queues another comparison without a hard like or dislike.",
+  neutral:
+    "Clears the current direct effect. Earlier signals remain in history, while the score, status, evidence count, and confidence return to the remaining evidence.",
+  veto: "-1.60 raw weight at strength 1; status becomes vetoed before any manual override."
 };
+
+export function getPreferenceContextScope(
+  context: PreferenceWorkspacePayload["selectedContext"]
+) {
+  const sharing =
+    context.shareMode === "shared"
+      ? "All active contexts contribute at full weight."
+      : context.shareMode === "blended"
+        ? "This context contributes at full weight; other active contexts contribute at 45%."
+        : "Only evidence recorded in this context contributes.";
+  return `${sharing} Evidence then decays over ${context.decayDays} days.`;
+}
+
+export function getPreferenceSignalHistory(
+  workspace: PreferenceWorkspacePayload,
+  itemId: string
+) {
+  return workspace.history.signals.filter((signal) => signal.itemId === itemId);
+}
+
+export function getPreferenceEffectiveSignal(
+  workspace: PreferenceWorkspacePayload,
+  itemId: string
+) {
+  const score = workspace.scores.find((entry) => entry.itemId === itemId);
+  if (score) {
+    return score.effectiveSignal;
+  }
+  return getPreferenceSignalHistory(workspace, itemId)[0] ?? null;
+}
+
+export function isPreferenceHistoryPartial(
+  workspace: PreferenceWorkspacePayload
+) {
+  const signalIds = new Set(
+    workspace.history.signals.map((signal) => signal.id)
+  );
+  const effectiveSignalOutsideHistory = workspace.scores.some(
+    (score) => score.effectiveSignal && !signalIds.has(score.effectiveSignal.id)
+  );
+  const selectedContextCoverage = workspace.evidenceCoverage.contexts.find(
+    (coverage) => coverage.contextId === workspace.selectedContext.id
+  );
+  const judgmentsOutsideHistory =
+    (selectedContextCoverage?.totalJudgments ?? 0) >
+    workspace.history.judgments.length;
+  const historyLimitReached =
+    workspace.history.judgments.length >= workspace.presentation.historyLimit ||
+    workspace.history.signals.length >= workspace.presentation.historyLimit;
+  return (
+    effectiveSignalOutsideHistory ||
+    judgmentsOutsideHistory ||
+    historyLimitReached
+  );
+}
+
+export function getPreferenceSignalConflicts(
+  workspace: PreferenceWorkspacePayload,
+  itemId: string,
+  candidateSignalType?: PreferenceSignalType
+) {
+  const history = getPreferenceSignalHistory(workspace, itemId);
+  const score = workspace.scores.find((entry) => entry.itemId === itemId);
+  const currentSignal = score ? score.effectiveSignal : (history[0] ?? null);
+  const signalType = candidateSignalType ?? currentSignal?.signalType ?? null;
+  if (!signalType) {
+    return [];
+  }
+
+  const weight =
+    SIGNAL_OPTIONS.find((option) => option.signalType === signalType)
+      ?.modelWeight ?? 0;
+  const wins = score?.pairwiseWins ?? 0;
+  const losses = score?.pairwiseLosses ?? 0;
+
+  const conflicts: string[] = [];
+  if (weight > 0 && losses > 0) {
+    conflicts.push(
+      `${losses} prior comparison ${losses === 1 ? "loss conflicts" : "losses conflict"} with this positive signal.`
+    );
+  }
+  if (weight < 0 && wins > 0) {
+    conflicts.push(
+      `${wins} prior comparison ${wins === 1 ? "win conflicts" : "wins conflict"} with this veto.`
+    );
+  }
+  const replacedSignal = candidateSignalType
+    ? currentSignal
+    : history.find((signal) => signal.id !== currentSignal?.id);
+  if (
+    replacedSignal &&
+    Math.sign(weight) !==
+      Math.sign(
+        SIGNAL_OPTIONS.find(
+          (option) => option.signalType === replacedSignal.signalType
+        )?.modelWeight ?? 0
+      )
+  ) {
+    conflicts.push(
+      candidateSignalType
+        ? `This replaces the current ${replacedSignal.signalType.replaceAll("_", " ")} signal; the earlier record remains in history but stops affecting the model.`
+        : `The current ${signalType.replaceAll("_", " ")} signal replaced the prior ${replacedSignal.signalType.replaceAll("_", " ")} signal; the earlier record remains in history but no longer affects the model.`
+    );
+  }
+  return conflicts;
+}
 
 export type PreferencesTab = (typeof TABS)[number]["id"];
 

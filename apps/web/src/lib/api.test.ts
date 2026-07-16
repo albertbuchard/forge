@@ -10,13 +10,19 @@ import {
   getDeletedPlanningRecord,
   getLifeEvent,
   getNote,
+  getPreferenceWorkspace,
+  getPsycheMetricsView,
   getSleepSession,
   getSleepSessionRawDetail,
+  getTodayPriorityDecision,
   getWeeklyReview,
   listActivity,
+  listNotes,
   listWikiPages,
   patchTask,
-  restoreEntities
+  refreshPreferenceWorkspace,
+  restoreEntities,
+  submitPairwisePreferenceJudgment
 } from "./api";
 
 function mockJsonResponse(body: unknown) {
@@ -33,6 +39,148 @@ function mockJsonErrorResponse(status: number, body: unknown) {
     text: vi.fn().mockResolvedValue(JSON.stringify(body))
   } as unknown as Response;
 }
+
+describe("notes API contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("encodes repeated filters, observed ranges, user scope, and opaque cursors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        notes: [],
+        total: 0,
+        limit: 40,
+        nextCursor: null,
+        hasMore: false
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listNotes({
+      linkedEntityType: "goal",
+      linkedEntityId: "goal_1",
+      anchorKey: "spark",
+      includeAnchorless: true,
+      linkedTo: [
+        { entityType: "goal", entityId: "goal_1" },
+        { entityType: "project", entityId: "project_1" }
+      ],
+      tags: ["decision", "evidence"],
+      textTerms: ["design review", "conflict"],
+      userIds: ["user_1"],
+      updatedFrom: "2026-06-01",
+      updatedTo: "2026-06-30",
+      observedFrom: "2026-05-01",
+      observedTo: "2026-05-31",
+      limit: 40,
+      cursor: "opaque-cursor"
+    });
+
+    const [rawUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const url = new URL(rawUrl, "http://forge.local");
+    expect(url.pathname).toBe("/api/v1/notes");
+    expect(url.searchParams.get("linkedEntityType")).toBe("goal");
+    expect(url.searchParams.get("linkedEntityId")).toBe("goal_1");
+    expect(url.searchParams.get("anchorKey")).toBe("spark");
+    expect(url.searchParams.get("includeAnchorless")).toBe("true");
+    expect(url.searchParams.getAll("linkedTo")).toEqual([
+      "goal:goal_1",
+      "project:project_1"
+    ]);
+    expect(url.searchParams.getAll("tags")).toEqual(["decision", "evidence"]);
+    expect(url.searchParams.getAll("textTerms")).toEqual([
+      "design review",
+      "conflict"
+    ]);
+    expect(url.searchParams.getAll("userIds")).toEqual(["user_1"]);
+    expect(url.searchParams.get("observedFrom")).toBe("2026-05-01");
+    expect(url.searchParams.get("observedTo")).toBe("2026-05-31");
+    expect(url.searchParams.get("cursor")).toBe("opaque-cursor");
+  });
+});
+
+describe("Preferences API contract", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends bounded workspace reads and explicit write-authorized refreshes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockJsonResponse({ workspace: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const input = {
+      userId: "user_operator",
+      domain: "projects" as const,
+      contextId: "context_1",
+      itemLimit: 25,
+      itemOffset: 50,
+      historyLimit: 10
+    };
+    await getPreferenceWorkspace(input);
+    await refreshPreferenceWorkspace(input);
+
+    const [readUrl, readInit] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit
+    ];
+    const parsedReadUrl = new URL(readUrl, "http://forge.local");
+    expect(parsedReadUrl.pathname).toBe("/api/v1/preferences/workspace");
+    expect(Object.fromEntries(parsedReadUrl.searchParams)).toEqual({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: "context_1",
+      itemLimit: "25",
+      itemOffset: "50",
+      historyLimit: "10"
+    });
+    expect(readInit?.method).toBeUndefined();
+
+    const [refreshUrl, refreshInit] = fetchMock.mock.calls[1] as [
+      string,
+      RequestInit
+    ];
+    expect(refreshUrl).toBe("/api/v1/preferences/workspace/refresh");
+    expect(refreshInit.method).toBe("POST");
+    expect(JSON.parse(String(refreshInit.body))).toEqual(input);
+  });
+
+  it("sends a stable judgment idempotency key outside the request body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockJsonResponse({ judgment: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitPairwisePreferenceJudgment({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: "context_1",
+      leftItemId: "item_left",
+      rightItemId: "item_right",
+      outcome: "left",
+      strength: 1,
+      reasonTags: [],
+      idempotencyKey: "judgment-retry-v1"
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBe(
+      "judgment-retry-v1"
+    );
+    expect(JSON.parse(String(init.body))).toEqual({
+      userId: "user_operator",
+      domain: "projects",
+      contextId: "context_1",
+      leftItemId: "item_left",
+      rightItemId: "item_right",
+      outcome: "left",
+      strength: 1,
+      reasonTags: []
+    });
+  });
+});
 
 describe("create entity payload normalization", () => {
   afterEach(() => {
@@ -303,6 +451,49 @@ describe("create entity payload normalization", () => {
       { id: "cal_google", dedupedName: "Forge (Google)" },
       { id: "cal_apple", dedupedName: "Forge (Apple)" }
     ]);
+  });
+
+  it("requests the canonical Today decision with explicit scope and timezone", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        mockJsonResponse({ decision: { contractVersion: 1 } })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getTodayPriorityDecision({
+      userIds: ["user_albert", "user_collaborator"],
+      timeZone: "Europe/Zurich",
+      candidateLimit: 24
+    });
+
+    const [requestUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const url = new URL(requestUrl, "http://forge.local");
+    expect(url.pathname).toBe("/api/v1/today/priority");
+    expect(url.searchParams.getAll("userIds")).toEqual([
+      "user_albert",
+      "user_collaborator"
+    ]);
+    expect(url.searchParams.get("timeZone")).toBe("Europe/Zurich");
+    expect(url.searchParams.get("candidateLimit")).toBe("24");
+  });
+
+  it("requests Psyche metrics with explicit owner scope and timezone", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockJsonResponse({ metrics: { summary: {} } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getPsycheMetricsView({
+      userIds: ["user_operator"],
+      timeZone: "Europe/Zurich"
+    });
+
+    const [requestUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const url = new URL(requestUrl, "http://forge.local");
+    expect(url.pathname).toBe("/api/v1/psyche/metrics");
+    expect(url.searchParams.getAll("userIds")).toEqual(["user_operator"]);
+    expect(url.searchParams.get("timeZone")).toBe("Europe/Zurich");
   });
 
   it("bootstraps an operator session and retries protected reads after auth expiry", async () => {

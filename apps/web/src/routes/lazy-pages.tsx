@@ -80,6 +80,16 @@ export const OverviewPage = lazy(() =>
     default: module.OverviewPage
   }))
 );
+export const PeoplePage = lazy(() =>
+  import("@/pages/people-page").then((module) => ({
+    default: module.PeoplePage
+  }))
+);
+export const PersonDetailPage = lazy(() =>
+  import("@/pages/person-detail-page").then((module) => ({
+    default: module.PersonDetailPage
+  }))
+);
 export const ProjectDetailPage = lazy(() =>
   import("@/pages/project-detail-page").then((module) => ({
     default: module.ProjectDetailPage

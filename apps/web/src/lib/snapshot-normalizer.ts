@@ -58,8 +58,8 @@ function normalizeTask(
     findUser(usersById, userId);
   const ownerUser =
     (task?.ownerUser as UserSummary | null | undefined) ??
-    ((task?.user as UserSummary | null | undefined) ??
-      findUser(usersById, ownerUserId));
+    (task?.user as UserSummary | null | undefined) ??
+    findUser(usersById, ownerUserId);
   const assigneeUserIds = task?.assigneeUserIds ?? [];
   const assignees =
     task?.assignees ??
@@ -92,6 +92,13 @@ function normalizeTask(
     acceptanceCriteria: task?.acceptanceCriteria ?? [],
     blockerLinks: task?.blockerLinks ?? [],
     completionReport: task?.completionReport ?? null,
+    closeoutState:
+      task?.closeoutState ??
+      (task?.status !== "done"
+        ? "not_applicable"
+        : task?.completionReport?.workSummary.trim()
+          ? "complete"
+          : "deferred"),
     gitRefs: task?.gitRefs ?? [],
     completedAt: task?.completedAt ?? null,
     createdAt: task?.createdAt ?? new Date(0).toISOString(),
@@ -386,8 +393,7 @@ export function normalizeForgeSnapshot(
       level: raw.metrics?.level ?? 1,
       currentLevelXp: raw.metrics?.currentLevelXp ?? 0,
       nextLevelXp: raw.metrics?.nextLevelXp ?? 120,
-      xpIntoLevel:
-        raw.metrics?.xpIntoLevel ?? raw.metrics?.currentLevelXp ?? 0,
+      xpIntoLevel: raw.metrics?.xpIntoLevel ?? raw.metrics?.currentLevelXp ?? 0,
       xpToNextLevel:
         raw.metrics?.xpToNextLevel ?? raw.metrics?.nextLevelXp ?? 120,
       currentLevelStartXp: raw.metrics?.currentLevelStartXp ?? 0,
@@ -451,7 +457,8 @@ export function normalizeForgeSnapshot(
         nextLevelTotalXp:
           raw.metrics?.nextLevelTotalXp ??
           (raw.metrics?.totalXp ?? 0) + (raw.metrics?.nextLevelXp ?? 120),
-        levelCurveVersion: raw.metrics?.levelCurveVersion ?? "legacy-linear-120",
+        levelCurveVersion:
+          raw.metrics?.levelCurveVersion ?? "legacy-linear-120",
         weeklyXp: raw.metrics?.weeklyXp ?? 0,
         streakDays: raw.metrics?.streakDays ?? 0,
         comboMultiplier: raw.metrics?.comboMultiplier ?? 1,

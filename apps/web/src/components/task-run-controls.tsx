@@ -17,9 +17,10 @@ import { formatDateTime } from "@/lib/utils";
 import type {
   Task,
   TaskRun,
-  TaskRunFinishInput,
+  TaskRunCompleteInput,
   TaskRunHeartbeatInput,
-  TaskRunClaimInput
+  TaskRunClaimInput,
+  TaskRunReleaseInput
 } from "@/lib/types";
 
 type TaskRunControlsProps = {
@@ -29,8 +30,9 @@ type TaskRunControlsProps = {
   errorMessage: string | null;
   onClaim: (input: TaskRunClaimInput) => Promise<void>;
   onHeartbeat: (runId: string, input: TaskRunHeartbeatInput) => Promise<void>;
-  onComplete: (runId: string, input: TaskRunFinishInput) => Promise<void>;
-  onRelease: (runId: string, input: TaskRunFinishInput) => Promise<void>;
+  onComplete?: (runId: string, input: TaskRunCompleteInput) => Promise<void>;
+  onRequestComplete?: (runId: string) => void;
+  onRelease: (runId: string, input: TaskRunReleaseInput) => Promise<void>;
   onFocus?: (runId: string, input: { actor?: string }) => Promise<void>;
 };
 
@@ -71,6 +73,7 @@ export function TaskRunControls({
   onClaim,
   onHeartbeat,
   onComplete,
+  onRequestComplete,
   onRelease,
   onFocus
 }: TaskRunControlsProps) {
@@ -351,13 +354,27 @@ export function TaskRunControls({
             </Button>
             <Button
               pending={pending}
-              disabled={!isOnline}
+              disabled={!isOnline || (!onRequestComplete && !onComplete)}
               pendingLabel="Completing"
-              onClick={() =>
-                void performAction(() =>
-                  onComplete(activeTaskRun.id, { actor: actor.trim(), note })
-                )
-              }
+              onClick={() => {
+                if (onRequestComplete) {
+                  setLocalError(null);
+                  if (!isOnline) {
+                    setLocalError("Reconnect before changing this task run.");
+                    return;
+                  }
+                  onRequestComplete(activeTaskRun.id);
+                  return;
+                }
+                if (onComplete) {
+                  void performAction(() =>
+                    onComplete(activeTaskRun.id, {
+                      actor: actor.trim(),
+                      note
+                    })
+                  );
+                }
+              }}
             >
               <CheckCheck className="mr-2 size-3.5" />
               Complete task

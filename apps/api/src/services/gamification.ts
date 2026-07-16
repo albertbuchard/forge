@@ -1,4 +1,4 @@
-import { getDatabase } from "../db.js";
+import { getDatabase, runInTransaction } from "../db.js";
 import {
   enqueueGamificationCelebration,
   getGamificationEquipment,
@@ -6,13 +6,12 @@ import {
   listGamificationDailyActivity,
   listGamificationUnlocks,
   listUnseenGamificationCelebrations,
-  replaceGamificationDailyActivity,
   upsertGamificationEquipment
 } from "../repositories/gamification.js";
 import {
-  getDailyAmbientXp,
   listRewardRules,
-  recordEntityCreationReward
+  recordEntityCreationReward,
+  reconcileTaskCompletionRewards
 } from "../repositories/rewards.js";
 import {
   getDefaultUser,
@@ -143,6 +142,7 @@ type RewardLedgerDbRow = {
   reversible_group: string | null;
   reversed_by_reward_id: string | null;
   metadata_json: string;
+  owner_user_id: string | null;
   created_at: string;
   rule_code: string | null;
   rule_family: string | null;
@@ -160,35 +160,38 @@ type DailyActivitySummary = {
   lastRewardEventId: string | null;
 };
 
+type RewardReadSummary = {
+  totalXp: number;
+  weeklyXp: number;
+  qualifyingXp: number;
+  recoveryEventCount: number;
+  collaborationRewardCount: number;
+  dailyAmbientXp: number;
+  recentRewards: RewardMetricRow[];
+};
+
 type GamificationState = {
   scope: GamificationScope;
-  scopedRewards: RewardMetricRow[];
+  rewardSummary: RewardReadSummary;
   profile: GamificationProfile;
   metricValues: CatalogMetricValues;
   equipment: GamificationEquipment;
   mascot: GamificationMascotState;
   catalog: GamificationCatalogPayload;
   persistableUserId: string | null;
+  timezone: string;
 };
 
 type GamificationProfileState = {
   scope: GamificationScope;
-  scopedRewards: RewardMetricRow[];
+  rewardSummary: RewardReadSummary;
   profile: GamificationProfile;
   persistableUserId: string | null;
   activeDateKeys: string[];
   missedDays: number;
   lastActiveDateKey: string | null;
+  timezone: string;
 };
-
-function startOfWeek(date: Date): Date {
-  const clone = new Date(date);
-  const day = clone.getDay();
-  const delta = day === 0 ? -6 : 1 - day;
-  clone.setDate(clone.getDate() + delta);
-  clone.setHours(0, 0, 0, 0);
-  return clone;
-}
 
 function isAlignedHabitCheckIn(
   habit: Habit,
@@ -257,10 +260,18 @@ function latestAlignedHabitAt(habits: Habit[]): string | null {
   );
 }
 
-function resolveTimezone(): string {
-  return (
-    process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-  );
+function resolveTimezone(requestedTimezone?: string): string {
+  const candidate =
+    requestedTimezone?.trim() ||
+    process.env.TZ?.trim() ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "UTC";
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: candidate }).format();
+    return candidate;
+  } catch {
+    return "UTC";
+  }
 }
 
 const dateKeyFormattersByTimezone = new Map<string, Intl.DateTimeFormat>();
@@ -301,6 +312,12 @@ function subtractDaysFromDateKey(dateKeyValue: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function startOfWeekDateKey(now: Date, timezone: string): string {
+  const today = dateKeyInTimezone(now, timezone);
+  const weekday = new Date(`${today}T12:00:00.000Z`).getUTCDay();
+  return subtractDaysFromDateKey(today, weekday === 0 ? 6 : weekday - 1);
+}
+
 function resolveScopeUsers(requestedUserIds?: string[]): {
   mode: GamificationScope["mode"];
   users: UserSummary[];
@@ -308,23 +325,22 @@ function resolveScopeUsers(requestedUserIds?: string[]): {
   const uniqueRequestedUserIds = Array.from(
     new Set((requestedUserIds ?? []).filter((userId) => userId.trim()))
   );
-  if (uniqueRequestedUserIds.length === 1) {
+  if (uniqueRequestedUserIds.length > 0) {
     const selectedUsers = listUsersByIds(uniqueRequestedUserIds);
-    if (selectedUsers.length === 1) {
+    if (uniqueRequestedUserIds.length === 1 && selectedUsers.length === 1) {
       return { mode: "selected_user", users: selectedUsers };
     }
-  }
-  if (uniqueRequestedUserIds.length > 1) {
-    const selectedUsers = listUsersByIds(uniqueRequestedUserIds);
-    if (selectedUsers.length > 0) {
-      return { mode: "aggregate_fallback", users: selectedUsers };
-    }
+    return { mode: "aggregate_fallback", users: selectedUsers };
   }
   try {
     return { mode: "operator_fallback", users: [getDefaultUser()] };
   } catch {
     return { mode: "aggregate_fallback", users: listUsers() };
   }
+}
+
+function isExplicitEmptyScope(scope: GamificationScope): boolean {
+  return scope.mode === "aggregate_fallback" && scope.userIds.length === 0;
 }
 
 export function resolveGamificationScope(
@@ -336,7 +352,9 @@ export function resolveGamificationScope(
       ? users[0]!.displayName
       : users.length > 1
         ? `${users.length} users`
-        : "Forge";
+        : mode === "aggregate_fallback"
+          ? "No matching user"
+          : "Forge";
   return {
     mode,
     userIds: users.map((user) => user.id),
@@ -366,38 +384,6 @@ function emptyGamificationEquipment(): GamificationEquipment {
   };
 }
 
-function buildOwnerResolver(defaultUserId: string | null) {
-  const ownerRows = getDatabase()
-    .prepare(
-      `SELECT entity_type, entity_id, user_id
-       FROM entity_owners`
-    )
-    .all() as Array<{
-    entity_type: string;
-    entity_id: string;
-    user_id: string;
-  }>;
-  const ownerByEntityKey = new Map(
-    ownerRows.map(
-      (row) => [`${row.entity_type}:${row.entity_id}`, row.user_id] as const
-    )
-  );
-  const usersByLabel = new Map<string, string>();
-  for (const user of listUsers()) {
-    usersByLabel.set(user.displayName.trim().toLowerCase(), user.id);
-    usersByLabel.set(user.handle.trim().toLowerCase(), user.id);
-  }
-  return (row: Pick<RewardMetricRow, "entityType" | "entityId" | "actor">) => {
-    if (row.entityType === "system" && row.actor) {
-      const actorUserId = usersByLabel.get(row.actor.trim().toLowerCase());
-      if (actorUserId) return actorUserId;
-    }
-    return (
-      ownerByEntityKey.get(`${row.entityType}:${row.entityId}`) ?? defaultUserId
-    );
-  };
-}
-
 function parseMetadata(raw: string): Record<string, MetadataValue> {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -410,68 +396,256 @@ function parseMetadata(raw: string): Record<string, MetadataValue> {
   }
 }
 
-function loadScopedRewardEvents(scope: GamificationScope): RewardMetricRow[] {
+type RewardReconciliationCursor = {
+  createdAt: string;
+  rewardId: string;
+};
+
+const REWARD_RECONCILIATION_PAGE_SIZE = 500;
+
+const legacyRewardOwnerSql = `COALESCE(
+  NULLIF(json_extract(reward_ledger.metadata_json, '$.ownerUserId'), ''),
+  task_owner.user_id,
+  entity_owner.user_id,
+  (
+    SELECT users.id
+    FROM users
+    WHERE reward_ledger.actor IS NOT NULL
+      AND (
+        LOWER(TRIM(users.display_name)) = LOWER(TRIM(reward_ledger.actor))
+        OR LOWER(TRIM(users.handle)) = LOWER(TRIM(reward_ledger.actor))
+      )
+    ORDER BY
+      CASE
+        WHEN LOWER(TRIM(users.handle)) = LOWER(TRIM(reward_ledger.actor))
+        THEN 0 ELSE 1
+      END,
+      users.id
+    LIMIT 1
+  ),
+  ?
+)`;
+
+function rewardProjectionSql(ownerSql: string, includeLegacyJoins: boolean) {
+  return `SELECT
+    reward_ledger.id,
+    reward_ledger.rule_id,
+    reward_ledger.event_log_id,
+    reward_ledger.entity_type,
+    reward_ledger.entity_id,
+    reward_ledger.actor,
+    reward_ledger.source,
+    reward_ledger.delta_xp,
+    reward_ledger.reason_title,
+    reward_ledger.reason_summary,
+    reward_ledger.reversible_group,
+    reward_ledger.reversed_by_reward_id,
+    reward_ledger.metadata_json,
+    reward_ledger.created_at,
+    reward_rules.code AS rule_code,
+    reward_rules.family AS rule_family,
+    ${ownerSql} AS owner_user_id
+  FROM reward_ledger
+  LEFT JOIN reward_rules ON reward_rules.id = reward_ledger.rule_id
+  ${
+    includeLegacyJoins
+      ? `LEFT JOIN entity_owners entity_owner
+      ON entity_owner.entity_type = reward_ledger.entity_type
+     AND entity_owner.entity_id = reward_ledger.entity_id
+    LEFT JOIN entity_owners task_owner
+      ON task_owner.entity_type = 'task'
+     AND task_owner.entity_id = json_extract(reward_ledger.metadata_json, '$.taskId')`
+      : ""
+  }`;
+}
+
+export function buildScopedRewardsSql(scope: GamificationScope) {
+  const legacyFallbackUserId =
+    scope.mode === "operator_fallback"
+      ? persistableUserIdForScope(scope)
+      : null;
+  if (isExplicitEmptyScope(scope)) {
+    return {
+      cte: `WITH scoped_rewards AS (
+        ${rewardProjectionSql("reward_ledger.owner_user_id", false)}
+        WHERE 0 = 1
+      )`,
+      where: "",
+      params: [] as Array<string | null>
+    };
+  }
+  if (scope.userIds.length === 0) {
+    return {
+      cte: `WITH scoped_rewards AS (
+        ${rewardProjectionSql(
+          `COALESCE(reward_ledger.owner_user_id, ${legacyRewardOwnerSql})`,
+          true
+        )}
+      )`,
+      where: "",
+      params: [legacyFallbackUserId]
+    };
+  }
+  const placeholders = scope.userIds.map(() => "?").join(", ");
+  return {
+    cte: `WITH persisted_rewards AS (
+      ${rewardProjectionSql("reward_ledger.owner_user_id", false)}
+      WHERE reward_ledger.owner_user_id IN (${placeholders})
+    ), legacy_reward_candidates AS (
+      ${rewardProjectionSql(legacyRewardOwnerSql, true)}
+      WHERE reward_ledger.owner_user_id IS NULL
+    ), scoped_rewards AS (
+      SELECT * FROM persisted_rewards
+      UNION ALL
+      SELECT * FROM legacy_reward_candidates
+      WHERE owner_user_id IN (${placeholders})
+    )`,
+    where: "",
+    params: [...scope.userIds, legacyFallbackUserId, ...scope.userIds] as Array<
+      string | null
+    >
+  };
+}
+
+function loadScopedRewardEventPage(
+  scope: GamificationScope,
+  cursor: RewardReconciliationCursor | null,
+  limit = REWARD_RECONCILIATION_PAGE_SIZE
+): RewardMetricRow[] {
+  const sql = buildScopedRewardsSql(scope);
+  const cursorWhere = cursor
+    ? "WHERE created_at > ? OR (created_at = ? AND id > ?)"
+    : "";
+  const cursorParams = cursor
+    ? [cursor.createdAt, cursor.createdAt, cursor.rewardId]
+    : [];
   const rows = getDatabase()
     .prepare(
-      `SELECT
-         reward_ledger.id,
-         reward_ledger.rule_id,
-         reward_ledger.event_log_id,
-         reward_ledger.entity_type,
-         reward_ledger.entity_id,
-         reward_ledger.actor,
-         reward_ledger.source,
-         reward_ledger.delta_xp,
-         reward_ledger.reason_title,
-         reward_ledger.reason_summary,
-         reward_ledger.reversible_group,
-         reward_ledger.reversed_by_reward_id,
-         reward_ledger.metadata_json,
-         reward_ledger.created_at,
-         reward_rules.code AS rule_code,
-         reward_rules.family AS rule_family
-       FROM reward_ledger
-       LEFT JOIN reward_rules ON reward_rules.id = reward_ledger.rule_id
-       ORDER BY reward_ledger.created_at ASC`
+      `${sql.cte}
+       SELECT *
+       FROM scoped_rewards
+       ${cursorWhere}
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`
     )
-    .all() as RewardLedgerDbRow[];
-  const scopeUserIds = new Set(scope.userIds);
-  const defaultUserId = persistableUserIdForScope(scope);
-  const resolveOwner = buildOwnerResolver(defaultUserId);
-  return rows
-    .map((row) => {
-      const event: RewardLedgerEvent = {
-        id: row.id,
-        ruleId: row.rule_id,
-        eventLogId: row.event_log_id,
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        actor: row.actor,
-        source: row.source,
-        deltaXp: row.delta_xp,
-        reasonTitle: row.reason_title,
-        reasonSummary: row.reason_summary,
-        reversibleGroup: row.reversible_group,
-        reversedByRewardId: row.reversed_by_reward_id,
-        metadata: parseMetadata(row.metadata_json),
-        createdAt: row.created_at
-      };
-      return {
-        ...event,
-        ownerUserId: resolveOwner(event),
-        ruleCode: row.rule_code,
-        ruleFamily: row.rule_family
-      };
+    .all(...sql.params, ...cursorParams, limit) as RewardLedgerDbRow[];
+  return rows.map(mapRewardMetricRow);
+}
+
+function mapRewardMetricRow(
+  row: RewardLedgerDbRow & { owner_user_id: string | null }
+) {
+  return {
+    id: row.id,
+    ruleId: row.rule_id,
+    eventLogId: row.event_log_id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    actor: row.actor,
+    source: row.source,
+    deltaXp: row.delta_xp,
+    reasonTitle: row.reason_title,
+    reasonSummary: row.reason_summary,
+    reversibleGroup: row.reversible_group,
+    reversedByRewardId: row.reversed_by_reward_id,
+    metadata: parseMetadata(row.metadata_json),
+    createdAt: row.created_at,
+    ownerUserId: row.owner_user_id,
+    ruleCode: row.rule_code,
+    ruleFamily: row.rule_family
+  } satisfies RewardMetricRow;
+}
+
+function loadScopedRewardReadSummary(
+  scope: GamificationScope,
+  timezone: string,
+  now: Date
+): RewardReadSummary {
+  const sql = buildScopedRewardsSql(scope);
+  const qualifyingPredicate = `delta_xp > 0
+    AND reversed_by_reward_id IS NULL
+    AND COALESCE(json_extract(metadata_json, '$.manual'), 0) <> 1
+    AND COALESCE(json_extract(metadata_json, '$.qualifiesForStreak'), 1) <> 0`;
+  const aggregate = getDatabase()
+    .prepare(
+      `${sql.cte}
+       SELECT
+         COALESCE(SUM(delta_xp), 0) AS total_xp,
+         COALESCE(SUM(CASE WHEN ${qualifyingPredicate} THEN delta_xp ELSE 0 END), 0) AS qualifying_xp,
+         COALESCE(SUM(CASE WHEN ${qualifyingPredicate} AND rule_family = 'recovery' THEN 1 ELSE 0 END), 0) AS recovery_count,
+         COALESCE(SUM(CASE WHEN ${qualifyingPredicate} AND (
+           rule_family = 'collaboration' OR entity_type = 'insight' OR entity_type LIKE '%agent%'
+         ) THEN 1 ELSE 0 END), 0) AS collaboration_count
+       FROM scoped_rewards
+       ${sql.where}`
+    )
+    .get(...sql.params) as {
+    total_xp: number;
+    qualifying_xp: number;
+    recovery_count: number;
+    collaboration_count: number;
+  };
+
+  const recentRows = getDatabase()
+    .prepare(
+      `${sql.cte}
+       SELECT *
+       FROM scoped_rewards
+       ${sql.where}
+       ORDER BY created_at DESC, id DESC
+       LIMIT 25`
+    )
+    .all(...sql.params) as Array<
+    RewardLedgerDbRow & { owner_user_id: string | null }
+  >;
+
+  const weekStart = startOfWeekDateKey(now, timezone);
+  const today = dateKeyInTimezone(now, timezone);
+  const windowStart = `${subtractDaysFromDateKey(weekStart, 2)}T00:00:00.000Z`;
+  const windowEndDate = new Date(now);
+  windowEndDate.setUTCDate(windowEndDate.getUTCDate() + 2);
+  const windowRows = getDatabase()
+    .prepare(
+      `${sql.cte}
+       SELECT delta_xp, created_at, rule_family
+       FROM scoped_rewards
+       ${sql.where ? `${sql.where} AND` : "WHERE"} created_at >= ? AND created_at < ?`
+    )
+    .all(...sql.params, windowStart, windowEndDate.toISOString()) as Array<{
+    delta_xp: number;
+    created_at: string;
+    rule_family: string | null;
+  }>;
+  const weeklyXp = windowRows
+    .filter((row) => {
+      const dateKey = dateKeyInTimezone(row.created_at, timezone);
+      return dateKey >= weekStart && dateKey <= today;
     })
-    .filter((event) =>
-      scopeUserIds.size === 0
-        ? true
-        : event.ownerUserId !== null && scopeUserIds.has(event.ownerUserId)
-    );
+    .reduce((sum, row) => sum + row.delta_xp, 0);
+  const dailyAmbientXp = windowRows
+    .filter(
+      (row) =>
+        row.rule_family === "ambient" &&
+        dateKeyInTimezone(row.created_at, timezone) === today
+    )
+    .reduce((sum, row) => sum + row.delta_xp, 0);
+
+  return {
+    totalXp: Math.max(0, Number(aggregate.total_xp ?? 0)),
+    weeklyXp: Math.max(0, weeklyXp),
+    qualifyingXp: Math.max(0, Number(aggregate.qualifying_xp ?? 0)),
+    recoveryEventCount: Math.max(0, Number(aggregate.recovery_count ?? 0)),
+    collaborationRewardCount: Math.max(
+      0,
+      Number(aggregate.collaboration_count ?? 0)
+    ),
+    dailyAmbientXp: Math.max(0, dailyAmbientXp),
+    recentRewards: recentRows.map(mapRewardMetricRow)
+  };
 }
 
 function syncEntityCreationRewards(scope: GamificationScope): void {
-  if (!persistableUserIdForScope(scope)) {
+  if (!persistableUserIdForScope(scope) || isExplicitEmptyScope(scope)) {
     return;
   }
   const database = getDatabase();
@@ -483,7 +657,7 @@ function syncEntityCreationRewards(scope: GamificationScope): void {
       scopeUserIds.length > 0
         ? `AND (
              entity_owners.user_id IN (${scopePlaceholders})
-             OR (entity_owners.user_id IS NULL AND ? IS NOT NULL)
+             OR (entity_owners.user_id IS NULL AND ? = 1)
            )`
         : "";
     const params =
@@ -492,7 +666,7 @@ function syncEntityCreationRewards(scope: GamificationScope): void {
             source.entityType,
             source.entityType,
             ...scopeUserIds,
-            scopeUserIds[0] ?? null
+            scope.mode === "operator_fallback" ? 1 : 0
           ]
         : [source.entityType, source.entityType];
     const rows = database
@@ -532,7 +706,8 @@ function isQualifyingStreakReward(event: RewardMetricRow): boolean {
   return (
     event.deltaXp > 0 &&
     event.reversedByRewardId === null &&
-    event.metadata.manual !== true
+    event.metadata.manual !== true &&
+    event.metadata.qualifiesForStreak !== false
   );
 }
 
@@ -577,14 +752,141 @@ function deriveDailyActivityRows(
   }));
 }
 
-function syncDailyActivity(
+type GamificationReconciliationStateRow = {
+  cursor_created_at: string | null;
+  cursor_reward_id: string | null;
+  requires_full_rebuild: number;
+};
+
+function getGamificationReconciliationState(
   userId: string,
-  scopedRewards: RewardMetricRow[],
+  timezone: string
+): GamificationReconciliationStateRow | null {
+  return (
+    (getDatabase()
+      .prepare(
+        `SELECT cursor_created_at, cursor_reward_id, requires_full_rebuild
+         FROM gamification_reconciliation_state
+         WHERE user_id = ? AND timezone = ?`
+      )
+      .get(userId, timezone) as
+      | GamificationReconciliationStateRow
+      | undefined) ?? null
+  );
+}
+
+function upsertDailyActivityRows(rows: DailyActivitySummary[], now: string) {
+  const upsert = getDatabase().prepare(
+    `INSERT INTO gamification_daily_activity (
+       user_id, date_key, timezone, qualifying_xp, event_count,
+       first_reward_event_id, last_reward_event_id, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, date_key, timezone) DO UPDATE SET
+       qualifying_xp = gamification_daily_activity.qualifying_xp + excluded.qualifying_xp,
+       event_count = gamification_daily_activity.event_count + excluded.event_count,
+       first_reward_event_id = COALESCE(
+         gamification_daily_activity.first_reward_event_id,
+         excluded.first_reward_event_id
+       ),
+       last_reward_event_id = COALESCE(
+         excluded.last_reward_event_id,
+         gamification_daily_activity.last_reward_event_id
+       ),
+       updated_at = excluded.updated_at`
+  );
+  for (const row of rows) {
+    upsert.run(
+      row.userId,
+      row.dateKey,
+      row.timezone,
+      row.qualifyingXp,
+      row.eventCount,
+      row.firstRewardEventId,
+      row.lastRewardEventId,
+      now,
+      now
+    );
+  }
+}
+
+function saveGamificationReconciliationState(
+  userId: string,
+  timezone: string,
+  cursor: RewardReconciliationCursor | null,
+  now: string
+) {
+  getDatabase()
+    .prepare(
+      `INSERT INTO gamification_reconciliation_state (
+         user_id, timezone, cursor_created_at, cursor_reward_id,
+         requires_full_rebuild, updated_at
+       ) VALUES (?, ?, ?, ?, 0, ?)
+       ON CONFLICT(user_id, timezone) DO UPDATE SET
+         cursor_created_at = excluded.cursor_created_at,
+         cursor_reward_id = excluded.cursor_reward_id,
+         requires_full_rebuild = 0,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      userId,
+      timezone,
+      cursor?.createdAt ?? null,
+      cursor?.rewardId ?? null,
+      now
+    );
+}
+
+function syncDailyActivityIncrementally(
+  userId: string,
+  scope: GamificationScope,
   timezone: string
 ) {
-  const rows = deriveDailyActivityRows(userId, scopedRewards, timezone);
-  replaceGamificationDailyActivity(userId, rows);
-  return listGamificationDailyActivity(userId);
+  return runInTransaction(() => {
+    const state = getGamificationReconciliationState(userId, timezone);
+    const fullRebuild = !state || state.requires_full_rebuild === 1;
+    let cursor: RewardReconciliationCursor | null =
+      !fullRebuild && state?.cursor_created_at && state.cursor_reward_id
+        ? {
+            createdAt: state.cursor_created_at,
+            rewardId: state.cursor_reward_id
+          }
+        : null;
+    if (fullRebuild) {
+      getDatabase()
+        .prepare(
+          `DELETE FROM gamification_daily_activity
+           WHERE user_id = ? AND timezone = ?`
+        )
+        .run(userId, timezone);
+    }
+
+    const now = new Date().toISOString();
+    let processedAny = false;
+    while (true) {
+      const page = loadScopedRewardEventPage(scope, cursor);
+      if (page.length === 0) {
+        break;
+      }
+      upsertDailyActivityRows(
+        deriveDailyActivityRows(userId, page, timezone),
+        now
+      );
+      const last = page.at(-1);
+      if (!last) {
+        break;
+      }
+      cursor = { createdAt: last.createdAt, rewardId: last.id };
+      processedAny = true;
+      if (page.length < REWARD_RECONCILIATION_PAGE_SIZE) {
+        break;
+      }
+    }
+
+    if (fullRebuild || processedAny) {
+      saveGamificationReconciliationState(userId, timezone, cursor, now);
+    }
+    return listGamificationDailyActivity(userId, timezone);
+  });
 }
 
 function calculateStreakFromActivity(
@@ -674,6 +976,14 @@ function ownerScopeClause(
   entityType: string,
   scope: GamificationScope
 ) {
+  if (isExplicitEmptyScope(scope)) {
+    return {
+      join: "",
+      where: " AND 0 = 1",
+      joinParams: [] as unknown[],
+      whereParams: [] as unknown[]
+    };
+  }
   if (scope.userIds.length === 0) {
     return {
       join: "",
@@ -716,6 +1026,9 @@ function countRowsByUser(
   whereSql = "1 = 1",
   whereParams: unknown[] = []
 ): number {
+  if (isExplicitEmptyScope(scope)) {
+    return 0;
+  }
   const scopeWhere =
     scope.userIds.length > 0
       ? ` AND user_id IN (${scope.userIds.map(() => "?").join(", ")})`
@@ -741,6 +1054,29 @@ function countTaskRuns(
      ${scopeClause.join}
      WHERE (${whereSql})${scopeClause.where}`,
     [...scopeClause.joinParams, ...whereParams, ...scopeClause.whereParams]
+  );
+}
+
+function countAgentActions(
+  scope: GamificationScope,
+  whereSql = "1 = 1"
+): number {
+  if (isExplicitEmptyScope(scope)) {
+    return 0;
+  }
+  if (scope.userIds.length === 0) {
+    return scalarNumber(
+      `SELECT COUNT(*) AS value FROM agent_actions WHERE (${whereSql})`
+    );
+  }
+  return scalarNumber(
+    `SELECT COUNT(DISTINCT agent_actions.id) AS value
+     FROM agent_actions
+     INNER JOIN agent_identity_users
+       ON agent_identity_users.agent_id = agent_actions.agent_id
+     WHERE (${whereSql})
+       AND agent_identity_users.user_id IN (${scope.userIds.map(() => "?").join(", ")})`,
+    scope.userIds
   );
 }
 
@@ -785,19 +1121,15 @@ function jsonTextPresent(expression: string): string {
 function buildMetricValues(input: {
   scope: GamificationScope;
   profile: GamificationProfile;
-  scopedRewards: RewardMetricRow[];
+  rewardSummary: RewardReadSummary;
   tasks: Task[];
   habits: Habit[];
   activeDateKeys: string[];
 }): CatalogMetricValues {
-  const positiveRewards = input.scopedRewards.filter(isQualifyingStreakReward);
   const doneTasks = input.tasks.filter((task) => task.status === "done");
   const completedRunWhere =
     "r.status IN ('completed', 'released', 'timed_out')";
-  const nonManualXp = positiveRewards.reduce(
-    (sum, reward) => sum + reward.deltaXp,
-    0
-  );
+  const nonManualXp = input.rewardSummary.qualifyingXp;
   const goalLinkedTaskCompletionCount = doneTasks.filter(
     (task) => task.goalId !== null
   ).length;
@@ -848,13 +1180,10 @@ function buildMetricValues(input: {
     "health_workout_sessions",
     input.scope
   );
-  const agentActionCount = scalarNumber(
-    `SELECT COUNT(*) AS value FROM agent_actions`
-  );
-  const agentCompletedActionCount = scalarNumber(
-    `SELECT COUNT(*) AS value
-     FROM agent_actions
-     WHERE status IN ('completed', 'approved', 'applied', 'done')`
+  const agentActionCount = countAgentActions(input.scope);
+  const agentCompletedActionCount = countAgentActions(
+    input.scope,
+    "agent_actions.status IN ('completed', 'approved', 'applied', 'done')"
   );
   const base: Omit<CatalogMetricValues, "activeCategoryCount"> = {
     totalXp: input.profile.totalXp,
@@ -912,9 +1241,7 @@ function buildMetricValues(input: {
     distinctHabitCount: input.habits.filter((habit) =>
       habit.checkIns.some((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
     ).length,
-    recoveryEventCount: positiveRewards.filter(
-      (reward) => reward.ruleFamily === "recovery"
-    ).length,
+    recoveryEventCount: input.rewardSummary.recoveryEventCount,
     lifeForceSnapshotCount: countRowsByUser(
       "life_force_day_snapshots",
       input.scope
@@ -948,8 +1275,10 @@ function buildMetricValues(input: {
         jsonTextPresent("t.linked_value_ids_json")
       ].join(" OR ")
     ),
-    modeGuideSessionCount: scalarNumber(
-      `SELECT COUNT(*) AS value FROM mode_guide_sessions`
+    modeGuideSessionCount: countOwnedRows(
+      "mode_guide_sessions",
+      "mode_guide_session",
+      input.scope
     ),
     triggerReportCount,
     triggerReportCompletedCount: countOwnedRows(
@@ -992,12 +1321,7 @@ function buildMetricValues(input: {
     ),
     agentActionCount,
     agentCompletedActionCount,
-    collaborationRewardCount: positiveRewards.filter(
-      (reward) =>
-        reward.ruleFamily === "collaboration" ||
-        reward.entityType === "insight" ||
-        reward.entityType.includes("agent")
-    ).length
+    collaborationRewardCount: input.rewardSummary.collaborationRewardCount
   };
   const activeCategorySignals = [
     base.nonManualXp > 0,
@@ -1219,7 +1543,7 @@ function evaluateCatalogItem(
   return evaluateRequirement(item.requirement, metricValues);
 }
 
-function syncCatalog(input: {
+function buildCatalogPayload(input: {
   scope: GamificationScope;
   persistableUserId: string | null;
   profile: GamificationProfile;
@@ -1227,6 +1551,7 @@ function syncCatalog(input: {
   equipment: GamificationEquipment;
   mascot: GamificationMascotState;
   now: Date;
+  persistProgress?: boolean;
 }): GamificationCatalogPayload {
   const userId = input.persistableUserId;
   const nowIso = input.now.toISOString();
@@ -1248,7 +1573,12 @@ function syncCatalog(input: {
   );
   for (const item of GAMIFICATION_CATALOG) {
     const evaluation = evaluationsByItemId.get(item.id)!;
-    if (userId && evaluation.met && !unlocksByItemId.has(item.id)) {
+    if (
+      input.persistProgress &&
+      userId &&
+      evaluation.met &&
+      !unlocksByItemId.has(item.id)
+    ) {
       const celebrationSeenAt = isInitialBackfill ? nowIso : null;
       const inserted = insertGamificationUnlock({
         userId,
@@ -1288,7 +1618,7 @@ function syncCatalog(input: {
       }
     }
   }
-  if (userId && input.profile.level > 1) {
+  if (input.persistProgress && userId && input.profile.level > 1) {
     enqueueGamificationCelebration({
       id: `gce_${userId}_level_${input.profile.level}`,
       userId,
@@ -1304,7 +1634,7 @@ function syncCatalog(input: {
       createdAt: nowIso
     });
   }
-  if (userId && input.mascot.missedDays > 0) {
+  if (input.persistProgress && userId && input.mascot.missedDays > 0) {
     enqueueGamificationCelebration({
       id: `gce_${userId}_comeback_pressure_${input.mascot.lastActiveDateKey ?? "none"}`,
       userId,
@@ -1390,7 +1720,7 @@ function buildGamificationState(
   goals: Goal[],
   tasks: Task[],
   habits: Habit[],
-  options: { userIds?: string[]; now?: Date } = {}
+  options: { userIds?: string[]; now?: Date; timezone?: string } = {}
 ): GamificationState {
   const profileState = buildGamificationProfileState(
     goals,
@@ -1400,13 +1730,16 @@ function buildGamificationState(
   );
   const {
     scope,
-    scopedRewards,
+    rewardSummary,
     profile,
     persistableUserId,
     activeDateKeys,
     missedDays,
-    lastActiveDateKey
+    lastActiveDateKey,
+    timezone
   } = profileState;
+  const effectiveTasks = isExplicitEmptyScope(scope) ? [] : tasks;
+  const effectiveHabits = isExplicitEmptyScope(scope) ? [] : habits;
   const now = options.now ?? new Date();
   const equipment = persistableUserId
     ? getGamificationEquipment(persistableUserId)
@@ -1414,9 +1747,9 @@ function buildGamificationState(
   const metricValues = buildMetricValues({
     scope,
     profile,
-    scopedRewards,
-    tasks,
-    habits,
+    rewardSummary,
+    tasks: effectiveTasks,
+    habits: effectiveHabits,
     activeDateKeys
   });
   const mascot = buildMascotState({
@@ -1425,7 +1758,7 @@ function buildGamificationState(
     missedDays,
     lastActiveDateKey
   });
-  const catalog = syncCatalog({
+  const catalog = buildCatalogPayload({
     scope,
     persistableUserId,
     profile,
@@ -1436,13 +1769,14 @@ function buildGamificationState(
   });
   return {
     scope,
-    scopedRewards,
+    rewardSummary,
     profile,
     metricValues,
     equipment,
     mascot,
     catalog,
-    persistableUserId
+    persistableUserId,
+    timezone
   };
 }
 
@@ -1450,18 +1784,23 @@ function buildGamificationProfileState(
   goals: Goal[],
   tasks: Task[],
   habits: Habit[],
-  options: { userIds?: string[]; now?: Date } = {}
+  options: { userIds?: string[]; now?: Date; timezone?: string } = {}
 ): GamificationProfileState {
   const now = options.now ?? new Date();
   const scope = resolveGamificationScope(options.userIds);
+  const effectiveGoals = isExplicitEmptyScope(scope) ? [] : goals;
+  const effectiveTasks = isExplicitEmptyScope(scope) ? [] : tasks;
+  const effectiveHabits = isExplicitEmptyScope(scope) ? [] : habits;
   const persistableUserId = persistableUserIdForScope(scope);
-  syncEntityCreationRewards(scope);
-  const scopedRewards = loadScopedRewardEvents(scope);
-  const timezone = resolveTimezone();
-  const dailyActivity = persistableUserId
-    ? syncDailyActivity(persistableUserId, scopedRewards, timezone)
-    : deriveDailyActivityRows("aggregate", scopedRewards, timezone);
-  const activeDateKeys = dailyActivity.map((row) => row.dateKey);
+  const timezone = resolveTimezone(options.timezone);
+  const rewardSummary = loadScopedRewardReadSummary(scope, timezone, now);
+  const activeDateKeys = isExplicitEmptyScope(scope)
+    ? []
+    : scope.userIds.flatMap((userId) =>
+        listGamificationDailyActivity(userId, timezone).map(
+          (row) => row.dateKey
+        )
+      );
   const activeDateSet = new Set(activeDateKeys);
   const streakDays = calculateStreakFromActivity(activeDateSet, now, timezone);
   const { missedDays, lastActiveDateKey } = calculateMissedDays(
@@ -1469,32 +1808,22 @@ function buildGamificationProfileState(
     now,
     timezone
   );
-  const weekStart = startOfWeek(now).toISOString();
-  const totalXp = Math.max(
-    0,
-    scopedRewards.reduce((sum, event) => sum + event.deltaXp, 0)
-  );
-  const weeklyXp = Math.max(
-    0,
-    scopedRewards
-      .filter((event) => event.createdAt >= weekStart)
-      .reduce((sum, event) => sum + event.deltaXp, 0)
-  );
-  const doneTasks = tasks.filter((task) => task.status === "done");
-  const focusTasks = tasks.filter(
+  const today = dateKeyInTimezone(now, timezone);
+  const totalXp = rewardSummary.totalXp;
+  const weeklyXp = rewardSummary.weeklyXp;
+  const doneTasks = effectiveTasks.filter((task) => task.status === "done");
+  const focusTasks = effectiveTasks.filter(
     (task) => task.status === "focus" || task.status === "in_progress"
   ).length;
-  const overdueTasks = tasks.filter(
+  const overdueTasks = effectiveTasks.filter(
     (task) =>
-      task.status !== "done" &&
-      task.dueDate !== null &&
-      task.dueDate < now.toISOString().slice(0, 10)
+      task.status !== "done" && task.dueDate !== null && task.dueDate < today
   ).length;
-  const dueHabits = habits.filter((habit) => habit.dueToday).length;
-  const alignedHabitCheckIns = habits.flatMap((habit) =>
+  const dueHabits = effectiveHabits.filter((habit) => habit.dueToday).length;
+  const alignedHabitCheckIns = effectiveHabits.flatMap((habit) =>
     habit.checkIns.filter((checkIn) => isAlignedHabitCheckIn(habit, checkIn))
   );
-  const habitMomentum = habits.reduce(
+  const habitMomentum = effectiveHabits.reduce(
     (sum, habit) => sum + habit.streakCount * 3 + (habit.dueToday ? -4 : 2),
     0
   );
@@ -1502,7 +1831,7 @@ function buildGamificationProfileState(
     .filter((task) => task.goalId !== null && task.tagIds.length > 0)
     .reduce((sum, task) => sum + task.points, 0);
   const levelState = calculateLevel(totalXp);
-  const goalScores = goals
+  const goalScores = effectiveGoals
     .map((goal) => ({
       goalId: goal.id,
       goalTitle: goal.title,
@@ -1517,7 +1846,7 @@ function buildGamificationProfileState(
     ...levelState,
     weeklyXp,
     streakDays,
-    comboMultiplier: Number((1 + Math.min(0.75, streakDays * 0.05)).toFixed(2)),
+    comboMultiplier: 1,
     momentumScore: Math.max(
       0,
       Math.min(
@@ -1538,12 +1867,13 @@ function buildGamificationProfileState(
   });
   return {
     scope,
-    scopedRewards,
+    rewardSummary,
     profile,
     persistableUserId,
     activeDateKeys,
     missedDays,
-    lastActiveDateKey
+    lastActiveDateKey,
+    timezone
   };
 }
 
@@ -1552,12 +1882,55 @@ export function buildGamificationProfile(
   tasks: Task[],
   habits: Habit[],
   now = new Date(),
-  options: { userIds?: string[] } = {}
+  options: { userIds?: string[]; timezone?: string } = {}
 ): GamificationProfile {
   return buildGamificationProfileState(goals, tasks, habits, {
     userIds: options.userIds,
+    timezone: options.timezone,
     now
   }).profile;
+}
+
+export function reconcileGamificationProgress(input: {
+  goals: Goal[];
+  tasks: Task[];
+  habits: Habit[];
+  userIds?: string[];
+  timezone?: string;
+  now?: Date;
+}) {
+  const scope = resolveGamificationScope(input.userIds);
+  const effectiveTasks = isExplicitEmptyScope(scope) ? [] : input.tasks;
+  syncEntityCreationRewards(scope);
+  reconcileTaskCompletionRewards(effectiveTasks);
+
+  const timezone = resolveTimezone(input.timezone);
+  const persistableUserId = persistableUserIdForScope(scope);
+  if (persistableUserId) {
+    syncDailyActivityIncrementally(persistableUserId, scope, timezone);
+  }
+
+  const now = input.now ?? new Date();
+  const state = buildGamificationState(input.goals, input.tasks, input.habits, {
+    userIds: input.userIds,
+    timezone,
+    now
+  });
+  buildCatalogPayload({
+    scope: state.scope,
+    persistableUserId: state.persistableUserId,
+    profile: state.profile,
+    metricValues: state.metricValues,
+    equipment: state.equipment,
+    mascot: state.mascot,
+    now,
+    persistProgress: true
+  });
+  return buildGamificationState(input.goals, input.tasks, input.habits, {
+    userIds: input.userIds,
+    timezone,
+    now
+  });
 }
 
 function buildAchievementSignalsFromProfile(input: {
@@ -1703,8 +2076,10 @@ function buildMilestoneRewardsFromProfile(input: {
   habits: Habit[];
   now: Date;
   profile: GamificationProfile;
+  timezone?: string;
 }): MilestoneReward[] {
   const { goals, tasks, habits, now, profile } = input;
+  const timezone = resolveTimezone(input.timezone);
   const doneTasks = tasks.filter((task) => task.status === "done");
   const topGoal = profile.topGoalId
     ? (goals.find((goal) => goal.id === profile.topGoalId) ?? null)
@@ -1715,7 +2090,10 @@ function buildMilestoneRewardsFromProfile(input: {
         .reduce((sum, task) => sum + task.points, 0)
     : 0;
   const completedToday = doneTasks.filter(
-    (task) => task.completedAt?.slice(0, 10) === now.toISOString().slice(0, 10)
+    (task) =>
+      task.completedAt !== null &&
+      dateKeyInTimezone(task.completedAt, timezone) ===
+        dateKeyInTimezone(now, timezone)
   ).length;
   const alignedHabitCount = habits.reduce(
     (sum, habit) =>
@@ -1730,7 +2108,7 @@ function buildMilestoneRewardsFromProfile(input: {
       id: "next-level",
       title: "Next level threshold",
       summary:
-        "Keep pushing until the next level unlocks a stronger sense of ascent.",
+        "Progress from the current level start to the next XP threshold.",
       rewardLabel: `Level ${profile.level + 1}`,
       progressLabel: `${profile.currentLevelXp}/${profile.nextLevelXp} xp`,
       current: profile.currentLevelXp,
@@ -1739,9 +2117,9 @@ function buildMilestoneRewardsFromProfile(input: {
     },
     {
       id: "weekly-sprint",
-      title: "Weekly sprint heat",
-      summary: "Cross the weekly XP line that keeps the system feeling alive.",
-      rewardLabel: "Momentum bonus",
+      title: "Weekly XP target",
+      summary: "Automatic and manual ledger changes recorded since Monday.",
+      rewardLabel: "240 weekly XP",
       progressLabel: `${Math.min(profile.weeklyXp, 240)}/240 weekly xp`,
       current: profile.weeklyXp,
       target: 240,
@@ -1749,9 +2127,9 @@ function buildMilestoneRewardsFromProfile(input: {
     },
     {
       id: "daily-mass",
-      title: "Daily mass threshold",
-      summary: "Make the day feel consequential with multiple completed tasks.",
-      rewardLabel: "Quest chest +90 xp",
+      title: "Completed tasks today",
+      summary: `Task completions dated today in ${timezone}.`,
+      rewardLabel: "3 completions",
       progressLabel: `${Math.min(completedToday, 3)}/3 completions today`,
       current: completedToday,
       target: 3,
@@ -1775,10 +2153,10 @@ function buildMilestoneRewardsFromProfile(input: {
     },
     {
       id: "habit-mass",
-      title: "Habit mass threshold",
+      title: "Aligned habit check-ins",
       summary:
         "Make recurring behavior part of the same reward engine as tasks and projects.",
-      rewardLabel: "Consistency cache +75 xp",
+      rewardLabel: "14 aligned check-ins",
       progressLabel: `${Math.min(alignedHabitCount, 14)}/14 aligned habit check-ins`,
       current: alignedHabitCount,
       target: 14,
@@ -1792,7 +2170,7 @@ export function buildMilestoneRewards(
   tasks: Task[],
   habits: Habit[],
   now = new Date(),
-  options: { userIds?: string[] } = {}
+  options: { userIds?: string[]; timezone?: string } = {}
 ): MilestoneReward[] {
   const profile = buildGamificationProfile(goals, tasks, habits, now, options);
   return buildMilestoneRewardsFromProfile({
@@ -1800,7 +2178,8 @@ export function buildMilestoneRewards(
     tasks,
     habits,
     now,
-    profile
+    profile,
+    timezone: options.timezone
   });
 }
 
@@ -1831,7 +2210,8 @@ export function buildGamificationDashboardSignals(
     tasks,
     habits,
     now,
-    profile: state.profile
+    profile: state.profile,
+    timezone: state.timezone
   });
   return {
     profile: state.profile,
@@ -1909,7 +2289,8 @@ export function buildXpMomentumPulse(
     tasks,
     habits,
     now,
-    profile: state.profile
+    profile: state.profile,
+    timezone: state.timezone
   });
   return buildXpMomentumPulseFromParts({
     profile: state.profile,
@@ -1922,7 +2303,7 @@ export function buildGamificationCatalogPayload(
   goals: Goal[],
   tasks: Task[],
   habits: Habit[],
-  options: { userIds?: string[]; now?: Date } = {}
+  options: { userIds?: string[]; now?: Date; timezone?: string } = {}
 ): GamificationCatalogPayload {
   return buildGamificationState(goals, tasks, habits, options).catalog;
 }
@@ -1967,10 +2348,19 @@ export function updateGamificationEquipmentSelection(input: {
   tasks: Task[];
   habits: Habit[];
   userIds?: string[];
+  timezone?: string;
   equipment: Partial<Omit<GamificationEquipment, "updatedAt">>;
 }) {
+  reconcileGamificationProgress({
+    goals: input.goals,
+    tasks: input.tasks,
+    habits: input.habits,
+    userIds: input.userIds,
+    timezone: input.timezone
+  });
   const state = buildGamificationState(input.goals, input.tasks, input.habits, {
-    userIds: input.userIds
+    userIds: input.userIds,
+    timezone: input.timezone
   });
   const userId = state.persistableUserId;
   if (!userId) {
@@ -2004,10 +2394,11 @@ export function buildGamificationOverview(
   tasks: Task[],
   habits: Habit[],
   now = new Date(),
-  options: { userIds?: string[] } = {}
+  options: { userIds?: string[]; timezone?: string } = {}
 ) {
   const state = buildGamificationState(goals, tasks, habits, {
     userIds: options.userIds,
+    timezone: options.timezone,
     now
   });
   const achievements = buildAchievementSignalsFromProfile({
@@ -2022,7 +2413,8 @@ export function buildGamificationOverview(
     tasks,
     habits,
     now,
-    profile: state.profile
+    profile: state.profile,
+    timezone: state.timezone
   });
   return {
     profile: state.profile,
@@ -2036,11 +2428,14 @@ export function buildXpMetricsPayloadModel(input: {
   tasks: Task[];
   habits: Habit[];
   userIds?: string[];
+  timezone?: string;
+  now?: Date;
 }) {
-  const now = new Date();
+  const now = input.now ?? new Date();
   const state = buildGamificationState(input.goals, input.tasks, input.habits, {
     userIds: input.userIds,
-    now
+    now,
+    timezone: input.timezone
   });
   const rules = listRewardRules();
   const dailyAmbientCap =
@@ -2062,7 +2457,8 @@ export function buildXpMetricsPayloadModel(input: {
     tasks: input.tasks,
     habits: input.habits,
     now,
-    profile: state.profile
+    profile: state.profile,
+    timezone: state.timezone
   });
   const momentumPulse = buildXpMomentumPulseFromParts({
     profile: state.profile,
@@ -2090,6 +2486,7 @@ export function buildXpMetricsPayloadModel(input: {
     ...new Map(visibleCatalog.map((item) => [item.id, item])).values()
   ].slice(0, 6);
   return {
+    timezone: state.timezone,
     scope: state.scope,
     profile: state.profile,
     achievements,
@@ -2106,19 +2503,16 @@ export function buildXpMetricsPayloadModel(input: {
     celebrations: state.persistableUserId
       ? listUnseenGamificationCelebrations(state.persistableUserId, 5)
       : [],
-    recentLedger: state.scopedRewards
-      .slice(-25)
-      .reverse()
-      .map(
-        ({
-          ownerUserId: _ownerUserId,
-          ruleCode: _ruleCode,
-          ruleFamily: _ruleFamily,
-          ...event
-        }) => event
-      ),
+    recentLedger: state.rewardSummary.recentRewards.map(
+      ({
+        ownerUserId: _ownerUserId,
+        ruleCode: _ruleCode,
+        ruleFamily: _ruleFamily,
+        ...event
+      }) => event
+    ),
     rules,
-    dailyAmbientXp: getDailyAmbientXp(new Date().toISOString().slice(0, 10)),
+    dailyAmbientXp: state.rewardSummary.dailyAmbientXp,
     dailyAmbientCap
   };
 }

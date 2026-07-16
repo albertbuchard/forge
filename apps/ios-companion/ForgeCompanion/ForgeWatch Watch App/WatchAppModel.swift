@@ -1,8 +1,51 @@
 import Combine
 import Foundation
+import Security
 import SwiftUI
 import WatchConnectivity
 import WatchKit
+
+enum ForgeWatchPreviewScenario: String, CaseIterable {
+    case standard
+    case empty
+    case loading
+    case stale
+    case error
+    case longContent = "long"
+}
+
+@MainActor
+final class ForgeWatchPeoplePrivacyMonitor: ObservableObject {
+    @Published private(set) var isUnlocked = false
+
+    func refresh() {
+        isUnlocked = Self.protectedDataIsAvailable()
+    }
+
+    private static func protectedDataIsAvailable() -> Bool {
+        let service = "com.albertbuchard.forge.watch.people-unlock-probe"
+        let account = "device"
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+            kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecSuccess { return true }
+        guard status == errSecItemNotFound else { return false }
+
+        var attributes = query
+        attributes.removeValue(forKey: kSecReturnData)
+        attributes.removeValue(forKey: kSecMatchLimit)
+        attributes[kSecValueData] = Data([0x01])
+        let addStatus = SecItemAdd(attributes as CFDictionary, nil)
+        return addStatus == errSecSuccess || addStatus == errSecDuplicateItem
+    }
+}
 
 @MainActor
 final class WatchAppModel: NSObject, ObservableObject {
@@ -13,6 +56,7 @@ final class WatchAppModel: NSObject, ObservableObject {
     @Published private(set) var pendingActionCount = 0
     @Published private(set) var snapshotSource: ForgeWatchSnapshotSource = .unavailable
     @Published private(set) var recentReceipts: [ForgeWatchStoredReceipt] = []
+    @Published private(set) var refreshState: ForgeWatchRefreshState = .idle
 
     var latestReceipt: ForgeWatchStoredReceipt? {
         recentReceipts.first
@@ -29,17 +73,41 @@ final class WatchAppModel: NSObject, ObservableObject {
     private var directRetryTask: Task<Void, Never>?
     private var directRouteCoolingDownUntil: Date?
     private var directRouteLastFailureDescription: String?
+    private var activeHandoffActivity: NSUserActivity?
+    private var activeRefreshRequestId: String?
+    private var refreshDeadlineTask: Task<Void, Never>?
 
-    init(preview: Bool = false) {
+    init(
+        preview: Bool = false,
+        previewScenario: ForgeWatchPreviewScenario = .standard
+    ) {
         self.previewMode = preview
         if preview {
-            self.bootstrap = Self.previewBootstrap()
+            self.bootstrap = Self.previewBootstrap(scenario: previewScenario)
         } else {
             self.bootstrap = ForgeWatchBootstrap.empty
         }
         super.init()
         if preview {
-            snapshotSource = .preview
+            switch previewScenario {
+            case .loading:
+                snapshotSource = .unavailable
+                refreshState = .refreshing
+                lastStatusMessage = "Refreshing Forge preview"
+            case .error:
+                snapshotSource = .unavailable
+                refreshState = .failed
+                lastStatusMessage = "Forge refresh failed"
+            case .stale:
+                snapshotSource = .cache
+                lastStatusMessage = "Showing cached Forge preview"
+            case .empty:
+                snapshotSource = .preview
+                lastStatusMessage = "No active planning items"
+            case .standard, .longContent:
+                snapshotSource = .preview
+                lastStatusMessage = "Forge preview ready"
+            }
         } else {
             bootstrap = loadBootstrap()
             snapshotSource = bootstrap.hasSnapshotContent ? .cache : .unavailable
@@ -55,6 +123,70 @@ final class WatchAppModel: NSObject, ObservableObject {
             hasSnapshot: bootstrap.hasSnapshotContent,
             now: now
         )
+    }
+
+    func continueOnPhone(_ destination: ForgeWatchPhoneDestination) {
+        if let url = ForgeWatchPhoneHandoff.url(
+            uiBaseUrl: bootstrap.connection?.uiBaseUrl,
+            destination: destination
+        ) {
+            activeHandoffActivity?.invalidate()
+            let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+            activity.title = "Continue in Forge"
+            activity.webpageURL = url
+            activity.isEligibleForHandoff = true
+            activity.isEligibleForSearch = false
+            activity.isEligibleForPublicIndexing = false
+            activity.becomeCurrent()
+            activeHandoffActivity = activity
+            lastStatusMessage = "Ready to continue on iPhone"
+            WKInterfaceDevice.current().play(.click)
+            return
+        }
+
+        guard
+            previewMode == false,
+            WCSession.isSupported(),
+            let request = ForgeWatchPhoneHandoffRequest(destination: destination),
+            let data = try? encoder.encode(request)
+        else {
+            lastStatusMessage = "Open Forge on iPhone to continue"
+            WKInterfaceDevice.current().play(.directionDown)
+            return
+        }
+        let session = WCSession.default
+        if session.isReachable {
+            session.sendMessageData(data) { [weak self] replyData in
+                Task { @MainActor in
+                    guard
+                        let self,
+                        let response = try? self.decoder.decode(
+                            ForgeWatchPhoneHandoffResponse.self,
+                            from: replyData
+                        )
+                    else { return }
+                    self.applyPhoneHandoffResponse(response)
+                }
+            } errorHandler: { [weak self] error in
+                Task { @MainActor in
+                    self?.lastStatusMessage = "iPhone handoff failed: \(error.localizedDescription)"
+                    WKInterfaceDevice.current().play(.failure)
+                }
+            }
+        } else {
+            session.transferUserInfo([
+                ForgeWatchStorage.phoneHandoffRequestMessageKey: data
+            ])
+        }
+        lastStatusMessage = session.isReachable
+            ? "Opening Forge on iPhone"
+            : "Handoff waiting for paired iPhone"
+        WKInterfaceDevice.current().play(.click)
+    }
+
+    private func applyPhoneHandoffResponse(_ response: ForgeWatchPhoneHandoffResponse) {
+        lastStatusMessage = response.message
+        WKInterfaceDevice.current().play(response.status == .ready ? .click : .failure)
     }
 
     func activateSession() {
@@ -165,6 +297,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         lastRefreshRequestAt = now
+        refreshState = .refreshing
         let respectCooldown = ForgeWatchDirectRoutePolicy.shouldRespectFailureCooldown(
             forceUserRetry: force
         )
@@ -181,19 +314,42 @@ final class WatchAppModel: NSObject, ObservableObject {
     private func requestPhoneFallbackRefresh(reason: String) {
         guard WCSession.isSupported() else {
             lastStatusMessage = "Forge direct unavailable"
+            refreshState = .failed
             return
         }
+        refreshState = .refreshing
+        let createdAt = Date()
+        let deadline = ForgeWatchRefreshRequestPolicy.deadline(for: createdAt)
         let request = ForgeWatchControlRequest(
             id: UUID().uuidString,
-            createdAt: ISO8601DateFormatter().string(from: Date()),
-            reason: reason
+            createdAt: ISO8601DateFormatter().string(from: createdAt),
+            reason: reason,
+            deadlineAt: ISO8601DateFormatter().string(from: deadline)
         )
-        guard let data = try? encoder.encode(request) else { return }
+        guard let data = try? encoder.encode(request) else {
+            refreshState = .failed
+            lastStatusMessage = "Could not request a Forge refresh"
+            return
+        }
+        beginRefreshDeadline(for: request)
         lastStatusMessage = "Paired iPhone backup refreshing Forge"
         if WCSession.default.isReachable {
-            WCSession.default.sendMessageData(data, replyHandler: nil) { [weak self] error in
+            WCSession.default.sendMessageData(data) { [weak self] replyData in
+                Task { @MainActor in
+                    guard
+                        let self,
+                        let response = try? self.decoder.decode(
+                            ForgeWatchRefreshResponse.self,
+                            from: replyData
+                        )
+                    else { return }
+                    self.applyRefreshResponse(response)
+                }
+            } errorHandler: { [weak self] error in
                 Task { @MainActor in
                     self?.lastStatusMessage = "Paired iPhone backup failed: \(error.localizedDescription)"
+                    self?.refreshState = .failed
+                    self?.finishRefreshRequest()
                 }
             }
         } else {
@@ -201,6 +357,43 @@ final class WatchAppModel: NSObject, ObservableObject {
                 ForgeWatchStorage.syncRequestMessageKey: data
             ])
         }
+    }
+
+    private func beginRefreshDeadline(for request: ForgeWatchControlRequest) {
+        refreshDeadlineTask?.cancel()
+        activeRefreshRequestId = request.id
+        let requestId = request.id
+        refreshDeadlineTask = Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(ForgeWatchRefreshRequestPolicy.timeoutSeconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard Task.isCancelled == false, self?.activeRefreshRequestId == requestId else {
+                return
+            }
+            self?.refreshState = .failed
+            self?.lastStatusMessage = "Refresh timed out. Cached Forge summaries remain available."
+            self?.finishRefreshRequest()
+        }
+    }
+
+    private func finishRefreshRequest() {
+        refreshDeadlineTask?.cancel()
+        refreshDeadlineTask = nil
+        activeRefreshRequestId = nil
+    }
+
+    private func applyRefreshResponse(_ response: ForgeWatchRefreshResponse) {
+        guard ForgeWatchRefreshRequestPolicy.accepts(
+            response,
+            activeRequestId: activeRefreshRequestId
+        ) else { return }
+        finishRefreshRequest()
+        switch response.status {
+        case .refreshed:
+            refreshState = .idle
+        case .failed, .expired:
+            refreshState = .failed
+        }
+        lastStatusMessage = response.message
     }
 
     func refreshFromForge(
@@ -227,11 +420,22 @@ final class WatchAppModel: NSObject, ObservableObject {
         }
     }
 
-    private static func previewBootstrap() -> ForgeWatchBootstrap {
-        let now = ISO8601DateFormatter().string(from: Date())
+    static func previewBootstrap(
+        scenario: ForgeWatchPreviewScenario = .standard
+    ) -> ForgeWatchBootstrap {
+        if scenario == .loading || scenario == .error {
+            return .empty
+        }
+        let generatedDate = scenario == .stale
+            ? Date().addingTimeInterval(-(ForgeWatchSnapshotFreshness.freshInterval + 60))
+            : Date()
+        let now = ISO8601DateFormatter().string(from: generatedDate)
+        let isLongContent = scenario == .longContent
         let task = ForgeWatchTaskSummary(
             id: "task_watch_quality",
-            title: "Improve watch navigation and fast logging",
+            title: isLongContent
+                ? "Review the complete watch planning summary without losing the exact strategic context or the next safe handoff"
+                : "Improve watch navigation and fast logging",
             status: "focus",
             level: "task",
             priority: "high",
@@ -246,7 +450,9 @@ final class WatchAppModel: NSObject, ObservableObject {
         )
         let secondTask = ForgeWatchTaskSummary(
             id: "task_sync_metrics",
-            title: "Check sync timing and duplicate requests",
+            title: isLongContent
+                ? "Check sync timing, duplicate requests, retry boundaries, and the full receipt trail before changing any canonical work"
+                : "Check sync timing and duplicate requests",
             status: "in_progress",
             level: "task",
             priority: "medium",
@@ -339,6 +545,73 @@ final class WatchAppModel: NSObject, ObservableObject {
                 )
             ]
         )
+        let extraTodayTasks = isLongContent
+            ? (0..<6).map { index in
+                previewTask(
+                    id: "task_watch_long_\(index)",
+                    title: "Long watch task \(index + 1) with enough detail to verify compact truncation, vertical scrolling, and a stable handoff target",
+                    status: ["backlog", "blocked", "in_progress"][index % 3],
+                    priority: ["low", "high", "medium"][index % 3],
+                    points: index + 1,
+                    now: now
+                )
+            }
+            : []
+        let previewGoals: [ForgeWatchGoalSummary] = scenario == .empty
+            ? []
+            : [
+                ForgeWatchGoalSummary(
+                    id: "goal_forge_quality",
+                    title: isLongContent
+                        ? "Make Forge faster, calmer, and easier to command across every planning surface without losing strategic depth"
+                        : "Make Forge faster and easier to command",
+                    horizon: "quarter",
+                    status: "active",
+                    targetPoints: 120
+                )
+            ] + (isLongContent
+                ? (0..<5).map { index in
+                    ForgeWatchGoalSummary(
+                        id: "goal_watch_long_\(index)",
+                        title: "Strategic direction \(index + 1) with a deliberately extended title for compact watch verification",
+                        horizon: ["lifetime", "year", "quarter"][index % 3],
+                        status: "active",
+                        targetPoints: 80 - index
+                    )
+                }
+                : [])
+        let previewProjects: [ForgeWatchProjectSummary] = scenario == .empty
+            ? []
+            : [
+                ForgeWatchProjectSummary(
+                    id: "project_forge_watch",
+                    title: isLongContent
+                        ? "Forge watchOS companion planning summaries and safe cross-device continuation"
+                        : "Forge watchOS companion",
+                    status: "active",
+                    workflowStatus: "in_progress",
+                    goalId: "goal_forge_quality",
+                    goalTitle: "Make Forge faster and easier to command",
+                    activeRunCount: 1,
+                    openTaskCount: 2
+                )
+            ] + (isLongContent
+                ? (0..<5).map { index in
+                    ForgeWatchProjectSummary(
+                        id: "project_watch_long_\(index)",
+                        title: "Watch project \(index + 1) with extended operational context for layout verification",
+                        status: "active",
+                        workflowStatus: ["backlog", "blocked", "focus", "in_progress"][index % 4],
+                        goalId: "goal_forge_quality",
+                        goalTitle: "Make Forge faster and easier to command",
+                        activeRunCount: index % 2,
+                        openTaskCount: 6 - index
+                    )
+                }
+                : [])
+        let previewTodayTasks = scenario == .empty
+            ? []
+            : [task, secondTask] + extraTodayTasks
 
         return ForgeWatchBootstrap(
             schemaVersion: 2,
@@ -360,6 +633,7 @@ final class WatchAppModel: NSObject, ObservableObject {
                 .init(id: "health", title: "Health", icon: "heart"),
                 .init(id: "movement", title: "Move", icon: "location"),
                 .init(id: "psyche", title: "Psyche", icon: "mind"),
+                .init(id: "people", title: "Forge People", icon: "person.2"),
                 .init(id: "inbox", title: "Inbox", icon: "tray"),
                 .init(id: "sync", title: "Sync", icon: "antenna")
             ],
@@ -382,32 +656,15 @@ final class WatchAppModel: NSObject, ObservableObject {
                 visibleCount: 2,
                 doneCount: 1
             ),
-            goals: [
-                ForgeWatchGoalSummary(
-                    id: "goal_forge_quality",
-                    title: "Make Forge faster and easier to command",
-                    horizon: "quarter",
-                    status: "active",
-                    targetPoints: 120
-                )
-            ],
-            projects: [
-                ForgeWatchProjectSummary(
-                    id: "project_forge_watch",
-                    title: "Forge watchOS companion",
-                    status: "active",
-                    workflowStatus: "building",
-                    goalId: "goal_forge_quality",
-                    goalTitle: "Make Forge faster and easier to command",
-                    activeRunCount: 1,
-                    openTaskCount: 2
-                )
-            ],
+            goals: previewGoals,
+            goalCount: previewGoals.count,
+            projects: previewProjects,
+            projectCount: previewProjects.count,
             today: ForgeWatchTodaySnapshot(
                 dateKey: String(now.prefix(10)),
-                dueTasks: [task, secondTask],
-                dueCount: 2,
-                recentDone: []
+                dueTasks: previewTodayTasks,
+                dueCount: previewTodayTasks.count,
+                recentDone: scenario == .empty ? [] : [secondTask]
             ),
             health: ForgeWatchHealthSnapshot(
                 lastWorkout: ForgeWatchHealthSnapshot.Workout(
@@ -467,6 +724,24 @@ final class WatchAppModel: NSObject, ObservableObject {
                 storedCaptureCount: 3,
                 actionReceiptCount: 7
             ),
+            people: scenario == .empty
+                ? .chooseOnIPhone(generatedAt: now)
+                : ForgeWatchPeopleGlanceSnapshot(
+                    selection: .selected,
+                    generatedAt: now,
+                    personName: "Ada Example",
+                    lastConnectedAt: now,
+                    nextSharedEvent: ForgeWatchPeopleGlanceSnapshot.SharedEvent(
+                        title: "Project check-in",
+                        startsAt: ISO8601DateFormatter().string(
+                            from: generatedDate.addingTimeInterval(3_600)
+                        ),
+                        sharedAt: now,
+                        validUntil: ISO8601DateFormatter().string(
+                            from: generatedDate.addingTimeInterval(7_200)
+                        )
+                    )
+                ),
             habits: habits,
             checkInOptions: ForgeWatchQuickOptions(
                 activities: ["Working", "Walking", "Resting"],
@@ -477,6 +752,31 @@ final class WatchAppModel: NSObject, ObservableObject {
                 recentPeople: ["Julien", "Family", "Coach"]
             ),
             pendingPrompts: prompts
+        )
+    }
+
+    private static func previewTask(
+        id: String,
+        title: String,
+        status: String,
+        priority: String,
+        points: Int,
+        now: String
+    ) -> ForgeWatchTaskSummary {
+        ForgeWatchTaskSummary(
+            id: id,
+            title: title,
+            status: status,
+            level: "task",
+            priority: priority,
+            dueDate: String(now.prefix(10)),
+            projectId: "project_forge_watch",
+            goalId: "goal_forge_quality",
+            parentWorkItemId: nil,
+            points: points,
+            effort: "medium",
+            energy: "focus",
+            updatedAt: now
         )
     }
 
@@ -776,6 +1076,7 @@ final class WatchAppModel: NSObject, ObservableObject {
             return
         }
         do {
+            refreshState = .refreshing
             lastStatusMessage = "Refreshing through \(connection.transportLabel)"
             let result: DirectPostResult<WatchBootstrapEnvelope> = try await postDirect(
                 path: "/mobile/watch/bootstrap",
@@ -798,6 +1099,8 @@ final class WatchAppModel: NSObject, ObservableObject {
             markDirectRouteFailureIfNeeded(error)
             if fallbackToPhone {
                 requestPhoneFallbackRefresh(reason: reason)
+            } else {
+                refreshState = .failed
             }
         }
     }
@@ -1051,10 +1354,13 @@ final class WatchAppModel: NSObject, ObservableObject {
         _ bootstrap: ForgeWatchBootstrap,
         source: ForgeWatchSnapshotSource? = nil
     ) {
-        let merged = bootstrap.withConnection(bootstrap.connection ?? self.bootstrap.connection)
+        let connected = bootstrap.withConnection(bootstrap.connection ?? self.bootstrap.connection)
+        let merged = connected.preservingPeople(from: self.bootstrap)
         self.bootstrap = merged
         if let source {
             snapshotSource = source
+            refreshState = .idle
+            finishRefreshRequest()
         }
         if let data = try? encoder.encode(merged) {
             defaults.set(data, forKey: ForgeWatchStorage.bootstrapKey)
@@ -1176,6 +1482,7 @@ extension WatchAppModel: WCSessionDelegate {
         Task { @MainActor in
             if let error {
                 self.lastStatusMessage = "iPhone link failed: \(error.localizedDescription)"
+                self.refreshState = .failed
             } else {
                 if activationState == .activated, let connection = self.directConnection() {
                     self.lastStatusMessage = Self.directRouteTestingStatus(for: connection)
@@ -1217,6 +1524,22 @@ extension WatchAppModel: WCSessionDelegate {
         _ session: WCSession,
         didReceiveUserInfo userInfo: [String : Any] = [:]
     ) {
+        if let data = userInfo[ForgeWatchStorage.syncResponseMessageKey] as? Data {
+            Task { @MainActor in
+                if let response = try? self.decoder.decode(ForgeWatchRefreshResponse.self, from: data) {
+                    self.applyRefreshResponse(response)
+                }
+            }
+            return
+        }
+        if let data = userInfo[ForgeWatchStorage.phoneHandoffResponseMessageKey] as? Data {
+            Task { @MainActor in
+                if let response = try? self.decoder.decode(ForgeWatchPhoneHandoffResponse.self, from: data) {
+                    self.applyPhoneHandoffResponse(response)
+                }
+            }
+            return
+        }
         guard let data = userInfo[ForgeWatchStorage.ackMessageKey] as? Data else { return }
         Task { @MainActor in
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: data) {
@@ -1227,6 +1550,14 @@ extension WatchAppModel: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
         Task { @MainActor in
+            if let response = try? self.decoder.decode(ForgeWatchRefreshResponse.self, from: messageData) {
+                self.applyRefreshResponse(response)
+                return
+            }
+            if let response = try? self.decoder.decode(ForgeWatchPhoneHandoffResponse.self, from: messageData) {
+                self.applyPhoneHandoffResponse(response)
+                return
+            }
             if let ack = try? self.decoder.decode(ForgeWatchAckEnvelope.self, from: messageData) {
                 self.applyAsyncAck(ack)
             }

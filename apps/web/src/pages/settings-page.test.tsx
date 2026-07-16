@@ -40,7 +40,17 @@ vi.mock("@/components/shell/page-hero", () => ({
 }));
 
 vi.mock("@/components/settings/settings-section-nav", () => ({
-  SettingsSectionNav: () => <div>Settings nav</div>
+  SettingsSectionNav: () => <div>Settings nav</div>,
+  SettingsStateFrame: ({
+    children
+  }: {
+    children: import("react").ReactNode;
+  }) => (
+    <>
+      <div>Settings nav</div>
+      {children}
+    </>
+  )
 }));
 
 vi.mock("@/components/settings/theme-customizer-dialog", () => ({
@@ -182,7 +192,8 @@ describe("SettingsPage theme persistence", () => {
             fileName: "forge-gamification-dramatic-smithie-0.2.59.zip",
             downloadUrl:
               "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057831",
-            sha256: "407c98a89626d723f9f92e79411df7c999458459c96e0e09e73020b3d3ce14c0",
+            sha256:
+              "407c98a89626d723f9f92e79411df7c999458459c96e0e09e73020b3d3ce14c0",
             installed: false,
             spriteCount: 0,
             expectedSpriteCount: 348,
@@ -196,7 +207,8 @@ describe("SettingsPage theme persistence", () => {
             fileName: "forge-gamification-dark-fantasy-0.2.59.zip",
             downloadUrl:
               "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057833",
-            sha256: "9545900906784a23d15f4536eb8c32683ffff0ef42006d06c70cea101c1db570",
+            sha256:
+              "9545900906784a23d15f4536eb8c32683ffff0ef42006d06c70cea101c1db570",
             installed: false,
             spriteCount: 0,
             expectedSpriteCount: 348,
@@ -210,7 +222,8 @@ describe("SettingsPage theme persistence", () => {
             fileName: "forge-gamification-mind-locksmith-0.2.59.zip",
             downloadUrl:
               "https://api.github.com/repos/albertbuchard/aurel-monorepo/releases/assets/411057834",
-            sha256: "cfdfd4259145e589e6e0fba8e1deb69d30931cfabbe6d626c0053e4f4cfe5f10",
+            sha256:
+              "cfdfd4259145e589e6e0fba8e1deb69d30931cfabbe6d626c0053e4f4cfe5f10",
             installed: false,
             spriteCount: 0,
             expectedSpriteCount: 348,
@@ -299,6 +312,20 @@ describe("SettingsPage theme persistence", () => {
     revokeOperatorSessionMock.mockResolvedValue(undefined);
   });
 
+  it("exposes the selected shell and reward themes", async () => {
+    renderSettingsPage();
+
+    expect(
+      await screen.findByRole("button", { name: "Select Obsidian theme" })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Select Paper theme" })
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Select Fantasy" })
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("persists preset theme selection immediately", async () => {
     renderSettingsPage();
 
@@ -316,6 +343,29 @@ describe("SettingsPage theme persistence", () => {
         expect.objectContaining({ themePreference: "paper" })
       )
     );
+  });
+
+  it("restores the persisted shell theme when selection fails", async () => {
+    patchSettingsMock.mockRejectedValueOnce(
+      new Error("Theme preference could not be saved")
+    );
+    renderSettingsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select Paper theme" })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Theme preference could not be saved"
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Select Obsidian theme" })
+      ).toHaveAttribute("aria-pressed", "true")
+    );
+    expect(
+      screen.getByRole("button", { name: "Select Paper theme" })
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("persists custom theme saves immediately", async () => {
@@ -358,7 +408,9 @@ describe("SettingsPage theme persistence", () => {
 
     await screen.findByText("Gamification style");
 
-    expect(screen.getAllByAltText(/neutral Forge Smith mascot preview/i)).toHaveLength(3);
+    expect(
+      screen.getAllByAltText(/neutral Forge Smith mascot preview/i)
+    ).toHaveLength(3);
     expect(screen.getAllByAltText(/reward thumbnail/i)).toHaveLength(9);
   });
 
@@ -414,6 +466,44 @@ describe("SettingsPage theme persistence", () => {
     );
   });
 
+  it("keeps the settings index available when runtime settings fail", async () => {
+    getSettingsMock.mockRejectedValueOnce(
+      new Error("Runtime settings are temporarily unavailable")
+    );
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("Settings nav")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("keeps the settings index available while runtime settings load", async () => {
+    getSettingsMock.mockReturnValueOnce(new Promise<never>(() => {}));
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("Settings nav")).toBeInTheDocument();
+    await waitFor(() => expect(getSettingsMock).toHaveBeenCalled());
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Loading runtime settings."
+    );
+  });
+
+  it("keeps all settings return paths visible when operator access fails", async () => {
+    ensureOperatorSessionMock.mockRejectedValueOnce(
+      new Error("Operator access is unavailable")
+    );
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("Settings nav")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Operator access is unavailable"
+    );
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
   it("explains Doctor-backed integrity details", async () => {
     renderSettingsPage();
 
@@ -429,7 +519,9 @@ describe("SettingsPage theme persistence", () => {
     fireEvent.click(integritySummary);
 
     expect(integrityDetails).toHaveAttribute("open");
-    expect(await screen.findByText("Integrity is complete")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Integrity is complete")
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/No active Doctor warnings are holding back integrity/i)
     ).toBeInTheDocument();

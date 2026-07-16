@@ -6,19 +6,39 @@ import WatchConnectivity
 final class WatchSessionManager: NSObject, ObservableObject {
     @Published private(set) var lastStatusMessage = "Watch bridge idle"
     @Published private(set) var latestBootstrap: ForgeWatchBootstrap = .empty
+    @Published private(set) var pendingPhoneHandoffURL: URL?
 
     private let syncClient: ForgeSyncClient
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private let defaults = ForgeWatchStorage.sharedDefaults()
+    private let defaults: UserDefaults
+    private let phoneHandoffTransportAvailable: () -> Bool
 
     private var pairingProvider: (() -> PairingPayload?)?
     private var processingTask: Task<Void, Never>?
+    private var relayedPeopleGlance: ForgeWatchPeopleGlanceSnapshot?
+    private var relayedPeopleSessionId: String?
+#if DEBUG
+    private var didInjectPhoneHandoffForUITesting = false
+#endif
 
-    init(syncClient: ForgeSyncClient) {
+    init(
+        syncClient: ForgeSyncClient,
+        defaults: UserDefaults = ForgeWatchStorage.sharedDefaults(),
+        phoneHandoffTransportAvailable: @escaping () -> Bool = {
+            guard WCSession.isSupported() else { return false }
+            let session = WCSession.default
+            return session.isPaired && session.isWatchAppInstalled
+        }
+    ) {
         self.syncClient = syncClient
+        self.defaults = defaults
+        self.phoneHandoffTransportAvailable = phoneHandoffTransportAvailable
         super.init()
         latestBootstrap = loadBootstrap()
+        relayedPeopleGlance = latestBootstrap.people
+        relayedPeopleSessionId = latestBootstrap.connection?.sessionId
+        pendingPhoneHandoffURL = loadPendingPhoneHandoffURL()
     }
 
     func configure(pairingProvider: @escaping () -> PairingPayload?) {
@@ -38,27 +58,67 @@ final class WatchSessionManager: NSObject, ObservableObject {
             : "Watch app not installed"
     }
 
-    func refreshBootstrapIfPossible(reason: String) async {
+    @discardableResult
+    func refreshBootstrapIfPossible(reason: String) async -> Bool {
         guard let pairing = pairingProvider?() else {
             lastStatusMessage = "Watch bridge waiting for pairing"
-            return
+            return false
         }
         guard watchTransportAvailable(for: WCSession.default) else {
             lastStatusMessage = "Watch app not installed"
-            return
+            return false
         }
 
         do {
             let bootstrap = try await syncClient.fetchWatchBootstrap(payload: pairing)
-            let enrichedBootstrap = bootstrap.withConnection(Self.directWatchConnection(for: pairing))
+            let enrichedBootstrap = enrichBootstrap(bootstrap, pairing: pairing)
             saveBootstrap(enrichedBootstrap)
             publishBootstrap(enrichedBootstrap)
             lastStatusMessage = "Watch bootstrap refreshed via \(reason)"
             await processPendingQueue()
+            return true
         } catch {
             lastStatusMessage = "Watch bootstrap failed: \(error.localizedDescription)"
+            return false
         }
     }
+
+    func consumePendingPhoneHandoffURL() -> URL? {
+        defer {
+            pendingPhoneHandoffURL = nil
+            defaults.removeObject(forKey: ForgeWatchPhoneHandoffDeliveryPolicy.pendingStorageKey)
+        }
+        return pendingPhoneHandoffURL
+    }
+
+    func updatePeopleGlance(
+        _ glance: ForgeWatchPeopleGlanceSnapshot,
+        pairingSessionId: String?
+    ) {
+        relayedPeopleGlance = glance
+        relayedPeopleSessionId = pairingSessionId
+        guard glance.selection == .chooseOnIPhone || pairingSessionId == nil ||
+                latestBootstrap.connection?.sessionId == pairingSessionId
+        else { return }
+        let bootstrap = latestBootstrap.withPeople(glance)
+        saveBootstrap(bootstrap)
+        publishBootstrap(bootstrap)
+    }
+
+#if DEBUG
+    func injectPendingPhoneHandoffURLForUITestingIfConfigured() {
+        guard didInjectPhoneHandoffForUITesting == false else { return }
+        didInjectPhoneHandoffForUITesting = true
+        guard
+            ProcessInfo.processInfo.arguments.contains("--forge-ui-test-watch-handoff"),
+            let value = ProcessInfo.processInfo.environment["FORGE_UI_TEST_WATCH_HANDOFF_URL"],
+            let url = URL(string: value)
+        else {
+            return
+        }
+        pendingPhoneHandoffURL = url
+    }
+#endif
 
     private func saveBootstrap(_ bootstrap: ForgeWatchBootstrap) {
         latestBootstrap = bootstrap
@@ -75,6 +135,21 @@ final class WatchSessionManager: NSObject, ObservableObject {
             return .empty
         }
         return bootstrap
+    }
+
+    private func enrichBootstrap(
+        _ bootstrap: ForgeWatchBootstrap,
+        pairing: PairingPayload
+    ) -> ForgeWatchBootstrap {
+        let connected = bootstrap.withConnection(Self.directWatchConnection(for: pairing))
+        guard connected.people == nil else { return connected }
+        if relayedPeopleSessionId == pairing.sessionId {
+            return connected.withPeople(relayedPeopleGlance)
+        }
+        guard latestBootstrap.connection?.sessionId == pairing.sessionId else {
+            return connected
+        }
+        return connected.withPeople(latestBootstrap.people)
     }
 
     private func loadQueue() -> [ForgeWatchOutboundEnvelope] {
@@ -158,7 +233,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
             kind: envelope.kind.rawValue,
             processedAt: ISO8601DateFormatter().string(from: Date()),
             status: "deferred",
-            error: ["message": message],
+            error: ["message": .string(message)],
             bootstrap: nil
         )
     }
@@ -201,7 +276,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
                 envelopes: envelopes,
                 pairing: pairing
             )
-            let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
+            let bootstrap = enrichBootstrap(result.watch, pairing: pairing)
             saveBootstrap(bootstrap)
             publishBootstrap(bootstrap)
             var receiptsByActionId: [String: ForgeWatchCommandReceipt] = [:]
@@ -228,14 +303,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
                             ?? "Forge did not acknowledge the watch action"
                     )
                 }
-                return ForgeWatchAckEnvelope(
-                    actionId: receipt.actionId,
-                    kind: receipt.kind,
-                    processedAt: receipt.processedAt,
-                    status: receipt.status,
-                    error: nil,
-                    bootstrap: bootstrap
-                )
+                return Self.ackEnvelope(for: receipt, bootstrap: bootstrap)
             }
             lastStatusMessage = "Watch actions processed"
             return ForgeWatchAckBatchEnvelope(acks: acks)
@@ -256,12 +324,150 @@ final class WatchSessionManager: NSObject, ObservableObject {
         }
     }
 
-    private func handleControlRequestData(_ data: Data) async -> Bool {
+    private func handleControlRequestData(_ data: Data) async -> ForgeWatchRefreshResponse? {
         guard let request = try? decoder.decode(ForgeWatchControlRequest.self, from: data) else {
-            return false
+            return nil
         }
-        await refreshBootstrapIfPossible(reason: "watch-\(request.reason)")
-        return true
+        if ForgeWatchRefreshRequestPolicy.isExpired(request) {
+            return ForgeWatchRefreshResponse(
+                requestId: request.id,
+                completedAt: ISO8601DateFormatter().string(from: Date()),
+                status: .expired,
+                message: "Refresh request expired. Retry from Apple Watch."
+            )
+        }
+        let refreshed = await refreshBootstrapIfPossible(reason: "watch-\(request.reason)")
+        return ForgeWatchRefreshResponse(
+            requestId: request.id,
+            completedAt: ISO8601DateFormatter().string(from: Date()),
+            status: refreshed ? .refreshed : .failed,
+            message: refreshed
+                ? "Forge summaries refreshed"
+                : "Forge refresh failed. Cached summaries remain available."
+        )
+    }
+
+    private func handlePhoneHandoffRequestData(
+        _ data: Data,
+        now: Date = Date()
+    ) -> ForgeWatchPhoneHandoffResponse? {
+        guard let request = try? decoder.decode(ForgeWatchPhoneHandoffRequest.self, from: data) else {
+            return nil
+        }
+        guard
+            phoneHandoffTransportAvailable(),
+            let pairing = pairingProvider?(),
+            let url = Self.phoneHandoffURL(for: pairing, destination: request.destination)
+        else {
+            return ForgeWatchPhoneHandoffResponse(
+                requestId: request.id,
+                completedAt: ISO8601DateFormatter().string(from: now),
+                status: .unavailable,
+                message: "Open Forge on iPhone to continue"
+            )
+        }
+
+        switch ForgeWatchPhoneHandoffDeliveryPolicy.admission(
+            for: request,
+            deliveredRecords: loadPhoneHandoffDeliveryRecords(),
+            now: now
+        ) {
+        case .invalid, .stale:
+            return ForgeWatchPhoneHandoffResponse(
+                requestId: request.id,
+                completedAt: ISO8601DateFormatter().string(from: now),
+                status: .unavailable,
+                message: "Handoff expired. Retry from Apple Watch."
+            )
+        case .duplicate:
+            return ForgeWatchPhoneHandoffResponse(
+                requestId: request.id,
+                completedAt: ISO8601DateFormatter().string(from: now),
+                status: .ready,
+                message: "Forge already received this handoff"
+            )
+        case .deliver:
+            break
+        }
+
+        let pending = ForgeWatchPendingPhoneHandoff(
+            requestId: request.id,
+            createdAt: request.createdAt,
+            url: url.absoluteString
+        )
+        guard let pendingData = try? encoder.encode(pending) else {
+            return ForgeWatchPhoneHandoffResponse(
+                requestId: request.id,
+                completedAt: ISO8601DateFormatter().string(from: now),
+                status: .unavailable,
+                message: "Open Forge on iPhone to continue"
+            )
+        }
+        defaults.set(pendingData, forKey: ForgeWatchPhoneHandoffDeliveryPolicy.pendingStorageKey)
+        savePhoneHandoffDeliveryRecord(requestId: request.id, now: now)
+        pendingPhoneHandoffURL = url
+        lastStatusMessage = "Watch handoff ready on iPhone"
+        return ForgeWatchPhoneHandoffResponse(
+            requestId: request.id,
+            completedAt: ISO8601DateFormatter().string(from: now),
+            status: .ready,
+            message: "Forge is ready on iPhone"
+        )
+    }
+
+    func handlePhoneHandoffRequestForTesting(
+        _ request: ForgeWatchPhoneHandoffRequest,
+        now: Date
+    ) -> ForgeWatchPhoneHandoffResponse? {
+        guard let data = try? encoder.encode(request) else { return nil }
+        return handlePhoneHandoffRequestData(data, now: now)
+    }
+
+    private func loadPendingPhoneHandoffURL(now: Date = Date()) -> URL? {
+        guard
+            let data = defaults.data(forKey: ForgeWatchPhoneHandoffDeliveryPolicy.pendingStorageKey),
+            let pending = try? decoder.decode(ForgeWatchPendingPhoneHandoff.self, from: data),
+            ForgeWatchPhoneHandoffDeliveryPolicy.isFresh(createdAt: pending.createdAt, now: now),
+            let url = URL(string: pending.url)
+        else {
+            defaults.removeObject(forKey: ForgeWatchPhoneHandoffDeliveryPolicy.pendingStorageKey)
+            return nil
+        }
+        return url
+    }
+
+    private func loadPhoneHandoffDeliveryRecords() -> [ForgeWatchPhoneHandoffDeliveryRecord] {
+        guard
+            let data = defaults.data(forKey: ForgeWatchPhoneHandoffDeliveryPolicy.historyStorageKey),
+            let records = try? decoder.decode([ForgeWatchPhoneHandoffDeliveryRecord].self, from: data)
+        else {
+            return []
+        }
+        return records
+    }
+
+    private func savePhoneHandoffDeliveryRecord(requestId: String, now: Date) {
+        let records = ForgeWatchPhoneHandoffDeliveryPolicy.recording(
+            requestId: requestId,
+            in: loadPhoneHandoffDeliveryRecords(),
+            now: now
+        )
+        guard let data = try? encoder.encode(records) else { return }
+        defaults.set(data, forKey: ForgeWatchPhoneHandoffDeliveryPolicy.historyStorageKey)
+    }
+
+    private func transferRefreshResponse(_ response: ForgeWatchRefreshResponse) {
+        guard let data = try? encoder.encode(response) else { return }
+        WCSession.default.transferUserInfo([
+            ForgeWatchStorage.syncResponseMessageKey: data
+        ])
+    }
+
+    private func transferPhoneHandoffResponse(_ response: ForgeWatchPhoneHandoffResponse) {
+        guard let data = try? encoder.encode(response) else { return }
+        WCSession.default.transferUserInfo([
+            ForgeWatchStorage.phoneHandoffResponseMessageKey: data
+        ])
     }
 
     func processPendingQueue() async {
@@ -305,21 +511,12 @@ final class WatchSessionManager: NSObject, ObservableObject {
                     envelopes: batch,
                     pairing: pairing
                 )
-                let bootstrap = result.watch.withConnection(Self.directWatchConnection(for: pairing))
+                let bootstrap = enrichBootstrap(result.watch, pairing: pairing)
                 saveBootstrap(bootstrap)
                 publishBootstrap(bootstrap)
                 let acknowledgedIds = Set(result.receipt.receipts.map(\.actionId))
                 for receipt in result.receipt.receipts {
-                    sendAck(
-                        ForgeWatchAckEnvelope(
-                            actionId: receipt.actionId,
-                            kind: receipt.kind,
-                            processedAt: receipt.processedAt,
-                            status: receipt.status,
-                            error: nil,
-                            bootstrap: bootstrap
-                        )
-                    )
+                    sendAck(Self.ackEnvelope(for: receipt, bootstrap: bootstrap))
                 }
                 let latestQueue = loadQueue()
                 let stillPending = ForgeWatchActionQueueReconciliation.remainingEnvelopes(
@@ -350,6 +547,40 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     static func directWatchConnectionForTesting(for pairing: PairingPayload) -> ForgeWatchConnection? {
         directWatchConnection(for: pairing)
+    }
+
+    static func ackEnvelope(
+        for receipt: ForgeWatchCommandReceipt,
+        bootstrap: ForgeWatchBootstrap?
+    ) -> ForgeWatchAckEnvelope {
+        ForgeWatchAckEnvelope(
+            actionId: receipt.actionId,
+            kind: receipt.kind,
+            processedAt: receipt.processedAt,
+            status: receipt.status,
+            error: receipt.error,
+            bootstrap: bootstrap
+        )
+    }
+
+    static func phoneHandoffURLForTesting(
+        for pairing: PairingPayload,
+        destination: ForgeWatchPhoneDestination
+    ) -> URL? {
+        phoneHandoffURL(for: pairing, destination: destination)
+    }
+
+    private static func phoneHandoffURL(
+        for pairing: PairingPayload,
+        destination: ForgeWatchPhoneDestination
+    ) -> URL? {
+        let normalizedPairing = CompanionPairingURLResolver.normalizedPayload(pairing)
+        let uiBaseUrl = normalizedPairing.uiBaseUrl
+            ?? CompanionPairingURLResolver.deriveUiBaseUrl(from: normalizedPairing.apiBaseUrl)
+        return ForgeWatchPhoneHandoff.iPhoneURL(
+            uiBaseUrl: uiBaseUrl,
+            destination: destination
+        )
     }
 
     private static func directWatchConnection(for pairing: PairingPayload) -> ForgeWatchConnection? {
@@ -389,6 +620,88 @@ final class WatchSessionManager: NSObject, ObservableObject {
         return "HTTPS"
     }
 
+}
+
+private struct ForgeWatchPendingPhoneHandoff: Codable {
+    let requestId: String
+    let createdAt: String
+    let url: String
+}
+
+struct ForgeWatchPhoneHandoffDeliveryRecord: Codable, Equatable {
+    let requestId: String
+    let deliveredAt: Date
+}
+
+enum ForgeWatchPhoneHandoffDeliveryAdmission: Equatable {
+    case deliver
+    case duplicate
+    case stale
+    case invalid
+}
+
+enum ForgeWatchPhoneHandoffDeliveryPolicy {
+    static let pendingStorageKey = "forge_watch_pending_phone_handoff"
+    static let historyStorageKey = "forge_watch_phone_handoff_history"
+    static let maximumRequestAge: TimeInterval = 5 * 60
+    static let futureClockTolerance: TimeInterval = 60
+    static let historyRetention: TimeInterval = 24 * 60 * 60
+    static let maximumHistoryCount = 32
+
+    static func admission(
+        for request: ForgeWatchPhoneHandoffRequest,
+        deliveredRecords: [ForgeWatchPhoneHandoffDeliveryRecord],
+        now: Date
+    ) -> ForgeWatchPhoneHandoffDeliveryAdmission {
+        guard request.id.isEmpty == false, request.id.count <= 128 else {
+            return .invalid
+        }
+        guard let createdAt = ISO8601DateFormatter().date(from: request.createdAt) else {
+            return .invalid
+        }
+        let age = now.timeIntervalSince(createdAt)
+        guard age >= -futureClockTolerance else {
+            return .invalid
+        }
+        guard age <= maximumRequestAge else {
+            return .stale
+        }
+        let historyCutoff = now.addingTimeInterval(-historyRetention)
+        return deliveredRecords.contains {
+            $0.requestId == request.id && $0.deliveredAt >= historyCutoff
+        }
+            ? .duplicate
+            : .deliver
+    }
+
+    static func isFresh(createdAt: String, now: Date) -> Bool {
+        guard let createdAt = ISO8601DateFormatter().date(from: createdAt) else {
+            return false
+        }
+        let age = now.timeIntervalSince(createdAt)
+        return age >= -futureClockTolerance && age <= maximumRequestAge
+    }
+
+    static func recording(
+        requestId: String,
+        in records: [ForgeWatchPhoneHandoffDeliveryRecord],
+        now: Date
+    ) -> [ForgeWatchPhoneHandoffDeliveryRecord] {
+        let cutoff = now.addingTimeInterval(-historyRetention)
+        var retained = records.filter {
+            $0.deliveredAt >= cutoff && $0.requestId != requestId
+        }
+        retained.append(
+            ForgeWatchPhoneHandoffDeliveryRecord(
+                requestId: requestId,
+                deliveredAt: now
+            )
+        )
+        if retained.count > maximumHistoryCount {
+            retained.removeFirst(retained.count - maximumHistoryCount)
+        }
+        return retained
+    }
 }
 
 extension WatchSessionManager: WCSessionDelegate {
@@ -432,9 +745,19 @@ extension WatchSessionManager: WCSessionDelegate {
         _ session: WCSession,
         didReceiveUserInfo userInfo: [String : Any] = [:]
     ) {
+        if let data = userInfo[ForgeWatchStorage.phoneHandoffRequestMessageKey] as? Data {
+            Task { @MainActor in
+                if let response = self.handlePhoneHandoffRequestData(data) {
+                    self.transferPhoneHandoffResponse(response)
+                }
+            }
+            return
+        }
         if let data = userInfo[ForgeWatchStorage.syncRequestMessageKey] as? Data {
             Task { @MainActor in
-                _ = await self.handleControlRequestData(data)
+                if let response = await self.handleControlRequestData(data) {
+                    self.transferRefreshResponse(response)
+                }
             }
             return
         }
@@ -460,7 +783,16 @@ extension WatchSessionManager: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
         Task { @MainActor in
-            if await self.handleControlRequestData(messageData) {
+            if let response = self.handlePhoneHandoffRequestData(messageData) {
+                if let data = try? self.encoder.encode(response) {
+                    WCSession.default.sendMessageData(data, replyHandler: nil, errorHandler: nil)
+                }
+                return
+            }
+            if let response = await self.handleControlRequestData(messageData) {
+                if let data = try? self.encoder.encode(response) {
+                    WCSession.default.sendMessageData(data, replyHandler: nil, errorHandler: nil)
+                }
                 return
             }
             if let batch = try? self.decoder.decode(ForgeWatchOutboundBatchEnvelope.self, from: messageData) {
@@ -500,8 +832,14 @@ extension WatchSessionManager: WCSessionDelegate {
         replyHandler: @escaping (Data) -> Void
     ) {
         Task { @MainActor in
-            if await self.handleControlRequestData(messageData) {
-                if let data = try? self.encoder.encode(ForgeWatchAckBatchEnvelope(acks: [])) {
+            if let response = self.handlePhoneHandoffRequestData(messageData) {
+                if let data = try? self.encoder.encode(response) {
+                    replyHandler(data)
+                }
+                return
+            }
+            if let response = await self.handleControlRequestData(messageData) {
+                if let data = try? self.encoder.encode(response) {
                     replyHandler(data)
                 }
                 return

@@ -40,7 +40,13 @@ import {
 } from "@/lib/life-force-display";
 import { getEntityNotesSummary } from "@/lib/note-helpers";
 import { useI18n } from "@/lib/i18n";
-import type { MovementDayData, VitalsViewData } from "@/lib/types";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
+import type {
+  ForgeSnapshot,
+  MovementDayData,
+  VitalsViewData,
+  XpMetricsPayload
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { normalizeOverviewLayout } from "@/pages/overview-layout";
 
@@ -56,6 +62,65 @@ const OVERVIEW_METRIC_HELP: Record<string, string> = {
   "Weekly XP":
     "Weekly XP is recent reward-ledger movement. It helps separate a genuinely active week from old accumulated progress."
 };
+
+export function buildOverviewXpFallback(
+  snapshot: Pick<ForgeSnapshot, "userScope" | "metrics">
+): XpMetricsPayload {
+  return {
+    timezone: getRuntimeTimeZone(),
+    scope: {
+      mode: "operator_fallback",
+      userIds: snapshot.userScope.selectedUserIds,
+      users: snapshot.userScope.selectedUsers,
+      label: snapshot.userScope.selectedUsers[0]?.displayName ?? "Forge"
+    },
+    profile: snapshot.metrics,
+    achievements: [],
+    milestoneRewards: [],
+    momentumPulse: {
+      status:
+        snapshot.metrics.momentumScore >= 80
+          ? "surging"
+          : snapshot.metrics.momentumScore >= 60
+            ? "steady"
+            : "recovering",
+      headline: `${snapshot.metrics.streakDays}-day streak`,
+      detail: `${snapshot.metrics.currentLevelXp}/${snapshot.metrics.nextLevelXp} XP in level ${snapshot.metrics.level}.`,
+      celebrationLabel: "Forge Smith",
+      nextMilestoneId: null,
+      nextMilestoneLabel: "Next unlock"
+    },
+    catalogPreview: [],
+    unlockedItemCount: 0,
+    totalItemCount: 144,
+    nextUnlock: null,
+    newestUnlock: null,
+    nextTargets: [],
+    equipment: {
+      selectedMascotSkin: null,
+      selectedHudTreatment: null,
+      selectedStreakEffect: null,
+      selectedTrophyShelf: null,
+      selectedCelebrationVariant: null,
+      updatedAt: null
+    },
+    mascot: {
+      mood: "wise",
+      spriteKey: "mascot-state-014",
+      streakSpriteKey: "mascot-state-017",
+      headline: "Small heat still counts.",
+      line: "Return to the anvil today.",
+      pressureLevel: 0,
+      missedDays: 0,
+      lastActiveDateKey: null
+    },
+    celebrations: [],
+    recentLedger: [],
+    rules: [],
+    dailyAmbientXp: 0,
+    dailyAmbientCap: 12
+  } satisfies XpMetricsPayload;
+}
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -381,64 +446,21 @@ export function OverviewPage() {
           <GamificationOverviewWidget
             metrics={xpMetricsQuery.data.metrics}
             compact
+            statusMessage={
+              xpMetricsQuery.isError
+                ? "Could not refresh progression. Showing the latest overview snapshot."
+                : undefined
+            }
           />
         ) : (
           <GamificationOverviewWidget
-            metrics={{
-              scope: {
-                mode: "operator_fallback",
-                userIds: snapshot.userScope.selectedUserIds,
-                users: snapshot.userScope.selectedUsers,
-                label:
-                  snapshot.userScope.selectedUsers[0]?.displayName ?? "Forge"
-              },
-              profile: snapshot.metrics,
-              achievements: [],
-              milestoneRewards: [],
-              momentumPulse: {
-                status:
-                  snapshot.metrics.momentumScore >= 80
-                    ? "surging"
-                    : snapshot.metrics.momentumScore >= 60
-                      ? "steady"
-                      : "recovering",
-                headline: `${snapshot.metrics.streakDays}-day streak`,
-                detail: `${snapshot.metrics.currentLevelXp}/${snapshot.metrics.nextLevelXp} XP in level ${snapshot.metrics.level}.`,
-                celebrationLabel: "Forge Smith",
-                nextMilestoneId: null,
-                nextMilestoneLabel: "Next unlock"
-              },
-              catalogPreview: [],
-              unlockedItemCount: 0,
-              totalItemCount: 144,
-              nextUnlock: null,
-              newestUnlock: null,
-              nextTargets: [],
-              equipment: {
-                selectedMascotSkin: null,
-                selectedHudTreatment: null,
-                selectedStreakEffect: null,
-                selectedTrophyShelf: null,
-                selectedCelebrationVariant: null,
-                updatedAt: null
-              },
-              mascot: {
-                mood: "wise",
-                spriteKey: "mascot-state-014",
-                streakSpriteKey: "mascot-state-017",
-                headline: "Small heat still counts.",
-                line: "Return to the anvil today.",
-                pressureLevel: 0,
-                missedDays: 0,
-                lastActiveDateKey: null
-              },
-              celebrations: [],
-              recentLedger: [],
-              rules: [],
-              dailyAmbientXp: 0,
-              dailyAmbientCap: 12
-            }}
+            metrics={buildOverviewXpFallback(snapshot)}
             compact
+            statusMessage={
+              xpMetricsQuery.isError
+                ? "Could not refresh progression. Showing the latest overview snapshot."
+                : "Refreshing progression from the reward ledger."
+            }
           />
         )
     },

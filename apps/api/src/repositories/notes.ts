@@ -2,9 +2,14 @@ import { randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
-import { decorateOwnedEntity, setEntityOwner } from "./entity-ownership.js";
 import {
-  filterDeletedEntities,
+  clearEntityOwner,
+  decorateOwnedEntities,
+  decorateOwnedEntity,
+  getEntityOwnerId,
+  setEntityOwner
+} from "./entity-ownership.js";
+import {
   getDeletedEntityRecord,
   clearDeletedEntityRecord,
   isEntityDeleted
@@ -15,6 +20,7 @@ import {
   notesListQuerySchema,
   createNoteSchema,
   updateNoteSchema,
+  type ActivityEvent,
   type ActivitySource,
   type CrudEntityType,
   type CreateNoteInput,
@@ -30,6 +36,7 @@ import {
   prepareNoteWikiFields,
   syncNoteWikiArtifacts
 } from "./wiki-memory.js";
+import { PSYCHE_ENTITY_TYPES } from "../psyche-types.js";
 
 type NoteRow = {
   id: string;
@@ -68,6 +75,52 @@ type NoteContext = {
   source: ActivitySource;
   actor?: string | null;
 };
+
+type NotesPageQuery = NotesListQuery & {
+  cursor?: string;
+  observedFrom?: string;
+  observedTo?: string;
+  ids?: readonly string[];
+};
+
+export type NotesPageScope = {
+  accessibleSpaceIds?: readonly string[];
+  includePsyche?: boolean;
+};
+
+export type NoteReadScope = NotesPageScope & {
+  userIds?: readonly string[];
+};
+
+export type NotesPage = {
+  notes: Note[];
+  total: number;
+  limit: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+type NotesCursor = {
+  version: 1;
+  createdAt: string;
+  id: string;
+};
+
+const DEFAULT_NOTES_PAGE_LIMIT = 40;
+const MAX_NOTES_PAGE_LIMIT = 100;
+export const EXPIRED_NOTE_CLEANUP_BATCH_SIZE = 100;
+const PSYCHE_NOTE_LINK_TYPES = PSYCHE_ENTITY_TYPES;
+
+export function noteHasPsycheLink(note: Pick<Note, "links">) {
+  return (
+    Array.isArray(note.links) &&
+    note.links.some((link) =>
+      PSYCHE_NOTE_LINK_TYPES.includes(
+        link.entityType as (typeof PSYCHE_NOTE_LINK_TYPES)[number]
+      )
+    )
+  );
+}
 
 function normalizeAnchorKey(anchorKey: string): string | null {
   return anchorKey.trim().length > 0 ? anchorKey : null;
@@ -154,24 +207,6 @@ function parseFrontmatterJson(raw: string): Record<string, unknown> {
   }
 }
 
-function noteMatchesTextTerm(note: Note, term: string): boolean {
-  const normalized = term.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return note.tags.some((tag) => tag.toLowerCase().includes(normalized));
-}
-
-function filterNotesByOwnerIds(notes: Note[], userIds?: string[]) {
-  if (!userIds || userIds.length === 0) {
-    return notes;
-  }
-  const allowed = new Set(userIds);
-  return notes.filter(
-    (note) => note.userId !== null && allowed.has(note.userId)
-  );
-}
-
 export function resolveNoteObservedAt(
   note: Pick<Note, "frontmatter" | "createdAt">
 ) {
@@ -185,24 +220,48 @@ export function resolveNoteObservedAt(
   return note.createdAt;
 }
 
-function cleanupExpiredNotes() {
-  const expiredRows = getDatabase()
-    .prepare(
-      `SELECT id
-       FROM notes
-       WHERE destroy_at IS NOT NULL
-         AND destroy_at != ''
-         AND destroy_at <= ?`
-    )
-    .all(new Date().toISOString()) as Array<{ id: string }>;
+export function cleanupExpiredNotes(now = new Date()) {
+  const expiresOnOrBefore = now.toISOString();
+  return runInTransaction(() => {
+    const expiredRows = getDatabase()
+      .prepare(
+        `SELECT id
+         FROM notes
+         WHERE destroy_at IS NOT NULL
+           AND destroy_at != ''
+           AND destroy_at <= ?
+         ORDER BY destroy_at ASC, id ASC
+         LIMIT ?`
+      )
+      .all(expiresOnOrBefore, EXPIRED_NOTE_CLEANUP_BATCH_SIZE) as Array<{
+      id: string;
+    }>;
 
-  for (const row of expiredRows) {
-    deleteNoteInternal(
-      row.id,
-      { source: "system", actor: null },
-      "Ephemeral note expired"
+    const readDestroyAt = getDatabase().prepare(
+      `SELECT destroy_at
+       FROM notes
+       WHERE id = ?`
     );
-  }
+    let deletedCount = 0;
+    for (const row of expiredRows) {
+      const current = readDestroyAt.get(row.id) as
+        | { destroy_at: string | null }
+        | undefined;
+      if (!current?.destroy_at || current.destroy_at > expiresOnOrBefore) {
+        continue;
+      }
+      if (
+        deleteNoteInternal(
+          row.id,
+          { source: "system", actor: null },
+          "Ephemeral note expired"
+        )
+      ) {
+        deletedCount += 1;
+      }
+    }
+    return deletedCount;
+  });
 }
 
 function stripMarkdown(markdown: string): string {
@@ -223,16 +282,149 @@ function stripMarkdown(markdown: string): string {
     .trim();
 }
 
-function buildFtsQuery(query: string): string | null {
-  const tokens = query
-    .trim()
-    .split(/\s+/)
-    .map((token) => token.replace(/["*']/g, "").trim())
-    .filter(Boolean);
-  if (tokens.length === 0) {
+function tokenizeNoteSearch(query: string): string[] {
+  return (
+    query
+      .normalize("NFKC")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}_]+/gu) ?? []
+  );
+}
+
+function normalizeNoteSearchValue(value: unknown) {
+  return typeof value === "string" ? value.normalize("NFKC").toLowerCase() : "";
+}
+
+export function noteMatchesSearchQuery(
+  note: Pick<
+    Note,
+    "title" | "summary" | "contentPlain" | "author" | "tags" | "links"
+  >,
+  query: string | undefined
+) {
+  if (!query?.trim()) {
+    return true;
+  }
+  const queryTokens = tokenizeNoteSearch(query);
+  if (queryTokens.length === 0) {
+    return false;
+  }
+  const searchableValues = [
+    note.title,
+    note.summary,
+    note.contentPlain,
+    note.author,
+    ...(Array.isArray(note.tags) ? note.tags : []),
+    ...(Array.isArray(note.links)
+      ? note.links.flatMap((link) => [
+          link.entityType,
+          link.entityId,
+          link.anchorKey
+        ])
+      : [])
+  ].map(normalizeNoteSearchValue);
+  return queryTokens.every((token) =>
+    searchableValues.some((value) => value.includes(token))
+  );
+}
+
+export function resolveNoteMutationUserId(
+  requestedUserId: string | null | undefined,
+  allowedUserIds: readonly string[]
+): string | null {
+  const requested = requestedUserId?.trim() || null;
+  const allowed = Array.from(
+    new Set(allowedUserIds.map((userId) => userId.trim()).filter(Boolean))
+  );
+  if (requested) {
+    if (allowed.length > 0 && !allowed.includes(requested)) {
+      throw new HttpError(
+        403,
+        "user_scope_forbidden",
+        "The requested user scope is outside this token's allowed users."
+      );
+    }
+    return requested;
+  }
+  if (allowed.length === 1) {
+    return allowed[0]!;
+  }
+  if (allowed.length > 1) {
+    throw new HttpError(
+      400,
+      "note_user_selection_required",
+      "Choose one allowed userId for this note mutation."
+    );
+  }
+  return null;
+}
+
+function buildFtsTokenQuery(token: string) {
+  return `"${token.replaceAll('"', '""')}"*`;
+}
+
+function escapeSqlLike(value: string) {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+}
+
+function hasAsciiControlCharacter(value: string) {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127;
+  });
+}
+
+function encodeNotesCursor(row: Pick<NoteRow, "created_at" | "id">) {
+  const cursor: NotesCursor = {
+    version: 1,
+    createdAt: row.created_at,
+    id: row.id
+  };
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeNotesCursor(raw: string | undefined): NotesCursor | null {
+  const value = raw?.trim();
+  if (!value) {
     return null;
   }
-  return tokens.map((token) => `${token}*`).join(" AND ");
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8")
+    ) as Partial<NotesCursor>;
+    const createdAt = parsed.createdAt;
+    const id = parsed.id;
+    if (
+      parsed.version !== 1 ||
+      typeof createdAt !== "string" ||
+      createdAt.length === 0 ||
+      createdAt.length > 64 ||
+      createdAt !== createdAt.trim() ||
+      hasAsciiControlCharacter(createdAt) ||
+      Number.isNaN(Date.parse(createdAt)) ||
+      typeof id !== "string" ||
+      id.length === 0 ||
+      id.length > 256 ||
+      id !== id.trim() ||
+      hasAsciiControlCharacter(id)
+    ) {
+      throw new Error("Invalid note cursor payload");
+    }
+    return {
+      version: 1,
+      createdAt,
+      id
+    };
+  } catch {
+    throw new HttpError(
+      400,
+      "invalid_note_cursor",
+      "The note page cursor is invalid or no longer supported. Start again from the first page."
+    );
+  }
 }
 
 function getNoteRow(noteId: string): NoteRow | undefined {
@@ -270,7 +462,13 @@ function mapLinks(rows: NoteLinkRow[]): NoteLink[] {
 }
 
 function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
-  return noteSchema.parse(decorateOwnedEntity("note", {
+  return noteSchema.parse(
+    decorateOwnedEntity("note", mapUnownedNote(row, linkRows))
+  );
+}
+
+function mapUnownedNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
+  return noteSchema.parse({
     id: row.id,
     kind: row.kind,
     title: row.title,
@@ -294,7 +492,20 @@ function mapNote(row: NoteRow, linkRows: NoteLinkRow[]): Note {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     links: mapLinks(linkRows)
-  }));
+  });
+}
+
+function mapNotes(rows: NoteRow[], linkRows: NoteLinkRow[]): Note[] {
+  const linksByNoteId = new Map<string, NoteLinkRow[]>();
+  for (const link of linkRows) {
+    const current = linksByNoteId.get(link.note_id) ?? [];
+    current.push(link);
+    linksByNoteId.set(link.note_id, current);
+  }
+  return decorateOwnedEntities(
+    "note",
+    rows.map((row) => mapUnownedNote(row, linksByNoteId.get(row.id) ?? []))
+  ).map((note) => noteSchema.parse(note));
 }
 
 function upsertSearchRow(
@@ -307,62 +518,284 @@ function upsertSearchRow(
     .prepare(
       `INSERT INTO notes_fts (note_id, content_plain, author) VALUES (?, ?, ?)`
     )
-    .run(noteId, contentPlain, author ?? "");
+    .run(
+      noteId,
+      contentPlain.normalize("NFKC").toLowerCase(),
+      (author ?? "").normalize("NFKC").toLowerCase()
+    );
 }
 
 function deleteSearchRow(noteId: string) {
   getDatabase().prepare(`DELETE FROM notes_fts WHERE note_id = ?`).run(noteId);
 }
 
-function listAllNoteRows(): NoteRow[] {
-  return getDatabase()
-    .prepare(
-      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
-              source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
-       FROM notes
-       ORDER BY created_at DESC`
+function appendTextTokenCondition(
+  clauses: string[],
+  parameters: Array<string | number | null>,
+  token: string
+) {
+  const like = `%${escapeSqlLike(token)}%`;
+  clauses.push(`(
+    notes.id IN (
+      SELECT note_id
+      FROM notes_fts
+      WHERE notes_fts MATCH ?
     )
-    .all() as NoteRow[];
-}
-
-function listActiveNotes(): Note[] {
-  const rows = listAllNoteRows();
-  const linksByNoteId = new Map<string, NoteLinkRow[]>();
-  for (const link of listLinkRowsForNotes(rows.map((row) => row.id))) {
-    const current = linksByNoteId.get(link.note_id) ?? [];
-    current.push(link);
-    linksByNoteId.set(link.note_id, current);
-  }
-
-  return filterDeletedEntities(
-    "note",
-    rows.map((row) => mapNote(row, linksByNoteId.get(row.id) ?? []))
+    OR forge_nfkc_lower(notes.content_plain) LIKE ? ESCAPE '\\'
+    OR forge_nfkc_lower(COALESCE(notes.author, '')) LIKE ? ESCAPE '\\'
+    OR forge_nfkc_lower(notes.title) LIKE ? ESCAPE '\\'
+    OR forge_nfkc_lower(notes.summary) LIKE ? ESCAPE '\\'
+    OR EXISTS (
+      SELECT 1
+      FROM json_each(
+        CASE WHEN json_valid(notes.tags_json) THEN notes.tags_json ELSE '[]' END
+      ) AS note_tag
+      WHERE forge_nfkc_lower(CAST(note_tag.value AS TEXT)) LIKE ? ESCAPE '\\'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM note_links AS search_note_link
+      WHERE search_note_link.note_id = notes.id
+        AND (
+          forge_nfkc_lower(search_note_link.entity_type) LIKE ? ESCAPE '\\'
+          OR forge_nfkc_lower(search_note_link.entity_id) LIKE ? ESCAPE '\\'
+          OR forge_nfkc_lower(COALESCE(search_note_link.anchor_key, '')) LIKE ? ESCAPE '\\'
+        )
+    )
+  )`);
+  parameters.push(
+    buildFtsTokenQuery(token),
+    like,
+    like,
+    like,
+    like,
+    like,
+    like,
+    like,
+    like
   );
 }
 
-function findMatchingNoteIds(query: string): Set<string> {
-  const ftsQuery = buildFtsQuery(query);
-  if (!ftsQuery) {
-    return new Set();
-  }
-  const rows = getDatabase()
-    .prepare(`SELECT note_id FROM notes_fts WHERE notes_fts MATCH ?`)
-    .all(ftsQuery) as Array<{ note_id: string }>;
-  return new Set(rows.map((row) => row.note_id));
-}
-
-function findMatchingNoteIdsForTextTerms(terms: string[]): Set<string> | null {
-  const normalizedTerms = terms.map((term) => term.trim()).filter(Boolean);
-  if (normalizedTerms.length === 0) {
-    return null;
-  }
-  const matches = new Set<string>();
-  for (const term of normalizedTerms) {
-    for (const noteId of findMatchingNoteIds(term)) {
-      matches.add(noteId);
+function appendNoteReadScopeConditions(
+  clauses: string[],
+  parameters: Array<string | number | null>,
+  scope: NoteReadScope,
+  noteAlias = "notes"
+) {
+  if (scope.accessibleSpaceIds !== undefined) {
+    if (scope.accessibleSpaceIds.length === 0) {
+      clauses.push("0 = 1");
+    } else {
+      clauses.push(
+        `${noteAlias}.space_id IN (${scope.accessibleSpaceIds.map(() => "?").join(", ")})`
+      );
+      parameters.push(...scope.accessibleSpaceIds);
     }
   }
-  return matches;
+
+  if (scope.userIds && scope.userIds.length > 0) {
+    const ownerPlaceholders = scope.userIds.map(() => "?").join(", ");
+    const accessibleWikiClause =
+      scope.accessibleSpaceIds && scope.accessibleSpaceIds.length > 0
+        ? `
+      OR (
+        ${noteAlias}.kind = 'wiki'
+        AND ${noteAlias}.space_id IN (${scope.accessibleSpaceIds.map(() => "?").join(", ")})
+      )`
+        : "";
+    clauses.push(`(
+      EXISTS (
+        SELECT 1
+        FROM entity_owners AS note_owner
+        WHERE note_owner.entity_type = 'note'
+          AND note_owner.entity_id = ${noteAlias}.id
+          AND note_owner.user_id IN (${ownerPlaceholders})
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM entity_assignments AS note_assignment
+        WHERE note_assignment.entity_type = 'note'
+          AND note_assignment.entity_id = ${noteAlias}.id
+          AND note_assignment.role = 'assignee'
+          AND note_assignment.user_id IN (${ownerPlaceholders})
+      )
+      ${accessibleWikiClause}
+    )`);
+    parameters.push(...scope.userIds, ...scope.userIds);
+    if (accessibleWikiClause && scope.accessibleSpaceIds) {
+      parameters.push(...scope.accessibleSpaceIds);
+    }
+  }
+
+  if (scope.includePsyche === false) {
+    clauses.push(`NOT EXISTS (
+      SELECT 1
+      FROM note_links AS psyche_note_link
+      WHERE psyche_note_link.note_id = ${noteAlias}.id
+        AND psyche_note_link.entity_type IN (${PSYCHE_NOTE_LINK_TYPES.map(() => "?").join(", ")})
+    )`);
+    parameters.push(...PSYCHE_NOTE_LINK_TYPES);
+  }
+}
+
+function buildNotesWhere(
+  parsed: ReturnType<typeof notesListQuerySchema.parse>,
+  query: NotesPageQuery,
+  scope: NotesPageScope,
+  options: { includeCursor: boolean }
+) {
+  const clauses = [
+    `NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE deleted_entities.entity_type = 'note'
+        AND deleted_entities.entity_id = notes.id
+    )`,
+    `(notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)`
+  ];
+  const parameters: Array<string | number | null> = [new Date().toISOString()];
+
+  if (parsed.kind) {
+    clauses.push("notes.kind = ?");
+    parameters.push(parsed.kind);
+  }
+  if (parsed.spaceId) {
+    clauses.push("notes.space_id = ?");
+    parameters.push(parsed.spaceId);
+  }
+  if (parsed.slug) {
+    clauses.push("lower(notes.slug) = lower(?)");
+    parameters.push(parsed.slug);
+  }
+  if (parsed.author) {
+    clauses.push("lower(COALESCE(notes.author, '')) LIKE ? ESCAPE '\\'");
+    parameters.push(`%${escapeSqlLike(parsed.author.toLowerCase())}%`);
+  }
+  if (query.ids !== undefined) {
+    if (query.ids.length === 0) {
+      clauses.push("0 = 1");
+    } else {
+      clauses.push(`notes.id IN (${query.ids.map(() => "?").join(", ")})`);
+      parameters.push(...query.ids);
+    }
+  }
+
+  const queryTokens = parsed.query ? tokenizeNoteSearch(parsed.query) : [];
+  if (parsed.query && queryTokens.length === 0) {
+    clauses.push("0 = 1");
+  } else {
+    for (const token of queryTokens) {
+      appendTextTokenCondition(clauses, parameters, token);
+    }
+  }
+
+  const textTermGroups = parsed.textTerms
+    .map((term) => tokenizeNoteSearch(term))
+    .filter((tokens) => tokens.length > 0);
+  if (parsed.textTerms.length > 0 && textTermGroups.length === 0) {
+    clauses.push("0 = 1");
+  } else if (textTermGroups.length > 0) {
+    const termClauses: string[] = [];
+    for (const tokens of textTermGroups) {
+      const tokenClauses: string[] = [];
+      for (const token of tokens) {
+        appendTextTokenCondition(tokenClauses, parameters, token);
+      }
+      termClauses.push(`(${tokenClauses.join(" AND ")})`);
+    }
+    clauses.push(`(${termClauses.join(" OR ")})`);
+  }
+
+  const linkedFilters = [
+    ...(parsed.linkedEntityType && parsed.linkedEntityId
+      ? [
+          {
+            entityType: parsed.linkedEntityType,
+            entityId: parsed.linkedEntityId
+          }
+        ]
+      : []),
+    ...parsed.linkedTo
+  ];
+  if (linkedFilters.length > 0) {
+    const linkedClauses = linkedFilters.map(
+      () =>
+        `(note_link.entity_type = ? AND note_link.entity_id = ?${
+          parsed.anchorKey === undefined
+            ? ""
+            : parsed.includeAnchorless
+              ? " AND (COALESCE(NULLIF(note_link.anchor_key, ''), '') = ? OR COALESCE(NULLIF(note_link.anchor_key, ''), '') = '')"
+              : " AND COALESCE(NULLIF(note_link.anchor_key, ''), '') = ?"
+        })`
+    );
+    clauses.push(`EXISTS (
+      SELECT 1
+      FROM note_links AS note_link
+      WHERE note_link.note_id = notes.id
+        AND (${linkedClauses.join(" OR ")})
+    )`);
+    for (const filter of linkedFilters) {
+      parameters.push(filter.entityType, filter.entityId);
+      if (parsed.anchorKey !== undefined) {
+        parameters.push(parsed.anchorKey ?? "");
+      }
+    }
+  }
+
+  for (const tag of parsed.tags) {
+    clauses.push(`EXISTS (
+      SELECT 1
+      FROM json_each(
+        CASE WHEN json_valid(notes.tags_json) THEN notes.tags_json ELSE '[]' END
+      ) AS exact_note_tag
+      WHERE lower(CAST(exact_note_tag.value AS TEXT)) = lower(?)
+    )`);
+    parameters.push(tag);
+  }
+
+  if (parsed.updatedFrom) {
+    clauses.push("substr(notes.updated_at, 1, 10) >= ?");
+    parameters.push(parsed.updatedFrom);
+  }
+  if (parsed.updatedTo) {
+    clauses.push("substr(notes.updated_at, 1, 10) <= ?");
+    parameters.push(parsed.updatedTo);
+  }
+  const observedFrom = query.observedFrom?.trim();
+  const observedTo = query.observedTo?.trim();
+  const observedDateSql = `date(COALESCE(
+    CASE
+      WHEN json_valid(notes.frontmatter_json)
+      THEN json_extract(notes.frontmatter_json, '$.observedAt')
+      ELSE NULL
+    END,
+    notes.created_at
+  ))`;
+  if (observedFrom) {
+    clauses.push(`${observedDateSql} >= date(?)`);
+    parameters.push(observedFrom);
+  }
+  if (observedTo) {
+    clauses.push(`${observedDateSql} <= date(?)`);
+    parameters.push(observedTo);
+  }
+
+  appendNoteReadScopeConditions(clauses, parameters, {
+    ...scope,
+    userIds: parsed.userIds
+  });
+
+  if (options.includeCursor) {
+    const cursor = decodeNotesCursor(query.cursor);
+    if (cursor) {
+      clauses.push(
+        "(notes.created_at < ? OR (notes.created_at = ? AND notes.id < ?))"
+      );
+      parameters.push(cursor.createdAt, cursor.createdAt, cursor.id);
+    }
+  }
+
+  return { sql: clauses.join(" AND "), parameters };
 }
 
 function insertLinks(
@@ -411,18 +844,36 @@ function recordNoteActivity(
   title: string,
   context: NoteContext
 ) {
+  const description =
+    eventType === "note.created"
+      ? "A linked note was added."
+      : eventType === "note.updated"
+        ? "A linked note was updated."
+        : "A linked note was deleted.";
+  const linksByTarget = new Map<string, NoteLink[]>();
   for (const link of note.links) {
+    const key = `${link.entityType}:${link.entityId}`;
+    const links = linksByTarget.get(key) ?? [];
+    links.push(link);
+    linksByTarget.set(key, links);
+  }
+  for (const links of linksByTarget.values()) {
+    const link = links[0]!;
+    const anchorKeys = Array.from(
+      new Set(links.map((entry) => entry.anchorKey ?? ""))
+    );
     recordActivityEvent({
       entityType: link.entityType,
       entityId: link.entityId,
       eventType,
       title,
-      description: note.contentPlain,
+      description,
       actor: note.author ?? context.actor ?? null,
       source: context.source,
       metadata: {
         noteId: note.id,
-        anchorKey: link.anchorKey ?? ""
+        anchorKey: anchorKeys[0] ?? "",
+        anchorKeys
       }
     });
     recordEventLog({
@@ -433,10 +884,68 @@ function recordNoteActivity(
       source: context.source,
       metadata: {
         noteId: note.id,
-        anchorKey: link.anchorKey ?? ""
+        anchorKey: anchorKeys[0] ?? "",
+        anchorKeys
       }
     });
   }
+}
+
+export function isNoteVisibleToScope(note: Note, scope: NoteReadScope) {
+  if (
+    scope.accessibleSpaceIds !== undefined &&
+    !scope.accessibleSpaceIds.includes(note.spaceId)
+  ) {
+    return false;
+  }
+  if (scope.userIds && scope.userIds.length > 0) {
+    const allowed = new Set(scope.userIds);
+    const accessibleWikiNote =
+      note.kind === "wiki" &&
+      scope.accessibleSpaceIds?.includes(note.spaceId) === true;
+    if (
+      !accessibleWikiNote &&
+      (!note.userId || !allowed.has(note.userId)) &&
+      !(note.assigneeUserIds ?? []).some((userId) => allowed.has(userId))
+    ) {
+      return false;
+    }
+  }
+  return scope.includePsyche !== false || !noteHasPsycheLink(note);
+}
+
+export function filterNoteActivityEventsForScope(
+  events: readonly ActivityEvent[],
+  scope: NoteReadScope
+) {
+  const visibility = new Map<string, boolean>();
+  return events.filter((event) => {
+    if (
+      scope.includePsyche === false &&
+      PSYCHE_NOTE_LINK_TYPES.includes(
+        event.entityType as (typeof PSYCHE_NOTE_LINK_TYPES)[number]
+      )
+    ) {
+      return false;
+    }
+    const metadataNoteId =
+      typeof event.metadata.noteId === "string"
+        ? event.metadata.noteId.trim()
+        : "";
+    const noteId =
+      metadataNoteId || (event.entityType === "note" ? event.entityId : "");
+    if (!noteId) {
+      return true;
+    }
+    const cached = visibility.get(noteId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const note = getNoteByIdIncludingDeleted(noteId, { skipCleanup: true });
+    const visible = Boolean(note && isNoteVisibleToScope(note, scope));
+    visibility.set(noteId, visible);
+    return visible;
+  });
 }
 
 export function getNoteById(
@@ -472,6 +981,20 @@ export function getNoteByIdIncludingDeleted(
 }
 
 export function listNotes(query: NotesListQuery = {}): Note[] {
+  const parsed = notesListQuerySchema.parse(query);
+  return listNotesPage(
+    {
+      ...parsed,
+      limit: parsed.limit ?? 100
+    },
+    {}
+  ).notes;
+}
+
+export function listNotesPage(
+  query: NotesPageQuery = {},
+  scope: NotesPageScope = {}
+): NotesPage {
   cleanupExpiredNotes();
   const parsed = notesListQuerySchema.parse(query);
   const linkedFilters = [
@@ -485,100 +1008,77 @@ export function listNotes(query: NotesListQuery = {}): Note[] {
       : []),
     ...parsed.linkedTo
   ];
-
   if (
     linkedFilters.some((filter) =>
       isEntityDeleted(filter.entityType, filter.entityId)
     )
   ) {
-    return [];
+    return {
+      notes: [],
+      total: 0,
+      limit: Math.min(
+        parsed.limit ?? DEFAULT_NOTES_PAGE_LIMIT,
+        MAX_NOTES_PAGE_LIMIT
+      ),
+      nextCursor: null,
+      hasMore: false
+    };
   }
-  const matchingIds = findMatchingNoteIdsForTextTerms([
-    ...(parsed.query ? [parsed.query] : []),
-    ...parsed.textTerms
-  ]);
-  return filterNotesByOwnerIds(
-    listActiveNotes()
-      .filter((note) =>
-        parsed.kind ? note.kind === parsed.kind : true
-      )
-      .filter((note) =>
-        parsed.spaceId ? note.spaceId === parsed.spaceId : true
-      )
-      .filter((note) =>
-        parsed.slug
-          ? note.slug.toLowerCase() === parsed.slug.toLowerCase()
-          : true
-      )
-      .filter((note) =>
-        parsed.author
-          ? (note.author ?? "")
-              .toLowerCase()
-              .includes(parsed.author.toLowerCase())
-          : true
-      )
-      .filter((note) => {
-        if (!matchingIds) {
-          return true;
-        }
-        return (
-          matchingIds.has(note.id) ||
-          parsed.textTerms.some((term) => noteMatchesTextTerm(note, term)) ||
-          (parsed.query ? noteMatchesTextTerm(note, parsed.query) : false)
-        );
-      })
-      .filter((note) =>
-        linkedFilters.length > 0
-          ? note.links.some((link) =>
-              linkedFilters.some(
-                (filter) =>
-                  link.entityType === filter.entityType &&
-                  link.entityId === filter.entityId &&
-                  (parsed.anchorKey === undefined
-                    ? true
-                    : (link.anchorKey ?? null) === parsed.anchorKey)
-              )
-            )
-          : true
-      )
-      .filter((note) =>
-        parsed.tags.length > 0
-          ? parsed.tags.every((filterTag) =>
-              note.tags.some(
-                (noteTag) => noteTag.toLowerCase() === filterTag.toLowerCase()
-              )
-            )
-          : true
-      )
-      .filter((note) => {
-        if (!parsed.updatedFrom && !parsed.updatedTo) {
-          return true;
-        }
-        const updatedDate = note.updatedAt.slice(0, 10);
-        if (parsed.updatedFrom && updatedDate < parsed.updatedFrom) {
-          return false;
-        }
-        if (parsed.updatedTo && updatedDate > parsed.updatedTo) {
-          return false;
-        }
-        return true;
-      })
-      .slice(0, parsed.limit ?? 100),
-    parsed.userIds
+
+  const limit = Math.min(
+    parsed.limit ?? DEFAULT_NOTES_PAGE_LIMIT,
+    MAX_NOTES_PAGE_LIMIT
   );
+  const countWhere = buildNotesWhere(parsed, query, scope, {
+    includeCursor: false
+  });
+  const totalRow = getDatabase()
+    .prepare(`SELECT COUNT(*) AS count FROM notes WHERE ${countWhere.sql}`)
+    .get(...countWhere.parameters) as { count: number };
+
+  const pageWhere = buildNotesWhere(parsed, query, scope, {
+    includeCursor: true
+  });
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id, kind, title, slug, space_id, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
+              source_path, frontmatter_json, revision_hash, last_synced_at, parent_slug, index_order, show_in_index, created_at, updated_at
+       FROM notes
+       WHERE ${pageWhere.sql}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    )
+    .all(...pageWhere.parameters, limit + 1) as NoteRow[];
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const lastRow = pageRows.at(-1);
+
+  return {
+    notes: mapNotes(
+      pageRows,
+      listLinkRowsForNotes(pageRows.map((row) => row.id))
+    ),
+    total: totalRow.count,
+    limit,
+    nextCursor: hasMore && lastRow ? encodeNotesCursor(lastRow) : null,
+    hasMore
+  };
 }
 
-export function listNotesByObservedAtRange({
-  from,
-  to,
-  userIds,
-  limit = 400
-}: {
-  from: string;
-  to: string;
-  userIds?: string[];
-  limit?: number;
-}) {
+export function listNotesByObservedAtRange(
+  {
+    from,
+    to,
+    userIds,
+    limit = 400
+  }: {
+    from: string;
+    to: string;
+    userIds?: string[];
+    limit?: number;
+  },
+  scope: NotesPageScope = {}
+) {
   cleanupExpiredNotes();
   const fromMs = Date.parse(from);
   const toMs = Date.parse(to);
@@ -586,19 +1086,41 @@ export function listNotesByObservedAtRange({
     return [] as Note[];
   }
 
-  return filterNotesByOwnerIds(listActiveNotes(), userIds)
-    .map((note) => ({
-      note,
-      observedAt: resolveNoteObservedAt(note)
-    }))
-    .filter(({ observedAt }) => {
+  const matches: Array<{ note: Note; observedAt: string }> = [];
+  let cursor: string | undefined;
+  let pageCount = 0;
+  do {
+    const page = listNotesPage(
+      {
+        userIds,
+        observedFrom: new Date(fromMs).toISOString().slice(0, 10),
+        observedTo: new Date(Math.max(fromMs, toMs - 1))
+          .toISOString()
+          .slice(0, 10),
+        limit: MAX_NOTES_PAGE_LIMIT,
+        cursor
+      },
+      scope
+    );
+    for (const note of page.notes) {
+      const observedAt = resolveNoteObservedAt(note);
       const observedAtMs = Date.parse(observedAt);
-      return (
+      if (
         !Number.isNaN(observedAtMs) &&
         observedAtMs >= fromMs &&
         observedAtMs < toMs
-      );
-    })
+      ) {
+        matches.push({ note, observedAt });
+      }
+    }
+    cursor = page.nextCursor ?? undefined;
+    pageCount += 1;
+    if (!page.hasMore || matches.length >= limit || pageCount >= 100) {
+      break;
+    }
+  } while (cursor);
+
+  return matches
     .sort((left, right) => left.observedAt.localeCompare(right.observedAt))
     .slice(0, limit)
     .map(({ note }) => note);
@@ -611,65 +1133,72 @@ export function createNote(input: CreateNoteInput, context: NoteContext): Note {
     links: normalizeLinks(input.links),
     tags: normalizeTags(input.tags)
   });
-  const now = new Date().toISOString();
-  const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-  const wikiFields = prepareNoteWikiFields({
-    id,
-    contentMarkdown: parsed.contentMarkdown,
-    kind: parsed.kind,
-    title: parsed.title,
-    slug: parsed.slug,
-    spaceId: parsed.spaceId,
-    parentSlug: parsed.parentSlug,
-    indexOrder: parsed.indexOrder,
-    showInIndex: parsed.showInIndex,
-    aliases: parsed.aliases,
-    summary: parsed.summary,
-    userId: parsed.userId ?? null
-  });
-  const contentPlain = stripMarkdown(parsed.contentMarkdown);
-
-  getDatabase()
-    .prepare(
-      `INSERT INTO notes (
-         id, kind, title, slug, space_id, parent_slug, index_order, show_in_index, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
-         source_path, frontmatter_json, revision_hash, last_synced_at, created_at, updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
+  return runInTransaction(() => {
+    const now = new Date().toISOString();
+    const id = `note_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const wikiFields = prepareNoteWikiFields({
       id,
-      wikiFields.kind,
-      wikiFields.title,
-      wikiFields.slug,
-      wikiFields.spaceId,
-      wikiFields.parentSlug,
-      wikiFields.indexOrder,
-      wikiFields.showInIndex ? 1 : 0,
-      JSON.stringify(wikiFields.aliases),
-      wikiFields.summary,
-      parsed.contentMarkdown,
-      contentPlain,
-      parsed.author ?? context.actor ?? null,
-      context.source,
-      JSON.stringify(parsed.tags),
-      parsed.destroyAt,
-      canonicalNoteSourcePath(),
-      JSON.stringify(parsed.frontmatter),
-      parsed.revisionHash,
-      parsed.lastSyncedAt ?? null,
-      now,
-      now
-    );
-  insertLinks(id, parsed.links, now);
-  setEntityOwner("note", id, parsed.userId, parsed.author ?? context.actor ?? null);
-  clearDeletedEntityRecord("note", id);
-  upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
+      contentMarkdown: parsed.contentMarkdown,
+      kind: parsed.kind,
+      title: parsed.title,
+      slug: parsed.slug,
+      spaceId: parsed.spaceId,
+      parentSlug: parsed.parentSlug,
+      indexOrder: parsed.indexOrder,
+      showInIndex: parsed.showInIndex,
+      aliases: parsed.aliases,
+      summary: parsed.summary,
+      userId: parsed.userId ?? null
+    });
+    const contentPlain = stripMarkdown(parsed.contentMarkdown);
 
-  const note = getNoteById(id, { skipCleanup: true })!;
-  syncNoteWikiArtifacts(note);
-  recordNoteActivity(note, "note.created", "Note added", context);
-  return getNoteById(id, { skipCleanup: true })!;
+    getDatabase()
+      .prepare(
+        `INSERT INTO notes (
+           id, kind, title, slug, space_id, parent_slug, index_order, show_in_index, aliases_json, summary, content_markdown, content_plain, author, source, tags_json, destroy_at,
+           source_path, frontmatter_json, revision_hash, last_synced_at, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        wikiFields.kind,
+        wikiFields.title,
+        wikiFields.slug,
+        wikiFields.spaceId,
+        wikiFields.parentSlug,
+        wikiFields.indexOrder,
+        wikiFields.showInIndex ? 1 : 0,
+        JSON.stringify(wikiFields.aliases),
+        wikiFields.summary,
+        parsed.contentMarkdown,
+        contentPlain,
+        parsed.author ?? context.actor ?? null,
+        context.source,
+        JSON.stringify(parsed.tags),
+        parsed.destroyAt,
+        canonicalNoteSourcePath(),
+        JSON.stringify(parsed.frontmatter),
+        parsed.revisionHash,
+        parsed.lastSyncedAt ?? null,
+        now,
+        now
+      );
+    insertLinks(id, parsed.links, now);
+    setEntityOwner(
+      "note",
+      id,
+      parsed.userId,
+      parsed.author ?? context.actor ?? null
+    );
+    clearDeletedEntityRecord("note", id);
+    upsertSearchRow(id, contentPlain, parsed.author ?? context.actor ?? null);
+
+    const note = getNoteById(id, { skipCleanup: true })!;
+    syncNoteWikiArtifacts(note);
+    recordNoteActivity(note, "note.created", "Note added", context);
+    return getNoteById(id, { skipCleanup: true })!;
+  });
 }
 
 export function createLinkedNotes(
@@ -681,13 +1210,20 @@ export function createLinkedNotes(
     return [];
   }
 
+  const parentNote =
+    entityLink.entityType === "note"
+      ? getNoteById(entityLink.entityId)
+      : undefined;
+  const parentUserId =
+    parentNote?.userId ??
+    getEntityOwnerId(entityLink.entityType, entityLink.entityId);
   return notes.map((note) =>
     createNote(
       {
         kind: "evidence",
         title: "",
         slug: "",
-        spaceId: "",
+        spaceId: parentNote?.spaceId ?? "",
         parentSlug: null,
         indexOrder: 0,
         showInIndex: false,
@@ -700,7 +1236,8 @@ export function createLinkedNotes(
         links: [entityLink, ...note.links],
         sourcePath: "",
         frontmatter: {},
-        revisionHash: ""
+        revisionHash: "",
+        userId: parentUserId
       },
       context
     )
@@ -848,11 +1385,17 @@ function deleteNoteInternal(
   if (!existing) {
     return undefined;
   }
+  deleteNoteWikiArtifacts(existing);
   clearDeletedEntityRecord("note", noteId);
   getDatabase().prepare(`DELETE FROM note_links WHERE note_id = ?`).run(noteId);
   getDatabase().prepare(`DELETE FROM notes WHERE id = ?`).run(noteId);
+  clearEntityOwner("note", noteId);
+  getDatabase()
+    .prepare(
+      `DELETE FROM entity_assignments WHERE entity_type = 'note' AND entity_id = ?`
+    )
+    .run(noteId);
   deleteSearchRow(noteId);
-  deleteNoteWikiArtifacts(existing);
   clearDeletedEntityRecord("note", noteId);
   recordNoteActivity(existing, "note.deleted", title, context);
   return existing;
@@ -866,49 +1409,93 @@ export function deleteNote(
   return deleteNoteInternal(noteId, context, "Note deleted");
 }
 
-export function buildNotesSummaryByEntity(): NotesSummaryByEntity {
+export function buildNotesSummaryByEntity(
+  targets: ReadonlyArray<{
+    entityType: CrudEntityType;
+    entityId: string;
+  }>,
+  scope: NoteReadScope = {}
+): NotesSummaryByEntity {
   cleanupExpiredNotes();
-  const rows = getDatabase()
-    .prepare(
-      `SELECT
-         note_links.entity_type AS entity_type,
-         note_links.entity_id AS entity_id,
-         notes.id AS note_id,
-         notes.created_at AS created_at
-       FROM note_links
-       INNER JOIN notes ON notes.id = note_links.note_id
-       LEFT JOIN deleted_entities
-         ON deleted_entities.entity_type = 'note'
-        AND deleted_entities.entity_id = notes.id
-       WHERE deleted_entities.entity_id IS NULL
-         AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)
-       ORDER BY notes.created_at DESC`
-    )
-    .all(new Date().toISOString()) as Array<{
-    entity_type: string;
-    entity_id: string;
-    note_id: string;
-    created_at: string;
-  }>;
+  const idsByType = new Map<CrudEntityType, Set<string>>();
+  for (const target of targets) {
+    if (!target.entityId.trim()) {
+      continue;
+    }
+    const ids = idsByType.get(target.entityType) ?? new Set<string>();
+    ids.add(target.entityId);
+    idsByType.set(target.entityType, ids);
+  }
 
-  return rows.reduce<NotesSummaryByEntity>((acc, row) => {
-    const key = `${row.entity_type}:${row.entity_id}`;
-    const current = acc[key];
-    if (!current) {
-      acc[key] = {
-        count: 1,
-        latestNoteId: row.note_id,
-        latestCreatedAt: row.created_at
-      };
-      return acc;
+  const summary: NotesSummaryByEntity = {};
+  const now = new Date().toISOString();
+  for (const [entityType, entityIds] of idsByType) {
+    const ids = [...entityIds];
+    for (let offset = 0; offset < ids.length; offset += 250) {
+      const batch = ids.slice(offset, offset + 250);
+      const placeholders = batch.map(() => "?").join(", ");
+      const scopeClauses: string[] = [];
+      const scopeParameters: Array<string | number | null> = [];
+      appendNoteReadScopeConditions(
+        scopeClauses,
+        scopeParameters,
+        scope,
+        "notes"
+      );
+      const scopeSql =
+        scopeClauses.length > 0 ? `AND ${scopeClauses.join(" AND ")}` : "";
+      const rows = getDatabase()
+        .prepare(
+          `WITH visible_links AS (
+             SELECT DISTINCT
+               note_links.entity_type AS entity_type,
+               note_links.entity_id AS entity_id,
+               notes.id AS note_id,
+               notes.created_at AS created_at
+             FROM note_links
+             INNER JOIN notes ON notes.id = note_links.note_id
+             LEFT JOIN deleted_entities
+               ON deleted_entities.entity_type = 'note'
+              AND deleted_entities.entity_id = notes.id
+             WHERE note_links.entity_type = ?
+               AND note_links.entity_id IN (${placeholders})
+               AND deleted_entities.entity_id IS NULL
+               AND (notes.destroy_at IS NULL OR notes.destroy_at = '' OR notes.destroy_at > ?)
+               ${scopeSql}
+           ), ranked AS (
+             SELECT
+               entity_type,
+               entity_id,
+               note_id,
+               created_at,
+               COUNT(*) OVER (PARTITION BY entity_type, entity_id) AS note_count,
+               ROW_NUMBER() OVER (
+                 PARTITION BY entity_type, entity_id
+                 ORDER BY created_at DESC, note_id DESC
+               ) AS note_rank
+             FROM visible_links
+           )
+           SELECT entity_type, entity_id, note_id, created_at, note_count
+           FROM ranked
+           WHERE note_rank = 1`
+        )
+        .all(entityType, ...batch, now, ...scopeParameters) as Array<{
+        entity_type: string;
+        entity_id: string;
+        note_id: string;
+        created_at: string;
+        note_count: number;
+      }>;
+      for (const row of rows) {
+        summary[`${row.entity_type}:${row.entity_id}`] = {
+          count: row.note_count,
+          latestNoteId: row.note_id,
+          latestCreatedAt: row.created_at
+        };
+      }
     }
-    current.count += 1;
-    if (!current.latestCreatedAt || row.created_at > current.latestCreatedAt) {
-      current.latestCreatedAt = row.created_at;
-      current.latestNoteId = row.note_id;
-    }
-    return acc;
-  }, {});
+  }
+  return summary;
 }
 
 export function unlinkNotesForEntity(

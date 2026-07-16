@@ -25,6 +25,34 @@ export const preferenceDomainSchema = z.enum([
 
 export const preferenceCatalogSourceSchema = z.enum(["seeded", "custom"]);
 
+export const preferenceCatalogCreatedSourceSchema = z.enum([
+  "ui",
+  "openclaw",
+  "agent",
+  "system",
+  "unknown"
+]);
+
+export const preferenceCatalogLinkInputSchema = z
+  .object({
+    entityType: crudEntityTypeSchema,
+    entityId: nonEmptyTrimmedString,
+    anchorKey: trimmedString.max(256).optional().default(""),
+    relationship: trimmedString.max(64).optional().default("related")
+  })
+  .strict();
+
+export const preferenceCatalogLinkSchema = z.object({
+  sourceEntityType: nonEmptyTrimmedString,
+  sourceEntityId: nonEmptyTrimmedString,
+  targetEntityType: nonEmptyTrimmedString,
+  targetEntityId: nonEmptyTrimmedString,
+  anchorKey: trimmedString.nullable(),
+  relationship: nonEmptyTrimmedString,
+  createdByActor: z.string().nullable(),
+  createdAt: z.string()
+});
+
 export const preferenceContextShareModeSchema = z.enum([
   "shared",
   "isolated",
@@ -46,6 +74,15 @@ export const preferenceSignalTypeSchema = z.enum([
   "neutral",
   "compare_later"
 ]);
+
+export const PREFERENCE_SIGNAL_MODEL_WEIGHTS = {
+  favorite: 1.25,
+  veto: -1.6,
+  must_have: 1.5,
+  bookmark: 0.35,
+  neutral: 0,
+  compare_later: 0.2
+} as const;
 
 export const preferenceDimensionIdSchema = z.enum([
   "novelty",
@@ -132,6 +169,7 @@ export const preferenceCatalogItemSchema = z.object({
   tags: z.array(nonEmptyTrimmedString).default([]),
   featureWeights: preferenceDimensionVectorSchema,
   position: z.number().int().min(0),
+  archived: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -139,14 +177,25 @@ export const preferenceCatalogItemSchema = z.object({
 export const preferenceCatalogSchema = z.object({
   id: z.string(),
   profileId: nonEmptyTrimmedString,
+  userId: nonEmptyTrimmedString,
+  user: userSummarySchema.nullable(),
   domain: preferenceDomainSchema,
   slug: nonEmptyTrimmedString,
   title: nonEmptyTrimmedString,
   description: trimmedString.default(""),
+  scopeIn: trimmedString.default(""),
+  scopeOut: trimmedString.default(""),
   source: preferenceCatalogSourceSchema,
+  createdSource: preferenceCatalogCreatedSourceSchema,
+  createdByActor: z.string().nullable(),
+  archived: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  items: z.array(preferenceCatalogItemSchema).default([])
+  links: z.array(preferenceCatalogLinkSchema).default([]),
+  items: z.array(preferenceCatalogItemSchema).default([]),
+  itemCount: z.number().int().nonnegative(),
+  matchingItemCount: z.number().int().nonnegative().optional(),
+  itemsTruncated: z.boolean()
 });
 
 export const pairwiseJudgmentSchema = z.object({
@@ -169,10 +218,16 @@ export const absoluteSignalSchema = z.object({
   profileId: nonEmptyTrimmedString,
   contextId: nonEmptyTrimmedString,
   userId: nonEmptyTrimmedString,
+  ownerUserId: nonEmptyTrimmedString,
   itemId: nonEmptyTrimmedString,
   signalType: preferenceSignalTypeSchema,
   strength: z.number().min(0.5).max(2),
+  modelWeight: z.number(),
+  // Existing databases may contain provider-specific source labels from before
+  // authenticated activity provenance was standardized. New writes still use
+  // ActivitySource, while reads preserve those historical labels verbatim.
   source: nonEmptyTrimmedString,
+  actor: z.string().nullable(),
   createdAt: z.string()
 });
 
@@ -189,6 +244,7 @@ export const preferenceItemScoreSchema = z.object({
   pairwiseLosses: z.number().int().min(0),
   pairwiseTies: z.number().int().min(0),
   signalCount: z.number().int().min(0),
+  effectiveSignal: absoluteSignalSchema.nullable().default(null),
   conflictCount: z.number().int().min(0),
   status: preferenceItemStatusSchema,
   dominantDimensions: z.array(preferenceDimensionIdSchema).default([]),
@@ -264,6 +320,29 @@ export const preferenceWorkspacePayloadSchema = z.object({
     staleItemIds: z.array(nonEmptyTrimmedString).default([]),
     flippedItemIds: z.array(nonEmptyTrimmedString).default([])
   }),
+  presentation: z.object({
+    itemLimit: z.number().int().positive(),
+    itemOffset: z.number().int().min(0),
+    totalItems: z.number().int().min(0),
+    returnedItems: z.number().int().min(0),
+    hasMore: z.boolean(),
+    nextOffset: z.number().int().min(0).nullable(),
+    historyLimit: z.number().int().positive()
+  }),
+  evidenceCoverage: z.object({
+    judgmentLimitPerContext: z.number().int().positive(),
+    totalJudgments: z.number().int().min(0),
+    consideredJudgments: z.number().int().min(0),
+    truncated: z.boolean(),
+    contexts: z.array(
+      z.object({
+        contextId: nonEmptyTrimmedString,
+        totalJudgments: z.number().int().min(0),
+        consideredJudgments: z.number().int().min(0),
+        truncated: z.boolean()
+      })
+    )
+  }),
   compare: z.object({
     nextPair: preferenceComparePairSchema.nullable(),
     pendingCount: z.number().int().min(0),
@@ -287,44 +366,99 @@ export const preferenceWorkspacePayloadSchema = z.object({
   })
 });
 
-export const preferenceWorkspaceQuerySchema = z.object({
-  userId: nonEmptyTrimmedString.optional(),
-  domain: preferenceDomainSchema.optional(),
-  contextId: nonEmptyTrimmedString.optional()
-});
+export const preferenceWorkspaceQuerySchema = z
+  .object({
+    userId: nonEmptyTrimmedString.optional(),
+    domain: preferenceDomainSchema.optional(),
+    contextId: nonEmptyTrimmedString.optional(),
+    itemLimit: z.coerce.number().int().positive().max(100).default(50),
+    itemOffset: z.coerce.number().int().min(0).default(0),
+    historyLimit: z.coerce.number().int().positive().max(100).default(50)
+  })
+  .strict();
 
-export const createPreferenceContextSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  name: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  shareMode: preferenceContextShareModeSchema.default("blended"),
-  active: z.boolean().default(true),
-  isDefault: z.boolean().default(false),
-  decayDays: z.number().int().min(7).max(365).default(90)
-});
+export const refreshPreferenceWorkspaceSchema =
+  preferenceWorkspaceQuerySchema.extend({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema
+  });
+
+const preferencePageCursorSchema = nonEmptyTrimmedString.max(2048);
+
+export const preferenceCatalogListQuerySchema = z
+  .object({
+    domain: preferenceDomainSchema.optional(),
+    query: trimmedString.max(200).optional(),
+    limit: z.coerce.number().int().positive().max(100).default(24),
+    offset: z.coerce.number().int().min(0).default(0),
+    cursor: preferencePageCursorSchema.optional()
+  })
+  .superRefine((value, context) => {
+    if (value.cursor && value.offset > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["offset"],
+        message: "offset must be zero when cursor is provided"
+      });
+    }
+  });
+
+export const preferenceCatalogItemListQuerySchema = z
+  .object({
+    catalogId: nonEmptyTrimmedString.optional(),
+    query: trimmedString.max(200).optional(),
+    limit: z.coerce.number().int().positive().max(200).default(24),
+    offset: z.coerce.number().int().min(0).default(0),
+    cursor: preferencePageCursorSchema.optional()
+  })
+  .superRefine((value, context) => {
+    if (value.cursor && value.offset > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["offset"],
+        message: "offset must be zero when cursor is provided"
+      });
+    }
+  });
+
+export const createPreferenceContextSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    name: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    shareMode: preferenceContextShareModeSchema.default("blended"),
+    active: z.boolean().default(true),
+    isDefault: z.boolean().default(false),
+    decayDays: z.number().int().min(7).max(365).default(90)
+  })
+  .strict();
 
 export const updatePreferenceContextSchema = createPreferenceContextSchema
   .omit({ userId: true, domain: true })
   .partial();
 
-export const mergePreferenceContextsSchema = z.object({
-  sourceContextId: nonEmptyTrimmedString,
-  targetContextId: nonEmptyTrimmedString
-});
+export const mergePreferenceContextsSchema = z
+  .object({
+    sourceContextId: nonEmptyTrimmedString,
+    targetContextId: nonEmptyTrimmedString
+  })
+  .strict();
 
-const preferenceItemMutationFieldsSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  label: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  tags: z.array(nonEmptyTrimmedString).default([]),
-  featureWeights: preferenceDimensionVectorSchema.default({}),
-  sourceEntityType: crudEntityTypeSchema.nullable().optional(),
-  sourceEntityId: nonEmptyTrimmedString.nullable().optional(),
-  metadata: z.record(z.string(), z.unknown()).default({}),
-  queueForCompare: z.boolean().default(true)
-});
+const preferenceItemMutationFieldsSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    label: nonEmptyTrimmedString,
+    description: trimmedString.default(""),
+    tags: z.array(nonEmptyTrimmedString).default([]),
+    featureWeights: preferenceDimensionVectorSchema.default({}),
+    sourceEntityType: crudEntityTypeSchema.nullable().optional(),
+    sourceEntityId: nonEmptyTrimmedString.nullable().optional(),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+    queueForCompare: z.boolean().default(true)
+  })
+  .strict();
 
 export const createPreferenceItemSchema =
   preferenceItemMutationFieldsSchema.superRefine((value, context) => {
@@ -341,79 +475,99 @@ export const updatePreferenceItemSchema = preferenceItemMutationFieldsSchema
   .omit({ userId: true, domain: true })
   .partial();
 
-export const createPreferenceCatalogSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  title: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  slug: trimmedString.optional()
-});
+export const createPreferenceCatalogSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    title: nonEmptyTrimmedString.max(200),
+    description: trimmedString.max(4000).default(""),
+    scopeIn: trimmedString.max(4000).default(""),
+    scopeOut: trimmedString.max(4000).default(""),
+    slug: trimmedString.max(64).optional(),
+    links: z.array(preferenceCatalogLinkInputSchema).max(100).default([])
+  })
+  .strict();
 
 export const updatePreferenceCatalogSchema = createPreferenceCatalogSchema
   .omit({ userId: true, domain: true })
   .partial();
 
-export const createPreferenceCatalogItemSchema = z.object({
-  catalogId: nonEmptyTrimmedString,
-  label: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  tags: z.array(nonEmptyTrimmedString).default([]),
-  featureWeights: preferenceDimensionVectorSchema.default({}),
-  position: z.number().int().min(0).optional()
-});
+export const createPreferenceCatalogItemSchema = z
+  .object({
+    catalogId: nonEmptyTrimmedString,
+    label: nonEmptyTrimmedString.max(200),
+    description: trimmedString.max(4000).default(""),
+    tags: z.array(nonEmptyTrimmedString.max(100)).max(100).default([]),
+    featureWeights: preferenceDimensionVectorSchema.default({}),
+    position: z.number().int().min(0).optional()
+  })
+  .strict();
 
 export const updatePreferenceCatalogItemSchema =
-  createPreferenceCatalogItemSchema.omit({ catalogId: true }).partial();
+  createPreferenceCatalogItemSchema
+    .omit({ catalogId: true })
+    .partial()
+    .strict();
 
-export const enqueueEntityPreferenceItemSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  entityType: crudEntityTypeSchema,
-  entityId: nonEmptyTrimmedString,
-  label: trimmedString.optional(),
-  description: trimmedString.optional(),
-  tags: z.array(nonEmptyTrimmedString).default([])
-});
+export const enqueueEntityPreferenceItemSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    entityType: crudEntityTypeSchema,
+    entityId: nonEmptyTrimmedString,
+    label: trimmedString.optional(),
+    description: trimmedString.optional(),
+    tags: z.array(nonEmptyTrimmedString).default([])
+  })
+  .strict();
 
-export const submitPairwiseJudgmentSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  contextId: nonEmptyTrimmedString,
-  leftItemId: nonEmptyTrimmedString,
-  rightItemId: nonEmptyTrimmedString,
-  outcome: preferenceJudgmentOutcomeSchema,
-  strength: z.number().min(0.5).max(2).default(1),
-  responseTimeMs: z.number().int().nullable().optional(),
-  reasonTags: z.array(nonEmptyTrimmedString).default([])
-});
+export const submitPairwiseJudgmentSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    contextId: nonEmptyTrimmedString,
+    leftItemId: nonEmptyTrimmedString,
+    rightItemId: nonEmptyTrimmedString,
+    outcome: preferenceJudgmentOutcomeSchema,
+    strength: z.number().min(0.5).max(2).default(1),
+    responseTimeMs: z.number().int().nullable().optional(),
+    reasonTags: z.array(nonEmptyTrimmedString).max(100).default([])
+  })
+  .strict();
 
-export const submitAbsoluteSignalSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  contextId: nonEmptyTrimmedString,
-  itemId: nonEmptyTrimmedString,
-  signalType: preferenceSignalTypeSchema,
-  strength: z.number().min(0.5).max(2).default(1)
-});
+export const submitAbsoluteSignalSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    contextId: nonEmptyTrimmedString,
+    itemId: nonEmptyTrimmedString,
+    signalType: preferenceSignalTypeSchema,
+    strength: z.number().min(0.5).max(2).default(1)
+  })
+  .strict();
 
-export const updatePreferenceScoreSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  contextId: nonEmptyTrimmedString,
-  manualStatus: preferenceItemStatusSchema.nullable().optional(),
-  manualScore: z.number().nullable().optional(),
-  confidenceLock: z.number().min(0).max(1).nullable().optional(),
-  bookmarked: z.boolean().optional(),
-  compareLater: z.boolean().optional(),
-  frozen: z.boolean().optional()
-});
+export const updatePreferenceScoreSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    contextId: nonEmptyTrimmedString,
+    manualStatus: preferenceItemStatusSchema.nullable().optional(),
+    manualScore: z.number().nullable().optional(),
+    confidenceLock: z.number().min(0).max(1).nullable().optional(),
+    bookmarked: z.boolean().optional(),
+    compareLater: z.boolean().optional(),
+    frozen: z.boolean().optional()
+  })
+  .strict();
 
-export const startPreferenceGameSchema = z.object({
-  userId: nonEmptyTrimmedString,
-  domain: preferenceDomainSchema,
-  contextId: nonEmptyTrimmedString.optional(),
-  catalogId: nonEmptyTrimmedString.optional()
-});
+export const startPreferenceGameSchema = z
+  .object({
+    userId: nonEmptyTrimmedString,
+    domain: preferenceDomainSchema,
+    contextId: nonEmptyTrimmedString.optional(),
+    catalogId: nonEmptyTrimmedString.optional()
+  })
+  .strict();
 
 export type PreferenceDomain = z.infer<typeof preferenceDomainSchema>;
 export type PreferenceContextShareMode = z.infer<
@@ -434,6 +588,13 @@ export type PreferenceItem = z.infer<typeof preferenceItemSchema>;
 export type PreferenceCatalogSource = z.infer<
   typeof preferenceCatalogSourceSchema
 >;
+export type PreferenceCatalogCreatedSource = z.infer<
+  typeof preferenceCatalogCreatedSourceSchema
+>;
+export type PreferenceCatalogLinkInput = z.infer<
+  typeof preferenceCatalogLinkInputSchema
+>;
+export type PreferenceCatalogLink = z.infer<typeof preferenceCatalogLinkSchema>;
 export type PreferenceCatalogItem = z.infer<typeof preferenceCatalogItemSchema>;
 export type PreferenceCatalog = z.infer<typeof preferenceCatalogSchema>;
 export type PairwiseJudgment = z.infer<typeof pairwiseJudgmentSchema>;
@@ -448,7 +609,7 @@ export type PreferenceComparePair = z.infer<typeof preferenceComparePairSchema>;
 export type PreferenceWorkspacePayload = z.infer<
   typeof preferenceWorkspacePayloadSchema
 >;
-export type PreferenceWorkspaceQuery = z.infer<
+export type PreferenceWorkspaceQuery = z.input<
   typeof preferenceWorkspaceQuerySchema
 >;
 export type CreatePreferenceContextInput = z.infer<

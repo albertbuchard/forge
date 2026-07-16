@@ -188,6 +188,70 @@ describe("resolveQuestionFlowStepIndex", () => {
     expect(await screen.findByText("Next step")).toBeInTheDocument();
   });
 
+  it("mounts the next question immediately without an empty transition canvas", () => {
+    render(
+      <QuestionFlowDialog
+        open
+        onOpenChange={() => undefined}
+        eyebrow="Experiment"
+        title="Create experiment"
+        description="Define an experiment."
+        value={{}}
+        onChange={() => undefined}
+        steps={[
+          {
+            id: "first-step",
+            title: "First step",
+            render: () => <div>First-step content</div>
+          },
+          {
+            id: "second-step",
+            title: "Second step",
+            render: () => <div>Second-step content</div>
+          }
+        ]}
+        submitLabel="Save"
+        onSubmit={async () => undefined}
+      />
+    );
+
+    expect(screen.getByTestId("question-flow-step")).toHaveAttribute(
+      "data-step-id",
+      "first-step"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    expect(screen.getByTestId("question-flow-step")).toHaveAttribute(
+      "data-step-id",
+      "second-step"
+    );
+    expect(screen.getByText("Second-step content")).toBeInTheDocument();
+    expect(screen.queryByText("First-step content")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("question-flow-canvas")
+    ).not.toBeEmptyDOMElement();
+  });
+
+  it("keeps field errors and hints out of the control's accessible name", () => {
+    render(
+      <FlowField
+        label="Birthday month"
+        hint="Use a number from 1 to 12."
+        error="Enter a birthday month."
+      >
+        <Input />
+      </FlowField>
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Birthday month" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a birthday month."
+    );
+  });
+
   it("keeps required missing information on the current step", async () => {
     function RequiredDialog() {
       const [value, setValue] = useState({ title: "" });
@@ -230,8 +294,13 @@ describe("resolveQuestionFlowStepIndex", () => {
 
     render(<RequiredDialog />);
     const continueButton = screen.getByRole("button", { name: /continue/i });
+    expect(
+      screen.getByRole("progressbar", { name: "Create goal progress" })
+    ).toHaveAttribute("aria-valuetext", "Step 1 of 2");
     expect(continueButton).toBeDisabled();
-    expect(screen.getByText("Name the goal before continuing.")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Name the goal before continuing."
+    );
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "A clear goal" }

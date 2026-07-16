@@ -17,7 +17,10 @@ import {
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -570,35 +573,42 @@ export function SettingsDataPage() {
 
   if (operatorSessionQuery.isLoading || dataQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Data"
-        title="Loading data controls"
-        description="Checking the live data folder, backup plan, and recovery tools."
-        columns={3}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Data"
+          title="Loading data controls"
+          description="Checking the live data folder, backup plan, and recovery tools."
+          columns={3}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Data"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Data"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (dataQuery.isError || !data) {
     return (
-      <ErrorState
-        eyebrow="Data"
-        error={
-          dataQuery.error ?? new Error("Forge returned an empty data payload.")
-        }
-        onRetry={() => void dataQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Data"
+          error={
+            dataQuery.error ??
+            new Error("Forge returned an empty data payload.")
+          }
+          onRetry={() => void dataQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 

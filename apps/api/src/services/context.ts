@@ -1,4 +1,8 @@
 import { listActivityEvents } from "../repositories/activity-events.js";
+import {
+  filterNoteActivityEventsForScope,
+  type NoteReadScope
+} from "../repositories/notes.js";
 import { listRewardLedger } from "../repositories/rewards.js";
 import { listTags, listTagsByIds } from "../repositories/tags.js";
 import { getDashboard } from "./dashboard.js";
@@ -31,12 +35,17 @@ function priorityWeight(task: Task): number {
 }
 
 function dueWeight(task: Task): number {
-  return task.dueDate ? Date.parse(`${task.dueDate}T00:00:00.000Z`) : Number.POSITIVE_INFINITY;
+  return task.dueDate
+    ? Date.parse(`${task.dueDate}T00:00:00.000Z`)
+    : Number.POSITIVE_INFINITY;
 }
 
 function taskSignalRank(task: Task): number {
-  const statusBoost = task.status === "in_progress" ? 30 : task.status === "focus" ? 20 : 0;
-  const dueBoost = task.dueDate ? Math.max(0, 20 - Math.floor((dueWeight(task) - Date.now()) / 86_400_000)) : 0;
+  const statusBoost =
+    task.status === "in_progress" ? 30 : task.status === "focus" ? 20 : 0;
+  const dueBoost = task.dueDate
+    ? Math.max(0, 20 - Math.floor((dueWeight(task) - Date.now()) / 86_400_000))
+    : 0;
   return priorityWeight(task) * 20 + statusBoost + dueBoost + task.points;
 }
 
@@ -53,22 +62,40 @@ function sortStrategicTasks(tasks: Task[]): Task[] {
 function latestGoalActivity(goal: Goal, tasks: Task[]): string | null {
   const goalTasks = tasks.filter((task) => task.goalId === goal.id);
   const timestamps = goalTasks
-    .flatMap((task) => [task.updatedAt, task.completedAt].filter((value): value is string => value !== null))
+    .flatMap((task) =>
+      [task.updatedAt, task.completedAt].filter(
+        (value): value is string => value !== null
+      )
+    )
     .sort((left, right) => Date.parse(right) - Date.parse(left));
   return timestamps[0] ?? null;
 }
 
-function buildNeglectedGoals(goals: Goal[], tasks: Task[], now: Date): ContextNeglectedGoal[] {
+function buildNeglectedGoals(
+  goals: Goal[],
+  tasks: Task[],
+  now: Date
+): ContextNeglectedGoal[] {
   return goals
     .filter((goal) => goal.status === "active")
     .map((goal) => {
       const relatedTasks = tasks.filter((task) => task.goalId === goal.id);
-      const completedCount = relatedTasks.filter((task) => task.status === "done").length;
-      const activeCount = relatedTasks.filter((task) => task.status !== "done").length;
+      const completedCount = relatedTasks.filter(
+        (task) => task.status === "done"
+      ).length;
+      const activeCount = relatedTasks.filter(
+        (task) => task.status !== "done"
+      ).length;
       const latestActivity = latestGoalActivity(goal, tasks);
-      const ageDays = latestActivity ? Math.floor((now.getTime() - Date.parse(latestActivity)) / 86_400_000) : 999;
+      const ageDays = latestActivity
+        ? Math.floor((now.getTime() - Date.parse(latestActivity)) / 86_400_000)
+        : 999;
       const risk: ContextNeglectedGoal["risk"] =
-        activeCount === 0 || ageDays >= 7 ? "high" : ageDays >= 4 || completedCount === 0 ? "medium" : "low";
+        activeCount === 0 || ageDays >= 7
+          ? "high"
+          : ageDays >= 4 || completedCount === 0
+            ? "medium"
+            : "low";
       const summary =
         activeCount === 0
           ? "No active projects are attached right now."
@@ -93,10 +120,18 @@ function buildNeglectedGoals(goals: Goal[], tasks: Task[], now: Date): ContextNe
 
 function chooseDomainTag(goal: Goal, tagsById: Map<string, Tag>): Tag | null {
   const tags = listTagsByIds(goal.tagIds);
-  return tags.find((tag) => tag.kind === "value") ?? tags.find((tag) => tag.kind === "category") ?? tagsById.get(goal.tagIds[0] ?? "") ?? null;
+  return (
+    tags.find((tag) => tag.kind === "value") ??
+    tags.find((tag) => tag.kind === "category") ??
+    tagsById.get(goal.tagIds[0] ?? "") ??
+    null
+  );
 }
 
-function buildDomainBalance(goals: Goal[], tasks: Task[]): ContextDomainBalance[] {
+function buildDomainBalance(
+  goals: Goal[],
+  tasks: Task[]
+): ContextDomainBalance[] {
   const allTags = listTags();
   const tagsById = new Map(allTags.map((tag) => [tag.id, tag] as const));
   const domainRows = new Map<string, ContextDomainBalance>();
@@ -107,14 +142,17 @@ function buildDomainBalance(goals: Goal[], tasks: Task[]): ContextDomainBalance[
       continue;
     }
     const relatedTasks = tasks.filter((task) => task.goalId === goal.id);
-    const activeTaskCount = relatedTasks.filter((task) => task.status !== "done").length;
+    const activeTaskCount = relatedTasks.filter(
+      (task) => task.status !== "done"
+    ).length;
     const completedPoints = relatedTasks
       .filter((task) => task.status === "done")
       .reduce((sum, task) => sum + task.points, 0);
     const existing = domainRows.get(domainTag.id);
     const nextGoalCount = (existing?.goalCount ?? 0) + 1;
     const nextActiveCount = (existing?.activeTaskCount ?? 0) + activeTaskCount;
-    const nextCompletedPoints = (existing?.completedPoints ?? 0) + completedPoints;
+    const nextCompletedPoints =
+      (existing?.completedPoints ?? 0) + completedPoints;
     domainRows.set(domainTag.id, {
       tagId: domainTag.id,
       label: domainTag.name,
@@ -123,23 +161,45 @@ function buildDomainBalance(goals: Goal[], tasks: Task[]): ContextDomainBalance[
       activeTaskCount: nextActiveCount,
       completedPoints: nextCompletedPoints,
       momentumLabel:
-        nextCompletedPoints >= 120 ? "Hot" : nextActiveCount >= 3 ? "Loaded" : nextCompletedPoints > 0 ? "Alive" : "Cold"
+        nextCompletedPoints >= 120
+          ? "Hot"
+          : nextActiveCount >= 3
+            ? "Loaded"
+            : nextCompletedPoints > 0
+              ? "Alive"
+              : "Cold"
     });
   }
 
-  return [...domainRows.values()].sort((left, right) => right.completedPoints - left.completedPoints);
+  return [...domainRows.values()].sort(
+    (left, right) => right.completedPoints - left.completedPoints
+  );
 }
 
 type ContextOptions = {
   userIds?: string[];
   dashboard?: DashboardPayload;
+  noteScope?: NoteReadScope;
 };
 
-export function getOverviewContext(now = new Date(), options: ContextOptions = {}): OverviewContext {
-  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
-  const focusTasks = dashboard.tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
-  const overdueTasks = dashboard.tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
-  const dueHabits = dashboard.habits.filter((habit) => habit.dueToday).slice(0, 6);
+export function getOverviewContext(
+  now = new Date(),
+  options: ContextOptions = {}
+): OverviewContext {
+  const dashboard =
+    options.dashboard ?? getDashboard({ userIds: options.userIds });
+  const focusTasks = dashboard.tasks.filter(
+    (task) => task.status === "focus" || task.status === "in_progress"
+  ).length;
+  const overdueTasks = dashboard.tasks.filter(
+    (task) =>
+      task.status !== "done" &&
+      task.dueDate !== null &&
+      task.dueDate < now.toISOString().slice(0, 10)
+  ).length;
+  const dueHabits = dashboard.habits
+    .filter((habit) => habit.dueToday)
+    .slice(0, 6);
   const goals = dashboard.goals;
   const tasks = dashboard.tasks;
   return overviewContextSchema.parse({
@@ -156,33 +216,60 @@ export function getOverviewContext(now = new Date(), options: ContextOptions = {
     },
     projects: dashboard.projects.slice(0, 5),
     activeGoals: goals.filter((goal) => goal.status === "active").slice(0, 6),
-    topTasks: sortStrategicTasks(tasks.filter((task) => task.status !== "done")).slice(0, 6),
+    topTasks: sortStrategicTasks(
+      tasks.filter((task) => task.status !== "done")
+    ).slice(0, 6),
     dueHabits,
-    recentEvidence: listActivityEvents({ limit: 12, userIds: options.userIds }),
+    recentEvidence: filterNoteActivityEventsForScope(
+      listActivityEvents({ limit: 60, userIds: options.userIds }),
+      options.noteScope ?? { userIds: options.userIds }
+    ).slice(0, 12),
     achievements: dashboard.achievements,
     domainBalance: buildDomainBalance(goals, tasks),
     neglectedGoals: buildNeglectedGoals(goals, tasks, now)
   });
 }
 
-export function getTodayContext(now = new Date(), options: ContextOptions = {}): TodayContext {
-  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
+export function getTodayContext(
+  now = new Date(),
+  options: ContextOptions = {}
+): TodayContext {
+  const dashboard =
+    options.dashboard ?? getDashboard({ userIds: options.userIds });
   const goals = dashboard.goals;
   const tasks = dashboard.tasks;
   const habits = dashboard.habits;
   const gamification = dashboard.gamification;
-  const inProgressTasks = sortStrategicTasks(tasks.filter((task) => task.status === "in_progress")).slice(0, 4);
-  const readyTasks = sortStrategicTasks(tasks.filter((task) => task.status === "focus" || task.status === "backlog")).slice(0, 4);
-  const deferredTasks = sortStrategicTasks(tasks.filter((task) => task.status === "blocked")).slice(0, 4);
+  const inProgressTasks = sortStrategicTasks(
+    tasks.filter((task) => task.status === "in_progress")
+  ).slice(0, 4);
+  const readyTasks = sortStrategicTasks(
+    tasks.filter((task) => task.status === "focus" || task.status === "backlog")
+  ).slice(0, 4);
+  const deferredTasks = sortStrategicTasks(
+    tasks.filter((task) => task.status === "blocked")
+  ).slice(0, 4);
   const dueHabits = habits.filter((habit) => habit.dueToday).slice(0, 6);
   const completedTasks = [...tasks]
     .filter((task) => task.status === "done" && task.completedAt !== null)
-    .sort((left, right) => Date.parse(right.completedAt ?? "") - Date.parse(left.completedAt ?? ""))
+    .sort(
+      (left, right) =>
+        Date.parse(right.completedAt ?? "") - Date.parse(left.completedAt ?? "")
+    )
     .slice(0, 4);
   const directiveTask = inProgressTasks[0] ?? readyTasks[0] ?? null;
-  const goalTitle = directiveTask?.goalId ? goals.find((goal) => goal.id === directiveTask.goalId)?.title ?? null : null;
-  const overdueCount = tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10)).length;
-  const completedToday = completedTasks.filter((task) => task.completedAt?.slice(0, 10) === now.toISOString().slice(0, 10)).length;
+  const goalTitle = directiveTask?.goalId
+    ? (goals.find((goal) => goal.id === directiveTask.goalId)?.title ?? null)
+    : null;
+  const overdueCount = tasks.filter(
+    (task) =>
+      task.status !== "done" &&
+      task.dueDate !== null &&
+      task.dueDate < now.toISOString().slice(0, 10)
+  ).length;
+  const completedToday = completedTasks.filter(
+    (task) => task.completedAt?.slice(0, 10) === now.toISOString().slice(0, 10)
+  ).length;
 
   return todayContextSchema.parse({
     generatedAt: now.toISOString(),
@@ -190,7 +277,9 @@ export function getTodayContext(now = new Date(), options: ContextOptions = {}):
       task: directiveTask,
       goalTitle,
       rewardXp: directiveTask?.points ?? 0,
-      sessionLabel: directiveTask ? `${directiveTask.effort} effort · ${directiveTask.energy} energy` : "No active directive selected"
+      sessionLabel: directiveTask
+        ? `${directiveTask.effort} effort · ${directiveTask.energy} energy`
+        : "No active directive selected"
     },
     timeline: [
       { id: "in_progress", label: "In progress", tasks: inProgressTasks },
@@ -210,7 +299,8 @@ export function getTodayContext(now = new Date(), options: ContextOptions = {}):
       {
         id: "quest-focus-lane",
         title: "Keep one focus lane alive",
-        summary: "Protect at least one in-progress or focus task from stalling.",
+        summary:
+          "Protect at least one in-progress or focus task from stalling.",
         rewardXp: 60,
         progressLabel: `${inProgressTasks.length > 0 || readyTasks.length > 0 ? 1 : 0}/1 active tasks`,
         completed: inProgressTasks.length > 0 || readyTasks.length > 0
@@ -234,20 +324,31 @@ export function getTodayContext(now = new Date(), options: ContextOptions = {}):
         dueHabits.length > 0
           ? `${dueHabits.length} habit${dueHabits.length === 1 ? "" : "s"} still need a check-in today. Closing one will keep momentum honest.`
           : overdueCount > 0
-          ? `Clear ${overdueCount} overdue task${overdueCount === 1 ? "" : "s"} to keep momentum from decaying.`
-          : "No overdue drag right now. Preserve the rhythm with one decisive completion."
+            ? `Clear ${overdueCount} overdue task${overdueCount === 1 ? "" : "s"} to keep momentum from decaying.`
+            : "No overdue drag right now. Preserve the rhythm with one decisive completion."
     }
   });
 }
 
-export function getRiskContext(now = new Date(), options: ContextOptions = {}): RiskContext {
-  const dashboard = options.dashboard ?? getDashboard({ userIds: options.userIds });
+export function getRiskContext(
+  now = new Date(),
+  options: ContextOptions = {}
+): RiskContext {
+  const dashboard =
+    options.dashboard ?? getDashboard({ userIds: options.userIds });
   const tasks = dashboard.tasks;
   const goals = dashboard.goals;
   const overdueTasks = sortStrategicTasks(
-    tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < now.toISOString().slice(0, 10))
+    tasks.filter(
+      (task) =>
+        task.status !== "done" &&
+        task.dueDate !== null &&
+        task.dueDate < now.toISOString().slice(0, 10)
+    )
   ).slice(0, 8);
-  const blockedTasks = sortStrategicTasks(tasks.filter((task) => task.status === "blocked")).slice(0, 8);
+  const blockedTasks = sortStrategicTasks(
+    tasks.filter((task) => task.status === "blocked")
+  ).slice(0, 8);
   const neglectedGoals = buildNeglectedGoals(goals, tasks, now);
   const summary =
     overdueTasks.length === 0 && blockedTasks.length === 0

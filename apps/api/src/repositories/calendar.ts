@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import { recordActivityEvent } from "./activity-events.js";
 import {
+  clearEntityOwner,
   decorateOwnedEntity,
   filterOwnedEntities,
+  getEntityOwnerId,
   inferFirstOwnedUserId,
   setEntityOwner
 } from "./entity-ownership.js";
@@ -38,6 +40,7 @@ import {
   type CalendarSchedulingRules,
   type CalendarTimeboxStatus,
   type CalendarTimeboxSource,
+  type CalendarActivityPresetKey,
   type CreateCalendarEventInput,
   type CreateTaskTimeboxInput,
   type CreateWorkBlockTemplateInput,
@@ -48,7 +51,10 @@ import {
   type WorkBlockInstance,
   type WorkBlockTemplate
 } from "../types.js";
-import { resolveZonedDateTime } from "../services/calendar-time.js";
+import {
+  isValidTimeZone,
+  resolveZonedDateTime
+} from "../services/calendar-time.js";
 
 type ActivityContext = {
   source: ActivitySource;
@@ -194,8 +200,38 @@ type TaskTimeboxRow = {
   starts_at: string;
   ends_at: string;
   override_reason: string | null;
+  deletion_requested_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type TaskTimeboxProviderOperationRow = {
+  timebox_id: string;
+  operation: "upsert" | "delete";
+  state: "pending" | "claimed" | "applied" | "error";
+  target_connection_id: string | null;
+  target_calendar_id: string | null;
+  remote_event_id: string | null;
+  claim_token: string | null;
+  claim_version: number;
+  needs_retry: number;
+  claimed_at: string | null;
+  lease_expires_at: string | null;
+  attempt_count: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaskTimeboxProjectionClaim = {
+  timebox: TaskTimebox;
+  operation: "upsert" | "delete";
+  claimToken: string;
+  claimVersion: number;
+  targetConnectionId: string | null;
+  targetCalendarId: string | null;
+  remoteEventId: string | null;
+  attemptCount: number;
 };
 
 export type CalendarConnectionCredentialsRecord = Record<string, unknown>;
@@ -296,6 +332,21 @@ export type SchedulingEvaluation = {
   }>;
 };
 
+export type TaskTimeboxPlacementConflict = {
+  kind: "calendar_event" | "work_block" | "task_timebox" | "scheduling_rule";
+  id: string;
+  title: string;
+  reason: string;
+  startsAt: string;
+  endsAt: string;
+};
+
+export type TaskTimeboxPlacementEvaluation = {
+  blocked: boolean;
+  requiresOverride: boolean;
+  conflicts: TaskTimeboxPlacementConflict[];
+};
+
 const DEFAULT_SCHEDULING_RULES: CalendarSchedulingRules = {
   allowWorkBlockKinds: [],
   blockWorkBlockKinds: [],
@@ -308,6 +359,12 @@ const DEFAULT_SCHEDULING_RULES: CalendarSchedulingRules = {
   allowAvailability: [],
   blockAvailability: []
 };
+
+const MAX_TIMEBOX_QUERY_DAYS = 732;
+const MAX_TIMEBOX_ROWS = 5_000;
+const MAX_TIMEBOX_SUGGESTION_DAYS = 31;
+const MAX_TIMEBOX_SUGGESTIONS = 12;
+const MAX_TIMEBOX_DURATION_MS = 31 * 24 * 60 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -645,6 +702,94 @@ function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60 * 1000);
 }
 
+function parseTimeboxWindow(
+  startsAt: string,
+  endsAt: string,
+  options: {
+    maxDurationMs?: number;
+    limitKind?: "timebox" | "range";
+  } = {}
+) {
+  const startsAtMs = Date.parse(startsAt);
+  const endsAtMs = Date.parse(endsAt);
+  if (
+    !Number.isFinite(startsAtMs) ||
+    !Number.isFinite(endsAtMs) ||
+    endsAtMs <= startsAtMs
+  ) {
+    throw new HttpError(
+      400,
+      "calendar_timebox_window_invalid",
+      "Task timeboxes need valid start and end timestamps, with the end after the start."
+    );
+  }
+  const maxDurationMs = options.maxDurationMs ?? MAX_TIMEBOX_DURATION_MS;
+  if (endsAtMs - startsAtMs > maxDurationMs) {
+    const isTimeboxDurationLimit = options.limitKind !== "range";
+    throw new HttpError(
+      400,
+      isTimeboxDurationLimit
+        ? "calendar_timebox_duration_too_long"
+        : "calendar_timebox_range_too_large",
+      isTimeboxDurationLimit
+        ? "A single task timebox can span at most 31 days. Split longer plans into separate focused blocks."
+        : "The requested task-timebox range is too large. Request a shorter range."
+    );
+  }
+  return { startsAtMs, endsAtMs };
+}
+
+function validateTimeboxQueryRange(query: CalendarAgendaQuery) {
+  const { startsAtMs, endsAtMs } = parseTimeboxWindow(query.from, query.to, {
+    maxDurationMs: MAX_TIMEBOX_QUERY_DAYS * 24 * 60 * 60 * 1000,
+    limitKind: "range"
+  });
+  return { fromMs: startsAtMs, toMs: endsAtMs };
+}
+
+function taskOwnerId(task: Task) {
+  return (
+    getEntityOwnerId("task", task.id) ?? task.ownerUserId ?? task.userId ?? null
+  );
+}
+
+function validateTaskTimeboxIdentity(input: {
+  task: Task | undefined;
+  taskId: string;
+  projectId?: string | null;
+  userId?: string | null;
+}) {
+  if (!input.task) {
+    throw new HttpError(
+      404,
+      "calendar_timebox_task_not_found",
+      "The task for this timebox does not exist."
+    );
+  }
+  if (
+    input.projectId !== undefined &&
+    input.projectId !== null &&
+    input.projectId !== input.task.projectId
+  ) {
+    throw new HttpError(
+      409,
+      "calendar_timebox_project_mismatch",
+      "The timebox project must match the task's current project."
+    );
+  }
+  const ownerId = taskOwnerId(input.task);
+  if (input.userId !== undefined && input.userId !== null && ownerId) {
+    if (input.userId !== ownerId) {
+      throw new HttpError(
+        409,
+        "calendar_timebox_owner_mismatch",
+        "A task timebox must stay owned by the same user as its task."
+      );
+    }
+  }
+  return ownerId;
+}
+
 function normalizeRules(rules: CalendarSchedulingRules | null | undefined) {
   return calendarSchedulingRulesSchema.parse(rules ?? DEFAULT_SCHEDULING_RULES);
 }
@@ -732,6 +877,7 @@ export function createCalendarConnectionRecord(input: {
   accountLabel?: string;
   config: Record<string, string | number | boolean | null>;
   credentialsSecretId: string;
+  userId?: string | null;
 }): CalendarConnectionRecord {
   const now = nowIso();
   const id = `calconn_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
@@ -752,6 +898,7 @@ export function createCalendarConnectionRecord(input: {
       now,
       now
     );
+  setEntityOwner("calendar_connection", id, input.userId ?? null);
   return getCalendarConnectionById(id)!;
 }
 
@@ -827,6 +974,7 @@ export function deleteCalendarConnectionRecord(connectionId: string) {
   getDatabase()
     .prepare(`DELETE FROM calendar_connections WHERE id = ?`)
     .run(connectionId);
+  clearEntityOwner("calendar_connection", connectionId);
   return current;
 }
 
@@ -1398,6 +1546,9 @@ export function upsertCalendarEventRecord(
   if (!connection) {
     throw new Error(`Calendar connection ${connectionId} is not registered`);
   }
+  const connectionOwnerId =
+    getEntityOwnerId("calendar_connection", connectionId) ??
+    setEntityOwner("calendar_connection", connectionId).userId;
   const existing = getCalendarEventByRemoteId(
     connectionId,
     calendar.id,
@@ -1466,6 +1617,9 @@ export function upsertCalendarEventRecord(
       rawPayloadJson: JSON.stringify(input.rawPayload ?? {}),
       lastSyncedAt: input.remoteUpdatedAt ?? now
     });
+    if ((input.ownership ?? existing.ownership) === "external") {
+      setEntityOwner("calendar_event", existing.id, connectionOwnerId);
+    }
     return getCalendarEventById(existing.id)!;
   }
 
@@ -1532,6 +1686,7 @@ export function upsertCalendarEventRecord(
     rawPayloadJson: JSON.stringify(input.rawPayload ?? {}),
     lastSyncedAt: input.remoteUpdatedAt ?? now
   });
+  setEntityOwner("calendar_event", id, connectionOwnerId);
   return getCalendarEventById(id)!;
 }
 
@@ -2197,8 +2352,13 @@ export function listTaskTimeboxes(
     userIds?: string[];
   }
 ) {
-  const clauses = ["ends_at > ?", "starts_at < ?"];
-  const params: Array<string> = [query.from, query.to];
+  validateTimeboxQueryRange(query);
+  const clauses = [
+    "deletion_requested_at IS NULL",
+    "ends_at > ?",
+    "starts_at < ?"
+  ];
+  const params: Array<string | number> = [query.from, query.to];
   if (query.taskId) {
     clauses.push("task_id = ?");
     params.push(query.taskId);
@@ -2207,13 +2367,153 @@ export function listTaskTimeboxes(
     clauses.push("project_id = ?");
     params.push(query.projectId);
   }
+  const userIds = Array.from(
+    new Set(
+      (query.userIds ?? [])
+        .map((userId) => userId.trim())
+        .filter((userId) => userId.length > 0)
+    )
+  );
+  if (userIds.length > 0) {
+    const placeholders = userIds.map(() => "?").join(", ");
+    clauses.push(
+      `(EXISTS (
+          SELECT 1
+          FROM entity_owners timebox_owner
+          WHERE timebox_owner.entity_type = 'task_timebox'
+            AND timebox_owner.entity_id = task_timeboxes.id
+            AND timebox_owner.user_id IN (${placeholders})
+        ) OR EXISTS (
+          SELECT 1
+          FROM entity_assignments timebox_assignment
+          WHERE timebox_assignment.entity_type = 'task_timebox'
+            AND timebox_assignment.entity_id = task_timeboxes.id
+            AND timebox_assignment.role = 'assignee'
+            AND timebox_assignment.user_id IN (${placeholders})
+        ))`
+    );
+    params.push(...userIds, ...userIds);
+  }
+  params.push(MAX_TIMEBOX_ROWS + 1);
   const rows = getDatabase()
     .prepare(
       `SELECT id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
               starts_at, ends_at, override_reason, created_at, updated_at
        FROM task_timeboxes
        WHERE ${clauses.join(" AND ")}
-       ORDER BY starts_at ASC`
+       ORDER BY starts_at ASC, id ASC
+       LIMIT ?`
+    )
+    .all(...params) as TaskTimeboxRow[];
+  if (rows.length > MAX_TIMEBOX_ROWS) {
+    throw new HttpError(
+      400,
+      "calendar_timebox_result_too_large",
+      `The requested range contains more than ${MAX_TIMEBOX_ROWS} task timeboxes. Request a shorter range.`
+    );
+  }
+  const activeIds = activeConnectionIds();
+  return filterOwnedEntities(
+    "task_timebox",
+    rows
+      .map(mapTimebox)
+      .filter(
+        (timebox) =>
+          timebox.connectionId === null || activeIds.has(timebox.connectionId)
+      ),
+    userIds
+  );
+}
+
+function buildTaskTimeboxFtsQuery(value: string) {
+  const terms = value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .match(/[\p{L}\p{N}_]+/gu);
+  if (!terms || terms.length === 0) {
+    return null;
+  }
+  return terms
+    .slice(0, 12)
+    .map((term) => `"${term.replaceAll('"', '""')}"*`)
+    .join(" AND ");
+}
+
+export function searchTaskTimeboxesForEntityCrud(
+  input: {
+    ids?: string[];
+    query?: string;
+    status?: string[];
+    userIds?: string[];
+    limit?: number;
+  } = {}
+) {
+  const boundedLimit = Math.max(
+    1,
+    Math.min(input.limit ?? MAX_TIMEBOX_ROWS, MAX_TIMEBOX_ROWS)
+  );
+  const clauses = ["task_timeboxes.deletion_requested_at IS NULL"];
+  const params: Array<string | number> = [];
+  const ids = Array.from(
+    new Set((input.ids ?? []).map((id) => id.trim()).filter(Boolean))
+  );
+  if (ids.length > 0) {
+    clauses.push(`task_timeboxes.id IN (${ids.map(() => "?").join(", ")})`);
+    params.push(...ids);
+  }
+  const statuses = Array.from(
+    new Set((input.status ?? []).map((status) => status.trim()).filter(Boolean))
+  );
+  if (statuses.length > 0) {
+    clauses.push(
+      `task_timeboxes.status IN (${statuses.map(() => "?").join(", ")})`
+    );
+    params.push(...statuses);
+  }
+  const userIds = Array.from(
+    new Set((input.userIds ?? []).map((id) => id.trim()).filter(Boolean))
+  );
+  if (userIds.length > 0) {
+    const placeholders = userIds.map(() => "?").join(", ");
+    clauses.push(
+      `(EXISTS (
+          SELECT 1 FROM entity_owners owner
+          WHERE owner.entity_type = 'task_timebox'
+            AND owner.entity_id = task_timeboxes.id
+            AND owner.user_id IN (${placeholders})
+        ) OR EXISTS (
+          SELECT 1 FROM entity_assignments assignment
+          WHERE assignment.entity_type = 'task_timebox'
+            AND assignment.entity_id = task_timeboxes.id
+            AND assignment.role = 'assignee'
+            AND assignment.user_id IN (${placeholders})
+        ))`
+    );
+    params.push(...userIds, ...userIds);
+  }
+  const query = input.query?.trim().toLowerCase() ?? "";
+  if (query) {
+    const ftsQuery = buildTaskTimeboxFtsQuery(query);
+    if (!ftsQuery) {
+      clauses.push("0 = 1");
+    } else {
+      clauses.push(`task_timeboxes.rowid IN (
+        SELECT rowid
+        FROM task_timebox_search
+        WHERE task_timebox_search MATCH ?
+      )`);
+      params.push(ftsQuery);
+    }
+  }
+  params.push(boundedLimit);
+  const rows = getDatabase()
+    .prepare(
+      `SELECT id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
+              starts_at, ends_at, override_reason, created_at, updated_at
+       FROM task_timeboxes
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY task_timeboxes.updated_at DESC, task_timeboxes.id ASC
+       LIMIT ?`
     )
     .all(...params) as TaskTimeboxRow[];
   const activeIds = activeConnectionIds();
@@ -2225,8 +2525,12 @@ export function listTaskTimeboxes(
         (timebox) =>
           timebox.connectionId === null || activeIds.has(timebox.connectionId)
       ),
-    query.userIds
+    userIds
   );
+}
+
+export function listTaskTimeboxesForEntityCrud(limit = MAX_TIMEBOX_ROWS) {
+  return searchTaskTimeboxesForEntityCrud({ limit });
 }
 
 export function getTaskTimeboxById(timeboxId: string) {
@@ -2235,10 +2539,322 @@ export function getTaskTimeboxById(timeboxId: string) {
       `SELECT id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
               starts_at, ends_at, override_reason, created_at, updated_at
        FROM task_timeboxes
+       WHERE id = ? AND deletion_requested_at IS NULL`
+    )
+    .get(timeboxId) as TaskTimeboxRow | undefined;
+  return row ? decorateOwnedEntity("task_timebox", mapTimebox(row)) : undefined;
+}
+
+export function getTaskTimeboxByIdIncludingPendingDeletion(timeboxId: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
+              starts_at, ends_at, override_reason, deletion_requested_at, created_at, updated_at
+       FROM task_timeboxes
        WHERE id = ?`
     )
     .get(timeboxId) as TaskTimeboxRow | undefined;
   return row ? decorateOwnedEntity("task_timebox", mapTimebox(row)) : undefined;
+}
+
+function taskTimeboxRequestFingerprint(
+  input: CreateTaskTimeboxInput & {
+    connectionId?: string | null;
+    calendarId?: string | null;
+    linkedTaskRunId?: string | null;
+  }
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        taskId: input.taskId,
+        projectId: input.projectId ?? null,
+        connectionId: input.connectionId ?? null,
+        calendarId: input.calendarId ?? null,
+        linkedTaskRunId: input.linkedTaskRunId ?? null,
+        status: input.status ?? "planned",
+        source: input.source ?? "manual",
+        title: input.title,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        overrideReason: input.overrideReason ?? null,
+        activityPresetKey: input.activityPresetKey ?? null,
+        customSustainRateApPerHour: input.customSustainRateApPerHour ?? null,
+        userId: input.userId ?? null
+      })
+    )
+    .digest("hex");
+}
+
+function readTaskTimeboxProviderOperation(timeboxId: string) {
+  return getDatabase()
+    .prepare(
+      `SELECT timebox_id, operation, state, target_connection_id, target_calendar_id, remote_event_id,
+              claim_token, claim_version, needs_retry, claimed_at, lease_expires_at, attempt_count, last_error, created_at, updated_at
+       FROM task_timebox_provider_operations
+       WHERE timebox_id = ?`
+    )
+    .get(timeboxId) as TaskTimeboxProviderOperationRow | undefined;
+}
+
+export function queueTaskTimeboxProviderOperation(
+  timeboxId: string,
+  operation?: "upsert" | "delete"
+) {
+  const timebox = getTaskTimeboxByIdIncludingPendingDeletion(timeboxId);
+  if (!timebox) {
+    return undefined;
+  }
+  const requestedOperation =
+    operation ?? (timebox.status === "cancelled" ? "delete" : "upsert");
+  const timestamp = nowIso();
+  getDatabase()
+    .prepare(
+      `INSERT INTO task_timebox_provider_operations (
+         timebox_id, operation, state, target_connection_id, target_calendar_id, remote_event_id,
+         claim_version, attempt_count, created_at, updated_at
+       )
+       VALUES (?, ?, 'pending', ?, ?, ?, 0, 0, ?, ?)
+       ON CONFLICT(timebox_id) DO UPDATE SET
+         operation = excluded.operation,
+         state = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed' THEN 'claimed'
+           ELSE 'pending'
+         END,
+         target_connection_id = excluded.target_connection_id,
+         target_calendar_id = excluded.target_calendar_id,
+         remote_event_id = COALESCE(excluded.remote_event_id, task_timebox_provider_operations.remote_event_id),
+         claim_token = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed' THEN task_timebox_provider_operations.claim_token
+           ELSE NULL
+         END,
+         claim_version = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed' THEN task_timebox_provider_operations.claim_version
+           ELSE task_timebox_provider_operations.claim_version + 1
+         END,
+         needs_retry = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed'
+             AND task_timebox_provider_operations.operation = excluded.operation
+           THEN 1
+           ELSE 0
+         END,
+         claimed_at = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed' THEN task_timebox_provider_operations.claimed_at
+           ELSE NULL
+         END,
+         lease_expires_at = CASE
+           WHEN task_timebox_provider_operations.state = 'claimed' THEN task_timebox_provider_operations.lease_expires_at
+           ELSE NULL
+         END,
+         last_error = NULL,
+         updated_at = excluded.updated_at`
+    )
+    .run(
+      timeboxId,
+      requestedOperation,
+      timebox.connectionId,
+      timebox.calendarId,
+      timebox.remoteEventId,
+      timestamp,
+      timestamp
+    );
+  return readTaskTimeboxProviderOperation(timeboxId);
+}
+
+export function listTaskTimeboxProjectionCandidateIds(input: {
+  connectionId: string;
+  from: string;
+  to: string;
+  limit?: number;
+}) {
+  const limit = Math.max(1, Math.min(input.limit ?? 5_000, 5_000));
+  const rows = getDatabase()
+    .prepare(
+      `SELECT operation.timebox_id
+       FROM task_timebox_provider_operations operation
+       JOIN task_timeboxes timebox ON timebox.id = operation.timebox_id
+       WHERE operation.state != 'applied'
+         AND (operation.target_connection_id IS NULL OR operation.target_connection_id = ?)
+         AND (
+           operation.operation = 'delete'
+           OR (timebox.ends_at > ? AND timebox.starts_at < ?)
+         )
+       ORDER BY
+         CASE operation.operation WHEN 'delete' THEN 0 ELSE 1 END,
+         timebox.starts_at ASC,
+         operation.timebox_id ASC
+       LIMIT ?`
+    )
+    .all(input.connectionId, input.from, input.to, limit) as Array<{
+    timebox_id: string;
+  }>;
+  return rows.map((row) => row.timebox_id);
+}
+
+export function claimTaskTimeboxProviderOperation(input: {
+  timeboxId: string;
+  connectionId: string;
+  now?: string;
+  leaseMs?: number;
+}): TaskTimeboxProjectionClaim | null {
+  return runInTransaction(() => {
+    const timestamp = input.now ?? nowIso();
+    const leaseMs = Math.max(1_000, Math.min(input.leaseMs ?? 60_000, 600_000));
+    const operation = readTaskTimeboxProviderOperation(input.timeboxId);
+    if (
+      !operation ||
+      operation.state === "applied" ||
+      (operation.target_connection_id !== null &&
+        operation.target_connection_id !== input.connectionId) ||
+      (operation.state === "claimed" &&
+        operation.lease_expires_at !== null &&
+        operation.lease_expires_at > timestamp)
+    ) {
+      return null;
+    }
+    const timebox = getTaskTimeboxByIdIncludingPendingDeletion(input.timeboxId);
+    if (!timebox) {
+      return null;
+    }
+    const claimToken = `tbclaim_${randomUUID()}`;
+    const claimVersion = operation.claim_version + 1;
+    const leaseExpiresAt = new Date(
+      Date.parse(timestamp) + leaseMs
+    ).toISOString();
+    const result = getDatabase()
+      .prepare(
+        `UPDATE task_timebox_provider_operations
+         SET state = 'claimed', claim_token = ?, claim_version = ?, claimed_at = ?, lease_expires_at = ?,
+             needs_retry = 0, attempt_count = attempt_count + 1, last_error = NULL, updated_at = ?
+         WHERE timebox_id = ?
+           AND claim_version = ?
+           AND state != 'applied'
+           AND (target_connection_id IS NULL OR target_connection_id = ?)
+           AND (state != 'claimed' OR lease_expires_at IS NULL OR lease_expires_at <= ?)`
+      )
+      .run(
+        claimToken,
+        claimVersion,
+        timestamp,
+        leaseExpiresAt,
+        timestamp,
+        input.timeboxId,
+        operation.claim_version,
+        input.connectionId,
+        timestamp
+      );
+    if (result.changes !== 1) {
+      return null;
+    }
+    return {
+      timebox,
+      operation: operation.operation,
+      claimToken,
+      claimVersion,
+      targetConnectionId: operation.target_connection_id,
+      targetCalendarId: operation.target_calendar_id,
+      remoteEventId: operation.remote_event_id,
+      attemptCount: operation.attempt_count + 1
+    };
+  });
+}
+
+export function completeTaskTimeboxProviderOperation(input: {
+  timeboxId: string;
+  operation: "upsert" | "delete";
+  claimToken: string;
+  claimVersion: number;
+  connectionId: string;
+  calendarId: string | null;
+  remoteEventId: string | null;
+}) {
+  return runInTransaction(() => {
+    const timestamp = nowIso();
+    const operation = readTaskTimeboxProviderOperation(input.timeboxId);
+    if (
+      !operation ||
+      operation.operation !== input.operation ||
+      operation.state !== "claimed" ||
+      operation.claim_token !== input.claimToken ||
+      operation.claim_version !== input.claimVersion
+    ) {
+      return false;
+    }
+    if (input.operation === "delete") {
+      getDatabase()
+        .prepare(`DELETE FROM task_timeboxes WHERE id = ?`)
+        .run(input.timeboxId);
+      clearEntityOwner("task_timebox", input.timeboxId);
+      return true;
+    }
+    const retryPending = operation.needs_retry === 1;
+    const targetConnectionId = retryPending
+      ? (operation.target_connection_id ?? input.connectionId)
+      : input.connectionId;
+    const targetCalendarId = retryPending
+      ? (operation.target_calendar_id ?? input.calendarId)
+      : input.calendarId;
+    const claimed = getDatabase()
+      .prepare(
+        `UPDATE task_timebox_provider_operations
+         SET state = ?, target_connection_id = ?, target_calendar_id = ?, remote_event_id = ?,
+             claim_token = NULL, needs_retry = 0, claimed_at = NULL, lease_expires_at = NULL,
+             last_error = NULL, updated_at = ?
+         WHERE timebox_id = ? AND operation = 'upsert' AND state = 'claimed' AND claim_token = ? AND claim_version = ?`
+      )
+      .run(
+        retryPending ? "pending" : "applied",
+        targetConnectionId,
+        targetCalendarId,
+        input.remoteEventId,
+        timestamp,
+        input.timeboxId,
+        input.claimToken,
+        input.claimVersion
+      );
+    if (claimed.changes !== 1) {
+      return false;
+    }
+    getDatabase()
+      .prepare(
+        `UPDATE task_timeboxes
+         SET connection_id = ?, calendar_id = ?, remote_event_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        targetConnectionId,
+        targetCalendarId,
+        input.remoteEventId,
+        timestamp,
+        input.timeboxId
+      );
+    return true;
+  });
+}
+
+export function failTaskTimeboxProviderOperation(input: {
+  timeboxId: string;
+  claimToken: string;
+  claimVersion: number;
+  error: string;
+}) {
+  const timestamp = nowIso();
+  return (
+    getDatabase()
+      .prepare(
+        `UPDATE task_timebox_provider_operations
+         SET state = 'error', claim_token = NULL, claimed_at = NULL, lease_expires_at = NULL,
+             needs_retry = 0, last_error = ?, updated_at = ?
+         WHERE timebox_id = ? AND state = 'claimed' AND claim_token = ? AND claim_version = ?`
+      )
+      .run(
+        input.error.slice(0, 2_000),
+        timestamp,
+        input.timeboxId,
+        input.claimToken,
+        input.claimVersion
+      ).changes === 1
+  );
 }
 
 export function createTaskTimebox(
@@ -2246,50 +2862,117 @@ export function createTaskTimebox(
     connectionId?: string | null;
     calendarId?: string | null;
     linkedTaskRunId?: string | null;
+    idempotencyKey?: string | null;
   }
 ) {
-  const now = nowIso();
-  const id = `timebox_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-  const task = getTaskById(input.taskId);
-  getDatabase()
-    .prepare(
-      `INSERT INTO task_timeboxes (
-         id, task_id, project_id, connection_id, calendar_id, linked_task_run_id, status, source, title, starts_at, ends_at, override_reason, created_at, updated_at
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      id,
-      input.taskId,
-      input.projectId ?? null,
-      input.connectionId ?? null,
-      input.calendarId ?? null,
-      input.linkedTaskRunId ?? null,
-      input.status ?? "planned",
-      input.source ?? "manual",
-      input.title,
-      input.startsAt,
-      input.endsAt,
-      input.overrideReason ?? null,
-      now,
-      now
-    );
-  upsertEntityActionProfile({
-    entityType: "task_timebox",
-    entityId: id,
-    profile: buildTaskTimeboxActionProfile({
-      timeboxId: id,
-      title: input.title,
+  return runInTransaction(() => {
+    const task = getTaskById(input.taskId);
+    const ownerId = validateTaskTimeboxIdentity({
+      task,
       taskId: input.taskId,
-      taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
-      startsAt: input.startsAt,
-      endsAt: input.endsAt,
-      activityPresetKey: input.activityPresetKey ?? null,
-      customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
-    })
+      projectId: input.projectId,
+      userId: input.userId
+    });
+    const effectiveOwnerId =
+      ownerId ?? inferTaskTimeboxOwnerId(input) ?? "user_operator";
+    parseTimeboxWindow(input.startsAt, input.endsAt);
+    const idempotencyKey = input.idempotencyKey?.trim() || null;
+    const requestFingerprint = taskTimeboxRequestFingerprint(input);
+    if (idempotencyKey) {
+      const existing = getDatabase()
+        .prepare(
+          `SELECT request_fingerprint, timebox_id
+           FROM task_timebox_create_idempotency
+           WHERE owner_user_id = ? AND idempotency_key = ?`
+        )
+        .get(effectiveOwnerId, idempotencyKey) as
+        | { request_fingerprint: string; timebox_id: string }
+        | undefined;
+      if (existing) {
+        if (existing.request_fingerprint !== requestFingerprint) {
+          throw new HttpError(
+            409,
+            "idempotency_conflict",
+            "This idempotency key was already used for a different task-timebox payload."
+          );
+        }
+        const replay = getTaskTimeboxByIdIncludingPendingDeletion(
+          existing.timebox_id
+        );
+        if (!replay) {
+          throw new HttpError(
+            409,
+            "idempotency_result_deleted",
+            "The task timebox created with this idempotency key was later deleted. Use a new key for a new timebox."
+          );
+        }
+        return replay;
+      }
+    }
+
+    if ((input.source ?? "manual") !== "live_run") {
+      assertTaskTimeboxPlacementAllowed({
+        task: task!,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        overrideReason: input.overrideReason ?? null,
+        userIds: [effectiveOwnerId]
+      });
+    }
+
+    const now = nowIso();
+    const id = `timebox_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    getDatabase()
+      .prepare(
+        `INSERT INTO task_timeboxes (
+           id, task_id, project_id, connection_id, calendar_id, linked_task_run_id, status, source, title, starts_at, ends_at, override_reason, created_at, updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.taskId,
+        task!.projectId ?? null,
+        input.connectionId ?? null,
+        input.calendarId ?? null,
+        input.linkedTaskRunId ?? null,
+        input.status ?? "planned",
+        input.source ?? "manual",
+        input.title,
+        input.startsAt,
+        input.endsAt,
+        input.overrideReason ?? null,
+        now,
+        now
+      );
+    upsertEntityActionProfile({
+      entityType: "task_timebox",
+      entityId: id,
+      profile: buildTaskTimeboxActionProfile({
+        timeboxId: id,
+        title: input.title,
+        taskId: input.taskId,
+        taskPlannedDurationSeconds: task!.plannedDurationSeconds ?? null,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        activityPresetKey: input.activityPresetKey ?? null,
+        customSustainRateApPerHour: input.customSustainRateApPerHour ?? null
+      })
+    });
+    setEntityOwner("task_timebox", id, effectiveOwnerId);
+    queueTaskTimeboxProviderOperation(id);
+    if (idempotencyKey) {
+      getDatabase()
+        .prepare(
+          `INSERT INTO task_timebox_create_idempotency (
+             owner_user_id, idempotency_key, request_fingerprint, timebox_id, created_at
+           )
+           VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(effectiveOwnerId, idempotencyKey, requestFingerprint, id, now);
+    }
+    return getTaskTimeboxById(id)!;
   });
-  setEntityOwner("task_timebox", id, inferTaskTimeboxOwnerId(input));
-  return getTaskTimeboxById(id)!;
 }
 
 export function updateTaskTimebox(
@@ -2305,114 +2988,158 @@ export function updateTaskTimebox(
     startsAt: string;
     endsAt: string;
     overrideReason: string | null;
-    activityPresetKey: string | null;
+    activityPresetKey: CalendarActivityPresetKey | null;
     customSustainRateApPerHour: number | null;
     userId: string | null;
   }>
 ) {
-  const current = getTaskTimeboxById(timeboxId);
-  if (!current) {
-    return undefined;
-  }
-  const next = {
-    connectionId:
-      patch.connectionId === undefined
-        ? current.connectionId
-        : patch.connectionId,
-    calendarId:
-      patch.calendarId === undefined ? current.calendarId : patch.calendarId,
-    remoteEventId:
-      patch.remoteEventId === undefined
-        ? current.remoteEventId
-        : patch.remoteEventId,
-    linkedTaskRunId:
-      patch.linkedTaskRunId === undefined
-        ? current.linkedTaskRunId
-        : patch.linkedTaskRunId,
-    status: patch.status ?? current.status,
-    source: patch.source ?? current.source,
-    title: patch.title ?? current.title,
-    startsAt: patch.startsAt ?? current.startsAt,
-    endsAt: patch.endsAt ?? current.endsAt,
-    overrideReason:
-      patch.overrideReason === undefined
-        ? current.overrideReason
-        : patch.overrideReason,
-    updatedAt: nowIso()
-  };
-
-  getDatabase()
-    .prepare(
-      `UPDATE task_timeboxes
-       SET connection_id = ?, calendar_id = ?, remote_event_id = ?, linked_task_run_id = ?, status = ?, source = ?, title = ?,
-           starts_at = ?, ends_at = ?, override_reason = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      next.connectionId,
-      next.calendarId,
-      next.remoteEventId,
-      next.linkedTaskRunId,
-      next.status,
-      next.source,
-      next.title,
-      next.startsAt,
-      next.endsAt,
-      next.overrideReason,
-      next.updatedAt,
-      timeboxId
-    );
-
-  if (
-    patch.title !== undefined ||
-    patch.startsAt !== undefined ||
-    patch.endsAt !== undefined ||
-    patch.activityPresetKey !== undefined ||
-    patch.customSustainRateApPerHour !== undefined
-  ) {
+  return runInTransaction(() => {
+    const current = getTaskTimeboxById(timeboxId);
+    if (!current) {
+      return undefined;
+    }
     const task = getTaskById(current.taskId);
-    upsertEntityActionProfile({
-      entityType: "task_timebox",
-      entityId: timeboxId,
-      profile: buildTaskTimeboxActionProfile({
-        timeboxId,
-        title: next.title,
-        taskId: current.taskId,
-        taskPlannedDurationSeconds: task?.plannedDurationSeconds ?? null,
+    const ownerId = validateTaskTimeboxIdentity({
+      task,
+      taskId: current.taskId,
+      projectId: current.projectId,
+      userId: patch.userId
+    });
+    const next = {
+      connectionId:
+        patch.connectionId === undefined
+          ? current.connectionId
+          : patch.connectionId,
+      calendarId:
+        patch.calendarId === undefined ? current.calendarId : patch.calendarId,
+      remoteEventId:
+        patch.remoteEventId === undefined
+          ? current.remoteEventId
+          : patch.remoteEventId,
+      linkedTaskRunId:
+        patch.linkedTaskRunId === undefined
+          ? current.linkedTaskRunId
+          : patch.linkedTaskRunId,
+      status: patch.status ?? current.status,
+      source: patch.source ?? current.source,
+      title: patch.title ?? current.title,
+      startsAt: patch.startsAt ?? current.startsAt,
+      endsAt: patch.endsAt ?? current.endsAt,
+      overrideReason:
+        patch.overrideReason === undefined
+          ? current.overrideReason
+          : patch.overrideReason,
+      updatedAt: nowIso()
+    };
+
+    parseTimeboxWindow(next.startsAt, next.endsAt);
+    const placementChanged =
+      patch.startsAt !== undefined ||
+      patch.endsAt !== undefined ||
+      patch.overrideReason !== undefined ||
+      (patch.status !== undefined &&
+        current.status === "cancelled" &&
+        patch.status !== "cancelled");
+    if (placementChanged && next.status !== "cancelled") {
+      assertTaskTimeboxPlacementAllowed({
+        task: task!,
         startsAt: next.startsAt,
         endsAt: next.endsAt,
-        activityPresetKey:
-          patch.activityPresetKey === undefined
-            ? (current.actionProfile?.metadata?.activityPresetKey as
-                | string
-                | null
-                | undefined)
-            : patch.activityPresetKey,
-        customSustainRateApPerHour:
-          patch.customSustainRateApPerHour === undefined
-            ? typeof current.actionProfile?.metadata
-                ?.customSustainRateApPerHour === "number"
-              ? current.actionProfile.metadata.customSustainRateApPerHour
-              : null
-            : patch.customSustainRateApPerHour
-      })
-    });
-  }
-  if (patch.userId !== undefined) {
-    setEntityOwner("task_timebox", timeboxId, patch.userId);
-  }
-  return getTaskTimeboxById(timeboxId);
+        overrideReason: next.overrideReason,
+        excludeTimeboxId: timeboxId,
+        userIds: ownerId ? [ownerId] : undefined
+      });
+    }
+
+    getDatabase()
+      .prepare(
+        `UPDATE task_timeboxes
+         SET connection_id = ?, calendar_id = ?, remote_event_id = ?, linked_task_run_id = ?, status = ?, source = ?, title = ?,
+             starts_at = ?, ends_at = ?, override_reason = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        next.connectionId,
+        next.calendarId,
+        next.remoteEventId,
+        next.linkedTaskRunId,
+        next.status,
+        next.source,
+        next.title,
+        next.startsAt,
+        next.endsAt,
+        next.overrideReason,
+        next.updatedAt,
+        timeboxId
+      );
+
+    if (
+      patch.title !== undefined ||
+      patch.startsAt !== undefined ||
+      patch.endsAt !== undefined ||
+      patch.activityPresetKey !== undefined ||
+      patch.customSustainRateApPerHour !== undefined
+    ) {
+      upsertEntityActionProfile({
+        entityType: "task_timebox",
+        entityId: timeboxId,
+        profile: buildTaskTimeboxActionProfile({
+          timeboxId,
+          title: next.title,
+          taskId: current.taskId,
+          taskPlannedDurationSeconds: task!.plannedDurationSeconds ?? null,
+          startsAt: next.startsAt,
+          endsAt: next.endsAt,
+          activityPresetKey:
+            patch.activityPresetKey === undefined
+              ? (current.actionProfile?.metadata?.activityPresetKey as
+                  | string
+                  | null
+                  | undefined)
+              : patch.activityPresetKey,
+          customSustainRateApPerHour:
+            patch.customSustainRateApPerHour === undefined
+              ? typeof current.actionProfile?.metadata
+                  ?.customSustainRateApPerHour === "number"
+                ? current.actionProfile.metadata.customSustainRateApPerHour
+                : null
+              : patch.customSustainRateApPerHour
+        })
+      });
+    }
+    if (patch.userId !== undefined && ownerId) {
+      setEntityOwner("task_timebox", timeboxId, ownerId);
+    }
+    queueTaskTimeboxProviderOperation(timeboxId);
+    return getTaskTimeboxById(timeboxId);
+  });
 }
 
 export function deleteTaskTimebox(timeboxId: string) {
-  const current = getTaskTimeboxById(timeboxId);
-  if (!current) {
-    return undefined;
-  }
-  getDatabase()
-    .prepare(`DELETE FROM task_timeboxes WHERE id = ?`)
-    .run(timeboxId);
-  return current;
+  return runInTransaction(() => {
+    const current = getTaskTimeboxByIdIncludingPendingDeletion(timeboxId);
+    if (!current) {
+      return undefined;
+    }
+    const operation = readTaskTimeboxProviderOperation(timeboxId);
+    if (!current.remoteEventId && operation?.state !== "claimed") {
+      getDatabase()
+        .prepare(`DELETE FROM task_timeboxes WHERE id = ?`)
+        .run(timeboxId);
+      clearEntityOwner("task_timebox", timeboxId);
+      return current;
+    }
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE task_timeboxes
+         SET deletion_requested_at = COALESCE(deletion_requested_at, ?), status = 'cancelled', updated_at = ?
+         WHERE id = ?`
+      )
+      .run(timestamp, timestamp, timeboxId);
+    queueTaskTimeboxProviderOperation(timeboxId, "delete");
+    return current;
+  });
 }
 
 export function findCoveringTimeboxForTask(taskId: string, at: Date) {
@@ -2421,7 +3148,11 @@ export function findCoveringTimeboxForTask(taskId: string, at: Date) {
       `SELECT id, task_id, project_id, connection_id, calendar_id, remote_event_id, linked_task_run_id, status, source, title,
               starts_at, ends_at, override_reason, created_at, updated_at
        FROM task_timeboxes
-       WHERE task_id = ? AND starts_at <= ? AND ends_at >= ?
+       WHERE task_id = ?
+         AND deletion_requested_at IS NULL
+         AND status IN ('planned', 'active')
+         AND starts_at <= ?
+         AND ends_at > ?
        ORDER BY starts_at DESC
        LIMIT 1`
     )
@@ -2531,9 +3262,53 @@ function matchKeywords(keywords: string[], haystack: string) {
   return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
 }
 
-export function evaluateSchedulingForTask(
+type TaskSchedulingContext = {
+  events: ReturnType<typeof listCalendarEvents>;
+  blocks: WorkBlockInstance[];
+  timeboxes: TaskTimebox[];
+};
+
+function spansOverlap(
+  left: { startAt: string; endAt: string },
+  right: { startAt: string; endAt: string }
+) {
+  return (
+    Date.parse(left.startAt) < Date.parse(right.endAt) &&
+    Date.parse(left.endAt) > Date.parse(right.startAt)
+  );
+}
+
+function spanCovers(
+  candidate: { startAt: string; endAt: string },
+  target: { startAt: string; endAt: string }
+) {
+  return (
+    Date.parse(candidate.startAt) <= Date.parse(target.startAt) &&
+    Date.parse(candidate.endAt) >= Date.parse(target.endAt)
+  );
+}
+
+function loadTaskSchedulingContext(input: {
+  startsAt: string;
+  endsAt: string;
+  userIds?: string[];
+}): TaskSchedulingContext {
+  const query = {
+    from: input.startsAt,
+    to: input.endsAt,
+    userIds: input.userIds
+  };
+  return {
+    events: listCalendarEvents(query),
+    blocks: listWorkBlockInstances(query),
+    timeboxes: listTaskTimeboxes(query)
+  };
+}
+
+function evaluateSchedulingRulesForWindow(
   task: Task,
-  at = new Date()
+  window: { startsAt: string; endsAt: string },
+  context: TaskSchedulingContext
 ): SchedulingEvaluation {
   const project = task.projectId
     ? (getProjectById(task.projectId) ?? null)
@@ -2541,19 +3316,17 @@ export function evaluateSchedulingForTask(
   const effectiveRules = normalizeRules(
     task.schedulingRules ?? project?.schedulingRules
   );
-  const currentEvents = listCalendarEvents({
-    from: addMinutes(at, -1).toISOString(),
-    to: addMinutes(at, 1).toISOString()
-  }).filter(
-    (event) =>
-      event.startAt <= at.toISOString() && event.endAt >= at.toISOString()
+  const currentEvents = context.events.filter((event) =>
+    spansOverlap(
+      { startAt: event.startAt, endAt: event.endAt },
+      { startAt: window.startsAt, endAt: window.endsAt }
+    )
   );
-  const currentBlocks = listWorkBlockInstances({
-    from: addMinutes(at, -1).toISOString(),
-    to: addMinutes(at, 1).toISOString()
-  }).filter(
-    (block) =>
-      block.startAt <= at.toISOString() && block.endAt >= at.toISOString()
+  const currentBlocks = context.blocks.filter((block) =>
+    spansOverlap(
+      { startAt: block.startAt, endAt: block.endAt },
+      { startAt: window.startsAt, endAt: window.endsAt }
+    )
   );
 
   const conflicts: SchedulingEvaluation["conflicts"] = [];
@@ -2566,7 +3339,7 @@ export function evaluateSchedulingForTask(
       effectiveRules.blockAvailability.includes(event.availability) ||
       matchKeywords(
         effectiveRules.blockEventKeywords,
-        `${event.title}\n${event.description}\n${event.location}`
+        `${event.title}\n${event.description}\n${event.location}\n${event.categories.join(" ")}`
       )
     ) {
       conflicts.push(
@@ -2574,7 +3347,8 @@ export function evaluateSchedulingForTask(
           kind: "external_event",
           id: event.id,
           title: event.title,
-          reason: "The active calendar event blocks this task or project.",
+          reason:
+            "This calendar event blocks the task under its current scheduling rules.",
           startsAt: event.startAt,
           endsAt: event.endAt
         })
@@ -2583,17 +3357,14 @@ export function evaluateSchedulingForTask(
   }
 
   for (const block of currentBlocks) {
-    if (
-      effectiveRules.blockWorkBlockKinds.includes(block.kind) ||
-      (effectiveRules.allowWorkBlockKinds.length > 0 &&
-        !effectiveRules.allowWorkBlockKinds.includes(block.kind))
-    ) {
+    if (effectiveRules.blockWorkBlockKinds.includes(block.kind)) {
       conflicts.push(
         calendarContextConflictSchema.parse({
           kind: "work_block",
           id: block.id,
           title: block.title,
-          reason: "The current work block does not allow this task or project.",
+          reason:
+            "This work block blocks the task under its current scheduling rules.",
           startsAt: block.startAt,
           endsAt: block.endAt
         })
@@ -2607,22 +3378,28 @@ export function evaluateSchedulingForTask(
     effectiveRules.allowEventTypes.length > 0 ||
     effectiveRules.allowEventKeywords.length > 0 ||
     effectiveRules.allowAvailability.length > 0;
-
   let allowSatisfied = !anyAllowRules;
   if (anyAllowRules) {
-    const syntheticFreeAllowed =
-      effectiveRules.allowAvailability.includes("free") &&
-      currentEvents.every((event) => event.availability !== "busy");
-    allowSatisfied = syntheticFreeAllowed;
-
-    if (!allowSatisfied) {
-      allowSatisfied = currentBlocks.some((block) =>
-        effectiveRules.allowWorkBlockKinds.includes(block.kind)
-      );
-    }
-    if (!allowSatisfied) {
-      allowSatisfied = currentEvents.some(
+    allowSatisfied =
+      (effectiveRules.allowAvailability.includes("free") &&
+        currentEvents.every(
+          (event) =>
+            event.status === "cancelled" || event.availability !== "busy"
+        )) ||
+      currentBlocks.some(
+        (block) =>
+          effectiveRules.allowWorkBlockKinds.includes(block.kind) &&
+          spanCovers(
+            { startAt: block.startAt, endAt: block.endAt },
+            { startAt: window.startsAt, endAt: window.endsAt }
+          )
+      ) ||
+      currentEvents.some(
         (event) =>
+          spanCovers(
+            { startAt: event.startAt, endAt: event.endAt },
+            { startAt: window.startsAt, endAt: window.endsAt }
+          ) &&
           (effectiveRules.allowCalendarIds.length === 0 ||
             (event.calendarId
               ? effectiveRules.allowCalendarIds.includes(event.calendarId)
@@ -2634,26 +3411,21 @@ export function evaluateSchedulingForTask(
           (effectiveRules.allowEventKeywords.length === 0 ||
             matchKeywords(
               effectiveRules.allowEventKeywords,
-              `${event.title}\n${event.description}\n${event.location}`
+              `${event.title}\n${event.description}\n${event.location}\n${event.categories.join(" ")}`
             ))
       );
-    }
   }
 
   if (!allowSatisfied) {
     conflicts.push({
       kind: currentBlocks[0] ? "work_block" : "external_event",
-      id: currentBlocks[0]?.id ?? currentEvents[0]?.id ?? "calendar_now",
+      id: currentBlocks[0]?.id ?? currentEvents[0]?.id ?? "calendar_window",
       title:
-        currentBlocks[0]?.title ?? currentEvents[0]?.title ?? "Current context",
+        currentBlocks[0]?.title ?? currentEvents[0]?.title ?? "Calendar window",
       reason:
-        "The current calendar context does not match the allowed rules for this task or project.",
-      startsAt:
-        currentBlocks[0]?.startAt ??
-        currentEvents[0]?.startAt ??
-        at.toISOString(),
-      endsAt:
-        currentBlocks[0]?.endAt ?? currentEvents[0]?.endAt ?? at.toISOString()
+        "This window does not fully match the allowed scheduling context for the task.",
+      startsAt: window.startsAt,
+      endsAt: window.endsAt
     });
   }
 
@@ -2664,43 +3436,191 @@ export function evaluateSchedulingForTask(
   };
 }
 
-function collectBusyIntervals(query: CalendarAgendaQuery) {
-  const busyIntervals: Array<{ startAt: string; endAt: string }> = [];
-  for (const event of listCalendarEvents(query)) {
-    if (event.status !== "cancelled" && event.availability === "busy") {
-      busyIntervals.push({ startAt: event.startAt, endAt: event.endAt });
-    }
-  }
-  for (const block of listWorkBlockInstances(query)) {
-    if (block.blockingState === "blocked") {
-      busyIntervals.push({ startAt: block.startAt, endAt: block.endAt });
-    }
-  }
-  for (const timebox of listTaskTimeboxes(query)) {
-    if (timebox.status !== "cancelled") {
-      busyIntervals.push({ startAt: timebox.startsAt, endAt: timebox.endsAt });
-    }
-  }
-  return busyIntervals.sort((left, right) =>
-    left.startAt.localeCompare(right.startAt)
+export function evaluateSchedulingForTask(
+  task: Task,
+  at = new Date()
+): SchedulingEvaluation {
+  const startsAt = at.toISOString();
+  const endsAt = new Date(at.getTime() + 1).toISOString();
+  const ownerId = taskOwnerId(task);
+  return evaluateSchedulingRulesForWindow(
+    task,
+    { startsAt, endsAt },
+    loadTaskSchedulingContext({
+      startsAt,
+      endsAt,
+      userIds: ownerId ? [ownerId] : undefined
+    })
   );
 }
 
-function hasOverlap(
-  busyIntervals: Array<{ startAt: string; endAt: string }>,
-  startsAt: Date,
-  endsAt: Date
-) {
-  return busyIntervals.some(
-    (interval) =>
-      Date.parse(interval.startAt) < endsAt.getTime() &&
-      Date.parse(interval.endAt) > startsAt.getTime()
+function evaluateTaskTimeboxPlacementWithContext(input: {
+  task: Task;
+  startsAt: string;
+  endsAt: string;
+  excludeTimeboxId?: string;
+  context: TaskSchedulingContext;
+}): TaskTimeboxPlacementEvaluation {
+  const window = { startAt: input.startsAt, endAt: input.endsAt };
+  const conflicts: TaskTimeboxPlacementConflict[] = [];
+  for (const event of input.context.events) {
+    if (
+      event.status !== "cancelled" &&
+      event.availability === "busy" &&
+      spansOverlap({ startAt: event.startAt, endAt: event.endAt }, window)
+    ) {
+      conflicts.push({
+        kind: "calendar_event",
+        id: event.id,
+        title: event.title,
+        reason: "This provider or Forge calendar event is marked busy.",
+        startsAt: event.startAt,
+        endsAt: event.endAt
+      });
+    }
+  }
+  for (const block of input.context.blocks) {
+    if (
+      block.blockingState === "blocked" &&
+      spansOverlap({ startAt: block.startAt, endAt: block.endAt }, window)
+    ) {
+      conflicts.push({
+        kind: "work_block",
+        id: block.id,
+        title: block.title,
+        reason: "This work block reserves the selected time.",
+        startsAt: block.startAt,
+        endsAt: block.endAt
+      });
+    }
+  }
+  for (const timebox of input.context.timeboxes) {
+    if (
+      timebox.id !== input.excludeTimeboxId &&
+      timebox.status !== "cancelled" &&
+      spansOverlap({ startAt: timebox.startsAt, endAt: timebox.endsAt }, window)
+    ) {
+      conflicts.push({
+        kind: "task_timebox",
+        id: timebox.id,
+        title: timebox.title,
+        reason: "Another task timebox already occupies this window.",
+        startsAt: timebox.startsAt,
+        endsAt: timebox.endsAt
+      });
+    }
+  }
+
+  const ruleEvaluation = evaluateSchedulingRulesForWindow(
+    input.task,
+    { startsAt: input.startsAt, endsAt: input.endsAt },
+    input.context
   );
+  for (const conflict of ruleEvaluation.conflicts) {
+    conflicts.push({
+      kind: "scheduling_rule",
+      id: conflict.id,
+      title: conflict.title,
+      reason: conflict.reason,
+      startsAt: conflict.startsAt,
+      endsAt: conflict.endsAt
+    });
+  }
+
+  return {
+    blocked: conflicts.length > 0,
+    requiresOverride: conflicts.length > 0,
+    conflicts
+  };
+}
+
+export function evaluateTaskTimeboxPlacement(input: {
+  task: Task;
+  startsAt: string;
+  endsAt: string;
+  excludeTimeboxId?: string;
+  userIds?: string[];
+}) {
+  parseTimeboxWindow(input.startsAt, input.endsAt);
+  return evaluateTaskTimeboxPlacementWithContext({
+    ...input,
+    context: loadTaskSchedulingContext(input)
+  });
+}
+
+function assertTaskTimeboxPlacementAllowed(input: {
+  task: Task;
+  startsAt: string;
+  endsAt: string;
+  overrideReason: string | null;
+  excludeTimeboxId?: string;
+  userIds?: string[];
+}) {
+  const evaluation = evaluateTaskTimeboxPlacement(input);
+  if (evaluation.requiresOverride && !input.overrideReason?.trim()) {
+    throw new HttpError(
+      409,
+      "calendar_timebox_overlap_requires_override",
+      "This time overlaps calendar pressure or the task's scheduling rules. Review the conflicts or add a specific override reason.",
+      { conflicts: evaluation.conflicts }
+    );
+  }
+  return evaluation;
+}
+
+function firstResolvedInstant(localDateTime: string, timeZone: string) {
+  const resolution = resolveZonedDateTime(localDateTime, timeZone);
+  return resolution.kind === "exact" || resolution.kind === "ambiguous"
+    ? resolution.instants[0]
+    : null;
+}
+
+function buildFallbackSuggestionWindows(input: {
+  from: Date;
+  to: Date;
+  timeZone: string;
+}) {
+  const firstDateKey = localDateKeyForInstant(
+    input.from.toISOString(),
+    input.timeZone
+  );
+  const lastDateKey = localDateKeyForInstant(
+    new Date(input.to.getTime() - 1).toISOString(),
+    input.timeZone
+  );
+  const windows: Array<{ start: Date; end: Date }> = [];
+  for (
+    let dateKey = firstDateKey;
+    dateKey <= lastDateKey;
+    dateKey = addCalendarDays(dateKey, 1)
+  ) {
+    const dayStart = firstResolvedInstant(
+      `${dateKey}T08:00:00`,
+      input.timeZone
+    );
+    const dayEnd = firstResolvedInstant(`${dateKey}T18:00:00`, input.timeZone);
+    if (!dayStart || !dayEnd) {
+      continue;
+    }
+    const start = new Date(
+      Math.max(Date.parse(dayStart), input.from.getTime())
+    );
+    const end = new Date(Math.min(Date.parse(dayEnd), input.to.getTime()));
+    if (end > start) {
+      windows.push({ start, end });
+    }
+  }
+  return windows;
 }
 
 export function suggestTaskTimeboxes(
   taskId: string,
-  options: { from?: string; to?: string; limit?: number } = {}
+  options: {
+    from?: string;
+    to?: string;
+    limit?: number;
+    timeZone?: string;
+  } = {}
 ) {
   const task = getTaskById(taskId);
   if (!task) {
@@ -2708,65 +3628,72 @@ export function suggestTaskTimeboxes(
   }
   const from = options.from ? new Date(options.from) : new Date();
   const to = options.to ? new Date(options.to) : addMinutes(from, 14 * 24 * 60);
+  const { startsAtMs, endsAtMs } = parseTimeboxWindow(
+    from.toISOString(),
+    to.toISOString(),
+    {
+      maxDurationMs: MAX_TIMEBOX_SUGGESTION_DAYS * 24 * 60 * 60 * 1000,
+      limitKind: "range"
+    }
+  );
+  const limit = Math.max(
+    1,
+    Math.min(MAX_TIMEBOX_SUGGESTIONS, options.limit ?? 6)
+  );
   const durationMinutes = Math.max(
     15,
     Math.ceil((task.plannedDurationSeconds ?? 30 * 60) / 60)
   );
-  const query = { from: from.toISOString(), to: to.toISOString() };
-  ensureWorkBlockInstancesInRange(query);
-  const busyIntervals = collectBusyIntervals(query);
-  const allowedBlocks = listWorkBlockInstances(query).filter(
+  const query = {
+    from: new Date(startsAtMs).toISOString(),
+    to: new Date(endsAtMs).toISOString()
+  };
+  const ownerId = taskOwnerId(task);
+  const context = loadTaskSchedulingContext({
+    startsAt: query.from,
+    endsAt: query.to,
+    userIds: ownerId ? [ownerId] : undefined
+  });
+  const allowedBlocks = context.blocks.filter(
     (block) => block.blockingState === "allowed"
   );
-  const suggestions: TaskTimebox[] = [];
+  const resolvedTimeZone =
+    options.timeZone && isValidTimeZone(options.timeZone)
+      ? options.timeZone
+      : Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const candidateWindows =
     allowedBlocks.length > 0
       ? allowedBlocks.map((block) => ({
-          start: new Date(block.startAt),
-          end: new Date(block.endAt)
+          start: new Date(Math.max(Date.parse(block.startAt), startsAtMs)),
+          end: new Date(Math.min(Date.parse(block.endAt), endsAtMs))
         }))
-      : Array.from({ length: 14 }, (_, index) => {
-          const day = addMinutes(new Date(from), index * 24 * 60);
-          const start = new Date(
-            Date.UTC(
-              day.getUTCFullYear(),
-              day.getUTCMonth(),
-              day.getUTCDate(),
-              8,
-              0,
-              0
-            )
-          );
-          const end = new Date(
-            Date.UTC(
-              day.getUTCFullYear(),
-              day.getUTCMonth(),
-              day.getUTCDate(),
-              18,
-              0,
-              0
-            )
-          );
-          return { start, end };
+      : buildFallbackSuggestionWindows({
+          from,
+          to,
+          timeZone: resolvedTimeZone
         });
+  const suggestions: TaskTimebox[] = [];
+  const slotStepMs = 30 * 60 * 1000;
 
   for (const window of candidateWindows) {
+    const firstSlotMs =
+      Math.ceil(window.start.getTime() / slotStepMs) * slotStepMs;
     for (
-      let cursor = new Date(window.start);
+      let cursor = new Date(firstSlotMs);
       cursor.getTime() + durationMinutes * 60 * 1000 <= window.end.getTime();
       cursor = addMinutes(cursor, 30)
     ) {
       const slotEnd = addMinutes(cursor, durationMinutes);
-      if (hasOverlap(busyIntervals, cursor, slotEnd)) {
-        continue;
-      }
-      const evaluation = evaluateSchedulingForTask(
+      const evaluation = evaluateTaskTimeboxPlacementWithContext({
         task,
-        addMinutes(cursor, Math.floor(durationMinutes / 2))
-      );
+        startsAt: cursor.toISOString(),
+        endsAt: slotEnd.toISOString(),
+        context
+      });
       if (evaluation.blocked) {
         continue;
       }
+      const generatedAt = nowIso();
       suggestions.push(
         taskTimeboxSchema.parse({
           id: `suggested_${task.id}_${cursor.getTime()}`,
@@ -2782,11 +3709,11 @@ export function suggestTaskTimeboxes(
           startsAt: cursor.toISOString(),
           endsAt: slotEnd.toISOString(),
           overrideReason: null,
-          createdAt: nowIso(),
-          updatedAt: nowIso()
+          createdAt: generatedAt,
+          updatedAt: generatedAt
         })
       );
-      if (suggestions.length >= (options.limit ?? 6)) {
+      if (suggestions.length >= limit) {
         return suggestions;
       }
     }

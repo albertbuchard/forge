@@ -45,8 +45,10 @@ import { createWorkAdjustment } from "./work-adjustments.js";
 import {
   calendarSchedulingRulesSchema,
   createTaskSchema,
+  getSafeHttpUrl,
   taskSchema,
   type ActivitySource,
+  type CompletionReport,
   type CreateTaskInput,
   type Task,
   type TaskListQuery,
@@ -54,6 +56,7 @@ import {
   type TaskTimeSummary,
   type UpdateTaskInput,
   type WorkItemGitRef,
+  type WorkItemGitRefInput,
   type WorkItemLevel
 } from "../types.js";
 import { formatLocalDateKey } from "@/lib/date-keys.js";
@@ -116,6 +119,12 @@ type WorkItemGitRefRow = {
   updated_at: string;
 };
 
+type PreparedWorkItemGitRef = Omit<WorkItemGitRefInput, "id"> & {
+  id: string;
+};
+
+const WORK_ITEM_GIT_REF_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
 function readTaskTagIds(taskId: string): string[] {
   const rows = getDatabase()
     .prepare(`SELECT tag_id FROM task_tags WHERE task_id = ? ORDER BY tag_id`)
@@ -154,6 +163,8 @@ function readTaskTagIdsIndex(taskIds: string[]): Map<string, string[]> {
 }
 
 function mapWorkItemGitRef(row: WorkItemGitRefRow): WorkItemGitRef {
+  const rawUrl = row.url?.trim() || null;
+  const safeUrl = getSafeHttpUrl(rawUrl);
   return {
     id: row.id,
     workItemId: row.work_item_id,
@@ -166,11 +177,104 @@ function mapWorkItemGitRef(row: WorkItemGitRefRow): WorkItemGitRef {
     provider: row.provider,
     repository: row.repository,
     refValue: row.ref_value,
-    url: row.url,
+    url: safeUrl,
+    rawUrl,
+    urlSafety: rawUrl === null ? "absent" : safeUrl ? "safe" : "unsafe",
     displayTitle: row.display_title,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function generateWorkItemGitRefId(): string {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = `gitref_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
+    const existing = getDatabase()
+      .prepare(`SELECT 1 FROM work_item_git_refs WHERE id = ?`)
+      .get(candidate);
+    if (!existing) {
+      return candidate;
+    }
+  }
+  throw new HttpError(
+    500,
+    "git_ref_id_generation_failed",
+    "Could not allocate a unique Git reference ID"
+  );
+}
+
+function prepareWorkItemGitRefs(
+  taskId: string,
+  refs: readonly WorkItemGitRefInput[]
+): PreparedWorkItemGitRef[] {
+  const seenIds = new Set<string>();
+  const seenRefs = new Set<string>();
+  return refs.map((ref) => {
+    const id = ref.id?.trim() || generateWorkItemGitRefId();
+    if (!WORK_ITEM_GIT_REF_ID_PATTERN.test(id)) {
+      throw new HttpError(
+        400,
+        "git_ref_id_invalid",
+        `Git reference ID '${id}' is malformed`
+      );
+    }
+    if (seenIds.has(id)) {
+      throw new HttpError(
+        409,
+        "git_ref_id_duplicate",
+        `Git reference ID '${id}' appears more than once`
+      );
+    }
+    seenIds.add(id);
+
+    const identity = [
+      ref.refType,
+      ref.provider,
+      ref.repository,
+      ref.refValue
+    ].join("\u0000");
+    if (seenRefs.has(identity)) {
+      throw new HttpError(
+        409,
+        "git_ref_duplicate",
+        "The same Git reference appears more than once"
+      );
+    }
+    seenRefs.add(identity);
+
+    const existing = getDatabase()
+      .prepare(`SELECT work_item_id FROM work_item_git_refs WHERE id = ?`)
+      .get(id) as { work_item_id: string } | undefined;
+    if (existing && existing.work_item_id !== taskId) {
+      throw new HttpError(
+        409,
+        "git_ref_id_conflict",
+        `Git reference ID '${id}' already belongs to another task`
+      );
+    }
+    return { ...ref, id };
+  });
+}
+
+function assertCompletionReportGitRefs(
+  report: CompletionReport | null,
+  refs: readonly Pick<PreparedWorkItemGitRef, "id">[]
+) {
+  if (!report) {
+    return;
+  }
+  const availableIds = new Set(refs.map((ref) => ref.id));
+  const missingIds = report.linkedGitRefIds.filter(
+    (id) => !availableIds.has(id)
+  );
+  if (missingIds.length > 0) {
+    throw new HttpError(
+      409,
+      "completion_report_git_ref_missing",
+      "Completion report references Git evidence that is not attached to this task",
+      { missingGitRefIds: missingIds }
+    );
+  }
 }
 
 function readWorkItemGitRefs(taskId: string): WorkItemGitRef[] {
@@ -214,12 +318,16 @@ function readWorkItemGitRefsIndex(
 
 function replaceWorkItemGitRefs(
   taskId: string,
-  refs: CreateTaskInput["gitRefs"] | UpdateTaskInput["gitRefs"]
+  refs: readonly WorkItemGitRefInput[] | undefined
 ): WorkItemGitRef[] {
   if (refs === undefined) {
     return readWorkItemGitRefs(taskId);
   }
+  const preparedRefs = prepareWorkItemGitRefs(taskId, refs);
   const database = getDatabase();
+  const existingCreatedAt = new Map(
+    readWorkItemGitRefs(taskId).map((ref) => [ref.id, ref.createdAt])
+  );
   database
     .prepare(`DELETE FROM work_item_git_refs WHERE work_item_id = ?`)
     .run(taskId);
@@ -229,13 +337,9 @@ function replaceWorkItemGitRefs(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const now = new Date().toISOString();
-  for (const ref of refs) {
-    const id =
-      "id" in ref && typeof ref.id === "string" && ref.id.trim().length > 0
-        ? ref.id
-        : `gitref_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  for (const ref of preparedRefs) {
     insert.run(
-      id,
+      ref.id,
       taskId,
       ref.refType,
       ref.provider ?? "git",
@@ -243,7 +347,7 @@ function replaceWorkItemGitRefs(
       ref.refValue,
       ref.url ?? null,
       ref.displayTitle ?? "",
-      now,
+      existingCreatedAt.get(ref.id) ?? now,
       now
     );
   }
@@ -326,6 +430,10 @@ function mapTaskBase(
     gitRefs?: WorkItemGitRef[];
   }
 ): TaskBaseShape {
+  const completionReport =
+    row.completion_report_json === null
+      ? null
+      : (JSON.parse(row.completion_report_json) as CompletionReport);
   return {
     id: row.id,
     title: row.title,
@@ -364,10 +472,13 @@ function mapTaskBase(
         : null,
     acceptanceCriteria: JSON.parse(row.acceptance_criteria_json || "[]"),
     blockerLinks: JSON.parse(row.blocker_links_json || "[]"),
-    completionReport:
-      row.completion_report_json === null
-        ? null
-        : JSON.parse(row.completion_report_json),
+    completionReport,
+    closeoutState:
+      row.status !== "done"
+        ? "not_applicable"
+        : completionReport?.workSummary.trim()
+          ? "complete"
+          : "deferred",
     gitRefs: relations?.gitRefs ?? readWorkItemGitRefs(row.id),
     completedAt: row.completed_at,
     createdAt: row.created_at,
@@ -600,6 +711,19 @@ function updateTaskRecord(
     projectId: nextProjectId
   });
 
+  const preparedGitRefs =
+    input.gitRefs === undefined
+      ? undefined
+      : prepareWorkItemGitRefs(current.id, input.gitRefs);
+  const nextCompletionReport =
+    input.completionReport === undefined
+      ? current.completionReport
+      : input.completionReport;
+  assertCompletionReportGitRefs(
+    nextCompletionReport,
+    preparedGitRefs ?? current.gitRefs
+  );
+
   const nextStatus = input.status ?? current.status;
   const movedColumns = nextStatus !== current.status;
   const nextSort =
@@ -747,10 +871,35 @@ function updateTaskRecord(
 
   replaceTaskTags(current.id, nextTagIds);
   setEntityOwner("task", current.id, assignment.userId);
+  if (
+    current.projectId !== nextProjectId ||
+    current.userId !== assignment.userId
+  ) {
+    getDatabase()
+      .prepare(
+        `UPDATE task_timeboxes
+         SET project_id = ?, updated_at = ?
+         WHERE task_id = ?`
+      )
+      .run(nextProjectId, updatedAt, current.id);
+    getDatabase()
+      .prepare(
+        `INSERT INTO entity_owners (
+           entity_type, entity_id, user_id, role, created_at, updated_at
+         )
+         SELECT 'task_timebox', timebox.id, ?, 'owner', timebox.created_at, ?
+         FROM task_timeboxes timebox
+         WHERE timebox.task_id = ?
+         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
+           user_id = excluded.user_id,
+           updated_at = excluded.updated_at`
+      )
+      .run(assignment.userId, updatedAt, current.id);
+  }
   if (input.assigneeUserIds !== undefined) {
     replaceEntityAssignees("task", current.id, input.assigneeUserIds);
   }
-  replaceWorkItemGitRefs(current.id, input.gitRefs);
+  replaceWorkItemGitRefs(current.id, preparedGitRefs);
   const updated = getTaskById(current.id);
   if (
     updated &&
@@ -917,6 +1066,8 @@ function insertTaskRecord(
   });
   const now = new Date().toISOString();
   const id = `task_${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const preparedGitRefs = prepareWorkItemGitRefs(id, parsed.gitRefs);
+  assertCompletionReportGitRefs(parsed.completionReport, preparedGitRefs);
   const sortOrder = parsed.sortOrder ?? nextSortOrder(parsed.status);
   const completedAt = normalizeCompletedAt(parsed.status, null);
   getDatabase()
@@ -965,7 +1116,7 @@ function insertTaskRecord(
   setEntityOwner("task", id, assignment.userId);
   replaceEntityAssignees("task", id, parsed.assigneeUserIds);
   replaceTaskTags(id, parsed.tagIds);
-  replaceWorkItemGitRefs(id, parsed.gitRefs);
+  replaceWorkItemGitRefs(id, preparedGitRefs);
   const task = getTaskById(id)!;
   upsertTaskActionProfile({
     taskId: task.id,

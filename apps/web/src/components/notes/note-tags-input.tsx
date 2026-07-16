@@ -68,12 +68,18 @@ export function NoteTagsInput({
     <EntityLinkMultiSelect
       options={options}
       selectedValues={normalizeNoteTags(value)}
-      onChange={(next) => onChange(normalizeNoteTags(next))}
+      onChange={(next) =>
+        onChange(
+          normalizeNoteTags(next)
+            .filter((tag) => tag.length <= 80)
+            .slice(0, 24)
+        )
+      }
       placeholder={placeholder}
       emptyMessage="No note tags yet."
       createLabel="Add custom tag"
       onCreate={async (query) => {
-        const tag = query.trim();
+        const tag = query.trim().slice(0, 80);
         return {
           value: tag,
           label: tag,

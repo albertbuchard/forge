@@ -1,0 +1,62 @@
+name: Preferences Package Parity
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/preferences-package-parity.yml"
+      - "apps/api/migrations/086_preference_catalog_contract.sql"
+      - "apps/api/migrations/089_preference_owner_scope.sql"
+      - "apps/api/migrations/090_preference_adversarial_hardening.sql"
+      - "apps/api/migrations/101_preference_integrity_and_signal_idempotency.sql"
+      - "apps/api/src/openapi.ts"
+      - "apps/api/src/preferences-types.ts"
+      - "plugins/openclaw/docs/openapi.json"
+      - "plugins/openclaw/docs/api/openapi.json"
+      - "plugins/openclaw/server/migrations/**"
+      - "plugins/openclaw/dist/server/apps/api/migrations/**"
+      - "plugins/codex/runtime/server/migrations/**"
+      - "plugins/codex/runtime/dist/server/apps/api/migrations/**"
+      - "plugins/hermes/forge_hermes/runtime/apps/api/migrations/**"
+      - "plugins/hermes/forge_hermes/runtime/dist/server/apps/api/migrations/**"
+      - "scripts/ci/check-preferences-package-parity.mjs"
+      - "scripts/ci/check-preferences-package-parity.test.mjs"
+  pull_request:
+    paths:
+      - ".github/workflows/preferences-package-parity.yml"
+      - "apps/api/migrations/086_preference_catalog_contract.sql"
+      - "apps/api/migrations/089_preference_owner_scope.sql"
+      - "apps/api/migrations/090_preference_adversarial_hardening.sql"
+      - "apps/api/migrations/101_preference_integrity_and_signal_idempotency.sql"
+      - "apps/api/src/openapi.ts"
+      - "apps/api/src/preferences-types.ts"
+      - "plugins/openclaw/docs/openapi.json"
+      - "plugins/openclaw/docs/api/openapi.json"
+      - "plugins/openclaw/server/migrations/**"
+      - "plugins/openclaw/dist/server/apps/api/migrations/**"
+      - "plugins/codex/runtime/server/migrations/**"
+      - "plugins/codex/runtime/dist/server/apps/api/migrations/**"
+      - "plugins/hermes/forge_hermes/runtime/apps/api/migrations/**"
+      - "plugins/hermes/forge_hermes/runtime/dist/server/apps/api/migrations/**"
+      - "scripts/ci/check-preferences-package-parity.mjs"
+      - "scripts/ci/check-preferences-package-parity.test.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Test Preferences package parity gate
+        run: node --import tsx --test scripts/ci/check-preferences-package-parity.test.mjs
+      - name: Check tracked Preferences package parity
+        run: node --import tsx scripts/ci/check-preferences-package-parity.mjs

@@ -4,9 +4,15 @@ import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PsycheMetricsPage } from "@/pages/psyche-metrics-page";
+import type { PsycheMetricsViewData } from "@/lib/psyche-types";
 
-const { getPsycheMetricsViewMock } = vi.hoisted(() => ({
-  getPsycheMetricsViewMock: vi.fn()
+const { getPsycheMetricsViewMock, useForgeShellMock } = vi.hoisted(() => ({
+  getPsycheMetricsViewMock: vi.fn(),
+  useForgeShellMock: vi.fn()
+}));
+
+vi.mock("@/components/shell/app-shell", () => ({
+  useForgeShell: useForgeShellMock
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -24,44 +30,60 @@ vi.mock("@/components/shell/page-hero", () => ({
     description: ReactNode;
     badge?: ReactNode;
   }) => (
-    <div>
-      <div>{title}</div>
-      <div>{description}</div>
+    <header>
+      <h1>{title}</h1>
+      <p>{description}</p>
       {badge ? <div>{badge}</div> : null}
-    </div>
+    </header>
   )
 }));
 
 vi.mock("@/components/psyche/psyche-section-nav", () => ({
-  PsycheSectionNav: () => <div>Psyche section nav</div>
+  PsycheSectionNav: () => <nav aria-label="Psyche sections" />
 }));
 
-function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false
-      }
-    }
-  });
+vi.mock("@/components/psyche/psyche-metrics-workspace", () => ({
+  PsycheMetricsWorkspace: ({ metrics }: { metrics: EmptyMetrics }) => (
+    <div>Psyche metrics workspace: {metrics.summary.metricCount}</div>
+  )
+}));
 
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <PsycheMetricsPage />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-}
+type EmptyMetrics = PsycheMetricsViewData;
 
-const emptyMetrics = {
+const emptyMetrics: EmptyMetrics = {
   summary: {
     hasData: false,
     trackedDays: 0,
     metricCount: 0,
     latestDateKey: null,
     latestMetricCount: 0,
-    categoryBreakdown: []
+    categoryBreakdown: [],
+    familyAvailability: [
+      {
+        family: "mood",
+        status: "no_data",
+        metricCount: 0,
+        reason: "No dated emotion reports."
+      },
+      {
+        family: "urges",
+        status: "unsupported",
+        metricCount: 0,
+        reason: "No dated urge field."
+      },
+      {
+        family: "selfRegulation",
+        status: "unsupported",
+        metricCount: 0,
+        reason: "No completed outcome field."
+      },
+      {
+        family: "conversation",
+        status: "no_data",
+        metricCount: 0,
+        reason: "No scanner rows."
+      }
+    ]
   },
   context: {
     generatedAt: "2026-05-14T00:00:00.000Z",
@@ -86,13 +108,52 @@ const emptyMetrics = {
       fullSyncCompletedAt: null,
       lastDailySyncAt: null,
       lastSyncedDateKey: null
-    }
+    },
+    freshness: {
+      status: "not_synced",
+      lastSuccessfulAt: null,
+      lastAttemptAt: null,
+      warningCount: 0,
+      warnings: []
+    },
+    ownerScope: {
+      mode: "unscoped_all_data",
+      effectiveUserIds: [],
+      availableOwners: [],
+      filterMode: "all_data",
+      serverEnforced: false,
+      unattributedRecordCount: 0,
+      limitation: "The route has no authenticated owner scope."
+    },
+    sources: [],
+    dataQualityWarnings: []
   },
   metrics: []
 };
 
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <PsycheMetricsPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 describe("PsycheMetricsPage", () => {
   beforeEach(() => {
+    useForgeShellMock.mockReturnValue({
+      selectedUserIds: ["user_operator"]
+    });
     getPsycheMetricsViewMock.mockResolvedValue({ metrics: emptyMetrics });
   });
 
@@ -101,223 +162,74 @@ describe("PsycheMetricsPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders a quiet empty state when no stored metric rows exist", async () => {
+  it("keeps the page identity and navigation visible while metrics load", () => {
+    getPsycheMetricsViewMock.mockReturnValue(new Promise(() => undefined));
+
     renderPage();
 
-    expect(await screen.findByText("Psyche Metrics")).toBeInTheDocument();
-    expect(screen.getAllByText("No daily metrics yet").length).toBeGreaterThan(
-      0
-    );
     expect(
-      screen.getByText(/after the first local backfill finds conversations/i)
+      screen.getByRole("heading", { name: "Psyche Metrics" })
     ).toBeInTheDocument();
+    expect(screen.getByText("Loading metrics")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Psyche sections" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 
-  it("renders devrage metric plots and summary statistics", async () => {
-    getPsycheMetricsViewMock.mockResolvedValue({
+  it("hands an empty read model to the review workspace", async () => {
+    renderPage();
+
+    expect(
+      await screen.findByText("Psyche metrics workspace: 0")
+    ).toBeInTheDocument();
+    expect(screen.getByText("No metrics yet")).toBeInTheDocument();
+    expect(getPsycheMetricsViewMock).toHaveBeenCalledWith({
+      userIds: ["user_operator"],
+      timeZone: expect.any(String)
+    });
+  });
+
+  it("surfaces partial scanner freshness in the page badge", async () => {
+    getPsycheMetricsViewMock.mockResolvedValueOnce({
       metrics: {
-        summary: {
-          hasData: true,
-          trackedDays: 2,
-          metricCount: 4,
-          latestDateKey: "2026-05-14",
-          latestMetricCount: 4,
-          categoryBreakdown: [
-            { category: "conversationTone", metricCount: 4, coverageDays: 2 }
-          ]
-        },
+        ...emptyMetrics,
         context: {
-          generatedAt: "2026-05-14T00:00:00.000Z",
-          conversationsScanned: 3,
-          sourceCount: 1,
-          messagesScanned: 30,
-          messagesWithSwears: 6,
-          totalSwears: 12,
-          dailyAverage: {
-            rawSwearCount: 6,
-            swearingMessagePercent: 20,
-            averageMaxCumulativeRage: 5,
-            maxCumulativeRage: 6
-          },
-          weeklyAverage: {
-            rawSwearCount: 6,
-            swearingMessagePercent: 20,
-            averageMaxCumulativeRage: 5,
-            maxCumulativeRage: 6
-          },
-          sync: {
-            fullSyncCompletedAt: "2026-05-14T00:00:00.000Z",
-            lastDailySyncAt: null,
-            lastSyncedDateKey: null
+          ...emptyMetrics.context,
+          freshness: {
+            status: "partial",
+            lastSuccessfulAt: "2026-05-14T17:00:00.000Z",
+            lastAttemptAt: "2026-05-14T18:00:00.000Z",
+            warningCount: 1,
+            warnings: ["codex failed"]
           }
-        },
-        metrics: [
-          {
-            metric: "devrageSwearCount",
-            label: "Devrage swears",
-            category: "conversationTone",
-            unit: "swears",
-            aggregation: "cumulative",
-            latestValue: 8,
-            latestDateKey: "2026-05-14",
-            baselineValue: 4,
-            deltaValue: 4,
-            coverageDays: 2,
-            days: [
-              {
-                dateKey: "2026-05-13",
-                average: 4,
-                minimum: 4,
-                maximum: 4,
-                latest: 4,
-                total: 4,
-                sampleCount: 1,
-                latestSampleAt: "2026-05-13T00:00:00.000Z"
-              },
-              {
-                dateKey: "2026-05-14",
-                average: 8,
-                minimum: 8,
-                maximum: 8,
-                latest: 8,
-                total: 8,
-                sampleCount: 2,
-                latestSampleAt: "2026-05-14T00:00:00.000Z"
-              }
-            ]
-          },
-          {
-            metric: "swearingMessagePercent",
-            label: "Swearing messages",
-            category: "conversationTone",
-            unit: "%",
-            aggregation: "discrete",
-            latestValue: 25,
-            latestDateKey: "2026-05-14",
-            baselineValue: 12.5,
-            deltaValue: 12.5,
-            coverageDays: 2,
-            days: [
-              {
-                dateKey: "2026-05-13",
-                average: 12.5,
-                minimum: 12.5,
-                maximum: 12.5,
-                latest: 12.5,
-                total: null,
-                sampleCount: 8,
-                latestSampleAt: "2026-05-13T00:00:00.000Z"
-              },
-              {
-                dateKey: "2026-05-14",
-                average: 25,
-                minimum: 25,
-                maximum: 25,
-                latest: 25,
-                total: null,
-                sampleCount: 12,
-                latestSampleAt: "2026-05-14T00:00:00.000Z"
-              }
-            ]
-          },
-          {
-            metric: "devrageAverageMaxCumulativeRage",
-            label: "Average max cumulative rage",
-            category: "conversationTone",
-            unit: "score",
-            aggregation: "discrete",
-            latestValue: 5,
-            latestDateKey: "2026-05-14",
-            baselineValue: 3,
-            deltaValue: 2,
-            coverageDays: 2,
-            days: [
-              {
-                dateKey: "2026-05-13",
-                average: 3,
-                minimum: 3,
-                maximum: 3,
-                latest: 3,
-                total: null,
-                sampleCount: 1,
-                latestSampleAt: "2026-05-13T00:00:00.000Z"
-              },
-              {
-                dateKey: "2026-05-14",
-                average: 5,
-                minimum: 5,
-                maximum: 5,
-                latest: 5,
-                total: null,
-                sampleCount: 2,
-                latestSampleAt: "2026-05-14T00:00:00.000Z"
-              }
-            ]
-          },
-          {
-            metric: "devrageMaxCumulativeRage",
-            label: "Max cumulative rage",
-            category: "conversationTone",
-            unit: "score",
-            aggregation: "discrete",
-            latestValue: 6,
-            latestDateKey: "2026-05-14",
-            baselineValue: 4,
-            deltaValue: 2,
-            coverageDays: 2,
-            days: [
-              {
-                dateKey: "2026-05-13",
-                average: 4,
-                minimum: 4,
-                maximum: 4,
-                latest: 4,
-                total: null,
-                sampleCount: 1,
-                latestSampleAt: "2026-05-13T00:00:00.000Z"
-              },
-              {
-                dateKey: "2026-05-14",
-                average: 6,
-                minimum: 6,
-                maximum: 6,
-                latest: 6,
-                total: null,
-                sampleCount: 2,
-                latestSampleAt: "2026-05-14T00:00:00.000Z"
-              }
-            ]
-          }
-        ]
+        }
       }
     });
 
     renderPage();
 
-    expect(await screen.findByText("4 daily metrics")).toBeInTheDocument();
-    expect(screen.getByText("Cumulative rage profile")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Explain devrage baseline" })
-    );
-    expect(screen.getAllByText("Baseline calculation").length).toBeGreaterThan(
-      0
-    );
-    expect(screen.getByText("Devrage count")).toBeInTheDocument();
-    expect(screen.getAllByText("Average rage peak").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Max rage peak").length).toBeGreaterThan(0);
-    expect(screen.getByText("Summary statistics")).toBeInTheDocument();
     expect(
-      screen.getByText(/12 total swears across stored history/i)
+      await screen.findByText("Scanner freshness partial")
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Devrage swears").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Period min").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Period avg").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Period max").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("4 swears").length).toBeGreaterThan(0);
-    expect(screen.getByText("6 swears")).toBeInTheDocument();
-    expect(screen.getAllByText("8 swears").length).toBeGreaterThan(0);
+  });
+
+  it("retries a failed metric request without losing page context", async () => {
+    getPsycheMetricsViewMock
+      .mockRejectedValueOnce(new Error("Metrics request failed"))
+      .mockResolvedValueOnce({ metrics: emptyMetrics });
+
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: /full screen/i }).length
-    ).toBeGreaterThan(0);
+      screen.getByRole("heading", { name: "Psyche Metrics" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(
+      await screen.findByText("Psyche metrics workspace: 0")
+    ).toBeInTheDocument();
+    expect(getPsycheMetricsViewMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -17,6 +17,20 @@ const score: PreferenceItemScore = {
   pairwiseLosses: 1,
   pairwiseTies: 1,
   signalCount: 2,
+  effectiveSignal: {
+    id: "signal_1",
+    profileId: "profile_1",
+    contextId: "context_1",
+    userId: "user_1",
+    ownerUserId: "user_1",
+    itemId: "item_1",
+    signalType: "favorite",
+    strength: 1,
+    modelWeight: 1.25,
+    source: "agent",
+    actor: "Preference assistant",
+    createdAt: "2026-01-02T00:00:00.000Z"
+  },
   conflictCount: 1,
   status: "liked",
   dominantDimensions: ["rigor", "depth"],
@@ -71,10 +85,16 @@ describe("PreferenceEvidencePanel", () => {
       screen.getByText("4", { selector: ".font-medium" })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/1 conflicting signal reduces confidence/i)
+      screen.getByText(/1 evidence conflict reduces confidence/i)
     ).toBeInTheDocument();
     expect(
       screen.getByText(/manual model controls are active/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/current direct mark: favorite/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/recorded by preference assistant through agent/i)
     ).toBeInTheDocument();
     expect(
       screen.getByText(/source: project · project_1/i)

@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { ErrorState } from "@/components/ui/page-state";
 import { getGamificationCatalog, updateGamificationEquipment } from "@/lib/api";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 import { forgeApi, useGetXpMetricsQuery } from "@/store/api/forge-api";
 import { useAppDispatch } from "@/store/typed-hooks";
 import {
@@ -302,14 +303,19 @@ export function RewardsPage() {
     Set<GamificationCatalogCategory>
   >(() => new Set());
   const rewardGroupPreviewCount = useRewardGroupPreviewCount();
+  const runtimeTimezone = getRuntimeTimeZone();
   const catalogQuery = useQuery({
-    queryKey: ["forge-gamification-catalog", ...selectedUserIds],
-    queryFn: () => getGamificationCatalog(selectedUserIds)
+    queryKey: [
+      "forge-gamification-catalog",
+      runtimeTimezone,
+      ...selectedUserIds
+    ],
+    queryFn: () => getGamificationCatalog(selectedUserIds, runtimeTimezone)
   });
   const xpQuery = useGetXpMetricsQuery(selectedUserIds);
   const equipMutation = useMutation({
     mutationFn: (input: Partial<Omit<GamificationEquipment, "updatedAt">>) =>
-      updateGamificationEquipment(input, selectedUserIds),
+      updateGamificationEquipment(input, selectedUserIds, runtimeTimezone),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({

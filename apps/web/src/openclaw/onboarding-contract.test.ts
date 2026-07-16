@@ -54,7 +54,12 @@ async function loadOnboardingPayload() {
       classification: string;
       purpose?: string;
       relationshipRules?: string[];
-      fieldGuide?: Array<{ name: string; description?: string }>;
+      fieldGuide?: Array<{
+        name: string;
+        description?: string;
+        defaultValue?: unknown;
+        enumValues?: string[];
+      }>;
       questionFlow: {
         openingQuestion: string;
         coachingGoal: string;
@@ -104,7 +109,19 @@ async function loadOnboardingPayload() {
           methodRoutes?: Record<string, { method: string; path: string }>;
         }
       >;
-      actionEntities: Record<string, Record<string, unknown>>;
+      actionEntities: Record<
+        string,
+        {
+          classification: string;
+          aliases: string[];
+          summary: string;
+          routeKeys: string[];
+          routeTools: Record<string, string>;
+          methodRoutes: Record<string, string>;
+          notes: string[];
+          [key: string]: unknown;
+        }
+      >;
       specializedDomainSurfaces: Record<
         string,
         {
@@ -310,6 +327,12 @@ describe("forge onboarding contract", () => {
         expect(flow.openingQuestion).toBe(psychePlaybook.openingQuestion);
         expect(flow.readinessCheck).toMatch(/accuracy or consent/i);
         expect(flow.readinessCheck).toMatch(/shared batch CRUD/i);
+        if (catalogEntry.entityType === "mode_guide_session") {
+          expect(flow.readinessCheck).toMatch(
+            /Immediate support[\s\S]*does not require a save[\s\S]*direct-save session[\s\S]*candidate mode label[\s\S]*Resume, review, or update[\s\S]*exact existing session[\s\S]*Guided formulation[\s\S]*fit-or-correction[\s\S]*Closing may preserve the session without a durable label/i
+          );
+          continue;
+        }
         expect(flow.readinessCheck).toMatch(
           /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*do not require a new concrete example or hypothesis/i
         );
@@ -692,6 +715,64 @@ describe("forge onboarding contract", () => {
       })
     );
 
+    const toolInputNames = new Set(
+      onboarding.toolInputCatalog.flatMap((entry) =>
+        entry.toolName.split(" | ")
+      )
+    );
+    for (const [workflowName, workflow] of Object.entries(
+      routeModel.actionEntities
+    )) {
+      expect(workflow.classification, `${workflowName} classification`).toBe(
+        "action_workflow_entity"
+      );
+      expect(
+        workflow.aliases.length,
+        `${workflowName} aliases`
+      ).toBeGreaterThan(0);
+      expect(workflow.summary.trim(), `${workflowName} summary`).not.toBe("");
+      expect(workflow.notes.length, `${workflowName} notes`).toBeGreaterThan(0);
+      expect(
+        Object.keys(workflow.routeTools).sort(),
+        `${workflowName} routeTools`
+      ).toEqual([...workflow.routeKeys].sort());
+      expect(
+        Object.keys(workflow.methodRoutes).sort(),
+        `${workflowName} methodRoutes`
+      ).toEqual([...workflow.routeKeys].sort());
+      for (const routeKey of workflow.routeKeys) {
+        expect(
+          toolInputNames.has(workflow.routeTools[routeKey]),
+          `${workflowName}.${routeKey} should name a tool with an input guide`
+        ).toBe(true);
+        expect(
+          workflow.methodRoutes[routeKey],
+          `${workflowName}.${routeKey} method route`
+        ).toMatch(/^(GET|POST|PATCH|DELETE|PUT) \/api\/v1\//);
+      }
+    }
+
+    expect(routeModel.actionEntities.questionnaire_run.routeTools).toEqual({
+      start: "forge_start_questionnaire_run",
+      read: "forge_get_questionnaire_run",
+      update: "forge_update_questionnaire_run",
+      complete: "forge_complete_questionnaire_run"
+    });
+    expect(routeModel.actionEntities.questionnaires.routeTools).toEqual({
+      list: "forge_list_questionnaires",
+      detail: "forge_get_questionnaire",
+      clone: "forge_clone_questionnaire",
+      ensureDraft: "forge_ensure_questionnaire_draft",
+      publishDraft: "forge_publish_questionnaire_draft"
+    });
+    expect(routeModel.actionEntities.self_observation.routeTools).toEqual(
+      expect.objectContaining({
+        readCalendar: "forge_get_self_observation_calendar",
+        createObservedNote: "forge_create_entities",
+        updateObservedNote: "forge_update_entities"
+      })
+    );
+
     expect(routeModel.specializedDomainSurfaces.movement.readRoutes).toEqual(
       expect.objectContaining({
         day: "/api/v1/movement/day",
@@ -972,6 +1053,8 @@ describe("forge onboarding contract", () => {
 
     expect(routeModel.readModelOnlySurfaces).toEqual(
       expect.objectContaining({
+        todayPriority: "/api/v1/today/priority",
+        today_priority: "/api/v1/today/priority",
         sleepOverview: "/api/v1/health/sleep",
         sleep_overview: "/api/v1/health/sleep",
         sportsOverview: "/api/v1/health/fitness",
@@ -1029,27 +1112,50 @@ describe("forge onboarding contract", () => {
       "trigger_report"
     ] as const;
 
+    const immediateDeleteEntities = new Set([
+      "calendar_event",
+      "work_block_template",
+      "task_timebox",
+      "sleep_session",
+      "workout_session",
+      "preference_context",
+      "preference_item",
+      "questionnaire_instrument"
+    ]);
+
     for (const entityType of batchCrudEntities) {
+      const ordinaryBatchPath = immediateDeleteEntities.has(entityType)
+        ? "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/search"
+        : "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
       expect(entityByType.get(entityType)).toEqual(
         expect.objectContaining({
           classification: "batch_crud_entity",
           preferredMutationPath:
             entityType === "questionnaire_instrument"
               ? expect.stringMatching(
-                  /shared batch CRUD[\s\S]*GET \/api\/v1\/psyche\/questionnaires[\s\S]*clone[\s\S]*draft[\s\S]*publish/i
+                  /shared batch CRUD[\s\S]*immediate delete[\s\S]*not restorable[\s\S]*GET \/api\/v1\/psyche\/questionnaires[\s\S]*clone[\s\S]*draft[\s\S]*publish/i
                 )
               : entityType === "preference_context"
                 ? expect.stringMatching(
-                    /shared batch CRUD[\s\S]*GET \/api\/v1\/preferences\/contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*do not emulate a merge with batch deletion/i
+                    /shared batch CRUD[\s\S]*immediate delete[\s\S]*not restorable[\s\S]*GET \/api\/v1\/preferences\/contexts[\s\S]*POST \/api\/v1\/preferences\/contexts\/merge[\s\S]*do not emulate a merge with batch deletion/i
                   )
                 : entityType === "preference_item"
                   ? expect.stringMatching(
-                      /shared batch CRUD[\s\S]*POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*POST \/api\/v1\/preferences\/judgments[\s\S]*POST \/api\/v1\/preferences\/signals[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score/i
+                      /shared batch CRUD[\s\S]*immediate delete[\s\S]*not restorable[\s\S]*POST \/api\/v1\/preferences\/items\/from-entity[\s\S]*POST \/api\/v1\/preferences\/judgments[\s\S]*POST \/api\/v1\/preferences\/signals[\s\S]*PATCH \/api\/v1\/preferences\/items\/:id\/score/i
                     )
-                  : "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search"
+                  : ordinaryBatchPath
         })
       );
     }
+
+    for (const entityType of immediateDeleteEntities) {
+      expect(entityByType.get(entityType)?.preferredMutationTool).not.toContain(
+        "forge_restore_entities"
+      );
+    }
+    expect(
+      entityByType.get("preference_catalog")?.preferredMutationTool
+    ).toContain("forge_restore_entities");
 
     expect(entityByType.get("life_event")).toEqual(
       expect.objectContaining({
@@ -1273,12 +1379,55 @@ describe("forge onboarding contract", () => {
     ]);
     expect(onboarding.recommendedPluginTools?.readModels).toEqual(
       expect.arrayContaining([
+        "forge_get_today_priority",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog"
       ])
     );
+    expect(onboarding.recommendedPluginTools?.preferencesWorkflow).toEqual(
+      expect.arrayContaining([
+        "forge_get_preferences_workspace",
+        "forge_submit_preferences_judgment",
+        "forge_submit_preferences_signal"
+      ])
+    );
+    expect(onboarding.recommendedPluginTools?.questionnaireWorkflow).toEqual([
+      "forge_list_questionnaires",
+      "forge_get_questionnaire",
+      "forge_clone_questionnaire",
+      "forge_ensure_questionnaire_draft",
+      "forge_publish_questionnaire_draft",
+      "forge_start_questionnaire_run",
+      "forge_get_questionnaire_run",
+      "forge_update_questionnaire_run",
+      "forge_complete_questionnaire_run"
+    ]);
+    expect(onboarding.recommendedPluginTools?.selfObservationWorkflow).toEqual([
+      "forge_get_self_observation_calendar",
+      "forge_search_entities",
+      "forge_create_entities",
+      "forge_update_entities"
+    ]);
+    const guidedToolNames = new Set(
+      onboarding.toolInputCatalog.flatMap((entry) =>
+        entry.toolName.split(" | ")
+      )
+    );
+    for (const [workflowName, tools] of Object.entries(
+      onboarding.recommendedPluginTools ?? {}
+    )) {
+      for (const tool of tools) {
+        expect(
+          guidedToolNames.has(tool),
+          `${workflowName} recommended tool ${tool} should publish an input guide`
+        ).toBe(true);
+      }
+    }
     expect(onboarding.verificationPaths.psycheSchemaCatalog).toBe(
       "/api/v1/psyche/schema-catalog"
+    );
+    expect(onboarding.verificationPaths.todayPriority).toBe(
+      "/api/v1/today/priority"
     );
     expect(onboarding.mutationGuidance.specializedRouteToolRule).toMatch(
       /forge_call_movement_route[\s\S]*forge_call_life_event_route[\s\S]*forge_call_life_force_route[\s\S]*forge_call_workbench_route[\s\S]*toolInputCatalog[\s\S]*routeKey[\s\S]*pathParams[\s\S]*query[\s\S]*body[\s\S]*batch entity tools/i
@@ -1484,6 +1633,41 @@ describe("forge onboarding contract", () => {
           `${surfaceKey}.${routeKey} method route`
         ).toBeTruthy();
       }
+    }
+  });
+
+  it("publishes PSY-09 owner, idempotency, and scope payload guidance", async () => {
+    const onboarding = await loadOnboardingPayload();
+    const toolByName = new Map(
+      onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
+    );
+    const search = toolByName.get("forge_search_entities");
+    expect(search?.inputShape).toMatch(/userIds\?: string\[\]/);
+    expect(search?.notes.join(" ")).toMatch(
+      /searches\[\]\.userIds[\s\S]*effective custom-vocabulary owner scope/i
+    );
+    expect(search?.notes.join(" ")).toMatch(
+      /base read or write plus psyche\.read[\s\S]*dedicated[\s\S]*psyche\.read/i
+    );
+
+    const create = toolByName.get("forge_create_entities");
+    expect(create?.inputShape).toMatch(/idempotencyKey\?: string/);
+    expect(create?.notes.join(" ")).toMatch(
+      /stable operations\[\]\.idempotencyKey[\s\S]*exact retry[\s\S]*hard deletion[\s\S]*terminal/i
+    );
+    expect(create?.notes.join(" ")).toMatch(
+      /base write plus psyche\.write[\s\S]*dedicated[\s\S]*psyche\.write/i
+    );
+
+    for (const entityType of ["event_type", "emotion_definition"]) {
+      const guide = onboarding.entityCatalog.find(
+        (entry) => entry.entityType === entityType
+      );
+      const guidance = guide?.relationshipRules?.join(" ") ?? "";
+      expect(guidance).toMatch(/hard-deleted.*idempotency key.*consumed/i);
+      expect(guidance).toMatch(
+        /Dedicated Psyche vocabulary routes[\s\S]*batch agent routes[\s\S]*base read or write/i
+      );
     }
   });
 
@@ -1861,6 +2045,36 @@ describe("forge onboarding contract", () => {
       behaviorCatalog?.fieldGuide?.find((field) => field.name === "repairPlan")
         ?.description
     ).toMatch(/recovery move[\s\S]*repairs, steadies, or returns/i);
+    const triggerReportCatalog = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "trigger_report"
+    );
+    const triggerReportFields = new Set(
+      triggerReportCatalog?.fieldGuide?.map((field) => field.name) ?? []
+    );
+    for (const field of [
+      "bodyCues",
+      "memoryClarity",
+      "reflection",
+      "interpretationConsent",
+      "hypothesis",
+      "hypothesisFit",
+      "hypothesisCorrection"
+    ]) {
+      expect(
+        triggerReportFields,
+        `trigger_report fieldGuide.${field}`
+      ).toContain(field);
+    }
+    const memoryClarityField = triggerReportCatalog?.fieldGuide?.find(
+      (field) => field.name === "memoryClarity"
+    );
+    expect(memoryClarityField?.defaultValue).toBe("unspecified");
+    expect(memoryClarityField?.enumValues).toEqual([
+      "unspecified",
+      "clear",
+      "partial",
+      "uncertain"
+    ]);
     expect(psycheByFocus.get("belief_entry")?.notes.join(" ")).toMatch(
       /rule or prediction[\s\S]*invite correction/i
     );
@@ -1896,6 +2110,27 @@ describe("forge onboarding contract", () => {
     );
     expect(psycheByFocus.get("trigger_report")?.notes.join(" ")).toMatch(
       /provisional draft[\s\S]*missing segments as missing[\s\S]*existing chain[\s\S]*newly true segment[\s\S]*what happened[\s\S]*inferred[\s\S]*hypothesis/i
+    );
+    const triggerReportGuidance = [
+      ...(psycheByFocus.get("trigger_report")?.askSequence ?? []),
+      ...(psycheByFocus.get("trigger_report")?.notes ?? [])
+    ].join(" ");
+    expect(triggerReportGuidance).toMatch(/read the exact report/i);
+    const triggerReportUpdateGuidance =
+      psycheByFocus
+        .get("trigger_report")
+        ?.notes.find((note) => note.startsWith("For an update,")) ?? "";
+    expect(triggerReportUpdateGuidance).toContain("read the current report");
+    expect(triggerReportUpdateGuidance).toContain("pass expectedRevision");
+    const triggerReportInterpretationGuidance =
+      psycheByFocus
+        .get("trigger_report")
+        ?.notes.find((note) => note.includes("interpretationConsent")) ?? "";
+    expect(triggerReportInterpretationGuidance).toContain(
+      "only after explicit interpretationConsent"
+    );
+    expect(triggerReportGuidance).toMatch(
+      /fits, partly fits, or does not fit[\s\S]*correction/i
     );
     expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /repeated emotional or relational stake/i
@@ -1974,6 +2209,8 @@ describe("forge onboarding contract", () => {
     const specializedSurfaceSchema =
       routeModelSchema?.properties?.specializedDomainSurfaces
         ?.additionalProperties;
+    const actionWorkflowSchema =
+      routeModelSchema?.properties?.actionEntities?.additionalProperties;
     const toolByName = new Map(
       onboarding.toolInputCatalog.map((tool) => [tool.toolName, tool])
     );
@@ -2015,6 +2252,24 @@ describe("forge onboarding contract", () => {
         expect(
           openApiMethodsByPath.get(route)?.has(method),
           `${surfaceName}.${routeKey} should exist in OpenAPI as ${method} ${route}`
+        ).toBe(true);
+      }
+    }
+
+    for (const [workflowName, workflow] of Object.entries(
+      onboarding.entityRouteModel.actionEntities
+    )) {
+      for (const routeKey of workflow.routeKeys) {
+        expect(
+          toolByName.has(workflow.routeTools[routeKey]),
+          `${workflowName}.${routeKey} tool should have an onboarding input guide`
+        ).toBe(true);
+        const { method, path } = parseMethodRoute(
+          workflow.methodRoutes[routeKey]
+        );
+        expect(
+          openApiMethodsByPath.get(path)?.has(method.toUpperCase()),
+          `${workflowName}.${routeKey} should exist in OpenAPI as ${method.toUpperCase()} ${path}`
         ).toBe(true);
       }
     }
@@ -2082,6 +2337,28 @@ describe("forge onboarding contract", () => {
           writeRoutes: expect.objectContaining({
             additionalProperties: { type: "string" }
           })
+        })
+      })
+    );
+    expect(actionWorkflowSchema).toEqual(
+      expect.objectContaining({
+        additionalProperties: true,
+        required: expect.arrayContaining([
+          "classification",
+          "aliases",
+          "summary",
+          "routeKeys",
+          "routeTools",
+          "methodRoutes",
+          "notes"
+        ]),
+        properties: expect.objectContaining({
+          classification: expect.objectContaining({
+            enum: ["action_workflow_entity"]
+          }),
+          routeKeys: expect.objectContaining({ type: "array" }),
+          routeTools: expect.objectContaining({ type: "object" }),
+          methodRoutes: expect.objectContaining({ type: "object" })
         })
       })
     );

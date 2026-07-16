@@ -1390,9 +1390,11 @@ test("knowledge graph routes return a unified graph and focused neighborhood", a
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
     const graphResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/knowledge-graph"
+      url: "/api/v1/knowledge-graph",
+      headers: { cookie: operatorCookie }
     });
 
     assert.equal(graphResponse.statusCode, 200);
@@ -1448,7 +1450,8 @@ test("knowledge graph routes return a unified graph and focused neighborhood", a
       method: "GET",
       url: `/api/v1/knowledge-graph/focus?entityType=${encodeURIComponent(
         focusCandidate.entityType
-      )}&entityId=${encodeURIComponent(focusCandidate.entityId)}`
+      )}&entityId=${encodeURIComponent(focusCandidate.entityId)}`,
+      headers: { cookie: operatorCookie }
     });
 
     assert.equal(focusResponse.statusCode, 200);
@@ -1573,7 +1576,7 @@ test("goal detail, operator context, and retroactive work logging are available 
         cookie: operatorCookie
       }
     });
-    assert.equal(operatorOverview.statusCode, 200);
+    assert.equal(operatorOverview.statusCode, 200, operatorOverview.body);
     const overview = (
       operatorOverview.json() as {
         overview: {
@@ -11735,12 +11738,22 @@ test("health probe can expose the effective runtime storage root for OpenClaw ru
         pid: number;
         storageRoot: string;
         basePath: string;
+        packageName: string | null;
+        packageVersion: string | null;
       };
     };
     assert.equal(body.ok, true);
     assert.equal(body.runtime?.pid, process.pid);
     assert.equal(body.runtime?.storageRoot, rootDir);
     assert.equal(body.runtime?.basePath, "/forge/");
+    assert.equal(
+      body.runtime?.packageName,
+      process.env.FORGE_RUNTIME_PACKAGE_NAME?.trim() || null
+    );
+    assert.equal(
+      body.runtime?.packageVersion,
+      process.env.FORGE_RUNTIME_PACKAGE_VERSION?.trim() || null
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -11771,12 +11784,22 @@ test("health probe reports the effective database root even when FORGE_DATA_ROOT
         pid: number;
         storageRoot: string;
         basePath: string;
+        packageName: string | null;
+        packageVersion: string | null;
       };
     };
     assert.equal(body.ok, true);
     assert.equal(body.runtime?.pid, process.pid);
     assert.equal(body.runtime?.storageRoot, rootDir);
     assert.equal(body.runtime?.basePath, "/forge/");
+    assert.equal(
+      body.runtime?.packageName,
+      process.env.FORGE_RUNTIME_PACKAGE_NAME?.trim() || null
+    );
+    assert.equal(
+      body.runtime?.packageVersion,
+      process.env.FORGE_RUNTIME_PACKAGE_VERSION?.trim() || null
+    );
   } finally {
     await app.close();
     closeDatabase();
@@ -12541,7 +12564,8 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
 
     const metricsResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/metrics"
+      url: "/api/v1/metrics",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(metricsResponse.statusCode, 200);
     const metricsBody = metricsResponse.json() as {
@@ -12646,7 +12670,8 @@ test("versioned API exposes stable reads and task-run writes for agents", async 
 
     const activityResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?entityType=task_run&limit=5"
+      url: "/api/v1/activity?entityType=task_run&limit=5",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(activityResponse.statusCode, 200);
     const activityBody = activityResponse.json() as {
@@ -13631,7 +13656,8 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
 
     const activityAfterFinish = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?limit=100"
+      url: "/api/v1/activity?limit=100",
+      headers: { cookie: operatorCookie }
     });
     const activityAfterFinishBody = activityAfterFinish.json() as {
       activity: Array<{
@@ -13659,7 +13685,8 @@ test("project lifecycle patching suspends, finishes, restarts, and keeps finish 
 
     const activityAfterSecondFinish = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?limit=100"
+      url: "/api/v1/activity?limit=100",
+      headers: { cookie: operatorCookie }
     });
     const activityAfterSecondFinishBody = activityAfterSecondFinish.json() as {
       activity: Array<{
@@ -15702,7 +15729,8 @@ test("activity correction hides removed events from the default archive", async 
 
     const initialActivity = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?limit=1"
+      url: "/api/v1/activity?limit=1",
+      headers: { cookie: operatorCookie }
     });
     const eventId = (
       initialActivity.json() as { activity: Array<{ id: string }> }
@@ -15720,7 +15748,8 @@ test("activity correction hides removed events from the default archive", async 
 
     const afterRemoval = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?limit=100"
+      url: "/api/v1/activity?limit=100",
+      headers: { cookie: operatorCookie }
     });
     const visibleIds = (
       afterRemoval.json() as { activity: Array<{ id: string }> }
@@ -15729,7 +15758,8 @@ test("activity correction hides removed events from the default archive", async 
 
     const correctedHistory = await app.inject({
       method: "GET",
-      url: "/api/v1/activity?limit=100&includeCorrected=true"
+      url: "/api/v1/activity?limit=100&includeCorrected=true",
+      headers: { cookie: operatorCookie }
     });
     const correctedIds = (
       correctedHistory.json() as { activity: Array<{ id: string }> }
@@ -18034,7 +18064,8 @@ test("activity endpoints capture mutations with source attribution", async () =>
 
     const activityResponse = await app.inject({
       method: "GET",
-      url: "/api/activity?limit=10"
+      url: "/api/activity?limit=10",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(activityResponse.statusCode, 200);
     const activity = (
@@ -19092,7 +19123,8 @@ test("direct calendar get routes list and fetch events, work blocks, and timebox
 
     const getTimebox = await app.inject({
       method: "GET",
-      url: `/api/v1/calendar/timeboxes/${timeboxId}`
+      url: `/api/v1/calendar/timeboxes/${timeboxId}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(getTimebox.statusCode, 200);
     assert.equal(
@@ -19203,7 +19235,8 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const listCatalogs = await app.inject({
       method: "GET",
-      url: "/api/v1/preferences/catalogs"
+      url: "/api/v1/preferences/catalogs",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(listCatalogs.statusCode, 200);
     assert.ok(
@@ -19214,7 +19247,8 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const listCatalogItems = await app.inject({
       method: "GET",
-      url: "/api/v1/preferences/catalog-items"
+      url: "/api/v1/preferences/catalog-items",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(listCatalogItems.statusCode, 200);
     assert.ok(
@@ -19247,13 +19281,15 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const getCatalog = await app.inject({
       method: "GET",
-      url: `/api/v1/preferences/catalogs/${catalogId}`
+      url: `/api/v1/preferences/catalogs/${catalogId}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(getCatalog.statusCode, 200);
 
     const getCatalogItem = await app.inject({
       method: "GET",
-      url: `/api/v1/preferences/catalog-items/${catalogItemId}`
+      url: `/api/v1/preferences/catalog-items/${catalogItemId}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(getCatalogItem.statusCode, 200);
 
@@ -20412,7 +20448,6 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     .sort();
   assert.deepEqual(immediateDeleteTypes, [
     "calendar_event",
-    "preference_catalog",
     "preference_catalog_item",
     "preference_context",
     "preference_item",
@@ -20425,6 +20460,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
   const binTypes = matrix
     .filter((entry) => entry.inBin)
     .map((entry) => entry.entityType);
+  assert.ok(binTypes.includes("preference_catalog"));
   assert.ok(!binTypes.includes("calendar_event"));
   assert.ok(!binTypes.includes("work_block_template"));
   assert.ok(!binTypes.includes("task_timebox"));
@@ -22033,6 +22069,16 @@ test("settings and local agent token management persist through the versioned AP
     );
     assert.equal(
       onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .todayPriority,
+      "/api/v1/today/priority"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
+        .today_priority,
+      "/api/v1/today/priority"
+    );
+    assert.equal(
+      onboardingBody.onboarding.entityRouteModel.readModelOnlySurfaces
         .sleep_overview,
       "/api/v1/health/sleep"
     );
@@ -22773,18 +22819,17 @@ test("collaboration routes persist insights, feedback, and approval-gated agent 
     });
     assert.equal(feedbackResponse.statusCode, 200);
 
-    const xpResponse = await app.inject({
+    const ledgerResponse = await app.inject({
       method: "GET",
-      url: "/api/v1/metrics/xp"
+      url: `/api/v1/rewards/ledger?entityType=goal&entityId=${encodeURIComponent(goalId)}&limit=200`,
+      headers: { cookie: operatorCookie }
     });
-    assert.equal(xpResponse.statusCode, 200);
-    const xpBody = xpResponse.json() as {
-      metrics: { recentLedger: Array<{ reasonTitle: string }> };
+    assert.equal(ledgerResponse.statusCode, 200);
+    const ledgerBody = ledgerResponse.json() as {
+      ledger: Array<{ reasonTitle: string }>;
     };
     assert.ok(
-      xpBody.metrics.recentLedger.some(
-        (entry) => entry.reasonTitle === "Insight applied"
-      )
+      ledgerBody.ledger.some((entry) => entry.reasonTitle === "Insight applied")
     );
 
     const actionResponse = await app.inject({

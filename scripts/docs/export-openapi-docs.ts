@@ -15,7 +15,10 @@ const document = buildOpenApiDocument();
 const payload = `${JSON.stringify(document, null, 2)}\n`;
 
 const pluginManifest = JSON.parse(
-  readFileSync(path.join(repoRoot, "plugins/openclaw/openclaw.plugin.json"), "utf8")
+  readFileSync(
+    path.join(repoRoot, "plugins/openclaw/openclaw.plugin.json"),
+    "utf8"
+  )
 ) as { contracts?: { tools?: string[] } };
 
 type ToolCatalogEntry = (typeof AGENT_ONBOARDING_TOOL_INPUT_CATALOG)[number];
@@ -124,8 +127,11 @@ registerForgePluginTools(
 const documentedToolNames = new Set(
   AGENT_ONBOARDING_TOOL_INPUT_CATALOG.flatMap(splitCatalogToolNames)
 );
+const generatedAt = process.env.FORGE_DOCS_GENERATED_AT?.trim()
+  ? new Date(process.env.FORGE_DOCS_GENERATED_AT).toISOString()
+  : new Date().toISOString();
 const agentToolsPayload = {
-  generatedAt: new Date().toISOString(),
+  generatedAt,
   source: {
     manifest: "plugins/openclaw/openclaw.plugin.json",
     onboardingCatalog: "apps/api/src/app.ts#AGENT_ONBOARDING_TOOL_INPUT_CATALOG"

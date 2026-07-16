@@ -4,20 +4,68 @@ import { activityEventSchema, noteSchema, userSummarySchema } from "./types.js";
 const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const uniqueStringArraySchema = z.array(nonEmptyTrimmedString);
-const optionalOwnedUserIdSchema = z.string().trim().min(1).nullable().optional();
+const triggerShortTextSchema = trimmedString.max(500);
+const triggerNarrativeSchema = trimmedString.max(6_000);
+const triggerIdSchema = nonEmptyTrimmedString.max(160);
+const triggerTextListSchema = z.array(triggerShortTextSchema).max(40);
+const triggerIdListSchema = z.array(triggerIdSchema).max(100);
+const optionalOwnedUserIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .nullable()
+  .optional();
 const ownedEntityFieldsSchema = {
   userId: optionalOwnedUserIdSchema,
   user: userSummarySchema.nullable().optional()
 };
 
-export const triggerReportStatusSchema = z.enum(["draft", "reviewed", "integrated"]);
+export const triggerReportStatusSchema = z.enum([
+  "draft",
+  "reviewed",
+  "integrated"
+]);
+export const triggerMemoryClaritySchema = z.enum([
+  "unspecified",
+  "clear",
+  "partial",
+  "uncertain"
+]);
+export const triggerHypothesisFitSchema = z.enum([
+  "not_reviewed",
+  "fits",
+  "partly_fits",
+  "does_not_fit"
+]);
 export const behaviorKindSchema = z.enum(["away", "committed", "recovery"]);
 export const beliefTypeSchema = z.enum(["absolute", "conditional"]);
-export const modeFamilySchema = z.enum(["coping", "child", "critic_parent", "healthy_adult", "happy_child"]);
+export const modeFamilySchema = z.enum([
+  "coping",
+  "child",
+  "critic_parent",
+  "healthy_adult",
+  "happy_child"
+]);
 export const schemaTypeSchema = z.enum(["maladaptive", "adaptive"]);
-export const flashcardTypographySchema = z.enum(["serif", "sans", "mono", "display"]);
-export const flashcardLayoutSchema = z.enum(["centered", "top_left", "image_split", "poster"]);
-export const flashcardVisualStyleSchema = z.enum(["calm", "urgent", "warm", "clinical", "playful"]);
+export const flashcardTypographySchema = z.enum([
+  "serif",
+  "sans",
+  "mono",
+  "display"
+]);
+export const flashcardLayoutSchema = z.enum([
+  "centered",
+  "top_left",
+  "image_split",
+  "poster"
+]);
+export const flashcardVisualStyleSchema = z.enum([
+  "calm",
+  "urgent",
+  "warm",
+  "clinical",
+  "playful"
+]);
 
 export const PSYCHE_ENTITY_TYPES = [
   "psyche_value",
@@ -25,8 +73,11 @@ export const PSYCHE_ENTITY_TYPES = [
   "behavior",
   "belief_entry",
   "mode_profile",
+  "mode_guide_session",
   "flashcard",
-  "trigger_report"
+  "trigger_report",
+  "event_type",
+  "emotion_definition"
 ] as const;
 
 export const domainSchema = z.object({
@@ -271,6 +322,7 @@ export const triggerReportSchema = z.object({
   customEventType: trimmedString,
   eventSituation: trimmedString,
   occurredAt: z.string().nullable(),
+  bodyCues: z.array(trimmedString).default([]),
   emotions: z.array(triggerEmotionSchema).default([]),
   thoughts: z.array(triggerThoughtSchema).default([]),
   behaviors: z.array(triggerBehaviorSchema).default([]),
@@ -287,6 +339,13 @@ export const triggerReportSchema = z.object({
   schemaLinks: z.array(trimmedString).default([]),
   modeTimeline: z.array(modeTimelineEntrySchema).default([]),
   nextMoves: z.array(trimmedString).default([]),
+  memoryClarity: triggerMemoryClaritySchema.default("unspecified"),
+  reflection: trimmedString.default(""),
+  hypothesis: trimmedString.default(""),
+  hypothesisFit: triggerHypothesisFitSchema.default("not_reviewed"),
+  hypothesisCorrection: trimmedString.default(""),
+  interpretationConsent: z.boolean().default(false),
+  revision: z.number().int().positive(),
   createdAt: z.string(),
   updatedAt: z.string(),
   ...ownedEntityFieldsSchema
@@ -342,6 +401,27 @@ export const devrageMetricPayloadSchema = z.object({
   })
 });
 
+export const psycheMetricFamilySchema = z.enum([
+  "mood",
+  "urges",
+  "selfRegulation",
+  "conversation",
+  "other"
+]);
+
+export const psycheMetricSourceRecordSchema = z.object({
+  sourceType: z.enum(["trigger_report", "conversation"]),
+  sourceId: z.string(),
+  label: z.string(),
+  href: z.string().nullable(),
+  observedAt: z.string(),
+  recordedAt: z.string(),
+  ownerUserId: z.string().nullable(),
+  ownerDisplayName: z.string().nullable(),
+  value: z.number().nullable(),
+  sampleCount: z.number().int().nonnegative()
+});
+
 export const psycheMetricDayRecordSchema = z.object({
   dateKey: z.string(),
   average: z.number().nullable(),
@@ -350,7 +430,8 @@ export const psycheMetricDayRecordSchema = z.object({
   latest: z.number().nullable(),
   total: z.number().nullable(),
   sampleCount: z.number().int().nonnegative(),
-  latestSampleAt: z.string().nullable()
+  latestSampleAt: z.string().nullable(),
+  sourceRecords: z.array(psycheMetricSourceRecordSchema)
 });
 
 export const psycheMetricsViewDataSchema = z.object({
@@ -365,6 +446,14 @@ export const psycheMetricsViewDataSchema = z.object({
         category: z.string(),
         metricCount: z.number().int().nonnegative(),
         coverageDays: z.number().int().nonnegative()
+      })
+    ),
+    familyAvailability: z.array(
+      z.object({
+        family: psycheMetricFamilySchema.exclude(["other"]),
+        status: z.enum(["available", "no_data", "unsupported"]),
+        metricCount: z.number().int().nonnegative(),
+        reason: z.string()
       })
     )
   }),
@@ -391,15 +480,73 @@ export const psycheMetricsViewDataSchema = z.object({
       fullSyncCompletedAt: z.string().nullable(),
       lastDailySyncAt: z.string().nullable(),
       lastSyncedDateKey: z.string().nullable()
-    })
+    }),
+    freshness: z.object({
+      status: z.enum([
+        "current",
+        "stale",
+        "partial",
+        "not_synced",
+        "not_applicable"
+      ]),
+      lastSuccessfulAt: z.string().nullable(),
+      lastAttemptAt: z.string().nullable(),
+      warningCount: z.number().int().nonnegative(),
+      warnings: z.array(z.string())
+    }),
+    ownerScope: z.object({
+      mode: z.enum(["unscoped_all_data", "scoped"]),
+      effectiveUserIds: z.array(z.string()),
+      availableOwners: z.array(
+        z.object({
+          userId: z.string(),
+          displayName: z.string()
+        })
+      ),
+      filterMode: z.enum(["all_data", "server_attribution"]),
+      serverEnforced: z.boolean(),
+      unattributedRecordCount: z.number().int().nonnegative(),
+      limitation: z.string()
+    }),
+    sources: z.array(
+      z.object({
+        sourceId: z.string(),
+        label: z.string(),
+        kind: z.enum(["trigger_reports", "conversation_scanner"]),
+        recordCount: z.number().int().nonnegative(),
+        linkedRecordCount: z.number().int().nonnegative(),
+        href: z.string().nullable(),
+        ownerAttribution: z.enum(["attributed", "unattributed", "mixed"])
+      })
+    ),
+    dataQualityWarnings: z.array(z.string())
   }),
   metrics: z.array(
     z.object({
       metric: z.string(),
       label: z.string(),
+      family: psycheMetricFamilySchema,
       category: z.string(),
       unit: z.string(),
       aggregation: z.enum(["discrete", "cumulative"]),
+      cadence: z.enum(["daily", "event_based"]),
+      sampleUnit: z.string(),
+      definition: z.object({
+        description: z.string(),
+        calculation: z.string(),
+        interpretation: z.string(),
+        missingness: z.string()
+      }),
+      confidence: z.object({
+        status: z.literal("not_estimated"),
+        rationale: z.string()
+      }),
+      source: z.object({
+        kind: z.enum(["trigger_reports", "conversation_scanner"]),
+        label: z.string(),
+        href: z.string().nullable(),
+        ownerAttribution: z.enum(["attributed", "unattributed", "mixed"])
+      }),
       latestValue: z.number().nullable(),
       latestDateKey: z.string().nullable(),
       baselineValue: z.number().nullable(),
@@ -482,7 +629,8 @@ export const createBehaviorPatternSchema = z.object({
   userId: optionalOwnedUserIdSchema
 });
 
-export const updateBehaviorPatternSchema = createBehaviorPatternSchema.partial();
+export const updateBehaviorPatternSchema =
+  createBehaviorPatternSchema.partial();
 
 export const createBehaviorSchema = z.object({
   kind: behaviorKindSchema,
@@ -548,7 +696,8 @@ export const createModeGuideSessionSchema = z.object({
   userId: optionalOwnedUserIdSchema
 });
 
-export const updateModeGuideSessionSchema = createModeGuideSessionSchema.partial();
+export const updateModeGuideSessionSchema =
+  createModeGuideSessionSchema.partial();
 
 export const createFlashcardSchema = z.object({
   title: trimmedString.default(""),
@@ -575,55 +724,140 @@ export const createFlashcardSchema = z.object({
 
 export const updateFlashcardSchema = createFlashcardSchema.partial();
 
-export const createEventTypeSchema = z.object({
-  label: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  userId: optionalOwnedUserIdSchema
-});
+export const createEventTypeSchema = z
+  .object({
+    label: nonEmptyTrimmedString.max(160),
+    description: trimmedString.max(2_000).default(""),
+    userId: optionalOwnedUserIdSchema
+  })
+  .strict();
 
 export const updateEventTypeSchema = createEventTypeSchema.partial();
 
-export const createEmotionDefinitionSchema = z.object({
-  label: nonEmptyTrimmedString,
-  description: trimmedString.default(""),
-  category: trimmedString.default(""),
-  userId: optionalOwnedUserIdSchema
+export const createEmotionDefinitionSchema = z
+  .object({
+    label: nonEmptyTrimmedString.max(160),
+    description: trimmedString.max(2_000).default(""),
+    category: trimmedString.max(160).default(""),
+    userId: optionalOwnedUserIdSchema
+  })
+  .strict();
+
+export const updateEmotionDefinitionSchema =
+  createEmotionDefinitionSchema.partial();
+
+const triggerEmotionInputSchema = triggerEmotionSchema
+  .omit({ id: true })
+  .extend({
+    id: triggerIdSchema.optional(),
+    emotionDefinitionId: triggerIdSchema.nullable().default(null),
+    label: nonEmptyTrimmedString.max(160),
+    note: triggerShortTextSchema.default("")
+  });
+
+const triggerThoughtInputSchema = triggerThoughtSchema
+  .omit({ id: true })
+  .extend({
+    id: triggerIdSchema.optional(),
+    text: nonEmptyTrimmedString.max(2_000),
+    parentMode: triggerShortTextSchema.default(""),
+    criticMode: triggerShortTextSchema.default(""),
+    beliefId: triggerIdSchema.nullable().default(null)
+  });
+
+const triggerBehaviorInputSchema = triggerBehaviorSchema
+  .omit({ id: true })
+  .extend({
+    id: triggerIdSchema.optional(),
+    text: nonEmptyTrimmedString.max(2_000),
+    mode: triggerShortTextSchema.default(""),
+    behaviorId: triggerIdSchema.nullable().default(null)
+  });
+
+const triggerModeTimelineInputSchema = modeTimelineEntrySchema
+  .omit({ id: true })
+  .extend({
+    id: triggerIdSchema.optional(),
+    stage: nonEmptyTrimmedString.max(80),
+    modeId: triggerIdSchema.nullable(),
+    label: nonEmptyTrimmedString.max(160),
+    note: triggerShortTextSchema.default("")
+  });
+
+const triggerConsequencesInputSchema = z.object({
+  selfShortTerm: triggerTextListSchema.default([]),
+  selfLongTerm: triggerTextListSchema.default([]),
+  othersShortTerm: triggerTextListSchema.default([]),
+  othersLongTerm: triggerTextListSchema.default([])
 });
 
-export const updateEmotionDefinitionSchema = createEmotionDefinitionSchema.partial();
-
 export const createTriggerReportSchema = z.object({
-  title: nonEmptyTrimmedString,
+  title: nonEmptyTrimmedString.max(200),
   status: triggerReportStatusSchema.default("draft"),
-  eventTypeId: z.string().nullable().default(null),
-  customEventType: trimmedString.default(""),
-  eventSituation: trimmedString.default(""),
-  occurredAt: trimmedString.nullable().default(null),
-  emotions: z.array(triggerEmotionSchema.omit({ id: true }).extend({ id: z.string().optional() })).default([]),
-  thoughts: z.array(triggerThoughtSchema.omit({ id: true }).extend({ id: z.string().optional() })).default([]),
-  behaviors: z.array(triggerBehaviorSchema.omit({ id: true }).extend({ id: z.string().optional() })).default([]),
-  consequences: triggerConsequencesSchema.default({
+  eventTypeId: triggerIdSchema.nullable().default(null),
+  customEventType: triggerShortTextSchema.default(""),
+  eventSituation: triggerNarrativeSchema.default(""),
+  occurredAt: z
+    .string()
+    .trim()
+    .datetime({ offset: true })
+    .nullable()
+    .default(null),
+  bodyCues: triggerTextListSchema.default([]),
+  emotions: z.array(triggerEmotionInputSchema).max(40).default([]),
+  thoughts: z.array(triggerThoughtInputSchema).max(40).default([]),
+  behaviors: z.array(triggerBehaviorInputSchema).max(40).default([]),
+  consequences: triggerConsequencesInputSchema.default({
     selfShortTerm: [],
     selfLongTerm: [],
     othersShortTerm: [],
     othersLongTerm: []
   }),
-  linkedPatternIds: uniqueStringArraySchema.default([]),
-  linkedValueIds: uniqueStringArraySchema.default([]),
-  linkedGoalIds: uniqueStringArraySchema.default([]),
-  linkedProjectIds: uniqueStringArraySchema.default([]),
-  linkedTaskIds: uniqueStringArraySchema.default([]),
-  linkedBehaviorIds: uniqueStringArraySchema.default([]),
-  linkedBeliefIds: uniqueStringArraySchema.default([]),
-  linkedModeIds: uniqueStringArraySchema.default([]),
-  modeOverlays: z.array(trimmedString).default([]),
-  schemaLinks: z.array(trimmedString).default([]),
-  modeTimeline: z.array(modeTimelineEntrySchema.omit({ id: true }).extend({ id: z.string().optional() })).default([]),
-  nextMoves: z.array(trimmedString).default([]),
+  linkedPatternIds: triggerIdListSchema.default([]),
+  linkedValueIds: triggerIdListSchema.default([]),
+  linkedGoalIds: triggerIdListSchema.default([]),
+  linkedProjectIds: triggerIdListSchema.default([]),
+  linkedTaskIds: triggerIdListSchema.default([]),
+  linkedBehaviorIds: triggerIdListSchema.default([]),
+  linkedBeliefIds: triggerIdListSchema.default([]),
+  linkedModeIds: triggerIdListSchema.default([]),
+  modeOverlays: triggerTextListSchema.default([]),
+  schemaLinks: triggerTextListSchema.default([]),
+  modeTimeline: z.array(triggerModeTimelineInputSchema).max(40).default([]),
+  nextMoves: triggerTextListSchema.default([]),
+  memoryClarity: triggerMemoryClaritySchema.default("unspecified"),
+  reflection: triggerNarrativeSchema.default(""),
+  hypothesis: triggerNarrativeSchema.default(""),
+  hypothesisFit: triggerHypothesisFitSchema.default("not_reviewed"),
+  hypothesisCorrection: triggerNarrativeSchema.default(""),
+  interpretationConsent: z.boolean().default(false),
   userId: optionalOwnedUserIdSchema
 });
 
-export const updateTriggerReportSchema = createTriggerReportSchema.partial();
+export const updateTriggerReportSchema = createTriggerReportSchema
+  .partial()
+  .extend({ expectedRevision: z.number().int().positive() });
+
+export const triggerReportRouteUpdateSchema = updateTriggerReportSchema.extend({
+  expectedRevision: z.number().int().positive()
+});
+
+export const triggerReportListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().trim().max(1_024).optional(),
+  userId: z.string().trim().max(160).optional(),
+  userIds: z
+    .union([z.string().trim().max(2_000), z.array(z.string().trim().max(160))])
+    .optional()
+});
+
+export const triggerReportPageSchema = z.object({
+  reports: z.array(triggerReportSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  nextCursor: z.string().nullable(),
+  hasMore: z.boolean()
+});
 
 export type Domain = z.infer<typeof domainSchema>;
 export type SchemaCatalogEntry = z.infer<typeof schemaCatalogEntrySchema>;
@@ -641,7 +875,9 @@ export type TriggerReport = z.infer<typeof triggerReportSchema>;
 export type DevrageMetricPayload = z.infer<typeof devrageMetricPayloadSchema>;
 export type PsycheMetricsViewData = z.infer<typeof psycheMetricsViewDataSchema>;
 export type PsycheOverviewPayload = z.infer<typeof psycheOverviewPayloadSchema>;
-export type PsycheObservationEntry = z.infer<typeof psycheObservationEntrySchema>;
+export type PsycheObservationEntry = z.infer<
+  typeof psycheObservationEntrySchema
+>;
 export type PsycheObservationActivityEntry = z.infer<
   typeof psycheObservationActivityEntrySchema
 >;
@@ -650,21 +886,37 @@ export type PsycheObservationCalendarPayload = z.infer<
 >;
 export type CreatePsycheValueInput = z.infer<typeof createPsycheValueSchema>;
 export type UpdatePsycheValueInput = z.infer<typeof updatePsycheValueSchema>;
-export type CreateBehaviorPatternInput = z.infer<typeof createBehaviorPatternSchema>;
-export type UpdateBehaviorPatternInput = z.infer<typeof updateBehaviorPatternSchema>;
+export type CreateBehaviorPatternInput = z.infer<
+  typeof createBehaviorPatternSchema
+>;
+export type UpdateBehaviorPatternInput = z.infer<
+  typeof updateBehaviorPatternSchema
+>;
 export type CreateBehaviorInput = z.infer<typeof createBehaviorSchema>;
 export type UpdateBehaviorInput = z.infer<typeof updateBehaviorSchema>;
 export type CreateBeliefEntryInput = z.infer<typeof createBeliefEntrySchema>;
 export type UpdateBeliefEntryInput = z.infer<typeof updateBeliefEntrySchema>;
 export type CreateModeProfileInput = z.infer<typeof createModeProfileSchema>;
 export type UpdateModeProfileInput = z.infer<typeof updateModeProfileSchema>;
-export type CreateModeGuideSessionInput = z.infer<typeof createModeGuideSessionSchema>;
-export type UpdateModeGuideSessionInput = z.infer<typeof updateModeGuideSessionSchema>;
+export type CreateModeGuideSessionInput = z.infer<
+  typeof createModeGuideSessionSchema
+>;
+export type UpdateModeGuideSessionInput = z.infer<
+  typeof updateModeGuideSessionSchema
+>;
 export type CreateFlashcardInput = z.infer<typeof createFlashcardSchema>;
 export type UpdateFlashcardInput = z.infer<typeof updateFlashcardSchema>;
 export type CreateEventTypeInput = z.infer<typeof createEventTypeSchema>;
 export type UpdateEventTypeInput = z.infer<typeof updateEventTypeSchema>;
-export type CreateEmotionDefinitionInput = z.infer<typeof createEmotionDefinitionSchema>;
-export type UpdateEmotionDefinitionInput = z.infer<typeof updateEmotionDefinitionSchema>;
-export type CreateTriggerReportInput = z.infer<typeof createTriggerReportSchema>;
-export type UpdateTriggerReportInput = z.infer<typeof updateTriggerReportSchema>;
+export type CreateEmotionDefinitionInput = z.infer<
+  typeof createEmotionDefinitionSchema
+>;
+export type UpdateEmotionDefinitionInput = z.infer<
+  typeof updateEmotionDefinitionSchema
+>;
+export type CreateTriggerReportInput = z.input<
+  typeof createTriggerReportSchema
+>;
+export type UpdateTriggerReportInput = z.input<
+  typeof updateTriggerReportSchema
+>;

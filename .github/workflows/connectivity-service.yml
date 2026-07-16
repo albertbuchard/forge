@@ -1,0 +1,87 @@
+name: Forge Connectivity Service
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/connectivity-service.yml"
+      - ".github/workflows/people-sharing-release-gate.yml"
+      - ".github/workflows/release-connectivity-service.yml"
+      - "packages/forge-connectivity-service/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/ci/check-people-sharing-*.mjs"
+      - "scripts/ci/check-public-release-privacy*.mjs"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/connectivity-service.yml"
+      - ".github/workflows/people-sharing-release-gate.yml"
+      - ".github/workflows/release-connectivity-service.yml"
+      - "packages/forge-connectivity-service/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/ci/check-people-sharing-*.mjs"
+      - "scripts/ci/check-public-release-privacy*.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connectivity-service-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  people-release-gate:
+    name: Canonical People release gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/people-sharing-release-gate.yml
+    with:
+      release: false
+      source_sha: ${{ github.sha }}
+
+  verify:
+    needs: people-release-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24.18.0"
+          cache: npm
+          cache-dependency-path: packages/forge-connectivity-service/package-lock.json
+
+      - name: Set up Safe Chain
+        run: ./scripts/ci/setup-safe-chain-ci.sh
+
+      - name: Use the package-pinned npm release
+        run: npm install --global npm@11.12.1
+
+      - name: Install dependencies without lifecycle scripts
+        working-directory: packages/forge-connectivity-service
+        run: npm ci --ignore-scripts
+
+      - name: Verify service, contracts, package, and security gates
+        working-directory: packages/forge-connectivity-service
+        run: |
+          npm run verify
+          npm run audit
+
+      - name: Build the production container
+        working-directory: packages/forge-connectivity-service
+        run: |
+          docker build \
+            --build-arg SERVICE_VERSION="$(node -p "require('./package.json').version")" \
+            --build-arg VCS_REF="${GITHUB_SHA}" \
+            --build-arg BUILD_DATE="$(git show -s --format=%cI "${GITHUB_SHA}")" \
+            --tag forge-connectivity-service:ci \
+            .

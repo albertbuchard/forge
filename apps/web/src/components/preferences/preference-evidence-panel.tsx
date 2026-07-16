@@ -1,4 +1,5 @@
 import type { PreferenceItemScore } from "@/lib/types";
+import { SIGNAL_OPTIONS } from "./preferences-workspace-model";
 
 export function PreferenceEvidencePanel({
   score,
@@ -14,6 +15,12 @@ export function PreferenceEvidencePanel({
     typeof score.manualScore === "number" ||
     typeof score.confidenceLock === "number" ||
     score.frozen;
+  const directSignal = score.effectiveSignal;
+  const directSignalLabel = directSignal
+    ? (SIGNAL_OPTIONS.find(
+        (option) => option.signalType === directSignal.signalType
+      )?.label ?? directSignal.signalType.replaceAll("_", " "))
+    : null;
 
   return (
     <div className="grid gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4">
@@ -40,6 +47,29 @@ export function PreferenceEvidencePanel({
           </div>
         ))}
       </div>
+      {directSignal ? (
+        <div className="rounded-[14px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-3 text-sm leading-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-[var(--ui-ink-strong)]">
+              Current direct mark: {directSignalLabel}
+            </span>
+            <span className="text-[var(--ui-ink-faint)]">
+              {directSignal.signalType === "neutral"
+                ? "No direct weight"
+                : `${directSignal.modelWeight >= 0 ? "+" : ""}${directSignal.modelWeight.toFixed(2)} raw weight`}
+            </span>
+          </div>
+          <div className="text-[var(--ui-ink-soft)]">
+            {directSignal.signalType === "neutral"
+              ? "The prior direct effect is cleared. Earlier marks remain in history, and only other evidence affects this score."
+              : `Recorded by ${directSignal.actor ?? "an earlier Forge client"} through ${directSignal.source}.`}
+          </div>
+        </div>
+      ) : (
+        <div className="text-sm text-[var(--ui-ink-soft)]">
+          No direct mark is active in this context.
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         {[
           ["Wins", score.pairwiseWins],
@@ -69,7 +99,7 @@ export function PreferenceEvidencePanel({
       )}
       {score.conflictCount > 0 ? (
         <div className="rounded-[14px] bg-[var(--ui-warning-soft)] px-3 py-2 text-sm text-[var(--ui-ink-medium)]">
-          {score.conflictCount} conflicting signal
+          {score.conflictCount} evidence conflict
           {score.conflictCount === 1 ? " reduces" : "s reduce"} confidence.
         </div>
       ) : null}

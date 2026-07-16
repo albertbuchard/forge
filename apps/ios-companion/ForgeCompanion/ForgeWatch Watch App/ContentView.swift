@@ -2,7 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var appModel: WatchAppModel
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     @StateObject private var navigation = WatchNavigationModel()
+    @StateObject private var peoplePrivacy = ForgeWatchPeoplePrivacyMonitor()
     @State private var selectedHabit: ForgeWatchHabitSummary?
     @State private var selectedCommand: WatchCommandModalItem?
     @FocusState private var crownFocused: Bool
@@ -23,13 +26,20 @@ struct ContentView: View {
                         bootstrap: appModel.bootstrap,
                         snapshotFreshness: appModel.snapshotFreshness(now: context.date),
                         snapshotSource: appModel.snapshotSource,
+                        refreshState: appModel.refreshState,
                         directMetric: appModel.lastDirectSyncMetric,
                         pendingActionCount: appModel.pendingActionCount,
                         latestReceipt: appModel.latestReceipt,
+                        peoplePresentation: ForgeWatchPeopleDisplayPolicy.presentation(
+                            snapshot: appModel.bootstrap.people,
+                            context: peoplePrivacyContext,
+                            now: context.date
+                        ),
                         onHabitTap: { selectedHabit = $0 },
                         onCommandTap: { selectedCommand = $0 },
                         onCommand: appModel.queueCommand,
                         onCapture: appModel.queueCaptureEvent,
+                        onContinueOnPhone: appModel.continueOnPhone,
                         onRefresh: { appModel.requestForgeRefresh(reason: "surface_refresh", force: true) },
                         onRetry: { appModel.flushPendingActions(forceDirect: true) }
                     )
@@ -55,7 +65,11 @@ struct ContentView: View {
             appModel.consumePendingLaunchDestination()
             navigation.selectSurface(appModel.selectedSurface)
             crownFocused = true
+            peoplePrivacy.refresh()
             appModel.requestForgeRefresh(reason: "watch_open")
+        }
+        .onChange(of: scenePhase) { _, _ in
+            peoplePrivacy.refresh()
         }
         .onChange(of: navigation.crownValue) { _, value in
             withAnimation(.snappy(duration: 0.22)) {
@@ -82,22 +96,41 @@ struct ContentView: View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(surfaceTitle(navigation.selectedSurface))
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(
+                        size: navigation.selectedSurface == .people ? 14 : 18,
+                        weight: .bold,
+                        design: .rounded
+                    ))
                     .foregroundStyle(WatchTheme.textPrimary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
 
-                TimelineView(.periodic(from: Date(), by: 60)) { context in
-                    Text(snapshotSummary(now: context.date))
-                        .foregroundStyle(snapshotStatusTint(now: context.date))
-                        .accessibilityLabel(snapshotAccessibilityLabel(now: context.date))
+                Group {
+                    if navigation.selectedSurface == .people,
+                       peoplePrivacyContext != .unlockedActive
+                    {
+                        Text("Private")
+                            .foregroundStyle(WatchTheme.textMuted)
+                            .accessibilityLabel("Forge People private")
+                    } else {
+                        TimelineView(.periodic(from: Date(), by: 60)) { context in
+                            Text(snapshotSummary(now: context.date))
+                                .foregroundStyle(snapshotStatusTint(now: context.date))
+                                .accessibilityLabel(snapshotAccessibilityLabel(now: context.date))
+                        }
+                    }
                 }
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .lineLimit(1)
 
-                Text(appModel.lastStatusMessage)
-                    .font(.system(size: 8, weight: .medium, design: .rounded))
-                    .foregroundStyle(WatchTheme.textMuted)
-                    .lineLimit(1)
+                if navigation.selectedSurface != .people ||
+                    peoplePrivacyContext == .unlockedActive
+                {
+                    Text(appModel.lastStatusMessage)
+                        .font(.system(size: 8, weight: .medium, design: .rounded))
+                        .foregroundStyle(WatchTheme.textMuted)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 4)
@@ -160,9 +193,22 @@ struct ContentView: View {
     }
 
     private func surfaceTitle(_ surface: WatchSurface) -> String {
-        appModel.bootstrap.surfaces?
+        if surface == .people { return "Forge People" }
+        return appModel.bootstrap.surfaces?
             .first(where: { $0.id == surface.rawValue })?
             .title ?? surface.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private var peoplePrivacyContext: ForgeWatchPeoplePrivacyContext {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--forge-watch-preview") ||
+            arguments.contains("--forge-watch-screenshot-fixture")
+        {
+            return .screenshotFixture
+        }
+        guard scenePhase == .active else { return .inactive }
+        if isLuminanceReduced { return .alwaysOn }
+        return peoplePrivacy.isUnlocked ? .unlockedActive : .locked
     }
 }
 
@@ -172,13 +218,16 @@ private struct WatchSurfacePager: View {
     let bootstrap: ForgeWatchBootstrap
     let snapshotFreshness: ForgeWatchSnapshotFreshness
     let snapshotSource: ForgeWatchSnapshotSource
+    let refreshState: ForgeWatchRefreshState
     let directMetric: ForgeWatchDirectSyncMetric?
     let pendingActionCount: Int
     let latestReceipt: ForgeWatchStoredReceipt?
+    let peoplePresentation: ForgeWatchPeoplePresentation
     let onHabitTap: (ForgeWatchHabitSummary) -> Void
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
+    let onContinueOnPhone: (ForgeWatchPhoneDestination) -> Void
     let onRefresh: () -> Void
     let onRetry: () -> Void
 
@@ -213,18 +262,32 @@ private struct WatchSurfacePager: View {
                 )
             case .goals:
                 GoalSurface(
-                    goals: bootstrap.goals ?? [],
-                    projects: bootstrap.projects ?? [],
+                    goals: bootstrap.goals,
+                    totalGoalCount: bootstrap.goalCount,
+                    projects: bootstrap.projects,
+                    totalProjectCount: bootstrap.projectCount,
+                    uiBaseUrl: bootstrap.connection?.uiBaseUrl,
+                    snapshotFreshness: snapshotFreshness,
+                    snapshotSource: snapshotSource,
+                    refreshState: refreshState,
                     selection: navigation.cardIndexBinding(for: surface),
-                    onCapture: onCapture
+                    onCapture: onCapture,
+                    onContinueOnPhone: onContinueOnPhone,
+                    onRefresh: onRefresh
                 )
             case .today:
                 TodaySurface(
                     today: bootstrap.today,
+                    uiBaseUrl: bootstrap.connection?.uiBaseUrl,
+                    snapshotFreshness: snapshotFreshness,
+                    snapshotSource: snapshotSource,
+                    refreshState: refreshState,
                     selection: navigation.cardIndexBinding(for: surface),
                     onCommandTap: onCommandTap,
                     onCommand: onCommand,
-                    onCapture: onCapture
+                    onCapture: onCapture,
+                    onContinueOnPhone: onContinueOnPhone,
+                    onRefresh: onRefresh
                 )
             case .health:
                 HealthSurface(
@@ -244,6 +307,8 @@ private struct WatchSurfacePager: View {
                     selection: navigation.cardIndexBinding(for: surface),
                     onCapture: onCapture
                 )
+            case .people:
+                PeopleGlanceSurface(presentation: peoplePresentation)
             case .inbox:
                 InboxSurface(
                     prompts: bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts,
@@ -267,6 +332,9 @@ private struct WatchSurfacePager: View {
         .animation(.snappy(duration: 0.24), value: surface)
         .onAppear {
             navigation.registerCardCount(cardCount, for: surface)
+            if let previewCardIndex {
+                navigation.selectCard(previewCardIndex, for: surface)
+            }
         }
         .onChange(of: cardCount) { _, count in
             navigation.registerCardCount(count, for: surface)
@@ -285,9 +353,19 @@ private struct WatchSurfacePager: View {
         case .habits:
             return max(1, bootstrap.habits.count)
         case .goals:
-            return max(1, (bootstrap.goals?.count ?? 0) + (bootstrap.projects?.count ?? 0))
+            let hasPayload = bootstrap.goals != nil || bootstrap.projects != nil
+            guard hasPayload else { return 1 }
+            let presentation = ForgeWatchGoalsPresentation(
+                goals: bootstrap.goals ?? [],
+                projects: bootstrap.projects ?? [],
+                totalGoalCount: bootstrap.goalCount,
+                totalProjectCount: bootstrap.projectCount
+            )
+            return presentation.cardCount + compactNoticeCount(hasPayload: true)
         case .today:
-            return max(1, 1 + (bootstrap.today?.dueTasks.count ?? 0))
+            guard let today = bootstrap.today else { return 1 }
+            return ForgeWatchTodayPresentation(today: today).cardCount
+                + compactNoticeCount(hasPayload: true)
         case .health:
             return max(1, 1 + (bootstrap.health?.lastWorkout == nil ? 0 : 1))
         case .movement:
@@ -297,6 +375,8 @@ private struct WatchSurfacePager: View {
             )
         case .psyche:
             return max(1, psycheCardCount(bootstrap.psyche))
+        case .people:
+            return 1
         case .inbox:
             let prompts = bootstrap.inbox?.prompts ?? bootstrap.pendingPrompts
             let attentionCards = bootstrap.inbox?.attention.map { 1 + $0.items.count } ?? 0
@@ -305,6 +385,20 @@ private struct WatchSurfacePager: View {
         case .sync:
             return 1
         }
+    }
+
+    private func compactNoticeCount(hasPayload: Bool) -> Int {
+        ForgeWatchCompactSurfacePolicy.notice(
+            hasPayload: hasPayload,
+            freshness: snapshotFreshness,
+            refreshState: refreshState
+        ) == .none ? 0 : 1
+    }
+
+    private var previewCardIndex: Int? {
+        ProcessInfo.processInfo.arguments
+            .first(where: { $0.hasPrefix("--forge-watch-card=") })
+            .flatMap { Int($0.replacingOccurrences(of: "--forge-watch-card=", with: "")) }
     }
 }
 
@@ -361,8 +455,17 @@ private func taskCommandModal(
             WatchCommandModalAction(id: "blocked", title: "Blocked", systemImage: "exclamationmark.triangle.fill", tint: .orange) {
                 onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "blocked"])
             },
-            WatchCommandModalAction(id: "done", title: "Done", systemImage: "checkmark.circle.fill", tint: WatchTheme.success) {
-                onCommand(.taskStatusUpdate, ["taskId": task.id, "status": "done"])
+            WatchCommandModalAction(
+                id: "done",
+                title: "Done",
+                systemImage: "checkmark.circle.fill",
+                tint: WatchTheme.success,
+                confirmation: WatchTaskCloseoutPresentation.taskCompletion
+            ) {
+                onCommand(
+                    .taskStatusUpdate,
+                    ["taskId": task.id, "status": "done", "closeoutMode": "deferred"]
+                )
             }
         ]
     )
@@ -383,8 +486,17 @@ private func runCommandModal(
             WatchCommandModalAction(id: "focus", title: "Focus", systemImage: "scope", tint: WatchTheme.accent) {
                 onCommand(.taskRunFocus, ["runId": run.id])
             },
-            WatchCommandModalAction(id: "complete", title: "Complete", systemImage: "checkmark.circle.fill", tint: WatchTheme.success) {
-                onCommand(.taskRunComplete, ["runId": run.id])
+            WatchCommandModalAction(
+                id: "complete",
+                title: "Complete",
+                systemImage: "checkmark.circle.fill",
+                tint: WatchTheme.success,
+                confirmation: WatchTaskCloseoutPresentation.runCompletion
+            ) {
+                onCommand(
+                    .taskRunComplete,
+                    ["runId": run.id, "closeoutMode": "deferred"]
+                )
             },
             WatchCommandModalAction(id: "pause", title: "Pause", systemImage: "pause.fill", tint: .orange) {
                 onCommand(.taskRunRelease, ["runId": run.id])
@@ -585,6 +697,13 @@ private struct TaskCard: View {
                         DenseMetric(title: "Pts", value: "\(task.points)", tint: WatchTheme.accent)
                         DenseMetric(title: "Energy", value: task.energy.isEmpty ? "--" : task.energy.capitalized, tint: WatchTheme.success)
                     }
+                    if task.closeoutState == "deferred" {
+                        Label("Evidence deferred", systemImage: "doc.badge.clock")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(WatchTheme.accent)
+                            .accessibilityLabel("Completion evidence deferred")
+                            .accessibilityHint("Add files, Git references, and a completion note later in Forge")
+                    }
                     Label("Tap to start or move", systemImage: "ellipsis.circle")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundStyle(WatchTheme.accent)
@@ -731,131 +850,565 @@ private struct HabitSurface: View {
 }
 
 private struct GoalSurface: View {
-    let goals: [ForgeWatchGoalSummary]
-    let projects: [ForgeWatchProjectSummary]
+    let goals: [ForgeWatchGoalSummary]?
+    let totalGoalCount: Int?
+    let projects: [ForgeWatchProjectSummary]?
+    let totalProjectCount: Int?
+    let uiBaseUrl: String?
+    let snapshotFreshness: ForgeWatchSnapshotFreshness
+    let snapshotSource: ForgeWatchSnapshotSource
+    let refreshState: ForgeWatchRefreshState
     @Binding var selection: Int
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
+    let onContinueOnPhone: (ForgeWatchPhoneDestination) -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
-        let count = goals.count + projects.count
-        if count == 0 {
-            EmptySurfaceCard(
-                title: "No goals loaded",
-                message: "Mark a direction note now; richer goals load after the next Forge refresh.",
-                actionTitle: "Capture note",
-                systemImage: "square.and.pencil",
-                action: {
-                    onCapture("mark_moment", nil, .empty, ["surface": "goals"])
-                }
+        let hasPayload = goals != nil || projects != nil
+        let notice = ForgeWatchCompactSurfacePolicy.notice(
+            hasPayload: hasPayload,
+            freshness: snapshotFreshness,
+            refreshState: refreshState
+        )
+        if hasPayload == false {
+            CompactSurfaceNoticeCard(
+                surfaceTitle: "Goals",
+                notice: notice,
+                freshness: snapshotFreshness,
+                source: snapshotSource,
+                hasCachedContent: false,
+                onCheckpoint: {
+                    onCapture("mark_moment", nil, .empty, goalCheckpointPayload())
+                },
+                onRefresh: onRefresh
             )
         } else {
-            SurfaceCarousel(selection: $selection, count: count) {
-                ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
-                    WatchCard {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(goal.horizon.capitalized)
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(WatchTheme.accent)
-                            Text(goal.title)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(WatchTheme.textPrimary)
-                                .lineLimit(4)
-                            Text("\(goal.targetPoints) target pts")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(WatchTheme.textMuted)
-                            Button("Mark goal") {
-                                onCapture("mark_moment", nil, .empty, ["goalId": goal.id, "surface": "goals"])
-                            }
-                            .buttonStyle(.bordered)
-                        }
+            let presentation = ForgeWatchGoalsPresentation(
+                goals: goals ?? [],
+                projects: projects ?? [],
+                totalGoalCount: totalGoalCount,
+                totalProjectCount: totalProjectCount
+            )
+            let noticeOffset = notice == .none ? 0 : 1
+            IndexedSurfaceCarousel(
+                selection: $selection,
+                count: presentation.cardCount + noticeOffset
+            ) { pageIndex in
+                let contentIndex = pageIndex - noticeOffset
+                if pageIndex < noticeOffset {
+                    CompactSurfaceNoticeCard(
+                        surfaceTitle: "Goals",
+                        notice: notice,
+                        freshness: snapshotFreshness,
+                        source: snapshotSource,
+                        hasCachedContent: true,
+                        onCheckpoint: {
+                            onCapture("mark_moment", nil, .empty, goalCheckpointPayload())
+                        },
+                        onRefresh: onRefresh
+                    )
+                } else if contentIndex == 0 {
+                    goalSummaryCard(presentation)
+                } else if contentIndex <= presentation.goals.count {
+                    goalCard(presentation.goals[contentIndex - 1])
+                } else {
+                    let projectIndex = contentIndex - presentation.goals.count - 1
+                    if presentation.projects.indices.contains(projectIndex) {
+                        projectCard(presentation.projects[projectIndex])
                     }
-                    .tag(index)
-                }
-                ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
-                    WatchCard {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(project.workflowStatus.capitalized)
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(WatchTheme.success)
-                            Text(project.title)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
-                                .foregroundStyle(WatchTheme.textPrimary)
-                                .lineLimit(4)
-                            HStack {
-                                DenseMetric(title: "Open", value: "\(project.openTaskCount)", tint: WatchTheme.accent)
-                                DenseMetric(title: "Runs", value: "\(project.activeRunCount)", tint: WatchTheme.success)
-                            }
-                            Button("Mark project") {
-                                onCapture("mark_moment", nil, .empty, ["projectId": project.id, "surface": "projects"])
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                    .tag(goals.count + index)
                 }
             }
         }
+    }
+
+    private func goalSummaryCard(_ presentation: ForgeWatchGoalsPresentation) -> some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(
+                    presentation.totalGoalCount + presentation.totalProjectCount == 0
+                        ? "No active direction"
+                        : "Direction snapshot",
+                    systemImage: "scope"
+                )
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .foregroundStyle(WatchTheme.textPrimary)
+
+                HStack(spacing: 8) {
+                    DenseMetric(
+                        title: "Goals",
+                        value: "\(presentation.totalGoalCount)",
+                        tint: WatchTheme.accent
+                    )
+                    DenseMetric(
+                        title: "Projects",
+                        value: "\(presentation.totalProjectCount)",
+                        tint: WatchTheme.success
+                    )
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(presentation.totalGoalCount) goals, \(presentation.totalProjectCount) projects"
+                )
+
+                Text(goalSummaryMessage(presentation))
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                WatchCheckpointButton {
+                    onCapture("mark_moment", nil, .empty, goalCheckpointPayload())
+                }
+
+                WatchPhoneHandoffButton(
+                    destination: .goals,
+                    uiBaseUrl: uiBaseUrl,
+                    onContinue: onContinueOnPhone
+                )
+            }
+        }
+    }
+
+    private func goalCard(_ goal: ForgeWatchGoalSummary) -> some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 7) {
+                Label(
+                    "Goal · \(watchDisplayLabel(goal.horizon))",
+                    systemImage: "scope"
+                )
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.accent)
+                Text(goal.title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.82)
+                    .accessibilityLabel("Goal: \(goal.title)")
+                Text("\(goal.targetPoints) target points · \(watchDisplayLabel(goal.status))")
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                WatchCheckpointButton {
+                    onCapture(
+                        "mark_moment",
+                        nil,
+                        .empty,
+                        goalCheckpointPayload(goalId: goal.id)
+                    )
+                }
+                WatchPhoneHandoffButton(
+                    destination: .goal(goal.id),
+                    uiBaseUrl: uiBaseUrl,
+                    onContinue: onContinueOnPhone
+                )
+            }
+        }
+    }
+
+    private func projectCard(_ project: ForgeWatchProjectSummary) -> some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 7) {
+                Label(
+                    "Project · \(watchDisplayLabel(project.workflowStatus))",
+                    systemImage: "hammer.fill"
+                )
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.success)
+                Text(project.title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.82)
+                    .accessibilityLabel("Project: \(project.title)")
+                Text(project.goalTitle)
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    DenseMetric(title: "Open", value: "\(project.openTaskCount)", tint: WatchTheme.accent)
+                    DenseMetric(title: "Runs", value: "\(project.activeRunCount)", tint: WatchTheme.success)
+                }
+                WatchCheckpointButton {
+                    onCapture(
+                        "mark_moment",
+                        nil,
+                        .empty,
+                        goalCheckpointPayload(projectId: project.id)
+                    )
+                }
+                WatchPhoneHandoffButton(
+                    destination: .project(project.id),
+                    uiBaseUrl: uiBaseUrl,
+                    onContinue: onContinueOnPhone
+                )
+            }
+        }
+    }
+
+    private func goalSummaryMessage(_ presentation: ForgeWatchGoalsPresentation) -> String {
+        let total = presentation.totalGoalCount + presentation.totalProjectCount
+        guard total > 0 else {
+            return "No active goals or projects are in this snapshot. Plan and edit in Forge on iPhone."
+        }
+        let hidden = presentation.hiddenGoalCount + presentation.hiddenProjectCount
+        if hidden > 0 {
+            return "\(presentation.goals.count + presentation.projects.count) cards shown · \(hidden) more in Forge."
+        }
+        return "Swipe for compact details. Plan and edit in Forge on iPhone."
+    }
+
+    private func goalCheckpointPayload(
+        goalId: String? = nil,
+        projectId: String? = nil
+    ) -> [String: String] {
+        var payload = [
+            "surface": "goals",
+            "context": "planning_checkpoint",
+            "source": "watch"
+        ]
+        payload["goalId"] = goalId
+        payload["projectId"] = projectId
+        return payload
     }
 }
 
 private struct TodaySurface: View {
     let today: ForgeWatchTodaySnapshot?
+    let uiBaseUrl: String?
+    let snapshotFreshness: ForgeWatchSnapshotFreshness
+    let snapshotSource: ForgeWatchSnapshotSource
+    let refreshState: ForgeWatchRefreshState
     @Binding var selection: Int
     let onCommandTap: (WatchCommandModalItem) -> Void
     let onCommand: (ForgeWatchActionKind, [String: String]) -> Void
     let onCapture: (String, String?, ForgeWatchLinkedContext, [String: String]) -> Void
+    let onContinueOnPhone: (ForgeWatchPhoneDestination) -> Void
+    let onRefresh: () -> Void
 
     var body: some View {
+        let notice = ForgeWatchCompactSurfacePolicy.notice(
+            hasPayload: today != nil,
+            freshness: snapshotFreshness,
+            refreshState: refreshState
+        )
         if let today {
-            SurfaceCarousel(selection: $selection, count: 1 + today.dueTasks.count) {
-                WatchCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(today.dateKey)
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(WatchTheme.accent)
-                        HStack {
-                            DenseMetric(title: "Due", value: "\(today.dueCount)", tint: WatchTheme.accent)
-                            DenseMetric(title: "Done", value: "\(today.recentDone.count)", tint: WatchTheme.success)
-                        }
-                        Button("Checkpoint") {
-                            onCapture("mark_moment", nil, .empty, ["surface": "today", "dateKey": today.dateKey])
-                        }
-                        .buttonStyle(.bordered)
+            let presentation = ForgeWatchTodayPresentation(today: today)
+            let noticeOffset = notice == .none ? 0 : 1
+            IndexedSurfaceCarousel(
+                selection: $selection,
+                count: presentation.cardCount + noticeOffset
+            ) { pageIndex in
+                let contentIndex = pageIndex - noticeOffset
+                if pageIndex < noticeOffset {
+                    CompactSurfaceNoticeCard(
+                        surfaceTitle: "Today",
+                        notice: notice,
+                        freshness: snapshotFreshness,
+                        source: snapshotSource,
+                        hasCachedContent: true,
+                        onCheckpoint: {
+                            onCapture("mark_moment", nil, .empty, todayCheckpointPayload())
+                        },
+                        onRefresh: onRefresh
+                    )
+                } else if contentIndex == 0 {
+                    todaySummaryCard(today: today, presentation: presentation)
+                } else {
+                    let taskIndex = contentIndex - 1
+                    if presentation.dueTasks.indices.contains(taskIndex) {
+                        todayTaskCard(presentation.dueTasks[taskIndex])
                     }
-                }
-                .tag(0)
-                ForEach(Array(today.dueTasks.enumerated()), id: \.element.id) { index, task in
-                    Button {
-                        onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
-                    } label: {
-                        WatchCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(task.title)
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(WatchTheme.textPrimary)
-                                    .lineLimit(4)
-                                Label("Tap for task actions", systemImage: "ellipsis.circle")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                    .foregroundStyle(WatchTheme.accent)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .tag(index + 1)
                 }
             }
         } else {
-            EmptySurfaceCard(
-                title: "Today not loaded",
-                message: "Mark a checkpoint now; due work arrives after refresh.",
-                actionTitle: "Checkpoint",
-                systemImage: "checkmark.seal",
-                action: {
-                    onCapture("mark_moment", nil, .empty, ["surface": "today"])
-                }
+            CompactSurfaceNoticeCard(
+                surfaceTitle: "Today",
+                notice: notice,
+                freshness: snapshotFreshness,
+                source: snapshotSource,
+                hasCachedContent: false,
+                onCheckpoint: {
+                    onCapture("mark_moment", nil, .empty, todayCheckpointPayload())
+                },
+                onRefresh: onRefresh
             )
         }
     }
+
+    private func todaySummaryCard(
+        today: ForgeWatchTodaySnapshot,
+        presentation: ForgeWatchTodayPresentation
+    ) -> some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(today.dateKey, systemImage: "calendar")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.accent)
+                HStack(spacing: 8) {
+                    DenseMetric(title: "Due", value: "\(presentation.snapshotDueCount)", tint: WatchTheme.accent)
+                    DenseMetric(title: "Recent", value: "\(presentation.recentDoneCount)", tint: WatchTheme.success)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(presentation.snapshotDueCount) tasks due in this snapshot, \(presentation.recentDoneCount) recently completed tasks"
+                )
+                Text(todaySummaryMessage(presentation))
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if today.recentDone.contains(where: { $0.closeoutState == "deferred" }) {
+                    let deferredCount = today.recentDone.filter {
+                        $0.closeoutState == "deferred"
+                    }.count
+                    Label(
+                        "\(deferredCount) need\(deferredCount == 1 ? "s" : "") evidence",
+                        systemImage: "doc.badge.clock"
+                    )
+                    .font(.system(.footnote, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(
+                        "\(deferredCount) completed task\(deferredCount == 1 ? "" : "s") need completion evidence"
+                    )
+                    .accessibilityHint("Continue on iPhone to add files, Git references, and completion notes")
+                }
+                WatchCheckpointButton {
+                    onCapture("mark_moment", nil, .empty, todayCheckpointPayload())
+                }
+                WatchPhoneHandoffButton(
+                    destination: .today,
+                    uiBaseUrl: uiBaseUrl,
+                    onContinue: onContinueOnPhone
+                )
+            }
+        }
+    }
+
+    private func todayTaskCard(_ task: ForgeWatchTaskSummary) -> some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(watchDisplayLabel(task.status)) · \(watchDisplayLabel(task.priority)) priority")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.accent)
+                Text(task.title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.82)
+                    .accessibilityLabel("Due task: \(task.title)")
+                Text("\(task.points) points · \(watchDisplayLabel(task.effort)) effort")
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                WatchCheckpointButton {
+                    onCapture(
+                        "mark_moment",
+                        nil,
+                        .empty,
+                        todayCheckpointPayload(taskId: task.id)
+                    )
+                }
+                Button {
+                    onCommandTap(taskCommandModal(task: task, onCommand: onCommand))
+                } label: {
+                    Label("Task actions", systemImage: "checklist")
+                        .font(.system(.footnote, design: .rounded, weight: .bold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WatchTheme.success)
+                .accessibilityHint("Opens bounded status and task run actions")
+                WatchPhoneHandoffButton(
+                    destination: .task(task.id),
+                    uiBaseUrl: uiBaseUrl,
+                    onContinue: onContinueOnPhone
+                )
+            }
+        }
+    }
+
+    private func todaySummaryMessage(_ presentation: ForgeWatchTodayPresentation) -> String {
+        guard presentation.snapshotDueCount > 0 else {
+            return "Nothing is due in this compact snapshot. Plan and edit in Forge on iPhone."
+        }
+        if presentation.hiddenDueTaskCount > 0 {
+            return "\(presentation.dueTasks.count) cards shown · \(presentation.hiddenDueTaskCount) more in Forge."
+        }
+        return "Swipe through due work. Plan and edit in Forge on iPhone."
+    }
+
+    private func todayCheckpointPayload(taskId: String? = nil) -> [String: String] {
+        var payload = [
+            "surface": "today",
+            "context": "planning_checkpoint",
+            "source": "watch"
+        ]
+        payload["taskId"] = taskId
+        return payload
+    }
+}
+
+private struct CompactScrollableWatchCard<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(.vertical) {
+            WatchCard {
+                content
+            }
+            .padding(.vertical, 1)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
+private struct WatchCheckpointButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Checkpoint", systemImage: "checkmark.circle")
+                .font(.system(.footnote, design: .rounded, weight: .bold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .tint(WatchTheme.success)
+        .accessibilityLabel("Capture planning checkpoint")
+        .accessibilityHint("Records a quick checkpoint without opening the planning editor")
+    }
+}
+
+private struct WatchPhoneHandoffButton: View {
+    let destination: ForgeWatchPhoneDestination
+    let uiBaseUrl: String?
+    let onContinue: (ForgeWatchPhoneDestination) -> Void
+
+    private var canContinue: Bool {
+        ForgeWatchPhoneHandoff.url(uiBaseUrl: uiBaseUrl, destination: destination) != nil
+            || ForgeWatchPhoneHandoffRequest(destination: destination) != nil
+    }
+
+    var body: some View {
+        Button {
+            onContinue(destination)
+        } label: {
+            Label("On iPhone", systemImage: "iphone")
+                .font(.system(.footnote, design: .rounded, weight: .bold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+        .tint(WatchTheme.accent)
+        .disabled(canContinue == false)
+        .accessibilityLabel("Continue in Forge on iPhone")
+        .accessibilityHint(
+            canContinue
+                ? "Opens this exact Forge view through Handoff or the paired iPhone"
+                : "Open Forge on the paired iPhone to continue"
+        )
+    }
+}
+
+private struct CompactSurfaceNoticeCard: View {
+    let surfaceTitle: String
+    let notice: ForgeWatchCompactNotice
+    let freshness: ForgeWatchSnapshotFreshness
+    let source: ForgeWatchSnapshotSource
+    let hasCachedContent: Bool
+    let onCheckpoint: (() -> Void)?
+    let onRefresh: () -> Void
+
+    var body: some View {
+        CompactScrollableWatchCard {
+            VStack(alignment: .leading, spacing: 8) {
+                if notice == .loading {
+                    ProgressView()
+                        .tint(WatchTheme.accent)
+                        .accessibilityLabel("Refreshing \(surfaceTitle)")
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(WatchTheme.accent)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(WatchTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(message)
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(WatchTheme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let onCheckpoint {
+                    WatchCheckpointButton(action: onCheckpoint)
+                }
+                if notice != .loading {
+                    Button {
+                        onRefresh()
+                    } label: {
+                        Label("Refresh now", systemImage: "arrow.clockwise")
+                            .font(.system(.footnote, design: .rounded, weight: .bold))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(WatchTheme.accent)
+                }
+            }
+        }
+    }
+
+    private var title: String {
+        switch notice {
+        case .loading:
+            return "Refreshing \(surfaceTitle)"
+        case .stale:
+            return "Cached \(surfaceTitle)"
+        case .clockSkew:
+            return "Snapshot time mismatch"
+        case .failed:
+            return "Refresh failed"
+        case .unavailable, .none:
+            return "\(surfaceTitle) unavailable"
+        }
+    }
+
+    private var message: String {
+        switch notice {
+        case .loading:
+            return "Fetching a compact Forge snapshot."
+        case .stale:
+            return "\(freshness.shortLabel) from \(source.label). Cached cards remain available after this notice."
+        case .clockSkew:
+            return "The snapshot timestamp is ahead of this watch. Refresh before relying on current counts."
+        case .failed:
+            return hasCachedContent
+                ? "Forge could not refresh this summary. Cached cards remain available after this notice."
+                : "Forge could not load this summary. Retry directly or through the paired iPhone."
+        case .unavailable, .none:
+            return "Forge has not delivered this compact summary yet."
+        }
+    }
+
+    private var systemImage: String {
+        switch notice {
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        case .stale, .clockSkew:
+            return "clock.arrow.circlepath"
+        case .loading:
+            return "arrow.clockwise"
+        case .unavailable, .none:
+            return "icloud.slash"
+        }
+    }
+}
+
+private func watchDisplayLabel(_ rawValue: String) -> String {
+    rawValue
+        .replacingOccurrences(of: "_", with: " ")
+        .replacingOccurrences(of: "-", with: " ")
+        .capitalized
 }
 
 private struct HealthSurface: View {
@@ -1193,6 +1746,79 @@ private struct PsycheRecentReportCard: View {
     }
 }
 
+private struct PeopleGlanceSurface: View {
+    let presentation: ForgeWatchPeoplePresentation
+
+    var body: some View {
+        CompactScrollableWatchCard {
+            if presentation.isDetailed, let personName = presentation.personName {
+                VStack(alignment: .leading, spacing: 7) {
+                    Label("Together", systemImage: "person.2.fill")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.accent)
+                    Text(personName)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textPrimary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                    Text(presentation.indicator)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(
+                            presentation.indicator.contains("stale")
+                                ? WatchTheme.accent
+                                : WatchTheme.success
+                        )
+                    if let connectivity = presentation.connectivity {
+                        Label(connectivity, systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(WatchTheme.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Divider().overlay(WatchTheme.border)
+                    if let eventTitle = presentation.eventTitle {
+                        Text(eventTitle)
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .foregroundStyle(WatchTheme.textPrimary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                        if let eventTiming = presentation.eventTiming {
+                            Text(eventTiming)
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(WatchTheme.textMuted)
+                        }
+                    }
+                    if let eventStatus = presentation.eventStatus {
+                        Text(eventStatus)
+                            .font(.system(size: 9, weight: .medium, design: .rounded))
+                            .foregroundStyle(WatchTheme.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(WatchTheme.accent)
+                        .accessibilityHidden(true)
+                    Text(presentation.title)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(WatchTheme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Text(presentation.indicator)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(WatchTheme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(presentation.title), \(presentation.indicator)")
+            }
+        }
+        .accessibilityIdentifier("ForgeWatchPeopleGlance")
+    }
+}
+
 private struct InboxSurface: View {
     let prompts: [ForgeWatchPrompt]
     let attention: ForgeWatchAttentionSnapshot?
@@ -1430,6 +2056,18 @@ private struct SyncSurface: View {
                             Text(latestReceipt.status.replacingOccurrences(of: "_", with: " ").capitalized)
                                 .font(.system(size: 9, weight: .medium, design: .rounded))
                                 .foregroundStyle(receiptTint(latestReceipt.status))
+                            if let errorMessage = latestReceipt.errorMessage {
+                                Text(errorMessage)
+                                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                                    .foregroundStyle(WatchTheme.danger)
+                                    .lineLimit(3)
+                                    .minimumScaleFactor(0.78)
+                            }
+                            Text(receiptOperationLabel(latestReceipt))
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(WatchTheme.textMuted)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.68)
                         }
                     }
                     .accessibilityElement(children: .combine)
@@ -1506,6 +2144,11 @@ private struct SyncSurface: View {
 
     private func receiptTint(_ status: String) -> Color {
         status == "failed" ? WatchTheme.danger : WatchTheme.success
+    }
+
+    private func receiptOperationLabel(_ receipt: ForgeWatchStoredReceipt) -> String {
+        let code = receipt.structuredError?["code"]?.stringValue
+        return code.map { "\($0) · \(receipt.actionId)" } ?? receipt.actionId
     }
 }
 

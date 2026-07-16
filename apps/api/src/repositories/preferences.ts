@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { getDatabase, runInTransaction } from "../db.js";
 import { HttpError } from "../errors.js";
 import {
   absoluteSignalSchema,
+  PREFERENCE_SIGNAL_MODEL_WEIGHTS,
   createPreferenceCatalogItemSchema,
   createPreferenceCatalogSchema,
   createPreferenceContextSchema,
@@ -64,7 +65,14 @@ import {
   type UpdatePreferenceScoreInput
 } from "../preferences-types.js";
 import { getPreferenceCatalogSeeds } from "../preferences-seeds.js";
-import { getUserById, getDefaultUser } from "./users.js";
+import { getUserById, getDefaultUser, listUsersByIds } from "./users.js";
+import { clearEntityOwner, setEntityOwner } from "./entity-ownership.js";
+import { recordActivityEvent } from "./activity-events.js";
+import {
+  listEntityLinksForSources,
+  normalizeEntityLinks,
+  replaceEntityLinksForSource
+} from "./entity-links.js";
 import { getGoalById } from "./goals.js";
 import { getProjectById } from "./projects.js";
 import { getTaskById } from "./tasks.js";
@@ -88,11 +96,47 @@ import {
   getPsycheValueById,
   getTriggerReportById
 } from "./psyche.js";
-import type { CrudEntityType } from "../types.js";
+import type { ActivitySource, CrudEntityType, UserSummary } from "../types.js";
 
 const PREFERENCE_MODEL_VERSION = "pref-v1-bt-lite";
 const DEFAULT_PREFERENCE_DOMAIN: PreferenceDomain = "projects";
 const DIMENSION_IDS = preferenceDimensionIdSchema.options;
+const PREFERENCE_CATALOG_ITEM_EMBED_LIMIT = 24;
+const PREFERENCE_WORKSPACE_CATALOG_LIMIT = 24;
+const PREFERENCE_SEARCH_FILTER_VALUE_LIMIT = 200;
+const PREFERENCE_SEARCH_QUERY_LENGTH_LIMIT = 200;
+const PREFERENCE_SEARCH_RESULT_LIMIT = 201;
+const PREFERENCE_WORKSPACE_HISTORY_LIMIT = 100;
+const PREFERENCE_MODEL_JUDGMENT_LIMIT_PER_CONTEXT = 1_000;
+
+function normalizePreferenceSearchValues(
+  values: string[] | undefined,
+  fieldName: string
+): string[] {
+  const normalized = Array.from(
+    new Set((values ?? []).map((value) => value.trim()).filter(Boolean))
+  );
+  if (normalized.length > PREFERENCE_SEARCH_FILTER_VALUE_LIMIT) {
+    throw new HttpError(
+      400,
+      "preferences_search_filter_limit_exceeded",
+      `${fieldName} accepts at most ${PREFERENCE_SEARCH_FILTER_VALUE_LIMIT} distinct values.`
+    );
+  }
+  return normalized;
+}
+
+function normalizePreferenceSearchQuery(query: string | undefined) {
+  const normalized = query?.trim();
+  if (normalized && normalized.length > PREFERENCE_SEARCH_QUERY_LENGTH_LIMIT) {
+    throw new HttpError(
+      400,
+      "preferences_search_query_too_long",
+      `Preference search queries accept at most ${PREFERENCE_SEARCH_QUERY_LENGTH_LIMIT} characters.`
+    );
+  }
+  return normalized;
+}
 
 type ProfileRow = {
   id: string;
@@ -134,14 +178,24 @@ type ItemRow = {
 type CatalogRow = {
   id: string;
   profile_id: string;
+  user_id: string;
   domain: PreferenceDomain;
   slug: string;
   title: string;
   description: string;
+  scope_in: string;
+  scope_out: string;
   source: PreferenceCatalogSource;
+  created_source: PreferenceCatalog["createdSource"];
+  created_by_actor: string | null;
   archived: number;
   created_at: string;
   updated_at: string;
+};
+
+type PreferenceMutationContext = {
+  source: ActivitySource;
+  actor?: string | null;
 };
 
 type CatalogItemRow = {
@@ -155,6 +209,48 @@ type CatalogItemRow = {
   archived: number;
   created_at: string;
   updated_at: string;
+};
+
+type PreferenceCatalogCursor = {
+  version: 1;
+  kind: "catalog";
+  scope: string;
+  snapshotAt: string;
+  snapshotRowId: number;
+  seen: number;
+  after: { updatedAt: string; id: string };
+};
+
+type PreferenceCatalogItemCursor = {
+  version: 1;
+  kind: "catalog-item";
+  scope: string;
+  snapshotAt: string;
+  snapshotRowId: number;
+  seen: number;
+  after: { catalogId: string; position: number; id: string };
+};
+
+export type PreferenceCatalogPage = {
+  catalogs: PreferenceCatalog[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+  previousOffset: number | null;
+  snapshotAt: string;
+  nextCursor: string | null;
+};
+
+export type PreferenceCatalogItemPage = {
+  items: PreferenceCatalogItem[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+  previousOffset: number | null;
+  snapshotAt: string;
+  nextCursor: string | null;
 };
 
 type JudgmentRow = {
@@ -181,6 +277,7 @@ type SignalRow = {
   signal_type: AbsoluteSignal["signalType"];
   strength: number;
   source: string;
+  actor: string | null;
   created_at: string;
 };
 
@@ -309,15 +406,6 @@ const DEFAULT_CONTEXT_TEMPLATES = [
   }
 ];
 
-const SIGNAL_WEIGHTS: Record<AbsoluteSignal["signalType"], number> = {
-  favorite: 1.25,
-  veto: -1.6,
-  must_have: 1.5,
-  bookmark: 0.35,
-  neutral: 0,
-  compare_later: 0.2
-};
-
 function nowIso() {
   return new Date().toISOString();
 }
@@ -364,6 +452,126 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
+}
+
+function catalogFingerprint(input: CreatePreferenceCatalogInput) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        ...input,
+        links: normalizeEntityLinks(input.links).sort((left, right) =>
+          `${left.entityType}:${left.entityId}:${left.anchorKey}:${left.relationship}`.localeCompare(
+            `${right.entityType}:${right.entityId}:${right.anchorKey}:${right.relationship}`
+          )
+        )
+      })
+    )
+    .digest("hex");
+}
+
+function judgmentFingerprint(input: SubmitPairwiseJudgmentInput) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+function signalFingerprint(input: SubmitAbsoluteSignalInput) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+function assertCatalogTitleAvailable(
+  profileId: string,
+  title: string,
+  exceptCatalogId?: string
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT id
+       FROM preference_catalogs
+       WHERE profile_id = ?
+         AND archived = 0
+         AND lower(trim(title)) = lower(trim(?))
+         AND (? IS NULL OR id <> ?)
+       LIMIT 1`
+    )
+    .get(profileId, title, exceptCatalogId ?? null, exceptCatalogId ?? null) as
+    | { id: string }
+    | undefined;
+  if (existing) {
+    throw new HttpError(
+      409,
+      "preferences_catalog_duplicate",
+      "An active preference catalog with this title already exists for the selected user and domain.",
+      { existingCatalogId: existing.id }
+    );
+  }
+}
+
+function normalizeCatalogUniqueText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function assertCatalogItemLabelAvailable(
+  catalogId: string,
+  label: string,
+  exceptItemId?: string
+) {
+  const existing = getDatabase()
+    .prepare(
+      `SELECT id
+       FROM preference_catalog_items
+       WHERE catalog_id = ?
+         AND archived = 0
+         AND lower(trim(label)) = lower(trim(?))
+         AND (? IS NULL OR id <> ?)
+       LIMIT 1`
+    )
+    .get(catalogId, label, exceptItemId ?? null, exceptItemId ?? null) as
+    | { id: string }
+    | undefined;
+  if (existing) {
+    throw new HttpError(
+      409,
+      "preferences_catalog_item_duplicate",
+      "This preference catalog already contains an active concept with the same label.",
+      { existingCatalogItemId: existing.id }
+    );
+  }
+}
+
+function escapeSqlLike(value: string) {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+}
+
+function nextCatalogSlug(
+  profileId: string,
+  requested: string,
+  exceptCatalogId?: string
+) {
+  const baseSlug = slugify(requested) || "concept-list";
+  const existingSlugs = new Set(
+    (
+      getDatabase()
+        .prepare(
+          `SELECT slug
+           FROM preference_catalogs
+           WHERE profile_id = ? AND (? IS NULL OR id <> ?)`
+        )
+        .all(
+          profileId,
+          exceptCatalogId ?? null,
+          exceptCatalogId ?? null
+        ) as Array<{ slug: string }>
+    ).map((row) => row.slug)
+  );
+  let slug = baseSlug;
+  let index = 2;
+  while (existingSlugs.has(slug)) {
+    slug = `${baseSlug}-${index}`;
+    index += 1;
+  }
+  return slug;
 }
 
 function parseJsonObject<T extends Record<string, unknown>>(
@@ -472,6 +680,7 @@ function mapCatalogItem(row: CatalogItemRow): PreferenceCatalogItem {
       parseJsonObject<Record<string, unknown>>(row.feature_weights_json, {})
     ),
     position: row.position,
+    archived: row.archived === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   });
@@ -479,20 +688,154 @@ function mapCatalogItem(row: CatalogItemRow): PreferenceCatalogItem {
 
 function mapCatalog(
   row: CatalogRow,
-  items: PreferenceCatalogItem[]
+  items: PreferenceCatalogItem[],
+  links = listEntityLinksForSources("preference_catalog", [row.id]),
+  user: UserSummary | null = getUserById(row.user_id) ?? null,
+  itemCount = items.length,
+  matchingItemCount?: number
 ): PreferenceCatalog {
   return preferenceCatalogSchema.parse({
     id: row.id,
     profileId: row.profile_id,
+    userId: row.user_id,
+    user,
     domain: row.domain,
     slug: row.slug,
     title: row.title,
     description: row.description,
+    scopeIn: row.scope_in,
+    scopeOut: row.scope_out,
     source: row.source,
+    createdSource: row.created_source,
+    createdByActor: row.created_by_actor,
+    archived: row.archived === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    items
+    links,
+    items,
+    itemCount,
+    matchingItemCount,
+    itemsTruncated: (matchingItemCount ?? itemCount) > items.length
   });
+}
+
+function mapCatalogRows(
+  catalogRows: CatalogRow[],
+  options: { itemQuery?: string } = {}
+): PreferenceCatalog[] {
+  if (catalogRows.length === 0) {
+    return [];
+  }
+  const catalogIds = catalogRows.map((row) => row.id);
+  const placeholders = catalogIds.map(() => "?").join(", ");
+  const itemQuery = options.itemQuery?.trim();
+  const escapedItemQuery = itemQuery ? escapeSqlLike(itemQuery) : null;
+  const itemQueryFilter = escapedItemQuery
+    ? ` AND (
+         label LIKE ? ESCAPE '\\'
+         OR description LIKE ? ESCAPE '\\'
+         OR tags_json LIKE ? ESCAPE '\\'
+       )`
+    : "";
+  const itemQueryParameters = escapedItemQuery
+    ? [
+        `%${escapedItemQuery}%`,
+        `%${escapedItemQuery}%`,
+        `%${escapedItemQuery}%`
+      ]
+    : [];
+  const itemRows = getDatabase()
+    .prepare(
+      `WITH ranked_items AS (
+         SELECT id, catalog_id, label, description, tags_json,
+                feature_weights_json, position, archived, created_at,
+                updated_at,
+                ROW_NUMBER() OVER (
+                  PARTITION BY catalog_id
+                  ORDER BY position ASC, label ASC, id ASC
+                ) AS item_rank
+         FROM preference_catalog_items
+         WHERE catalog_id IN (${placeholders}) AND archived = 0${itemQueryFilter}
+       )
+       SELECT id, catalog_id, label, description, tags_json,
+              feature_weights_json, position, archived, created_at, updated_at
+       FROM ranked_items
+       WHERE item_rank <= ?
+       ORDER BY catalog_id ASC, position ASC, label ASC, id ASC`
+    )
+    .all(
+      ...catalogIds,
+      ...itemQueryParameters,
+      PREFERENCE_CATALOG_ITEM_EMBED_LIMIT
+    ) as CatalogItemRow[];
+
+  const itemCounts = new Map(
+    (
+      getDatabase()
+        .prepare(
+          `SELECT catalog_id, COUNT(*) AS item_count
+           FROM preference_catalog_items
+           WHERE catalog_id IN (${placeholders}) AND archived = 0
+           GROUP BY catalog_id`
+        )
+        .all(...catalogIds) as Array<{ catalog_id: string; item_count: number }>
+    ).map((row) => [row.catalog_id, row.item_count])
+  );
+  const matchingItemCounts = escapedItemQuery
+    ? new Map(
+        (
+          getDatabase()
+            .prepare(
+              `SELECT catalog_id, COUNT(*) AS item_count
+               FROM preference_catalog_items
+               WHERE catalog_id IN (${placeholders})
+                 AND archived = 0${itemQueryFilter}
+               GROUP BY catalog_id`
+            )
+            .all(...catalogIds, ...itemQueryParameters) as Array<{
+            catalog_id: string;
+            item_count: number;
+          }>
+        ).map((row) => [row.catalog_id, row.item_count])
+      )
+    : null;
+
+  const itemsByCatalogId = new Map<string, PreferenceCatalogItem[]>();
+  for (const row of itemRows) {
+    const items = itemsByCatalogId.get(row.catalog_id) ?? [];
+    items.push(mapCatalogItem(row));
+    itemsByCatalogId.set(row.catalog_id, items);
+  }
+
+  const linksByCatalogId = new Map<
+    string,
+    ReturnType<typeof listEntityLinksForSources>
+  >();
+  for (const link of listEntityLinksForSources(
+    "preference_catalog",
+    catalogIds
+  )) {
+    const links = linksByCatalogId.get(link.sourceEntityId) ?? [];
+    links.push(link);
+    linksByCatalogId.set(link.sourceEntityId, links);
+  }
+
+  const usersById = new Map(
+    listUsersByIds(
+      Array.from(new Set(catalogRows.map((row) => row.user_id)))
+    ).map((user) => [user.id, user])
+  );
+
+  return catalogRows.map((row) =>
+    mapCatalog(
+      row,
+      itemsByCatalogId.get(row.id) ?? [],
+      linksByCatalogId.get(row.id) ?? [],
+      usersById.get(row.user_id) ?? null,
+      itemCounts.get(row.id) ?? 0,
+      matchingItemCounts ? (matchingItemCounts.get(row.id) ?? 0) : undefined
+    )
+  );
 }
 
 function mapJudgment(row: JudgmentRow): PairwiseJudgment {
@@ -518,15 +861,23 @@ function mapSignal(row: SignalRow): AbsoluteSignal {
     profileId: row.profile_id,
     contextId: row.context_id,
     userId: row.user_id,
+    ownerUserId: row.user_id,
     itemId: row.item_id,
     signalType: row.signal_type,
     strength: row.strength,
+    modelWeight:
+      PREFERENCE_SIGNAL_MODEL_WEIGHTS[row.signal_type] * row.strength,
     source: row.source,
+    actor: row.actor,
     createdAt: row.created_at
   });
 }
 
-function mapScore(row: ScoreRow, item: PreferenceItem): PreferenceItemScore {
+function mapScore(
+  row: ScoreRow,
+  item: PreferenceItem,
+  effectiveSignal: AbsoluteSignal | null = null
+): PreferenceItemScore {
   return preferenceItemScoreSchema.parse({
     id: row.id,
     profileId: row.profile_id,
@@ -540,6 +891,7 @@ function mapScore(row: ScoreRow, item: PreferenceItem): PreferenceItemScore {
     pairwiseLosses: row.pairwise_losses,
     pairwiseTies: row.pairwise_ties,
     signalCount: row.signal_count,
+    effectiveSignal,
     conflictCount: row.conflict_count,
     status: row.status,
     dominantDimensions: parseJsonArray<PreferenceDimensionId>(
@@ -636,6 +988,64 @@ function readContext(contextId: string): PreferenceContext | null {
   return row ? mapContext(row) : null;
 }
 
+function selectReplacementDefaultContext(
+  profileId: string,
+  excludedContextId?: string
+): PreferenceContext | null {
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, profile_id, name, description, share_mode, active, is_default,
+              decay_days, created_at, updated_at
+       FROM preference_contexts
+       WHERE profile_id = ?
+         AND (? IS NULL OR id <> ?)
+       ORDER BY is_default DESC, active DESC, created_at ASC, id ASC
+       LIMIT 1`
+    )
+    .get(
+      profileId,
+      excludedContextId ?? null,
+      excludedContextId ?? null
+    ) as ContextRow | undefined;
+  return row ? mapContext(row) : null;
+}
+
+function setProfileDefaultContext(
+  profileId: string,
+  contextId: string,
+  timestamp: string
+) {
+  const database = getDatabase();
+  database
+    .prepare(
+      `UPDATE preference_contexts
+       SET is_default = 0, updated_at = ?
+       WHERE profile_id = ? AND is_default <> 0`
+    )
+    .run(timestamp, profileId);
+  const result = database
+    .prepare(
+      `UPDATE preference_contexts
+       SET is_default = 1, active = 1, updated_at = ?
+       WHERE profile_id = ? AND id = ?`
+    )
+    .run(timestamp, profileId, contextId);
+  if (result.changes !== 1) {
+    throw new HttpError(
+      500,
+      "preferences_default_context_missing",
+      `Preference context ${contextId} cannot be the default for profile ${profileId}.`
+    );
+  }
+  database
+    .prepare(
+      `UPDATE preference_profiles
+       SET default_context_id = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(contextId, timestamp, profileId);
+}
+
 function resolveContext(
   profile: PreferenceProfile,
   contextId?: string | null
@@ -683,67 +1093,117 @@ function listCatalogs(profileId: string): PreferenceCatalog[] {
   const catalogRows = (
     getDatabase()
       .prepare(
-        `SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
+        `SELECT preference_catalogs.id, preference_catalogs.profile_id,
+                preference_profiles.user_id, preference_catalogs.domain,
+                preference_catalogs.slug, preference_catalogs.title,
+                preference_catalogs.description, preference_catalogs.scope_in,
+                preference_catalogs.scope_out, preference_catalogs.source,
+                preference_catalogs.created_source,
+                preference_catalogs.created_by_actor,
+                preference_catalogs.archived, preference_catalogs.created_at,
+                preference_catalogs.updated_at
          FROM preference_catalogs
-         WHERE profile_id = ? AND archived = 0
-         ORDER BY source ASC, title ASC`
+         INNER JOIN preference_profiles
+           ON preference_profiles.id = preference_catalogs.profile_id
+         WHERE preference_catalogs.profile_id = ?
+           AND preference_catalogs.archived = 0
+         ORDER BY source ASC, title ASC, preference_catalogs.id ASC
+         LIMIT ?`
       )
-      .all(profileId) as CatalogRow[]
+      .all(profileId, PREFERENCE_WORKSPACE_CATALOG_LIMIT) as CatalogRow[]
   ).filter((row) => row.archived === 0);
 
-  const itemRows = (
-    getDatabase()
-      .prepare(
-        `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
-         FROM preference_catalog_items
-         WHERE catalog_id IN (
-           SELECT id FROM preference_catalogs WHERE profile_id = ? AND archived = 0
-         )
-           AND archived = 0
-         ORDER BY position ASC, label ASC`
-      )
-      .all(profileId) as CatalogItemRow[]
-  ).filter((row) => row.archived === 0);
-
-  const itemsByCatalogId = new Map<string, PreferenceCatalogItem[]>();
-  for (const row of itemRows) {
-    const list = itemsByCatalogId.get(row.catalog_id) ?? [];
-    list.push(mapCatalogItem(row));
-    itemsByCatalogId.set(row.catalog_id, list);
-  }
-
-  return catalogRows.map((row) =>
-    mapCatalog(row, itemsByCatalogId.get(row.id) ?? [])
-  );
+  return mapCatalogRows(catalogRows);
 }
 
-function readCatalog(catalogId: string): PreferenceCatalog | null {
+function getCatalogLibraryCounts(profileId: string) {
+  const catalogCounts = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS total_catalogs,
+              SUM(CASE WHEN source = 'seeded' THEN 1 ELSE 0 END) AS seeded_catalogs,
+              SUM(CASE WHEN source = 'custom' THEN 1 ELSE 0 END) AS custom_catalogs
+       FROM preference_catalogs
+       WHERE profile_id = ? AND archived = 0`
+    )
+    .get(profileId) as {
+    total_catalogs: number;
+    seeded_catalogs: number | null;
+    custom_catalogs: number | null;
+  };
+  const itemCount = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS total_items
+       FROM preference_catalog_items
+       INNER JOIN preference_catalogs
+         ON preference_catalogs.id = preference_catalog_items.catalog_id
+       WHERE preference_catalogs.profile_id = ?
+         AND preference_catalogs.archived = 0
+         AND preference_catalog_items.archived = 0`
+    )
+    .get(profileId) as { total_items: number };
+  return {
+    totalCatalogs: catalogCounts.total_catalogs,
+    totalCatalogItems: itemCount.total_items,
+    seededCatalogCount: catalogCounts.seeded_catalogs ?? 0,
+    customCatalogCount: catalogCounts.custom_catalogs ?? 0
+  };
+}
+
+function readCatalog(
+  catalogId: string,
+  options: { includeArchived?: boolean; itemLimit?: number | null } = {}
+): PreferenceCatalog | null {
   const row = getDatabase()
     .prepare(
-      `SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
+      `SELECT preference_catalogs.id, preference_catalogs.profile_id,
+              preference_profiles.user_id, preference_catalogs.domain,
+              preference_catalogs.slug, preference_catalogs.title,
+              preference_catalogs.description, preference_catalogs.scope_in,
+              preference_catalogs.scope_out, preference_catalogs.source,
+              preference_catalogs.created_source,
+              preference_catalogs.created_by_actor,
+              preference_catalogs.archived, preference_catalogs.created_at,
+              preference_catalogs.updated_at
        FROM preference_catalogs
-       WHERE id = ?`
+       INNER JOIN preference_profiles
+         ON preference_profiles.id = preference_catalogs.profile_id
+       WHERE preference_catalogs.id = ?`
     )
     .get(catalogId) as CatalogRow | undefined;
-  if (!row || row.archived === 1) {
+  if (!row || (row.archived === 1 && !options.includeArchived)) {
     return null;
   }
-  const items = (
-    getDatabase()
-      .prepare(
-        `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
-         FROM preference_catalog_items
-         WHERE catalog_id = ? AND archived = 0
-         ORDER BY position ASC, label ASC`
-      )
-      .all(catalogId) as CatalogItemRow[]
-  )
-    .filter((entry) => entry.archived === 0)
-    .map(mapCatalogItem);
-  return mapCatalog(row, items);
+  const itemLimit =
+    options.itemLimit === undefined
+      ? PREFERENCE_CATALOG_ITEM_EMBED_LIMIT
+      : options.itemLimit;
+  const archivedFilter = options.includeArchived ? "" : " AND archived = 0";
+  const itemStatement = getDatabase().prepare(
+    `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
+     FROM preference_catalog_items
+     WHERE catalog_id = ?${archivedFilter}
+     ORDER BY position ASC, label ASC, id ASC${itemLimit === null ? "" : " LIMIT ?"}`
+  );
+  const itemRows = (
+    itemLimit === null
+      ? itemStatement.all(catalogId)
+      : itemStatement.all(catalogId, Math.max(1, itemLimit))
+  ) as CatalogItemRow[];
+  const items = itemRows.map(mapCatalogItem);
+  const countRow = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS item_count
+       FROM preference_catalog_items
+       WHERE catalog_id = ?${archivedFilter}`
+    )
+    .get(catalogId) as { item_count: number };
+  return mapCatalog(row, items, undefined, undefined, countRow.item_count);
 }
 
-function readCatalogItem(catalogItemId: string): PreferenceCatalogItem | null {
+function readCatalogItem(
+  catalogItemId: string,
+  includeArchived = false
+): PreferenceCatalogItem | null {
   const row = getDatabase()
     .prepare(
       `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
@@ -751,27 +1211,100 @@ function readCatalogItem(catalogItemId: string): PreferenceCatalogItem | null {
        WHERE id = ?`
     )
     .get(catalogItemId) as CatalogItemRow | undefined;
-  return row && row.archived === 0 ? mapCatalogItem(row) : null;
+  return row && (includeArchived || row.archived === 0)
+    ? mapCatalogItem(row)
+    : null;
 }
 
-function listJudgmentsForContexts(contextIds: string[]): PairwiseJudgment[] {
+type PreferenceEvidenceCoverage =
+  PreferenceWorkspacePayload["evidenceCoverage"];
+
+function listJudgmentsForContexts(contextIds: string[]): {
+  judgments: PairwiseJudgment[];
+  coverage: PreferenceEvidenceCoverage;
+} {
   if (contextIds.length === 0) {
-    return [];
+    return {
+      judgments: [],
+      coverage: {
+        judgmentLimitPerContext: PREFERENCE_MODEL_JUDGMENT_LIMIT_PER_CONTEXT,
+        totalJudgments: 0,
+        consideredJudgments: 0,
+        truncated: false,
+        contexts: []
+      }
+    };
   }
   const placeholders = contextIds.map(() => "?").join(", ");
-  return (
-    getDatabase()
-      .prepare(
-        `SELECT id, profile_id, context_id, user_id, left_item_id, right_item_id, outcome, strength, response_time_ms, source, reason_tags_json, created_at
+  const rows = getDatabase()
+    .prepare(
+      `WITH ranked_judgments AS (
+         SELECT pairwise_judgments.*,
+                ROW_NUMBER() OVER (
+                  PARTITION BY context_id
+                  ORDER BY created_at DESC, rowid DESC
+                ) AS context_rank,
+                COUNT(*) OVER (PARTITION BY context_id) AS context_total
          FROM pairwise_judgments
          WHERE context_id IN (${placeholders})
-         ORDER BY created_at DESC`
-      )
-      .all(...contextIds) as JudgmentRow[]
-  ).map(mapJudgment);
+       )
+       SELECT id, profile_id, context_id, user_id, left_item_id, right_item_id,
+              outcome, strength, response_time_ms, source, reason_tags_json,
+              created_at, context_total
+       FROM ranked_judgments
+       WHERE context_rank <= ?
+       ORDER BY created_at DESC, id DESC`
+    )
+    .all(...contextIds, PREFERENCE_MODEL_JUDGMENT_LIMIT_PER_CONTEXT) as Array<
+    JudgmentRow & { context_total: number }
+  >;
+  const totalByContext = new Map(
+    rows.map((row) => [row.context_id, row.context_total] as const)
+  );
+  if (rows.length < contextIds.length) {
+    const missingContextIds = contextIds.filter(
+      (contextId) => !totalByContext.has(contextId)
+    );
+    for (const contextId of missingContextIds) {
+      totalByContext.set(contextId, 0);
+    }
+  }
+  const contexts = contextIds.map((contextId) => {
+    const totalJudgments = totalByContext.get(contextId) ?? 0;
+    const consideredJudgments = Math.min(
+      totalJudgments,
+      PREFERENCE_MODEL_JUDGMENT_LIMIT_PER_CONTEXT
+    );
+    return {
+      contextId,
+      totalJudgments,
+      consideredJudgments,
+      truncated: totalJudgments > consideredJudgments
+    };
+  });
+  const totalJudgments = contexts.reduce(
+    (sum, context) => sum + context.totalJudgments,
+    0
+  );
+  const consideredJudgments = contexts.reduce(
+    (sum, context) => sum + context.consideredJudgments,
+    0
+  );
+  return {
+    judgments: rows.map(mapJudgment),
+    coverage: {
+      judgmentLimitPerContext: PREFERENCE_MODEL_JUDGMENT_LIMIT_PER_CONTEXT,
+      totalJudgments,
+      consideredJudgments,
+      truncated: totalJudgments > consideredJudgments,
+      contexts
+    }
+  };
 }
 
-function listSignalsForContexts(contextIds: string[]): AbsoluteSignal[] {
+function listEffectiveSignalsForContexts(
+  contextIds: string[]
+): AbsoluteSignal[] {
   if (contextIds.length === 0) {
     return [];
   }
@@ -779,13 +1312,139 @@ function listSignalsForContexts(contextIds: string[]): AbsoluteSignal[] {
   return (
     getDatabase()
       .prepare(
-        `SELECT id, profile_id, context_id, user_id, item_id, signal_type, strength, source, created_at
-         FROM absolute_signals
-         WHERE context_id IN (${placeholders})
-         ORDER BY created_at DESC`
+        `WITH ranked_signals AS (
+           SELECT
+             absolute_signals.*,
+             absolute_signals.rowid AS signal_rowid,
+             ROW_NUMBER() OVER (
+               PARTITION BY absolute_signals.context_id, absolute_signals.item_id
+               ORDER BY absolute_signals.created_at DESC, absolute_signals.rowid DESC
+             ) AS signal_rank
+           FROM absolute_signals
+           WHERE absolute_signals.context_id IN (${placeholders})
+         )
+         SELECT
+           ranked_signals.id,
+           ranked_signals.profile_id,
+           ranked_signals.context_id,
+           ranked_signals.user_id,
+           ranked_signals.item_id,
+           ranked_signals.signal_type,
+           ranked_signals.strength,
+           ranked_signals.source,
+           ranked_signals.created_at,
+           (
+             SELECT activity_events.actor
+             FROM activity_events
+             WHERE activity_events.entity_type = 'preference_item'
+               AND activity_events.entity_id = ranked_signals.item_id
+               AND json_extract(activity_events.metadata_json, '$.signalId') = ranked_signals.id
+             ORDER BY activity_events.created_at DESC
+             LIMIT 1
+           ) AS actor
+         FROM ranked_signals
+         WHERE ranked_signals.signal_rank = 1
+         ORDER BY ranked_signals.created_at DESC, ranked_signals.signal_rowid DESC`
       )
       .all(...contextIds) as SignalRow[]
   ).map(mapSignal);
+}
+
+function listEffectiveSignalsForItems(
+  contextId: string,
+  itemIds: string[]
+): AbsoluteSignal[] {
+  if (itemIds.length === 0) {
+    return [];
+  }
+  const distinctItemIds = [...new Set(itemIds)];
+  const placeholders = distinctItemIds.map(() => "?").join(", ");
+  return (
+    getDatabase()
+      .prepare(
+        `WITH ranked_signals AS (
+           SELECT
+             absolute_signals.*,
+             absolute_signals.rowid AS signal_rowid,
+             ROW_NUMBER() OVER (
+               PARTITION BY absolute_signals.context_id, absolute_signals.item_id
+               ORDER BY absolute_signals.created_at DESC, absolute_signals.rowid DESC
+             ) AS signal_rank
+           FROM absolute_signals
+           WHERE absolute_signals.context_id = ?
+             AND absolute_signals.item_id IN (${placeholders})
+         )
+         SELECT
+           ranked_signals.id,
+           ranked_signals.profile_id,
+           ranked_signals.context_id,
+           ranked_signals.user_id,
+           ranked_signals.item_id,
+           ranked_signals.signal_type,
+           ranked_signals.strength,
+           ranked_signals.source,
+           ranked_signals.created_at,
+           (
+             SELECT activity_events.actor
+             FROM activity_events
+             WHERE activity_events.entity_type = 'preference_item'
+               AND activity_events.entity_id = ranked_signals.item_id
+               AND json_extract(activity_events.metadata_json, '$.signalId') = ranked_signals.id
+             ORDER BY activity_events.created_at DESC
+             LIMIT 1
+           ) AS actor
+         FROM ranked_signals
+         WHERE ranked_signals.signal_rank = 1
+         ORDER BY ranked_signals.created_at DESC, ranked_signals.signal_rowid DESC`
+      )
+      .all(contextId, ...distinctItemIds) as SignalRow[]
+  ).map(mapSignal);
+}
+
+function listSignalHistory(
+  contextId: string,
+  limit = PREFERENCE_WORKSPACE_HISTORY_LIMIT
+): AbsoluteSignal[] {
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT
+           absolute_signals.id,
+           absolute_signals.profile_id,
+           absolute_signals.context_id,
+           absolute_signals.user_id,
+           absolute_signals.item_id,
+           absolute_signals.signal_type,
+           absolute_signals.strength,
+           absolute_signals.source,
+           absolute_signals.created_at,
+           (
+             SELECT activity_events.actor
+             FROM activity_events
+             WHERE activity_events.entity_type = 'preference_item'
+               AND activity_events.entity_id = absolute_signals.item_id
+               AND json_extract(activity_events.metadata_json, '$.signalId') = absolute_signals.id
+             ORDER BY activity_events.created_at DESC
+             LIMIT 1
+           ) AS actor
+         FROM absolute_signals
+         WHERE absolute_signals.context_id = ?
+         ORDER BY absolute_signals.created_at DESC, absolute_signals.rowid DESC
+         LIMIT ?`
+      )
+      .all(contextId, Math.max(1, limit)) as SignalRow[]
+  ).map(mapSignal);
+}
+
+function getEffectiveSignals(signals: AbsoluteSignal[]) {
+  const currentByContextAndItem = new Map<string, AbsoluteSignal>();
+  for (const signal of signals) {
+    const key = `${signal.contextId}\u0000${signal.itemId}`;
+    if (!currentByContextAndItem.has(key)) {
+      currentByContextAndItem.set(key, signal);
+    }
+  }
+  return [...currentByContextAndItem.values()];
 }
 
 function listStoredScores(contextId: string): ScoreRow[] {
@@ -798,15 +1457,86 @@ function listStoredScores(contextId: string): ScoreRow[] {
     .all(contextId) as ScoreRow[];
 }
 
-export function listPreferenceContexts(): PreferenceContext[] {
+export function getPreferenceItemScoreForContext(
+  itemId: string,
+  contextId: string
+): PreferenceItemScore | undefined {
+  const item = getItemById(itemId);
+  if (!item) {
+    return undefined;
+  }
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, profile_id, context_id, item_id, latent_score, confidence,
+              uncertainty, evidence_count, pairwise_wins, pairwise_losses,
+              pairwise_ties, signal_count, conflict_count, status,
+              dominant_dimensions_json, explanation_json, manual_status,
+              manual_score, confidence_lock, bookmarked, compare_later,
+              frozen, last_inferred_at, last_judgment_at, updated_at
+       FROM preference_item_scores
+       WHERE context_id = ? AND item_id = ?`
+    )
+    .get(contextId, itemId) as ScoreRow | undefined;
+  if (!row) {
+    return undefined;
+  }
+  return mapScore(
+    row,
+    item,
+    listEffectiveSignalsForItems(contextId, [itemId])[0] ?? null
+  );
+}
+
+export function listPreferenceContexts(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    query?: string;
+    limit?: number;
+  } = {}
+): PreferenceContext[] {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const where: string[] = [];
+  const parameters: Array<string | number> = [];
+  if (userIds.length > 0) {
+    where.push(
+      `preference_profiles.user_id IN (${userIds.map(() => "?").join(", ")})`
+    );
+    parameters.push(...userIds);
+  }
+  if (ids.length > 0) {
+    where.push(`preference_contexts.id IN (${ids.map(() => "?").join(", ")})`);
+    parameters.push(...ids);
+  }
+  const query = normalizePreferenceSearchQuery(options.query);
+  if (query) {
+    const escaped = escapeSqlLike(query);
+    where.push(
+      "(preference_contexts.name LIKE ? ESCAPE '\\' OR preference_contexts.description LIKE ? ESCAPE '\\')"
+    );
+    parameters.push(`%${escaped}%`, `%${escaped}%`);
+  }
+  const limit = Math.min(
+    Math.max(options.limit ?? 200, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
   return (
     getDatabase()
       .prepare(
-        `SELECT id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at
-       FROM preference_contexts
-       ORDER BY created_at ASC`
+        `SELECT preference_contexts.id, preference_contexts.profile_id,
+                preference_contexts.name, preference_contexts.description,
+                preference_contexts.share_mode, preference_contexts.active,
+                preference_contexts.is_default, preference_contexts.decay_days,
+                preference_contexts.created_at, preference_contexts.updated_at
+         FROM preference_contexts
+         INNER JOIN preference_profiles
+           ON preference_profiles.id = preference_contexts.profile_id
+         ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY preference_contexts.updated_at DESC, preference_contexts.id ASC
+         LIMIT ?`
       )
-      .all() as ContextRow[]
+      .all(...parameters, limit) as ContextRow[]
   ).map(mapContext);
 }
 
@@ -816,15 +1546,57 @@ export function getPreferenceContextById(
   return readContext(contextId) ?? undefined;
 }
 
-export function listPreferenceItems(): PreferenceItem[] {
+export function listPreferenceItems(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    query?: string;
+    limit?: number;
+  } = {}
+): PreferenceItem[] {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const where: string[] = [];
+  const parameters: Array<string | number> = [];
+  if (userIds.length > 0) {
+    where.push(
+      `preference_profiles.user_id IN (${userIds.map(() => "?").join(", ")})`
+    );
+    parameters.push(...userIds);
+  }
+  if (ids.length > 0) {
+    where.push(`preference_items.id IN (${ids.map(() => "?").join(", ")})`);
+    parameters.push(...ids);
+  }
+  const query = normalizePreferenceSearchQuery(options.query);
+  if (query) {
+    const escaped = escapeSqlLike(query);
+    where.push(
+      "(preference_items.label LIKE ? ESCAPE '\\' OR preference_items.description LIKE ? ESCAPE '\\' OR preference_items.tags_json LIKE ? ESCAPE '\\')"
+    );
+    parameters.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+  }
+  const limit = Math.min(
+    Math.max(options.limit ?? 200, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
   return (
     getDatabase()
       .prepare(
-        `SELECT id, profile_id, label, description, tags_json, feature_weights_json, source_entity_type, source_entity_id, metadata_json, created_at, updated_at
-       FROM preference_items
-       ORDER BY created_at ASC`
+        `SELECT preference_items.id, preference_items.profile_id,
+                preference_items.label, preference_items.description,
+                preference_items.tags_json, preference_items.feature_weights_json,
+                preference_items.source_entity_type, preference_items.source_entity_id,
+                preference_items.metadata_json, preference_items.created_at,
+                preference_items.updated_at
+         FROM preference_items
+         INNER JOIN preference_profiles
+           ON preference_profiles.id = preference_items.profile_id
+         ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY preference_items.updated_at DESC, preference_items.id ASC
+         LIMIT ?`
       )
-      .all() as ItemRow[]
+      .all(...parameters, limit) as ItemRow[]
   ).map(mapItem);
 }
 
@@ -834,47 +1606,512 @@ export function getPreferenceItemById(
   return getItemById(itemId) ?? undefined;
 }
 
-export function listPreferenceCatalogs(): PreferenceCatalog[] {
-  return (
-    getDatabase()
-      .prepare(
-        `SELECT id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
+export function listPreferenceCatalogs(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    domain?: PreferenceDomain;
+    query?: string;
+    linkedTo?: { entityType: string; id: string };
+    limit?: number;
+    offset?: number;
+    pageSnapshot?: {
+      snapshotAt: string;
+      snapshotRowId: number;
+      after?: { updatedAt: string; id: string };
+    };
+  } = {}
+): PreferenceCatalog[] {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const where = ["preference_catalogs.archived = 0"];
+  const parameters: Array<string | number> = [];
+  if (userIds.length > 0) {
+    where.push(
+      `preference_profiles.user_id IN (${userIds.map(() => "?").join(", ")})`
+    );
+    parameters.push(...userIds);
+  }
+  if (ids.length > 0) {
+    where.push(`preference_catalogs.id IN (${ids.map(() => "?").join(", ")})`);
+    parameters.push(...ids);
+  }
+  if (options.domain) {
+    where.push("preference_catalogs.domain = ?");
+    parameters.push(options.domain);
+  }
+  const query = normalizePreferenceSearchQuery(options.query);
+  if (query) {
+    const escaped = escapeSqlLike(query);
+    where.push(
+      `(preference_catalogs.title LIKE ? ESCAPE '\\'
+        OR preference_catalogs.description LIKE ? ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM preference_catalog_items
+          WHERE preference_catalog_items.catalog_id = preference_catalogs.id
+            AND preference_catalog_items.archived = 0
+            AND (
+              preference_catalog_items.label LIKE ? ESCAPE '\\'
+              OR preference_catalog_items.description LIKE ? ESCAPE '\\'
+              OR preference_catalog_items.tags_json LIKE ? ESCAPE '\\'
+            )
+        ))`
+    );
+    parameters.push(
+      `%${escaped}%`,
+      `%${escaped}%`,
+      `%${escaped}%`,
+      `%${escaped}%`,
+      `%${escaped}%`
+    );
+  }
+  if (options.linkedTo) {
+    where.push(
+      `EXISTS (
+         SELECT 1
+         FROM entity_links
+         WHERE (
+           source_entity_type = 'preference_catalog'
+           AND source_entity_id = preference_catalogs.id
+           AND target_entity_type = ?
+           AND target_entity_id = ?
+         ) OR (
+           target_entity_type = 'preference_catalog'
+           AND target_entity_id = preference_catalogs.id
+           AND source_entity_type = ?
+           AND source_entity_id = ?
+         )
+       )`
+    );
+    parameters.push(
+      options.linkedTo.entityType,
+      options.linkedTo.id,
+      options.linkedTo.entityType,
+      options.linkedTo.id
+    );
+  }
+  if (options.pageSnapshot) {
+    where.push("preference_catalogs.rowid <= ?");
+    parameters.push(options.pageSnapshot.snapshotRowId);
+    where.push("preference_catalogs.updated_at <= ?");
+    parameters.push(options.pageSnapshot.snapshotAt);
+    if (options.pageSnapshot.after) {
+      where.push(
+        `(preference_catalogs.updated_at < ?
+          OR (
+            preference_catalogs.updated_at = ?
+            AND preference_catalogs.id > ?
+          ))`
+      );
+      parameters.push(
+        options.pageSnapshot.after.updatedAt,
+        options.pageSnapshot.after.updatedAt,
+        options.pageSnapshot.after.id
+      );
+    }
+  }
+  const limit = Math.min(
+    Math.max(options.limit ?? 24, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
+  const offset = Math.max(options.offset ?? 0, 0);
+  const rows = getDatabase()
+    .prepare(
+      `SELECT preference_catalogs.id, preference_catalogs.profile_id,
+              preference_profiles.user_id, preference_catalogs.domain,
+              preference_catalogs.slug, preference_catalogs.title,
+              preference_catalogs.description, preference_catalogs.scope_in,
+              preference_catalogs.scope_out, preference_catalogs.source,
+              preference_catalogs.created_source,
+              preference_catalogs.created_by_actor,
+              preference_catalogs.archived, preference_catalogs.created_at,
+              preference_catalogs.updated_at
        FROM preference_catalogs
-       WHERE archived = 0
-       ORDER BY created_at ASC`
-      )
-      .all() as CatalogRow[]
-  )
-    .filter((row) => row.archived === 0)
-    .map((row) => readCatalog(row.id))
-    .filter((catalog): catalog is PreferenceCatalog => catalog !== null);
+       INNER JOIN preference_profiles
+         ON preference_profiles.id = preference_catalogs.profile_id
+       WHERE ${where.join(" AND ")}
+       ORDER BY preference_catalogs.updated_at DESC, preference_catalogs.id ASC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...parameters, limit, offset) as CatalogRow[];
+  return mapCatalogRows(rows, { itemQuery: query });
 }
 
 export function getPreferenceCatalogById(
-  catalogId: string
+  catalogId: string,
+  includeArchived = false
 ): PreferenceCatalog | undefined {
-  return readCatalog(catalogId) ?? undefined;
+  return readCatalog(catalogId, { includeArchived }) ?? undefined;
 }
 
-export function listPreferenceCatalogItems(): PreferenceCatalogItem[] {
+export function listPreferenceCatalogItems(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    catalogIds?: string[];
+    query?: string;
+    limit?: number;
+    offset?: number;
+    pageSnapshot?: {
+      snapshotAt: string;
+      snapshotRowId: number;
+      after?: { catalogId: string; position: number; id: string };
+    };
+  } = {}
+): PreferenceCatalogItem[] {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const catalogIds = normalizePreferenceSearchValues(
+    options.catalogIds,
+    "catalogIds"
+  );
+  const where = [
+    "preference_catalog_items.archived = 0",
+    "preference_catalogs.archived = 0"
+  ];
+  const parameters: Array<string | number> = [];
+  if (userIds.length > 0) {
+    where.push(
+      `preference_profiles.user_id IN (${userIds.map(() => "?").join(", ")})`
+    );
+    parameters.push(...userIds);
+  }
+  if (ids.length > 0) {
+    where.push(
+      `preference_catalog_items.id IN (${ids.map(() => "?").join(", ")})`
+    );
+    parameters.push(...ids);
+  }
+  if (catalogIds.length > 0) {
+    where.push(
+      `preference_catalog_items.catalog_id IN (${catalogIds.map(() => "?").join(", ")})`
+    );
+    parameters.push(...catalogIds);
+  }
+  const query = normalizePreferenceSearchQuery(options.query);
+  if (query) {
+    const escaped = escapeSqlLike(query);
+    where.push(
+      "(preference_catalog_items.label LIKE ? ESCAPE '\\' OR preference_catalog_items.description LIKE ? ESCAPE '\\' OR preference_catalog_items.tags_json LIKE ? ESCAPE '\\')"
+    );
+    parameters.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`);
+  }
+  if (options.pageSnapshot) {
+    where.push("preference_catalog_items.rowid <= ?");
+    parameters.push(options.pageSnapshot.snapshotRowId);
+    where.push("preference_catalog_items.updated_at <= ?");
+    parameters.push(options.pageSnapshot.snapshotAt);
+    if (options.pageSnapshot.after) {
+      where.push(
+        `(preference_catalog_items.catalog_id > ?
+          OR (
+            preference_catalog_items.catalog_id = ?
+            AND preference_catalog_items.position > ?
+          )
+          OR (
+            preference_catalog_items.catalog_id = ?
+            AND preference_catalog_items.position = ?
+            AND preference_catalog_items.id > ?
+          ))`
+      );
+      parameters.push(
+        options.pageSnapshot.after.catalogId,
+        options.pageSnapshot.after.catalogId,
+        options.pageSnapshot.after.position,
+        options.pageSnapshot.after.catalogId,
+        options.pageSnapshot.after.position,
+        options.pageSnapshot.after.id
+      );
+    }
+  }
+  const limit = Math.min(
+    Math.max(options.limit ?? 24, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
+  const offset = Math.max(options.offset ?? 0, 0);
   return (
     getDatabase()
       .prepare(
-        `SELECT id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
-       FROM preference_catalog_items
-       WHERE archived = 0
-       ORDER BY catalog_id ASC, position ASC, created_at ASC`
+        `SELECT preference_catalog_items.id,
+                preference_catalog_items.catalog_id,
+                preference_catalog_items.label,
+                preference_catalog_items.description,
+                preference_catalog_items.tags_json,
+                preference_catalog_items.feature_weights_json,
+                preference_catalog_items.position,
+                preference_catalog_items.archived,
+                preference_catalog_items.created_at,
+                preference_catalog_items.updated_at
+         FROM preference_catalog_items
+         INNER JOIN preference_catalogs
+           ON preference_catalogs.id = preference_catalog_items.catalog_id
+         INNER JOIN preference_profiles
+           ON preference_profiles.id = preference_catalogs.profile_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY preference_catalog_items.catalog_id ASC,
+                  preference_catalog_items.position ASC,
+                  preference_catalog_items.id ASC
+         LIMIT ? OFFSET ?`
       )
-      .all() as CatalogItemRow[]
-  )
-    .filter((row) => row.archived === 0)
-    .map(mapCatalogItem);
+      .all(...parameters, limit, offset) as CatalogItemRow[]
+  ).map(mapCatalogItem);
+}
+
+function invalidPreferenceCursor(): never {
+  throw new HttpError(
+    400,
+    "preferences_invalid_cursor",
+    "The Preferences page cursor is invalid or does not match this query."
+  );
+}
+
+function encodePreferenceCursor(
+  cursor: PreferenceCatalogCursor | PreferenceCatalogItemCursor
+) {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodePreferenceCursor(
+  encoded: string,
+  kind: PreferenceCatalogCursor["kind"]
+): PreferenceCatalogCursor;
+function decodePreferenceCursor(
+  encoded: string,
+  kind: PreferenceCatalogItemCursor["kind"]
+): PreferenceCatalogItemCursor;
+function decodePreferenceCursor(
+  encoded: string,
+  kind: PreferenceCatalogCursor["kind"] | PreferenceCatalogItemCursor["kind"]
+): PreferenceCatalogCursor | PreferenceCatalogItemCursor {
+  try {
+    const cursor = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8")
+    ) as Partial<PreferenceCatalogCursor | PreferenceCatalogItemCursor>;
+    if (
+      cursor.version !== 1 ||
+      cursor.kind !== kind ||
+      typeof cursor.scope !== "string" ||
+      typeof cursor.snapshotAt !== "string" ||
+      !Number.isFinite(Date.parse(cursor.snapshotAt)) ||
+      !Number.isInteger(cursor.snapshotRowId) ||
+      (cursor.snapshotRowId ?? -1) < 0 ||
+      !Number.isInteger(cursor.seen) ||
+      (cursor.seen ?? -1) < 0 ||
+      !cursor.after ||
+      typeof cursor.after !== "object"
+    ) {
+      return invalidPreferenceCursor();
+    }
+    if (kind === "catalog") {
+      const after = cursor.after as Partial<PreferenceCatalogCursor["after"]>;
+      if (
+        typeof after.updatedAt !== "string" ||
+        !Number.isFinite(Date.parse(after.updatedAt)) ||
+        typeof after.id !== "string" ||
+        after.id.length === 0
+      ) {
+        return invalidPreferenceCursor();
+      }
+    } else {
+      const after = cursor.after as Partial<
+        PreferenceCatalogItemCursor["after"]
+      >;
+      if (
+        typeof after.catalogId !== "string" ||
+        after.catalogId.length === 0 ||
+        !Number.isInteger(after.position) ||
+        typeof after.id !== "string" ||
+        after.id.length === 0
+      ) {
+        return invalidPreferenceCursor();
+      }
+    }
+    return cursor as PreferenceCatalogCursor | PreferenceCatalogItemCursor;
+  } catch {
+    return invalidPreferenceCursor();
+  }
+}
+
+function preferenceCursorScope(input: Record<string, unknown>) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("base64url");
+}
+
+function maxPreferenceRowId(
+  table: "preference_catalogs" | "preference_catalog_items"
+) {
+  const row = getDatabase()
+    .prepare(`SELECT COALESCE(MAX(rowid), 0) AS max_row_id FROM ${table}`)
+    .get() as { max_row_id: number };
+  return row.max_row_id;
+}
+
+export function listPreferenceCatalogPage(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    domain?: PreferenceDomain;
+    query?: string;
+    linkedTo?: { entityType: string; id: string };
+    limit?: number;
+    offset?: number;
+    cursor?: string;
+  } = {}
+): PreferenceCatalogPage {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const query = normalizePreferenceSearchQuery(options.query);
+  const limit = Math.min(
+    Math.max(options.limit ?? 24, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
+  const scope = preferenceCursorScope({
+    kind: "catalog",
+    userIds: [...userIds].sort(),
+    ids: [...ids].sort(),
+    domain: options.domain ?? null,
+    query: query ?? null,
+    linkedTo: options.linkedTo ?? null
+  });
+  const cursor = options.cursor
+    ? decodePreferenceCursor(options.cursor, "catalog")
+    : null;
+  if (cursor && cursor.scope !== scope) {
+    return invalidPreferenceCursor();
+  }
+  const snapshotAt = cursor?.snapshotAt ?? nowIso();
+  const snapshotRowId =
+    cursor?.snapshotRowId ?? maxPreferenceRowId("preference_catalogs");
+  const offset = cursor?.seen ?? Math.max(options.offset ?? 0, 0);
+  const rows = listPreferenceCatalogs({
+    ...options,
+    userIds,
+    ids,
+    query,
+    limit: limit + 1,
+    offset: cursor ? 0 : offset,
+    pageSnapshot: {
+      snapshotAt,
+      snapshotRowId,
+      after: cursor?.after
+    }
+  });
+  const hasMore = rows.length > limit;
+  const catalogs = rows.slice(0, limit);
+  const nextOffset = hasMore ? offset + catalogs.length : null;
+  const last = catalogs.at(-1);
+  return {
+    catalogs,
+    limit,
+    offset,
+    hasMore,
+    nextOffset,
+    previousOffset: offset > 0 ? Math.max(0, offset - limit) : null,
+    snapshotAt,
+    nextCursor:
+      hasMore && last
+        ? encodePreferenceCursor({
+            version: 1,
+            kind: "catalog",
+            scope,
+            snapshotAt,
+            snapshotRowId,
+            seen: offset + catalogs.length,
+            after: { updatedAt: last.updatedAt, id: last.id }
+          })
+        : null
+  };
+}
+
+export function listPreferenceCatalogItemPage(
+  options: {
+    userIds?: string[];
+    ids?: string[];
+    catalogIds?: string[];
+    query?: string;
+    limit?: number;
+    offset?: number;
+    cursor?: string;
+  } = {}
+): PreferenceCatalogItemPage {
+  const userIds = normalizePreferenceSearchValues(options.userIds, "userIds");
+  const ids = normalizePreferenceSearchValues(options.ids, "ids");
+  const catalogIds = normalizePreferenceSearchValues(
+    options.catalogIds,
+    "catalogIds"
+  );
+  const query = normalizePreferenceSearchQuery(options.query);
+  const limit = Math.min(
+    Math.max(options.limit ?? 24, 1),
+    PREFERENCE_SEARCH_RESULT_LIMIT
+  );
+  const scope = preferenceCursorScope({
+    kind: "catalog-item",
+    userIds: [...userIds].sort(),
+    ids: [...ids].sort(),
+    catalogIds: [...catalogIds].sort(),
+    query: query ?? null
+  });
+  const cursor = options.cursor
+    ? decodePreferenceCursor(options.cursor, "catalog-item")
+    : null;
+  if (cursor && cursor.scope !== scope) {
+    return invalidPreferenceCursor();
+  }
+  const snapshotAt = cursor?.snapshotAt ?? nowIso();
+  const snapshotRowId =
+    cursor?.snapshotRowId ?? maxPreferenceRowId("preference_catalog_items");
+  const offset = cursor?.seen ?? Math.max(options.offset ?? 0, 0);
+  const rows = listPreferenceCatalogItems({
+    ...options,
+    userIds,
+    ids,
+    catalogIds,
+    query,
+    limit: limit + 1,
+    offset: cursor ? 0 : offset,
+    pageSnapshot: {
+      snapshotAt,
+      snapshotRowId,
+      after: cursor?.after
+    }
+  });
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit);
+  const nextOffset = hasMore ? offset + items.length : null;
+  const last = items.at(-1);
+  return {
+    items,
+    limit,
+    offset,
+    hasMore,
+    nextOffset,
+    previousOffset: offset > 0 ? Math.max(0, offset - limit) : null,
+    snapshotAt,
+    nextCursor:
+      hasMore && last
+        ? encodePreferenceCursor({
+            version: 1,
+            kind: "catalog-item",
+            scope,
+            snapshotAt,
+            snapshotRowId,
+            seen: offset + items.length,
+            after: {
+              catalogId: last.catalogId,
+              position: last.position,
+              id: last.id
+            }
+          })
+        : null
+  };
 }
 
 export function getPreferenceCatalogItemById(
-  catalogItemId: string
+  catalogItemId: string,
+  includeArchived = false
 ): PreferenceCatalogItem | undefined {
-  return readCatalogItem(catalogItemId) ?? undefined;
+  return readCatalogItem(catalogItemId, includeArchived) ?? undefined;
 }
 
 function listStoredDimensions(contextId: string): PreferenceDimensionSummary[] {
@@ -1071,38 +2308,49 @@ function ensureProfile(
 }
 
 function createDefaultContexts(profileId: string) {
-  const now = nowIso();
-  const database = getDatabase();
-  const insertedContextIds: string[] = [];
-  for (const template of DEFAULT_CONTEXT_TEMPLATES) {
-    const contextId = `pref_ctx_${template.key}_${randomUUID().slice(0, 8)}`;
-    insertedContextIds.push(contextId);
+  runInTransaction(() => {
+    const now = nowIso();
+    const database = getDatabase();
+    const profile = getPreferenceProfileById(profileId);
+    if (!profile) {
+      throw new HttpError(
+        500,
+        "preferences_profile_missing",
+        `Preference profile ${profileId} was not found.`
+      );
+    }
+    const insertedContextIds: string[] = [];
+    for (const template of DEFAULT_CONTEXT_TEMPLATES) {
+      const contextId = `pref_ctx_${template.key}_${randomUUID().slice(0, 8)}`;
+      insertedContextIds.push(contextId);
+      database
+        .prepare(
+          `INSERT INTO preference_contexts (id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          contextId,
+          profileId,
+          template.name,
+          template.description,
+          template.shareMode,
+          template.active ? 1 : 0,
+          template.isDefault ? 1 : 0,
+          template.decayDays,
+          now,
+          now
+        );
+      setEntityOwner("preference_context", contextId, profile.userId);
+    }
+    const defaultContextId = insertedContextIds[0] ?? null;
     database
       .prepare(
-        `INSERT INTO preference_contexts (id, profile_id, name, description, share_mode, active, is_default, decay_days, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `UPDATE preference_profiles
+         SET default_context_id = ?, updated_at = ?
+         WHERE id = ?`
       )
-      .run(
-        contextId,
-        profileId,
-        template.name,
-        template.description,
-        template.shareMode,
-        template.active ? 1 : 0,
-        template.isDefault ? 1 : 0,
-        template.decayDays,
-        now,
-        now
-      );
-  }
-  const defaultContextId = insertedContextIds[0] ?? null;
-  database
-    .prepare(
-      `UPDATE preference_profiles
-       SET default_context_id = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(defaultContextId, now, profileId);
+      .run(defaultContextId, now, profileId);
+  });
 }
 
 function createSeededCatalogs(profileId: string, domain: PreferenceDomain) {
@@ -1112,13 +2360,22 @@ function createSeededCatalogs(profileId: string, domain: PreferenceDomain) {
   }
   const database = getDatabase();
   const now = nowIso();
+  const profile = getPreferenceProfileById(profileId);
+  if (!profile) {
+    throw new HttpError(
+      500,
+      "preferences_profile_missing",
+      `Preference profile ${profileId} was not found.`
+    );
+  }
   for (const seed of seeds) {
     const catalogId = `pref_catalog_${randomUUID().slice(0, 10)}`;
     database
       .prepare(
         `INSERT INTO preference_catalogs (
-           id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+           id, profile_id, domain, slug, title, description, source,
+           created_source, archived, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'system', 0, ?, ?)`
       )
       .run(
         catalogId,
@@ -1131,7 +2388,9 @@ function createSeededCatalogs(profileId: string, domain: PreferenceDomain) {
         now,
         now
       );
+    setEntityOwner("preference_catalog", catalogId, profile.userId);
     seed.items.forEach((seedItem, index) => {
+      const catalogItemId = `pref_catalog_item_${randomUUID().slice(0, 10)}`;
       database
         .prepare(
           `INSERT INTO preference_catalog_items (
@@ -1139,7 +2398,7 @@ function createSeededCatalogs(profileId: string, domain: PreferenceDomain) {
            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
         )
         .run(
-          `pref_catalog_item_${randomUUID().slice(0, 10)}`,
+          catalogItemId,
           catalogId,
           seedItem.label,
           seedItem.description,
@@ -1149,21 +2408,24 @@ function createSeededCatalogs(profileId: string, domain: PreferenceDomain) {
           now,
           now
         );
+      setEntityOwner("preference_catalog_item", catalogItemId, profile.userId);
     });
   }
 }
 
 function ensureCatalogs(profileId: string, domain: PreferenceDomain) {
-  const existingCount = getDatabase()
-    .prepare(
-      `SELECT COUNT(*) as count
-       FROM preference_catalogs
-       WHERE profile_id = ?`
-    )
-    .get(profileId) as { count: number };
-  if (existingCount.count === 0) {
-    createSeededCatalogs(profileId, domain);
-  }
+  runInTransaction(() => {
+    const existingCount = getDatabase()
+      .prepare(
+        `SELECT COUNT(*) as count
+         FROM preference_catalogs
+         WHERE profile_id = ?`
+      )
+      .get(profileId) as { count: number };
+    if (existingCount.count === 0) {
+      createSeededCatalogs(profileId, domain);
+    }
+  });
 }
 
 function buildEvidenceFactorMap(
@@ -1191,23 +2453,32 @@ function deriveStatus(options: {
   confidence: number;
   bookmarked: boolean;
   compareLater: boolean;
-  signals: Array<AbsoluteSignal["signalType"]>;
+  directSignal: AbsoluteSignal["signalType"] | null;
 }): PreferenceItemStatus {
-  const { manualStatus, score, confidence, bookmarked, compareLater, signals } =
-    options;
+  const {
+    manualStatus,
+    score,
+    confidence,
+    bookmarked,
+    compareLater,
+    directSignal
+  } = options;
   if (manualStatus) {
     return manualStatus;
   }
-  if (signals.includes("veto")) {
+  if (directSignal === "veto") {
     return "vetoed";
   }
-  if (signals.includes("must_have")) {
+  if (directSignal === "must_have") {
     return "must_have";
   }
-  if (signals.includes("favorite")) {
+  if (directSignal === "favorite") {
     return "favorite";
   }
-  if (bookmarked || compareLater || signals.includes("bookmark")) {
+  if (directSignal === "neutral") {
+    return "neutral";
+  }
+  if (bookmarked || compareLater || directSignal === "bookmark") {
     return "bookmarked";
   }
   if (confidence < 0.42) {
@@ -1242,13 +2513,16 @@ function computeDimensionSummaries(options: {
   );
 
   for (const signal of signals) {
+    if (signal.signalType === "neutral") {
+      continue;
+    }
     const item = itemsById.get(signal.itemId);
     const factor = evidenceFactors.get(signal.contextId) ?? 0;
     if (!item || factor <= 0) {
       continue;
     }
     const weight =
-      SIGNAL_WEIGHTS[signal.signalType] *
+      PREFERENCE_SIGNAL_MODEL_WEIGHTS[signal.signalType] *
       signal.strength *
       factor *
       timeDecay(ageInDays(signal.createdAt), selectedContext.decayDays);
@@ -1330,6 +2604,7 @@ function computeScores(options: {
     signals,
     existingScores
   } = options;
+  const effectiveSignals = getEffectiveSignals(signals);
   const itemsById = new Map(items.map((item) => [item.id, item] as const));
   const evidenceFactors = buildEvidenceFactorMap(contexts, selectedContext);
   const dimensionSummaries = computeDimensionSummaries({
@@ -1337,7 +2612,7 @@ function computeScores(options: {
     selectedContext,
     itemsById,
     judgments,
-    signals
+    signals: effectiveSignals
   });
   const dimensionLeanings = new Map(
     dimensionSummaries.map((summary) => [summary.dimensionId, summary.leaning])
@@ -1356,7 +2631,12 @@ function computeScores(options: {
       evidenceCount: number;
       lastJudgmentAt: string | null;
       lastEvidenceAt: string | null;
-      signals: AbsoluteSignal["signalType"][];
+      signals: Array<{
+        signal: AbsoluteSignal;
+        contextName: string;
+        factor: number;
+        weightedEffect: number;
+      }>;
     }
   >(
     items.map((item) => [
@@ -1374,26 +2654,34 @@ function computeScores(options: {
       }
     ])
   );
-  const pairDirections = new Map<
-    string,
-    { leftWins: number; rightWins: number }
-  >();
+  const pairWinners = new Map<string, Set<string>>();
 
-  for (const signal of signals) {
+  const contextsById = new Map(
+    contexts.map((context) => [context.id, context] as const)
+  );
+  for (const signal of effectiveSignals) {
     const itemStats = perItem.get(signal.itemId);
     const factor = evidenceFactors.get(signal.contextId) ?? 0;
     if (!itemStats || factor <= 0) {
       continue;
     }
     const weight =
-      SIGNAL_WEIGHTS[signal.signalType] *
+      PREFERENCE_SIGNAL_MODEL_WEIGHTS[signal.signalType] *
       signal.strength *
       factor *
       timeDecay(ageInDays(signal.createdAt), selectedContext.decayDays);
+    itemStats.signals.push({
+      signal,
+      contextName: contextsById.get(signal.contextId)?.name ?? signal.contextId,
+      factor,
+      weightedEffect: weight
+    });
+    if (signal.signalType === "neutral") {
+      continue;
+    }
     itemStats.raw += weight;
     itemStats.signalCount += 1;
     itemStats.evidenceCount += 1;
-    itemStats.signals.push(signal.signalType);
     itemStats.lastEvidenceAt =
       !itemStats.lastEvidenceAt || signal.createdAt > itemStats.lastEvidenceAt
         ? signal.createdAt
@@ -1419,27 +2707,26 @@ function computeScores(options: {
     const pairKey = [judgment.leftItemId, judgment.rightItemId]
       .sort()
       .join("::");
-    const pairState = pairDirections.get(pairKey) ?? {
-      leftWins: 0,
-      rightWins: 0
-    };
     if (judgment.outcome === "left") {
       leftStats.raw += weight;
       rightStats.raw -= weight;
       leftStats.wins += 1;
       rightStats.losses += 1;
-      pairState.leftWins += 1;
+      const winners = pairWinners.get(pairKey) ?? new Set<string>();
+      winners.add(judgment.leftItemId);
+      pairWinners.set(pairKey, winners);
     } else if (judgment.outcome === "right") {
       leftStats.raw -= weight;
       rightStats.raw += weight;
       leftStats.losses += 1;
       rightStats.wins += 1;
-      pairState.rightWins += 1;
+      const winners = pairWinners.get(pairKey) ?? new Set<string>();
+      winners.add(judgment.rightItemId);
+      pairWinners.set(pairKey, winners);
     } else {
       leftStats.ties += 1;
       rightStats.ties += 1;
     }
-    pairDirections.set(pairKey, pairState);
     leftStats.evidenceCount += 1;
     rightStats.evidenceCount += 1;
     leftStats.lastJudgmentAt =
@@ -1463,8 +2750,8 @@ function computeScores(options: {
   }
 
   const conflictCountByItem = new Map<string, number>();
-  for (const [pairKey, pairState] of pairDirections) {
-    if (pairState.leftWins === 0 || pairState.rightWins === 0) {
+  for (const [pairKey, winners] of pairWinners) {
+    if (winners.size < 2) {
       continue;
     }
     const [leftItemId, rightItemId] = pairKey.split("::");
@@ -1476,6 +2763,27 @@ function computeScores(options: {
       rightItemId,
       (conflictCountByItem.get(rightItemId) ?? 0) + 1
     );
+  }
+
+  for (const [itemId, stats] of perItem) {
+    const polarities = new Set(
+      stats.signals
+        .map(({ weightedEffect }) => Math.sign(weightedEffect))
+        .filter((value) => value !== 0)
+    );
+    let directConflictCount = polarities.size > 1 ? 1 : 0;
+    if ([...polarities].some((value) => value > 0) && stats.losses > 0) {
+      directConflictCount += 1;
+    }
+    if ([...polarities].some((value) => value < 0) && stats.wins > 0) {
+      directConflictCount += 1;
+    }
+    if (directConflictCount > 0) {
+      conflictCountByItem.set(
+        itemId,
+        (conflictCountByItem.get(itemId) ?? 0) + directConflictCount
+      );
+    }
   }
 
   const scores: ScoreComputation[] = items.map((item) => {
@@ -1519,18 +2827,34 @@ function computeScores(options: {
         0.04,
         1
       );
-    const bookmarked =
-      (existing?.bookmarked ?? 0) === 1 || stats.signals.includes("bookmark");
-    const compareLater =
-      (existing?.compare_later ?? 0) === 1 ||
-      stats.signals.includes("compare_later");
+    const statusSignal = [...stats.signals].sort((left, right) => {
+      const leftSelected = left.signal.contextId === selectedContext.id ? 1 : 0;
+      const rightSelected =
+        right.signal.contextId === selectedContext.id ? 1 : 0;
+      if (rightSelected !== leftSelected) {
+        return rightSelected - leftSelected;
+      }
+      if (Math.abs(right.weightedEffect) !== Math.abs(left.weightedEffect)) {
+        return Math.abs(right.weightedEffect) - Math.abs(left.weightedEffect);
+      }
+      return right.signal.createdAt.localeCompare(left.signal.createdAt);
+    })[0]?.signal;
+    const bookmarked = statusSignal
+      ? statusSignal.signalType === "bookmark"
+      : (existing?.bookmarked ?? 0) === 1;
+    const compareLater = statusSignal
+      ? statusSignal.signalType === "compare_later"
+      : (existing?.compare_later ?? 0) === 1;
     const status = deriveStatus({
       manualStatus: existing?.manual_status ?? null,
       score,
       confidence,
       bookmarked,
       compareLater,
-      signals: stats.signals
+      directSignal:
+        statusSignal?.signalType === "neutral"
+          ? null
+          : (statusSignal?.signalType ?? null)
     });
     const explanation = [
       stats.wins > 0
@@ -1539,14 +2863,16 @@ function computeScores(options: {
       stats.losses > 0
         ? `Lost against peers ${stats.losses} time${stats.losses === 1 ? "" : "s"}.`
         : null,
-      stats.signalCount > 0
-        ? `Direct signals recorded: ${stats.signals.join(", ")}.`
-        : null,
+      ...stats.signals.map(({ signal, contextName, factor, weightedEffect }) =>
+        signal.signalType === "neutral"
+          ? `Direct signal cleared in ${contextName}; earlier direct signals remain in history and no direct weight is active in this context.`
+          : `${signal.signalType.replaceAll("_", " ")} in ${contextName}: raw model weight ${signal.modelWeight.toFixed(2)}, context factor ${factor.toFixed(2)}, current contribution ${weightedEffect.toFixed(2)} before score scaling.`
+      ),
       dominantDimensions.length > 0
         ? `Dominant dimensions: ${dominantDimensions.join(", ")}.`
         : null,
       (conflictCountByItem.get(item.id) ?? 0) > 0
-        ? "Conflicting pairwise evidence lowers confidence."
+        ? "Direct signals and/or prior judgments conflict, which lowers confidence."
         : null,
       ageInDays(stats.lastEvidenceAt) > selectedContext.decayDays
         ? "Evidence is getting stale and should be recalibrated."
@@ -1595,7 +2921,7 @@ function computeScores(options: {
       selectedContext: { ...context, shareMode: "isolated" },
       itemsById,
       judgments,
-      signals
+      signals: effectiveSignals
     });
     contextOnlyDimensionsByContext.set(
       context.id,
@@ -1911,52 +3237,102 @@ function persistScoresAndDimensions(options: {
 
 function recomputeContext(
   profile: PreferenceProfile,
-  selectedContext: PreferenceContext
+  selectedContext: PreferenceContext,
+  mutationContext: PreferenceMutationContext = {
+    source: "system",
+    actor: null
+  }
 ) {
-  const contexts = listContexts(profile.id);
-  const items = listItems(profile.id);
-  const judgments = listJudgmentsForContexts(
-    contexts.map((context) => context.id)
-  );
-  const signals = listSignalsForContexts(contexts.map((context) => context.id));
-  const existingScores = listStoredScores(selectedContext.id);
-  const { scores, dimensions } = computeScores({
-    profile,
-    contexts,
-    selectedContext,
-    items,
-    judgments,
-    signals,
-    existingScores
-  });
-  persistScoresAndDimensions({
-    profile,
-    selectedContext,
-    scores,
-    dimensions,
-    snapshotsSummary: {
-      averageConfidence:
-        scores.length === 0
-          ? 0
-          : scores.reduce((sum, score) => sum + score.confidence, 0) /
-            scores.length,
-      likedCount: scores.filter((score) => score.status === "liked").length,
-      dislikedCount: scores.filter((score) => score.status === "disliked")
-        .length,
-      uncertainCount: scores.filter((score) => score.status === "uncertain")
-        .length,
-      totalItems: scores.length
+  return runInTransaction(() => {
+    const contexts = listContexts(profile.id);
+    if (contexts.length > 0) {
+      const placeholders = contexts.map(() => "?").join(", ");
+      getDatabase()
+        .prepare(
+          `INSERT INTO entity_owners (
+             entity_type, entity_id, user_id, role, created_at, updated_at
+           )
+           SELECT 'preference_signal', id, user_id, 'owner', created_at, created_at
+           FROM absolute_signals
+           WHERE context_id IN (${placeholders})
+           ON CONFLICT(entity_type, entity_id) DO NOTHING`
+        )
+        .run(...contexts.map((context) => context.id));
     }
+    const items = listItems(profile.id);
+    const judgmentWindow = listJudgmentsForContexts(
+      contexts.map((context) => context.id)
+    );
+    const signals = listEffectiveSignalsForContexts(
+      contexts.map((context) => context.id)
+    );
+    const existingScores = listStoredScores(selectedContext.id);
+    const { scores, dimensions } = computeScores({
+      profile,
+      contexts,
+      selectedContext,
+      items,
+      judgments: judgmentWindow.judgments,
+      signals,
+      existingScores
+    });
+    persistScoresAndDimensions({
+      profile,
+      selectedContext,
+      scores,
+      dimensions,
+      snapshotsSummary: {
+        averageConfidence:
+          scores.length === 0
+            ? 0
+            : scores.reduce((sum, score) => sum + score.confidence, 0) /
+              scores.length,
+        likedCount: scores.filter((score) => score.status === "liked").length,
+        dislikedCount: scores.filter((score) => score.status === "disliked")
+          .length,
+        uncertainCount: scores.filter((score) => score.status === "uncertain")
+          .length,
+        totalItems: scores.length,
+        evidenceCoverage: judgmentWindow.coverage,
+        refreshSource: mutationContext.source,
+        refreshActor: mutationContext.actor ?? null
+      }
+    });
+    return {
+      items,
+      judgments: judgmentWindow.judgments,
+      evidenceCoverage: judgmentWindow.coverage,
+      signals,
+      contexts,
+      selectedContext,
+      scores,
+      dimensions
+    };
   });
-  return {
-    items,
-    judgments,
-    signals,
-    contexts,
-    selectedContext,
-    scores,
-    dimensions
-  };
+}
+
+function recomputeAffectedContexts(
+  profile: PreferenceProfile,
+  primaryContextId: string | null,
+  mutationContext: PreferenceMutationContext = {
+    source: "system",
+    actor: null
+  }
+) {
+  const contexts = listContexts(profile.id)
+    .filter((context) => context.active || context.id === primaryContextId)
+    .sort((left, right) => {
+      if (left.id === primaryContextId) {
+        return -1;
+      }
+      if (right.id === primaryContextId) {
+        return 1;
+      }
+      return left.createdAt.localeCompare(right.createdAt);
+    });
+  for (const context of contexts) {
+    recomputeContext(profile, context, mutationContext);
+  }
 }
 
 function buildWorkspace(
@@ -1964,14 +3340,17 @@ function buildWorkspace(
   selectedContext: PreferenceContext,
   items: PreferenceItem[],
   judgments: PairwiseJudgment[],
-  signals: AbsoluteSignal[],
+  signalHistory: AbsoluteSignal[],
   scores: ScoreComputation[],
-  _dimensions: PreferenceDimensionSummary[]
+  _dimensions: PreferenceDimensionSummary[],
+  query: { itemLimit: number; itemOffset: number; historyLimit: number },
+  evidenceCoverage: PreferenceEvidenceCoverage
 ): PreferenceWorkspacePayload {
   const catalogs = listCatalogs(profile.id);
+  const libraryCounts = getCatalogLibraryCounts(profile.id);
   const storedScores = listStoredScores(selectedContext.id);
   const itemsById = new Map(items.map((item) => [item.id, item] as const));
-  const mappedScores = storedScores
+  const allMappedScores = storedScores
     .map((score) => {
       const item = itemsById.get(score.item_id);
       return item ? mapScore(score, item) : null;
@@ -1983,6 +3362,24 @@ function buildWorkspace(
       }
       return right.latentScore - left.latentScore;
     });
+  const pagedScores = allMappedScores.slice(
+    query.itemOffset,
+    query.itemOffset + query.itemLimit
+  );
+  const effectiveSignalsByItemId = new Map(
+    listEffectiveSignalsForItems(
+      selectedContext.id,
+      pagedScores.map((score) => score.itemId)
+    ).map((signal) => [signal.itemId, signal] as const)
+  );
+  const mappedScores = pagedScores.map((score) =>
+    preferenceItemScoreSchema.parse({
+      ...score,
+      effectiveSignal: effectiveSignalsByItemId.get(score.itemId) ?? null
+    })
+  );
+  const returnedItemIds = new Set(mappedScores.map((score) => score.itemId));
+  const returnedItems = items.filter((item) => returnedItemIds.has(item.id));
   const mappedDimensions = listStoredDimensions(selectedContext.id);
   const nextPair = buildNextPair({
     selectedContext,
@@ -2019,6 +3416,7 @@ function buildWorkspace(
       }
     }
     return [...signsByItemId.entries()]
+      .filter(([itemId]) => returnedItemIds.has(itemId))
       .filter(([, signs]) => {
         const filtered = signs.filter((sign) => sign !== 0);
         return filtered.length >= 2 && new Set(filtered).size > 1;
@@ -2032,59 +3430,63 @@ function buildWorkspace(
     catalogs,
     dimensions: mappedDimensions,
     scores: mappedScores,
-    map: buildMap(items, scores),
+    map: buildMap(
+      returnedItems,
+      scores.filter((score) => returnedItemIds.has(score.itemId))
+    ),
     history: {
-      judgments: judgments.filter(
-        (judgment) => judgment.contextId === selectedContext.id
-      ),
-      signals: signals.filter(
-        (signal) => signal.contextId === selectedContext.id
-      ),
+      judgments: judgments
+        .filter((judgment) => judgment.contextId === selectedContext.id)
+        .slice(0, query.historyLimit),
+      signals: signalHistory.slice(0, query.historyLimit),
       snapshots,
       staleItemIds,
       flippedItemIds
     },
+    presentation: {
+      itemLimit: query.itemLimit,
+      itemOffset: query.itemOffset,
+      totalItems: allMappedScores.length,
+      returnedItems: mappedScores.length,
+      hasMore: query.itemOffset + mappedScores.length < allMappedScores.length,
+      nextOffset:
+        query.itemOffset + mappedScores.length < allMappedScores.length
+          ? query.itemOffset + mappedScores.length
+          : null,
+      historyLimit: query.historyLimit
+    },
+    evidenceCoverage,
     compare: {
       nextPair,
-      pendingCount: mappedScores.filter(
+      pendingCount: allMappedScores.filter(
         (score) => score.uncertainty >= 0.5 || score.compareLater
       ).length,
       candidateCount: items.length
     },
     summary: {
-      totalItems: mappedScores.length,
-      likedCount: mappedScores.filter((score) => score.status === "liked")
+      totalItems: allMappedScores.length,
+      likedCount: allMappedScores.filter((score) => score.status === "liked")
         .length,
-      dislikedCount: mappedScores.filter((score) => score.status === "disliked")
-        .length,
-      uncertainCount: mappedScores.filter(
+      dislikedCount: allMappedScores.filter(
+        (score) => score.status === "disliked"
+      ).length,
+      uncertainCount: allMappedScores.filter(
         (score) => score.status === "uncertain"
       ).length,
-      bookmarkedCount: mappedScores.filter((score) => score.bookmarked).length,
-      vetoedCount: mappedScores.filter((score) => score.status === "vetoed")
+      bookmarkedCount: allMappedScores.filter((score) => score.bookmarked)
+        .length,
+      vetoedCount: allMappedScores.filter((score) => score.status === "vetoed")
         .length,
       averageConfidence:
-        mappedScores.length === 0
+        allMappedScores.length === 0
           ? 0
-          : mappedScores.reduce((sum, score) => sum + score.confidence, 0) /
-            mappedScores.length,
-      pendingComparisons: mappedScores.filter(
+          : allMappedScores.reduce((sum, score) => sum + score.confidence, 0) /
+            allMappedScores.length,
+      pendingComparisons: allMappedScores.filter(
         (score) => score.uncertainty >= 0.5 || score.compareLater
       ).length
     },
-    libraries: {
-      totalCatalogs: catalogs.length,
-      totalCatalogItems: catalogs.reduce(
-        (sum, catalog) => sum + catalog.items.length,
-        0
-      ),
-      seededCatalogCount: catalogs.filter(
-        (catalog) => catalog.source === "seeded"
-      ).length,
-      customCatalogCount: catalogs.filter(
-        (catalog) => catalog.source === "custom"
-      ).length
-    }
+    libraries: libraryCounts
   });
   return workspace;
 }
@@ -2093,213 +3495,641 @@ function resolveWorkspaceQuery(query: PreferenceWorkspaceQuery) {
   const parsed = preferenceWorkspaceQuerySchema.parse(query);
   const userId = parsed.userId ?? getDefaultUser().id;
   const domain = parsed.domain ?? DEFAULT_PREFERENCE_DOMAIN;
-  return { userId, domain, contextId: parsed.contextId ?? null };
+  return {
+    ...parsed,
+    userId,
+    domain,
+    contextId: parsed.contextId ?? null
+  };
+}
+
+function mapStoredScoresToComputations(rows: ScoreRow[]): ScoreComputation[] {
+  return rows.map((row) => ({
+    itemId: row.item_id,
+    latentScore: row.latent_score,
+    confidence: row.confidence,
+    uncertainty: row.uncertainty,
+    evidenceCount: row.evidence_count,
+    pairwiseWins: row.pairwise_wins,
+    pairwiseLosses: row.pairwise_losses,
+    pairwiseTies: row.pairwise_ties,
+    signalCount: row.signal_count,
+    conflictCount: row.conflict_count,
+    status: row.status,
+    dominantDimensions: parseJsonArray<PreferenceDimensionId>(
+      row.dominant_dimensions_json
+    ),
+    explanation: parseJsonArray<string>(row.explanation_json),
+    manualStatus: row.manual_status,
+    manualScore: row.manual_score,
+    confidenceLock: row.confidence_lock,
+    bookmarked: row.bookmarked === 1,
+    compareLater: row.compare_later === 1,
+    frozen: row.frozen === 1,
+    lastInferredAt: row.last_inferred_at,
+    lastJudgmentAt: row.last_judgment_at,
+    updatedAt: row.updated_at
+  }));
 }
 
 export function getPreferenceWorkspace(
   query: PreferenceWorkspaceQuery
 ): PreferenceWorkspacePayload {
-  const { userId, domain, contextId } = resolveWorkspaceQuery(query);
-  const profile = ensureProfile(userId, domain);
+  const resolved = resolveWorkspaceQuery(query);
+  const { userId, domain, contextId } = resolved;
+  const profile = readProfileByUserAndDomain(userId, domain);
+  if (!profile) {
+    throw new HttpError(
+      404,
+      "preferences_workspace_not_initialized",
+      "This Preferences workspace has not been initialized."
+    );
+  }
   const selectedContext = resolveContext(profile, contextId);
-  const recomputed = recomputeContext(profile, selectedContext);
+  const contexts = listContexts(profile.id);
+  const judgmentWindow = listJudgmentsForContexts(
+    contexts.map((context) => context.id)
+  );
+  const items = listItems(profile.id);
+  const scores = mapStoredScoresToComputations(
+    listStoredScores(selectedContext.id)
+  );
   return buildWorkspace(
     profile,
     selectedContext,
-    recomputed.items,
-    recomputed.judgments,
-    recomputed.signals,
-    recomputed.scores,
-    recomputed.dimensions
+    items,
+    judgmentWindow.judgments,
+    listSignalHistory(selectedContext.id, resolved.historyLimit),
+    scores,
+    listStoredDimensions(selectedContext.id),
+    resolved,
+    judgmentWindow.coverage
   );
 }
 
+export function refreshPreferenceWorkspace(
+  query: PreferenceWorkspaceQuery,
+  mutationContext: PreferenceMutationContext = { source: "system", actor: null }
+): PreferenceWorkspacePayload {
+  const resolved = resolveWorkspaceQuery(query);
+  return runInTransaction(() => {
+    const profile = ensureProfile(resolved.userId, resolved.domain);
+    const selectedContext = resolveContext(profile, resolved.contextId);
+    const recomputed = recomputeContext(
+      profile,
+      selectedContext,
+      mutationContext
+    );
+    return buildWorkspace(
+      profile,
+      selectedContext,
+      recomputed.items,
+      recomputed.judgments,
+      listSignalHistory(selectedContext.id, resolved.historyLimit),
+      recomputed.scores,
+      recomputed.dimensions,
+      resolved,
+      recomputed.evidenceCoverage
+    );
+  });
+}
+
 export function createPreferenceCatalog(
-  input: CreatePreferenceCatalogInput
+  input: CreatePreferenceCatalogInput,
+  context: PreferenceMutationContext = { source: "system", actor: null },
+  idempotencyKey?: string | null
 ): PreferenceCatalog {
   const parsed = createPreferenceCatalogSchema.parse(input);
-  const profile = ensureProfile(parsed.userId, parsed.domain);
-  const timestamp = nowIso();
-  const baseSlug = slugify(parsed.slug || parsed.title) || "concept-list";
-  const existingSlugs = new Set(
-    listCatalogs(profile.id).map((catalog) => catalog.slug)
-  );
-  let slug = baseSlug;
-  let index = 2;
-  while (existingSlugs.has(slug)) {
-    slug = `${baseSlug}-${index}`;
-    index += 1;
-  }
-  const catalogId = `pref_catalog_${randomUUID().slice(0, 10)}`;
-  getDatabase()
-    .prepare(
-      `INSERT INTO preference_catalogs (
-         id, profile_id, domain, slug, title, description, source, archived, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    )
-    .run(
-      catalogId,
-      profile.id,
-      parsed.domain,
-      slug,
-      parsed.title,
-      parsed.description,
-      preferenceCatalogSourceSchema.enum.custom,
-      timestamp,
-      timestamp
-    );
-  return readCatalog(catalogId)!;
+  return runInTransaction(() => {
+    const fingerprint = catalogFingerprint(parsed);
+    if (idempotencyKey) {
+      const receipt = getDatabase()
+        .prepare(
+          `SELECT request_fingerprint, catalog_id
+           FROM preference_catalog_create_receipts
+           WHERE user_id = ? AND idempotency_key = ?`
+        )
+        .get(parsed.userId, idempotencyKey) as
+        | { request_fingerprint: string; catalog_id: string }
+        | undefined;
+      if (receipt) {
+        if (receipt.request_fingerprint !== fingerprint) {
+          throw new HttpError(
+            409,
+            "idempotency_conflict",
+            "This idempotency key was already used with a different preference catalog payload."
+          );
+        }
+        const replay = readCatalog(receipt.catalog_id, {
+          includeArchived: true
+        });
+        if (!replay) {
+          throw new HttpError(
+            500,
+            "idempotency_corruption",
+            "The preference catalog recorded for this idempotency key is missing."
+          );
+        }
+        return replay;
+      }
+    }
+
+    const profile = ensureProfile(parsed.userId, parsed.domain);
+    assertCatalogTitleAvailable(profile.id, parsed.title);
+    const timestamp = nowIso();
+    const slug = nextCatalogSlug(profile.id, parsed.slug || parsed.title);
+    const catalogId = `pref_catalog_${randomUUID().slice(0, 10)}`;
+    getDatabase()
+      .prepare(
+        `INSERT INTO preference_catalogs (
+           id, profile_id, domain, slug, title, description, scope_in, scope_out,
+           source, created_source, created_by_actor, archived, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+      )
+      .run(
+        catalogId,
+        profile.id,
+        parsed.domain,
+        slug,
+        parsed.title,
+        parsed.description,
+        parsed.scopeIn,
+        parsed.scopeOut,
+        preferenceCatalogSourceSchema.enum.custom,
+        context.source,
+        context.actor ?? null,
+        timestamp,
+        timestamp
+      );
+    setEntityOwner("preference_catalog", catalogId, parsed.userId);
+    replaceEntityLinksForSource({
+      sourceEntityType: "preference_catalog",
+      sourceEntityId: catalogId,
+      links: parsed.links,
+      actor: context.actor ?? null
+    });
+    if (idempotencyKey) {
+      getDatabase()
+        .prepare(
+          `INSERT INTO preference_catalog_create_receipts (
+             user_id, idempotency_key, request_fingerprint, catalog_id, created_at
+           ) VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(parsed.userId, idempotencyKey, fingerprint, catalogId, timestamp);
+    }
+    return readCatalog(catalogId)!;
+  });
 }
 
 export function updatePreferenceCatalog(
   catalogId: string,
-  patch: UpdatePreferenceCatalogInput
+  patch: UpdatePreferenceCatalogInput,
+  context: PreferenceMutationContext = { source: "system", actor: null }
 ): PreferenceCatalog {
-  const current = readCatalog(catalogId);
-  if (!current) {
-    throw new HttpError(
-      404,
-      "preferences_catalog_not_found",
-      `Preference catalog ${catalogId} was not found.`
-    );
-  }
   const parsed = updatePreferenceCatalogSchema.parse(patch);
-  const timestamp = nowIso();
-  const nextTitle = parsed.title ?? current.title;
-  const desiredSlug = slugify(parsed.slug || nextTitle) || current.slug;
-  const siblingSlugs = new Set(
-    listCatalogs(current.profileId)
-      .filter((catalog) => catalog.id !== current.id)
-      .map((catalog) => catalog.slug)
-  );
-  let nextSlug = desiredSlug;
-  let index = 2;
-  while (siblingSlugs.has(nextSlug)) {
-    nextSlug = `${desiredSlug}-${index}`;
-    index += 1;
-  }
-  getDatabase()
-    .prepare(
-      `UPDATE preference_catalogs
-       SET slug = ?, title = ?, description = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      nextSlug,
-      nextTitle,
-      parsed.description ?? current.description,
-      timestamp,
-      catalogId
-    );
-  return readCatalog(catalogId)!;
+  return runInTransaction(() => {
+    const current = readCatalog(catalogId);
+    if (!current) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        `Preference catalog ${catalogId} was not found.`
+      );
+    }
+    const timestamp = nowIso();
+    const titleChanged =
+      parsed.title !== undefined &&
+      normalizeCatalogUniqueText(parsed.title) !==
+        normalizeCatalogUniqueText(current.title);
+    if (titleChanged) {
+      assertCatalogTitleAvailable(current.profileId, parsed.title!, catalogId);
+    }
+    const nextSlug = parsed.slug
+      ? nextCatalogSlug(current.profileId, parsed.slug, catalogId)
+      : current.slug;
+    const assignments = ["slug = ?"];
+    const values: Array<string | number> = [nextSlug];
+    if (titleChanged) {
+      assignments.push("title = ?");
+      values.push(parsed.title!);
+    }
+    if (parsed.description !== undefined) {
+      assignments.push("description = ?");
+      values.push(parsed.description);
+    }
+    if (parsed.scopeIn !== undefined) {
+      assignments.push("scope_in = ?");
+      values.push(parsed.scopeIn);
+    }
+    if (parsed.scopeOut !== undefined) {
+      assignments.push("scope_out = ?");
+      values.push(parsed.scopeOut);
+    }
+    assignments.push("updated_at = ?");
+    values.push(timestamp, catalogId);
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalogs
+         SET ${assignments.join(", ")}
+         WHERE id = ? AND archived = 0`
+      )
+      .run(...values);
+    if (parsed.links !== undefined) {
+      replaceEntityLinksForSource({
+        sourceEntityType: "preference_catalog",
+        sourceEntityId: catalogId,
+        links: parsed.links,
+        actor: context.actor ?? null
+      });
+    }
+    return readCatalog(catalogId)!;
+  });
 }
 
-export function deletePreferenceCatalog(catalogId: string): PreferenceCatalog {
-  const current = readCatalog(catalogId);
-  if (!current) {
-    throw new HttpError(
-      404,
-      "preferences_catalog_not_found",
-      `Preference catalog ${catalogId} was not found.`
-    );
-  }
-  const timestamp = nowIso();
-  runInTransaction(() => {
+export function archivePreferenceCatalog(catalogId: string): PreferenceCatalog {
+  return runInTransaction(() => {
+    const current = readCatalog(catalogId, { includeArchived: true });
+    if (!current) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        `Preference catalog ${catalogId} was not found.`
+      );
+    }
+    if (current.archived) {
+      return current;
+    }
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `DELETE FROM preference_catalog_archive_members WHERE catalog_id = ?`
+      )
+      .run(catalogId);
+    getDatabase()
+      .prepare(
+        `INSERT INTO preference_catalog_archive_members (catalog_id, catalog_item_id)
+         SELECT catalog_id, id
+         FROM preference_catalog_items
+         WHERE catalog_id = ? AND archived = 0`
+      )
+      .run(catalogId);
     getDatabase()
       .prepare(
         `UPDATE preference_catalogs
          SET archived = 1, updated_at = ?
-         WHERE id = ?`
+         WHERE id = ? AND archived = 0`
       )
       .run(timestamp, catalogId);
     getDatabase()
       .prepare(
         `UPDATE preference_catalog_items
          SET archived = 1, updated_at = ?
-         WHERE catalog_id = ?`
+         WHERE catalog_id = ? AND archived = 0`
       )
       .run(timestamp, catalogId);
+    return readCatalog(catalogId, { includeArchived: true })!;
+  });
+}
+
+export const deletePreferenceCatalog = archivePreferenceCatalog;
+
+export function restorePreferenceCatalog(catalogId: string): PreferenceCatalog {
+  return runInTransaction(() => {
+    const current = readCatalog(catalogId, { includeArchived: true });
+    if (!current || !current.archived) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_archived",
+        `Archived preference catalog ${catalogId} was not found.`
+      );
+    }
+    assertCatalogTitleAvailable(current.profileId, current.title, catalogId);
+    const itemConflict = getDatabase()
+      .prepare(
+        `SELECT lower(trim(label)) AS normalized_label,
+                GROUP_CONCAT(id) AS item_ids
+         FROM preference_catalog_items
+         WHERE catalog_id = ?
+           AND (
+             archived = 0
+             OR id IN (
+               SELECT catalog_item_id
+               FROM preference_catalog_archive_members
+               WHERE catalog_id = ?
+             )
+           )
+         GROUP BY lower(trim(label))
+         HAVING COUNT(*) > 1
+         LIMIT 1`
+      )
+      .get(catalogId, catalogId) as
+      | { normalized_label: string; item_ids: string }
+      | undefined;
+    if (itemConflict) {
+      throw new HttpError(
+        409,
+        "preferences_catalog_item_restore_conflict",
+        "This preference catalog cannot be restored because two retained concepts use the same label.",
+        {
+          normalizedLabel: itemConflict.normalized_label,
+          catalogItemIds: itemConflict.item_ids.split(",")
+        }
+      );
+    }
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalogs
+         SET archived = 0, updated_at = ?
+         WHERE id = ? AND archived = 1`
+      )
+      .run(timestamp, catalogId);
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalog_items
+         SET archived = 0, updated_at = ?
+         WHERE id IN (
+           SELECT catalog_item_id
+           FROM preference_catalog_archive_members
+           WHERE catalog_id = ?
+         )`
+      )
+      .run(timestamp, catalogId);
+    getDatabase()
+      .prepare(
+        `DELETE FROM preference_catalog_archive_members WHERE catalog_id = ?`
+      )
+      .run(catalogId);
+    return readCatalog(catalogId)!;
+  });
+}
+
+export function hardDeletePreferenceCatalog(
+  catalogId: string
+): PreferenceCatalog {
+  const current = readCatalog(catalogId, { includeArchived: true });
+  if (!current) {
+    throw new HttpError(
+      404,
+      "preferences_catalog_not_found",
+      `Preference catalog ${catalogId} was not found.`
+    );
+  }
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_links
+         WHERE (
+           source_entity_type = 'preference_catalog_item'
+           AND source_entity_id IN (
+             SELECT id FROM preference_catalog_items WHERE catalog_id = ?
+           )
+         ) OR (
+           target_entity_type = 'preference_catalog_item'
+           AND target_entity_id IN (
+             SELECT id FROM preference_catalog_items WHERE catalog_id = ?
+           )
+         )`
+      )
+      .run(catalogId, catalogId);
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_owners
+         WHERE entity_type = 'preference_catalog_item'
+           AND entity_id IN (
+             SELECT id FROM preference_catalog_items WHERE catalog_id = ?
+           )`
+      )
+      .run(catalogId);
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_links
+         WHERE (source_entity_type = 'preference_catalog' AND source_entity_id = ?)
+            OR (target_entity_type = 'preference_catalog' AND target_entity_id = ?)`
+      )
+      .run(catalogId, catalogId);
+    getDatabase()
+      .prepare(`DELETE FROM preference_catalogs WHERE id = ?`)
+      .run(catalogId);
   });
   return current;
+}
+
+export function listPreferenceCatalogHardDeleteDescendants(
+  catalogId: string
+): Array<{ entityType: "preference_catalog_item"; entityId: string }> {
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id
+         FROM preference_catalog_items
+         WHERE catalog_id = ?
+         ORDER BY id ASC`
+      )
+      .all(catalogId) as Array<{ id: string }>
+  ).map((row) => ({
+    entityType: "preference_catalog_item",
+    entityId: row.id
+  }));
 }
 
 export function createPreferenceCatalogItem(
   input: CreatePreferenceCatalogItemInput
 ): PreferenceCatalogItem {
   const parsed = createPreferenceCatalogItemSchema.parse(input);
-  const catalog = readCatalog(parsed.catalogId);
-  if (!catalog) {
-    throw new HttpError(
-      404,
-      "preferences_catalog_not_found",
-      `Preference catalog ${parsed.catalogId} was not found.`
-    );
-  }
-  const timestamp = nowIso();
-  const position =
-    parsed.position ??
-    catalog.items.reduce((max, item) => Math.max(max, item.position), -1) + 1;
-  const itemId = `pref_catalog_item_${randomUUID().slice(0, 10)}`;
-  getDatabase()
-    .prepare(
-      `INSERT INTO preference_catalog_items (
-         id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    )
-    .run(
-      itemId,
-      catalog.id,
-      parsed.label,
-      parsed.description,
-      JSON.stringify(parsed.tags),
-      JSON.stringify(normalizeDimensionVector(parsed.featureWeights)),
-      position,
-      timestamp,
-      timestamp
-    );
-  return readCatalogItem(itemId)!;
+  return runInTransaction(() => {
+    const catalog = getDatabase()
+      .prepare(
+        `SELECT preference_catalogs.id, preference_profiles.user_id
+         FROM preference_catalogs
+         INNER JOIN preference_profiles
+           ON preference_profiles.id = preference_catalogs.profile_id
+         WHERE preference_catalogs.id = ?
+           AND preference_catalogs.archived = 0`
+      )
+      .get(parsed.catalogId) as { id: string; user_id: string } | undefined;
+    if (!catalog) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        `Preference catalog ${parsed.catalogId} was not found.`
+      );
+    }
+    assertCatalogItemLabelAvailable(catalog.id, parsed.label);
+    const timestamp = nowIso();
+    const positionRow = getDatabase()
+      .prepare(
+        `SELECT COALESCE(MAX(position), -1) AS max_position
+         FROM preference_catalog_items
+         WHERE catalog_id = ?`
+      )
+      .get(catalog.id) as { max_position: number };
+    const position = parsed.position ?? positionRow.max_position + 1;
+    const itemId = `pref_catalog_item_${randomUUID().slice(0, 10)}`;
+    getDatabase()
+      .prepare(
+        `INSERT INTO preference_catalog_items (
+           id, catalog_id, label, description, tags_json, feature_weights_json, position, archived, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+      )
+      .run(
+        itemId,
+        catalog.id,
+        parsed.label,
+        parsed.description,
+        JSON.stringify(parsed.tags),
+        JSON.stringify(normalizeDimensionVector(parsed.featureWeights)),
+        position,
+        timestamp,
+        timestamp
+      );
+    setEntityOwner("preference_catalog_item", itemId, catalog.user_id);
+    return readCatalogItem(itemId)!;
+  });
 }
 
 export function updatePreferenceCatalogItem(
   catalogItemId: string,
   patch: UpdatePreferenceCatalogItemInput
 ): PreferenceCatalogItem {
-  const current = readCatalogItem(catalogItemId);
-  if (!current) {
-    throw new HttpError(
-      404,
-      "preferences_catalog_item_not_found",
-      `Preference catalog item ${catalogItemId} was not found.`
-    );
-  }
   const parsed = updatePreferenceCatalogItemSchema.parse(patch);
-  const timestamp = nowIso();
-  getDatabase()
-    .prepare(
-      `UPDATE preference_catalog_items
-       SET label = ?, description = ?, tags_json = ?, feature_weights_json = ?, position = ?, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(
-      parsed.label ?? current.label,
-      parsed.description ?? current.description,
-      JSON.stringify(parsed.tags ?? current.tags),
-      JSON.stringify(
-        parsed.featureWeights !== undefined
-          ? normalizeDimensionVector(parsed.featureWeights)
-          : current.featureWeights
-      ),
-      parsed.position ?? current.position,
-      timestamp,
-      catalogItemId
-    );
-  return readCatalogItem(catalogItemId)!;
+  return runInTransaction(() => {
+    const current = readCatalogItem(catalogItemId);
+    if (!current) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_item_not_found",
+        `Preference catalog item ${catalogItemId} was not found.`
+      );
+    }
+    const labelChanged =
+      parsed.label !== undefined &&
+      normalizeCatalogUniqueText(parsed.label) !==
+        normalizeCatalogUniqueText(current.label);
+    if (labelChanged) {
+      assertCatalogItemLabelAvailable(
+        current.catalogId,
+        parsed.label!,
+        catalogItemId
+      );
+    }
+    const timestamp = nowIso();
+    const assignments: string[] = [];
+    const values: Array<string | number> = [];
+    if (labelChanged) {
+      assignments.push("label = ?");
+      values.push(parsed.label!);
+    }
+    if (parsed.description !== undefined) {
+      assignments.push("description = ?");
+      values.push(parsed.description);
+    }
+    if (parsed.tags !== undefined) {
+      assignments.push("tags_json = ?");
+      values.push(JSON.stringify(parsed.tags));
+    }
+    if (parsed.featureWeights !== undefined) {
+      assignments.push("feature_weights_json = ?");
+      values.push(
+        JSON.stringify(normalizeDimensionVector(parsed.featureWeights))
+      );
+    }
+    if (parsed.position !== undefined) {
+      assignments.push("position = ?");
+      values.push(parsed.position);
+    }
+    assignments.push("updated_at = ?");
+    values.push(timestamp, catalogItemId);
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalog_items
+         SET ${assignments.join(", ")}
+         WHERE id = ?`
+      )
+      .run(...values);
+    return readCatalogItem(catalogItemId)!;
+  });
 }
 
-export function deletePreferenceCatalogItem(
+export function archivePreferenceCatalogItem(
   catalogItemId: string
 ): PreferenceCatalogItem {
-  const current = readCatalogItem(catalogItemId);
+  return runInTransaction(() => {
+    const current = readCatalogItem(catalogItemId, true);
+    if (!current) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_item_not_found",
+        `Preference catalog item ${catalogItemId} was not found.`
+      );
+    }
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalog_items
+         SET archived = 1, updated_at = ?
+         WHERE id = ? AND archived = 0`
+      )
+      .run(nowIso(), catalogItemId);
+    return readCatalogItem(catalogItemId, true)!;
+  });
+}
+
+export const deletePreferenceCatalogItem = archivePreferenceCatalogItem;
+
+export function restorePreferenceCatalogItem(
+  catalogItemId: string
+): PreferenceCatalogItem {
+  return runInTransaction(() => {
+    const current = readCatalogItem(catalogItemId, true);
+    if (!current) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_item_not_found",
+        `Preference catalog item ${catalogItemId} was not found.`
+      );
+    }
+    const state = getDatabase()
+      .prepare(
+        `SELECT preference_catalog_items.archived AS item_archived,
+                preference_catalogs.archived AS catalog_archived
+         FROM preference_catalog_items
+         INNER JOIN preference_catalogs
+           ON preference_catalogs.id = preference_catalog_items.catalog_id
+         WHERE preference_catalog_items.id = ?`
+      )
+      .get(catalogItemId) as
+      | { item_archived: number; catalog_archived: number }
+      | undefined;
+    if (!state || state.item_archived === 0) {
+      return current;
+    }
+    if (state.catalog_archived === 1) {
+      throw new HttpError(
+        409,
+        "preferences_catalog_item_parent_archived",
+        "Restore the preference catalog before restoring this concept."
+      );
+    }
+    assertCatalogItemLabelAvailable(
+      current.catalogId,
+      current.label,
+      catalogItemId
+    );
+    getDatabase()
+      .prepare(
+        `UPDATE preference_catalog_items
+         SET archived = 0, updated_at = ?
+         WHERE id = ? AND archived = 1`
+      )
+      .run(nowIso(), catalogItemId);
+    return readCatalogItem(catalogItemId)!;
+  });
+}
+
+export function hardDeletePreferenceCatalogItem(
+  catalogItemId: string
+): PreferenceCatalogItem {
+  const current = readCatalogItem(catalogItemId, true);
   if (!current) {
     throw new HttpError(
       404,
@@ -2307,13 +4137,19 @@ export function deletePreferenceCatalogItem(
       `Preference catalog item ${catalogItemId} was not found.`
     );
   }
-  getDatabase()
-    .prepare(
-      `UPDATE preference_catalog_items
-       SET archived = 1, updated_at = ?
-       WHERE id = ?`
-    )
-    .run(nowIso(), catalogItemId);
+  runInTransaction(() => {
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_links
+         WHERE (source_entity_type = 'preference_catalog_item' AND source_entity_id = ?)
+            OR (target_entity_type = 'preference_catalog_item' AND target_entity_id = ?)`
+      )
+      .run(catalogItemId, catalogItemId);
+    clearEntityOwner("preference_catalog_item", catalogItemId);
+    getDatabase()
+      .prepare(`DELETE FROM preference_catalog_items WHERE id = ?`)
+      .run(catalogItemId);
+  });
   return current;
 }
 
@@ -2325,7 +4161,7 @@ export function startPreferenceGame(
   const selectedContext = resolveContext(profile, parsed.contextId ?? null);
 
   if (parsed.catalogId) {
-    const catalog = readCatalog(parsed.catalogId);
+    const catalog = readCatalog(parsed.catalogId, { itemLimit: null });
     if (!catalog || catalog.profileId !== profile.id) {
       throw new HttpError(
         404,
@@ -2388,7 +4224,7 @@ export function startPreferenceGame(
     }
   }
 
-  return getPreferenceWorkspace({
+  return refreshPreferenceWorkspace({
     userId: parsed.userId,
     domain: parsed.domain,
     contextId: selectedContext.id
@@ -2402,6 +4238,13 @@ export function createPreferenceContext(
   const profile = ensureProfile(parsed.userId, parsed.domain);
   const contextId = `pref_ctx_${randomUUID().slice(0, 10)}`;
   const timestamp = nowIso();
+  if (parsed.isDefault && !parsed.active) {
+    throw new HttpError(
+      400,
+      "preferences_default_context_inactive",
+      "A default preference context must be active."
+    );
+  }
   runInTransaction(() => {
     if (parsed.isDefault) {
       getDatabase()
@@ -2429,6 +4272,7 @@ export function createPreferenceContext(
         timestamp,
         timestamp
       );
+    setEntityOwner("preference_context", contextId, parsed.userId);
     if (parsed.isDefault) {
       getDatabase()
         .prepare(
@@ -2438,6 +4282,7 @@ export function createPreferenceContext(
         )
         .run(contextId, timestamp, profile.id);
     }
+    recomputeAffectedContexts(profile, contextId);
   });
   return readContext(contextId)!;
 }
@@ -2463,6 +4308,34 @@ export function updatePreferenceContext(
     isDefault: parsed.isDefault ?? current.isDefault,
     decayDays: parsed.decayDays ?? current.decayDays
   };
+  const profile = getPreferenceProfileById(current.profileId);
+  if (!profile) {
+    throw new HttpError(
+      500,
+      "preferences_profile_missing",
+      `Preference profile ${current.profileId} was not found.`
+    );
+  }
+  if (next.isDefault && !next.active) {
+    throw new HttpError(
+      400,
+      "preferences_default_context_inactive",
+      "A default preference context must be active."
+    );
+  }
+  const effectiveDefault =
+    current.isDefault || profile.defaultContextId === contextId;
+  const replacementDefault =
+    effectiveDefault && (!next.isDefault || !next.active)
+      ? selectReplacementDefaultContext(current.profileId, contextId)
+      : null;
+  if (effectiveDefault && !next.isDefault && !replacementDefault) {
+    throw new HttpError(
+      400,
+      "preferences_context_default_required",
+      "A preference profile must keep one active default context."
+    );
+  }
   const timestamp = nowIso();
   runInTransaction(() => {
     if (next.isDefault) {
@@ -2473,13 +4346,6 @@ export function updatePreferenceContext(
            WHERE profile_id = ?`
         )
         .run(timestamp, current.profileId);
-      getDatabase()
-        .prepare(
-          `UPDATE preference_profiles
-           SET default_context_id = ?, updated_at = ?
-           WHERE id = ?`
-        )
-        .run(contextId, timestamp, current.profileId);
     }
     getDatabase()
       .prepare(
@@ -2497,12 +4363,24 @@ export function updatePreferenceContext(
         timestamp,
         contextId
       );
+    if (next.isDefault) {
+      getDatabase()
+        .prepare(
+          `UPDATE preference_profiles
+           SET default_context_id = ?, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(contextId, timestamp, current.profileId);
+    } else if (replacementDefault) {
+      setProfileDefaultContext(
+        current.profileId,
+        replacementDefault.id,
+        timestamp
+      );
+    }
+    recomputeAffectedContexts(profile, contextId);
   });
-  const profile = getPreferenceProfileById(current.profileId);
   const updated = readContext(contextId)!;
-  if (profile) {
-    recomputeContext(profile, updated);
-  }
   return updated;
 }
 
@@ -2526,9 +4404,26 @@ export function deletePreferenceContext(contextId: string): PreferenceContext {
     );
   }
   const replacementDefault =
-    remainingContexts.find((entry) => entry.isDefault) ?? remainingContexts[0]!;
+    selectReplacementDefaultContext(current.profileId, contextId) ??
+    remainingContexts[0]!;
+  const profile = getPreferenceProfileById(current.profileId);
   const timestamp = nowIso();
   runInTransaction(() => {
+    setProfileDefaultContext(
+      current.profileId,
+      replacementDefault.id,
+      timestamp
+    );
+    clearEntityOwner("preference_context", contextId);
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_owners
+         WHERE entity_type = 'preference_signal'
+           AND entity_id IN (
+             SELECT id FROM absolute_signals WHERE context_id = ?
+           )`
+      )
+      .run(contextId);
     getDatabase()
       .prepare(`DELETE FROM pairwise_judgments WHERE context_id = ?`)
       .run(contextId);
@@ -2549,27 +4444,10 @@ export function deletePreferenceContext(contextId: string): PreferenceContext {
     getDatabase()
       .prepare(`DELETE FROM preference_contexts WHERE id = ?`)
       .run(contextId);
-    if (current.isDefault) {
-      getDatabase()
-        .prepare(
-          `UPDATE preference_contexts
-           SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END, updated_at = ?
-           WHERE profile_id = ?`
-        )
-        .run(replacementDefault.id, timestamp, current.profileId);
-      getDatabase()
-        .prepare(
-          `UPDATE preference_profiles
-           SET default_context_id = ?, updated_at = ?
-           WHERE id = ?`
-        )
-        .run(replacementDefault.id, timestamp, current.profileId);
+    if (profile) {
+      recomputeAffectedContexts(profile, replacementDefault.id);
     }
   });
-  const profile = getPreferenceProfileById(current.profileId);
-  if (profile) {
-    recomputeContext(profile, replacementDefault);
-  }
   return current;
 }
 
@@ -2584,8 +4462,12 @@ export function mergePreferenceContexts(input: MergePreferenceContextsInput) {
       "Preference contexts must exist on the same profile before merging."
     );
   }
+  const profile = getPreferenceProfileById(source.profileId);
   const timestamp = nowIso();
   runInTransaction(() => {
+    if (source.isDefault || profile?.defaultContextId === source.id) {
+      setProfileDefaultContext(source.profileId, target.id, timestamp);
+    }
     getDatabase()
       .prepare(
         `UPDATE pairwise_judgments
@@ -2619,11 +4501,10 @@ export function mergePreferenceContexts(input: MergePreferenceContextsInput) {
          WHERE id = ?`
       )
       .run(timestamp, source.id);
+    if (profile) {
+      recomputeAffectedContexts(profile, target.id);
+    }
   });
-  const profile = getPreferenceProfileById(source.profileId);
-  if (profile) {
-    recomputeContext(profile, target);
-  }
   return {
     target: readContext(target.id)!,
     source: readContext(source.id)!
@@ -2681,6 +4562,7 @@ export function createPreferenceItem(
             linkedIdentity.entityId
           ) as { id: string })
       : { id: itemId };
+    setEntityOwner("preference_item", storedItem.id, parsed.userId);
     const selectedContext = resolveContext(profile, null);
     if (parsed.queueForCompare) {
       upsertPreferenceScoreState(storedItem.id, selectedContext.id, {
@@ -2688,7 +4570,7 @@ export function createPreferenceItem(
         bookmarked: true
       });
     }
-    recomputeContext(profile, selectedContext);
+    recomputeAffectedContexts(profile, selectedContext.id);
     return getItemById(storedItem.id)!;
   });
 }
@@ -2756,9 +4638,15 @@ function upsertPreferenceScoreState(
        WHERE context_id = ? AND item_id = ?`
     )
     .run(
-      patch.manualStatus ?? existing.manual_status,
-      patch.manualScore ?? existing.manual_score,
-      patch.confidenceLock ?? existing.confidence_lock,
+      patch.manualStatus !== undefined
+        ? patch.manualStatus
+        : existing.manual_status,
+      patch.manualScore !== undefined
+        ? patch.manualScore
+        : existing.manual_score,
+      patch.confidenceLock !== undefined
+        ? patch.confidenceLock
+        : existing.confidence_lock,
       (patch.bookmarked ?? existing.bookmarked === 1) ? 1 : 0,
       (patch.compareLater ?? existing.compare_later === 1) ? 1 : 0,
       (patch.frozen ?? existing.frozen === 1) ? 1 : 0,
@@ -2854,11 +4742,7 @@ export function updatePreferenceItem(
   const updated = getItemById(itemId)!;
   const profile = getPreferenceProfileById(item.profileId);
   if (profile) {
-    for (const context of listContexts(profile.id).filter(
-      (entry) => entry.active
-    )) {
-      recomputeContext(profile, context);
-    }
+    recomputeAffectedContexts(profile, null);
   }
   return updated;
 }
@@ -2873,6 +4757,16 @@ export function deletePreferenceItem(itemId: string): PreferenceItem {
     );
   }
   runInTransaction(() => {
+    clearEntityOwner("preference_item", itemId);
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_owners
+         WHERE entity_type = 'preference_signal'
+           AND entity_id IN (
+             SELECT id FROM absolute_signals WHERE item_id = ?
+           )`
+      )
+      .run(itemId);
     getDatabase()
       .prepare(
         `DELETE FROM pairwise_judgments
@@ -2891,11 +4785,7 @@ export function deletePreferenceItem(itemId: string): PreferenceItem {
   });
   const profile = getPreferenceProfileById(current.profileId);
   if (profile) {
-    for (const context of listContexts(profile.id).filter(
-      (entry) => entry.active
-    )) {
-      recomputeContext(profile, context);
-    }
+    recomputeAffectedContexts(profile, null);
   }
   return current;
 }
@@ -2909,7 +4799,7 @@ export function createPreferenceItemFromEntity(
     throw new HttpError(
       404,
       "preferences_source_entity_not_found",
-      `${parsed.entityType} ${parsed.entityId} was not found.`
+      "Preference source entity not found."
     );
   }
   return createPreferenceItem({
@@ -2927,116 +4817,395 @@ export function createPreferenceItemFromEntity(
 }
 
 export function submitPairwiseJudgment(
-  input: SubmitPairwiseJudgmentInput
+  input: SubmitPairwiseJudgmentInput,
+  mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
+  idempotencyKey?: string | null
 ): PairwiseJudgment {
   const parsed = submitPairwiseJudgmentSchema.parse(input);
-  const profile = ensureProfile(parsed.userId, parsed.domain);
-  const context = readContext(parsed.contextId);
-  if (!context || context.profileId !== profile.id) {
-    throw new HttpError(
-      400,
-      "preferences_invalid_context",
-      "Preference judgment context does not belong to the selected profile."
-    );
-  }
-  if (parsed.leftItemId === parsed.rightItemId) {
-    throw new HttpError(
-      400,
-      "preferences_invalid_pair",
-      "Preference comparisons require two distinct items."
-    );
-  }
-  if (!getItemById(parsed.leftItemId) || !getItemById(parsed.rightItemId)) {
-    throw new HttpError(
-      404,
-      "preferences_item_not_found",
-      "One or both preference items do not exist."
-    );
-  }
-  const judgmentId = `pref_judgment_${randomUUID().slice(0, 10)}`;
-  const timestamp = nowIso();
-  getDatabase()
-    .prepare(
-      `INSERT INTO pairwise_judgments (id, profile_id, context_id, user_id, left_item_id, right_item_id, outcome, strength, response_time_ms, source, reason_tags_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ui', ?, ?)`
-    )
-    .run(
-      judgmentId,
-      profile.id,
-      context.id,
-      parsed.userId,
-      parsed.leftItemId,
-      parsed.rightItemId,
-      parsed.outcome,
-      parsed.strength,
-      parsed.responseTimeMs ?? null,
-      JSON.stringify(parsed.reasonTags),
-      timestamp
-    );
-  recomputeContext(profile, context);
-  return mapJudgment(
+  return runInTransaction(() => {
+    const fingerprint = judgmentFingerprint(parsed);
+    if (idempotencyKey) {
+      const receipt = getDatabase()
+        .prepare(
+          `SELECT request_fingerprint, judgment_id
+           FROM preference_judgment_receipts
+           WHERE user_id = ? AND idempotency_key = ?`
+        )
+        .get(parsed.userId, idempotencyKey) as
+        | { request_fingerprint: string; judgment_id: string }
+        | undefined;
+      if (receipt) {
+        if (receipt.request_fingerprint !== fingerprint) {
+          throw new HttpError(
+            409,
+            "idempotency_conflict",
+            "This idempotency key was already used with a different preference judgment payload."
+          );
+        }
+        const replay = getDatabase()
+          .prepare(
+            `SELECT id, profile_id, context_id, user_id, left_item_id,
+                    right_item_id, outcome, strength, response_time_ms, source,
+                    reason_tags_json, created_at
+             FROM pairwise_judgments
+             WHERE id = ?`
+          )
+          .get(receipt.judgment_id) as JudgmentRow | undefined;
+        if (!replay) {
+          throw new HttpError(
+            500,
+            "idempotency_corruption",
+            "The preference judgment recorded for this idempotency key is missing."
+          );
+        }
+        return mapJudgment(replay);
+      }
+    }
+
+    const profile = ensureProfile(parsed.userId, parsed.domain);
+    const context = readContext(parsed.contextId);
+    if (!context || context.profileId !== profile.id) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_context",
+        "Preference judgment context does not belong to the selected profile."
+      );
+    }
+    if (parsed.leftItemId === parsed.rightItemId) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_pair",
+        "Preference comparisons require two distinct items."
+      );
+    }
+    const leftItem = getItemById(parsed.leftItemId);
+    const rightItem = getItemById(parsed.rightItemId);
+    if (!leftItem || !rightItem) {
+      throw new HttpError(
+        404,
+        "preferences_item_not_found",
+        "One or both preference items do not exist."
+      );
+    }
+    if (
+      leftItem.profileId !== profile.id ||
+      rightItem.profileId !== profile.id
+    ) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_judgment_item",
+        "Preference judgment items must belong to the selected profile."
+      );
+    }
+    const judgmentId = `pref_judgment_${randomUUID().slice(0, 10)}`;
+    const timestamp = nowIso();
     getDatabase()
       .prepare(
-        `SELECT id, profile_id, context_id, user_id, left_item_id, right_item_id, outcome, strength, response_time_ms, source, reason_tags_json, created_at
-         FROM pairwise_judgments
-         WHERE id = ?`
+        `INSERT INTO pairwise_judgments (id, profile_id, context_id, user_id, left_item_id, right_item_id, outcome, strength, response_time_ms, source, reason_tags_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .get(judgmentId) as JudgmentRow
-  );
+      .run(
+        judgmentId,
+        profile.id,
+        context.id,
+        parsed.userId,
+        parsed.leftItemId,
+        parsed.rightItemId,
+        parsed.outcome,
+        parsed.strength,
+        parsed.responseTimeMs ?? null,
+        mutationContext.source,
+        JSON.stringify(parsed.reasonTags),
+        timestamp
+      );
+    recordActivityEvent({
+      entityType: "preference_item",
+      entityId:
+        parsed.outcome === "right" ? parsed.rightItemId : parsed.leftItemId,
+      eventType: "preference_judgment_recorded",
+      title: `Preference comparison recorded as ${parsed.outcome}`,
+      description: `Comparison recorded in ${context.name}.`,
+      actor: mutationContext.actor ?? null,
+      source: mutationContext.source,
+      metadata: {
+        judgmentId,
+        contextId: context.id,
+        leftItemId: parsed.leftItemId,
+        rightItemId: parsed.rightItemId,
+        outcome: parsed.outcome,
+        strength: parsed.strength,
+        ownerUserId: parsed.userId
+      }
+    });
+    recomputeAffectedContexts(profile, context.id, mutationContext);
+    if (idempotencyKey) {
+      getDatabase()
+        .prepare(
+          `INSERT INTO preference_judgment_receipts (
+             user_id, idempotency_key, request_fingerprint, judgment_id, created_at
+           ) VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(parsed.userId, idempotencyKey, fingerprint, judgmentId, timestamp);
+    }
+    return mapJudgment(
+      getDatabase()
+        .prepare(
+          `SELECT id, profile_id, context_id, user_id, left_item_id,
+                  right_item_id, outcome, strength, response_time_ms, source,
+                  reason_tags_json, created_at
+           FROM pairwise_judgments
+           WHERE id = ?`
+        )
+        .get(judgmentId) as JudgmentRow
+    );
+  });
+}
+
+function readSignalById(signalId: string): SignalRow | undefined {
+  return getDatabase()
+    .prepare(
+      `SELECT
+         signal.id,
+         signal.profile_id,
+         signal.context_id,
+         signal.user_id,
+         signal.item_id,
+         signal.signal_type,
+         signal.strength,
+         signal.source,
+         signal.created_at,
+         (
+           SELECT activity_events.actor
+           FROM activity_events
+           WHERE activity_events.entity_type = 'preference_item'
+             AND activity_events.entity_id = signal.item_id
+             AND json_extract(activity_events.metadata_json, '$.signalId') = signal.id
+           ORDER BY activity_events.created_at DESC
+           LIMIT 1
+         ) AS actor
+       FROM absolute_signals AS signal
+       WHERE signal.id = ?`
+    )
+    .get(signalId) as SignalRow | undefined;
+}
+
+export type PreferenceSignalSubmissionResult = {
+  signal: AbsoluteSignal;
+  replayed: boolean;
+};
+
+export function submitAbsoluteSignalWithReceipt(
+  input: SubmitAbsoluteSignalInput,
+  mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
+  idempotencyKey?: string | null
+): PreferenceSignalSubmissionResult {
+  const parsed = submitAbsoluteSignalSchema.parse(input);
+  return runInTransaction(() => {
+    const fingerprint = signalFingerprint(parsed);
+    if (idempotencyKey) {
+      const receipt = getDatabase()
+        .prepare(
+          `SELECT request_fingerprint, signal_id
+           FROM preference_signal_receipts
+           WHERE user_id = ? AND idempotency_key = ?`
+        )
+        .get(parsed.userId, idempotencyKey) as
+        | { request_fingerprint: string; signal_id: string }
+        | undefined;
+      if (receipt) {
+        if (receipt.request_fingerprint !== fingerprint) {
+          throw new HttpError(
+            409,
+            "idempotency_conflict",
+            "This idempotency key was already used with a different preference signal payload."
+          );
+        }
+        const replay = readSignalById(receipt.signal_id);
+        if (!replay) {
+          throw new HttpError(
+            409,
+            "preferences_signal_idempotency_target_missing",
+            "The preference signal recorded for this idempotency key is no longer available."
+          );
+        }
+        return { signal: mapSignal(replay), replayed: true };
+      }
+    }
+
+    const profile = ensureProfile(parsed.userId, parsed.domain);
+    const context = readContext(parsed.contextId);
+    if (!context || context.profileId !== profile.id) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_context",
+        "Preference signal context does not belong to the selected profile."
+      );
+    }
+    const item = getItemById(parsed.itemId);
+    if (!item) {
+      throw new HttpError(
+        404,
+        "preferences_item_not_found",
+        `Preference item ${parsed.itemId} was not found.`
+      );
+    }
+    if (item.profileId !== profile.id) {
+      throw new HttpError(
+        400,
+        "preferences_invalid_signal_item",
+        "Preference signal item does not belong to the selected profile."
+      );
+    }
+
+    const previous = getDatabase()
+      .prepare(
+        `SELECT
+           signal.id,
+           signal.profile_id,
+           signal.context_id,
+           signal.user_id,
+           signal.item_id,
+           signal.signal_type,
+           signal.strength,
+           signal.source,
+           signal.created_at,
+           (
+             SELECT activity_events.actor
+             FROM activity_events
+             WHERE activity_events.entity_type = 'preference_item'
+               AND activity_events.entity_id = signal.item_id
+               AND json_extract(activity_events.metadata_json, '$.signalId') = signal.id
+             ORDER BY activity_events.created_at DESC
+             LIMIT 1
+           ) AS actor
+         FROM absolute_signals AS signal
+         WHERE signal.profile_id = ? AND signal.context_id = ? AND signal.item_id = ?
+         ORDER BY signal.created_at DESC, signal.rowid DESC
+         LIMIT 1`
+      )
+      .get(profile.id, context.id, item.id) as SignalRow | undefined;
+    if (
+      previous &&
+      previous.signal_type === parsed.signalType &&
+      previous.strength === parsed.strength &&
+      previous.source === mutationContext.source &&
+      previous.actor === (mutationContext.actor ?? null)
+    ) {
+      setEntityOwner("preference_signal", previous.id, parsed.userId);
+      if (idempotencyKey) {
+        getDatabase()
+          .prepare(
+            `INSERT INTO preference_signal_receipts (
+               user_id, idempotency_key, request_fingerprint, signal_id, created_at
+             ) VALUES (?, ?, ?, ?, ?)`
+          )
+          .run(
+            parsed.userId,
+            idempotencyKey,
+            fingerprint,
+            previous.id,
+            nowIso()
+          );
+      }
+      return { signal: mapSignal(previous), replayed: false };
+    }
+
+    const signalId = `pref_signal_${randomUUID().slice(0, 10)}`;
+    const timestamp = nowIso();
+    getDatabase()
+      .prepare(
+        `INSERT INTO absolute_signals (id, profile_id, context_id, user_id, item_id, signal_type, strength, source, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        signalId,
+        profile.id,
+        context.id,
+        parsed.userId,
+        item.id,
+        parsed.signalType,
+        parsed.strength,
+        mutationContext.source,
+        timestamp
+      );
+    setEntityOwner("preference_signal", signalId, parsed.userId);
+    recordActivityEvent({
+      entityType: "preference_item",
+      entityId: item.id,
+      eventType: previous
+        ? "preference_signal_replaced"
+        : "preference_signal_recorded",
+      title: previous
+        ? `Preference signal replaced with ${parsed.signalType.replaceAll("_", " ")}`
+        : `Preference signal recorded as ${parsed.signalType.replaceAll("_", " ")}`,
+      description: `Direct signal for ${item.label} in ${context.name}.`,
+      actor: mutationContext.actor ?? null,
+      source: mutationContext.source,
+      metadata: {
+        signalId,
+        previousSignalId: previous?.id ?? null,
+        previousSignalType: previous?.signal_type ?? null,
+        signalType: parsed.signalType,
+        strength: parsed.strength,
+        modelWeight:
+          PREFERENCE_SIGNAL_MODEL_WEIGHTS[parsed.signalType] * parsed.strength,
+        contextId: context.id,
+        ownerUserId: parsed.userId
+      }
+    });
+    recomputeAffectedContexts(profile, context.id, mutationContext);
+    if (idempotencyKey) {
+      getDatabase()
+        .prepare(
+          `INSERT INTO preference_signal_receipts (
+             user_id, idempotency_key, request_fingerprint, signal_id, created_at
+           ) VALUES (?, ?, ?, ?, ?)`
+        )
+        .run(
+          parsed.userId,
+          idempotencyKey,
+          fingerprint,
+          signalId,
+          timestamp
+        );
+    }
+    return {
+      signal: mapSignal({
+        id: signalId,
+        profile_id: profile.id,
+        context_id: context.id,
+        user_id: parsed.userId,
+        item_id: item.id,
+        signal_type: parsed.signalType,
+        strength: parsed.strength,
+        source: mutationContext.source,
+        actor: mutationContext.actor ?? null,
+        created_at: timestamp
+      }),
+      replayed: false
+    };
+  });
 }
 
 export function submitAbsoluteSignal(
-  input: SubmitAbsoluteSignalInput
+  input: SubmitAbsoluteSignalInput,
+  mutationContext: PreferenceMutationContext = { source: "ui", actor: null },
+  idempotencyKey?: string | null
 ): AbsoluteSignal {
-  const parsed = submitAbsoluteSignalSchema.parse(input);
-  const profile = ensureProfile(parsed.userId, parsed.domain);
-  const context = readContext(parsed.contextId);
-  if (!context || context.profileId !== profile.id) {
-    throw new HttpError(
-      400,
-      "preferences_invalid_context",
-      "Preference signal context does not belong to the selected profile."
-    );
-  }
-  if (!getItemById(parsed.itemId)) {
-    throw new HttpError(
-      404,
-      "preferences_item_not_found",
-      `Preference item ${parsed.itemId} was not found.`
-    );
-  }
-  const signalId = `pref_signal_${randomUUID().slice(0, 10)}`;
-  const timestamp = nowIso();
-  getDatabase()
-    .prepare(
-      `INSERT INTO absolute_signals (id, profile_id, context_id, user_id, item_id, signal_type, strength, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'ui', ?)`
-    )
-    .run(
-      signalId,
-      profile.id,
-      context.id,
-      parsed.userId,
-      parsed.itemId,
-      parsed.signalType,
-      parsed.strength,
-      timestamp
-    );
-  recomputeContext(profile, context);
-  return mapSignal(
-    getDatabase()
-      .prepare(
-        `SELECT id, profile_id, context_id, user_id, item_id, signal_type, strength, source, created_at
-         FROM absolute_signals
-         WHERE id = ?`
-      )
-      .get(signalId) as SignalRow
-  );
+  return submitAbsoluteSignalWithReceipt(
+    input,
+    mutationContext,
+    idempotencyKey
+  ).signal;
 }
 
 export function updatePreferenceScore(
   itemId: string,
-  input: UpdatePreferenceScoreInput
+  input: UpdatePreferenceScoreInput,
+  mutationContext: PreferenceMutationContext = {
+    source: "system",
+    actor: null
+  }
 ): PreferenceWorkspacePayload {
   const parsed = updatePreferenceScoreSchema.parse(input);
   const profile = ensureProfile(parsed.userId, parsed.domain);
@@ -3048,26 +5217,29 @@ export function updatePreferenceScore(
       "Preference score context does not belong to the selected profile."
     );
   }
-  upsertPreferenceScoreState(itemId, context.id, {
-    manualStatus:
-      parsed.manualStatus !== undefined
-        ? (parsed.manualStatus ?? null)
-        : undefined,
-    manualScore:
-      parsed.manualScore !== undefined
-        ? (parsed.manualScore ?? null)
-        : undefined,
-    confidenceLock:
-      parsed.confidenceLock !== undefined
-        ? (parsed.confidenceLock ?? null)
-        : undefined,
-    bookmarked: parsed.bookmarked,
-    compareLater: parsed.compareLater,
-    frozen: parsed.frozen
-  });
-  return getPreferenceWorkspace({
-    userId: parsed.userId,
-    domain: parsed.domain,
-    contextId: context.id
+  return runInTransaction(() => {
+    upsertPreferenceScoreState(itemId, context.id, {
+      manualStatus:
+        parsed.manualStatus !== undefined
+          ? (parsed.manualStatus ?? null)
+          : undefined,
+      manualScore:
+        parsed.manualScore !== undefined
+          ? (parsed.manualScore ?? null)
+          : undefined,
+      confidenceLock:
+        parsed.confidenceLock !== undefined
+          ? (parsed.confidenceLock ?? null)
+          : undefined,
+      bookmarked: parsed.bookmarked,
+      compareLater: parsed.compareLater,
+      frozen: parsed.frozen
+    });
+    recomputeContext(profile, context, mutationContext);
+    return getPreferenceWorkspace({
+      userId: parsed.userId,
+      domain: parsed.domain,
+      contextId: context.id
+    });
   });
 }

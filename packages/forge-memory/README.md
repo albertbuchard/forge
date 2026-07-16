@@ -32,6 +32,37 @@ npx forge-memory uninstall
 npx forge-memory pair-ios
 ```
 
+## Enable Forge-to-Forge sharing
+
+Peer sharing is disabled until the operator enables it. A new peer setup uses Iroh
+by default, so 2 Forge installations can connect from different networks without a
+shared Tailscale network or a server operated by the Forge maintainer:
+
+```bash
+npx forge-memory configure --enable-peer --enable-peer-iroh
+npx forge-memory doctor
+```
+
+Iroh can connect directly when the networks allow it and can use its configured
+relay infrastructure for encrypted transport when direct connectivity fails. No
+public IP or direct endpoint is required for an Iroh-only setup.
+
+A direct IP endpoint is optional. It must be a literal IPv4 address or bracketed
+IPv6 address with a port:
+
+```bash
+npx forge-memory configure --enable-peer --peer-endpoint 192.0.2.10:4318
+```
+
+Use `--disable-peer-iroh` only when the host has a usable direct endpoint or another
+configured provider. Forge does not silently change from a privacy-preserving mode
+to a transport that exposes more network metadata. `status` and `doctor` report the
+configured transports and whether the signed local `forge-peer` runtime is ready.
+
+Enabling transport does not pair another Forge or share data. Pairing still requires
+a one-use invitation and human confirmation. Every shared projection requires a
+separate directional grant.
+
 Codex and Claude Code use `npx forge-memory mcp` after configuration. That MCP entrypoint loads
 the same curated Forge tool registry as the other Forge adapters, including
 the wiki tools (`forge_search_wiki`, `forge_get_wiki_page`, and maintenance

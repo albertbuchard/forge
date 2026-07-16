@@ -41,7 +41,7 @@ export function PlanningRecordDeleteDialog({
       id: "confirm",
       eyebrow: "Reversible deletion",
       title: `Move "${recordTitle}" to the bin?`,
-      description: `The ${recordKind} will leave active planning views. Its notes, links, evidence, and history stay attached and can be restored from this page.`,
+      description: `The ${recordKind} will leave active Forge views. Its linked context and history stay attached and can be restored from this page.`,
       render: () => (
         <div className="rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] p-4 text-sm leading-6 text-[var(--ui-ink-medium)]">
           <div className="flex items-start gap-3">

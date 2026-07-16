@@ -1,10 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ChainCanvas } from "@/components/psyche/chain-canvas";
 import { InsightFlowDialog } from "@/components/insights/insight-flow-dialog";
 import { OpenInGraphButton } from "@/components/knowledge-graph/open-in-graph-button";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
+import { PlanningRecordDeleteDialog } from "@/components/planning/planning-record-delete-dialog";
+import {
+  EntityLinkMultiSelect,
+  type EntityLinkOption
+} from "@/components/psyche/entity-link-multiselect";
 import {
   BehaviorRowsEditor,
   EmotionRowsEditor,
@@ -13,6 +19,7 @@ import {
   ThoughtRowsEditor
 } from "@/components/psyche/report-chain-fields";
 import { PsycheSectionNav } from "@/components/psyche/psyche-section-nav";
+import { useForgeShell } from "@/components/shell/app-shell";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { PageHero } from "@/components/shell/page-hero";
 import { Button } from "@/components/ui/button";
@@ -23,19 +30,24 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createInsight,
+  deleteTriggerReport,
   getTriggerReport,
+  listBehaviorPatterns,
   listBehaviors,
   listBeliefs,
   listEmotionDefinitions,
   listEventTypes,
   listSchemaCatalog,
   listModes,
+  listPsycheValues,
   patchTriggerReport
 } from "@/lib/api";
 import { formatLines } from "@/lib/psyche-formats";
 import { triggerReportSchema } from "@/lib/psyche-schemas";
 import type {
+  BehaviorPattern,
   ModeTimelineEntry,
+  PsycheValue,
   TriggerBehavior,
   TriggerEmotion,
   TriggerReport,
@@ -48,14 +60,20 @@ import {
   getSchemaVisual,
   toggleSchemaSelection
 } from "@/lib/schema-visuals";
+import {
+  buildOwnedEntitySearchText,
+  formatOwnedEntityDescription,
+  formatOwnedEntityOptionLabel
+} from "@/lib/user-ownership";
 
-type ReportEditorShape = {
+export type ReportEditorShape = {
   title: string;
   status: "draft" | "reviewed" | "integrated";
   eventTypeId: string;
   customEventType: string;
   eventSituation: string;
   occurredAt: string;
+  bodyCues: string[];
   emotions: TriggerEmotion[];
   thoughts: TriggerThought[];
   behaviors: TriggerBehavior[];
@@ -70,6 +88,18 @@ type ReportEditorShape = {
   linkedBehaviorIds: string[];
   linkedBeliefIds: string[];
   linkedModeIds: string[];
+  linkedPatternIds: string[];
+  linkedValueIds: string[];
+  linkedGoalIds: string[];
+  linkedProjectIds: string[];
+  linkedTaskIds: string[];
+  memoryClarity: "unspecified" | "clear" | "partial" | "uncertain";
+  reflection: string;
+  hypothesis: string;
+  hypothesisFit: "not_reviewed" | "fits" | "partly_fits" | "does_not_fit";
+  hypothesisCorrection: string;
+  interpretationConsent: boolean;
+  revision: number;
 };
 
 function toggleId(current: string[], id: string) {
@@ -78,14 +108,32 @@ function toggleId(current: string[], id: string) {
     : [...current, id];
 }
 
-function toEditor(report: TriggerReport): ReportEditorShape {
+export function formatTriggerReportDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+export function toTriggerReportEditor(
+  report: TriggerReport
+): ReportEditorShape {
   return {
     title: report.title,
     status: report.status,
     eventTypeId: report.eventTypeId ?? "",
     customEventType: report.customEventType,
     eventSituation: report.eventSituation,
-    occurredAt: report.occurredAt ? report.occurredAt.slice(0, 16) : "",
+    occurredAt: report.occurredAt
+      ? formatTriggerReportDateTimeLocal(report.occurredAt)
+      : "",
+    bodyCues: report.bodyCues,
     emotions: report.emotions,
     thoughts: report.thoughts,
     behaviors: report.behaviors,
@@ -99,101 +147,205 @@ function toEditor(report: TriggerReport): ReportEditorShape {
     nextMoves: report.nextMoves,
     linkedBehaviorIds: report.linkedBehaviorIds,
     linkedBeliefIds: report.linkedBeliefIds,
-    linkedModeIds: report.linkedModeIds
+    linkedModeIds: report.linkedModeIds,
+    linkedPatternIds: report.linkedPatternIds,
+    linkedValueIds: report.linkedValueIds,
+    linkedGoalIds: report.linkedGoalIds,
+    linkedProjectIds: report.linkedProjectIds,
+    linkedTaskIds: report.linkedTaskIds,
+    memoryClarity: report.memoryClarity,
+    reflection: report.reflection,
+    hypothesis: report.hypothesis,
+    hypothesisFit: report.hypothesisFit,
+    hypothesisCorrection: report.hypothesisCorrection,
+    interpretationConsent: report.interpretationConsent,
+    revision: report.revision
+  };
+}
+
+function reportEditorFieldEquals(
+  left: ReportEditorShape[keyof ReportEditorShape],
+  right: ReportEditorShape[keyof ReportEditorShape]
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function isTriggerReportEditorDirty(
+  draft: ReportEditorShape,
+  baseline: ReportEditorShape
+) {
+  return (Object.keys(draft) as Array<keyof ReportEditorShape>).some(
+    (key) => !reportEditorFieldEquals(draft[key], baseline[key])
+  );
+}
+
+export function rebaseTriggerReportEditor(
+  baseline: ReportEditorShape,
+  localDraft: ReportEditorShape,
+  latestReport: TriggerReport
+) {
+  const latestDraft = toTriggerReportEditor(latestReport);
+  return Object.fromEntries(
+    (Object.keys(latestDraft) as Array<keyof ReportEditorShape>).map((key) => [
+      key,
+      reportEditorFieldEquals(localDraft[key], baseline[key])
+        ? latestDraft[key]
+        : localDraft[key]
+    ])
+  ) as ReportEditorShape;
+}
+
+export function buildTriggerReportPatch(value: ReportEditorShape) {
+  const payload = triggerReportSchema.parse({
+    title: value.title,
+    status: value.status,
+    eventTypeId: value.eventTypeId || null,
+    customEventType: value.customEventType,
+    eventSituation: value.eventSituation,
+    occurredAt: value.occurredAt
+      ? new Date(value.occurredAt).toISOString()
+      : null,
+    bodyCues: value.bodyCues.filter(Boolean),
+    emotions: value.emotions.filter((entry) => entry.label.trim().length > 0),
+    thoughts: value.thoughts.filter((entry) => entry.text.trim().length > 0),
+    behaviors: value.behaviors.filter((entry) => entry.text.trim().length > 0),
+    consequences: {
+      selfShortTerm: value.selfShortTerm,
+      selfLongTerm: value.selfLongTerm,
+      othersShortTerm: value.othersShortTerm,
+      othersLongTerm: value.othersLongTerm
+    },
+    linkedPatternIds: value.linkedPatternIds,
+    linkedValueIds: value.linkedValueIds,
+    linkedGoalIds: value.linkedGoalIds,
+    linkedProjectIds: value.linkedProjectIds,
+    linkedTaskIds: value.linkedTaskIds,
+    linkedBehaviorIds: value.linkedBehaviorIds,
+    linkedBeliefIds: value.linkedBeliefIds,
+    linkedModeIds: value.linkedModeIds,
+    modeOverlays: value.modeOverlaysText
+      .split("\n")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+    schemaLinks: value.schemaLinks.filter(Boolean),
+    modeTimeline: value.modeTimeline.filter(
+      (entry) => entry.stage.trim().length > 0 && entry.label.trim().length > 0
+    ),
+    nextMoves: value.nextMoves.filter(Boolean),
+    memoryClarity: value.memoryClarity,
+    reflection: value.reflection,
+    hypothesis: value.interpretationConsent ? value.hypothesis : "",
+    hypothesisFit: value.interpretationConsent
+      ? value.hypothesisFit
+      : "not_reviewed",
+    hypothesisCorrection: value.interpretationConsent
+      ? value.hypothesisCorrection
+      : "",
+    interpretationConsent: value.interpretationConsent
+  });
+  return {
+    ...payload,
+    expectedRevision: value.revision
   };
 }
 
 export function PsycheReportDetailPage() {
+  const shell = useForgeShell();
+  const navigate = useNavigate();
   const { reportId } = useParams();
   const queryClient = useQueryClient();
   const [activeStage, setActiveStage] = useState("spark");
   const [draft, setDraft] = useState<ReportEditorShape | null>(null);
+  const [baselineDraft, setBaselineDraft] = useState<ReportEditorShape | null>(
+    null
+  );
+  const [pendingServerReport, setPendingServerReport] =
+    useState<TriggerReport | null>(null);
   const [insightFlowOpen, setInsightFlowOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const loadedReportIdRef = useRef<string | null>(null);
   const reportQuery = useQuery({
     queryKey: ["forge-psyche-report", reportId],
     queryFn: () => getTriggerReport(reportId!),
     enabled: Boolean(reportId)
   });
+  const patternsQuery = useQuery({
+    queryKey: ["forge-psyche-patterns", ...shell.selectedUserIds],
+    queryFn: () => listBehaviorPatterns(shell.selectedUserIds)
+  });
+  const valuesQuery = useQuery({
+    queryKey: ["forge-psyche-values", ...shell.selectedUserIds],
+    queryFn: () => listPsycheValues(shell.selectedUserIds)
+  });
   const behaviorsQuery = useQuery({
-    queryKey: ["forge-psyche-behaviors"],
-    queryFn: listBehaviors
+    queryKey: ["forge-psyche-behaviors", ...shell.selectedUserIds],
+    queryFn: () => listBehaviors(shell.selectedUserIds)
   });
   const beliefsQuery = useQuery({
-    queryKey: ["forge-psyche-beliefs"],
-    queryFn: listBeliefs
+    queryKey: ["forge-psyche-beliefs", ...shell.selectedUserIds],
+    queryFn: () => listBeliefs(shell.selectedUserIds)
   });
   const modesQuery = useQuery({
-    queryKey: ["forge-psyche-modes"],
-    queryFn: listModes
+    queryKey: ["forge-psyche-modes", ...shell.selectedUserIds],
+    queryFn: () => listModes(shell.selectedUserIds)
   });
   const schemasQuery = useQuery({
     queryKey: ["forge-psyche-schema-catalog"],
     queryFn: listSchemaCatalog
   });
   const eventTypesQuery = useQuery({
-    queryKey: ["forge-psyche-event-types"],
-    queryFn: listEventTypes
+    queryKey: ["forge-psyche-event-types", ...shell.selectedUserIds],
+    queryFn: () => listEventTypes(shell.selectedUserIds)
   });
   const emotionsQuery = useQuery({
-    queryKey: ["forge-psyche-emotions"],
-    queryFn: listEmotionDefinitions
+    queryKey: ["forge-psyche-emotions", ...shell.selectedUserIds],
+    queryFn: () => listEmotionDefinitions(shell.selectedUserIds)
   });
 
   useEffect(() => {
-    if (reportQuery.data?.report) {
-      setDraft(toEditor(reportQuery.data.report));
+    const latestReport = reportQuery.data?.report;
+    if (!latestReport) {
+      return;
     }
-  }, [reportQuery.data]);
+
+    const latestDraft = toTriggerReportEditor(latestReport);
+    if (
+      loadedReportIdRef.current !== latestReport.id ||
+      !draft ||
+      !baselineDraft
+    ) {
+      loadedReportIdRef.current = latestReport.id;
+      setDraft(latestDraft);
+      setBaselineDraft(latestDraft);
+      setPendingServerReport(null);
+      return;
+    }
+
+    if (latestReport.revision <= baselineDraft.revision) {
+      return;
+    }
+
+    if (!isTriggerReportEditorDirty(draft, baselineDraft)) {
+      setDraft(latestDraft);
+      setBaselineDraft(latestDraft);
+      setPendingServerReport(null);
+      return;
+    }
+
+    if (pendingServerReport?.revision !== latestReport.revision) {
+      setPendingServerReport(latestReport);
+    }
+  }, [baselineDraft, draft, pendingServerReport?.revision, reportQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: async (value: ReportEditorShape) => {
-      const currentReport = reportQuery.data?.report;
-      const payload = triggerReportSchema.parse({
-        title: value.title,
-        status: value.status,
-        eventTypeId: value.eventTypeId || null,
-        customEventType: value.customEventType,
-        eventSituation: value.eventSituation,
-        occurredAt: value.occurredAt
-          ? new Date(value.occurredAt).toISOString()
-          : null,
-        emotions: value.emotions.filter(
-          (entry) => entry.label.trim().length > 0
-        ),
-        thoughts: value.thoughts.filter(
-          (entry) => entry.text.trim().length > 0
-        ),
-        behaviors: value.behaviors.filter(
-          (entry) => entry.text.trim().length > 0
-        ),
-        consequences: {
-          selfShortTerm: value.selfShortTerm,
-          selfLongTerm: value.selfLongTerm,
-          othersShortTerm: value.othersShortTerm,
-          othersLongTerm: value.othersLongTerm
-        },
-        linkedPatternIds: currentReport?.linkedPatternIds ?? [],
-        linkedValueIds: currentReport?.linkedValueIds ?? [],
-        linkedGoalIds: currentReport?.linkedGoalIds ?? [],
-        linkedProjectIds: currentReport?.linkedProjectIds ?? [],
-        linkedTaskIds: currentReport?.linkedTaskIds ?? [],
-        linkedBehaviorIds: value.linkedBehaviorIds,
-        linkedBeliefIds: value.linkedBeliefIds,
-        linkedModeIds: value.linkedModeIds,
-        modeOverlays: value.modeOverlaysText
-          .split("\n")
-          .map((entry) => entry.trim())
-          .filter(Boolean),
-        schemaLinks: value.schemaLinks.filter(Boolean),
-        modeTimeline: value.modeTimeline.filter(
-          (entry) =>
-            entry.stage.trim().length > 0 && entry.label.trim().length > 0
-        ),
-        nextMoves: value.nextMoves.filter(Boolean)
-      });
-      return patchTriggerReport(reportId!, payload);
+      return patchTriggerReport(reportId!, buildTriggerReportPatch(value));
     },
-    onSuccess: async () => {
+    onSuccess: async ({ report: savedReport }) => {
+      const savedDraft = toTriggerReportEditor(savedReport);
+      setDraft(savedDraft);
+      setBaselineDraft(savedDraft);
+      setPendingServerReport(null);
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["forge-psyche-report", reportId]
@@ -202,6 +354,18 @@ export function PsycheReportDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] }),
         queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] })
       ]);
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTriggerReport(reportId!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["forge-psyche-reports"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-psyche-overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] })
+      ]);
+      navigate("/psyche/reports", { replace: true });
     }
   });
 
@@ -215,38 +379,33 @@ export function PsycheReportDetailPage() {
     }
   });
 
-  const detailError =
-    reportQuery.error ??
-    behaviorsQuery.error ??
-    beliefsQuery.error ??
-    modesQuery.error ??
-    schemasQuery.error ??
-    eventTypesQuery.error ??
-    emotionsQuery.error ??
-    null;
-
-  if (reportQuery.isLoading || !draft) {
-    return <SurfaceSkeleton />;
-  }
+  const detailError = reportQuery.error ?? null;
+  const supportingCatalogQueries = [
+    patternsQuery,
+    valuesQuery,
+    behaviorsQuery,
+    beliefsQuery,
+    modesQuery,
+    schemasQuery,
+    eventTypesQuery,
+    emotionsQuery
+  ];
+  const supportingCatalogsError = supportingCatalogQueries.some(
+    (query) => query.isError
+  );
 
   if (detailError) {
     return (
       <ErrorState
         eyebrow="Trigger report"
         error={detailError}
-        onRetry={() =>
-          void Promise.all([
-            reportQuery.refetch(),
-            behaviorsQuery.refetch(),
-            beliefsQuery.refetch(),
-            modesQuery.refetch(),
-            schemasQuery.refetch(),
-            eventTypesQuery.refetch(),
-            emotionsQuery.refetch()
-          ])
-        }
+        onRetry={() => void reportQuery.refetch()}
       />
     );
+  }
+
+  if (reportQuery.isLoading || !draft || !baselineDraft) {
+    return <SurfaceSkeleton />;
   }
 
   if (!reportQuery.data) {
@@ -261,12 +420,93 @@ export function PsycheReportDetailPage() {
 
   const payload = reportQuery.data;
   const report = payload.report;
+  const patterns = patternsQuery.data?.patterns ?? [];
+  const values = valuesQuery.data?.values ?? [];
   const behaviors = behaviorsQuery.data?.behaviors ?? [];
   const beliefs = beliefsQuery.data?.beliefs ?? [];
   const modes = modesQuery.data?.modes ?? [];
   const schemas = schemasQuery.data?.schemas ?? [];
   const eventTypes = eventTypesQuery.data?.eventTypes ?? [];
   const emotions = emotionsQuery.data?.emotions ?? [];
+  const patternOptions: EntityLinkOption[] = patterns.map(
+    (pattern: BehaviorPattern) => ({
+      value: pattern.id,
+      label: formatOwnedEntityOptionLabel(pattern.title, pattern.user),
+      description: formatOwnedEntityDescription(
+        pattern.targetBehavior || pattern.preferredResponse,
+        pattern.user,
+        "Pattern"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [
+          pattern.title,
+          pattern.description,
+          pattern.targetBehavior,
+          pattern.preferredResponse
+        ],
+        pattern
+      ),
+      kind: "pattern"
+    })
+  );
+  const valueOptions: EntityLinkOption[] = values.map((value: PsycheValue) => ({
+    value: value.id,
+    label: formatOwnedEntityOptionLabel(value.title, value.user),
+    description: formatOwnedEntityDescription(
+      value.valuedDirection,
+      value.user,
+      "Value"
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [value.title, value.description, value.valuedDirection],
+      value
+    ),
+    kind: "value"
+  }));
+  const goalOptions: EntityLinkOption[] = shell.snapshot.goals.map((goal) => ({
+    value: goal.id,
+    label: formatOwnedEntityOptionLabel(goal.title, goal.user),
+    description: formatOwnedEntityDescription(
+      goal.description,
+      goal.user,
+      "Goal"
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [goal.title, goal.description],
+      goal
+    ),
+    kind: "goal"
+  }));
+  const projectOptions: EntityLinkOption[] = shell.snapshot.projects.map(
+    (project) => ({
+      value: project.id,
+      label: formatOwnedEntityOptionLabel(project.title, project.user),
+      description: formatOwnedEntityDescription(
+        project.description,
+        project.user,
+        "Project"
+      ),
+      searchText: buildOwnedEntitySearchText(
+        [project.title, project.description],
+        project
+      ),
+      kind: "project"
+    })
+  );
+  const taskOptions: EntityLinkOption[] = shell.snapshot.tasks.map((task) => ({
+    value: task.id,
+    label: formatOwnedEntityOptionLabel(task.title, task.user),
+    description: formatOwnedEntityDescription(
+      task.description,
+      task.user,
+      task.owner || "Task"
+    ),
+    searchText: buildOwnedEntitySearchText(
+      [task.title, task.description, task.owner],
+      task
+    ),
+    kind: "task"
+  }));
   const stages = [
     { id: "spark", label: "Spark", summary: "What happened concretely?" },
     {
@@ -329,9 +569,26 @@ export function PsycheReportDetailPage() {
             <select
               className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
               value={draft.eventTypeId}
-              onChange={(event) =>
-                setDraft({ ...draft, eventTypeId: event.target.value })
-              }
+              onChange={(event) => {
+                const eventTypeId = event.target.value;
+                const previousDefinition = eventTypes.find(
+                  (entry) => entry.id === draft.eventTypeId
+                );
+                const nextDefinition = eventTypes.find(
+                  (entry) => entry.id === eventTypeId
+                );
+                const wordingFollowsPreset =
+                  !draft.customEventType.trim() ||
+                  draft.customEventType === previousDefinition?.label;
+                setDraft({
+                  ...draft,
+                  eventTypeId,
+                  customEventType:
+                    wordingFollowsPreset && nextDefinition
+                      ? nextDefinition.label
+                      : draft.customEventType
+                });
+              }}
             >
               <option value="">Custom or uncategorized</option>
               {eventTypes.map((eventType) => (
@@ -374,14 +631,45 @@ export function PsycheReportDetailPage() {
             }
           />
         </label>
+        <label className="grid gap-2">
+          <span className="text-sm text-[var(--ui-ink-soft)]">
+            Memory clarity
+          </span>
+          <select
+            className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
+            value={draft.memoryClarity}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                memoryClarity: event.target
+                  .value as ReportEditorShape["memoryClarity"]
+              })
+            }
+          >
+            <option value="unspecified">Not recorded</option>
+            <option value="clear">Clear</option>
+            <option value="partial">Partial</option>
+            <option value="uncertain">Uncertain</option>
+          </select>
+        </label>
       </div>
     ),
     wave: (
-      <EmotionRowsEditor
-        items={draft.emotions}
-        onChange={(items) => setDraft({ ...draft, emotions: items })}
-        definitions={emotions}
-      />
+      <div className="grid gap-4">
+        <StringListEditor
+          title="Body cues"
+          description="What sensations, impulses, posture, breathing, numbness, or shutdown did you notice?"
+          addLabel="Add body cue"
+          items={draft.bodyCues}
+          onChange={(items) => setDraft({ ...draft, bodyCues: items })}
+          placeholder="My chest tightened and I stopped breathing fully."
+        />
+        <EmotionRowsEditor
+          items={draft.emotions}
+          onChange={(items) => setDraft({ ...draft, emotions: items })}
+          definitions={emotions}
+        />
+      </div>
     ),
     script: (
       <ThoughtRowsEditor
@@ -393,6 +681,208 @@ export function PsycheReportDetailPage() {
     ),
     lens: (
       <div className="grid gap-4">
+        {supportingCatalogsError ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[var(--ui-ink-strong)]"
+          >
+            <span>
+              Some linked records could not load. Your report is still
+              available, and you can retry these choices separately.
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                void Promise.all(
+                  supportingCatalogQueries.map((query) => query.refetch())
+                )
+              }
+            >
+              Retry links
+            </Button>
+          </div>
+        ) : null}
+        <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
+          <div>
+            <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
+              Connected records
+            </div>
+            <FieldHint className="mt-1">
+              Link only the patterns, values, goals, projects, or tasks that
+              help explain or revisit this episode.
+            </FieldHint>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <div className="text-sm text-[var(--ui-ink-soft)]">Patterns</div>
+              <EntityLinkMultiSelect
+                options={patternOptions}
+                selectedValues={draft.linkedPatternIds}
+                onChange={(linkedPatternIds) =>
+                  setDraft({ ...draft, linkedPatternIds })
+                }
+                placeholder="Search linked patterns"
+                emptyMessage="No patterns in scope yet."
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="text-sm text-[var(--ui-ink-soft)]">Values</div>
+              <EntityLinkMultiSelect
+                options={valueOptions}
+                selectedValues={draft.linkedValueIds}
+                onChange={(linkedValueIds) =>
+                  setDraft({ ...draft, linkedValueIds })
+                }
+                placeholder="Search linked values"
+                emptyMessage="No values in scope yet."
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-2">
+              <div className="text-sm text-[var(--ui-ink-soft)]">Goals</div>
+              <EntityLinkMultiSelect
+                options={goalOptions}
+                selectedValues={draft.linkedGoalIds}
+                onChange={(linkedGoalIds) =>
+                  setDraft({ ...draft, linkedGoalIds })
+                }
+                placeholder="Search linked goals"
+                emptyMessage="No goals in scope yet."
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="text-sm text-[var(--ui-ink-soft)]">Projects</div>
+              <EntityLinkMultiSelect
+                options={projectOptions}
+                selectedValues={draft.linkedProjectIds}
+                onChange={(linkedProjectIds) =>
+                  setDraft({ ...draft, linkedProjectIds })
+                }
+                placeholder="Search linked projects"
+                emptyMessage="No projects in scope yet."
+              />
+            </div>
+            <div className="grid gap-2">
+              <div className="text-sm text-[var(--ui-ink-soft)]">Tasks</div>
+              <EntityLinkMultiSelect
+                options={taskOptions}
+                selectedValues={draft.linkedTaskIds}
+                onChange={(linkedTaskIds) =>
+                  setDraft({ ...draft, linkedTaskIds })
+                }
+                placeholder="Search linked tasks"
+                emptyMessage="No tasks in scope yet."
+              />
+            </div>
+          </div>
+        </div>
+        <label className="grid gap-2">
+          <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+            Your reflection
+          </span>
+          <Textarea
+            value={draft.reflection}
+            onChange={(event) =>
+              setDraft({ ...draft, reflection: event.target.value })
+            }
+            placeholder="What feels most important, painful, protective, or revealing about this episode?"
+          />
+        </label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={draft.interpretationConsent}
+          className="flex min-w-0 items-start gap-3 rounded-[20px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-left"
+          onClick={() =>
+            setDraft(
+              !draft.interpretationConsent
+                ? { ...draft, interpretationConsent: true }
+                : {
+                    ...draft,
+                    interpretationConsent: false,
+                    hypothesis: "",
+                    hypothesisFit: "not_reviewed",
+                    hypothesisCorrection: ""
+                  }
+            )
+          }
+        >
+          <span
+            aria-hidden="true"
+            className={`mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
+              draft.interpretationConsent
+                ? "justify-end bg-[var(--primary)]"
+                : "justify-start bg-[var(--ui-surface-3)]"
+            }`}
+          >
+            <span className="size-5 rounded-full bg-white shadow-sm" />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-medium text-[var(--ui-ink-strong)]">
+              Include a tentative interpretation
+            </span>
+            <span className="mt-1 block text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Keep it discussable and open to correction.
+            </span>
+          </span>
+        </button>
+        {draft.interpretationConsent ? (
+          <div className="grid gap-4 rounded-[20px] border border-[var(--ui-border-subtle)] p-4">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                Tentative hypothesis
+              </span>
+              <Textarea
+                value={draft.hypothesis}
+                onChange={(event) =>
+                  setDraft({ ...draft, hypothesis: event.target.value })
+                }
+                placeholder="One possibility is that the silence felt like rejection, so withdrawal became a fast protection."
+              />
+            </label>
+            {draft.hypothesis.trim() ? (
+              <label className="grid gap-2">
+                <span className="text-sm text-[var(--ui-ink-soft)]">Fit</span>
+                <select
+                  className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
+                  value={draft.hypothesisFit}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      hypothesisFit: event.target
+                        .value as ReportEditorShape["hypothesisFit"]
+                    })
+                  }
+                >
+                  <option value="not_reviewed">Not ready to judge</option>
+                  <option value="fits">It fits</option>
+                  <option value="partly_fits">It partly fits</option>
+                  <option value="does_not_fit">It does not fit</option>
+                </select>
+              </label>
+            ) : null}
+            {draft.hypothesisFit === "partly_fits" ||
+            draft.hypothesisFit === "does_not_fit" ? (
+              <label className="grid gap-2">
+                <span className="text-sm text-[var(--ui-ink-soft)]">
+                  Your correction
+                </span>
+                <Textarea
+                  value={draft.hypothesisCorrection}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      hypothesisCorrection: event.target.value
+                    })
+                  }
+                  placeholder="What is missing, overstated, or different?"
+                />
+              </label>
+            ) : null}
+          </div>
+        ) : null}
         <div className="grid gap-4 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] p-4">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium text-[var(--ui-ink-strong)]">
@@ -453,6 +943,7 @@ export function PsycheReportDetailPage() {
                       <button
                         key={schema.id}
                         type="button"
+                        aria-pressed={selected}
                         className={`rounded-full border px-3 py-2 text-sm transition ${selected ? `${visual.badgeTone} ring-1 ring-[color-mix(in_srgb,var(--primary)_28%,transparent)]` : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"}`}
                         onClick={() =>
                           setDraft({
@@ -484,6 +975,7 @@ export function PsycheReportDetailPage() {
                 <button
                   key={belief.id}
                   type="button"
+                  aria-pressed={selected}
                   className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-[var(--ui-info-soft)] text-[color-mix(in_srgb,var(--info)_76%,var(--ui-ink-strong)_24%)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"}`}
                   onClick={() =>
                     setDraft({
@@ -531,6 +1023,7 @@ export function PsycheReportDetailPage() {
                 <button
                   key={mode.id}
                   type="button"
+                  aria-pressed={selected}
                   className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"}`}
                   onClick={() =>
                     setDraft({
@@ -566,6 +1059,7 @@ export function PsycheReportDetailPage() {
                 <button
                   key={behavior.id}
                   type="button"
+                  aria-pressed={selected}
                   className={`rounded-full px-3 py-2 text-sm transition ${selected ? "bg-[var(--ui-danger-soft)] text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]" : "bg-[var(--ui-surface-2)] text-[var(--ui-ink-soft)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"}`}
                   onClick={() =>
                     setDraft({
@@ -631,10 +1125,28 @@ export function PsycheReportDetailPage() {
           onChange={(items) => setDraft({ ...draft, nextMoves: items })}
           placeholder="Send one honest repair message tomorrow morning."
         />
+        {saveMutation.error ? (
+          <div
+            role="alert"
+            className="rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm text-[var(--danger)]"
+          >
+            {saveMutation.error instanceof Error
+              ? saveMutation.error.message
+              : "Unable to save this report."}
+          </div>
+        ) : null}
+        {saveMutation.isSuccess ? (
+          <div
+            role="status"
+            className="rounded-[18px] border border-[color-mix(in_srgb,var(--success)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-success-soft)] px-4 py-3 text-sm text-[var(--ui-ink-strong)]"
+          >
+            Report saved.
+          </div>
+        ) : null}
         <div className="flex justify-end">
           <Button
             pending={saveMutation.isPending}
-            onClick={() => void saveMutation.mutateAsync(draft)}
+            onClick={() => saveMutation.mutate(draft)}
           >
             Save chain
           </Button>
@@ -749,10 +1261,70 @@ export function PsycheReportDetailPage() {
         description="Move through Spark to Pivot in one chain canvas."
         badge={report.status}
         actions={
-          <OpenInGraphButton entityType="trigger_report" entityId={report.id} />
+          <div className="flex flex-wrap items-center gap-2">
+            <OpenInGraphButton
+              entityType="trigger_report"
+              entityId={report.id}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-[var(--danger)] hover:bg-[var(--ui-danger-soft)]"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              Delete report
+            </Button>
+          </div>
         }
       />
       <PsycheSectionNav />
+
+      {pendingServerReport ? (
+        <div
+          role="alert"
+          className="grid gap-3 rounded-[24px] border border-[color-mix(in_srgb,var(--warning)_34%,var(--ui-border-subtle)_66%)] bg-[var(--ui-warning-soft)] p-4 text-[var(--ui-ink-strong)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+        >
+          <div className="min-w-0">
+            <div className="font-medium">A newer version is available</div>
+            <p className="mt-1 text-sm leading-6 text-[var(--ui-ink-soft)]">
+              Forge kept your unsaved edits. Reload the latest version, or keep
+              your changed fields while bringing in newer untouched fields.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const latestDraft = toTriggerReportEditor(pendingServerReport);
+                setDraft(latestDraft);
+                setBaselineDraft(latestDraft);
+                setPendingServerReport(null);
+              }}
+            >
+              Reload latest
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const latestDraft = toTriggerReportEditor(pendingServerReport);
+                setDraft(
+                  rebaseTriggerReportEditor(
+                    baselineDraft,
+                    draft,
+                    pendingServerReport
+                  )
+                );
+                setBaselineDraft(latestDraft);
+                setPendingServerReport(null);
+              }}
+            >
+              Keep my edits
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <ChainCanvas
         stages={stages}
@@ -785,6 +1357,20 @@ export function PsycheReportDetailPage() {
         }}
         onSubmit={async (value) => {
           await insightMutation.mutateAsync(value);
+        }}
+      />
+      <PlanningRecordDeleteDialog
+        open={deleteDialogOpen}
+        recordKind="trigger report"
+        recordTitle={report.title}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) {
+            deleteMutation.reset();
+          }
+        }}
+        onConfirm={async () => {
+          await deleteMutation.mutateAsync();
         }}
       />
     </div>

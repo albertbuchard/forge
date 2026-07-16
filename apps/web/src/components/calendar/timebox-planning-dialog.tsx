@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, RefreshCcw } from "lucide-react";
 import {
   FlowChoiceGrid,
   FlowField,
@@ -10,13 +11,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getCalendarOverview, recommendTaskTimeboxes } from "@/lib/api";
-import { formatWeekday } from "@/lib/calendar-ui";
 import {
+  estimateCalendarEventActionPointLoad,
   estimateTaskTimeboxActionPointLoad,
+  estimateWorkBlockActionPointLoad,
   formatLifeForceAp,
   formatLifeForceRate,
+  getCalendarActivityCustomRate,
+  getCalendarActivityPresetKey,
   getCalendarActivityPresetOptions
 } from "@/lib/life-force-display";
+import {
+  formatDateInTimeZone,
+  formatDateTimeInputInTimeZone,
+  formatTimeInTimeZone,
+  localDateKeyInTimeZone,
+  parseDateTimeInputInTimeZone,
+  resolveDateTimeInputInTimeZone
+} from "@/lib/timezone-datetime";
 import type {
   CalendarEvent,
   Task,
@@ -39,16 +51,41 @@ type PlannerDraft = {
   overrideReason: string;
 };
 
-function toDateKey(input: string) {
-  return input.slice(0, 10);
+export function getPlanningRangeDateKeys(
+  from: string,
+  to: string,
+  timeZone: string
+) {
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+    throw new Error(
+      "Planning ranges require an exclusive end after the start."
+    );
+  }
+  return {
+    minDateKey: localDateKeyInTimeZone(
+      new Date(fromMs).toISOString(),
+      timeZone
+    ),
+    maxDateKey: localDateKeyInTimeZone(
+      new Date(toMs - 1).toISOString(),
+      timeZone
+    )
+  };
 }
 
-function toDayStartIso(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00`).toISOString();
+function toDayStartIso(dateKey: string, timeZone: string) {
+  return parseDateTimeInputInTimeZone(`${dateKey}T00:00`, timeZone);
 }
 
-function toDayEndIso(dateKey: string) {
-  return new Date(`${dateKey}T23:59:59.999`).toISOString();
+function toDayEndIso(dateKey: string, timeZone: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  return parseDateTimeInputInTimeZone(
+    `${next.toISOString().slice(0, 10)}T00:00`,
+    timeZone
+  );
 }
 
 function clampDateKey(dateKey: string, minDateKey: string, maxDateKey: string) {
@@ -61,71 +98,86 @@ function clampDateKey(dateKey: string, minDateKey: string, maxDateKey: string) {
   return dateKey;
 }
 
-function getPreferredPlanningDateKey(from: string, to: string) {
-  const minDateKey = toDateKey(from);
-  const maxDateKey = toDateKey(to);
-  const candidate = new Date(`${minDateKey}T12:00:00`);
-  candidate.setDate(candidate.getDate() + 1);
+function getPreferredPlanningDateKey(
+  from: string,
+  to: string,
+  timeZone: string
+) {
+  const { minDateKey, maxDateKey } = getPlanningRangeDateKeys(
+    from,
+    to,
+    timeZone
+  );
+  const candidate = new Date(`${minDateKey}T00:00:00.000Z`);
+  candidate.setUTCDate(candidate.getUTCDate() + 1);
   return clampDateKey(
-    toDateKey(candidate.toISOString()),
+    candidate.toISOString().slice(0, 10),
     minDateKey,
     maxDateKey
   );
 }
 
-function padNumber(value: number) {
-  return String(value).padStart(2, "0");
+function toTimeInputValue(value: string, timeZone: string) {
+  return formatDateTimeInputInTimeZone(value, timeZone).slice(11, 16);
 }
 
-function toTimeInputValue(date: Date) {
-  return `${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
-}
-
-function parseDateAndTime(dateKey: string, timeValue: string) {
+function parseDateAndTime(
+  dateKey: string,
+  timeValue: string,
+  timeZone: string,
+  preferredInstant?: string | null
+) {
   if (!dateKey || !timeValue) {
     return null;
   }
-  const date = new Date(`${dateKey}T${timeValue}:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const instant = parseDateTimeInputInTimeZone(
+    `${dateKey}T${timeValue}`,
+    timeZone,
+    { disambiguation: "reject", preferredInstant }
+  );
+  return instant ? new Date(instant) : null;
 }
 
 function buildManualWindow(
   dateKey: string,
   durationSeconds?: number | null,
-  seed?: { startsAt: string; endsAt: string } | null
+  seed?: { startsAt: string; endsAt: string } | null,
+  timeZone = "UTC"
 ) {
   if (seed) {
-    const seededStart = new Date(seed.startsAt);
-    const seededEnd = new Date(seed.endsAt);
     return {
-      startTime: toTimeInputValue(seededStart),
-      endTime: toTimeInputValue(seededEnd)
+      startTime: toTimeInputValue(seed.startsAt, timeZone),
+      endTime: toTimeInputValue(seed.endsAt, timeZone)
     };
   }
-  const start = new Date(`${dateKey}T09:00:00`);
   const boundedDurationSeconds = Math.max(
     30 * 60,
     Math.min(durationSeconds ?? 60 * 60, 6 * 60 * 60)
   );
-  const end = new Date(start.getTime() + boundedDurationSeconds * 1000);
+  const start = parseDateTimeInputInTimeZone(`${dateKey}T09:00`, timeZone);
+  const end = start
+    ? new Date(Date.parse(start) + boundedDurationSeconds * 1000).toISOString()
+    : null;
   return {
-    startTime: toTimeInputValue(start),
-    endTime: toTimeInputValue(end)
+    startTime: "09:00",
+    endTime: end ? toTimeInputValue(end, timeZone) : "10:00"
   };
 }
 
-function formatClockRange(startAt: string, endAt: string) {
-  return `${new Date(startAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
-  })} - ${new Date(endAt).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit"
-  })}`;
+function formatClockRange(
+  startAt: string,
+  endAt: string,
+  timeZone?: string | null
+) {
+  return `${formatTimeInTimeZone(startAt, timeZone)} - ${formatTimeInTimeZone(endAt, timeZone)}`;
 }
 
-function formatContextTime(startAt: string, endAt: string) {
-  return `${formatWeekday(new Date(startAt))} · ${formatClockRange(startAt, endAt)}`;
+function formatContextTime(
+  startAt: string,
+  endAt: string,
+  timeZone?: string | null
+) {
+  return `${formatDateInTimeZone(startAt, timeZone)} · ${formatClockRange(startAt, endAt, timeZone)}`;
 }
 
 const PANEL_CLASS =
@@ -182,13 +234,19 @@ function CalendarEventCard({ event }: { event: CalendarEvent }) {
         <Badge className={SOFT_BADGE_CLASS}>{event.availability}</Badge>
       </div>
       <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-        {formatContextTime(event.startAt, event.endAt)}
+        {formatContextTime(event.startAt, event.endAt, event.timezone)}
       </div>
     </div>
   );
 }
 
-function WorkBlockCard({ block }: { block: WorkBlockInstance }) {
+function WorkBlockCard({
+  block,
+  timeZone
+}: {
+  block: WorkBlockInstance;
+  timeZone: string;
+}) {
   return (
     <div className={`${INNER_CARD_CLASS} px-3 py-3`}>
       <div className="flex items-center justify-between gap-3">
@@ -198,13 +256,19 @@ function WorkBlockCard({ block }: { block: WorkBlockInstance }) {
         <Badge className={SOFT_BADGE_CLASS}>{block.blockingState}</Badge>
       </div>
       <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-        {formatContextTime(block.startAt, block.endAt)}
+        {formatContextTime(block.startAt, block.endAt, timeZone)}
       </div>
     </div>
   );
 }
 
-function TimeboxCard({ timebox }: { timebox: TaskTimebox }) {
+function TimeboxCard({
+  timebox,
+  timeZone
+}: {
+  timebox: TaskTimebox;
+  timeZone: string;
+}) {
   const actionPointLoad = estimateTaskTimeboxActionPointLoad(timebox);
   return (
     <div className={`${INNER_CARD_CLASS} px-3 py-3`}>
@@ -215,7 +279,7 @@ function TimeboxCard({ timebox }: { timebox: TaskTimebox }) {
         <Badge className={SOFT_BADGE_CLASS}>{timebox.source}</Badge>
       </div>
       <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-        {formatContextTime(timebox.startsAt, timebox.endsAt)}
+        {formatContextTime(timebox.startsAt, timebox.endsAt, timeZone)}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <Badge className={SOFT_BADGE_CLASS}>
@@ -227,6 +291,84 @@ function TimeboxCard({ timebox }: { timebox: TaskTimebox }) {
       </div>
     </div>
   );
+}
+
+function taskMatchesUserScope(task: Task, userIds?: string[]) {
+  if (!userIds || userIds.length === 0) {
+    return true;
+  }
+  const allowed = new Set(userIds);
+  return (
+    (typeof task.ownerUserId === "string" && allowed.has(task.ownerUserId)) ||
+    (typeof task.userId === "string" && allowed.has(task.userId)) ||
+    (Array.isArray(task.assigneeUserIds) &&
+      task.assigneeUserIds.some((userId) => allowed.has(userId)))
+  );
+}
+
+function overlapsWindow(
+  candidate: { startsAt: string; endsAt: string },
+  startsAt: string,
+  endsAt: string
+) {
+  return (
+    Date.parse(candidate.startsAt) < Date.parse(endsAt) &&
+    Date.parse(candidate.endsAt) > Date.parse(startsAt)
+  );
+}
+
+function findManualPlacementConflicts(input: {
+  startsAt: string | null;
+  endsAt: string | null;
+  events: CalendarEvent[];
+  blocks: WorkBlockInstance[];
+  timeboxes: TaskTimebox[];
+  editingTimeboxId?: string | null;
+}) {
+  if (!input.startsAt || !input.endsAt) {
+    return [];
+  }
+  return [
+    ...input.events
+      .filter(
+        (event) =>
+          event.status !== "cancelled" &&
+          event.availability === "busy" &&
+          overlapsWindow(
+            { startsAt: event.startAt, endsAt: event.endAt },
+            input.startsAt!,
+            input.endsAt!
+          )
+      )
+      .map((event) => ({ id: event.id, title: event.title, kind: "event" })),
+    ...input.blocks
+      .filter(
+        (block) =>
+          block.blockingState === "blocked" &&
+          overlapsWindow(
+            { startsAt: block.startAt, endsAt: block.endAt },
+            input.startsAt!,
+            input.endsAt!
+          )
+      )
+      .map((block) => ({
+        id: block.id,
+        title: block.title,
+        kind: "work block"
+      })),
+    ...input.timeboxes
+      .filter(
+        (timebox) =>
+          timebox.id !== input.editingTimeboxId &&
+          timebox.status !== "cancelled" &&
+          overlapsWindow(timebox, input.startsAt!, input.endsAt!)
+      )
+      .map((timebox) => ({
+        id: timebox.id,
+        title: timebox.title,
+        kind: "timebox"
+      }))
+  ];
 }
 
 export function TimeboxPlanningDialog({
@@ -277,23 +419,34 @@ export function TimeboxPlanningDialog({
   userIds?: string[];
 }) {
   const isEditing = Boolean(editingTimebox);
+  const planningTimeZone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const availableTasks = useMemo(() => {
     const pinnedTaskId = lockedTaskId ?? editingTimebox?.taskId ?? null;
     const liveTasks = tasks.filter(
-      (task) => task.status !== "done" || task.id === pinnedTaskId
+      (task) =>
+        taskMatchesUserScope(task, userIds) &&
+        (task.status !== "done" || task.id === pinnedTaskId)
     );
     if (!pinnedTaskId) {
       return liveTasks;
     }
     const locked = liveTasks.find((task) => task.id === pinnedTaskId);
     return locked ? [locked] : [];
-  }, [editingTimebox?.taskId, lockedTaskId, tasks]);
+  }, [editingTimebox?.taskId, lockedTaskId, tasks, userIds]);
 
-  const minDateKey = toDateKey(from);
-  const maxDateKey = toDateKey(to);
+  const { minDateKey, maxDateKey } = getPlanningRangeDateKeys(
+    from,
+    to,
+    planningTimeZone
+  );
   const defaultDateKey = editingTimebox
-    ? clampDateKey(toDateKey(editingTimebox.startsAt), minDateKey, maxDateKey)
-    : getPreferredPlanningDateKey(from, to);
+    ? clampDateKey(
+        localDateKeyInTimeZone(editingTimebox.startsAt, planningTimeZone),
+        minDateKey,
+        maxDateKey
+      )
+    : getPreferredPlanningDateKey(from, to, planningTimeZone);
   const defaultTaskId =
     lockedTaskId ??
     editingTimebox?.taskId ??
@@ -312,7 +465,8 @@ export function TimeboxPlanningDialog({
           startsAt: editingTimebox.startsAt,
           endsAt: editingTimebox.endsAt
         }
-      : null
+      : null,
+    planningTimeZone
   );
 
   const [draft, setDraft] = useState<PlannerDraft>({
@@ -321,11 +475,11 @@ export function TimeboxPlanningDialog({
     plannerMode: editingTimebox ? "manual" : "suggested",
     selectedTimeboxId: "",
     activityPresetKey:
-      editingTimebox?.actionProfile?.profileKey ?? "task_inherited",
-    customSustainRateApPerHour:
-      editingTimebox?.actionProfile?.sourceMethod === "manual"
-        ? editingTimebox.actionProfile.sustainRateApPerHour
-        : null,
+      getCalendarActivityPresetKey(editingTimebox?.actionProfile) ??
+      "task_inherited",
+    customSustainRateApPerHour: getCalendarActivityCustomRate(
+      editingTimebox?.actionProfile
+    ),
     manualStartTime: defaultManualWindow.startTime,
     manualEndTime: defaultManualWindow.endTime,
     manualTitle: editingTimebox?.title ?? defaultTask?.title ?? "",
@@ -347,8 +501,12 @@ export function TimeboxPlanningDialog({
       availableTasks[0] ??
       null;
     const nextDateKey = editingTimebox
-      ? clampDateKey(toDateKey(editingTimebox.startsAt), minDateKey, maxDateKey)
-      : getPreferredPlanningDateKey(from, to);
+      ? clampDateKey(
+          localDateKeyInTimeZone(editingTimebox.startsAt, planningTimeZone),
+          minDateKey,
+          maxDateKey
+        )
+      : getPreferredPlanningDateKey(from, to, planningTimeZone);
     const nextManualWindow = buildManualWindow(
       nextDateKey,
       nextTask?.plannedDurationSeconds,
@@ -357,7 +515,8 @@ export function TimeboxPlanningDialog({
             startsAt: editingTimebox.startsAt,
             endsAt: editingTimebox.endsAt
           }
-        : null
+        : null,
+      planningTimeZone
     );
     setSubmitError(null);
     setDraft({
@@ -366,11 +525,11 @@ export function TimeboxPlanningDialog({
       plannerMode: editingTimebox ? "manual" : "suggested",
       selectedTimeboxId: "",
       activityPresetKey:
-        editingTimebox?.actionProfile?.profileKey ?? "task_inherited",
-      customSustainRateApPerHour:
-        editingTimebox?.actionProfile?.sourceMethod === "manual"
-          ? editingTimebox.actionProfile.sustainRateApPerHour
-          : null,
+        getCalendarActivityPresetKey(editingTimebox?.actionProfile) ??
+        "task_inherited",
+      customSustainRateApPerHour: getCalendarActivityCustomRate(
+        editingTimebox?.actionProfile
+      ),
       manualStartTime: nextManualWindow.startTime,
       manualEndTime: nextManualWindow.endTime,
       manualTitle: editingTimebox?.title ?? nextTask?.title ?? "",
@@ -385,6 +544,7 @@ export function TimeboxPlanningDialog({
     maxDateKey,
     minDateKey,
     open,
+    planningTimeZone,
     to
   ]);
 
@@ -393,10 +553,14 @@ export function TimeboxPlanningDialog({
 
   const selectedDayWindow = useMemo(
     () => ({
-      from: toDayStartIso(draft.preferredDate),
-      to: toDayEndIso(draft.preferredDate)
+      from:
+        toDayStartIso(draft.preferredDate, planningTimeZone) ??
+        `${draft.preferredDate}T00:00:00.000Z`,
+      to:
+        toDayEndIso(draft.preferredDate, planningTimeZone) ??
+        `${draft.preferredDate}T23:59:59.999Z`
     }),
-    [draft.preferredDate]
+    [draft.preferredDate, planningTimeZone]
   );
 
   const suggestionQuery = useQuery({
@@ -411,9 +575,12 @@ export function TimeboxPlanningDialog({
         taskId: draft.taskId,
         from: selectedDayWindow.from,
         to: selectedDayWindow.to,
-        limit: 8
+        limit: 8,
+        timezone: planningTimeZone
       }),
-    enabled: open && draft.taskId.length > 0
+    enabled: open && draft.taskId.length > 0,
+    retry: 1,
+    staleTime: 30_000
   });
 
   const calendarDayQuery = useQuery({
@@ -429,7 +596,9 @@ export function TimeboxPlanningDialog({
         to: selectedDayWindow.to,
         userIds
       }),
-    enabled: open
+    enabled: open,
+    retry: 1,
+    staleTime: 30_000
   });
 
   useEffect(() => {
@@ -465,9 +634,53 @@ export function TimeboxPlanningDialog({
   );
   const manualStart = parseDateAndTime(
     draft.preferredDate,
-    draft.manualStartTime
+    draft.manualStartTime,
+    planningTimeZone,
+    editingTimebox?.startsAt
   );
-  const manualEnd = parseDateAndTime(draft.preferredDate, draft.manualEndTime);
+  const manualEnd = parseDateAndTime(
+    draft.preferredDate,
+    draft.manualEndTime,
+    planningTimeZone,
+    editingTimebox?.endsAt
+  );
+  const manualStartResolution = resolveDateTimeInputInTimeZone(
+    `${draft.preferredDate}T${draft.manualStartTime}`,
+    planningTimeZone
+  );
+  const manualEndResolution = resolveDateTimeInputInTimeZone(
+    `${draft.preferredDate}T${draft.manualEndTime}`,
+    planningTimeZone
+  );
+  const manualTimeResolutionError = [
+    manualStartResolution,
+    manualEndResolution
+  ].some((resolution) => resolution.kind === "nonexistent")
+    ? "That local time does not exist because the clock changes on this day. Choose another time."
+    : [manualStartResolution, manualEndResolution].some(
+          (resolution) => resolution.kind === "ambiguous"
+        ) && !editingTimebox
+      ? "That local time occurs twice because the clock changes on this day. Choose an unambiguous time."
+      : null;
+  const manualConflicts = findManualPlacementConflicts({
+    startsAt: manualStart?.toISOString() ?? null,
+    endsAt: manualEnd?.toISOString() ?? null,
+    events: dayEvents,
+    blocks: dayBlocks,
+    timeboxes: dayTimeboxes,
+    editingTimeboxId: editingTimebox?.id
+  });
+  const selectedDayPressureAp = [
+    ...dayEvents.map(
+      (event) => estimateCalendarEventActionPointLoad(event).totalAp
+    ),
+    ...dayBlocks.map(
+      (block) => estimateWorkBlockActionPointLoad(block).totalAp
+    ),
+    ...dayTimeboxes.map(
+      (timebox) => estimateTaskTimeboxActionPointLoad(timebox).totalAp
+    )
+  ].reduce((total, value) => total + value, 0);
   const manualPreview =
     manualStart && manualEnd
       ? estimateTaskTimeboxActionPointLoad({
@@ -526,508 +739,592 @@ export function TimeboxPlanningDialog({
       : "Forge will use the task's current planned duration and scheduling rules when it searches for valid slots.";
 
   const steps: Array<QuestionFlowStep<PlannerDraft>> = [
-      {
-        id: "task",
-        eyebrow: "Planning",
-        title: taskStepTitle,
-        description: taskStepDescription,
-        render: (value, setValue) => (
-          <div className="grid min-w-0 max-w-full gap-4 overflow-hidden">
-            {!lockedTaskId ? (
-              <FlowField label="Task">
-                <select
-                  value={value.taskId}
-                  onChange={(event) =>
-                    (() => {
-                      const nextTask = availableTasks.find(
-                        (task) => task.id === event.target.value
-                      );
-                      const nextManualWindow = buildManualWindow(
-                        value.preferredDate,
-                        nextTask?.plannedDurationSeconds
-                      );
-                      setValue({
-                        taskId: event.target.value,
-                        selectedTimeboxId: "",
-                        activityPresetKey: "task_inherited",
-                        customSustainRateApPerHour: null,
-                        manualStartTime: nextManualWindow.startTime,
-                        manualEndTime: nextManualWindow.endTime,
-                        manualTitle: nextTask?.title ?? value.manualTitle
-                      });
-                    })()
-                  }
-                  className={SELECT_CLASS}
-                >
-                  {availableTasks.map((task) => (
-                    <option key={task.id} value={task.id}>
-                      {task.title}
-                    </option>
-                  ))}
-                </select>
-              </FlowField>
-            ) : null}
+    {
+      id: "task",
+      eyebrow: "Planning",
+      title: taskStepTitle,
+      description: taskStepDescription,
+      render: (value, setValue) => (
+        <div className="grid min-w-0 max-w-full gap-4 overflow-hidden">
+          {!lockedTaskId ? (
+            <FlowField label="Task">
+              <select
+                value={value.taskId}
+                onChange={(event) =>
+                  (() => {
+                    const nextTask = availableTasks.find(
+                      (task) => task.id === event.target.value
+                    );
+                    const nextManualWindow = buildManualWindow(
+                      value.preferredDate,
+                      nextTask?.plannedDurationSeconds,
+                      null,
+                      planningTimeZone
+                    );
+                    setValue({
+                      taskId: event.target.value,
+                      selectedTimeboxId: "",
+                      activityPresetKey: "task_inherited",
+                      customSustainRateApPerHour: null,
+                      manualStartTime: nextManualWindow.startTime,
+                      manualEndTime: nextManualWindow.endTime,
+                      manualTitle: nextTask?.title ?? value.manualTitle
+                    });
+                  })()
+                }
+                className={SELECT_CLASS}
+              >
+                {availableTasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+              </select>
+            </FlowField>
+          ) : null}
 
-            {selectedTask ? (
-              <div className="min-w-0 max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 shadow-[var(--ui-shadow-soft)]">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
-                      Time Box
-                    </div>
-                    <div className="mt-2 break-words font-display text-[1.4rem] leading-tight text-[var(--ui-ink-strong)]">
-                      {selectedTask.title}
-                    </div>
+          {selectedTask ? (
+            <div className="min-w-0 max-w-full overflow-hidden rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5 shadow-[var(--ui-shadow-soft)]">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                    Time Box
                   </div>
-                  <Badge className={SOFT_BADGE_CLASS}>
-                    {selectedTask.status}
-                  </Badge>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Badge className={SOFT_BADGE_CLASS}>
-                    {selectedTask.plannedDurationSeconds
-                      ? `${Math.round(selectedTask.plannedDurationSeconds / 60)} min target`
-                      : "No duration yet"}
-                  </Badge>
-                  <Badge className={SOFT_BADGE_CLASS}>
-                    {selectedTask.schedulingRules
-                      ? "Task-specific rules"
-                      : "Uses project rules"}
-                  </Badge>
-                  <Badge className={SOFT_BADGE_CLASS}>
-                    {selectedTask.points} xp
-                  </Badge>
-                  {selectedTask.plannedDurationSeconds ? (
-                    <Badge className={SOFT_BADGE_CLASS}>
-                      {formatLifeForceAp(
-                        (selectedTask.plannedDurationSeconds / 3600 / 24) * 100
-                      )}{" "}
-                      target load
-                    </Badge>
-                  ) : null}
-                </div>
-                <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  Pick a day first, then either accept one of Forge&apos;s
-                  suggested slots or set the block manually.
-                </p>
-                {isEditing && editingTimebox && onDeleteTimebox ? (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3">
-                    <div className="text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
-                      Remove this planned timebox if you no longer want it in
-                      the calendar.
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[var(--ui-danger-soft)]"
-                      pending={deleting}
-                      pendingLabel="Deleting"
-                      onClick={() =>
-                        void (async () => {
-                          setSubmitError(null);
-                          setDeleting(true);
-                          try {
-                            await onDeleteTimebox(editingTimebox.id);
-                            onOpenChange(false);
-                          } catch (error) {
-                            setSubmitError(
-                              error instanceof Error
-                                ? error.message
-                                : "Forge could not delete this timebox."
-                            );
-                          } finally {
-                            setDeleting(false);
-                          }
-                        })()
-                      }
-                    >
-                      Delete timebox
-                    </Button>
+                  <div className="mt-2 break-words font-display text-[1.4rem] leading-tight text-[var(--ui-ink-strong)]">
+                    {selectedTask.title}
                   </div>
+                </div>
+                <Badge className={SOFT_BADGE_CLASS}>
+                  {selectedTask.status}
+                </Badge>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge className={SOFT_BADGE_CLASS}>
+                  {selectedTask.plannedDurationSeconds
+                    ? `${Math.round(selectedTask.plannedDurationSeconds / 60)} min target`
+                    : "No duration yet"}
+                </Badge>
+                <Badge className={SOFT_BADGE_CLASS}>
+                  {selectedTask.schedulingRules
+                    ? "Task-specific rules"
+                    : "Uses project rules"}
+                </Badge>
+                <Badge className={SOFT_BADGE_CLASS}>
+                  {selectedTask.points} xp
+                </Badge>
+                {selectedTask.plannedDurationSeconds ? (
+                  <Badge className={SOFT_BADGE_CLASS}>
+                    {formatLifeForceAp(
+                      (selectedTask.plannedDurationSeconds / 3600 / 24) * 100
+                    )}{" "}
+                    target load
+                  </Badge>
                 ) : null}
               </div>
-            ) : null}
+              <p className="mt-4 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                Pick a day first, then either accept one of Forge&apos;s
+                suggested slots or set the block manually.
+              </p>
+              {isEditing && editingTimebox && onDeleteTimebox ? (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-3">
+                  <div className="text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+                    Remove this planned timebox if you no longer want it in the
+                    calendar.
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)] hover:bg-[var(--ui-danger-soft)]"
+                    pending={deleting}
+                    pendingLabel="Deleting"
+                    onClick={() =>
+                      void (async () => {
+                        setSubmitError(null);
+                        setDeleting(true);
+                        try {
+                          await onDeleteTimebox(editingTimebox.id);
+                          onOpenChange(false);
+                        } catch (error) {
+                          setSubmitError(
+                            error instanceof Error
+                              ? error.message
+                              : "Forge could not delete this timebox."
+                          );
+                        } finally {
+                          setDeleting(false);
+                        }
+                      })()
+                    }
+                  >
+                    Delete timebox
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )
+    },
+    {
+      id: "day",
+      eyebrow: "Calendar",
+      title: "Choose the day and review what is already there",
+      description:
+        "Forge reads the real day first so the timebox stays grounded in your provider events, work blocks, and already-planned work.",
+      render: (value, setValue) => (
+        <div className="grid gap-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+            <div className="grid gap-4">
+              <FlowField
+                label="Date"
+                description="Choose the day you want to protect for this task."
+              >
+                <Input
+                  type="date"
+                  min={minDateKey}
+                  max={maxDateKey}
+                  value={value.preferredDate}
+                  onChange={(event) =>
+                    setValue({
+                      preferredDate: event.target.value,
+                      selectedTimeboxId: ""
+                    })
+                  }
+                />
+              </FlowField>
+              <FlowField
+                label="Planning style"
+                description="Take Forge's slot recommendation when it fits, or set the block yourself."
+              >
+                <FlowChoiceGrid
+                  value={value.plannerMode}
+                  onChange={(plannerMode) =>
+                    setValue({ plannerMode: plannerMode as PlannerMode })
+                  }
+                  options={[
+                    {
+                      value: "suggested",
+                      label: "Use suggestions",
+                      description:
+                        "Forge proposes slots that fit the task rules and the selected day."
+                    },
+                    {
+                      value: "manual",
+                      label: "Set it manually",
+                      description:
+                        "You choose the exact start and end time yourself."
+                    }
+                  ]}
+                />
+              </FlowField>
+            </div>
+            <div className="rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
+                    Selected day
+                  </div>
+                  <div className="mt-2 font-display text-[1.3rem] leading-tight text-[var(--ui-ink-strong)]">
+                    {value.preferredDate
+                      ? new Date(
+                          `${value.preferredDate}T12:00:00`
+                        ).toLocaleDateString([], {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric"
+                        })
+                      : "Choose a day"}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={SOFT_BADGE_CLASS}>
+                    {dayEvents.length} events
+                  </Badge>
+                  <Badge className={SOFT_BADGE_CLASS}>
+                    {dayBlocks.length} work blocks
+                  </Badge>
+                  <Badge className={SOFT_BADGE_CLASS}>
+                    {dayTimeboxes.length} timeboxes
+                  </Badge>
+                  <Badge className={SOFT_BADGE_CLASS}>
+                    {formatLifeForceAp(selectedDayPressureAp)} pressure
+                  </Badge>
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
+                This is the context Forge will use while recommending a slot.
+                You can still place the block manually if you want something
+                more exact.
+              </p>
+              {calendarDayQuery.isLoading ? (
+                <div className="mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
+                  Loading the selected day…
+                </div>
+              ) : calendarDayQuery.isError ? (
+                <div
+                  className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-4 text-sm text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
+                  role="alert"
+                >
+                  <span>
+                    Forge could not load this day. No placement will be saved
+                    until the calendar context is available.
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void calendarDayQuery.refetch()}
+                  >
+                    <RefreshCcw className="size-3.5" />
+                    Retry day
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                  <CalendarContextColumn
+                    title="Provider events"
+                    subtitle="Busy or free events already on the day."
+                    emptyLabel="No mirrored events on this day."
+                  >
+                    {dayEvents.slice(0, 4).map((event) => (
+                      <CalendarEventCard key={event.id} event={event} />
+                    ))}
+                  </CalendarContextColumn>
+                  <CalendarContextColumn
+                    title="Work blocks"
+                    subtitle="Recurring allowed or blocked containers."
+                    emptyLabel="No work blocks land on this day."
+                  >
+                    {dayBlocks.slice(0, 4).map((block) => (
+                      <WorkBlockCard
+                        key={block.id}
+                        block={block}
+                        timeZone={planningTimeZone}
+                      />
+                    ))}
+                  </CalendarContextColumn>
+                  <CalendarContextColumn
+                    title="Planned timeboxes"
+                    subtitle="Existing owned work already placed there."
+                    emptyLabel="No other planned timeboxes yet."
+                  >
+                    {dayTimeboxes.slice(0, 4).map((timebox) => (
+                      <TimeboxCard
+                        key={timebox.id}
+                        timebox={timebox}
+                        timeZone={planningTimeZone}
+                      />
+                    ))}
+                  </CalendarContextColumn>
+                </div>
+              )}
+            </div>
           </div>
-        )
-      },
-      {
-        id: "day",
-        eyebrow: "Calendar",
-        title: "Choose the day and review what is already there",
-        description:
-          "Forge reads the real day first so the timebox stays grounded in your provider events, work blocks, and already-planned work.",
-        render: (value, setValue) => (
-          <div className="grid gap-5">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
-              <div className="grid gap-4">
+        </div>
+      )
+    },
+    {
+      id: "slot",
+      eyebrow: draft.plannerMode === "suggested" ? "Suggestion" : "Manual",
+      title:
+        draft.plannerMode === "suggested"
+          ? "Choose one of Forge's suggested slots"
+          : "Set the exact timebox yourself",
+      description:
+        draft.plannerMode === "suggested"
+          ? "Forge proposes slots that fit the selected day, the task rules, and the current calendar picture."
+          : "Use manual mode when the right block is obvious to you or when you want to place the timebox despite imperfect recommendations.",
+      render: (value, setValue) => {
+        if (value.plannerMode === "manual") {
+          return (
+            <div className="grid gap-5">
+              <div className="grid gap-4 md:grid-cols-3">
                 <FlowField
-                  label="Date"
-                  description="Choose the day you want to protect for this task."
+                  label="Day"
+                  description="Pick the day for the block. Forge defaults to a future day, but you can move it."
                 >
                   <Input
                     type="date"
                     min={minDateKey}
                     max={maxDateKey}
                     value={value.preferredDate}
-                    onChange={(event) => {
-                      const nextManualWindow = buildManualWindow(
-                        event.target.value,
-                        selectedTask?.plannedDurationSeconds,
-                        editingTimebox
-                          ? {
-                              startsAt: `${event.target.value}T${value.manualStartTime}:00`,
-                              endsAt: `${event.target.value}T${value.manualEndTime}:00`
-                            }
-                          : null
-                      );
-                      setValue({
-                        preferredDate: event.target.value,
-                        selectedTimeboxId: "",
-                        manualStartTime: nextManualWindow.startTime,
-                        manualEndTime: nextManualWindow.endTime
-                      });
-                    }}
+                    onChange={(event) =>
+                      setValue({ preferredDate: event.target.value })
+                    }
                   />
                 </FlowField>
                 <FlowField
-                  label="Planning style"
-                  description="Take Forge's slot recommendation when it fits, or set the block yourself."
+                  label="Start time"
+                  description="Choose when the protected work block should begin."
                 >
-                  <FlowChoiceGrid
-                    value={value.plannerMode}
-                    onChange={(plannerMode) =>
-                      setValue({ plannerMode: plannerMode as PlannerMode })
+                  <Input
+                    type="time"
+                    step={300}
+                    value={value.manualStartTime}
+                    onChange={(event) =>
+                      setValue({ manualStartTime: event.target.value })
                     }
-                    options={[
-                      {
-                        value: "suggested",
-                        label: "Use suggestions",
-                        description:
-                          "Forge proposes slots that fit the task rules and the selected day."
-                      },
-                      {
-                        value: "manual",
-                        label: "Set it manually",
-                        description:
-                          "You choose the exact start and end time yourself."
-                      }
-                    ]}
+                  />
+                </FlowField>
+                <FlowField
+                  label="End time"
+                  description="Choose when the work block should end."
+                  error={manualTimeResolutionError}
+                >
+                  <Input
+                    type="time"
+                    step={300}
+                    value={value.manualEndTime}
+                    onChange={(event) =>
+                      setValue({ manualEndTime: event.target.value })
+                    }
                   />
                 </FlowField>
               </div>
-              <div className="rounded-[28px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-5">
+              {manualConflicts.length > 0 ? (
+                <div
+                  className="rounded-[20px] border border-[color-mix(in_srgb,var(--warning)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-warning-soft)] px-4 py-4 text-sm text-[var(--ui-ink-strong)]"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
+                    <div className="min-w-0">
+                      <div className="font-medium">
+                        This placement overlaps {manualConflicts.length} item
+                        {manualConflicts.length === 1 ? "" : "s"}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {manualConflicts.slice(0, 5).map((conflict) => (
+                          <Badge
+                            key={`${conflict.kind}:${conflict.id}`}
+                            className={SOFT_BADGE_CLASS}
+                          >
+                            {conflict.title} · {conflict.kind}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="mt-2 leading-6 text-[var(--ui-ink-soft)]">
+                        Choose another time or state why this overlap is
+                        intentional. Forge will verify the full task rules again
+                        before saving.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              <FlowField
+                label="Title"
+                description="By default Forge uses the task title. Tighten it only if a shorter calendar label would help."
+              >
+                <Input
+                  value={value.manualTitle}
+                  onChange={(event) =>
+                    setValue({ manualTitle: event.target.value })
+                  }
+                  placeholder={selectedTask?.title ?? "Task timebox"}
+                />
+              </FlowField>
+              <FlowField
+                label="Override reason"
+                description={
+                  manualConflicts.length > 0
+                    ? "Required for this overlapping placement. State the concrete reason it is still valid."
+                    : "Optional. Add a short reason only when you are intentionally overriding the normal rules or calendar shape."
+                }
+                error={
+                  manualConflicts.length > 0 &&
+                  value.overrideReason.trim().length === 0
+                    ? "Add an override reason or choose a non-overlapping time."
+                    : null
+                }
+              >
+                <Input
+                  value={value.overrideReason}
+                  onChange={(event) =>
+                    setValue({ overrideReason: event.target.value })
+                  }
+                  placeholder="Protected writing block before clinic."
+                />
+              </FlowField>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FlowField label="Activity profile">
+                  <select
+                    value={value.activityPresetKey ?? "task_inherited"}
+                    onChange={(event) =>
+                      setValue({ activityPresetKey: event.target.value })
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    {getCalendarActivityPresetOptions().map((preset) => (
+                      <option key={preset.key} value={preset.key}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </FlowField>
+                <FlowField label="Custom AP per hour">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={value.customSustainRateApPerHour ?? ""}
+                    onChange={(event) =>
+                      setValue({
+                        customSustainRateApPerHour:
+                          event.target.value.trim() === ""
+                            ? null
+                            : Number(event.target.value)
+                      })
+                    }
+                    placeholder="Leave empty to use the activity profile"
+                  />
+                </FlowField>
+              </div>
+              <div className={`${PANEL_CLASS} p-4`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--ui-ink-muted)]">
-                      Selected day
+                    <div className="font-medium text-[var(--ui-ink-strong)]">
+                      {value.manualTitle ||
+                        selectedTask?.title ||
+                        "Manual timebox"}
                     </div>
-                    <div className="mt-2 font-display text-[1.3rem] leading-tight text-[var(--ui-ink-strong)]">
-                      {value.preferredDate
-                        ? new Date(
-                            `${value.preferredDate}T12:00:00`
-                          ).toLocaleDateString([], {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric"
-                          })
-                        : "Choose a day"}
+                    <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
+                      {manualStart && manualEnd
+                        ? `${formatDateInTimeZone(
+                            manualStart.toISOString(),
+                            planningTimeZone
+                          )} · ${formatClockRange(
+                            manualStart.toISOString(),
+                            manualEnd.toISOString(),
+                            planningTimeZone
+                          )}`
+                        : "Choose a start and end time."}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className={SOFT_BADGE_CLASS}>
-                      {dayEvents.length} events
-                    </Badge>
-                    <Badge className={SOFT_BADGE_CLASS}>
-                      {dayBlocks.length} work blocks
-                    </Badge>
-                    <Badge className={SOFT_BADGE_CLASS}>
-                      {dayTimeboxes.length} timeboxes
-                    </Badge>
-                  </div>
+                  <Badge className={SOFT_BADGE_CLASS}>manual</Badge>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                  This is the context Forge will use while recommending a slot.
-                  You can still place the block manually if you want something
-                  more exact.
-                </p>
-                {calendarDayQuery.isLoading ? (
-                  <div className="mt-4 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-4 text-sm text-[var(--ui-ink-soft)]">
-                    Loading the selected day…
+                {manualPreview ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge className={SOFT_BADGE_CLASS}>
+                      {formatLifeForceRate(manualPreview.rateApPerHour)}
+                    </Badge>
+                    <Badge className={SOFT_BADGE_CLASS}>
+                      {formatLifeForceAp(manualPreview.totalAp)}
+                    </Badge>
                   </div>
-                ) : (
-                  <div className="mt-4 grid gap-4 xl:grid-cols-3">
-                    <CalendarContextColumn
-                      title="Provider events"
-                      subtitle="Busy or free events already on the day."
-                      emptyLabel="No mirrored events on this day."
-                    >
-                      {dayEvents.slice(0, 4).map((event) => (
-                        <CalendarEventCard key={event.id} event={event} />
-                      ))}
-                    </CalendarContextColumn>
-                    <CalendarContextColumn
-                      title="Work blocks"
-                      subtitle="Recurring allowed or blocked containers."
-                      emptyLabel="No work blocks land on this day."
-                    >
-                      {dayBlocks.slice(0, 4).map((block) => (
-                        <WorkBlockCard key={block.id} block={block} />
-                      ))}
-                    </CalendarContextColumn>
-                    <CalendarContextColumn
-                      title="Planned timeboxes"
-                      subtitle="Existing owned work already placed there."
-                      emptyLabel="No other planned timeboxes yet."
-                    >
-                      {dayTimeboxes.slice(0, 4).map((timebox) => (
-                        <TimeboxCard key={timebox.id} timebox={timebox} />
-                      ))}
-                    </CalendarContextColumn>
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
-          </div>
-        )
-      },
-      {
-        id: "slot",
-        eyebrow: draft.plannerMode === "suggested" ? "Suggestion" : "Manual",
-        title:
-          draft.plannerMode === "suggested"
-            ? "Choose one of Forge's suggested slots"
-            : "Set the exact timebox yourself",
-        description:
-          draft.plannerMode === "suggested"
-            ? "Forge proposes slots that fit the selected day, the task rules, and the current calendar picture."
-            : "Use manual mode when the right block is obvious to you or when you want to place the timebox despite imperfect recommendations.",
-        render: (value, setValue) => {
-          if (value.plannerMode === "manual") {
-            return (
-              <div className="grid gap-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <FlowField
-                    label="Day"
-                    description="Pick the day for the block. Forge defaults to a future day, but you can move it."
-                  >
-                    <Input
-                      type="date"
-                      min={minDateKey}
-                      max={maxDateKey}
-                      value={value.preferredDate}
-                      onChange={(event) =>
-                        setValue({ preferredDate: event.target.value })
-                      }
-                    />
-                  </FlowField>
-                  <FlowField
-                    label="Start time"
-                    description="Choose when the protected work block should begin."
-                  >
-                    <Input
-                      type="time"
-                      step={300}
-                      value={value.manualStartTime}
-                      onChange={(event) =>
-                        setValue({ manualStartTime: event.target.value })
-                      }
-                    />
-                  </FlowField>
-                  <FlowField
-                    label="End time"
-                    description="Choose when the work block should end."
-                  >
-                    <Input
-                      type="time"
-                      step={300}
-                      value={value.manualEndTime}
-                      onChange={(event) =>
-                        setValue({ manualEndTime: event.target.value })
-                      }
-                    />
-                  </FlowField>
-                </div>
-                <FlowField
-                  label="Title"
-                  description="By default Forge uses the task title. Tighten it only if a shorter calendar label would help."
-                >
-                  <Input
-                    value={value.manualTitle}
-                    onChange={(event) =>
-                      setValue({ manualTitle: event.target.value })
-                    }
-                    placeholder={selectedTask?.title ?? "Task timebox"}
-                  />
-                </FlowField>
-                <FlowField
-                  label="Override reason"
-                  description="Optional. Add a short reason only if you are intentionally placing the block despite the normal rules or calendar shape."
-                >
-                  <Input
-                    value={value.overrideReason}
-                    onChange={(event) =>
-                      setValue({ overrideReason: event.target.value })
-                    }
-                    placeholder="Protected writing block before clinic."
-                  />
-                </FlowField>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FlowField label="Activity profile">
-                    <select
-                      value={value.activityPresetKey ?? "task_inherited"}
-                      onChange={(event) =>
-                        setValue({ activityPresetKey: event.target.value })
-                      }
-                      className={SELECT_CLASS}
-                    >
-                      {getCalendarActivityPresetOptions().map((preset) => (
-                        <option key={preset.key} value={preset.key}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
-                  </FlowField>
-                  <FlowField label="Custom AP per hour">
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={value.customSustainRateApPerHour ?? ""}
-                      onChange={(event) =>
-                        setValue({
-                          customSustainRateApPerHour:
-                            event.target.value.trim() === ""
-                              ? null
-                              : Number(event.target.value)
-                        })
-                      }
-                      placeholder="Leave empty to use the activity profile"
-                    />
-                  </FlowField>
-                </div>
-                <div className={`${PANEL_CLASS} p-4`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-[var(--ui-ink-strong)]">
-                        {value.manualTitle ||
-                          selectedTask?.title ||
-                          "Manual timebox"}
-                      </div>
-                      <div className="mt-1 text-sm text-[var(--ui-ink-soft)]">
-                        {manualStart && manualEnd
-                          ? `${manualStart.toLocaleDateString([], {
-                              weekday: "long",
-                              month: "short",
-                              day: "numeric"
-                            })} · ${formatClockRange(
-                              manualStart.toISOString(),
-                              manualEnd.toISOString()
-                            )}`
-                          : "Choose a start and end time."}
-                      </div>
-                    </div>
-                    <Badge className={SOFT_BADGE_CLASS}>manual</Badge>
-                  </div>
-                  {manualPreview ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge className={SOFT_BADGE_CLASS}>
-                        {formatLifeForceRate(manualPreview.rateApPerHour)}
-                      </Badge>
-                      <Badge className={SOFT_BADGE_CLASS}>
-                        {formatLifeForceAp(manualPreview.totalAp)}
-                      </Badge>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          }
+          );
+        }
 
-          const suggestions = suggestionQuery.data?.timeboxes ?? [];
-          if (suggestionQuery.isLoading) {
-            return (
-              <div className="text-sm text-[var(--ui-ink-soft)]">
-                Looking for valid slots on the selected day…
+        const suggestions = suggestionQuery.data?.timeboxes ?? [];
+        if (suggestionQuery.isLoading) {
+          return (
+            <div className="text-sm text-[var(--ui-ink-soft)]">
+              Looking for valid slots on the selected day…
+            </div>
+          );
+        }
+        if (suggestionQuery.isError) {
+          return (
+            <div className="grid gap-3" role="alert">
+              <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--danger)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-danger-soft)] px-4 py-4 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
+                Forge could not calculate suggestions. The task and calendar are
+                unchanged.
               </div>
-            );
-          }
-          if (!suggestions.length) {
-            return (
-              <div className="grid gap-3">
-                <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-4 text-sm leading-6 text-[color-mix(in_srgb,var(--warning)_72%,var(--ui-ink-strong)_28%)]">
-                  Forge could not find a valid slot on this day. Try another
-                  day, adjust the task rules, or switch to manual placement if
-                  you already know the right block.
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => void suggestionQuery.refetch()}
-                  >
-                    Refresh suggestions
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setValue({ plannerMode: "manual" })}
-                  >
-                    Switch to manual
-                  </Button>
-                </div>
-              </div>
-            );
-          }
-
+              <Button
+                variant="secondary"
+                onClick={() => void suggestionQuery.refetch()}
+              >
+                <RefreshCcw className="size-4" />
+                Retry suggestions
+              </Button>
+            </div>
+          );
+        }
+        if (!suggestions.length) {
           return (
             <div className="grid gap-3">
-              {suggestions.map((timebox) => {
-                const active = value.selectedTimeboxId === timebox.id;
-                const actionPointLoad = estimateTaskTimeboxActionPointLoad({
-                  ...timebox,
-                  actionProfile:
-                    value.customSustainRateApPerHour !== null ||
-                    value.activityPresetKey !== "task_inherited"
-                      ? {
-                          id: "suggested-preview",
-                          profileKey: "suggested-preview",
-                          title: timebox.title,
-                          entityType: "task_timebox",
-                          mode: "container",
-                          startupAp: 0,
-                          totalCostAp: 0,
-                          expectedDurationSeconds: null,
-                          sustainRateApPerHour:
-                            value.customSustainRateApPerHour ??
-                            getCalendarActivityPresetOptions().find(
-                              (preset) => preset.key === value.activityPresetKey
-                            )?.defaultRateApPerHour ??
-                            100 / 24,
-                          demandWeights: {
-                            activation: 0.1,
-                            focus: 0.3,
-                            vigor: 0.1,
-                            composure: 0.1,
-                            flow: 0.4
-                          },
-                          doubleCountPolicy: "container_only",
-                          sourceMethod: "manual",
-                          costBand: "light",
-                          recoveryEffect: 0,
-                          metadata: {},
-                          createdAt: timebox.startsAt,
-                          updatedAt: timebox.startsAt
-                        }
-                      : null
-                });
-                return (
+              <div className="rounded-[24px] border border-[color-mix(in_srgb,var(--warning)_24%,var(--ui-border-subtle)_76%)] bg-[var(--ui-warning-soft)] px-4 py-4 text-sm leading-6 text-[color-mix(in_srgb,var(--warning)_72%,var(--ui-ink-strong)_28%)]">
+                Forge could not find a valid slot on this day. Try another day,
+                adjust the task rules, or switch to manual placement if you
+                already know the right block.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => void suggestionQuery.refetch()}
+                >
+                  Refresh suggestions
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setValue({ plannerMode: "manual" })}
+                >
+                  Switch to manual
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="grid gap-3">
+            {suggestions.map((timebox) => {
+              const active = value.selectedTimeboxId === timebox.id;
+              const actionPointLoad = estimateTaskTimeboxActionPointLoad({
+                ...timebox,
+                actionProfile:
+                  value.customSustainRateApPerHour !== null ||
+                  value.activityPresetKey !== "task_inherited"
+                    ? {
+                        id: "suggested-preview",
+                        profileKey: "suggested-preview",
+                        title: timebox.title,
+                        entityType: "task_timebox",
+                        mode: "container",
+                        startupAp: 0,
+                        totalCostAp: 0,
+                        expectedDurationSeconds: null,
+                        sustainRateApPerHour:
+                          value.customSustainRateApPerHour ??
+                          getCalendarActivityPresetOptions().find(
+                            (preset) => preset.key === value.activityPresetKey
+                          )?.defaultRateApPerHour ??
+                          100 / 24,
+                        demandWeights: {
+                          activation: 0.1,
+                          focus: 0.3,
+                          vigor: 0.1,
+                          composure: 0.1,
+                          flow: 0.4
+                        },
+                        doubleCountPolicy: "container_only",
+                        sourceMethod: "manual",
+                        costBand: "light",
+                        recoveryEffect: 0,
+                        metadata: {},
+                        createdAt: timebox.startsAt,
+                        updatedAt: timebox.startsAt
+                      }
+                    : null
+              });
+              return (
+                <div
+                  key={timebox.id}
+                  className={`rounded-[24px] border px-4 py-4 transition ${
+                    active
+                      ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
+                      : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
+                  }`}
+                >
                   <button
-                    key={timebox.id}
                     type="button"
+                    aria-pressed={active}
+                    aria-label={`${active ? "Selected" : "Select"} ${timebox.title}, ${formatContextTime(timebox.startsAt, timebox.endsAt, planningTimeZone)}`}
                     onClick={() => setValue({ selectedTimeboxId: timebox.id })}
-                    className={`rounded-[24px] border px-4 py-4 text-left transition ${
-                      active
-                        ? "border-[color-mix(in_srgb,var(--primary)_30%,var(--ui-border-subtle)_70%)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)] shadow-[var(--ui-shadow-soft)]"
-                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-medium)] hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)]"
-                    }`}
+                    className="block w-full rounded-[18px] text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ui-surface-2)]"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="font-medium">{timebox.title}</div>
@@ -1036,7 +1333,11 @@ export function TimeboxPlanningDialog({
                       </Badge>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-[var(--ui-ink-soft)]">
-                      {formatContextTime(timebox.startsAt, timebox.endsAt)}
+                      {formatContextTime(
+                        timebox.startsAt,
+                        timebox.endsAt,
+                        planningTimeZone
+                      )}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge className={SOFT_BADGE_CLASS}>
@@ -1046,54 +1347,56 @@ export function TimeboxPlanningDialog({
                         {formatLifeForceAp(actionPointLoad.totalAp)}
                       </Badge>
                     </div>
-                    {active ? (
-                      <div className="mt-4 grid gap-4 md:grid-cols-2">
-                        <FlowField label="Activity profile">
-                          <select
-                            value={value.activityPresetKey ?? "task_inherited"}
-                            onChange={(event) =>
-                              setValue({
-                                activityPresetKey: event.target.value
-                              })
-                            }
-                            className={SELECT_CLASS}
-                          >
-                            {getCalendarActivityPresetOptions().map(
-                              (preset) => (
-                                <option key={preset.key} value={preset.key}>
-                                  {preset.label}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </FlowField>
-                        <FlowField label="Custom AP per hour">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={0.5}
-                            value={value.customSustainRateApPerHour ?? ""}
-                            onChange={(event) =>
-                              setValue({
-                                customSustainRateApPerHour:
-                                  event.target.value.trim() === ""
-                                    ? null
-                                    : Number(event.target.value)
-                              })
-                            }
-                            placeholder="Leave empty to use the activity profile"
-                          />
-                        </FlowField>
-                      </div>
-                    ) : null}
                   </button>
-                );
-              })}
-            </div>
-          );
-        }
+                  {active ? (
+                    <div
+                      className="mt-4 grid gap-4 border-t border-[var(--ui-border-subtle)] pt-4 md:grid-cols-2"
+                      aria-label={`Action Point profile for ${timebox.title}`}
+                    >
+                      <FlowField label="Activity profile">
+                        <select
+                          value={value.activityPresetKey ?? "task_inherited"}
+                          onChange={(event) =>
+                            setValue({
+                              activityPresetKey: event.target.value
+                            })
+                          }
+                          className={SELECT_CLASS}
+                        >
+                          {getCalendarActivityPresetOptions().map((preset) => (
+                            <option key={preset.key} value={preset.key}>
+                              {preset.label}
+                            </option>
+                          ))}
+                        </select>
+                      </FlowField>
+                      <FlowField label="Custom AP per hour">
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.5}
+                          value={value.customSustainRateApPerHour ?? ""}
+                          onChange={(event) =>
+                            setValue({
+                              customSustainRateApPerHour:
+                                event.target.value.trim() === ""
+                                  ? null
+                                  : Number(event.target.value)
+                            })
+                          }
+                          placeholder="Leave empty to use the activity profile"
+                        />
+                      </FlowField>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        );
       }
-    ];
+    }
+  ];
 
   return (
     <QuestionFlowDialog
@@ -1126,6 +1429,16 @@ export function TimeboxPlanningDialog({
         }
 
         if (draft.plannerMode === "manual") {
+          if (calendarDayQuery.isError) {
+            setSubmitError(
+              "Reload the selected day before placing a manual timebox."
+            );
+            return;
+          }
+          if (manualTimeResolutionError) {
+            setSubmitError(manualTimeResolutionError);
+            return;
+          }
           if (!manualStart || !manualEnd) {
             setSubmitError("Choose a valid manual start and end time.");
             return;
@@ -1133,6 +1446,15 @@ export function TimeboxPlanningDialog({
           if (manualEnd <= manualStart) {
             setSubmitError(
               "The manual timebox needs an end time after the start time."
+            );
+            return;
+          }
+          if (
+            manualConflicts.length > 0 &&
+            draft.overrideReason.trim().length === 0
+          ) {
+            setSubmitError(
+              "This placement overlaps existing calendar pressure. Add a specific override reason or choose another time."
             );
             return;
           }

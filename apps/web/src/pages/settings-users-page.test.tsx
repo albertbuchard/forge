@@ -39,7 +39,17 @@ vi.mock("@/components/users/user-relationship-flow-dialog", () => ({
 }));
 
 vi.mock("@/components/settings/settings-section-nav", () => ({
-  SettingsSectionNav: () => <div>Settings nav</div>
+  SettingsSectionNav: () => <div>Settings nav</div>,
+  SettingsStateFrame: ({
+    children
+  }: {
+    children: import("react").ReactNode;
+  }) => (
+    <>
+      <div>Settings nav</div>
+      {children}
+    </>
+  )
 }));
 
 function renderPage() {

@@ -16,7 +16,10 @@ import {
   type EntityLinkInput,
   type EntityLinkRecord
 } from "./entity-links.js";
-import { getArtifactById } from "../services/artifacts.js";
+import {
+  readTrustedArtifactTicketText,
+  serializeArtifactPublicPayload
+} from "../services/artifacts.js";
 import {
   createLifeEventSchema,
   lifeEventCalendarProjectionSchema,
@@ -127,6 +130,9 @@ type LifeEventSegmentRow = {
 type ActivityContext = {
   source: ActivitySource;
   actor?: string | null;
+  userIds?: readonly string[];
+  projectIds?: readonly string[];
+  tagIds?: readonly string[];
 };
 
 export const lifeEventTimelineQuerySchema = z.object({
@@ -163,13 +169,14 @@ export const lifeEventFromCalendarInputSchema = z.object({
     .default("meaningful")
 });
 
-export const lifeEventTicketImportInputSchema = z.object({
-  artifactId: z.string().trim().min(1),
-  extractedText: z.string().default(""),
-  createDraft: z.boolean().default(false),
-  useLlm: z.boolean().default(false),
-  llmProfileId: z.string().trim().optional()
-});
+export const lifeEventTicketImportInputSchema = z
+  .object({
+    artifactId: z.string().trim().min(1),
+    createDraft: z.boolean().default(false),
+    useLlm: z.boolean().default(false),
+    llmProfileId: z.string().trim().optional()
+  })
+  .strict();
 
 function escapeLikePattern(value: string) {
   return value.replace(/[\\%_]/g, "\\$&");
@@ -1203,7 +1210,7 @@ export function createLifeEventFromCalendar(
 }
 
 function extractTicketDraft(text: string, originalFileName: string) {
-  const haystack = `${originalFileName}\n${text}`;
+  const haystack = text;
   const flightMatch = haystack.match(/\b([A-Z]{2,3})\s?(\d{2,4})\b/);
   const iataMatches = Array.from(
     new Set(
@@ -1275,27 +1282,21 @@ function extractTicketDraft(text: string, originalFileName: string) {
   };
 }
 
-export function importLifeEventTicket(
+export async function importLifeEventTicket(
   input: z.input<typeof lifeEventTicketImportInputSchema>,
   activity?: ActivityContext
 ) {
   const parsed = lifeEventTicketImportInputSchema.parse(input);
-  const artifact = getArtifactById(parsed.artifactId);
-  if (!artifact) {
+  const trustedContent = await readTrustedArtifactTicketText(
+    parsed.artifactId,
+    activity ?? { source: "system" }
+  );
+  if (!trustedContent) {
     return undefined;
   }
-  const text = [
-    parsed.extractedText,
-    artifact.title,
-    artifact.shortDescription,
-    artifact.description,
-    typeof artifact.scanResults?.extractedTextSample === "string"
-      ? artifact.scanResults.extractedTextSample
-      : ""
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const draft = extractTicketDraft(text, artifact.originalFileName);
+  const { artifact, extractedText } = trustedContent;
+  const publicArtifact = serializeArtifactPublicPayload(artifact);
+  const draft = extractTicketDraft(extractedText, artifact.originalFileName);
   const llmNotice = parsed.useLlm
     ? {
         llmRequested: true,
@@ -1334,7 +1335,7 @@ export function importLifeEventTicket(
   if (!parsed.createDraft) {
     return {
       draft: lifeEventInput,
-      artifact,
+      artifact: publicArtifact,
       lifeEvent: null,
       action: "drafted_from_ticket" as const
     };
@@ -1342,7 +1343,7 @@ export function importLifeEventTicket(
   const lifeEvent = createLifeEvent(lifeEventInput, activity);
   return {
     draft: lifeEventInput,
-    artifact,
+    artifact: publicArtifact,
     lifeEvent,
     action: "created_draft_from_ticket" as const
   };

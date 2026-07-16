@@ -420,11 +420,17 @@ NODE
 
 run_verification_suite() {
   verify_openclaw_host_floor
+  if is_full_mode || is_publish_from_tag_mode; then
+    [[ -n "${FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH:-}" ]] \
+      || fail "FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH is required for a publishing release"
+    export FORGE_REQUIRE_SIGNED_NATIVE_SOURCE=1
+  fi
   if is_publish_from_tag_mode; then
     echo "+ npm run build:openclaw-plugin"
     (
       cd "${FORGE_DIR}"
       npm run build:openclaw-plugin
+      npm run smoke:packed-openclaw-runtime
     )
     return 0
   fi
@@ -567,6 +573,14 @@ main() {
   run_verification_suite
   if ! is_publish_from_tag_mode; then
     create_release_commit "${next_version}"
+    if is_full_mode; then
+      echo "+ rebuilding signed publish artifacts against release commit"
+      (
+        cd "${FORGE_DIR}"
+        npm run build:openclaw-plugin
+        npm run smoke:packed-openclaw-runtime
+      )
+    fi
     push_release "${next_version}"
   fi
   if [[ "${SKIP_UPLOAD}" == "1" ]]; then

@@ -21,6 +21,15 @@ const FULL_OPERATOR_SCOPES = [
   "psyche.note",
   "psyche.insight",
   "psyche.mode",
+  "wiki:read",
+  "people:read:basic",
+  "people:read:private",
+  "people:read:contacts",
+  "people:read:sensitive",
+  "people:read:restricted",
+  "people:write",
+  "peer:status",
+  "peer:query",
   "artifact.readMetadata",
   "artifact.create",
   "artifact.uploadBytes",
@@ -76,6 +85,51 @@ const TOKEN_SCOPE_OPTIONS = [
     description: "Name, refine, and map mode profiles and guided mode results."
   },
   {
+    value: "wiki:read",
+    label: "Wiki read",
+    description: "Read visible Wiki pages and review People page candidates."
+  },
+  {
+    value: "people:read:basic",
+    label: "People overview",
+    description: "Read names, relationship labels, and bounded People context."
+  },
+  {
+    value: "people:read:private",
+    label: "People private context",
+    description: "Read private descriptions, dates, and ordinary private facts."
+  },
+  {
+    value: "people:read:contacts",
+    label: "People contacts",
+    description: "Read private contact methods and contact preferences."
+  },
+  {
+    value: "people:read:sensitive",
+    label: "People sensitive context",
+    description: "Read sensitive Person notes and facts."
+  },
+  {
+    value: "people:read:restricted",
+    label: "People restricted context",
+    description: "Read explicitly restricted Person facts."
+  },
+  {
+    value: "people:write",
+    label: "People write",
+    description: "Create and update local Person records and reviewed Wiki links."
+  },
+  {
+    value: "peer:status",
+    label: "Peer status",
+    description: "Read bounded relationship, device, request, and sync status."
+  },
+  {
+    value: "peer:query",
+    label: "Shared questions",
+    description: "Use existing grants for registered, bounded Person questions."
+  },
+  {
     value: "artifact.readMetadata",
     label: "Artifact metadata",
     description: "Inspect trusted artifact metadata without downloading bytes."
@@ -111,6 +165,9 @@ const TOKEN_SCOPE_OPTIONS = [
 const REVIEW_FIRST_SCOPES = new Set([
   "read",
   "psyche.read",
+  "wiki:read",
+  "people:read:basic",
+  "peer:status",
   "artifact.readMetadata"
 ]);
 

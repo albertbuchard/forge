@@ -79,11 +79,14 @@ import type {
   FatigueSignalInput,
   TaskSplitInput,
   PreferenceContext,
+  PreferenceDomain,
   PreferenceCatalog,
+  PreferenceCatalogItemPage,
   PreferenceCatalogItem,
   PreferenceCatalogItemMutationInput,
   PreferenceCatalogItemPatchInput,
   PreferenceCatalogMutationInput,
+  PreferenceCatalogPage,
   PreferenceCatalogPatchInput,
   PreferenceContextMergeInput,
   PreferenceContextMutationInput,
@@ -92,6 +95,7 @@ import type {
   PreferenceItem,
   PreferenceItemMutationInput,
   PreferenceItemPatchInput,
+  PreferenceItemScore,
   PreferenceScorePatchInput,
   PreferenceSignalInput,
   PreferenceWorkspacePayload,
@@ -133,8 +137,10 @@ import type {
   TaskContext,
   TaskRun,
   TaskRunClaimInput,
-  TaskRunFinishInput,
+  TaskRunCompleteInput,
+  TaskRunReleaseInput,
   TaskRunHeartbeatInput,
+  TodayPriorityDecision,
   UpdateRewardRuleInput,
   UserDirectoryPayload,
   UserSummary,
@@ -144,6 +150,7 @@ import type {
   WikiIngestJobPayload,
   WikiLlmConnectionTestResult,
   WikiPageDetailPayload,
+  WikiPageSummary,
   WikiSearchResponse,
   WikiSettingsPayload,
   WikiSpace,
@@ -180,7 +187,8 @@ import type {
   SchemaCatalogEntry,
   TriggerReport,
   TriggerReportDetailPayload,
-  TriggerReportInput
+  TriggerReportInput,
+  TriggerReportPage
 } from "./psyche-types";
 import type { FlashcardInput } from "./psyche-schemas";
 import type {
@@ -602,6 +610,25 @@ export function getForgeSnapshot(userIds?: string[] | unknown) {
   );
 }
 
+export function getTodayPriorityDecision(input: {
+  userIds?: string[] | unknown;
+  timeZone?: string;
+  candidateLimit?: number;
+}) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(input.userIds));
+  if (input.timeZone?.trim()) {
+    search.set("timeZone", input.timeZone.trim());
+  }
+  if (typeof input.candidateLimit === "number") {
+    search.set("candidateLimit", String(input.candidateLimit));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ decision: TodayPriorityDecision }>(
+    `/api/v1/today/priority${suffix}`
+  );
+}
+
 export function getLifeForce(userIds?: string[] | unknown) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
@@ -835,9 +862,33 @@ export function getPreferenceWorkspace(query: PreferenceWorkspaceQuery) {
   if (query.contextId) {
     search.set("contextId", query.contextId);
   }
+  if (query.itemLimit !== undefined) {
+    search.set("itemLimit", String(query.itemLimit));
+  }
+  if (query.itemOffset !== undefined) {
+    search.set("itemOffset", String(query.itemOffset));
+  }
+  if (query.historyLimit !== undefined) {
+    search.set("historyLimit", String(query.historyLimit));
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
   return request<{ workspace: PreferenceWorkspacePayload }>(
     `/api/v1/preferences/workspace${suffix}`
+  );
+}
+
+export function refreshPreferenceWorkspace(
+  input: PreferenceWorkspaceQuery & {
+    userId: string;
+    domain: PreferenceDomain;
+  }
+) {
+  return request<{ workspace: PreferenceWorkspacePayload }>(
+    "/api/v1/preferences/workspace/refresh",
+    {
+      method: "POST",
+      body: JSON.stringify(input)
+    }
   );
 }
 
@@ -852,11 +903,15 @@ export function startPreferenceGame(input: PreferenceGameStartInput) {
 }
 
 export function createPreferenceCatalog(input: PreferenceCatalogMutationInput) {
+  const { idempotencyKey, ...body } = input;
   return request<{ catalog: PreferenceCatalog }>(
     "/api/v1/preferences/catalogs",
     {
       method: "POST",
-      body: JSON.stringify(input)
+      headers: {
+        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID()
+      },
+      body: JSON.stringify(body)
     }
   );
 }
@@ -880,6 +935,52 @@ export function deletePreferenceCatalog(catalogId: string) {
     {
       method: "DELETE"
     }
+  );
+}
+
+export function getPreferenceCatalogs(query: {
+  userId?: string;
+  domain?: string;
+  query?: string;
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+}) {
+  const search = new URLSearchParams();
+  if (query.userId) search.set("userId", query.userId);
+  if (query.domain) search.set("domain", query.domain);
+  if (query.query?.trim()) search.set("query", query.query.trim());
+  if (typeof query.limit === "number") search.set("limit", String(query.limit));
+  if (typeof query.offset === "number")
+    search.set("offset", String(query.offset));
+  if (query.cursor) search.set("cursor", query.cursor);
+  return request<PreferenceCatalogPage>(
+    `/api/v1/preferences/catalogs?${search.toString()}`
+  );
+}
+
+export function getPreferenceCatalogItems(query: {
+  catalogId: string;
+  query?: string;
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+}) {
+  const search = new URLSearchParams({ catalogId: query.catalogId });
+  if (query.query?.trim()) {
+    search.set("query", query.query.trim());
+  }
+  if (typeof query.limit === "number") {
+    search.set("limit", String(query.limit));
+  }
+  if (typeof query.offset === "number") {
+    search.set("offset", String(query.offset));
+  }
+  if (query.cursor) {
+    search.set("cursor", query.cursor);
+  }
+  return request<PreferenceCatalogItemPage>(
+    `/api/v1/preferences/catalog-items?${search.toString()}`
   );
 }
 
@@ -982,20 +1083,31 @@ export function enqueuePreferenceEntity(input: EnqueuePreferenceEntityInput) {
 export function submitPairwisePreferenceJudgment(
   input: PreferenceJudgmentInput
 ) {
+  const { idempotencyKey, ...body } = input;
   return request<{ judgment: PairwiseJudgment }>(
     "/api/v1/preferences/judgments",
     {
       method: "POST",
-      body: JSON.stringify(input)
+      headers: {
+        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID()
+      },
+      body: JSON.stringify(body)
     }
   );
 }
 
 export function submitPreferenceSignal(input: PreferenceSignalInput) {
-  return request<{ signal: AbsoluteSignal }>("/api/v1/preferences/signals", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+  const { idempotencyKey, ...body } = input;
+  return request<{ signal: AbsoluteSignal; score: PreferenceItemScore }>(
+    "/api/v1/preferences/signals",
+    {
+      method: "POST",
+      headers: {
+        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID()
+      },
+      body: JSON.stringify(body)
+    }
+  );
 }
 
 export function patchPreferenceScore(
@@ -1031,8 +1143,18 @@ export function getPsycheOverview(userIds?: string[] | unknown) {
   );
 }
 
-export function getPsycheMetricsView() {
-  return request<{ metrics: PsycheMetricsViewData }>("/api/v1/psyche/metrics");
+export function getPsycheMetricsView(
+  input: { userIds?: string[] | unknown; timeZone?: string } = {}
+) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(input.userIds));
+  if (input.timeZone?.trim()) {
+    search.set("timeZone", input.timeZone.trim());
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ metrics: PsycheMetricsViewData }>(
+    `/api/v1/psyche/metrics${suffix}`
+  );
 }
 
 export function listQuestionnaires(userIds?: string[] | unknown) {
@@ -1458,8 +1580,13 @@ export async function deleteFlashcard(flashcardId: string) {
   return { flashcard: readBatchEntity<Flashcard>(response.results[0] ?? {}) };
 }
 
-export function listEventTypes() {
-  return request<{ eventTypes: EventType[] }>("/api/v1/psyche/event-types");
+export function listEventTypes(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ eventTypes: EventType[] }>(
+    `/api/v1/psyche/event-types${suffix}`
+  );
 }
 
 export function getEventType(eventTypeId: string) {
@@ -1468,9 +1595,15 @@ export function getEventType(eventTypeId: string) {
   );
 }
 
-export function createEventType(input: EventTypeInput) {
+export function createEventType(
+  input: EventTypeInput,
+  options?: { idempotencyKey?: string }
+) {
   return request<{ eventType: EventType }>("/api/v1/psyche/event-types", {
     method: "POST",
+    headers: options?.idempotencyKey
+      ? { "Idempotency-Key": options.idempotencyKey }
+      : undefined,
     body: JSON.stringify(input)
   });
 }
@@ -1497,8 +1630,13 @@ export function deleteEventType(eventTypeId: string) {
   );
 }
 
-export function listEmotionDefinitions() {
-  return request<{ emotions: EmotionDefinition[] }>("/api/v1/psyche/emotions");
+export function listEmotionDefinitions(userIds?: string[] | unknown) {
+  const search = new URLSearchParams();
+  appendUserIds(search, coerceUserIds(userIds));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{ emotions: EmotionDefinition[] }>(
+    `/api/v1/psyche/emotions${suffix}`
+  );
 }
 
 export function getEmotionDefinition(emotionId: string) {
@@ -1507,9 +1645,15 @@ export function getEmotionDefinition(emotionId: string) {
   );
 }
 
-export function createEmotionDefinition(input: EmotionDefinitionInput) {
+export function createEmotionDefinition(
+  input: EmotionDefinitionInput,
+  options?: { idempotencyKey?: string }
+) {
   return request<{ emotion: EmotionDefinition }>("/api/v1/psyche/emotions", {
     method: "POST",
+    headers: options?.idempotencyKey
+      ? { "Idempotency-Key": options.idempotencyKey }
+      : undefined,
     body: JSON.stringify(input)
   });
 }
@@ -1536,18 +1680,31 @@ export function deleteEmotionDefinition(emotionId: string) {
   );
 }
 
-export function listTriggerReports(userIds?: string[] | unknown) {
+export function listTriggerReports(
+  userIds?: string[] | unknown,
+  options?: { limit?: number; cursor?: string | null }
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (options?.limit) {
+    search.set("limit", String(options.limit));
+  }
+  if (options?.cursor) {
+    search.set("cursor", options.cursor);
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ reports: TriggerReport[] }>(
-    `/api/v1/psyche/reports${suffix}`
-  );
+  return request<TriggerReportPage>(`/api/v1/psyche/reports${suffix}`);
 }
 
-export function createTriggerReport(input: TriggerReportInput) {
+export function createTriggerReport(
+  input: TriggerReportInput,
+  options?: { idempotencyKey?: string }
+) {
   return request<{ report: TriggerReport }>("/api/v1/psyche/reports", {
     method: "POST",
+    headers: options?.idempotencyKey
+      ? { "Idempotency-Key": options.idempotencyKey }
+      : undefined,
     body: JSON.stringify(input)
   });
 }
@@ -1560,7 +1717,7 @@ export function getTriggerReport(reportId: string) {
 
 export function patchTriggerReport(
   reportId: string,
-  patch: Partial<TriggerReportInput>
+  patch: Partial<TriggerReportInput> & { expectedRevision: number }
 ) {
   return request<{ report: TriggerReport }>(
     `/api/v1/psyche/reports/${reportId}`,
@@ -1585,6 +1742,7 @@ export function listNotes(
     linkedEntityType?: CrudEntityType;
     linkedEntityId?: string;
     anchorKey?: string | null;
+    includeAnchorless?: boolean;
     linkedTo?: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -1596,7 +1754,10 @@ export function listNotes(
     userIds?: string[];
     updatedFrom?: string;
     updatedTo?: string;
+    observedFrom?: string;
+    observedTo?: string;
     limit?: number;
+    cursor?: string;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -1608,6 +1769,9 @@ export function listNotes(
   }
   if (input.anchorKey !== undefined && input.anchorKey !== null) {
     search.set("anchorKey", input.anchorKey);
+  }
+  if (input.includeAnchorless) {
+    search.set("includeAnchorless", "true");
   }
   for (const link of input.linkedTo ?? []) {
     search.append("linkedTo", `${link.entityType}:${link.entityId}`);
@@ -1635,14 +1799,30 @@ export function listNotes(
   if (input.updatedTo) {
     search.set("updatedTo", input.updatedTo);
   }
+  if (input.observedFrom) {
+    search.set("observedFrom", input.observedFrom);
+  }
+  if (input.observedTo) {
+    search.set("observedTo", input.observedTo);
+  }
   if (input.limit) {
     search.set("limit", String(input.limit));
   }
+  if (input.cursor) {
+    search.set("cursor", input.cursor);
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ notes: Note[] }>(`/api/v1/notes${suffix}`);
+  return request<{
+    notes: Note[];
+    total: number;
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+  }>(`/api/v1/notes${suffix}`);
 }
 
 export function createNote(input: {
+  title?: string;
   contentMarkdown: string;
   author?: string | null;
   tags?: string[];
@@ -1706,10 +1886,142 @@ export function getArtifact(artifactId: string) {
   );
 }
 
-export function uploadArtifact(input: ArtifactUploadInput) {
+export type ArtifactUploadRequestOptions = {
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+  onProgress?: (percentage: number) => void;
+};
+
+function artifactUploadAbortError() {
+  const error = new Error("Artifact upload canceled.");
+  error.name = "AbortError";
+  return error;
+}
+
+function parseArtifactUploadResponseBody(raw: string): unknown {
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
+function uploadArtifactWithProgress(
+  input: ArtifactUploadInput,
+  options: ArtifactUploadRequestOptions,
+  retryWithFreshSession = true
+): Promise<{ artifact: Artifact }> {
+  return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(artifactUploadAbortError());
+      return;
+    }
+
+    const path = "/api/v1/artifacts";
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+    const cleanup = () => {
+      options.signal?.removeEventListener("abort", abortUpload);
+    };
+    const settleWithError = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const abortUpload = () => xhr.abort();
+
+    xhr.open("POST", resolveForgePath(path), true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("content-type", "application/json");
+    xhr.setRequestHeader(UI_SOURCE_HEADER, UI_SOURCE_VALUE);
+    const idempotencyKey = options.idempotencyKey ?? input.idempotencyKey;
+    if (idempotencyKey) {
+      xhr.setRequestHeader("Idempotency-Key", idempotencyKey);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        options.onProgress?.(
+          Math.max(
+            0,
+            Math.min(100, Math.round((event.loaded / event.total) * 100))
+          )
+        );
+      }
+    };
+    xhr.onerror = () => {
+      settleWithError(
+        new Error("Artifact upload failed before Forge responded.")
+      );
+    };
+    xhr.onabort = () => settleWithError(artifactUploadAbortError());
+    xhr.onload = () => {
+      if (settled) {
+        return;
+      }
+      cleanup();
+      const body = parseArtifactUploadResponseBody(xhr.responseText);
+      const response = new Response(xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: {
+          "content-type":
+            xhr.getResponseHeader("content-type") ?? "application/json"
+        }
+      });
+      if (
+        retryWithFreshSession &&
+        shouldBootstrapAndRetryOperatorSession({
+          path,
+          init: { method: "POST", body: JSON.stringify(input) },
+          response,
+          body
+        })
+      ) {
+        settled = true;
+        void bootstrapOperatorSession()
+          .then(() => {
+            if (options.signal?.aborted) {
+              throw artifactUploadAbortError();
+            }
+            return uploadArtifactWithProgress(input, options, false);
+          })
+          .then(resolve, reject);
+        return;
+      }
+      if (!response.ok) {
+        publishRequestFailure(path, response, body);
+        settleWithError(createApiError(path, response, body));
+        return;
+      }
+      settled = true;
+      options.onProgress?.(100);
+      resolve(body as { artifact: Artifact });
+    };
+    options.signal?.addEventListener("abort", abortUpload, { once: true });
+    options.onProgress?.(0);
+    xhr.send(JSON.stringify(input));
+  });
+}
+
+export function uploadArtifact(
+  input: ArtifactUploadInput,
+  options: ArtifactUploadRequestOptions = {}
+) {
+  const idempotencyKey = options.idempotencyKey ?? input.idempotencyKey;
+  if (options.onProgress && typeof XMLHttpRequest !== "undefined") {
+    return uploadArtifactWithProgress(input, options);
+  }
   return request<{ artifact: Artifact }>("/api/v1/artifacts", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify(input),
+    signal: options.signal,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined
   });
 }
 
@@ -1804,16 +2116,46 @@ export function patchArtifactTrust(
   );
 }
 
-export function listArtifactVersions(artifactId: string) {
-  return request<{ versions: ArtifactVersion[] }>(
-    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions`
-  );
+export function listArtifactVersions(
+  artifactId: string,
+  options: { limit?: number; offset?: number } = {}
+) {
+  const search = new URLSearchParams();
+  if (options.limit) {
+    search.set("limit", String(options.limit));
+  }
+  if (typeof options.offset === "number") {
+    search.set("offset", String(options.offset));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{
+    versions: ArtifactVersion[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  }>(`/api/v1/artifacts/${encodeURIComponent(artifactId)}/versions${suffix}`);
 }
 
-export function listArtifactAuditEvents(artifactId: string) {
-  return request<{ events: ArtifactAuditEvent[] }>(
-    `/api/v1/artifacts/${encodeURIComponent(artifactId)}/audit`
-  );
+export function listArtifactAuditEvents(
+  artifactId: string,
+  options: { limit?: number; offset?: number } = {}
+) {
+  const search = new URLSearchParams();
+  if (options.limit) {
+    search.set("limit", String(options.limit));
+  }
+  if (typeof options.offset === "number") {
+    search.set("offset", String(options.offset));
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<{
+    events: ArtifactAuditEvent[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  }>(`/api/v1/artifacts/${encodeURIComponent(artifactId)}/audit${suffix}`);
 }
 
 export function getNote(noteId: string) {
@@ -1823,12 +2165,14 @@ export function getNote(noteId: string) {
 export function patchNote(
   noteId: string,
   patch: {
+    title?: string;
     contentMarkdown?: string;
     author?: string | null;
     tags?: string[];
     destroyAt?: string | null;
     frontmatter?: Record<string, unknown>;
     userId?: string | null;
+    expectedRevisionHash?: string;
     links?: Array<{
       entityType: CrudEntityType;
       entityId: string;
@@ -1836,17 +2180,23 @@ export function patchNote(
     }>;
   }
 ) {
-  return request<{ note: Note }>(`/api/v1/notes/${noteId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch)
-  });
+  return request<{ note: Note }>(
+    `/api/v1/notes/${encodeURIComponent(noteId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }
+  );
 }
 
 export function deleteNote(noteId: string, mode: DeleteMode = "soft") {
   const suffix = mode === "soft" ? "" : `?mode=${mode}`;
-  return request<{ note: Note }>(`/api/v1/notes/${noteId}${suffix}`, {
-    method: "DELETE"
-  });
+  return request<{ note: Note }>(
+    `/api/v1/notes/${encodeURIComponent(noteId)}${suffix}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export function getWikiSettings() {
@@ -1875,6 +2225,7 @@ export function listWikiPages(
     spaceId?: string;
     kind?: Note["kind"];
     limit?: number;
+    offset?: number;
   } = {}
 ) {
   const search = new URLSearchParams();
@@ -1887,8 +2238,17 @@ export function listWikiPages(
   if (input.limit) {
     search.set("limit", String(input.limit));
   }
+  if (typeof input.offset === "number") {
+    search.set("offset", String(input.offset));
+  }
   const suffix = search.size > 0 ? `?${search.toString()}` : "";
-  return request<{ pages: Note[] }>(`/api/v1/wiki/pages${suffix}`);
+  return request<{
+    pages: WikiPageSummary[];
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+  }>(`/api/v1/wiki/pages${suffix}`);
 }
 
 export function getWikiPage(pageId: string) {
@@ -1930,7 +2290,7 @@ export function getWikiTree(
   if (input.kind) {
     search.set("kind", input.kind);
   }
-  return request<{ tree: WikiTreeNode[] }>(
+  return request<{ tree: WikiTreeNode[]; truncated: boolean }>(
     `/api/v1/wiki/tree${search.size > 0 ? `?${search.toString()}` : ""}`
   );
 }
@@ -2017,21 +2377,26 @@ export function deleteWikiPage(pageId: string, mode: DeleteMode = "soft") {
   );
 }
 
-export function searchWiki(input: {
-  spaceId?: string;
-  kind?: Note["kind"];
-  mode?: "text" | "semantic" | "entity" | "hybrid";
-  query?: string;
-  profileId?: string;
-  linkedEntity?: {
-    entityType: CrudEntityType;
-    entityId: string;
-  };
-  limit?: number;
-}) {
+export function searchWiki(
+  input: {
+    spaceId?: string;
+    kind?: Note["kind"];
+    mode?: "text" | "semantic" | "entity" | "hybrid";
+    query?: string;
+    profileId?: string;
+    linkedEntity?: {
+      entityType: CrudEntityType;
+      entityId: string;
+    };
+    limit?: number;
+    offset?: number;
+  },
+  options: { signal?: AbortSignal } = {}
+) {
   return request<WikiSearchResponse>("/api/v1/wiki/search", {
     method: "POST",
-    body: JSON.stringify(input)
+    body: JSON.stringify(input),
+    signal: options.signal
   });
 }
 
@@ -2236,6 +2601,7 @@ export function searchWikiPages(input: {
   query?: string;
   profileId?: string;
   limit?: number;
+  offset?: number;
 }) {
   return request<WikiSearchResponse>("/api/v1/wiki/search", {
     method: "POST",
@@ -2245,7 +2611,8 @@ export function searchWikiPages(input: {
       mode: input.mode ?? "text",
       query: input.query ?? "",
       profileId: input.profileId,
-      limit: input.limit ?? 8
+      limit: input.limit ?? 8,
+      offset: input.offset ?? 0
     })
   });
 }
@@ -2964,6 +3331,7 @@ export function recommendTaskTimeboxes(input: {
   from?: string;
   to?: string;
   limit?: number;
+  timezone?: string;
 }) {
   return request<{ timeboxes: TaskTimebox[] }>(
     "/api/v1/calendar/timeboxes/recommend",
@@ -3456,15 +3824,59 @@ export function runAiProcessorBySlug(
   });
 }
 
-export function listWorkbenchBoxCatalog() {
-  return request<{ boxes: import("./types").ForgeBoxCatalogEntry[] }>(
-    "/api/v1/workbench/catalog/boxes"
+function appendWorkbenchCatalogValues(
+  search: URLSearchParams,
+  key: string,
+  values: string[] | undefined
+) {
+  for (const value of values ?? []) {
+    search.append(key, value);
+  }
+}
+
+export function listWorkbenchBoxCatalog(
+  input: {
+    q?: string;
+    categories?: string[];
+    surfaceIds?: string[];
+    sources?: Array<"forge" | "flow_output">;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.q?.trim()) search.set("q", input.q.trim());
+  appendWorkbenchCatalogValues(search, "category", input.categories);
+  appendWorkbenchCatalogValues(search, "surfaceId", input.surfaceIds);
+  appendWorkbenchCatalogValues(search, "source", input.sources);
+  if (input.limit !== undefined) search.set("limit", String(input.limit));
+  if (input.offset !== undefined) search.set("offset", String(input.offset));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<import("./types").WorkbenchBoxCatalogPage>(
+    `/api/v1/workbench/catalog/boxes${suffix}`
   );
 }
 
-export function listWorkbenchFlows() {
-  return request<{ flows: import("./types").AiConnector[] }>(
-    "/api/v1/workbench/flows"
+export function listWorkbenchFlows(
+  input: {
+    q?: string;
+    kinds?: import("./types").AiConnectorKind[];
+    homeSurfaceIds?: string[];
+    statuses?: Array<"enabled" | "disabled">;
+    limit?: number;
+    offset?: number;
+  } = {}
+) {
+  const search = new URLSearchParams();
+  if (input.q?.trim()) search.set("q", input.q.trim());
+  appendWorkbenchCatalogValues(search, "kind", input.kinds);
+  appendWorkbenchCatalogValues(search, "homeSurfaceId", input.homeSurfaceIds);
+  appendWorkbenchCatalogValues(search, "status", input.statuses);
+  if (input.limit !== undefined) search.set("limit", String(input.limit));
+  if (input.offset !== undefined) search.set("offset", String(input.offset));
+  const suffix = search.size > 0 ? `?${search.toString()}` : "";
+  return request<import("./types").WorkbenchFlowCatalogPage>(
+    `/api/v1/workbench/flows${suffix}`
   );
 }
 
@@ -4910,16 +5322,28 @@ export function listRewardLedger(limit = 50) {
   );
 }
 
-export function getXpMetrics(userIds?: string[] | unknown) {
+export function getXpMetrics(
+  userIds?: string[] | unknown,
+  timezone?: string | null
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (timezone?.trim()) {
+    search.set("timezone", timezone.trim());
+  }
   const suffix = search.toString() ? `?${search}` : "";
   return request<{ metrics: XpMetricsPayload }>(`/api/v1/metrics/xp${suffix}`);
 }
 
-export function getGamificationCatalog(userIds?: string[] | unknown) {
+export function getGamificationCatalog(
+  userIds?: string[] | unknown,
+  timezone?: string | null
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (timezone?.trim()) {
+    search.set("timezone", timezone.trim());
+  }
   const suffix = search.toString() ? `?${search}` : "";
   return request<{ catalog: GamificationCatalogPayload }>(
     `/api/v1/gamification/catalog${suffix}`
@@ -4944,9 +5368,15 @@ export function installGamificationAssetStyle(
   );
 }
 
-export function getGamificationEquipment(userIds?: string[] | unknown) {
+export function getGamificationEquipment(
+  userIds?: string[] | unknown,
+  timezone?: string | null
+) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (timezone?.trim()) {
+    search.set("timezone", timezone.trim());
+  }
   const suffix = search.toString() ? `?${search}` : "";
   return request<{ equipment: GamificationEquipment }>(
     `/api/v1/gamification/equipment${suffix}`
@@ -4955,10 +5385,14 @@ export function getGamificationEquipment(userIds?: string[] | unknown) {
 
 export function updateGamificationEquipment(
   input: Partial<Omit<GamificationEquipment, "updatedAt">>,
-  userIds?: string[] | unknown
+  userIds?: string[] | unknown,
+  timezone?: string | null
 ) {
   const search = new URLSearchParams();
   appendUserIds(search, coerceUserIds(userIds));
+  if (timezone?.trim()) {
+    search.set("timezone", timezone.trim());
+  }
   const suffix = search.toString() ? `?${search}` : "";
   return request<{ equipment: GamificationEquipment }>(
     `/api/v1/gamification/equipment${suffix}`,
@@ -5478,6 +5912,7 @@ export function removeActivityLog(
 export function recordSessionEvent(input: {
   sessionId: string;
   eventType: string;
+  timezone?: string;
   metrics: Record<string, string | number | boolean | null>;
 }) {
   return request<{
@@ -5541,7 +5976,10 @@ export function focusTaskRun(
   });
 }
 
-export function completeTaskRun(taskRunId: string, input: TaskRunFinishInput) {
+export function completeTaskRun(
+  taskRunId: string,
+  input: TaskRunCompleteInput
+) {
   return request<{ taskRun: TaskRun }>(
     `/api/v1/task-runs/${taskRunId}/complete`,
     {
@@ -5551,7 +5989,7 @@ export function completeTaskRun(taskRunId: string, input: TaskRunFinishInput) {
   );
 }
 
-export function releaseTaskRun(taskRunId: string, input: TaskRunFinishInput) {
+export function releaseTaskRun(taskRunId: string, input: TaskRunReleaseInput) {
   return request<{ taskRun: TaskRun }>(
     `/api/v1/task-runs/${taskRunId}/release`,
     {

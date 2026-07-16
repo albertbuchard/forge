@@ -29,6 +29,7 @@ const generalSectionByEntity = {
   task: "Task",
   habit: "Habit",
   tag: "Tag",
+  person: "Person",
   note: "Note",
   insight: "Insight",
   calendar_event: "Calendar Event",
@@ -201,7 +202,11 @@ test("adapter skills reconcile with onboarding and keep route families exact", (
       "forge_call_wiki_route",
       "GET /api/v1/life-force",
       '`{"routeKey":"selection"',
-      '`{"routeKey":"runFlow"'
+      '`{"routeKey":"runFlow"',
+      "`memoryClarity` as `unspecified`",
+      "Save a sparse `draft`",
+      "`interpretationConsent: true`",
+      "`expectedRevision`"
     ]) {
       assert.ok(skill.includes(phrase), `${target} is missing: ${phrase}`);
     }
@@ -211,6 +216,79 @@ test("adapter skills reconcile with onboarding and keep route families exact", (
         `${target} does not name batch entity ${entityType}`
       );
     }
+  }
+});
+
+test("People guidance stays batch-first, scoped, useful, and human-controlled", () => {
+  const skills = [
+    "plugins/openclaw/skills/forge-openclaw/SKILL.md",
+    "plugins/hermes/skill.md",
+    "plugins/codex/skills/forge-codex/SKILL.md"
+  ].map((target) => [target, read(target)]);
+
+  for (const [target, skill] of skills) {
+    for (const phrase of [
+      "`person` is an owner-scoped local record",
+      "forge_search_entities",
+      "forge_create_entities",
+      "forge_update_entities",
+      "forge_delete_entities",
+      "forge_restore_entities",
+      "general `links`",
+      "not a Forge `User`",
+      "forge_call_people_route",
+      "forge_call_peer_route",
+      "listPeopleReadModel",
+      "getPersonContext",
+      "interpretPersonQuestion",
+      "executePersonQuestion",
+      "listPeerRelationships",
+      "getPeerSyncStatus",
+      "Pairing acceptance",
+      "Calendar availability interpretation",
+      "Goal-horizon interpretation",
+      "Cycling aggregate interpretation",
+      "result.metadata.source",
+      "redactedFields",
+      "never infer withheld fields"
+    ]) {
+      assert.ok(skill.includes(phrase), `${target} is missing: ${phrase}`);
+    }
+    assert.match(
+      skill,
+      /An operator session does not\s+substitute\s+for that token/,
+      `${target} must require an agent token rather than an operator session`
+    );
+    assert.ok(
+      skill.includes("resync requests") && skill.includes("human-only"),
+      `${target} must classify resync as human-only`
+    );
+    const peerToolGuidance = skill.match(
+      /- `forge_call_peer_route` exposes only[\s\S]*?(?=\n- Pairing acceptance)/
+    )?.[0];
+    assert.ok(peerToolGuidance, `${target} is missing peer tool guidance`);
+    assert.doesNotMatch(
+      peerToolGuidance,
+      /requestPeerResync/,
+      `${target} must not advertise resync through the agent tool`
+    );
+  }
+
+  const person = section(
+    read(
+      "plugins/openclaw/skills/forge-openclaw/entity_conversation_playbooks.md"
+    ),
+    "Person"
+  );
+  for (const phrase of [
+    "contact form",
+    "Search the intended owner's Person records",
+    "Leave contacts, birthdays, private notes, and sensitive facts unasked",
+    "general `links:",
+    "not a local `User`",
+    "Agents cannot accept pairing"
+  ]) {
+    assert.ok(person.includes(phrase), `Person playbook is missing: ${phrase}`);
   }
 });
 

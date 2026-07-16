@@ -5,7 +5,15 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildServer } from "./app.js";
-import { closeDatabase } from "./db.js";
+import { closeDatabase, getDatabase } from "./db.js";
+
+function getArtifactStoragePath(artifactId: string): string {
+  const row = getDatabase()
+    .prepare("SELECT storage_path FROM artifacts WHERE id = ?")
+    .get(artifactId) as { storage_path: string } | undefined;
+  assert.ok(row);
+  return row.storage_path;
+}
 
 async function issueOperatorSessionCookie(
   app: Awaited<ReturnType<typeof buildServer>>
@@ -124,7 +132,6 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
     const uploadBody = upload.json() as {
       artifact: {
         id: string;
-        storagePath: string;
         dangerLevel: string;
         dangerScore: number;
         formatFamily: string;
@@ -166,7 +173,9 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       uploadBody.artifact.links[0]?.createdByActor,
       "Trusted Artifact Agent"
     );
-    await access(uploadBody.artifact.storagePath);
+    assert.equal("storagePath" in uploadBody.artifact, false);
+    const storagePath = getArtifactStoragePath(uploadBody.artifact.id);
+    await access(storagePath);
 
     const linkedList = await app.inject({
       method: "GET",
@@ -286,7 +295,7 @@ test("artifact store uses trusted upload, static scan, generic links, and human-
       headers: { cookie }
     });
     assert.equal(afterDelete.statusCode, 404);
-    await access(uploadBody.artifact.storagePath);
+    await access(storagePath);
   } finally {
     await app.close();
     closeDatabase();
@@ -336,7 +345,6 @@ test("artifact store supports human password encryption without exposing passwor
     const uploadBody = upload.json() as {
       artifact: {
         id: string;
-        storagePath: string;
         contentSha256: string;
         storedContentSha256: string;
         byteSize: number;
@@ -381,8 +389,9 @@ test("artifact store supports human password encryption without exposing passwor
       uploadBody.artifact.storedByteSize > uploadBody.artifact.byteSize
     );
     assert.equal(JSON.stringify(uploadBody).includes(password), false);
+    assert.equal("storagePath" in uploadBody.artifact, false);
     assert.equal(
-      (await readFile(uploadBody.artifact.storagePath)).equals(
+      (await readFile(getArtifactStoragePath(uploadBody.artifact.id))).equals(
         Buffer.from(csv, "utf8")
       ),
       false

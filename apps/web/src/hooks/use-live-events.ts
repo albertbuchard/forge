@@ -4,10 +4,13 @@ import { resolveForgePath } from "@/lib/runtime-paths";
 import { forgeApi } from "@/store/api/forge-api";
 import { appStore } from "@/store/store";
 
-export function useLiveEvents() {
+export function useLiveEvents(enabled = true) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     const stream = new EventSource(resolveForgePath("/api/v1/events/stream"));
     const invalidate = () => {
       appStore.dispatch(
@@ -39,5 +42,5 @@ export function useLiveEvents() {
       stream.removeEventListener("activity", invalidate);
       stream.close();
     };
-  }, [queryClient]);
+  }, [enabled, queryClient]);
 }

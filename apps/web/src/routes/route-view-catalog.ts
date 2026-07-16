@@ -115,6 +115,14 @@ export const ROUTE_VIEW_CATALOG = {
     tone: "psyche",
     skeleton: { blocks: 5, columns: 2, sideRail: true }
   },
+  "people-index": {
+    surfaceId: "people-index",
+    title: "People",
+    description:
+      "Review private Person records, explicit Wiki associations, peer relationships, shared projections, and pending requests.",
+    tone: "core",
+    skeleton: { blocks: 6, columns: 2, sideRail: true }
+  },
   "calendar-index": {
     surfaceId: "calendar-index",
     title: "Calendar",
@@ -636,6 +644,7 @@ const ROUTE_VIEW_PATH_MATCHERS: RouteViewPathMatcher[] = [
   { viewId: "strategies-index", match: exactly("/strategies") },
   { viewId: "strategy-detail", match: matches(/^\/strategies\/[^/]+$/) },
   { viewId: "preferences-index", match: startsWithSegment("/preferences") },
+  { viewId: "people-index", match: startsWithSegment("/people") },
   { viewId: "calendar-index", match: exactly("/calendar") },
   { viewId: "life-events-index", match: startsWithSegment("/life-events") },
   { viewId: "knowledge-graph-index", match: exactly("/knowledge-graph") },

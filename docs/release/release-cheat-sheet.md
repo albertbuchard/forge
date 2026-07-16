@@ -13,12 +13,13 @@ normal releases.
 
 ## Release Types
 
-Forge currently has four release tracks:
+Forge currently has five release tracks:
 
 - `forge-memory` guided installer to npm
 - OpenClaw plugin to npm
 - Hermes plugin to PyPI
 - Forge Companion iOS release to TestFlight or the App Store
+- Forge Connectivity Service package, source archive, and GHCR image
 
 The GitHub Actions workflows live in:
 
@@ -26,6 +27,7 @@ The GitHub Actions workflows live in:
 - `.github/workflows/release-openclaw-plugin.yml`
 - `.github/workflows/release-hermes-plugin.yml`
 - `.github/workflows/release-ios-companion.yml`
+- `.github/workflows/release-connectivity-service.yml`
 
 `forge-memory` is implemented under `packages/forge-memory/`. It uses the same
 Forge plugin version as OpenClaw, Hermes, and the Codex runtime package. The
@@ -157,6 +159,23 @@ One-time Apple-side setup:
    `aarch64-apple-ios-sim`, and `x86_64-apple-ios` targets so Xcode can link the
    native Forge Iroh bridge.
 
+### Forge Connectivity Service release
+
+- package: `forge-connectivity-service`
+- source: `packages/forge-connectivity-service`
+- workflow trigger tag: `connectivity-v<version>`
+- container: `ghcr.io/albertbuchard/forge-connectivity-service`
+
+The release workflow runs the independent format, lint, type, unit, integration,
+upgrade, abuse, load, OpenAPI, license, SBOM, package, audit, and clean-install
+gates. It attaches an npm-compatible tarball, source archive, CycloneDX SBOM,
+checksums, and Sigstore bundles to the GitHub release. It also publishes and signs
+`linux/amd64` and `linux/arm64` images with BuildKit and GitHub provenance.
+
+No npm registry is required. Install the attached tarball directly, or run the
+digest-pinned GHCR image. Publishing the package to npm later is an independent
+Trusted Publishing step and must not block the self-hosted release.
+
 ## GitHub Secrets
 
 ### Required for iOS workflow
@@ -207,6 +226,30 @@ Formatting note:
 ## Local Prep Commands
 
 Run these from the Forge repository root.
+
+### People and peer sharing release gate
+
+The aggregate gate requires a new, empty test root with its own safety marker. It
+rejects the normal Forge data folder, backup folders, unmarked paths, and databases
+that are open in another process. `lsof` is required; the gate fails closed when it
+cannot prove that the isolated database is unused. The full plan also checks the
+OpenClaw, Hermes, Codex, Forge Memory, connectivity-service, Rust, web, API, and
+native release surfaces.
+
+```bash
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/forge-people-release.XXXXXX")"
+artifact_root="$(mktemp -d "${TMPDIR:-/tmp}/forge-people-artifacts.XXXXXX")"
+npm run check:people-sharing-release -- --initialize-root "$test_root"
+
+FORGE_PEOPLE_RELEASE_DATA_ROOT="$test_root" \
+FORGE_PEOPLE_RELEASE_ARTIFACT_ROOT="$artifact_root" \
+npm run check:people-sharing-release
+```
+
+Use `--plan` to list every command. Use `--groups static,tests` only while diagnosing
+a named group. A release candidate must run the complete plan twice from a clean
+`main` checkout. Keep the resulting package archives and test evidence until the
+published release has been checked independently.
 
 ### OpenClaw
 
@@ -332,6 +375,22 @@ git tag ios-app-store-v1.0
 git push origin ios-app-store-v1.0
 ```
 
+### Forge Connectivity Service
+
+Before tagging, update the package, lockfile, runtime, OpenAPI, and Dockerfile
+versions together, then run:
+
+```bash
+npm ci --ignore-scripts --prefix packages/forge-connectivity-service
+npm run verify:connectivity-service
+npm run audit:connectivity-service
+git tag connectivity-v0.1.0
+git push origin connectivity-v0.1.0
+```
+
+The tag must match `packages/forge-connectivity-service/package.json` exactly and
+must point to a commit already on `origin/main`.
+
 iOS release rule:
 
 - the marketing version in `apps/ios-companion/release/release.yml` must exactly match the
@@ -409,6 +468,7 @@ When an iOS release tag lands on a `main` commit, the workflow:
 - Hermes: `hermes-v0.2.27`
 - iOS TestFlight: `ios-testflight-v1.0`
 - iOS App Store: `ios-app-store-v1.0`
+- Forge Connectivity Service: `connectivity-v0.1.0`
 
 ## Quick Release Checklist
 
@@ -440,6 +500,21 @@ python3 -m pip index versions forge-hermes-plugin
 Normal iOS release commands must be limited to git operations and GitHub Actions
 inspection. Local `./apps/ios-companion/scripts/publish-forge-companion.sh testflight`
 is a fallback only, not the standard release process.
+
+### Connectivity service release
+
+1. Run `npm run verify:connectivity-service` and `npm run audit:connectivity-service`
+2. Confirm the package version matches the intended tag
+3. Push the feature/release commit to `main`
+4. Push `connectivity-v<version>`
+5. Confirm the GitHub release contains the package, source, SBOM, checksums, and signatures
+6. Confirm both image platforms exist at the recorded digest
+7. Verify the artifact attestations and Sigstore identities before deployment
+
+Rollback does not erase the service database. Stop routing new peers to the
+affected provider, pin clients to the last verified image digest, and restore an
+application-consistent SQLite backup only when a schema rollback is explicitly
+required. Never replace the database with an empty volume as a release rollback.
 
 ## Recent Verified Releases
 

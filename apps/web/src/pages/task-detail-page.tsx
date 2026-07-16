@@ -23,6 +23,7 @@ import { NoteMarkdown } from "@/components/notes/note-markdown";
 import { EntityNotesSurface } from "@/components/notes/entity-notes-surface";
 import { PreferenceEntityHandoffButton } from "@/components/preferences/preference-entity-handoff-button";
 import { TaskDialog } from "@/components/task-dialog";
+import { getSafeGitRefHref } from "@/components/git-ref-picker";
 import {
   PlanningRecordDeleteDialog,
   PlanningRecordDeletedState
@@ -39,7 +40,6 @@ import { EntityName } from "@/components/ui/entity-name";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ErrorState } from "@/components/ui/page-state";
 import {
-  completeTaskRun,
   claimTaskRun,
   createTaskTimebox,
   createWorkAdjustment,
@@ -116,6 +116,8 @@ export function TaskDetailPage() {
   const [taskSchedulingDialogOpen, setTaskSchedulingDialogOpen] =
     useState(false);
   const [statusSheetOpen, setStatusSheetOpen] = useState(false);
+  const [closeoutEvidenceExpanded, setCloseoutEvidenceExpanded] =
+    useState(false);
   const [editingTimebox, setEditingTimebox] = useState<TaskTimebox | null>(
     null
   );
@@ -286,18 +288,6 @@ export function TaskDetailPage() {
     }) => releaseTaskRun(runId, { actor, note: note ?? "" }),
     onSuccess: invalidateAll
   });
-  const completeRunMutation = useMutation({
-    mutationFn: ({
-      runId,
-      actor,
-      note
-    }: {
-      runId: string;
-      actor?: string;
-      note?: string;
-    }) => completeTaskRun(runId, { actor, note: note ?? "" }),
-    onSuccess: invalidateAll
-  });
   const claimRunMutation = useMutation({
     mutationFn: (input: Parameters<typeof claimTaskRun>[1]) =>
       claimTaskRun(params.taskId!, input),
@@ -418,8 +408,7 @@ export function TaskDetailPage() {
     claimRunMutation,
     heartbeatRunMutation,
     focusRunMutation,
-    releaseRunMutation,
-    completeRunMutation
+    releaseRunMutation
   ];
   const taskRunError = taskRunMutations
     .map((mutation) => mutation.error)
@@ -457,11 +446,32 @@ export function TaskDetailPage() {
   const acceptanceCriteria = payload.task.acceptanceCriteria ?? [];
   const gitRefs = payload.task.gitRefs ?? [];
   const completionReport = payload.task.completionReport;
+  const closeoutState =
+    payload.task.closeoutState ??
+    (payload.task.status !== "done"
+      ? "not_applicable"
+      : completionReport?.workSummary.trim()
+        ? "complete"
+        : "deferred");
   const linkedGitRefIds = new Set(completionReport?.linkedGitRefIds ?? []);
   const closeoutGitRefs = gitRefs.filter((ref) => linkedGitRefIds.has(ref.id));
   const supportingGitRefs = gitRefs.filter(
     (ref) => !linkedGitRefIds.has(ref.id)
   );
+  const modifiedFiles = completionReport?.modifiedFiles ?? [];
+  const visibleModifiedFiles = closeoutEvidenceExpanded
+    ? modifiedFiles
+    : modifiedFiles.slice(0, 12);
+  const visibleCloseoutGitRefs = closeoutEvidenceExpanded
+    ? closeoutGitRefs
+    : closeoutGitRefs.slice(0, 12);
+  const visibleSupportingGitRefs = closeoutEvidenceExpanded
+    ? supportingGitRefs
+    : supportingGitRefs.slice(0, 12);
+  const hasCollapsedCloseoutEvidence =
+    modifiedFiles.length > 12 ||
+    closeoutGitRefs.length > 12 ||
+    supportingGitRefs.length > 12;
   const botOwner =
     payload.task.user?.kind === "bot" || payload.task.ownerUser?.kind === "bot";
   const botAssignees = (payload.task.assignees ?? []).filter(
@@ -622,15 +632,9 @@ export function TaskDetailPage() {
                   <Button
                     className={actionButtonClass}
                     variant="secondary"
-                    pending={completeRunMutation.isPending}
-                    pendingLabel="Completing"
-                    onClick={async () => {
-                      await completeRunMutation.mutateAsync({
-                        runId: currentRun.id,
-                        actor: currentRun.actor,
-                        note: currentRun.note
-                      });
-                    }}
+                    onClick={() =>
+                      shell.openTaskCloseout(payload.task.id, currentRun.id)
+                    }
                   >
                     Complete
                   </Button>
@@ -728,6 +732,11 @@ export function TaskDetailPage() {
           {currentRun ? (
             <Badge className="bg-[var(--ui-success-soft)] text-[color-mix(in_srgb,var(--success)_76%,var(--ui-ink-strong)_24%)]">
               Timer active
+            </Badge>
+          ) : null}
+          {closeoutState === "deferred" ? (
+            <Badge className="bg-[var(--ui-warning-soft)] text-[color-mix(in_srgb,var(--warning)_78%,var(--ui-ink-strong)_22%)]">
+              Closeout evidence deferred
             </Badge>
           ) : null}
           {payload.task.executionMode ? (
@@ -891,9 +900,8 @@ export function TaskDetailPage() {
                     <span>Changed files</span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {completionReport?.modifiedFiles &&
-                    completionReport.modifiedFiles.length > 0 ? (
-                      completionReport.modifiedFiles.map((file) => (
+                    {modifiedFiles.length > 0 ? (
+                      visibleModifiedFiles.map((file) => (
                         <Badge
                           key={file}
                           wrap
@@ -916,7 +924,7 @@ export function TaskDetailPage() {
                     <span>Git refs</span>
                   </div>
                   <div className="mt-3 grid gap-3">
-                    {[closeoutGitRefs, supportingGitRefs]
+                    {[visibleCloseoutGitRefs, visibleSupportingGitRefs]
                       .filter((group) => group.length > 0)
                       .map((group, groupIndex) => (
                         <div
@@ -933,6 +941,7 @@ export function TaskDetailPage() {
                           ) : null}
                           {group.map((ref) => {
                             const refMeta = GIT_REF_META[ref.refType];
+                            const safeRefUrl = getSafeGitRefHref(ref.url);
                             const refBody = (
                               <div className="rounded-[16px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-4 py-3">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -950,13 +959,13 @@ export function TaskDetailPage() {
                                 </div>
                               </div>
                             );
-                            if (!ref.url) {
+                            if (!safeRefUrl) {
                               return <div key={ref.id}>{refBody}</div>;
                             }
                             return (
                               <a
                                 key={ref.id}
-                                href={ref.url}
+                                href={safeRefUrl}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="group block"
@@ -978,6 +987,20 @@ export function TaskDetailPage() {
                     ) : null}
                   </div>
                 </div>
+                {hasCollapsedCloseoutEvidence ? (
+                  <div>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        setCloseoutEvidenceExpanded((current) => !current)
+                      }
+                    >
+                      {closeoutEvidenceExpanded
+                        ? "Show less evidence"
+                        : `Show all evidence (${modifiedFiles.length + gitRefs.length})`}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </SectionCard>
           </div>
@@ -1041,14 +1064,18 @@ export function TaskDetailPage() {
               <StatTile
                 label="Closeout readiness"
                 value={
-                  completionReport?.workSummary || closeoutGitRefs.length > 0
-                    ? "Evidence present"
-                    : "Needs closeout evidence"
+                  closeoutState === "complete"
+                    ? "Evidence complete"
+                    : closeoutState === "deferred"
+                      ? "Evidence deferred"
+                      : "Not closed yet"
                 }
                 hint={
-                  completionReport?.modifiedFiles?.length
-                    ? `${completionReport.modifiedFiles.length} changed file${completionReport.modifiedFiles.length === 1 ? "" : "s"} listed`
-                    : "No changed-file evidence captured yet."
+                  closeoutState === "deferred"
+                    ? "The task is complete, but its result evidence still needs to be recorded."
+                    : completionReport?.modifiedFiles?.length
+                      ? `${completionReport.modifiedFiles.length} changed file${completionReport.modifiedFiles.length === 1 ? "" : "s"} listed`
+                      : "No changed-file evidence captured yet."
                 }
               />
               <StatTile
@@ -1496,9 +1523,9 @@ export function TaskDetailPage() {
             onFocus={async (runId, input) => {
               await focusRunMutation.mutateAsync({ runId, input });
             }}
-            onComplete={async (runId, input) => {
-              await completeRunMutation.mutateAsync({ runId, ...input });
-            }}
+            onRequestComplete={(runId) =>
+              shell.openTaskCloseout(payload.task.id, runId)
+            }
             onRelease={async (runId, input) => {
               await releaseRunMutation.mutateAsync({ runId, ...input });
             }}

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ProgressMeter } from "@/components/ui/progress-meter";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -16,6 +16,7 @@ type XpCommandDeckProps = {
   milestoneRewards: MilestoneReward[];
   momentumPulse: XpMomentumPulse;
   recentLedger?: RewardLedgerEvent[];
+  scopeLabel?: string;
   className?: string;
   tone?: "core" | "psyche";
 };
@@ -56,15 +57,31 @@ const deckFaintClass = "text-[var(--ui-ink-faint)]";
 const deckMetricBadgeClass =
   "bg-[var(--ui-surface-3)] text-[var(--ui-ink-medium)]";
 
+export function getXpDeckEntranceMotion(reduceMotion: boolean | null) {
+  return reduceMotion
+    ? {
+        initial: false as const,
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0 }
+      }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.24, ease: "easeOut" as const }
+      };
+}
+
 export function XpCommandDeck({
   profile,
   achievements,
   milestoneRewards,
   momentumPulse,
   recentLedger = [],
+  scopeLabel = "Selected user",
   className,
   tone = "core"
 }: XpCommandDeckProps) {
+  const reduceMotion = useReducedMotion();
   const unlocked = achievements.filter((achievement) => achievement.unlocked);
   const visibleAchievements = (
     unlocked.length > 0 ? unlocked : achievements
@@ -75,6 +92,7 @@ export function XpCommandDeck({
     100,
     Math.round((profile.currentLevelXp / profile.nextLevelXp) * 100)
   );
+  const entranceMotion = getXpDeckEntranceMotion(reduceMotion);
 
   return (
     <section
@@ -88,7 +106,7 @@ export function XpCommandDeck({
       <div className={cn("px-5 py-5", statusTone(momentumPulse.status))}>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className={deckEyebrowClass}>Weekly progress</div>
+            <div className={deckEyebrowClass}>{scopeLabel} progression</div>
             <h2
               className={`mt-3 font-display text-3xl leading-none lg:text-4xl ${deckTitleClass}`}
             >
@@ -106,7 +124,7 @@ export function XpCommandDeck({
               {profile.streakDays} day streak
             </Badge>
             <Badge wrap className={deckMetricBadgeClass}>
-              {profile.weeklyXp} weekly XP
+              {profile.weeklyXp} XP since Monday
             </Badge>
           </div>
         </div>
@@ -114,16 +132,11 @@ export function XpCommandDeck({
 
       <div className="grid gap-5 px-5 py-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <div className="grid gap-5">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
-            className={deckPanelClass}
-          >
+          <motion.div {...entranceMotion} className={deckPanelClass}>
             <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className={`font-medium ${deckTitleClass}`}>
-                  Next reward
+                  Next progress target
                 </div>
                 <div className={`mt-2 text-sm ${deckBodyClass}`}>
                   {momentumPulse.nextMilestoneLabel}
@@ -143,23 +156,35 @@ export function XpCommandDeck({
               className={`mt-3 flex flex-wrap items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
             >
               <span>
-                {profile.currentLevelXp}/{profile.nextLevelXp} XP
+                {profile.currentLevelXp}/{profile.nextLevelXp} XP in level{" "}
+                {profile.level}
               </span>
-              <span>{profile.comboMultiplier.toFixed(2)}x combo</span>
+              <span>
+                {profile.xpToNextLevel} XP to level {profile.level + 1}
+              </span>
             </div>
+            <p className={`mt-4 text-xs leading-5 ${deckFaintClass}`}>
+              A streak day needs positive automatic XP that has not been
+              reversed. Manual adjustments, corrections, and penalties do not
+              extend the streak.
+            </p>
           </motion.div>
 
           <div className="grid gap-3 md:grid-cols-3">
             {visibleAchievements.map((achievement, index) => (
               <motion.div
                 key={achievement.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.24,
-                  delay: 0.04 * index,
-                  ease: "easeOut"
-                }}
+                transition={
+                  reduceMotion
+                    ? { duration: 0 }
+                    : {
+                        duration: 0.24,
+                        delay: 0.04 * index,
+                        ease: "easeOut"
+                      }
+                }
                 className={deckPanelClass}
               >
                 <div className="flex min-w-0 items-start justify-between gap-3">
@@ -193,7 +218,7 @@ export function XpCommandDeck({
 
         <div className="grid gap-4">
           <div className={deckPanelClass}>
-            <div className={deckEyebrowClass}>Rewards in progress</div>
+            <div className={deckEyebrowClass}>Progress targets</div>
             <div className="mt-4 grid gap-3">
               {visibleMilestones.map((milestone) => {
                 const progress = Math.min(
@@ -268,7 +293,11 @@ export function XpCommandDeck({
                     <div
                       className={`mt-3 text-xs uppercase tracking-[0.16em] ${deckFaintClass}`}
                     >
-                      {formatDateTime(event.createdAt)}
+                      {formatDateTime(event.createdAt)} · {event.source}
+                      {event.actor ? ` · ${event.actor}` : ""} ·{" "}
+                      {event.metadata.manual === true
+                        ? "manual adjustment"
+                        : "automatic rule"}
                     </div>
                   </div>
                 ))}

@@ -1,6 +1,18 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { GitRefPicker } from "./git-ref-picker";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { searchGitHelperRefs } from "@/lib/api";
+import {
+  createDraftGitRefId,
+  getSafeGitRefHref,
+  GitRefPicker,
+  type DraftGitRef
+} from "./git-ref-picker";
 
 vi.mock("@/lib/api", () => ({
   getGitHelperOverview: vi.fn(async () => ({
@@ -39,6 +51,14 @@ vi.mock("@/lib/api", () => ({
 }));
 
 describe("GitRefPicker", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("adds the current branch from helper results", async () => {
     const onChange = vi.fn();
 
@@ -48,7 +68,9 @@ describe("GitRefPicker", () => {
       await screen.findByRole("button", { name: /use current branch/i })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /use current branch/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /use current branch/i })
+    );
 
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(
@@ -61,5 +83,60 @@ describe("GitRefPicker", () => {
         ])
       );
     });
+    const addedRef = onChange.mock.calls[0]?.[0]?.[0] as DraftGitRef;
+    expect(addedRef.id).toMatch(/^gitref_draft_[a-f0-9]{32}$/);
+    expect(addedRef.id?.length).toBeLessThanOrEqual(128);
+  });
+
+  it("debounces searches and labels reference actions", async () => {
+    render(<GitRefPicker selectedRefs={[]} onChange={vi.fn()} />);
+
+    await screen.findByRole("button", { name: /use current branch/i });
+    fireEvent.change(screen.getByPlaceholderText("Search branches"), {
+      target: { value: "feature closeout" }
+    });
+
+    expect(searchGitHelperRefs).not.toHaveBeenCalledWith(
+      expect.objectContaining({ query: "feature closeout" })
+    );
+    await waitFor(
+      () => {
+        expect(searchGitHelperRefs).toHaveBeenCalledWith(
+          expect.objectContaining({ query: "feature closeout" })
+        );
+      },
+      { timeout: 1_000 }
+    );
+    expect(
+      await screen.findByRole("link", { name: "Open agent/demo-branch" })
+    ).toHaveAttribute("href", expect.stringMatching(/^https:\/\//));
+  });
+
+  it("never renders an unsafe stored Git URL as a link", () => {
+    const selectedRef: DraftGitRef = {
+      id: "gitref_unsafe",
+      workItemId: "task_1",
+      refType: "commit",
+      provider: "git",
+      repository: "owner/repo",
+      refValue: "abc123",
+      url: "javascript:alert(1)",
+      displayTitle: "Unsafe legacy reference"
+    };
+
+    render(<GitRefPicker selectedRefs={[selectedRef]} onChange={vi.fn()} />);
+
+    expect(
+      screen.queryByRole("link", { name: /unsafe legacy reference/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove Unsafe legacy reference" })
+    ).toBeInTheDocument();
+    expect(getSafeGitRefHref(selectedRef.url)).toBeNull();
+  });
+
+  it("allocates a bounded safe draft id without secure-context UUID support", () => {
+    expect(createDraftGitRefId(null)).toMatch(/^[A-Za-z0-9._:-]{1,128}$/);
+    expect(createDraftGitRefId(null).length).toBeLessThanOrEqual(128);
   });
 });

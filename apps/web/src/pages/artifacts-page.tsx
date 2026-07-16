@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -13,11 +13,13 @@ import {
   Lock,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Settings2,
   ShieldAlert,
   Sparkles,
   Trash2,
-  Upload
+  Upload,
+  XCircle
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -99,8 +101,11 @@ const ARTIFACT_STATES: ArtifactState[] = [
 ];
 
 const ARTIFACT_PAGE_SIZE = 50;
+const ARTIFACT_HISTORY_PAGE_SIZE = 10;
 const ARTIFACT_SEARCH_DEBOUNCE_MS = 200;
 const MAX_ARTIFACT_UPLOAD_QUEUE_FILES = 25;
+const MAX_ARTIFACT_UPLOAD_BYTES = 100 * 1024 * 1024;
+const ARTIFACT_UPLOAD_CONCURRENCY = 2;
 
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -176,18 +181,60 @@ function scanFindings(artifact: Artifact | null): ArtifactScanFinding[] {
   return artifact.scanResults.findings;
 }
 
-function fileToBase64(file: File) {
+function artifactUploadAbortError() {
+  const error = new Error("Artifact upload canceled.");
+  error.name = "AbortError";
+  return error;
+}
+
+function isArtifactUploadAbort(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function fileToBase64(
+  file: File,
+  signal: AbortSignal,
+  onProgress: (percentage: number) => void
+) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", abortRead);
+    const abortRead = () => reader.abort();
     reader.onload = () => {
+      settled = true;
+      cleanup();
       const result = typeof reader.result === "string" ? reader.result : "";
       const base64 = result.includes(",")
         ? result.slice(result.indexOf(",") + 1)
         : result;
+      onProgress(100);
       resolve(base64);
     };
-    reader.onerror = () =>
+    reader.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    reader.onerror = () => {
+      settled = true;
+      cleanup();
       reject(reader.error ?? new Error("Unable to read file."));
+    };
+    reader.onabort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(artifactUploadAbortError());
+    };
+    if (signal.aborted) {
+      reject(artifactUploadAbortError());
+      return;
+    }
+    signal.addEventListener("abort", abortRead, { once: true });
+    onProgress(0);
     reader.readAsDataURL(file);
   });
 }
@@ -203,6 +250,7 @@ function createUploadQueueItem(file: File): ArtifactUploadQueueItem {
       : `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`;
   return {
     id: randomId,
+    idempotencyKey: `artifact-ui-${randomId}`,
     file,
     title,
     shortDescription: "",
@@ -216,18 +264,40 @@ function createUploadQueueItem(file: File): ArtifactUploadQueueItem {
 }
 
 function appendUploadFiles(value: ArtifactUploadFlowValue, files: File[]) {
+  const nonEmptyFiles = files.filter((file) => file.size > 0);
+  const eligibleFiles = nonEmptyFiles.filter(
+    (file) => file.size <= MAX_ARTIFACT_UPLOAD_BYTES
+  );
   const availableSlots = Math.max(
     0,
     MAX_ARTIFACT_UPLOAD_QUEUE_FILES - value.items.length
   );
-  const acceptedFiles = files.slice(0, availableSlots);
-  if (acceptedFiles.length === 0) {
-    return value;
+  const acceptedFiles = eligibleFiles.slice(0, availableSlots);
+  const messages: string[] = [];
+  if (nonEmptyFiles.length !== files.length) {
+    messages.push("Empty files cannot be added to the Artifact Store.");
+  }
+  if (eligibleFiles.length !== nonEmptyFiles.length) {
+    messages.push("Artifact files may not exceed 100 MiB each.");
+  }
+  if (eligibleFiles.length > availableSlots) {
+    messages.push(
+      `The upload queue accepts at most ${MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files.`
+    );
   }
   return {
-    ...value,
-    items: [...value.items, ...acceptedFiles.map(createUploadQueueItem)],
-    activeItemId: null
+    value:
+      acceptedFiles.length === 0
+        ? value
+        : {
+            ...value,
+            items: [
+              ...value.items,
+              ...acceptedFiles.map(createUploadQueueItem)
+            ],
+            activeItemId: null
+          },
+    error: messages.length > 0 ? messages.join(" ") : null
   };
 }
 
@@ -288,6 +358,7 @@ type UploadDraft = {
 
 type ArtifactUploadQueueItem = UploadDraft & {
   id: string;
+  idempotencyKey: string;
   file: File;
   sourceKind: ArtifactSourceKind;
   metadataText: string;
@@ -296,6 +367,10 @@ type ArtifactUploadQueueItem = UploadDraft & {
 type ArtifactUploadFlowValue = {
   items: ArtifactUploadQueueItem[];
   activeItemId: string | null;
+  bulkShortDescription: string;
+  bulkSourceLabel: string;
+  bulkSourceKind: ArtifactSourceKind;
+  bulkUseLlmEnrichment: boolean;
   encryptContent: boolean;
   contentPassword: string;
   contentPasswordConfirm: string;
@@ -326,24 +401,31 @@ type ArtifactMetadataFlowValue = {
 
 type ArtifactTrustFlowValue = ArtifactTrustPatchInput;
 
-type ArtifactUploadResult =
-  | {
-      itemId: string;
-      fileName: string;
-      status: "success";
-      artifactId: string;
-      title: string;
-    }
-  | {
-      itemId: string;
-      fileName: string;
-      status: "error";
-      error: string;
-    };
+type ArtifactUploadResult = {
+  itemId: string;
+  fileName: string;
+  status: "queued" | "reading" | "uploading" | "success" | "error" | "canceled";
+  progress: number;
+  artifactId?: string;
+  title?: string;
+  contentSha256?: string;
+  error?: string;
+};
+
+type ArtifactUploadBatchRequest = {
+  items: ArtifactUploadQueueItem[];
+  contentProtection:
+    | { mode: "password_encrypted"; password: string; passwordHint: string }
+    | undefined;
+};
 
 const EMPTY_UPLOAD_FLOW_VALUE: ArtifactUploadFlowValue = {
   items: [],
   activeItemId: null,
+  bulkShortDescription: "",
+  bulkSourceLabel: "",
+  bulkSourceKind: "upload",
+  bulkUseLlmEnrichment: false,
   encryptContent: false,
   contentPassword: "",
   contentPasswordConfirm: "",
@@ -399,8 +481,6 @@ const ARTIFACT_ACCEPT_EXTENSIONS = [
 
 const SOURCE_KIND_OPTIONS: ArtifactSourceKind[] = [
   "upload",
-  "agent_upload",
-  "wiki_ingest",
   "external_reference",
   "manual"
 ];
@@ -474,6 +554,27 @@ function UploadResultBadge({
       </Badge>
     );
   }
+  if (result.status === "queued") {
+    return (
+      <Badge size="xs" tone="meta">
+        Queued
+      </Badge>
+    );
+  }
+  if (result.status === "reading") {
+    return (
+      <Badge size="xs" tone="meta">
+        Preparing {result.progress}%
+      </Badge>
+    );
+  }
+  if (result.status === "uploading") {
+    return (
+      <Badge size="xs" tone="meta">
+        Uploading {result.progress}%
+      </Badge>
+    );
+  }
   if (result.status === "success") {
     return (
       <Badge
@@ -484,6 +585,13 @@ function UploadResultBadge({
       </Badge>
     );
   }
+  if (result.status === "canceled") {
+    return (
+      <Badge size="xs" tone="meta">
+        Canceled
+      </Badge>
+    );
+  }
   return (
     <Badge
       size="xs"
@@ -491,6 +599,45 @@ function UploadResultBadge({
     >
       Failed
     </Badge>
+  );
+}
+
+function UploadProgressState({
+  result
+}: {
+  result: ArtifactUploadResult | undefined;
+}) {
+  if (
+    !result ||
+    (result.status !== "queued" &&
+      result.status !== "reading" &&
+      result.status !== "uploading")
+  ) {
+    return null;
+  }
+  return (
+    <div className="grid gap-1.5" aria-live="polite">
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-[var(--ui-surface-2)]"
+        role="progressbar"
+        aria-label={`Upload progress for ${result.fileName}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={result.progress}
+      >
+        <div
+          className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-150 motion-reduce:transition-none"
+          style={{ width: `${result.progress}%` }}
+        />
+      </div>
+      <span className="text-xs text-[var(--ui-ink-muted)]">
+        {result.status === "queued"
+          ? "Waiting for an upload slot"
+          : result.status === "reading"
+            ? "Preparing file"
+            : "Sending to Forge"}
+      </span>
+    </div>
   );
 }
 
@@ -535,6 +682,8 @@ export function ArtifactsPage() {
   const [linkedEntityType, setLinkedEntityType] = useState("");
   const [linkedEntityId, setLinkedEntityId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [versionPageIndex, setVersionPageIndex] = useState(0);
+  const [auditPageIndex, setAuditPageIndex] = useState(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
   const [trustDialogOpen, setTrustDialogOpen] = useState(false);
@@ -545,6 +694,9 @@ export function ArtifactsPage() {
   const [encryptDialogOpen, setEncryptDialogOpen] = useState(false);
   const [uploadFlowValue, setUploadFlowValue] =
     useState<ArtifactUploadFlowValue>(EMPTY_UPLOAD_FLOW_VALUE);
+  const uploadAbortControllersRef = useRef(new Map<string, AbortController>());
+  const canceledUploadItemIdsRef = useRef(new Set<string>());
+  const previousActiveUploadItemIdRef = useRef<string | null>(null);
   const [downloadPasswordValue, setDownloadPasswordValue] =
     useState<PasswordFlowValue>(EMPTY_PASSWORD_FLOW_VALUE);
   const [encryptFlowValue, setEncryptFlowValue] = useState<EncryptFlowValue>(
@@ -652,16 +804,31 @@ export function ArtifactsPage() {
   }, [query]);
 
   const versionsQuery = useQuery({
-    queryKey: ["artifact-versions", selectedArtifact?.id],
+    queryKey: ["artifact-versions", selectedArtifact?.id, versionPageIndex],
     enabled: Boolean(selectedArtifact?.id),
-    queryFn: () => listArtifactVersions(selectedArtifact!.id)
+    queryFn: () =>
+      listArtifactVersions(selectedArtifact!.id, {
+        limit: ARTIFACT_HISTORY_PAGE_SIZE,
+        offset: versionPageIndex * ARTIFACT_HISTORY_PAGE_SIZE
+      }),
+    retry: false
   });
 
   const auditQuery = useQuery({
-    queryKey: ["artifact-audit", selectedArtifact?.id],
+    queryKey: ["artifact-audit", selectedArtifact?.id, auditPageIndex],
     enabled: Boolean(selectedArtifact?.id),
-    queryFn: () => listArtifactAuditEvents(selectedArtifact!.id)
+    queryFn: () =>
+      listArtifactAuditEvents(selectedArtifact!.id, {
+        limit: ARTIFACT_HISTORY_PAGE_SIZE,
+        offset: auditPageIndex * ARTIFACT_HISTORY_PAGE_SIZE
+      }),
+    retry: false
   });
+
+  useEffect(() => {
+    setVersionPageIndex(0);
+    setAuditPageIndex(0);
+  }, [selectedArtifact?.id]);
 
   useEffect(() => {
     const firstArtifact = artifacts[0];
@@ -711,6 +878,32 @@ export function ArtifactsPage() {
     }
   }, [navigate, uploadDialogOpen, uploadedArtifactToOpenId]);
 
+  useEffect(() => {
+    if (!uploadDialogOpen) {
+      previousActiveUploadItemIdRef.current = null;
+      return;
+    }
+    const previousItemId = previousActiveUploadItemIdRef.current;
+    const activeItemId = uploadFlowValue.activeItemId;
+    const frame = window.requestAnimationFrame(() => {
+      if (activeItemId) {
+        document
+          .querySelector<HTMLElement>("[data-upload-detail-panel]")
+          ?.focus();
+        return;
+      }
+      if (previousItemId) {
+        document
+          .querySelector<HTMLElement>(
+            `[data-upload-details-id="${previousItemId}"]`
+          )
+          ?.focus();
+      }
+    });
+    previousActiveUploadItemIdRef.current = activeItemId;
+    return () => window.cancelAnimationFrame(frame);
+  }, [uploadDialogOpen, uploadFlowValue.activeItemId]);
+
   const invalidateArtifacts = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["artifacts"] }),
@@ -721,72 +914,216 @@ export function ArtifactsPage() {
     ]);
   };
 
+  const recordUploadResult = useCallback((nextResult: ArtifactUploadResult) => {
+    setUploadResults((current) => {
+      const merged = new Map(current.map((result) => [result.itemId, result]));
+      merged.set(nextResult.itemId, nextResult);
+      return Array.from(merged.values());
+    });
+  }, []);
+
   const uploadMutation = useMutation({
-    mutationFn: async (items: ArtifactUploadQueueItem[]) => {
+    mutationFn: async ({
+      items,
+      contentProtection
+    }: ArtifactUploadBatchRequest) => {
       if (items.length === 0) {
         throw new Error("Choose one or more files first.");
       }
-      const results: ArtifactUploadResult[] = [];
+      const resultByItemId = new Map<string, ArtifactUploadResult>();
+      let nextItemIndex = 0;
       for (const item of items) {
+        recordUploadResult({
+          itemId: item.id,
+          fileName: item.file.name,
+          status: "queued",
+          progress: 0
+        });
+      }
+
+      const uploadOne = async (item: ArtifactUploadQueueItem) => {
+        if (canceledUploadItemIdsRef.current.has(item.id)) {
+          const canceled: ArtifactUploadResult = {
+            itemId: item.id,
+            fileName: item.file.name,
+            status: "canceled",
+            progress: 0
+          };
+          resultByItemId.set(item.id, canceled);
+          recordUploadResult(canceled);
+          return;
+        }
+        const controller = new AbortController();
+        uploadAbortControllersRef.current.set(item.id, controller);
         try {
+          if (item.file.size === 0) {
+            throw new Error("Empty files cannot be uploaded.");
+          }
+          if (item.file.size > MAX_ARTIFACT_UPLOAD_BYTES) {
+            throw new Error("Artifact files may not exceed 100 MiB each.");
+          }
+          recordUploadResult({
+            itemId: item.id,
+            fileName: item.file.name,
+            status: "reading",
+            progress: 0
+          });
+          const contentBase64 = await fileToBase64(
+            item.file,
+            controller.signal,
+            (percentage) =>
+              recordUploadResult({
+                itemId: item.id,
+                fileName: item.file.name,
+                status: "reading",
+                progress: Math.round(percentage * 0.2)
+              })
+          );
           const input: ArtifactUploadInput = {
+            idempotencyKey: item.idempotencyKey,
             title: item.title.trim() || undefined,
             shortDescription: item.shortDescription,
             description: item.description,
             originalFileName: item.file.name,
             declaredMimeType: item.file.type,
-            contentBase64: await fileToBase64(item.file),
+            contentBase64,
             sourceKind: item.sourceKind,
             sourceLabel: item.sourceLabel,
             metadata: parseMetadataText(item.metadataText),
             links: artifactEntityLinkDraftsToInputs(item.linkDrafts),
-            contentProtection: uploadFlowValue.encryptContent
-              ? {
-                  mode: "password_encrypted",
-                  password: uploadFlowValue.contentPassword,
-                  passwordHint: uploadFlowValue.contentPasswordHint
-                }
-              : undefined,
+            contentProtection,
             useLlmEnrichment: item.useLlmEnrichment
           };
-          const { artifact } = await uploadArtifact(input);
-          results.push({
+          const { artifact } = await uploadArtifact(input, {
+            idempotencyKey: item.idempotencyKey,
+            signal: controller.signal,
+            onProgress: (percentage) =>
+              recordUploadResult({
+                itemId: item.id,
+                fileName: item.file.name,
+                status: "uploading",
+                progress: Math.min(99, 20 + Math.round(percentage * 0.79))
+              })
+          });
+          const success: ArtifactUploadResult = {
             itemId: item.id,
             fileName: item.file.name,
             status: "success",
+            progress: 100,
             artifactId: artifact.id,
-            title: artifact.title
-          });
+            title: artifact.title,
+            contentSha256: artifact.contentSha256
+          };
+          resultByItemId.set(item.id, success);
+          recordUploadResult(success);
         } catch (error) {
-          results.push({
+          const failed: ArtifactUploadResult = {
             itemId: item.id,
             fileName: item.file.name,
-            status: "error",
-            error: readErrorMessage(error)
-          });
+            status: isArtifactUploadAbort(error) ? "canceled" : "error",
+            progress: 0,
+            error: isArtifactUploadAbort(error)
+              ? undefined
+              : readErrorMessage(error)
+          };
+          resultByItemId.set(item.id, failed);
+          recordUploadResult(failed);
+        } finally {
+          uploadAbortControllersRef.current.delete(item.id);
         }
-      }
-      return results;
+      };
+
+      const workers = Array.from(
+        {
+          length: Math.min(ARTIFACT_UPLOAD_CONCURRENCY, items.length)
+        },
+        async () => {
+          while (nextItemIndex < items.length) {
+            const item = items[nextItemIndex];
+            nextItemIndex += 1;
+            if (item) {
+              await uploadOne(item);
+            }
+          }
+        }
+      );
+      await Promise.all(workers);
+      return items
+        .map((item) => resultByItemId.get(item.id))
+        .filter((result): result is ArtifactUploadResult => Boolean(result));
     },
     onSuccess: async (results) => {
-      setUploadResults((current) => {
-        const merged = new Map(
-          current.map((result) => [result.itemId, result])
-        );
-        for (const result of results) {
-          merged.set(result.itemId, result);
-        }
-        return Array.from(merged.values());
-      });
       await invalidateArtifacts();
       const firstSuccess = results.find(
         (result) => result.status === "success"
       );
-      if (firstSuccess?.status === "success") {
+      if (firstSuccess?.status === "success" && firstSuccess.artifactId) {
         setUploadedArtifactToOpenId(firstSuccess.artifactId);
       }
     }
   });
+
+  const cancelUploadItem = useCallback(
+    (itemId: string) => {
+      canceledUploadItemIdsRef.current.add(itemId);
+      uploadAbortControllersRef.current.get(itemId)?.abort();
+      const item = uploadFlowValue.items.find(
+        (candidate) => candidate.id === itemId
+      );
+      if (item) {
+        recordUploadResult({
+          itemId,
+          fileName: item.file.name,
+          status: "canceled",
+          progress: 0
+        });
+      }
+    },
+    [recordUploadResult, uploadFlowValue.items]
+  );
+
+  const cancelAllUploads = useCallback(() => {
+    for (const item of uploadFlowValue.items) {
+      const result = uploadResults.find(
+        (candidate) => candidate.itemId === item.id
+      );
+      if (result?.status !== "success") {
+        cancelUploadItem(item.id);
+      }
+    }
+  }, [cancelUploadItem, uploadFlowValue.items, uploadResults]);
+
+  const uploadBatchSnapshot = useCallback(
+    (items: ArtifactUploadQueueItem[]) => ({
+      items,
+      contentProtection: uploadFlowValue.encryptContent
+        ? {
+            mode: "password_encrypted" as const,
+            password: uploadFlowValue.contentPassword,
+            passwordHint: uploadFlowValue.contentPasswordHint
+          }
+        : undefined
+    }),
+    [
+      uploadFlowValue.contentPassword,
+      uploadFlowValue.contentPasswordHint,
+      uploadFlowValue.encryptContent
+    ]
+  );
+
+  const retryUploadItem = useCallback(
+    (item: ArtifactUploadQueueItem) => {
+      canceledUploadItemIdsRef.current.delete(item.id);
+      recordUploadResult({
+        itemId: item.id,
+        fileName: item.file.name,
+        status: "reading",
+        progress: 0
+      });
+      void uploadMutation.mutateAsync(uploadBatchSnapshot([item]));
+    },
+    [recordUploadResult, uploadBatchSnapshot, uploadMutation]
+  );
 
   const patchMutation = useMutation({
     mutationFn: (patch: ArtifactMetadataPatchInput) =>
@@ -929,7 +1266,8 @@ export function ArtifactsPage() {
   });
 
   const findings = scanFindings(selectedArtifact);
-  const versionCount = versionsQuery.data?.versions.length ?? 0;
+  const versionCount =
+    versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
   const auditEvents = auditQuery.data?.events ?? [];
   const downloadDisabledReason = selectedArtifact
     ? selectedArtifact.artifactState === "blocked"
@@ -954,6 +1292,11 @@ export function ArtifactsPage() {
   );
 
   const openUploadDialog = () => {
+    for (const controller of uploadAbortControllersRef.current.values()) {
+      controller.abort();
+    }
+    uploadAbortControllersRef.current.clear();
+    canceledUploadItemIdsRef.current.clear();
     setUploadFlowValue(EMPTY_UPLOAD_FLOW_VALUE);
     setUploadResults([]);
     setUploadDialogError(null);
@@ -1007,14 +1350,9 @@ export function ArtifactsPage() {
               onDrop={(event) => {
                 event.preventDefault();
                 const files = Array.from(event.dataTransfer.files);
-                setUploadResults([]);
-                setUploadDialogError(
-                  files.length + value.items.length >
-                    MAX_ARTIFACT_UPLOAD_QUEUE_FILES
-                    ? `The upload queue accepts at most ${MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files.`
-                    : null
-                );
-                setValue(appendUploadFiles(value, files));
+                const selection = appendUploadFiles(value, files);
+                setUploadDialogError(selection.error);
+                setValue(selection.value);
               }}
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1039,14 +1377,9 @@ export function ArtifactsPage() {
                   className="w-full sm:max-w-xs"
                   onChange={(event) => {
                     const files = Array.from(event.target.files ?? []);
-                    setUploadResults([]);
-                    setUploadDialogError(
-                      files.length + value.items.length >
-                        MAX_ARTIFACT_UPLOAD_QUEUE_FILES
-                        ? `The upload queue accepts at most ${MAX_ARTIFACT_UPLOAD_QUEUE_FILES} files.`
-                        : null
-                    );
-                    setValue(appendUploadFiles(value, files));
+                    const selection = appendUploadFiles(value, files);
+                    setUploadDialogError(selection.error);
+                    setValue(selection.value);
                     event.target.value = "";
                   }}
                 />
@@ -1167,11 +1500,15 @@ export function ArtifactsPage() {
           if (activeItem) {
             return (
               <div className="grid gap-4">
-                <div className="flex flex-col gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 sm:flex-row sm:items-start sm:justify-between">
+                <div
+                  data-upload-detail-panel
+                  tabIndex={-1}
+                  className="flex min-w-0 flex-col gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] sm:flex-row sm:items-start sm:justify-between"
+                >
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">
+                    <h4 className="break-words text-sm font-medium">
                       {activeItem.file.name}
-                    </div>
+                    </h4>
                     <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
                       {formatBytes(activeItem.file.size)} ·{" "}
                       {activeItem.file.type || "unknown type"}
@@ -1201,6 +1538,7 @@ export function ArtifactsPage() {
                   </FlowField>
                   <FlowField label="Source kind">
                     <select
+                      aria-label="Source kind"
                       value={activeItem.sourceKind}
                       onChange={(event) =>
                         setValue(
@@ -1209,7 +1547,7 @@ export function ArtifactsPage() {
                           })
                         )
                       }
-                      className="interactive-tap min-h-10 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                      className="interactive-tap min-h-10 w-full min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
                     >
                       {SOURCE_KIND_OPTIONS.map((option) => (
                         <option key={option} value={option}>
@@ -1290,20 +1628,33 @@ export function ArtifactsPage() {
                   />
                 </FlowField>
 
-                <label className="flex items-center gap-2 text-sm text-[var(--ui-ink-medium)]">
-                  <input
-                    type="checkbox"
-                    checked={activeItem.useLlmEnrichment}
-                    onChange={(event) =>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm text-[var(--ui-ink-medium)]">
+                    Use the configured LLM to fill missing metadata
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Use configured LLM to fill missing metadata for this file"
+                    aria-checked={activeItem.useLlmEnrichment}
+                    className={cn(
+                      "interactive-tap inline-flex min-h-10 w-full items-center justify-between rounded-[22px] border px-3 text-sm sm:w-auto sm:min-w-28",
+                      activeItem.useLlmEnrichment
+                        ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                        : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)]"
+                    )}
+                    onClick={() =>
                       setValue(
                         updateUploadItem(value, activeItem.id, {
-                          useLlmEnrichment: event.target.checked
+                          useLlmEnrichment: !activeItem.useLlmEnrichment
                         })
                       )
                     }
-                  />
-                  Use configured LLM to fill missing metadata for this file
-                </label>
+                  >
+                    <span>{activeItem.useLlmEnrichment ? "On" : "Off"}</span>
+                    <Sparkles className="size-4" />
+                  </button>
+                </div>
                 {value.encryptContent && activeItem.useLlmEnrichment ? (
                   <p className="text-xs leading-5 text-[var(--ui-ink-muted)]">
                     For encrypted uploads, LLM enrichment uses metadata and
@@ -1316,66 +1667,239 @@ export function ArtifactsPage() {
 
           return (
             <div className="grid gap-3">
+              {value.items.length > 0 ? (
+                <section
+                  aria-labelledby="artifact-bulk-defaults-title"
+                  className="grid min-w-0 gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+                >
+                  <div>
+                    <h4
+                      id="artifact-bulk-defaults-title"
+                      className="text-sm font-medium text-[var(--ui-ink-strong)]"
+                    >
+                      Bulk defaults
+                    </h4>
+                    <p className="mt-1 text-xs leading-5 text-[var(--ui-ink-muted)]">
+                      Apply shared retrieval and provenance details, then refine
+                      individual files where needed.
+                    </p>
+                  </div>
+                  <div className="grid min-w-0 gap-3 md:grid-cols-2">
+                    <FlowField label="Default short description">
+                      <Input
+                        value={value.bulkShortDescription}
+                        onChange={(event) =>
+                          setValue({
+                            ...value,
+                            bulkShortDescription: event.target.value
+                          })
+                        }
+                        placeholder="What this batch helps someone find"
+                      />
+                    </FlowField>
+                    <FlowField label="Default source or provenance">
+                      <Input
+                        value={value.bulkSourceLabel}
+                        onChange={(event) =>
+                          setValue({
+                            ...value,
+                            bulkSourceLabel: event.target.value
+                          })
+                        }
+                        placeholder="Where these files came from"
+                      />
+                    </FlowField>
+                    <FlowField label="Default source kind">
+                      <select
+                        aria-label="Default source kind"
+                        value={value.bulkSourceKind}
+                        onChange={(event) =>
+                          setValue({
+                            ...value,
+                            bulkSourceKind: event.target
+                              .value as ArtifactSourceKind
+                          })
+                        }
+                        className="interactive-tap min-h-10 w-full min-w-0 rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] px-3 text-sm text-[var(--ui-ink-strong)]"
+                      >
+                        {SOURCE_KIND_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {titleCase(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </FlowField>
+                    <div className="grid content-end gap-2">
+                      <span className="text-sm font-medium text-[var(--ui-ink-strong)]">
+                        LLM metadata enrichment
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-label="Use LLM enrichment as a bulk default"
+                        aria-checked={value.bulkUseLlmEnrichment}
+                        className={cn(
+                          "interactive-tap inline-flex min-h-10 w-full items-center justify-between rounded-[22px] border px-3 text-sm",
+                          value.bulkUseLlmEnrichment
+                            ? "border-[var(--primary)] bg-[var(--ui-accent-soft)] text-[var(--ui-ink-strong)]"
+                            : "border-[var(--ui-border-subtle)] bg-[var(--ui-surface-2)] text-[var(--ui-ink-muted)]"
+                        )}
+                        onClick={() =>
+                          setValue({
+                            ...value,
+                            bulkUseLlmEnrichment: !value.bulkUseLlmEnrichment
+                          })
+                        }
+                      >
+                        <span>
+                          {value.bulkUseLlmEnrichment ? "Enabled" : "Disabled"}
+                        </span>
+                        <Sparkles className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={uploadMutation.isPending}
+                    onClick={() =>
+                      setValue({
+                        ...value,
+                        items: value.items.map((item) =>
+                          uploadResultByItemId.get(item.id)?.status ===
+                          "success"
+                            ? item
+                            : {
+                                ...item,
+                                shortDescription:
+                                  value.bulkShortDescription ||
+                                  item.shortDescription,
+                                sourceLabel:
+                                  value.bulkSourceLabel || item.sourceLabel,
+                                sourceKind: value.bulkSourceKind,
+                                useLlmEnrichment: value.bulkUseLlmEnrichment
+                              }
+                        )
+                      })
+                    }
+                  >
+                    Apply defaults to queued files
+                  </Button>
+                </section>
+              ) : null}
               {value.items.length === 0 ? (
                 <div className="rounded-[22px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3 text-sm text-[var(--ui-ink-muted)]">
                   Choose files first.
                 </div>
               ) : (
-                value.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="grid gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">
-                          {item.file.name}
+                value.items.map((item) => {
+                  const result = uploadResultByItemId.get(item.id);
+                  const inFlight =
+                    result?.status === "queued" ||
+                    result?.status === "reading" ||
+                    result?.status === "uploading";
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid min-w-0 gap-3 rounded-[24px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {item.file.name}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
+                            {formatBytes(item.file.size)} ·{" "}
+                            {item.file.type || "unknown type"}
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs text-[var(--ui-ink-muted)]">
-                          {formatBytes(item.file.size)} ·{" "}
-                          {item.file.type || "unknown type"}
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Button
+                            data-upload-details-id={item.id}
+                            type="button"
+                            variant="secondary"
+                            disabled={inFlight || result?.status === "success"}
+                            onClick={() =>
+                              setValue({ ...value, activeItemId: item.id })
+                            }
+                          >
+                            <Pencil className="size-4" />
+                            Details
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={inFlight || result?.status === "success"}
+                            onClick={() => {
+                              cancelUploadItem(item.id);
+                              setUploadResults((current) =>
+                                current.filter(
+                                  (candidate) => candidate.itemId !== item.id
+                                )
+                              );
+                              setValue(removeUploadItem(value, item.id));
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                            Remove
+                          </Button>
+                          {inFlight ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => cancelUploadItem(item.id)}
+                            >
+                              <XCircle className="size-4" />
+                              Cancel
+                            </Button>
+                          ) : null}
+                          {(result?.status === "error" ||
+                            result?.status === "canceled") &&
+                          !uploadMutation.isPending ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => retryUploadItem(item)}
+                            >
+                              <RotateCcw className="size-4" />
+                              Retry
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() =>
-                            setValue({ ...value, activeItemId: item.id })
-                          }
-                        >
-                          <Pencil className="size-4" />
-                          Details
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() =>
-                            setValue(removeUploadItem(value, item.id))
-                          }
-                        >
-                          <Trash2 className="size-4" />
-                          Remove
-                        </Button>
+                      <Input
+                        aria-label={`Short description for ${item.file.name}`}
+                        disabled={inFlight || result?.status === "success"}
+                        value={item.shortDescription}
+                        onChange={(event) =>
+                          setValue(
+                            updateUploadItem(value, item.id, {
+                              shortDescription: event.target.value
+                            })
+                          )
+                        }
+                        placeholder="Quick short description"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <UploadResultBadge result={result} />
+                        {result?.status === "success" ? (
+                          <span className="text-xs text-[var(--ui-ink-muted)]">
+                            Saved in the Artifact Store
+                          </span>
+                        ) : null}
                       </div>
+                      <UploadProgressState result={result} />
+                      {result?.status === "error" ? (
+                        <p
+                          role="alert"
+                          className="break-words text-sm text-[var(--danger)]"
+                        >
+                          {result.error}
+                        </p>
+                      ) : null}
                     </div>
-                    <Input
-                      aria-label={`Short description for ${item.file.name}`}
-                      value={item.shortDescription}
-                      onChange={(event) =>
-                        setValue(
-                          updateUploadItem(value, item.id, {
-                            shortDescription: event.target.value
-                          })
-                        )
-                      }
-                      placeholder="Quick short description"
-                    />
-                    <UploadResultBadge
-                      result={uploadResultByItemId.get(item.id)}
-                    />
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           );
@@ -1394,6 +1918,18 @@ export function ArtifactsPage() {
           const failureCount = uploadResults.filter(
             (result) => result.status === "error"
           ).length;
+          const canceledCount = uploadResults.filter(
+            (result) => result.status === "canceled"
+          ).length;
+          const contentHashCounts = new Map<string, number>();
+          for (const result of uploadResults) {
+            if (result.status === "success" && result.contentSha256) {
+              contentHashCounts.set(
+                result.contentSha256,
+                (contentHashCounts.get(result.contentSha256) ?? 0) + 1
+              );
+            }
+          }
 
           return (
             <div className="grid gap-4">
@@ -1404,14 +1940,30 @@ export function ArtifactsPage() {
                     Upload results
                   </div>
                   <p className="mt-2 text-sm text-[var(--ui-ink-muted)]">
-                    {successCount} uploaded · {failureCount} failed
+                    {successCount} uploaded · {failureCount} failed ·{" "}
+                    {canceledCount} canceled
                   </p>
+                  {uploadMutation.isPending ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={cancelAllUploads}
+                    >
+                      <XCircle className="size-4" />
+                      Cancel remaining uploads
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
 
               <div className="grid gap-3">
                 {value.items.map((item) => {
                   const result = uploadResultByItemId.get(item.id);
+                  const inFlight =
+                    result?.status === "queued" ||
+                    result?.status === "reading" ||
+                    result?.status === "uploading";
                   return (
                     <div
                       key={item.id}
@@ -1431,12 +1983,50 @@ export function ArtifactsPage() {
                             </p>
                           ) : null}
                         </div>
-                        <UploadResultBadge result={result} />
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <UploadResultBadge result={result} />
+                          {inFlight ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => cancelUploadItem(item.id)}
+                            >
+                              <XCircle className="size-4" />
+                              Cancel {item.file.name}
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
+                      <UploadProgressState result={result} />
+                      {result?.status === "success" &&
+                      result.contentSha256 &&
+                      (contentHashCounts.get(result.contentSha256) ?? 0) > 1 ? (
+                        <p className="mt-3 text-xs leading-5 text-[var(--ui-ink-muted)]">
+                          {value.encryptContent
+                            ? "These bytes match another queued file. Forge kept this file's metadata separate and stored an independently encrypted ciphertext representation."
+                            : "These bytes match another queued file. Forge kept this file's metadata separate and reused the verified stored blob."}
+                        </p>
+                      ) : null}
                       {result?.status === "error" ? (
-                        <p className="mt-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]">
+                        <p
+                          role="alert"
+                          className="mt-3 rounded-[18px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-3 py-2 text-sm text-[var(--danger)]"
+                        >
                           {result.error}
                         </p>
+                      ) : null}
+                      {(result?.status === "error" ||
+                        result?.status === "canceled") &&
+                      !uploadMutation.isPending ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="mt-3"
+                          onClick={() => retryUploadItem(item)}
+                        >
+                          <RotateCcw className="size-4" />
+                          Retry {item.file.name}
+                        </Button>
                       ) : null}
                     </div>
                   );
@@ -1447,7 +2037,14 @@ export function ArtifactsPage() {
         }
       }
     ],
-    [uploadResultByItemId, uploadResults]
+    [
+      cancelAllUploads,
+      cancelUploadItem,
+      retryUploadItem,
+      uploadMutation.isPending,
+      uploadResultByItemId,
+      uploadResults
+    ]
   );
 
   const metadataFlowSteps = useMemo<
@@ -1823,7 +2420,10 @@ export function ArtifactsPage() {
       return;
     }
     setUploadDialogError(null);
-    await uploadMutation.mutateAsync(itemsToUpload);
+    for (const item of itemsToUpload) {
+      canceledUploadItemIdsRef.current.delete(item.id);
+    }
+    await uploadMutation.mutateAsync(uploadBatchSnapshot(itemsToUpload));
   };
 
   const submitMetadataFlow = async () => {
@@ -2400,16 +3000,6 @@ export function ArtifactsPage() {
                       mono
                     />
                     <ArtifactMetadataField
-                      label="Storage key"
-                      value={selectedArtifact.storageKey}
-                      mono
-                    />
-                    <ArtifactMetadataField
-                      label="Storage path"
-                      value={selectedArtifact.storagePath}
-                      mono
-                    />
-                    <ArtifactMetadataField
                       label="Created"
                       value={formatDateTime(selectedArtifact.createdAt)}
                     />
@@ -2524,14 +3114,31 @@ export function ArtifactsPage() {
                       role="alert"
                     >
                       <span>{readErrorMessage(versionsQuery.error)}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void versionsQuery.refetch()}
-                      >
-                        Retry versions
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {versionPageIndex > 0 ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              setVersionPageIndex((current) =>
+                                Math.max(0, current - 1)
+                              )
+                            }
+                          >
+                            <ChevronLeft className="size-4" />
+                            Previous page
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void versionsQuery.refetch()}
+                        >
+                          Retry versions
+                        </Button>
+                      </div>
                     </div>
                   ) : (versionsQuery.data?.versions ?? []).length === 0 ? (
                     <p className="text-sm text-[var(--ui-ink-muted)]">
@@ -2571,6 +3178,53 @@ export function ArtifactsPage() {
                       </div>
                     ))
                   )}
+                  {versionsQuery.data &&
+                  versionsQuery.data.versions.length > 0 ? (
+                    <div className="flex min-h-9 items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
+                      <span>
+                        Showing {versionsQuery.data.offset + 1}-
+                        {Math.min(
+                          versionsQuery.data.offset +
+                            versionsQuery.data.versions.length,
+                          versionsQuery.data.total
+                        )}{" "}
+                        of {versionsQuery.data.total}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            versionPageIndex === 0 || versionsQuery.isFetching
+                          }
+                          onClick={() =>
+                            setVersionPageIndex((current) =>
+                              Math.max(0, current - 1)
+                            )
+                          }
+                          aria-label="Previous artifact version page"
+                        >
+                          <ChevronLeft className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            !versionsQuery.data.hasMore ||
+                            versionsQuery.isFetching
+                          }
+                          onClick={() =>
+                            setVersionPageIndex((current) => current + 1)
+                          }
+                          aria-label="Next artifact version page"
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </Card>
 
                 <Card className="space-y-3">
@@ -2588,21 +3242,38 @@ export function ArtifactsPage() {
                       role="alert"
                     >
                       <span>{readErrorMessage(auditQuery.error)}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void auditQuery.refetch()}
-                      >
-                        Retry audit history
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {auditPageIndex > 0 ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              setAuditPageIndex((current) =>
+                                Math.max(0, current - 1)
+                              )
+                            }
+                          >
+                            <ChevronLeft className="size-4" />
+                            Previous page
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void auditQuery.refetch()}
+                        >
+                          Retry audit history
+                        </Button>
+                      </div>
                     </div>
                   ) : auditEvents.length === 0 ? (
                     <p className="text-sm text-[var(--ui-ink-muted)]">
                       No audit events are recorded.
                     </p>
                   ) : (
-                    auditEvents.slice(0, 10).map((event) => (
+                    auditEvents.map((event) => (
                       <div
                         key={event.id}
                         className="rounded-[var(--radius-card)] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] p-3 text-sm"
@@ -2621,11 +3292,49 @@ export function ArtifactsPage() {
                       </div>
                     ))
                   )}
-                  {auditEvents.length > 10 ? (
-                    <p className="text-xs text-[var(--ui-ink-muted)]">
-                      Showing 10 most recent of {auditEvents.length} loaded
-                      events.
-                    </p>
+                  {auditQuery.data && auditEvents.length > 0 ? (
+                    <div className="flex min-h-9 items-center justify-between gap-3 text-xs text-[var(--ui-ink-muted)]">
+                      <span>
+                        Showing {auditQuery.data.offset + 1}-
+                        {Math.min(
+                          auditQuery.data.offset + auditEvents.length,
+                          auditQuery.data.total
+                        )}{" "}
+                        of {auditQuery.data.total}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            auditPageIndex === 0 || auditQuery.isFetching
+                          }
+                          onClick={() =>
+                            setAuditPageIndex((current) =>
+                              Math.max(0, current - 1)
+                            )
+                          }
+                          aria-label="Previous artifact audit page"
+                        >
+                          <ChevronLeft className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={
+                            !auditQuery.data.hasMore || auditQuery.isFetching
+                          }
+                          onClick={() =>
+                            setAuditPageIndex((current) => current + 1)
+                          }
+                          aria-label="Next artifact audit page"
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
                   ) : null}
                 </Card>
               </div>
@@ -2637,8 +3346,18 @@ export function ArtifactsPage() {
       <QuestionFlowDialog
         open={uploadDialogOpen}
         onOpenChange={(open) => {
+          if (!open && uploadMutation.isPending) {
+            cancelAllUploads();
+            setUploadDialogError(
+              "Canceling active uploads. The queue will stay open so you can retry any request whose response was interrupted."
+            );
+            return;
+          }
           setUploadDialogOpen(open);
           if (!open) {
+            setUploadFlowValue(EMPTY_UPLOAD_FLOW_VALUE);
+            setUploadResults([]);
+            canceledUploadItemIdsRef.current.clear();
             setUploadDialogError(null);
           }
         }}
@@ -2649,13 +3368,19 @@ export function ArtifactsPage() {
         onChange={setUploadFlowValue}
         steps={uploadFlowSteps}
         pending={uploadMutation.isPending}
-        pendingLabel="Uploading"
+        pendingLabel="Uploading files"
         submitLabel={
-          uploadFlowValue.items.some(
-            (item) => uploadResultByItemId.get(item.id)?.status !== "success"
+          uploadResults.some(
+            (result) =>
+              result.status === "error" || result.status === "canceled"
           )
-            ? "Upload artifacts"
-            : "All files uploaded"
+            ? "Retry unfinished files"
+            : uploadFlowValue.items.some(
+                  (item) =>
+                    uploadResultByItemId.get(item.id)?.status !== "success"
+                )
+              ? "Upload artifacts"
+              : "All files uploaded"
         }
         error={
           uploadDialogError ??

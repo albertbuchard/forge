@@ -1,0 +1,104 @@
+{
+  "name": "forge-connectivity-service",
+  "version": "0.1.0",
+  "description": "Self-hosted, content-blind connectivity reference service for Forge peers.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/albertbuchard/forge.git",
+    "directory": "packages/forge-connectivity-service"
+  },
+  "homepage": "https://github.com/albertbuchard/forge/tree/main/packages/forge-connectivity-service#readme",
+  "bugs": {
+    "url": "https://github.com/albertbuchard/forge/issues"
+  },
+  "keywords": [
+    "forge",
+    "connectivity",
+    "ciphertext",
+    "mailbox",
+    "self-hosted"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "packageManager": "npm@11.12.1",
+  "bin": {
+    "forge-connectivity-service": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "openapi",
+    "scripts/healthcheck.mjs",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --import tsx --test --test-concurrency=1 test/unit/*.test.ts test/integration/*.test.ts test/upgrade/*.test.ts test/abuse/*.test.ts test/load/*.test.ts",
+    "test:unit": "node --import tsx --test --test-concurrency=1 test/unit/*.test.ts",
+    "test:integration": "node --import tsx --test --test-concurrency=1 test/integration/*.test.ts",
+    "test:upgrade": "node --import tsx --test --test-concurrency=1 test/upgrade/*.test.ts",
+    "test:abuse": "node --import tsx --test --test-concurrency=1 test/abuse/*.test.ts",
+    "test:load": "node --import tsx --test --test-concurrency=1 test/load/*.test.ts",
+    "test:coverage": "node --import tsx --test --test-concurrency=1 --experimental-test-coverage test/unit/*.test.ts test/integration/*.test.ts test/upgrade/*.test.ts test/abuse/*.test.ts test/load/*.test.ts",
+    "openapi:write": "node --import tsx scripts/export-openapi.ts --write",
+    "openapi:check": "node --import tsx scripts/export-openapi.ts --check",
+    "container:check": "node scripts/check-dockerfile.mjs",
+    "license:check": "node scripts/check-licenses.mjs",
+    "sbom": "npm sbom --package-lock-only --omit=dev --sbom-format=cyclonedx --sbom-type=application",
+    "sbom:check": "node scripts/check-sbom.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "audit": "npm audit --omit=dev --audit-level=high",
+    "verify": "npm run format:check && npm run lint && npm run check && npm run test && npm run build && npm run openapi:check && npm run container:check && npm run license:check && npm run sbom:check && npm run release:check",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "healthcheck": "node scripts/healthcheck.mjs",
+    "prepack": "npm run verify"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.8.1",
+    "fastify": "^5.8.5",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.29.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.29.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.34.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

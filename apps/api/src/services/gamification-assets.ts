@@ -1,7 +1,16 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
 import { getEffectiveDataRoot } from "../db.js";
@@ -31,11 +40,18 @@ export type GamificationAssetStyleStatus = {
 };
 
 const assetVersion = GAMIFICATION_ASSET_VERSION;
+const trustedGithubDownloadOrigins = new Set(["https://github.com"]);
+const staleStagingMinimumAgeMs = 60 * 60 * 1_000;
+const maximumStagingDirectoriesCleanedPerInstall = 16;
 const defaultReleaseBaseUrl = `https://github.com/albertbuchard/forge/releases/download/forge-gamification-assets-v${assetVersion}`;
 const styleDefinitions: Array<
   Omit<
     GamificationAssetStyleStatus,
-    "downloadUrl" | "installed" | "spriteCount" | "expectedSpriteCount" | "installedAt"
+    | "downloadUrl"
+    | "installed"
+    | "spriteCount"
+    | "expectedSpriteCount"
+    | "installedAt"
   >
 > = [
   {
@@ -71,12 +87,13 @@ export const defaultGamificationAssetStyle: GamificationAssetStyleId =
   "dramatic-smithie";
 
 function getCustomReleaseBaseUrl() {
-  return process.env.FORGE_GAMIFICATION_ASSET_BASE_URL?.trim().replace(/\/+$/, "");
+  return process.env.FORGE_GAMIFICATION_ASSET_BASE_URL?.trim().replace(
+    /\/+$/,
+    ""
+  );
 }
 
-function getDownloadUrl(
-  style: (typeof styleDefinitions)[number]
-) {
+function getDownloadUrl(style: (typeof styleDefinitions)[number]) {
   const customReleaseBaseUrl = getCustomReleaseBaseUrl();
   return `${customReleaseBaseUrl ?? defaultReleaseBaseUrl}/${style.fileName}`;
 }
@@ -127,7 +144,10 @@ function getStyleRoot(styleId: GamificationAssetStyleId) {
 }
 
 function getMarkerPath(styleId: GamificationAssetStyleId) {
-  return path.join(getStyleRoot(styleId), ".forge-gamification-style-ready.json");
+  return path.join(
+    getStyleRoot(styleId),
+    ".forge-gamification-style-ready.json"
+  );
 }
 
 async function countReadableFiles(root: string, relativePaths: Set<string>) {
@@ -183,19 +203,27 @@ export async function getGamificationAssetStatus() {
   };
 }
 
-function buildDownloadHeaders(url: string) {
+function isTrustedGithubDownloadUrl(url: string) {
+  try {
+    return trustedGithubDownloadOrigins.has(new URL(url).origin.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export function buildGamificationAssetDownloadHeaders(url: string) {
   const headers: Record<string, string> = {
     Accept: "application/octet-stream"
   };
   const token = resolveGithubTokenForDownload(url);
-  if (token && /github\.com/i.test(url)) {
+  if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
   return headers;
 }
 
 function resolveGithubTokenForDownload(url: string) {
-  if (!/github\.com/i.test(url)) {
+  if (!isTrustedGithubDownloadUrl(url)) {
     return undefined;
   }
   const envToken =
@@ -211,10 +239,7 @@ function resolveGithubTokenForDownload(url: string) {
   return cliToken || undefined;
 }
 
-function validateArchive(
-  styleId: GamificationAssetStyleId,
-  archive: AdmZip
-) {
+function validateArchive(styleId: GamificationAssetStyleId, archive: AdmZip) {
   const expectedPaths = getExpectedSpritePaths(styleId);
   const entriesByName = new Map(
     archive
@@ -225,7 +250,9 @@ function validateArchive(
         return [entry.entryName, entry] as const;
       })
   );
-  const missing = [...expectedPaths].filter((entryName) => !entriesByName.has(entryName));
+  const missing = [...expectedPaths].filter(
+    (entryName) => !entriesByName.has(entryName)
+  );
   const unexpected = [...entriesByName.keys()].filter(
     (entryName) => !expectedPaths.has(entryName)
   );
@@ -237,14 +264,196 @@ function validateArchive(
   return { expectedPaths, entriesByName };
 }
 
+type AtomicDirectoryFileOperations = {
+  lstat?: typeof lstat;
+  mkdir?: typeof mkdir;
+  readdir?: typeof readdir;
+  rename?: typeof rename;
+  rm?: typeof rm;
+  writeFile?: typeof writeFile;
+};
+
+const atomicDirectoryReplacementTails = new Map<string, Promise<void>>();
+
+async function cleanupStaleGamificationAssetStagingDirectories(
+  targetRoot: string,
+  currentStagingRoot: string,
+  operations: Required<AtomicDirectoryFileOperations>
+) {
+  const parentRoot = path.dirname(targetRoot);
+  const stagingPrefix = `${path.basename(targetRoot)}.staging-`;
+  let entries: string[];
+  try {
+    entries = await operations.readdir(parentRoot);
+  } catch {
+    return;
+  }
+
+  const staleDirectories: Array<{ path: string; modifiedAt: number }> = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(stagingPrefix)) {
+      continue;
+    }
+    const suffix = entry.slice(stagingPrefix.length);
+    if (!/^[a-f0-9]{12}$/.test(suffix)) {
+      continue;
+    }
+    const candidatePath = path.join(parentRoot, entry);
+    if (candidatePath === currentStagingRoot) {
+      continue;
+    }
+    try {
+      const candidate = await operations.lstat(candidatePath);
+      if (
+        !candidate.isDirectory() ||
+        Date.now() - candidate.mtimeMs < staleStagingMinimumAgeMs
+      ) {
+        continue;
+      }
+      staleDirectories.push({
+        path: candidatePath,
+        modifiedAt: candidate.mtimeMs
+      });
+    } catch {
+      // A concurrent process may have completed cleanup already.
+    }
+  }
+
+  staleDirectories.sort((left, right) => left.modifiedAt - right.modifiedAt);
+  for (const staleDirectory of staleDirectories.slice(
+    0,
+    maximumStagingDirectoriesCleanedPerInstall
+  )) {
+    await operations
+      .rm(staleDirectory.path, { recursive: true, force: true })
+      .catch(() => undefined);
+  }
+}
+
+async function withAtomicDirectoryReplacementLock<T>(
+  targetRoot: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous =
+    atomicDirectoryReplacementTails.get(targetRoot) ?? Promise.resolve();
+  let release: () => void = () => undefined;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.catch(() => undefined).then(() => current);
+  atomicDirectoryReplacementTails.set(targetRoot, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (atomicDirectoryReplacementTails.get(targetRoot) === tail) {
+      atomicDirectoryReplacementTails.delete(targetRoot);
+    }
+  }
+}
+
+async function replaceGamificationAssetDirectoryWithoutLock(
+  targetRoot: string,
+  writeStagedDirectory: (
+    stagingRoot: string,
+    operations: Required<AtomicDirectoryFileOperations>
+  ) => Promise<void>,
+  fileOperations: AtomicDirectoryFileOperations = {}
+) {
+  const operations: Required<AtomicDirectoryFileOperations> = {
+    lstat: fileOperations.lstat ?? lstat,
+    mkdir: fileOperations.mkdir ?? mkdir,
+    readdir: fileOperations.readdir ?? readdir,
+    rename: fileOperations.rename ?? rename,
+    rm: fileOperations.rm ?? rm,
+    writeFile: fileOperations.writeFile ?? writeFile
+  };
+  const operationId = randomUUID().replaceAll("-", "").slice(0, 12);
+  const stagingRoot = `${targetRoot}.staging-${operationId}`;
+  const backupRoot = `${targetRoot}.backup`;
+  let movedExistingInstall = false;
+  try {
+    await operations.rm(stagingRoot, { recursive: true, force: true });
+    await cleanupStaleGamificationAssetStagingDirectories(
+      targetRoot,
+      stagingRoot,
+      operations
+    );
+    if (existsSync(backupRoot)) {
+      if (existsSync(targetRoot)) {
+        // The target is the committed pack; this is a stale cleanup copy.
+        await operations.rm(backupRoot, { recursive: true, force: true });
+      } else {
+        // A process stopped after moving the active pack but before commit.
+        await operations.rename(backupRoot, targetRoot);
+      }
+    }
+    await writeStagedDirectory(stagingRoot, operations);
+    if (existsSync(targetRoot)) {
+      await operations.rename(targetRoot, backupRoot);
+      movedExistingInstall = true;
+    }
+    await operations.rename(stagingRoot, targetRoot);
+    if (movedExistingInstall) {
+      movedExistingInstall = false;
+      // The staging rename is the commit point. Cleanup must not turn a
+      // successful install into a reported failure with the new pack active.
+      await operations
+        .rm(backupRoot, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+  } catch (error) {
+    await operations
+      .rm(stagingRoot, { recursive: true, force: true })
+      .catch(() => undefined);
+    if (movedExistingInstall && !existsSync(targetRoot)) {
+      try {
+        await operations.rename(backupRoot, targetRoot);
+        movedExistingInstall = false;
+      } catch (restoreError) {
+        throw new AggregateError(
+          [error, restoreError],
+          `Gamification asset installation failed and the previous pack remains at ${backupRoot}.`
+        );
+      }
+    }
+    throw error;
+  } finally {
+    if (!movedExistingInstall) {
+      await operations
+        .rm(backupRoot, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+  }
+}
+
+export async function replaceGamificationAssetDirectoryAtomically(
+  targetRoot: string,
+  writeStagedDirectory: (
+    stagingRoot: string,
+    operations: Required<AtomicDirectoryFileOperations>
+  ) => Promise<void>,
+  fileOperations: AtomicDirectoryFileOperations = {}
+) {
+  return withAtomicDirectoryReplacementLock(targetRoot, () =>
+    replaceGamificationAssetDirectoryWithoutLock(
+      targetRoot,
+      writeStagedDirectory,
+      fileOperations
+    )
+  );
+}
+
 export async function installGamificationAssetStyle(
   styleId: GamificationAssetStyleId,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  fileOperations: AtomicDirectoryFileOperations = {}
 ) {
   const style = getStyleDefinition(styleId);
   const downloadUrl = getDownloadUrl(style);
   const response = await fetchImpl(downloadUrl, {
-    headers: buildDownloadHeaders(downloadUrl)
+    headers: buildGamificationAssetDownloadHeaders(downloadUrl)
   });
   if (!response.ok) {
     throw new Error(
@@ -253,7 +462,9 @@ export async function installGamificationAssetStyle(
   }
 
   const archivePayload = Buffer.from(await response.arrayBuffer());
-  const actualSha256 = createHash("sha256").update(archivePayload).digest("hex");
+  const actualSha256 = createHash("sha256")
+    .update(archivePayload)
+    .digest("hex");
   if (actualSha256 !== style.sha256) {
     throw new Error(
       `Gamification asset checksum mismatch for ${style.id}. Expected ${style.sha256}, got ${actualSha256}.`
@@ -263,32 +474,49 @@ export async function installGamificationAssetStyle(
   const archive = new AdmZip(archivePayload);
   const { expectedPaths, entriesByName } = validateArchive(style.id, archive);
   const targetRoot = getStyleRoot(style.id);
-  await rm(targetRoot, { recursive: true, force: true });
-  for (const relativePath of expectedPaths) {
-    const entry = entriesByName.get(relativePath);
-    if (!entry) {
-      throw new Error(`Missing gamification archive entry: ${relativePath}`);
-    }
-    const targetPath = path.join(targetRoot, relativePath);
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await writeFile(targetPath, entry.getData());
-  }
+  await replaceGamificationAssetDirectoryAtomically(
+    targetRoot,
+    async (stagingRoot, operations) => {
+      for (const relativePath of expectedPaths) {
+        const entry = entriesByName.get(relativePath);
+        if (!entry) {
+          throw new Error(
+            `Missing gamification archive entry: ${relativePath}`
+          );
+        }
+        const stagingPath = path.join(stagingRoot, relativePath);
+        await operations.mkdir(path.dirname(stagingPath), { recursive: true });
+        await operations.writeFile(stagingPath, entry.getData());
+      }
 
-  await writeFile(
-    getMarkerPath(style.id),
-    `${JSON.stringify(
-      {
-        style: style.id,
-        version: assetVersion,
-        sha256: style.sha256,
-        spriteCount: expectedPaths.size,
-        installedAt: new Date().toISOString(),
-        source: downloadUrl
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
+      await operations.writeFile(
+        path.join(stagingRoot, ".forge-gamification-style-ready.json"),
+        `${JSON.stringify(
+          {
+            style: style.id,
+            version: assetVersion,
+            sha256: style.sha256,
+            spriteCount: expectedPaths.size,
+            installedAt: new Date().toISOString(),
+            source: downloadUrl
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      );
+
+      const stagedSpriteCount = await countReadableFiles(
+        stagingRoot,
+        expectedPaths
+      );
+      if (stagedSpriteCount !== expectedPaths.size) {
+        throw new Error(
+          `Gamification style staging validation failed for ${style.id}: expected ${expectedPaths.size} sprites, found ${stagedSpriteCount}.`
+        );
+      }
+    },
+    fileOperations
   );
   return getStyleStatus(style.id);
 }
@@ -300,24 +528,44 @@ export async function resolveGamificationSpriteAssetPath(
   try {
     assertSafeRelativePath(safePath);
   } catch {
-    return path.join(getEffectiveDataRoot(), "runtime-assets", "missing-gamification-asset");
+    return path.join(
+      getEffectiveDataRoot(),
+      "runtime-assets",
+      "missing-gamification-asset"
+    );
   }
 
   const match = /^themes\/([^/]+)\//.exec(safePath);
   if (!match) {
-    return path.join(getEffectiveDataRoot(), "runtime-assets", "missing-gamification-asset");
+    return path.join(
+      getEffectiveDataRoot(),
+      "runtime-assets",
+      "missing-gamification-asset"
+    );
   }
   const styleId = match[1] as GamificationAssetStyleId;
   const style = styleDefinitions.find((candidate) => candidate.id === styleId);
   if (!style) {
-    return path.join(getEffectiveDataRoot(), "runtime-assets", "missing-gamification-asset");
+    return path.join(
+      getEffectiveDataRoot(),
+      "runtime-assets",
+      "missing-gamification-asset"
+    );
   }
   if (!getExpectedSpritePaths(style.id).has(safePath)) {
-    return path.join(getEffectiveDataRoot(), "runtime-assets", "missing-gamification-asset");
+    return path.join(
+      getEffectiveDataRoot(),
+      "runtime-assets",
+      "missing-gamification-asset"
+    );
   }
   const status = await getStyleStatus(style.id);
   if (!status.installed) {
-    return path.join(getEffectiveDataRoot(), "runtime-assets", "missing-gamification-asset");
+    return path.join(
+      getEffectiveDataRoot(),
+      "runtime-assets",
+      "missing-gamification-asset"
+    );
   }
   return path.join(getStyleRoot(style.id), safePath);
 }

@@ -144,6 +144,7 @@ The intended workflow is:
 - use `forge_grant_reward_bonus` only when a manual XP bonus or penalty should be explicit and auditable
 - use first-class `note` entities for Markdown progress evidence, handoff context, and multi-entity work summaries
 - use the dedicated wiki tools for SQLite-backed knowledge work, not the batch entity routes
+- browse compact wiki summaries with offsets through 9,999, then fetch full page detail only for selected documents; `forge_search_wiki` is a read-only ranked lookup with a 500-character query, 20-token FTS, and offset 999 ceiling
 - use `forge_get_sleep_overview`, `forge_get_sports_overview`, `forge_get_training_load_overview`, `forge_get_weight_loss_overview`, `forge_update_sleep_session`, and `forge_update_workout_session` for the first-class health surfaces
 - use `forge_parse_food_log_with_chatgpt` for rough food text or photo descriptions through the configured `openai-codex` ChatGPT subscription connection; this path must not fall back to metered OpenAI Platform API billing
 - use `forge_log_food`, `forge_log_body_checkin`, `forge_log_appearance_checkin`, `forge_log_subjective_food_effect`, `forge_log_gut_checkin`, `forge_get_nutrition_patterns`, `forge_start_nutrition_experiment`, and `forge_update_nutrition_experiment` for nutrition/body evidence and N-of-1 food experiments
@@ -185,7 +186,7 @@ handoff when the user wants to play the comparison game visually.
 
 Forge exposes several agent-facing surfaces that matter for OpenClaw:
 
-- Wiki is the SQLite-backed memory layer. Use the dedicated wiki tools so page rows, backlinks, search, and ingest metadata stay aligned.
+- Wiki is the SQLite-backed memory layer. Use the dedicated wiki tools so page rows, backlinks, search, and ingest metadata stay aligned. Scoped tokens can access shared spaces and only their allowed users' personal spaces; maintenance and ingest routes enforce the same space boundary.
 - Life Events are chronological records for important personal events. Use shared batch CRUD for normal `life_event` create, update, search, delete, restore, and generic links. Use `forge_call_life_event_route` for timeline reads, one-event reads, calendar sync, marking a calendar event as a Life Event, ticket artifact import, and travel-status reads.
 - Sleep is a first-class reflective surface. Use `forge_get_sleep_overview` for review and `forge_update_sleep_session` to attach tags, notes, or Forge links to one night.
 - Sports is the workout review surface. Use `forge_get_sports_overview` for read access and `forge_update_workout_session` to add subjective effort, narrative meaning, tags, or links to one workout.
@@ -208,7 +209,8 @@ Forge notes are the durable collaboration record across the app, API, and plugin
 
 - use `note` as the only collaboration entity name
 - use `/api/v1/notes` and the batch entity routes, not legacy comment routes
-- notes can link to one or many goals, projects, tasks, and Psyche records
+- notes can link to one or many compatible Forge entities through the general link model
+- normal note reads and writes use the shared batch routes; when Psyche authentication is enabled, Psyche-linked reads require `psyche.read` and mutations require `psyche.note`
 - goal, project, and task creation can include nested `notes`
 - task completion, task release, and retroactive work logging can include `closeoutNote`
 - the main detail views and the global `/forge/notes` page now surface these records directly in the UI
@@ -334,7 +336,7 @@ Field examples:
 - `belief_entry` uses `statement` and `beliefType`, not ad-hoc fields like `title` or `belief`
 - `behavior_pattern` uses `cueContexts`, `shortTermPayoff`, `longTermCost`, and `preferredResponse`
 - `mode_guide_session` creates require `summary` and `answers`; `results` stays optional candidate interpretation output rather than a free-form note
-- `event_type` and `emotion_definition` are reusable Psyche taxonomies that support reports
+- `event_type` and `emotion_definition` are reusable Psyche taxonomies that support reports. Batch searches support per-search `userIds`; batch creates support per-operation `idempotencyKey`, which must stay stable only across an exact retry and remains consumed after hard deletion. Batch agent access requires the base read/write scope plus `psyche.read`/`psyche.write`, while the dedicated vocabulary routes require the corresponding Psyche scope.
 - `trigger_report` uses nested arrays for `emotions`, `thoughts`, and `behaviors`, plus a structured `consequences` object
 - live work is handled through task runs, not just task status
 - minute corrections on existing tasks or projects go through `/api/v1/work-adjustments`, not `/api/v1/operator/log-work`
@@ -650,6 +652,10 @@ Calendar tools:
 - work-block templates accept optional `startsOn` / `endsOn` `YYYY-MM-DD` bounds; omitting `endsOn` keeps the block repeating indefinitely
 - holiday blocks should normally use `kind: "holiday"` with `weekDays: [0,1,2,3,4,5,6]` and `startMinute: 0`, `endMinute: 1440`
 - `forge_recommend_task_timeboxes` and `forge_create_task_timebox` for future planning and confirmation
+- recommendations are read-only, require the user's IANA `timezone`, and return at most 12 slots
+- direct create requires `taskId`, `title`, `startsAt`, and `endsAt`; optional fields are `status`, `overrideReason`, `activityPresetKey`, `customSustainRateApPerHour`, and `userId`
+- `activityPresetKey` accepts `deep_work`, `admin`, `maintenance`, `meeting`, `recovery_break`, `holiday_leisure`, `light_context`, or `task_inherited`
+- provider-backed timebox deletion disappears from normal reads immediately; Forge keeps a durable cleanup operation until the provider acknowledges the remote delete
 
 `forge_heartbeat_task_run`:
 

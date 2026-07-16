@@ -57,6 +57,7 @@ import type {
   PsycheValue,
   TriggerReport
 } from "@/lib/psyche-types";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 
 type ForgeApiQueryError = unknown;
 type AsyncResult<T> = T extends (...args: never[]) => infer TResult
@@ -184,7 +185,8 @@ export const forgeApi = createApi({
       AsyncResult<typeof getXpMetrics>,
       string[] | void
     >({
-      queryFn: (userIds) => resolveResult(() => getXpMetrics(userIds)),
+      queryFn: (userIds) =>
+        resolveResult(() => getXpMetrics(userIds, getRuntimeTimeZone())),
       providesTags: ["Gamification"]
     }),
     markGamificationCelebrationSeen: builder.mutation<

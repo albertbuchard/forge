@@ -6,12 +6,13 @@ import test from "node:test";
 import { buildServer } from "./app.js";
 import { closeDatabase, getDatabase } from "./db.js";
 import { listActivityEvents } from "./repositories/activity-events.js";
+import { listNotes } from "./repositories/notes.js";
 import {
   createProject,
   planProjectLifecycleTransition
 } from "./repositories/projects.js";
 import { createTask, getTaskById } from "./repositories/tasks.js";
-import type { Project, Task, WorkItemLevel } from "./types.js";
+import type { Note, Project, Task, WorkItemLevel } from "./types.js";
 
 const statuses = ["active", "paused", "completed"] as const;
 
@@ -151,6 +152,129 @@ test("project lifecycle transition matrix only cascades on first entry into comp
       });
     }
   }
+});
+
+test("project closeout persists one owned Note with exact generic links and no fabricated task evidence", async () => {
+  await withTestServer(async (app) => {
+    const cookie = await issueOperatorSessionCookie(app);
+    const project = createLifecycleProject("Closeout note project");
+    const issue = createWorkItem({
+      project,
+      title: "Closeout issue",
+      level: "issue"
+    });
+    const taskItem = createWorkItem({
+      project,
+      title: "Closeout task",
+      level: "task",
+      parentWorkItemId: issue.id
+    });
+    const contentMarkdown = [
+      "## PLAN-17 closeout",
+      "",
+      "The durable project evidence is linked without inventing child evidence."
+    ].join("\n");
+    const suppliedLinks = [
+      {
+        entityType: "artifact" as const,
+        entityId: "artifact_plan_17_closeout",
+        anchorKey: "final-evidence"
+      },
+      {
+        entityType: "goal" as const,
+        entityId: project.goalId,
+        anchorKey: "outcome"
+      }
+    ];
+
+    const closeout = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}`,
+      headers: { cookie },
+      payload: {
+        title: "Closed with durable evidence",
+        status: "completed",
+        notes: [
+          {
+            contentMarkdown,
+            author: "PLAN-17 closeout test",
+            tags: ["closeout", "plan-17"],
+            destroyAt: null,
+            links: suppliedLinks
+          }
+        ]
+      }
+    });
+    assert.equal(closeout.statusCode, 200, closeout.body);
+
+    const readBack = await app.inject({
+      method: "GET",
+      url: `/api/v1/notes?linkedEntityType=project&linkedEntityId=${project.id}`,
+      headers: { cookie }
+    });
+    assert.equal(readBack.statusCode, 200, readBack.body);
+    const notes = (readBack.json() as { notes: Note[] }).notes;
+    assert.equal(notes.length, 1);
+    const [note] = notes;
+    assert.ok(note);
+    assert.deepEqual(
+      {
+        contentMarkdown: note.contentMarkdown,
+        author: note.author,
+        source: note.source,
+        tags: note.tags,
+        destroyAt: note.destroyAt,
+        userId: note.userId
+      },
+      {
+        contentMarkdown,
+        author: "PLAN-17 closeout test",
+        source: "ui",
+        tags: ["closeout", "plan-17"],
+        destroyAt: null,
+        userId: project.userId
+      }
+    );
+    assert.deepEqual(
+      note.links
+        .map(
+          (link) =>
+            `${link.entityType}:${link.entityId}:${link.anchorKey ?? ""}`
+        )
+        .sort(),
+      [
+        `project:${project.id}:`,
+        ...suppliedLinks.map(
+          (link) => `${link.entityType}:${link.entityId}:${link.anchorKey}`
+        )
+      ].sort()
+    );
+
+    const noteEvent = listActivityEvents({
+      entityType: "project",
+      entityId: project.id
+    }).find(
+      (event) =>
+        event.eventType === "note.created" && event.metadata.noteId === note.id
+    );
+    assert.ok(noteEvent);
+    assert.equal(noteEvent.actor, "PLAN-17 closeout test");
+    assert.equal(noteEvent.source, "ui");
+
+    for (const workItemId of [issue.id, taskItem.id]) {
+      const workItem = getTaskById(workItemId);
+      assert.equal(workItem?.status, "done");
+      assert.equal(workItem?.completionReport, null);
+      assert.deepEqual(workItem?.gitRefs, []);
+      assert.equal(
+        listNotes({
+          linkedEntityType: "task",
+          linkedEntityId: workItemId
+        }).length,
+        0
+      );
+    }
+  });
 });
 
 test("project completion cascades once and records exact lifecycle audit evidence", async () => {
@@ -346,5 +470,120 @@ test("project completion rolls back every side effect and succeeds once on retry
       assert.equal(getTaskById(taskId)?.status, "done");
     }
     assert.equal(rewardCount(taskIds), taskIds.length);
+  });
+});
+
+test("a nested closeout Note failure rolls back project and task transitions before a clean retry", async () => {
+  await withTestServer(async (app) => {
+    const cookie = await issueOperatorSessionCookie(app);
+    const originalTitle = "Atomic closeout note project";
+    const project = createLifecycleProject(originalTitle);
+    const issue = createWorkItem({
+      project,
+      title: "Atomic closeout issue",
+      level: "issue"
+    });
+    const taskItem = createWorkItem({
+      project,
+      title: "Atomic closeout task",
+      level: "task",
+      parentWorkItemId: issue.id
+    });
+    const taskIds = [issue.id, taskItem.id];
+    const contentMarkdown = "PLAN-17 injected Note failure";
+    const payload = {
+      title: "Title that must roll back",
+      status: "completed" as const,
+      notes: [
+        {
+          contentMarkdown,
+          links: [
+            {
+              entityType: "artifact" as const,
+              entityId: "artifact_retry_evidence",
+              anchorKey: "retry"
+            }
+          ]
+        }
+      ]
+    };
+    const database = getDatabase();
+    database.exec(`
+      CREATE TRIGGER fail_project_closeout_note_insert
+      BEFORE INSERT ON notes
+      WHEN NEW.content_markdown = '${contentMarkdown}'
+      BEGIN
+        SELECT RAISE(ABORT, 'injected project closeout Note failure');
+      END;
+    `);
+
+    const failed = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}`,
+      headers: { cookie },
+      payload
+    });
+    assert.equal(failed.statusCode, 500, failed.body);
+    assert.deepEqual(
+      {
+        ...(database
+          .prepare("SELECT title, status FROM projects WHERE id = ?")
+          .get(project.id) as { title: string; status: string })
+      },
+      { title: originalTitle, status: "active" }
+    );
+    for (const taskId of taskIds) {
+      assert.notEqual(getTaskById(taskId)?.status, "done");
+      assert.equal(
+        listActivityEvents({ entityType: "task", entityId: taskId }).filter(
+          (event) => event.eventType === "task_completed"
+        ).length,
+        0
+      );
+    }
+    assert.equal(rewardCount(taskIds), 0);
+    assert.equal(
+      listNotes({ linkedEntityType: "project", linkedEntityId: project.id })
+        .length,
+      0
+    );
+    assert.equal(
+      listActivityEvents({
+        entityType: "project",
+        entityId: project.id
+      }).filter(
+        (event) =>
+          event.eventType === "note.created" ||
+          event.eventType === "project_status_changed"
+      ).length,
+      0
+    );
+
+    database.exec("DROP TRIGGER fail_project_closeout_note_insert");
+    const retry = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/projects/${project.id}`,
+      headers: { cookie },
+      payload
+    });
+    assert.equal(retry.statusCode, 200, retry.body);
+    assert.deepEqual(
+      {
+        ...(database
+          .prepare("SELECT title, status FROM projects WHERE id = ?")
+          .get(project.id) as { title: string; status: string })
+      },
+      { title: payload.title, status: "completed" }
+    );
+    for (const taskId of taskIds) {
+      assert.equal(getTaskById(taskId)?.status, "done");
+    }
+    assert.equal(rewardCount(taskIds), taskIds.length);
+    const notes = listNotes({
+      linkedEntityType: "project",
+      linkedEntityId: project.id
+    });
+    assert.equal(notes.length, 1);
+    assert.equal(notes[0]?.contentMarkdown, contentMarkdown);
   });
 });

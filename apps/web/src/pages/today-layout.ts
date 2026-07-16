@@ -10,6 +10,7 @@ const LEGACY_TODAY_CORE_ORDER = [
 
 const GENERATED_TODAY_CORE_ORDER = [
   "hero",
+  "priority",
   "life-force",
   "metrics",
   "runway",
@@ -17,8 +18,27 @@ const GENERATED_TODAY_CORE_ORDER = [
   "focus"
 ] as const;
 
+const PREVIOUS_GENERATED_TODAY_CORE_ORDER = [
+  "hero",
+  "life-force",
+  "metrics",
+  "runway",
+  "calendar",
+  "focus"
+] as const;
+
+const PREVIOUS_OPERATIONAL_TODAY_CORE_ORDER = [
+  "hero",
+  "runway",
+  "life-force",
+  "focus",
+  "calendar",
+  "metrics"
+] as const;
+
 const OPERATIONAL_TODAY_CORE_ORDER = [
   "hero",
+  "priority",
   "runway",
   "life-force",
   "focus",
@@ -42,13 +62,22 @@ export function normalizeTodayLayout(
 ): SurfaceLayoutPayload {
   const isGeneratedDefault =
     layout.updatedAt === new Date(0).toISOString() &&
-    startsWithOrder(layout.order, GENERATED_TODAY_CORE_ORDER);
+    (startsWithOrder(layout.order, GENERATED_TODAY_CORE_ORDER) ||
+      startsWithOrder(layout.order, PREVIOUS_GENERATED_TODAY_CORE_ORDER));
   const usesLegacyCoreOrder = startsWithOrder(
     layout.order,
     LEGACY_TODAY_CORE_ORDER
   );
+  const usesPreviousOperationalOrder = startsWithOrder(
+    layout.order,
+    PREVIOUS_OPERATIONAL_TODAY_CORE_ORDER
+  );
 
-  if (!isGeneratedDefault && !usesLegacyCoreOrder) {
+  if (
+    !isGeneratedDefault &&
+    !usesLegacyCoreOrder &&
+    !usesPreviousOperationalOrder
+  ) {
     return layout;
   }
 

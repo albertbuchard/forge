@@ -34,10 +34,19 @@ def object_schema(properties: Dict[str, Any], required: Optional[List[str]] = No
     return schema
 
 
-def array_schema(items: JsonSchema, description: Optional[str] = None) -> JsonSchema:
+def array_schema(
+    items: JsonSchema,
+    description: Optional[str] = None,
+    min_items: Optional[int] = None,
+    max_items: Optional[int] = None,
+) -> JsonSchema:
     schema: JsonSchema = {"type": "array", "items": items}
     if description:
         schema["description"] = description
+    if min_items is not None:
+        schema["minItems"] = min_items
+    if max_items is not None:
+        schema["maxItems"] = max_items
     return schema
 
 
@@ -58,6 +67,8 @@ def with_query(path: str, args: Dict[str, Any], allowed_keys: List[str]) -> str:
         value = args.get(key)
         if isinstance(value, str) and value.strip():
             query_parts.append((key, value.strip()))
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            query_parts.append((key, str(value)))
         elif isinstance(value, list):
             for item in value:
                 if isinstance(item, str) and item.strip():
@@ -188,6 +199,20 @@ ARTIFACT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "audit": {"method": "GET", "path": "/api/v1/artifacts/:id/audit"},
 }
 
+ARTIFACT_ROUTE_EXAMPLES: List[Dict[str, Any]] = [
+    {
+        "routeKey": "createWithBytes",
+        "body": {
+            "idempotencyKey": "artifact-upload-budget-2026-07-16",
+            "originalFileName": "budget.xlsx",
+            "contentBase64": "<base64>",
+            "title": "Thesis budget workbook",
+            "sourceLabel": "Research budget folder",
+            "useLlmEnrichment": True,
+        },
+    },
+]
+
 LIFE_EVENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "timeline": {"method": "GET", "path": "/api/v1/life-events/timeline"},
     "read": {"method": "GET", "path": "/api/v1/life-events/:id"},
@@ -222,7 +247,7 @@ CALENDAR_CONNECTION_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
 
 WIKI_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "list": {"method": "GET", "path": "/api/v1/wiki/pages"},
-    "search": {"method": "POST", "path": "/api/v1/wiki/search", "write": True},
+    "search": {"method": "POST", "path": "/api/v1/wiki/search"},
     "create": {"method": "POST", "path": "/api/v1/wiki/pages", "write": True},
     "read": {"method": "GET", "path": "/api/v1/wiki/pages/:id"},
     "readBySlug": {"method": "GET", "path": "/api/v1/wiki/by-slug/:slug"},
@@ -233,6 +258,633 @@ WIKI_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
     "reindex": {"method": "POST", "path": "/api/v1/wiki/reindex", "write": True},
     "ingest": {"method": "POST", "path": "/api/v1/wiki/ingest-jobs", "write": True},
 }
+
+
+def _people_peer_id_schema() -> JsonSchema:
+    return {"type": "string", "minLength": 1, "maxLength": 240}
+
+
+def _people_peer_version_schema() -> JsonSchema:
+    return {"type": "string", "minLength": 1, "maxLength": 240}
+
+
+def _people_peer_cursor_schema() -> JsonSchema:
+    return {
+        "type": "string",
+        "minLength": 8,
+        "maxLength": 2048,
+        "pattern": r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$",
+    }
+
+
+def _people_peer_hash_schema() -> JsonSchema:
+    return {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+
+
+def _people_peer_idempotency_key_schema() -> JsonSchema:
+    return {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 240,
+        "pattern": "^[A-Za-z0-9._:-]+$",
+    }
+
+
+def _people_peer_enum(values: List[str], default: Any = None) -> JsonSchema:
+    schema: JsonSchema = {"type": "string", "enum": values}
+    if default is not None:
+        schema["default"] = default
+    return schema
+
+
+PEER_PROJECTION_IDS = [
+    "calendar.availability.v1",
+    "calendar.selected_events.v1",
+    "goals.horizon_summary.v1",
+    "health.cycling.aggregate.v1",
+    "person.profile.v1",
+    "life_events.selected.v1",
+    "movement.aggregate.v1",
+    "custom.selected_entities.v1",
+]
+
+
+def _people_wiki_decision_schema() -> JsonSchema:
+    return {
+        "anyOf": [
+            object_schema(
+                {
+                    "wikiPageId": _people_peer_id_schema(),
+                    "action": {"type": "string", "const": "associate"},
+                    "personId": _people_peer_id_schema(),
+                    "expectedWikiVersion": _people_peer_version_schema(),
+                    "expectedPersonVersion": _people_peer_version_schema(),
+                },
+                required=[
+                    "wikiPageId",
+                    "action",
+                    "personId",
+                    "expectedWikiVersion",
+                    "expectedPersonVersion",
+                ],
+            ),
+            object_schema(
+                {
+                    "wikiPageId": _people_peer_id_schema(),
+                    "action": {"type": "string", "const": "create_person"},
+                    "displayName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160,
+                    },
+                    "expectedWikiVersion": _people_peer_version_schema(),
+                },
+                required=[
+                    "wikiPageId",
+                    "action",
+                    "displayName",
+                    "expectedWikiVersion",
+                ],
+            ),
+            object_schema(
+                {
+                    "wikiPageId": _people_peer_id_schema(),
+                    "action": {"type": "string", "const": "skip"},
+                    "expectedWikiVersion": _people_peer_version_schema(),
+                },
+                required=["wikiPageId", "action", "expectedWikiVersion"],
+            ),
+        ]
+    }
+
+
+def _list_people_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "userId": _people_peer_id_schema(),
+            "query": {"type": "string", "maxLength": 200},
+            "relationshipStatus": _people_peer_enum(
+                ["none", "pending", "active", "paused", "revoked"]
+            ),
+            "source": _people_peer_enum(["local", "shared", "both"], "both"),
+            "hasUpcomingSharedContext": {"type": "boolean"},
+            "sort": _people_peer_enum(
+                ["display_name", "updated_at", "next_shared_event"],
+                "display_name",
+            ),
+            "direction": _people_peer_enum(["asc", "desc"], "asc"),
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        }
+    )
+
+
+def _person_context_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "includePrivate": {"type": "boolean", "default": False},
+            "includeShared": {"type": "boolean", "default": True},
+            "linkLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "default": 100,
+            },
+            "projectionLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 40,
+            },
+        }
+    )
+
+
+def _people_wiki_candidate_scan_body_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "userId": _people_peer_id_schema(),
+            "peopleRootPageId": _people_peer_id_schema(),
+            "query": {"type": "string", "maxLength": 200},
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        },
+        required=["peopleRootPageId"],
+    )
+
+
+def _people_wiki_association_preview_body_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "userId": _people_peer_id_schema(),
+            "peopleRootPageId": _people_peer_id_schema(),
+            "decisions": array_schema(
+                _people_wiki_decision_schema(), min_items=1, max_items=100
+            ),
+        },
+        required=["peopleRootPageId", "decisions"],
+    )
+
+
+def _people_wiki_association_apply_body_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "userId": _people_peer_id_schema(),
+            "peopleRootPageId": _people_peer_id_schema(),
+            "previewId": _people_peer_id_schema(),
+            "previewHash": _people_peer_hash_schema(),
+            "idempotencyKey": _people_peer_idempotency_key_schema(),
+            "decisions": array_schema(
+                _people_wiki_decision_schema(), min_items=1, max_items=100
+            ),
+        },
+        required=[
+            "peopleRootPageId",
+            "previewId",
+            "previewHash",
+            "idempotencyKey",
+            "decisions",
+        ],
+    )
+
+
+def _peer_requests_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "kind": _people_peer_enum(["pairing", "device", "grant"]),
+            "status": _people_peer_enum(
+                ["pending", "accepted", "rejected", "expired"]
+            ),
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        }
+    )
+
+
+def _peer_relationships_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "query": {"type": "string", "maxLength": 200},
+            "status": _people_peer_enum(
+                [
+                    "pending_verification",
+                    "active",
+                    "paused",
+                    "revoked",
+                    "recovery_required",
+                ]
+            ),
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        }
+    )
+
+
+def _peer_grants_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "status": _people_peer_enum(
+                [
+                    "draft",
+                    "proposed",
+                    "active",
+                    "countered",
+                    "rejected",
+                    "revoked",
+                    "superseded",
+                    "expired",
+                    "conflicted",
+                ]
+            ),
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        }
+    )
+
+
+def _peer_diagnostics_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "default": 100,
+            },
+        }
+    )
+
+
+def _person_question_interpret_body_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "question": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "timeZone": {"type": "string", "minLength": 1, "maxLength": 100},
+            "referenceTime": {"type": "string", "format": "date-time"},
+        },
+        required=["question", "timeZone"],
+    )
+
+
+def _person_typed_question_schema() -> JsonSchema:
+    interval = object_schema(
+        {
+            "startsAt": {"type": "string", "format": "date-time"},
+            "endsAt": {"type": "string", "format": "date-time"},
+            "timeZone": {"type": "string", "minLength": 1, "maxLength": 64},
+        },
+        required=["startsAt", "endsAt", "timeZone"],
+    )
+
+    def variant(
+        projection_id: str,
+        parameters: JsonSchema,
+        query_interval: JsonSchema,
+        fields: List[str],
+        entity_limit: int,
+        precision: JsonSchema,
+    ) -> JsonSchema:
+        return object_schema(
+            {
+                "projectionId": {"type": "string", "const": projection_id},
+                "parameters": parameters,
+                "interval": query_interval,
+                "entityIds": array_schema(
+                    _people_peer_id_schema(), max_items=entity_limit
+                )
+                | {"default": []},
+                "fields": array_schema(
+                    _people_peer_enum(fields), max_items=len(fields)
+                )
+                | {"default": []},
+                "precision": precision,
+                "maximumResultCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "default": 100,
+                },
+            },
+            required=["projectionId", "parameters", "interval", "precision"],
+        )
+
+    empty_parameters = object_schema({})
+    exact = {"type": "string", "const": "exact"}
+    calendar_fields = [
+        "start",
+        "end",
+        "timezone",
+        "busyState",
+        "eventTitle",
+        "eventLocation",
+    ]
+    return {
+        "anyOf": [
+            variant(
+                "calendar.availability.v1",
+                empty_parameters,
+                interval,
+                calendar_fields,
+                0,
+                _people_peer_enum(["exact", "fifteen_minutes", "hour"]),
+            ),
+            variant(
+                "calendar.selected_events.v1",
+                empty_parameters,
+                interval,
+                calendar_fields,
+                256,
+                exact,
+            ),
+            variant(
+                "goals.horizon_summary.v1",
+                empty_parameters,
+                interval,
+                ["goalTitle", "goalSummary", "goalState", "goalProgress"],
+                0,
+                exact,
+            ),
+            variant(
+                "health.cycling.aggregate.v1",
+                object_schema(
+                    {
+                        "granularity": _people_peer_enum(["day", "week", "month"]),
+                        "units": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240,
+                        },
+                    },
+                    required=["granularity", "units"],
+                ),
+                interval,
+                ["duration", "distance", "activityCount", "energy"],
+                0,
+                exact,
+            ),
+            variant(
+                "person.profile.v1",
+                empty_parameters,
+                {"type": "null"},
+                [
+                    "displayName",
+                    "preferredName",
+                    "pronouns",
+                    "relationshipLabel",
+                    "shortDescription",
+                ],
+                0,
+                exact,
+            ),
+            variant(
+                "life_events.selected.v1",
+                empty_parameters,
+                interval,
+                ["lifeEventTitle", "lifeEventType", "lifeEventPlace"],
+                256,
+                exact,
+            ),
+            variant(
+                "movement.aggregate.v1",
+                object_schema(
+                    {
+                        "granularity": _people_peer_enum(["day", "week", "month"])
+                    },
+                    required=["granularity"],
+                ),
+                interval,
+                ["movementDuration", "movementDistance"],
+                0,
+                exact,
+            ),
+            variant(
+                "custom.selected_entities.v1",
+                empty_parameters,
+                {"type": "null"},
+                ["customTitle", "customSummary", "customState"],
+                256,
+                exact,
+            ),
+        ]
+    }
+
+
+def _person_question_execute_body_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "interpretationId": _people_peer_id_schema(),
+            "interpretationHash": _people_peer_hash_schema(),
+            "query": _person_typed_question_schema(),
+            "sourcePreference": _people_peer_enum(
+                ["live_then_cache", "live_only", "cache_only"],
+                "live_then_cache",
+            ),
+        },
+        required=["interpretationId", "interpretationHash", "query"],
+    )
+
+
+def _person_question_history_query_schema() -> JsonSchema:
+    return object_schema(
+        {
+            "cursor": _people_peer_cursor_schema(),
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 50,
+            },
+        }
+    )
+
+
+def _people_peer_route_spec(
+    operation_id: str,
+    method: str,
+    path: str,
+    scopes: List[str],
+    principals: List[str],
+    params: JsonSchema,
+    query: JsonSchema,
+    body: Optional[JsonSchema] = None,
+) -> Dict[str, Any]:
+    spec: Dict[str, Any] = {
+        "operationId": operation_id,
+        "method": method,
+        "path": path,
+        "requiredScopes": scopes,
+        "principalClasses": principals,
+        "humanOnly": False,
+        "mcpExposed": True,
+        "write": method != "GET",
+        "params": params,
+        "query": query,
+    }
+    if body is not None:
+        spec["body"] = body
+    return spec
+
+
+_OPERATOR_AGENT = ["operator_session", "agent_token"]
+_OPERATOR_AGENT_COMPANION = [
+    "operator_session",
+    "agent_token",
+    "companion_session",
+]
+_EMPTY_PEOPLE_PEER_SCHEMA = object_schema({})
+_PERSON_PATH_SCHEMA = object_schema(
+    {"personId": _people_peer_id_schema()}, required=["personId"]
+)
+_RELATIONSHIP_PATH_SCHEMA = object_schema(
+    {"relationshipId": _people_peer_id_schema()}, required=["relationshipId"]
+)
+
+
+PEOPLE_AGENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "listPeopleReadModel": _people_peer_route_spec(
+        "listPeopleReadModel", "GET", "/api/v1/people",
+        ["people:read:basic"], _OPERATOR_AGENT,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _list_people_query_schema(),
+    ),
+    "getPersonContext": _people_peer_route_spec(
+        "getPersonContext", "GET", "/api/v1/people/:personId/context",
+        ["people:read:basic"], _OPERATOR_AGENT,
+        _PERSON_PATH_SCHEMA, _person_context_query_schema(),
+    ),
+    "scanPeopleWikiCandidates": _people_peer_route_spec(
+        "scanPeopleWikiCandidates", "POST", "/api/v1/people/wiki-candidates/scan",
+        ["people:read:basic", "wiki:read"], _OPERATOR_AGENT,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+        _people_wiki_candidate_scan_body_schema(),
+    ),
+    "previewPeopleWikiAssociations": _people_peer_route_spec(
+        "previewPeopleWikiAssociations", "POST", "/api/v1/people/wiki-associations/preview",
+        ["people:write", "wiki:read"], _OPERATOR_AGENT,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+        _people_wiki_association_preview_body_schema(),
+    ),
+    "applyPeopleWikiAssociations": _people_peer_route_spec(
+        "applyPeopleWikiAssociations", "POST", "/api/v1/people/wiki-associations/apply",
+        ["people:write", "wiki:read"], _OPERATOR_AGENT,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+        _people_wiki_association_apply_body_schema(),
+    ),
+    "interpretPersonQuestion": _people_peer_route_spec(
+        "interpretPersonQuestion", "POST", "/api/v1/people/:personId/questions/interpret",
+        ["people:read:basic", "peer:query"], _OPERATOR_AGENT,
+        _PERSON_PATH_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+        _person_question_interpret_body_schema(),
+    ),
+    "executePersonQuestion": _people_peer_route_spec(
+        "executePersonQuestion", "POST", "/api/v1/people/:personId/questions/execute",
+        ["people:read:basic", "peer:query"], _OPERATOR_AGENT,
+        _PERSON_PATH_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+        _person_question_execute_body_schema(),
+    ),
+    "listPersonQuestionHistory": _people_peer_route_spec(
+        "listPersonQuestionHistory", "GET", "/api/v1/people/:personId/questions",
+        ["people:read:basic", "peer:query"], _OPERATOR_AGENT,
+        _PERSON_PATH_SCHEMA, _person_question_history_query_schema(),
+    ),
+}
+
+
+PEER_AGENT_ROUTE_SPECS: Dict[str, Dict[str, Any]] = {
+    "listPeerRequests": _people_peer_route_spec(
+        "listPeerRequests", "GET", "/api/v1/peers/requests",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _peer_requests_query_schema(),
+    ),
+    "listPeerRelationships": _people_peer_route_spec(
+        "listPeerRelationships", "GET", "/api/v1/peers/relationships",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _EMPTY_PEOPLE_PEER_SCHEMA, _peer_relationships_query_schema(),
+    ),
+    "getPeerRelationship": _people_peer_route_spec(
+        "getPeerRelationship", "GET", "/api/v1/peers/relationships/:relationshipId",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _RELATIONSHIP_PATH_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+    ),
+    "listPeerDevices": _people_peer_route_spec(
+        "listPeerDevices", "GET", "/api/v1/peers/relationships/:relationshipId/devices",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _RELATIONSHIP_PATH_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+    ),
+    "listPeerGrants": _people_peer_route_spec(
+        "listPeerGrants", "GET", "/api/v1/peers/relationships/:relationshipId/grants",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _RELATIONSHIP_PATH_SCHEMA, _peer_grants_query_schema(),
+    ),
+    "getPeerSyncStatus": _people_peer_route_spec(
+        "getPeerSyncStatus", "GET", "/api/v1/peers/relationships/:relationshipId/sync",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _RELATIONSHIP_PATH_SCHEMA, _EMPTY_PEOPLE_PEER_SCHEMA,
+    ),
+    "getPeerDiagnostics": _people_peer_route_spec(
+        "getPeerDiagnostics", "GET", "/api/v1/peers/relationships/:relationshipId/diagnostics",
+        ["peer:status"], _OPERATOR_AGENT_COMPANION,
+        _RELATIONSHIP_PATH_SCHEMA, _peer_diagnostics_query_schema(),
+    ),
+}
+
+
+def people_peer_route_parameters(
+    route_specs: Dict[str, Dict[str, Any]],
+) -> JsonSchema:
+    variants: List[JsonSchema] = []
+    for route_key, spec in route_specs.items():
+        contract = (
+            f"{spec['operationId']}: {spec['method']} {spec['path']}; "
+            f"scopes: {', '.join(spec['requiredScopes'])}; "
+            f"principals: {', '.join(spec['principalClasses'])}."
+        )
+        properties: Dict[str, Any] = {
+            "routeKey": {"type": "string", "const": route_key, "description": contract}
+        }
+        required = ["routeKey"]
+        if spec["params"].get("properties"):
+            properties["pathParams"] = spec["params"]
+            required.append("pathParams")
+        if spec["query"].get("properties"):
+            properties["query"] = spec["query"]
+        if spec.get("body") is not None:
+            properties["body"] = spec["body"]
+            required.append("body")
+        variants.append(object_schema(properties, required=required))
+    return {
+        "oneOf": variants,
+        "description": (
+            "Choose one published MCP operation id. Each variant fixes the exact "
+            "method, path parameters, query fields, JSON body, principal classes, "
+            "and local token scopes accepted by Forge."
+        ),
+    }
 
 
 def specialized_route_parameters(
@@ -405,6 +1057,7 @@ def _task_run_actor_body(
     *,
     include_lease: bool = False,
     include_closeout: bool = False,
+    include_completion: bool = False,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {}
     actor = _optional_trimmed_text(args, "actor")
@@ -417,6 +1070,10 @@ def _task_run_actor_body(
         body["leaseTtlSeconds"] = args.get("leaseTtlSeconds")
     if include_closeout and args.get("closeoutNote") is not None:
         body["closeoutNote"] = args.get("closeoutNote")
+    if include_completion and args.get("completionReport") is not None:
+        body["completionReport"] = args.get("completionReport")
+    if include_completion and args.get("gitRefs") is not None:
+        body["gitRefs"] = args.get("gitRefs")
     return body
 
 
@@ -441,7 +1098,7 @@ def complete_task_run_path(args: Dict[str, Any]) -> str:
 
 
 def complete_task_run_body(args: Dict[str, Any], _config: Any) -> Dict[str, Any]:
-    return _task_run_actor_body(args, include_closeout=True)
+    return _task_run_actor_body(args, include_closeout=True, include_completion=True)
 
 
 def release_task_run_path(args: Dict[str, Any]) -> str:
@@ -489,6 +1146,55 @@ NOTE_INPUT = object_schema(
         ),
     },
     required=["contentMarkdown"],
+)
+
+COMPLETION_REPORT_INPUT = object_schema(
+    {
+        "modifiedFiles": array_schema(
+            {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "description": "Safe repository-relative path without traversal.",
+            },
+            max_items=256,
+        )
+        | {"uniqueItems": True},
+        "workSummary": {"type": "string", "maxLength": 8000},
+        "linkedGitRefIds": array_schema(
+            {"type": "string", "minLength": 1, "maxLength": 128},
+            max_items=64,
+        )
+        | {"uniqueItems": True},
+    }
+)
+
+WORK_ITEM_GIT_REF_INPUT = object_schema(
+    {
+        "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        },
+        "refType": {"type": "string", "enum": ["commit", "branch", "pull_request"]},
+        "provider": {"type": "string", "maxLength": 64, "default": "git"},
+        "repository": {"type": "string", "maxLength": 255, "default": ""},
+        "refValue": {"type": "string", "minLength": 1, "maxLength": 512},
+        "url": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "format": "uri",
+                    "pattern": "^https?://",
+                    "maxLength": 2048,
+                },
+                {"type": "null"},
+            ]
+        },
+        "displayTitle": {"type": "string", "maxLength": 512, "default": ""},
+    },
+    required=["refType", "refValue"],
 )
 
 NUTRITION_MEAL_ITEM = object_schema(
@@ -552,7 +1258,7 @@ SEARCH_ENTITY = object_schema(
             required=["entityType", "id"],
         ),
         "includeDeleted": {"type": "boolean"},
-        "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 200},
         "clientRef": optional_string("Client reference echoed back by Forge."),
     }
 )
@@ -581,6 +1287,7 @@ CREATE_OPERATION = object_schema(
     {
         "entityType": {"type": "string", "minLength": 1},
         "data": {"type": "object"},
+        "idempotencyKey": {"type": "string", "minLength": 1, "maxLength": 128},
         "clientRef": optional_string("Client reference echoed back by Forge."),
     },
     required=["entityType", "data"],
@@ -655,7 +1362,9 @@ def preference_score_path(args: Dict[str, Any]) -> str:
 
 
 def wiki_pages_path(args: Dict[str, Any]) -> str:
-    return with_query("/api/v1/wiki/pages", args, ["spaceId", "kind", "limit"])
+    return with_query(
+        "/api/v1/wiki/pages", args, ["spaceId", "kind", "limit", "offset"]
+    )
 
 
 def wiki_page_path(args: Dict[str, Any]) -> str:
@@ -813,8 +1522,10 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_call_artifact_route",
-        "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
-        "parameters": specialized_route_parameters(ARTIFACT_ROUTE_SPECS),
+        "description": "Call one allowed dedicated Artifact Store route for metadata listing, trusted upload, metadata update, static rescan, LLM metadata enrichment, generic entity-link replacement, trust state, versions, or audit. For createWithBytes, put one stable per-file idempotencyKey in the body and reuse it only for an exact transport retry; Forge normalizes agent provenance and rejects changed-payload key reuse. Agents may read contentProtection metadata and password hints, but must not receive, store, submit, or route artifact passwords. Do not expose download, password download, decrypt, open, execute, preview, or transform stored file bytes as an agent.",
+        "parameters": specialized_route_parameters(
+            ARTIFACT_ROUTE_SPECS, ARTIFACT_ROUTE_EXAMPLES
+        ),
         "method_builder": lambda args: specialized_route_method(ARTIFACT_ROUTE_SPECS, args),
         "path_builder": lambda args: specialized_route_path(ARTIFACT_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
@@ -828,6 +1539,26 @@ TOOL_CATALOG: List[ToolSpec] = [
         "path_builder": lambda args: specialized_route_path(LIFE_EVENT_ROUTE_SPECS, args),
         "body_builder": specialized_route_body,
         "write_builder": lambda args: specialized_route_write(LIFE_EVENT_ROUTE_SPECS, args),
+    },
+    {
+        "name": "forge_call_people_route",
+        "description": "Call one MCP-exposed People read or reviewed Wiki-association operation, or interpret, execute, and review a typed question against an existing directional grant. Person create, search, update, soft delete, restore, and general links stay on shared batch CRUD. Every call requires a configured agent token with the published People, Wiki, or peer-query scopes. For typed answers preserve result.state plus metadata source, freshness, precision, completeness, and redactedFields; never infer withheld fields. Agents cannot pair Forge installations or change consent, grants, devices, credentials, or human-presence approvals.",
+        "parameters": people_peer_route_parameters(PEOPLE_AGENT_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(PEOPLE_AGENT_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(PEOPLE_AGENT_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(PEOPLE_AGENT_ROUTE_SPECS, args),
+        "requires_agent_token": True,
+    },
+    {
+        "name": "forge_call_peer_route",
+        "description": "Call one MCP-exposed peer request, relationship, device, grant, sync-status, or diagnostic operation using an existing human-approved relationship. Every call requires a configured agent token with peer:status. This tool cannot create or accept pairing, request a resync, widen or revoke consent, accept or counter grants, approve or remove devices, manage credentials, or perform a human-presence ceremony.",
+        "parameters": people_peer_route_parameters(PEER_AGENT_ROUTE_SPECS),
+        "method_builder": lambda args: specialized_route_method(PEER_AGENT_ROUTE_SPECS, args),
+        "path_builder": lambda args: specialized_route_path(PEER_AGENT_ROUTE_SPECS, args),
+        "body_builder": specialized_route_body,
+        "write_builder": lambda args: specialized_route_write(PEER_AGENT_ROUTE_SPECS, args),
+        "requires_agent_token": True,
     },
     {
         "name": "forge_get_doctor",
@@ -851,12 +1582,13 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_list_wiki_pages",
-        "description": "List wiki or evidence pages inside one space without search ranking.",
+        "description": "List compact wiki or evidence page summaries inside one space with bounded offset pagination.",
         "parameters": object_schema(
             {
                 "spaceId": optional_string("Optional wiki space id."),
                 "kind": {"enum": ["wiki", "evidence"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 9999},
             }
         ),
         "method": "GET",
@@ -887,13 +1619,17 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_search_wiki",
-        "description": "Search the wiki with text, semantic, entity, or hybrid retrieval.",
+        "description": "Search compact wiki page summaries with ranked title, alias, content, entity, or semantic matches and bounded offset pagination.",
         "parameters": object_schema(
             {
                 "spaceId": optional_string("Optional wiki space id."),
                 "kind": {"enum": ["wiki", "evidence"]},
                 "mode": {"enum": ["text", "semantic", "entity", "hybrid"]},
-                "query": optional_string("Optional free-text wiki query."),
+                "query": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Optional free-text wiki query. Forge uses at most the first 20 FTS tokens.",
+                },
                 "profileId": optional_string("Optional embedding profile id."),
                 "linkedEntity": object_schema(
                     {
@@ -903,11 +1639,11 @@ TOOL_CATALOG: List[ToolSpec] = [
                     required=["entityType", "entityId"],
                 ),
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 999},
             }
         ),
         "method": "POST",
         "path": "/api/v1/wiki/search",
-        "write": True,
     },
     {
         "name": "forge_upsert_wiki_page",
@@ -1654,11 +2390,42 @@ TOOL_CATALOG: List[ToolSpec] = [
         "custom_handler": "current_work",
     },
     {
+        "name": "forge_get_today_priority",
+        "description": "Read Forge's canonical deterministic decision for the next useful work, including active-run conflicts, task-timebox timing, Life Force capacity, ranked alternatives, and explicit no-work or overload states.",
+        "parameters": object_schema(
+            {
+                "userIds": array_schema(
+                    {"type": "string"},
+                    "Optional Forge user ids. Select one user for Life Force capacity evidence.",
+                ),
+                "timeZone": optional_string("Optional IANA timezone for local-day evidence."),
+                "candidateLimit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "default": 24,
+                    "description": "Maximum ranked candidates to return.",
+                },
+            }
+        ),
+        "method": "GET",
+        "path_builder": lambda args: with_query(
+            "/api/v1/today/priority",
+            args,
+            ["userIds", "timeZone", "candidateLimit"],
+        ),
+    },
+    {
         "name": "forge_search_entities",
         "description": "Search Forge entities before creating or updating to avoid duplicates. Pass searches as an array, even for one search.",
         "parameters": object_schema(
             {
-                "searches": array_schema(SEARCH_ENTITY, "Ordered search requests."),
+                "searches": array_schema(
+                    SEARCH_ENTITY,
+                    "Ordered search requests.",
+                    min_items=1,
+                    max_items=50,
+                ),
             },
             required=["searches"],
         ),
@@ -1672,7 +2439,12 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
-                "operations": array_schema(CREATE_OPERATION, "Ordered create requests."),
+                "operations": array_schema(
+                    CREATE_OPERATION,
+                    "Ordered create requests.",
+                    min_items=1,
+                    max_items=100,
+                ),
             },
             required=["operations"],
         ),
@@ -1686,7 +2458,12 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
-                "operations": array_schema(UPDATE_OPERATION, "Ordered update requests."),
+                "operations": array_schema(
+                    UPDATE_OPERATION,
+                    "Ordered update requests.",
+                    min_items=1,
+                    max_items=100,
+                ),
             },
             required=["operations"],
         ),
@@ -1696,11 +2473,16 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_delete_entities",
-        "description": "Delete Forge entities in one batch request. Pass operations as an array with entityType and id. Delete defaults to soft mode unless hard is requested explicitly. Some entities such as calendar-domain records, preference CRUD entities, and questionnaire_instrument delete immediately by design.",
+        "description": "Delete Forge entities in one batch request. Pass operations as an array with entityType and id. Delete defaults to soft mode unless hard is requested explicitly. preference_catalog and preference_catalog_item use reversible soft deletion and forge_restore_entities; preference_context, preference_item, calendar-domain records, and questionnaire_instrument retain immediate deletion.",
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
-                "operations": array_schema(DELETE_OPERATION, "Ordered delete requests."),
+                "operations": array_schema(
+                    DELETE_OPERATION,
+                    "Ordered delete requests.",
+                    min_items=1,
+                    max_items=100,
+                ),
             },
             required=["operations"],
         ),
@@ -1714,7 +2496,12 @@ TOOL_CATALOG: List[ToolSpec] = [
         "parameters": object_schema(
             {
                 "atomic": {"type": "boolean"},
-                "operations": array_schema(RESTORE_OPERATION, "Ordered restore requests."),
+                "operations": array_schema(
+                    RESTORE_OPERATION,
+                    "Ordered restore requests.",
+                    min_items=1,
+                    max_items=100,
+                ),
             },
             required=["operations"],
         ),
@@ -1865,12 +2652,23 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_complete_task_run",
-        "description": "Finish an active task run as completed work and let Forge award the appropriate completion rewards. Prefer closeoutNote when the work summary should become a real linked note.",
+        "description": "Finish an active task run and atomically store bounded completionReport, canonical gitRefs, an optional linked closeoutNote, task state, time, rewards, and activity. An exact terminal replay is idempotent; changed closeout evidence conflicts. A quick or native completion may truthfully leave closeoutState deferred, so read the task back and inspect its closeout state and evidence.",
         "parameters": object_schema(
             {
                 "taskRunId": {"type": "string", "minLength": 1},
-                "actor": optional_string("Optional actor label."),
-                "note": optional_string("Optional completion note."),
+                "actor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "Optional actor label.",
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Optional completion note.",
+                },
+                "completionReport": COMPLETION_REPORT_INPUT,
+                "gitRefs": array_schema(WORK_ITEM_GIT_REF_INPUT, max_items=64),
                 "closeoutNote": NOTE_INPUT,
             },
             required=["taskRunId"],
@@ -1882,12 +2680,21 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_release_task_run",
-        "description": "Stop an active task run without completing it. Use this to truthfully stop current work. Prefer closeoutNote when blockers or handoff context should become a real linked note.",
+        "description": "Stop an active task run without completing the task. Release accepts actor, note, and closeoutNote only; it never accepts completionReport or gitRefs. Use closeoutNote when blockers or handoff context should become a durable linked note.",
         "parameters": object_schema(
             {
                 "taskRunId": {"type": "string", "minLength": 1},
-                "actor": optional_string("Optional actor label."),
-                "note": optional_string("Optional release note."),
+                "actor": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "Optional actor label.",
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "Optional release note.",
+                },
                 "closeoutNote": NOTE_INPUT,
             },
             required=["taskRunId"],
@@ -2013,19 +2820,20 @@ TOOL_CATALOG: List[ToolSpec] = [
     },
     {
         "name": "forge_recommend_task_timeboxes",
-        "description": "Suggest future task timeboxes that fit the current calendar rules and current schedule. Use this when the agent wants candidate slots; if the slot is already clear from the calendar, create the timebox directly instead.",
+        "description": "Read up to 12 future task-timebox suggestions that fit the task owner, requested timezone, current calendar pressure, and scheduling rules. Use this when candidate slots are needed; if the slot is already clear from the calendar, create the timebox directly instead.",
         "parameters": object_schema(
             {
                 "taskId": {"type": "string", "minLength": 1},
                 "from": optional_string("Optional recommendation window start."),
                 "to": optional_string("Optional recommendation window end."),
-                "limit": {"type": "integer", "minimum": 1, "maximum": 24},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 12},
+                "timezone": optional_string("Optional IANA timezone for fallback wall-time windows."),
             },
             required=["taskId"],
         ),
         "method": "POST",
         "path": "/api/v1/calendar/timeboxes/recommend",
-        "write": True,
+        "write": False,
     },
     {
         "name": "forge_create_task_timebox",
@@ -2038,8 +2846,28 @@ TOOL_CATALOG: List[ToolSpec] = [
                 "startsAt": {"type": "string", "minLength": 1},
                 "endsAt": {"type": "string", "minLength": 1},
                 "source": {"enum": ["manual", "suggested", "live_run"]},
+                "status": {
+                    "enum": ["planned", "active", "completed", "cancelled"]
+                },
                 "overrideReason": optional_nullable_string("Optional note about why this slot exists or why it was chosen."),
-                "activityPresetKey": optional_nullable_string("Optional activity preset key for the timebox AP profile."),
+                "activityPresetKey": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "deep_work",
+                                "admin",
+                                "maintenance",
+                                "meeting",
+                                "recovery_break",
+                                "holiday_leisure",
+                                "light_context",
+                                "task_inherited",
+                            ]
+                        },
+                        {"type": "null"},
+                    ],
+                    "description": "Optional validated activity preset for the timebox AP profile.",
+                },
                 "customSustainRateApPerHour": {
                     "type": ["number", "null"],
                     "minimum": 0,

@@ -2,13 +2,14 @@ import { getDatabase } from "../db.js";
 import { listInsights } from "../repositories/collaboration.js";
 import {
   listCalendarEvents,
-  listTaskTimeboxes,
+  searchTaskTimeboxesForEntityCrud,
   listWorkBlockTemplates
 } from "../repositories/calendar.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { listGoals } from "../repositories/goals.js";
 import { listHabits } from "../repositories/habits.js";
-import { listNotes } from "../repositories/notes.js";
+import { listNotesPage, type NoteReadScope } from "../repositories/notes.js";
+import { searchPeopleAcrossOwners } from "../repositories/people.js";
 import {
   listBehaviors,
   listBehaviorPatterns,
@@ -24,9 +25,7 @@ import {
 import { listStrategies } from "../repositories/strategies.js";
 import { listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
-import {
-  listWikiSpaces
-} from "../repositories/wiki-memory.js";
+import { listWikiSpaces } from "../repositories/wiki-memory.js";
 import { listProjectSummaries } from "./projects.js";
 import { listAiConnectors } from "../repositories/ai-connectors.js";
 import {
@@ -68,12 +67,53 @@ type WikiLinkRow = {
   target_entity_id: string | null;
 };
 
+type PersonLinkRow = {
+  source_entity_type: string;
+  source_entity_id: string;
+  target_entity_type: string;
+  target_entity_id: string;
+  relationship: string;
+};
+
 const GRAPH_RANGE = {
   from: "2000-01-01T00:00:00.000Z",
   to: "2100-01-01T00:00:00.000Z"
 } as const;
 
 const KNOWLEDGE_GRAPH_NOTE_LIMIT = 2000;
+const KNOWLEDGE_GRAPH_NOTE_PAGE_LIMIT = 100;
+
+type KnowledgeGraphBuildOptions = {
+  includePeople?: boolean;
+  noteScope?: NoteReadScope;
+};
+
+function listKnowledgeGraphNotes(scope: NoteReadScope = {}) {
+  const notes: ReturnType<typeof listNotesPage>["notes"] = [];
+  let cursor: string | undefined;
+
+  do {
+    const remaining = KNOWLEDGE_GRAPH_NOTE_LIMIT - notes.length;
+    const page = listNotesPage(
+      {
+        userIds: scope.userIds ? [...scope.userIds] : undefined,
+        limit: Math.min(KNOWLEDGE_GRAPH_NOTE_PAGE_LIMIT, remaining),
+        cursor
+      },
+      {
+        accessibleSpaceIds: scope.accessibleSpaceIds,
+        includePsyche: scope.includePsyche
+      }
+    );
+    notes.push(...page.notes);
+    cursor = page.nextCursor ?? undefined;
+    if (!page.hasMore || remaining <= page.notes.length) {
+      break;
+    }
+  } while (cursor);
+
+  return notes;
+}
 
 const BASE_NODE_SIZE: Record<KnowledgeGraphEntityKind, number> = {
   goal: 56,
@@ -84,6 +124,7 @@ const BASE_NODE_SIZE: Record<KnowledgeGraphEntityKind, number> = {
   wiki_space: 40,
   wiki_page: 38,
   note: 34,
+  person: 40,
   habit: 36,
   insight: 34,
   calendar_event: 34,
@@ -224,14 +265,22 @@ function makeNode(input: {
   subtitle?: string | null;
   description?: string | null;
   searchText?: string | null;
-  previewStats?: Array<{ label: string; value: string | number | null | undefined }>;
+  previewStats?: Array<{
+    label: string;
+    value: string | number | null | undefined;
+  }>;
   owner?: OwnedLike | null;
   tags?: Array<{ id: string; label: string }>;
   href?: string | null;
   updatedAt?: string | null;
 }) {
   const previewStats = (input.previewStats ?? [])
-    .filter((stat) => stat.value !== null && stat.value !== undefined && `${stat.value}`.trim().length > 0)
+    .filter(
+      (stat) =>
+        stat.value !== null &&
+        stat.value !== undefined &&
+        `${stat.value}`.trim().length > 0
+    )
     .slice(0, 3)
     .map((stat) => ({
       label: stat.label,
@@ -304,6 +353,24 @@ function listWikiLinkRows(noteIds: string[]): WikiLinkRow[] {
     .all(...noteIds) as WikiLinkRow[];
 }
 
+function listPersonLinkRows(personIds: string[]): PersonLinkRow[] {
+  if (personIds.length === 0) {
+    return [];
+  }
+  const placeholders = personIds.map(() => "?").join(", ");
+  return getDatabase()
+    .prepare(
+      `SELECT source_entity_type, source_entity_id, target_entity_type,
+              target_entity_id, relationship
+       FROM entity_links
+       WHERE (source_entity_type = 'person' AND source_entity_id IN (${placeholders}))
+          OR (target_entity_type = 'person' AND target_entity_id IN (${placeholders}))
+       ORDER BY created_at, source_entity_type, source_entity_id,
+                target_entity_type, target_entity_id`
+    )
+    .all(...personIds, ...personIds) as PersonLinkRow[];
+}
+
 function buildFocusPayload(
   graph: KnowledgeGraphPayload,
   focusNodeId: string
@@ -313,7 +380,8 @@ function buildFocusPayload(
 
 export function buildKnowledgeGraph(
   userIds?: string[],
-  query: KnowledgeGraphQuery = {}
+  query: KnowledgeGraphQuery = {},
+  options: KnowledgeGraphBuildOptions = {}
 ): KnowledgeGraphPayload {
   const goals = filterOwnedEntities("goal", listGoals(), userIds);
   const projects = listProjectSummaries({ userIds });
@@ -322,43 +390,73 @@ export function buildKnowledgeGraph(
   const strategies = listStrategies({ userIds });
   const habits = listHabits({ userIds });
   const selectedUserIds = new Set(userIds ?? []);
-  const notes = listNotes({ limit: KNOWLEDGE_GRAPH_NOTE_LIMIT }).filter((note) => {
-    if (selectedUserIds.size === 0) {
-      return true;
-    }
-    if (note.userId && selectedUserIds.has(note.userId)) {
-      return true;
-    }
-    return note.kind === "wiki" && note.userId === null;
-  });
+  const noteScope = options.noteScope ?? { userIds };
+  const includePsyche = noteScope.includePsyche !== false;
+  const notes = listKnowledgeGraphNotes(noteScope);
+  const people = options.includePeople
+    ? searchPeopleAcrossOwners({ userIds, limit: 500 })
+    : [];
   const insights = listInsights({ userIds });
   const calendarEvents = listCalendarEvents({ ...GRAPH_RANGE, userIds });
   const workBlocks = listWorkBlockTemplates({ userIds });
-  const timeboxes = listTaskTimeboxes({ ...GRAPH_RANGE, userIds });
+  const timeboxes = searchTaskTimeboxesForEntityCrud({ userIds });
   const artifacts = listArtifacts().filter((artifact) => {
     if (selectedUserIds.size === 0) {
       return true;
     }
     return Boolean(
-      (artifact.uploadedByUserId && selectedUserIds.has(artifact.uploadedByUserId)) ||
-        (artifact.actingForUserId && selectedUserIds.has(artifact.actingForUserId))
+      (artifact.uploadedByUserId &&
+        selectedUserIds.has(artifact.uploadedByUserId)) ||
+      (artifact.actingForUserId &&
+        selectedUserIds.has(artifact.actingForUserId))
     );
   });
-  const eventTypes = filterOwnedEntities("event_type", listEventTypes(), userIds);
-  const emotions = filterOwnedEntities(
-    "emotion_definition",
-    listEmotionDefinitions(),
-    userIds
+  const eventTypes = includePsyche
+    ? filterOwnedEntities("event_type", listEventTypes(), userIds)
+    : [];
+  const emotions = includePsyche
+    ? filterOwnedEntities(
+        "emotion_definition",
+        listEmotionDefinitions(),
+        userIds
+      )
+    : [];
+  const values = includePsyche
+    ? filterOwnedEntities("psyche_value", listPsycheValues(), userIds)
+    : [];
+  const patterns = includePsyche
+    ? filterOwnedEntities("behavior_pattern", listBehaviorPatterns(), userIds)
+    : [];
+  const behaviors = includePsyche
+    ? filterOwnedEntities("behavior", listBehaviors(), userIds)
+    : [];
+  const beliefs = includePsyche
+    ? filterOwnedEntities("belief_entry", listBeliefEntries(), userIds)
+    : [];
+  const modes = includePsyche
+    ? filterOwnedEntities("mode_profile", listModeProfiles(), userIds)
+    : [];
+  const modeSessions = includePsyche
+    ? filterOwnedEntities(
+        "mode_guide_session",
+        listModeGuideSessions(),
+        userIds
+      )
+    : [];
+  const flashcards = includePsyche
+    ? filterOwnedEntities("flashcard", listFlashcards(), userIds)
+    : [];
+  const reports = includePsyche
+    ? filterOwnedEntities("trigger_report", listTriggerReports(), userIds)
+    : [];
+  const accessibleWikiSpaceIds =
+    noteScope.accessibleSpaceIds === undefined
+      ? null
+      : new Set(noteScope.accessibleSpaceIds);
+  const wikiSpaces = listWikiSpaces().filter(
+    (space) =>
+      accessibleWikiSpaceIds === null || accessibleWikiSpaceIds.has(space.id)
   );
-  const values = filterOwnedEntities("psyche_value", listPsycheValues(), userIds);
-  const patterns = filterOwnedEntities("behavior_pattern", listBehaviorPatterns(), userIds);
-  const behaviors = filterOwnedEntities("behavior", listBehaviors(), userIds);
-  const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
-  const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
-  const modeSessions = filterOwnedEntities("mode_guide_session", listModeGuideSessions(), userIds);
-  const flashcards = filterOwnedEntities("flashcard", listFlashcards(), userIds);
-  const reports = filterOwnedEntities("trigger_report", listTriggerReports(), userIds);
-  const wikiSpaces = listWikiSpaces();
   const flows = listAiConnectors();
 
   const nodes = new Map<string, KnowledgeGraphNode>();
@@ -366,6 +464,7 @@ export function buildKnowledgeGraph(
 
   const noteIds = notes.map((note) => note.id);
   const wikiLinkRows = listWikiLinkRows(noteIds);
+  const personLinkRows = listPersonLinkRows(people.map((person) => person.id));
   const noteById = new Map(notes.map((note) => [note.id, note]));
   const tagById = new Map(tags.map((tag) => [tag.id, tag]));
 
@@ -720,6 +819,51 @@ export function buildKnowledgeGraph(
     }
   }
 
+  for (const person of people) {
+    nodes.set(
+      buildKnowledgeGraphNodeId("person", person.id),
+      makeNode({
+        entityType: "person",
+        entityId: person.id,
+        entityKind: "person",
+        title: person.displayName,
+        subtitle: person.relationshipLabel || person.relationshipCategory,
+        description: person.shortDescription,
+        previewStats: [
+          {
+            label: "Relationship",
+            value:
+              person.relationshipLabel ||
+              person.relationshipCategory ||
+              "Person"
+          },
+          { label: "Importance", value: person.importance ?? "Not set" }
+        ],
+        owner: person,
+        href: getKnowledgeGraphEntityHref("person", person.id),
+        updatedAt: person.updatedAt
+      })
+    );
+  }
+
+  for (const link of personLinkRows) {
+    addEdge(edges, {
+      source: buildKnowledgeGraphNodeId(
+        link.source_entity_type as KnowledgeGraphEntityType,
+        link.source_entity_id
+      ),
+      target: buildKnowledgeGraphNodeId(
+        link.target_entity_type as KnowledgeGraphEntityType,
+        link.target_entity_id
+      ),
+      relationKind: "entity_link",
+      label: link.relationship || "Related person",
+      strength: 0.72,
+      directional: true,
+      structural: false
+    });
+  }
+
   for (const note of notes) {
     const isWiki = note.kind === "wiki";
     const noteNodeId = buildKnowledgeGraphNodeId("note", note.id);
@@ -811,10 +955,17 @@ export function buildKnowledgeGraph(
         structural: false
       });
     }
-    if (row.target_type === "entity" && row.target_entity_type && row.target_entity_id) {
+    if (
+      row.target_type === "entity" &&
+      row.target_entity_type &&
+      row.target_entity_id
+    ) {
       addEdge(edges, {
         source: buildKnowledgeGraphNodeId("note", row.source_note_id),
-        target: buildKnowledgeGraphNodeId(row.target_entity_type, row.target_entity_id),
+        target: buildKnowledgeGraphNodeId(
+          row.target_entity_type,
+          row.target_entity_id
+        ),
         relationKind: "wiki_link",
         label: "Wiki entity link",
         strength: 0.64,
@@ -836,7 +987,10 @@ export function buildKnowledgeGraph(
         description: insight.summary || insight.recommendation,
         previewStats: [
           { label: "Status", value: insight.status },
-          { label: "Confidence", value: `${Math.round(insight.confidence * 100)}%` },
+          {
+            label: "Confidence",
+            value: `${Math.round(insight.confidence * 100)}%`
+          },
           { label: "Evidence", value: insight.evidence.length }
         ],
         owner: insight,
@@ -886,7 +1040,10 @@ export function buildKnowledgeGraph(
         description: event.description || event.location,
         previewStats: [
           { label: "Origin", value: event.originType },
-          { label: "Start", value: new Date(event.startAt).toLocaleDateString() },
+          {
+            label: "Start",
+            value: new Date(event.startAt).toLocaleDateString()
+          },
           { label: "Links", value: event.links.length }
         ],
         owner: event,
@@ -942,7 +1099,10 @@ export function buildKnowledgeGraph(
         previewStats: [
           { label: "Status", value: timebox.status },
           { label: "Source", value: timebox.source },
-          { label: "Starts", value: new Date(timebox.startsAt).toLocaleDateString() }
+          {
+            label: "Starts",
+            value: new Date(timebox.startsAt).toLocaleDateString()
+          }
         ],
         owner: timebox,
         href: getKnowledgeGraphEntityHref("task_timebox", timebox.id),
@@ -1380,7 +1540,9 @@ export function buildKnowledgeGraph(
     );
     for (const result of session.results) {
       const matchedMode =
-        modeByGuideKey.get(`${result.family}::${result.archetype}`.toLowerCase()) ??
+        modeByGuideKey.get(
+          `${result.family}::${result.archetype}`.toLowerCase()
+        ) ??
         modes.find(
           (mode) =>
             mode.family === result.family &&
@@ -1502,7 +1664,12 @@ export function buildKnowledgeGraph(
         description: report.eventSituation,
         previewStats: [
           { label: "Status", value: report.status },
-          { label: "Occurred", value: report.occurredAt ? new Date(report.occurredAt).toLocaleDateString() : "Draft" },
+          {
+            label: "Occurred",
+            value: report.occurredAt
+              ? new Date(report.occurredAt).toLocaleDateString()
+              : "Draft"
+          },
           { label: "Next moves", value: report.nextMoves.length }
         ],
         owner: report,
@@ -1637,7 +1804,9 @@ export function buildKnowledgeGraph(
 
   for (const surfaceId of discoveredWorkbenchSurfaceIds) {
     const surfaceMeta = WORKBENCH_SURFACE_ROUTES[surfaceId] ?? {
-      title: surfaceId.replace(/[-_]+/g, " ").replace(/\b\w/g, (value) => value.toUpperCase()),
+      title: surfaceId
+        .replace(/[-_]+/g, " ")
+        .replace(/\b\w/g, (value) => value.toUpperCase()),
       subtitle: "Workbench route surface",
       href: `/workbench?surface=${encodeURIComponent(surfaceId)}`
     };
@@ -1653,7 +1822,10 @@ export function buildKnowledgeGraph(
           surfaceId === "workbench"
             ? "Forge's top-level graph-flow workspace for functors, chats, and published outputs."
             : `Workbench surface routed into ${surfaceMeta.href}.`,
-        previewStats: surfaceId === "workbench" ? [{ label: "Flows", value: flows.length }] : [],
+        previewStats:
+          surfaceId === "workbench"
+            ? [{ label: "Flows", value: flows.length }]
+            : [],
         href: surfaceMeta.href
       })
     );
@@ -1771,10 +1943,13 @@ export function buildKnowledgeGraph(
     counts[node.entityKind] = (counts[node.entityKind] ?? 0) + 1;
     return counts;
   }, {});
-  const relationKinds = graphEdges.reduce<Record<string, number>>((counts, edge) => {
-    counts[edge.relationKind] = (counts[edge.relationKind] ?? 0) + 1;
-    return counts;
-  }, {});
+  const relationKinds = graphEdges.reduce<Record<string, number>>(
+    (counts, edge) => {
+      counts[edge.relationKind] = (counts[edge.relationKind] ?? 0) + 1;
+      return counts;
+    },
+    {}
+  );
   const baseGraph = {
     generatedAt: new Date().toISOString(),
     nodes: sizedNodes,
@@ -1843,8 +2018,12 @@ export function buildKnowledgeGraph(
 export function buildKnowledgeGraphFocus(
   entityType: KnowledgeGraphEntityType,
   entityId: string,
-  userIds?: string[]
+  userIds?: string[],
+  options: KnowledgeGraphBuildOptions = {}
 ) {
-  const graph = buildKnowledgeGraph(userIds);
-  return buildFocusPayload(graph, buildKnowledgeGraphNodeId(entityType, entityId));
+  const graph = buildKnowledgeGraph(userIds, {}, options);
+  return buildFocusPayload(
+    graph,
+    buildKnowledgeGraphNodeId(entityType, entityId)
+  );
 }

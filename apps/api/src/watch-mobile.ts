@@ -14,12 +14,10 @@ import {
   getHabitById,
   listHabits
 } from "./repositories/habits.js";
-import { listGoals } from "./repositories/goals.js";
 import { createNote } from "./repositories/notes.js";
 import { listAttentionInbox } from "./services/attention-inbox.js";
 import { listEntityNavigation } from "./services/entity-navigation.js";
-import { listProjectSummaries } from "./services/projects.js";
-import { listTasks, updateTask } from "./repositories/tasks.js";
+import { getTaskById, listTasks, updateTask } from "./repositories/tasks.js";
 import {
   claimTaskRun,
   completeTaskRun,
@@ -99,11 +97,7 @@ export const mobileWatchHabitCheckInSchema = z.object({
   sessionId: z.string().trim().min(1),
   pairingToken: z.string().trim().min(1),
   dedupeKey: z.string().trim().min(1),
-  dateKey: z
-    .string()
-    .trim()
-    .min(1)
-    .optional(),
+  dateKey: z.string().trim().min(1).optional(),
   status: z.enum(["done", "missed"]),
   note: z.string().trim().default(""),
   description: z.string().trim().optional(),
@@ -196,11 +190,10 @@ function nowIso() {
 }
 
 function watchActorLabel(pairing: PairingSessionLike) {
-  const settings = getDatabase()
-    .prepare(`SELECT operator_name FROM app_settings WHERE id = 1`)
-    .get() as { operator_name?: string } | undefined;
-  const operatorName = settings?.operator_name?.trim();
-  return operatorName || pairing.user_id || "Albert";
+  const user = getDatabase()
+    .prepare(`SELECT display_name FROM users WHERE id = ?`)
+    .get(pairing.user_id) as { display_name?: string } | undefined;
+  return user?.display_name?.trim() || pairing.user_id;
 }
 
 function formatDateKey(date: Date) {
@@ -715,6 +708,7 @@ function projectPsycheEvent(
         schemaLinks: [],
         modeTimeline: [],
         nextMoves: [],
+        memoryClarity: "unspecified",
         userId: pairing.user_id
       },
       { source: "system", actor: "Apple Watch" }
@@ -922,6 +916,19 @@ export function assertWatchReady(pairing: PairingSessionLike) {
 }
 
 function compactTask(task: Record<string, unknown>) {
+  const closeoutState =
+    task.closeoutState === "complete" || task.closeoutState === "deferred"
+      ? task.closeoutState
+      : task.status === "done"
+        ? safeJsonParse<{ workSummary?: string }>(
+            typeof task.completionReportJson === "string"
+              ? task.completionReportJson
+              : null,
+            {}
+          ).workSummary?.trim()
+          ? "complete"
+          : "deferred"
+        : "not_applicable";
   return {
     id: String(task.id ?? ""),
     title: String(task.title ?? "Untitled work"),
@@ -936,7 +943,141 @@ function compactTask(task: Record<string, unknown>) {
     points: typeof task.points === "number" ? task.points : 0,
     effort: String(task.effort ?? ""),
     energy: String(task.energy ?? ""),
+    closeoutState,
     updatedAt: String(task.updatedAt ?? "")
+  };
+}
+
+const watchDirectionGoalLimit = 8;
+const watchDirectionProjectLimit = 8;
+const watchTodayDueTaskLimit = 8;
+const watchTodayRecentDoneLimit = 5;
+
+function stableTitleCompare(
+  left: { id: string; title: string },
+  right: { id: string; title: string }
+) {
+  const titleComparison = left.title.localeCompare(right.title, undefined, {
+    sensitivity: "base"
+  });
+  return titleComparison !== 0
+    ? titleComparison
+    : left.id.localeCompare(right.id);
+}
+
+export function buildBoundedWatchDirectionSnapshot(
+  goals: Array<{
+    id: string;
+    title: string;
+    horizon: string;
+    status: string;
+    targetPoints: number;
+  }>,
+  projects: Array<{
+    id: string;
+    title: string;
+    status: string;
+    workflowStatus: string;
+    goalId: string;
+    goalTitle: string;
+    activeRunCount: number;
+    openTaskCount: number;
+  }>
+) {
+  const horizonRank = new Map([
+    ["quarter", 0],
+    ["year", 1],
+    ["lifetime", 2]
+  ]);
+  const workflowRank = new Map([
+    ["focus", 0],
+    ["in_progress", 1],
+    ["building", 1],
+    ["blocked", 2],
+    ["backlog", 3],
+    ["done", 4]
+  ]);
+  const orderedGoals = [...goals].sort((left, right) => {
+    const rankDifference =
+      (horizonRank.get(left.horizon.toLowerCase()) ?? Number.MAX_SAFE_INTEGER) -
+      (horizonRank.get(right.horizon.toLowerCase()) ?? Number.MAX_SAFE_INTEGER);
+    if (rankDifference !== 0) return rankDifference;
+    if (left.targetPoints !== right.targetPoints) {
+      return right.targetPoints - left.targetPoints;
+    }
+    return stableTitleCompare(left, right);
+  });
+  const orderedProjects = [...projects].sort((left, right) => {
+    const rankDifference =
+      (workflowRank.get(left.workflowStatus.toLowerCase()) ??
+        Number.MAX_SAFE_INTEGER) -
+      (workflowRank.get(right.workflowStatus.toLowerCase()) ??
+        Number.MAX_SAFE_INTEGER);
+    if (rankDifference !== 0) return rankDifference;
+    if (left.activeRunCount !== right.activeRunCount) {
+      return right.activeRunCount - left.activeRunCount;
+    }
+    if (left.openTaskCount !== right.openTaskCount) {
+      return right.openTaskCount - left.openTaskCount;
+    }
+    return stableTitleCompare(left, right);
+  });
+
+  return {
+    goals: orderedGoals.slice(0, watchDirectionGoalLimit),
+    goalCount: orderedGoals.length,
+    projects: orderedProjects.slice(0, watchDirectionProjectLimit),
+    projectCount: orderedProjects.length
+  };
+}
+
+export function buildBoundedWatchTodaySnapshot(
+  tasks: ReturnType<typeof compactTask>[],
+  todayKey: string
+) {
+  const statusRank = new Map([
+    ["focus", 0],
+    ["in_progress", 1],
+    ["blocked", 2],
+    ["backlog", 3],
+    ["done", 4]
+  ]);
+  const priorityRank = new Map([
+    ["critical", 0],
+    ["high", 1],
+    ["medium", 2],
+    ["low", 3]
+  ]);
+  const dueToday = tasks
+    .filter((task) => task.status !== "done" && task.dueDate === todayKey)
+    .sort((left, right) => {
+      const statusDifference =
+        (statusRank.get(left.status.toLowerCase()) ?? Number.MAX_SAFE_INTEGER) -
+        (statusRank.get(right.status.toLowerCase()) ?? Number.MAX_SAFE_INTEGER);
+      if (statusDifference !== 0) return statusDifference;
+      const priorityDifference =
+        (priorityRank.get(left.priority.toLowerCase()) ??
+          Number.MAX_SAFE_INTEGER) -
+        (priorityRank.get(right.priority.toLowerCase()) ??
+          Number.MAX_SAFE_INTEGER);
+      if (priorityDifference !== 0) return priorityDifference;
+      if (left.points !== right.points) return right.points - left.points;
+      return stableTitleCompare(left, right);
+    });
+  const recentDone = tasks
+    .filter((task) => task.status === "done")
+    .sort((left, right) => {
+      const updatedComparison = right.updatedAt.localeCompare(left.updatedAt);
+      return updatedComparison !== 0
+        ? updatedComparison
+        : stableTitleCompare(left, right);
+    });
+
+  return {
+    dateKey: todayKey,
+    dueTasks: dueToday.slice(0, watchTodayDueTaskLimit),
+    dueCount: dueToday.length,
+    recentDone: recentDone.slice(0, watchTodayRecentDoneLimit)
   };
 }
 
@@ -1006,54 +1147,284 @@ function buildWorkSnapshot(pairing: PairingSessionLike) {
   };
 }
 
-function buildDirectionSnapshot(pairing: PairingSessionLike) {
-  const scope = userScopeFilter(pairing);
-  const goals = listGoals()
-    .filter(
-      (goal) =>
-        pairing.user_id === "user_operator" ||
-        (goal as Record<string, unknown>).userId === pairing.user_id
+export function buildDirectionSnapshot(pairing: PairingSessionLike) {
+  const database = getDatabase();
+  const operatorScope = pairing.user_id === "user_operator";
+  const goalScopeSql = operatorScope
+    ? ""
+    : `AND EXISTS (
+         SELECT 1
+         FROM entity_owners
+         WHERE entity_owners.entity_type = 'goal'
+           AND entity_owners.entity_id = goals.id
+           AND entity_owners.user_id = ?
+           AND entity_owners.role = 'owner'
+       )`;
+  const projectScopeSql = operatorScope
+    ? ""
+    : `AND (
+         EXISTS (
+           SELECT 1
+           FROM entity_owners
+           WHERE entity_owners.entity_type = 'project'
+             AND entity_owners.entity_id = projects.id
+             AND entity_owners.user_id = ?
+             AND entity_owners.role = 'owner'
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM entity_assignments
+           WHERE entity_assignments.entity_type = 'project'
+             AND entity_assignments.entity_id = projects.id
+             AND entity_assignments.user_id = ?
+             AND entity_assignments.role = 'assignee'
+         )
+       )`;
+  const goalScopeParams = operatorScope ? [] : [pairing.user_id];
+  const projectScopeParams = operatorScope
+    ? []
+    : [pairing.user_id, pairing.user_id];
+  const visibleGoalSql = `goals.status = 'active'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE deleted_entities.entity_type = 'goal'
+        AND deleted_entities.entity_id = goals.id
     )
-    .filter((goal) => goal.status === "active")
-    .slice(0, 8)
-    .map((goal) => ({
-      id: goal.id,
-      title: goal.title,
-      horizon: goal.horizon,
-      status: goal.status,
-      targetPoints: goal.targetPoints
-    }));
-  const projects = listProjectSummaries(scope)
-    .filter((project) => project.status === "active")
-    .slice(0, 8)
-    .map((project) => ({
-      id: project.id,
-      title: project.title,
-      status: project.status,
-      workflowStatus: project.workflowStatus,
-      goalId: project.goalId,
-      goalTitle: project.goalTitle,
-      activeRunCount: project.time.activeRunCount,
-      openTaskCount: project.activeTaskCount
-    }));
-  return { goals, projects };
+    ${goalScopeSql}`;
+  const visibleProjectSql = `projects.status = 'active'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM deleted_entities
+      WHERE deleted_entities.entity_type = 'project'
+        AND deleted_entities.entity_id = projects.id
+    )
+    ${projectScopeSql}`;
+
+  const goalCount = (
+    database
+      .prepare(`SELECT COUNT(*) AS count FROM goals WHERE ${visibleGoalSql}`)
+      .get(...goalScopeParams) as { count: number }
+  ).count;
+  const goals = database
+    .prepare(
+      `SELECT
+         goals.id,
+         goals.title,
+         goals.horizon,
+         goals.status,
+         goals.target_points AS targetPoints
+       FROM goals
+       WHERE ${visibleGoalSql}
+       ORDER BY
+         CASE lower(goals.horizon)
+           WHEN 'quarter' THEN 0
+           WHEN 'year' THEN 1
+           WHEN 'lifetime' THEN 2
+           ELSE 2147483647
+         END,
+         goals.target_points DESC,
+         goals.title COLLATE NOCASE ASC,
+         goals.id ASC
+       LIMIT ?`
+    )
+    .all(...goalScopeParams, watchDirectionGoalLimit) as Array<{
+    id: string;
+    title: string;
+    horizon: string;
+    status: string;
+    targetPoints: number;
+  }>;
+
+  const projectCount = (
+    database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM projects WHERE ${visibleProjectSql}`
+      )
+      .get(...projectScopeParams) as { count: number }
+  ).count;
+  const projects = database
+    .prepare(
+      `WITH visible_projects AS (
+         SELECT
+           projects.id,
+           projects.goal_id,
+           projects.title,
+           projects.status,
+           projects.workflow_status
+         FROM projects
+         WHERE ${visibleProjectSql}
+       ),
+       visible_tasks AS (
+         SELECT tasks.id, tasks.project_id, tasks.status
+         FROM tasks
+         INNER JOIN visible_projects
+           ON visible_projects.id = tasks.project_id
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM deleted_entities
+           WHERE deleted_entities.entity_type = 'task'
+             AND deleted_entities.entity_id = tasks.id
+         )
+       ),
+       task_counts AS (
+         SELECT
+           visible_tasks.project_id,
+           SUM(CASE WHEN visible_tasks.status != 'done' THEN 1 ELSE 0 END) AS open_task_count
+         FROM visible_tasks
+         WHERE visible_tasks.project_id IS NOT NULL
+         GROUP BY visible_tasks.project_id
+       ),
+       run_counts AS (
+         SELECT
+           visible_tasks.project_id,
+           COUNT(*) AS active_run_count
+         FROM visible_tasks
+         INNER JOIN task_runs ON task_runs.task_id = visible_tasks.id
+         WHERE visible_tasks.project_id IS NOT NULL
+           AND task_runs.status = 'active'
+         GROUP BY visible_tasks.project_id
+       )
+       SELECT
+         projects.id,
+         projects.title,
+         projects.status,
+         projects.workflow_status AS workflowStatus,
+         projects.goal_id AS goalId,
+         CASE
+           WHEN goals.id IS NULL OR EXISTS (
+             SELECT 1
+             FROM deleted_entities
+             WHERE deleted_entities.entity_type = 'goal'
+               AND deleted_entities.entity_id = goals.id
+           ) THEN 'Unknown life goal'
+           ELSE goals.title
+         END AS goalTitle,
+         COALESCE(run_counts.active_run_count, 0) AS activeRunCount,
+         COALESCE(task_counts.open_task_count, 0) AS openTaskCount
+       FROM visible_projects AS projects
+       LEFT JOIN goals ON goals.id = projects.goal_id
+       LEFT JOIN task_counts ON task_counts.project_id = projects.id
+       LEFT JOIN run_counts ON run_counts.project_id = projects.id
+       ORDER BY
+         CASE lower(projects.workflow_status)
+           WHEN 'focus' THEN 0
+           WHEN 'in_progress' THEN 1
+           WHEN 'building' THEN 1
+           WHEN 'blocked' THEN 2
+           WHEN 'backlog' THEN 3
+           WHEN 'done' THEN 4
+           ELSE 2147483647
+         END,
+         COALESCE(run_counts.active_run_count, 0) DESC,
+         COALESCE(task_counts.open_task_count, 0) DESC,
+         projects.title COLLATE NOCASE ASC,
+         projects.id ASC
+       LIMIT ?`
+    )
+    .all(...projectScopeParams, watchDirectionProjectLimit) as Array<{
+    id: string;
+    title: string;
+    status: string;
+    workflowStatus: string;
+    goalId: string;
+    goalTitle: string;
+    activeRunCount: number;
+    openTaskCount: number;
+  }>;
+
+  return { goals, goalCount, projects, projectCount };
 }
 
 function buildTodaySnapshot(pairing: PairingSessionLike) {
   const todayKey = formatLocalDateKey();
-  const tasks = (
-    listTasks({ ...userScopeFilter(pairing), limit: 100 }) as Array<
-      Record<string, unknown>
-    >
-  ).map(compactTask);
-  const dueToday = tasks
-    .filter((task) => task.status !== "done" && task.dueDate === todayKey)
-    .slice(0, 8);
+  const ownershipSql =
+    pairing.user_id === "user_operator"
+      ? ""
+      : `AND EXISTS (
+           SELECT 1
+           FROM entity_owners
+           WHERE entity_owners.entity_type = 'task'
+             AND entity_owners.entity_id = tasks.id
+             AND entity_owners.user_id = ?
+             AND entity_owners.role = 'owner'
+         )`;
+  const ownershipParams =
+    pairing.user_id === "user_operator" ? [] : [pairing.user_id];
+  const visibleSql = `AND NOT EXISTS (
+    SELECT 1
+    FROM deleted_entities
+    WHERE deleted_entities.entity_type = 'task'
+      AND deleted_entities.entity_id = tasks.id
+  )`;
+  const taskProjection = `
+    SELECT id, title, status, level, priority,
+           due_date AS dueDate,
+           project_id AS projectId,
+           goal_id AS goalId,
+           parent_task_id AS parentWorkItemId,
+           points, effort, energy,
+           completion_report_json AS completionReportJson,
+           updated_at AS updatedAt
+    FROM tasks`;
+  const dueCount = getDatabase()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM tasks
+       WHERE status != 'done'
+         AND due_date = ?
+         ${visibleSql}
+         ${ownershipSql}`
+    )
+    .get(todayKey, ...ownershipParams) as { count: number };
+  const dueTasks = getDatabase()
+    .prepare(
+      `${taskProjection}
+       WHERE status != 'done'
+         AND due_date = ?
+         ${visibleSql}
+         ${ownershipSql}
+       ORDER BY
+         CASE status
+           WHEN 'focus' THEN 0
+           WHEN 'in_progress' THEN 1
+           WHEN 'blocked' THEN 2
+           WHEN 'backlog' THEN 3
+           ELSE 4
+         END,
+         CASE priority
+           WHEN 'critical' THEN 0
+           WHEN 'high' THEN 1
+           WHEN 'medium' THEN 2
+           WHEN 'low' THEN 3
+           ELSE 4
+         END,
+         points DESC,
+         title COLLATE NOCASE,
+         id
+       LIMIT ?`
+    )
+    .all(todayKey, ...ownershipParams, watchTodayDueTaskLimit) as Array<
+    Record<string, unknown>
+  >;
+  const recentDone = getDatabase()
+    .prepare(
+      `${taskProjection}
+       WHERE status = 'done'
+         ${visibleSql}
+         ${ownershipSql}
+       ORDER BY updated_at DESC, title COLLATE NOCASE, id
+       LIMIT ?`
+    )
+    .all(...ownershipParams, watchTodayRecentDoneLimit) as Array<
+    Record<string, unknown>
+  >;
+
   return {
     dateKey: todayKey,
-    dueTasks: dueToday,
-    dueCount: dueToday.length,
-    recentDone: tasks.filter((task) => task.status === "done").slice(0, 5)
+    dueTasks: dueTasks.map(compactTask),
+    dueCount: dueCount.count,
+    recentDone: recentDone.map(compactTask)
   };
 }
 
@@ -1513,7 +1884,9 @@ export function buildWatchBootstrap(
     },
     work,
     goals: direction.goals,
+    goalCount: direction.goalCount,
     projects: direction.projects,
+    projectCount: direction.projectCount,
     today,
     health: buildHealthSnapshot(pairing.user_id),
     movement: buildMovementSnapshot(pairing.user_id),
@@ -1706,11 +2079,7 @@ function writeActionReceipt(
 
 const habitCommandPayloadSchema = z.object({
   habitId: z.string().trim().min(1),
-  dateKey: z
-    .string()
-    .trim()
-    .min(1)
-    .optional(),
+  dateKey: z.string().trim().min(1).optional(),
   status: z.enum(["done", "missed"]),
   note: z.string().trim().default(""),
   description: z.string().trim().optional(),
@@ -1764,14 +2133,75 @@ const taskRunIdCommandPayloadSchema = z.object({
   actor: z.string().trim().min(1).optional(),
   leaseTtlSeconds: z.coerce.number().int().min(1).max(14_400).default(900),
   note: z.string().trim().default(""),
-  overrideReason: z.string().trim().optional()
+  overrideReason: z.string().trim().optional(),
+  closeoutMode: z.literal("deferred").optional()
 });
 
 const taskStatusCommandPayloadSchema = z.object({
   taskId: z.string().trim().min(1),
   status: z.enum(["backlog", "focus", "in_progress", "blocked", "done"]),
-  note: z.string().trim().default("")
+  note: z.string().trim().default(""),
+  closeoutMode: z.literal("deferred").optional()
 });
+
+function hasWatchTaskAccess(userId: string, taskId: string) {
+  return Boolean(
+    getDatabase()
+      .prepare(
+        `SELECT 1
+         FROM tasks
+         WHERE tasks.id = ?
+           AND NOT EXISTS (
+             SELECT 1
+             FROM deleted_entities
+             WHERE deleted_entities.entity_type = 'task'
+               AND deleted_entities.entity_id = tasks.id
+           )
+           AND (
+             EXISTS (
+               SELECT 1
+               FROM entity_owners
+               WHERE entity_owners.entity_type = 'task'
+                 AND entity_owners.entity_id = tasks.id
+                 AND entity_owners.user_id = ?
+                 AND entity_owners.role = 'owner'
+             )
+             OR EXISTS (
+               SELECT 1
+               FROM entity_assignments
+               WHERE entity_assignments.entity_type = 'task'
+                 AND entity_assignments.entity_id = tasks.id
+                 AND entity_assignments.user_id = ?
+                 AND entity_assignments.role = 'assignee'
+             )
+           )`
+      )
+      .get(taskId, userId, userId)
+  );
+}
+
+function requireWatchTaskAccess(pairing: PairingSessionLike, taskId: string) {
+  if (!hasWatchTaskAccess(pairing.user_id, taskId)) {
+    throw new HttpError(404, "watch_task_not_found", "Task not found");
+  }
+}
+
+function requireWatchTaskRunAccess(
+  pairing: PairingSessionLike,
+  taskRunId: string
+) {
+  const row = getDatabase()
+    .prepare(`SELECT task_id FROM task_runs WHERE id = ?`)
+    .get(taskRunId) as { task_id: string } | undefined;
+  if (!row || !hasWatchTaskAccess(pairing.user_id, row.task_id)) {
+    throw new HttpError(
+      404,
+      "watch_task_run_not_found",
+      "Task run not found"
+    );
+  }
+  return row.task_id;
+}
 
 function processWatchCommand(
   pairing: PairingSessionLike,
@@ -1860,6 +2290,7 @@ function processWatchCommand(
     }
     case "task_run_start": {
       const payload = taskRunStartCommandPayloadSchema.parse(command.payload);
+      requireWatchTaskAccess(pairing, payload.taskId);
       const result = claimTaskRun(
         payload.taskId,
         {
@@ -1878,6 +2309,7 @@ function processWatchCommand(
     }
     case "task_run_heartbeat": {
       const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      requireWatchTaskRunAccess(pairing, payload.runId);
       return {
         taskRun: heartbeatTaskRun(
           payload.runId,
@@ -1894,6 +2326,7 @@ function processWatchCommand(
     }
     case "task_run_focus": {
       const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      requireWatchTaskRunAccess(pairing, payload.runId);
       return {
         taskRun: focusTaskRun(
           payload.runId,
@@ -1905,17 +2338,21 @@ function processWatchCommand(
     }
     case "task_run_complete": {
       const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      const taskId = requireWatchTaskRunAccess(pairing, payload.runId);
+      const taskRun = completeTaskRun(
+        payload.runId,
+        { actor: payload.actor ?? actor, note: payload.note },
+        new Date(),
+        { source: "system" }
+      );
       return {
-        taskRun: completeTaskRun(
-          payload.runId,
-          { actor: payload.actor ?? actor, note: payload.note },
-          new Date(),
-          { source: "system" }
-        )
+        taskRun,
+        closeoutState: getTaskById(taskId)?.closeoutState ?? "deferred"
       };
     }
     case "task_run_release": {
       const payload = taskRunIdCommandPayloadSchema.parse(command.payload);
+      requireWatchTaskRunAccess(pairing, payload.runId);
       return {
         taskRun: releaseTaskRun(
           payload.runId,
@@ -1927,6 +2364,7 @@ function processWatchCommand(
     }
     case "task_status_update": {
       const payload = taskStatusCommandPayloadSchema.parse(command.payload);
+      requireWatchTaskAccess(pairing, payload.taskId);
       const task = updateTask(
         payload.taskId,
         { status: payload.status },
@@ -1957,7 +2395,11 @@ function processWatchCommand(
           ]
         });
       }
-      return { taskId: task.id, status: task.status };
+      return {
+        taskId: task.id,
+        status: task.status,
+        closeoutState: task.closeoutState
+      };
     }
   }
 }
@@ -2023,11 +2465,13 @@ export function ingestWatchCommandBatch(
     }
 
     try {
-      const result = processWatchCommand(pairing, command);
       receipts.push(
-        writeActionReceipt(pairing, command, {
-          status: "processed",
-          result
+        runInTransaction(() => {
+          const result = processWatchCommand(pairing, command);
+          return writeActionReceipt(pairing, command, {
+            status: "processed",
+            result
+          });
         })
       );
     } catch (error) {

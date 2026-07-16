@@ -8,6 +8,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const packageRoot = path.resolve(import.meta.dirname, "..");
 const bin = path.join(packageRoot, "bin", "forge-memory.mjs");
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")
+).version;
+const runtimePackageName = "forge-openclaw-plugin";
 const cliSource = fs.readFileSync(bin, "utf8");
 if (
   !cliSource.includes('path.join(repoRoot, "apps", "api", "src", "index.ts")')
@@ -257,12 +261,20 @@ async function withPlainServer(callback) {
   }
 }
 
-function forgeHealthResponse() {
+function forgeHealthResponse({
+  packageName = runtimePackageName,
+  runtimeVersion = packageVersion
+} = {}) {
   return {
     app: "forge",
     apiVersion: "v1",
     backend: "forge-node-runtime",
-    runtime: { basePath: "/forge/", storageRoot: dataRoot }
+    runtime: {
+      basePath: "/forge/",
+      storageRoot: dataRoot,
+      packageName,
+      packageVersion: runtimeVersion
+    }
   };
 }
 
@@ -284,7 +296,9 @@ const server = http.createServer((request, response) => {
       runtime: {
         pid: process.pid,
         basePath: "/forge/",
-        storageRoot: process.env.FORGE_DATA_ROOT
+        storageRoot: process.env.FORGE_DATA_ROOT,
+        packageName: process.env.FORGE_RUNTIME_PACKAGE_NAME,
+        packageVersion: process.env.FORGE_RUNTIME_PACKAGE_VERSION
       }
     }));
     return;
@@ -299,7 +313,12 @@ server.listen(0, "127.0.0.1", () => {
       `
     ],
     {
-      env: { ...env, FORGE_DATA_ROOT: dataRoot },
+      env: {
+        ...env,
+        FORGE_DATA_ROOT: dataRoot,
+        FORGE_RUNTIME_PACKAGE_NAME: runtimePackageName,
+        FORGE_RUNTIME_PACKAGE_VERSION: packageVersion
+      },
       stdio: ["ignore", "pipe", "pipe"]
     }
   );
@@ -462,6 +481,34 @@ async function inspectMcp() {
 
 run(["--help"]);
 run(["--version"]);
+for (const peerOption of [
+  "--enable-peer",
+  "--disable-peer",
+  "--enable-peer-iroh",
+  "--disable-peer-iroh",
+  "--peer-endpoint <ip:port>",
+  "--allow-loopback-peer"
+]) {
+  if (!run(["--help"]).stdout.includes(peerOption)) {
+    throw new Error(`Expected Forge Memory help to include ${peerOption}`);
+  }
+}
+const conflictingPeerFlags = runFailure([
+  "configure",
+  "--enable-peer",
+  "--disable-peer"
+]);
+if (!conflictingPeerFlags.stderr.includes("cannot be used together")) {
+  throw new Error("Expected conflicting peer enable/disable flags to fail");
+}
+const conflictingPeerIrohFlags = runFailure([
+  "configure",
+  "--enable-peer-iroh",
+  "--disable-peer-iroh"
+]);
+if (!conflictingPeerIrohFlags.stderr.includes("cannot be used together")) {
+  throw new Error("Expected conflicting peer Iroh flags to fail");
+}
 const guidedDryRun = run(
   [
     "install",
@@ -521,6 +568,119 @@ run([
   "0",
   "--json"
 ]);
+const initialConfigPath = path.join(tempHome, ".forge", "config.json");
+const initialConfigBytes = fs.readFileSync(initialConfigPath);
+const initialConfig = JSON.parse(initialConfigBytes.toString("utf8"));
+if (
+  initialConfig.peer?.enabled !== false ||
+  initialConfig.peer?.irohEnabled !== false ||
+  initialConfig.peer?.allowLoopbackDirect !== false ||
+  initialConfig.peer?.directEndpoints?.length !== 0
+) {
+  throw new Error(
+    `Expected a non-interactive install to keep peer sharing disabled by default, got ${JSON.stringify(initialConfig.peer)}`
+  );
+}
+const inheritedPeerStatus = JSON.parse(
+  run(["status", "--json"], {
+    env: {
+      ...env,
+      FORGE_PEER_ENABLED: "1",
+      FORGE_PEER_BIN: "/tmp/untrusted-forge-peer",
+      FORGE_PEER_ENABLE_IROH: "1",
+      FORGE_PEER_DIRECT_ENDPOINTS: "127.0.0.1:1"
+    }
+  }).stdout
+);
+if (
+  inheritedPeerStatus.peer?.enabled !== false ||
+  inheritedPeerStatus.peer?.runtime?.enabled !== false
+) {
+  throw new Error(
+    "Expected persisted Forge Memory settings to ignore inherited peer environment variables"
+  );
+}
+const loopbackPeerFailure = runFailure([
+  "configure",
+  "--yes",
+  "--dry-run",
+  "--no-start",
+  "--no-doctor",
+  "--skip-pair-ios",
+  "--enable-peer",
+  "--peer-endpoint",
+  "127.0.0.1:4318",
+  "--json"
+]);
+if (!loopbackPeerFailure.stderr.includes("requires --allow-loopback-peer")) {
+  throw new Error(
+    "Expected loopback peer endpoints to require explicit opt-in"
+  );
+}
+const peerPreview = JSON.parse(
+  run([
+    "configure",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--no-doctor",
+    "--skip-pair-ios",
+    "--enable-peer",
+    "--allow-loopback-peer",
+    "--peer-endpoint",
+    "127.0.0.1:4318",
+    "--json"
+  ]).stdout
+);
+if (
+  peerPreview.config.peerEnabled !== true ||
+  peerPreview.config.peerIrohEnabled !== true ||
+  peerPreview.config.peerAllowLoopbackDirect !== true ||
+  peerPreview.config.peerDirectEndpoints?.join(",") !== "127.0.0.1:4318"
+) {
+  throw new Error(
+    `Expected an explicit loopback test configuration in dry-run output, got ${JSON.stringify(peerPreview.config)}`
+  );
+}
+const irohOnlyPeerPreview = JSON.parse(
+  run([
+    "configure",
+    "--yes",
+    "--dry-run",
+    "--no-start",
+    "--no-doctor",
+    "--skip-pair-ios",
+    "--enable-peer",
+    "--enable-peer-iroh",
+    "--json"
+  ]).stdout
+);
+if (
+  irohOnlyPeerPreview.config.peerIrohEnabled !== true ||
+  irohOnlyPeerPreview.config.peerDirectEndpoints?.length !== 0
+) {
+  throw new Error(
+    `Expected Iroh-only peer sharing to work without a direct endpoint, got ${JSON.stringify(irohOnlyPeerPreview.config)}`
+  );
+}
+if (!fs.readFileSync(initialConfigPath).equals(initialConfigBytes)) {
+  throw new Error("Expected peer configuration dry-runs not to change config");
+}
+const hostnamePeerFailure = runFailure([
+  "configure",
+  "--yes",
+  "--dry-run",
+  "--no-start",
+  "--no-doctor",
+  "--skip-pair-ios",
+  "--enable-peer",
+  "--peer-endpoint",
+  "peer.example.test:4318",
+  "--json"
+]);
+if (!hostnamePeerFailure.stderr.includes("must use an IPv4 address")) {
+  throw new Error("Expected peer endpoints to reject unresolved hostnames");
+}
 fs.writeFileSync(
   path.join(dataRoot, "install-preserved.txt"),
   "preserve across reinstall\n"
@@ -998,6 +1158,35 @@ await withFakeForgeServer(
   }
 );
 await withFakeForgeServer(
+  async (request) => {
+    if (request.url === "/api/v1/health") {
+      return {
+        body: forgeHealthResponse({ runtimeVersion: "0.0.0-stale" })
+      };
+    }
+    return { statusCode: 404, body: { error: "not found" } };
+  },
+  async ({ port }) => {
+    writeSmokeConfig({ mode: "packaged", port, dataRoot, adapters: [] });
+    fs.rmSync(
+      path.join(tempHome, ".forge", "run", "forge-memory-runtime.json"),
+      { force: true }
+    );
+    const start = await runAsync(["start"]);
+    const payload = JSON.parse(start.stdout);
+    if (
+      payload.ok ||
+      payload.runtimeVersionMismatch !== true ||
+      payload.adopted !== false ||
+      payload.runningRuntimePackage?.version !== "0.0.0-stale"
+    ) {
+      throw new Error(
+        `Expected an unowned stale Forge runtime not to be adopted, got ${start.stdout}`
+      );
+    }
+  }
+);
+await withFakeForgeServer(
   async (request, body) => {
     if (request.url === "/api/v1/health")
       return { body: forgeHealthResponse() };
@@ -1350,6 +1539,33 @@ await withFakeForgeServer(
         `Expected healthy runtime adoption without spawning, got ${start.stdout}`
       );
     }
+    writeSmokeConfig({
+      peer: {
+        enabled: true,
+        irohEnabled: true,
+        directEndpoints: ["127.0.0.1:4318"],
+        allowLoopbackDirect: true
+      }
+    });
+    const mismatchedStart = await runAsync(["start"]);
+    const mismatchedPayload = JSON.parse(mismatchedStart.stdout);
+    if (
+      mismatchedPayload.ok ||
+      mismatchedPayload.configurationMismatch !== true ||
+      mismatchedPayload.adopted !== false
+    ) {
+      throw new Error(
+        `Expected a healthy runtime with unknown peer settings not to be adopted, got ${mismatchedStart.stdout}`
+      );
+    }
+    writeSmokeConfig({
+      peer: {
+        enabled: false,
+        irohEnabled: false,
+        directEndpoints: [],
+        allowLoopbackDirect: false
+      }
+    });
   }
 );
 await withFakeForgeServer(

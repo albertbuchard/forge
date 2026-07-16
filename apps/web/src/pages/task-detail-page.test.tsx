@@ -211,6 +211,7 @@ describe("TaskDetailPage", () => {
     getDeletedPlanningRecordMock.mockResolvedValue(null);
     useForgeShellMock.mockReturnValue({
       selectedUserIds: ["user_operator"],
+      openTaskCloseout: vi.fn(),
       patchTaskStatus: vi.fn().mockResolvedValue(undefined),
       startTaskNow: vi.fn().mockResolvedValue(undefined),
       refresh: vi.fn().mockResolvedValue(undefined),

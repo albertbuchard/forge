@@ -99,10 +99,16 @@ The flow is:
 4. Review the draft, fill missing fields, and save or calendar-sync the event.
 
 Agents must not download, open, execute, decrypt, preview, or transform stored artifact
-bytes. Ticket import reads safe artifact metadata and scanner text samples. If `useLlm`
-is requested and the runtime does not have an approved extraction path, the response
-records that LLM extraction was requested but unavailable; it does not silently call an
-unapproved provider.
+bytes. Ticket import accepts no caller-supplied extracted text and does not derive travel
+details from Artifact descriptions or metadata. The server requires an active plaintext
+Artifact that is neither blocked nor quarantined, verifies the stored and plaintext
+hashes and byte sizes, and runs the current static scanner again. Only that transient
+scanner-approved plaintext is used for extraction; it is not returned or persisted by
+the import route. Archived, metadata-only, encrypted, blocked, quarantined, empty-text,
+and integrity-mismatched Artifacts are rejected. If `useLlm` is requested and the
+runtime does not have an approved extraction path, the response records that LLM
+extraction was requested but unavailable; it does not silently call an unapproved
+provider.
 
 ## Web App Behavior
 

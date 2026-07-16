@@ -53,6 +53,7 @@ test("entity navigation defines a truthful destination for every CRUD entity typ
     habit: `/habits?focus=${encodedId}`,
     tag: `/knowledge-graph?focus=tag%3A${encodedId}`,
     note: `/notes?focus=${encodedId}`,
+    person: `/people/${encodedId}`,
     insight: `/knowledge-graph?focus=insight%3A${encodedId}`,
     calendar_event: `/calendar?focus=${encodedId}&focusType=calendar_event`,
     work_block_template: `/calendar?focus=${encodedId}&focusType=work_block_template`,
@@ -494,9 +495,8 @@ test("entity navigation preference targets preserve the owning user and domain",
       }
     });
     assert.equal(itemResponse.statusCode, 201, itemResponse.body);
-    const preferenceItemId = (
-      itemResponse.json() as { item: { id: string } }
-    ).item.id;
+    const preferenceItemId = (itemResponse.json() as { item: { id: string } })
+      .item.id;
 
     const expectedTargets: Array<{
       entityType:

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronRight, RefreshCcw } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { type SurfaceWidgetDefinition } from "@/components/customization/editable-surface";
 import { AiSurfaceWorkspace } from "@/components/customization/ai-surface-workspace";
@@ -25,12 +25,16 @@ import {
 } from "@/components/workbench-boxes/today/today-boxes";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/page-state";
+import { Button } from "@/components/ui/button";
 import { ProgressMeter } from "@/components/ui/progress-meter";
-import { getCalendarOverview } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import {
+  getCalendarOverview,
+  getLifeForce,
+  getTodayPriorityDecision
+} from "@/lib/api";
 import type { CalendarEvent } from "@/lib/types";
 import { normalizeTodayLayout } from "@/pages/today-layout";
+import { TodayPriorityPanel } from "@/pages/today-priority-panel";
 
 const MAX_VISIBLE_TODAY_EVENTS = 5;
 const todayEyebrowClass =
@@ -45,11 +49,18 @@ const todayGhostButtonClass =
   "inline-flex min-h-10 max-w-full shrink-0 items-center justify-center gap-2 rounded-full border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-3 py-2 text-xs font-medium text-[var(--ui-ink-medium)] shadow-[var(--ui-shadow-soft)] transition hover:border-[var(--ui-border-strong)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]";
 
 function buildTodayRange() {
-  const start = new Date();
+  const now = new Date();
+  const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
-  return { start, end, from: start.toISOString(), to: end.toISOString() };
+  return {
+    now,
+    start,
+    end,
+    from: start.toISOString(),
+    to: end.toISOString()
+  };
 }
 
 function eventFallsOnDay(
@@ -58,28 +69,41 @@ function eventFallsOnDay(
 ) {
   const eventStart = new Date(event.startAt);
   const eventEnd = new Date(event.endAt);
-  return eventStart < range.end && eventEnd > range.start;
+  return (
+    Number.isFinite(eventStart.getTime()) &&
+    Number.isFinite(eventEnd.getTime()) &&
+    eventStart < range.end &&
+    eventEnd > range.start
+  );
 }
 
 function formatTodayEventWindow(event: CalendarEvent) {
   if (event.isAllDay) {
     return "All day";
   }
+  const start = new Date(event.startAt);
+  const end = new Date(event.endAt);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    return "Time unavailable";
+  }
   const formatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit"
   });
-  return `${formatter.format(new Date(event.startAt))} - ${formatter.format(new Date(event.endAt))}`;
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
 export function TodayPage() {
-  const { t } = useI18n();
   const shell = useForgeShell();
   const navigate = useNavigate();
   const todayRange = useMemo(() => buildTodayRange(), []);
   const selectedUserIds = Array.isArray(shell.selectedUserIds)
     ? shell.selectedUserIds
     : [];
+  const priorityTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    []
+  );
   const calendarQuery = useQuery({
     queryKey: [
       "forge-calendar-overview",
@@ -94,7 +118,48 @@ export function TodayPage() {
         userIds: selectedUserIds
       })
   });
-  const directive = shell.snapshot.today.directive.task;
+  const lifeForceQuery = useQuery({
+    queryKey: ["forge-life-force", ...selectedUserIds],
+    queryFn: () => getLifeForce(selectedUserIds),
+    initialData:
+      shell.snapshot.lifeForce === undefined
+        ? undefined
+        : { lifeForce: shell.snapshot.lifeForce, templates: [] }
+  });
+  const priorityQuery = useQuery({
+    queryKey: ["forge-today-priority", priorityTimeZone, ...selectedUserIds],
+    queryFn: () =>
+      getTodayPriorityDecision({
+        userIds: selectedUserIds,
+        timeZone: priorityTimeZone,
+        candidateLimit: 24
+      })
+  });
+  const lifeForce = lifeForceQuery.data?.lifeForce ?? shell.snapshot.lifeForce;
+  const todayDecision = priorityQuery.data?.decision ?? null;
+  const directive = todayDecision?.task ?? null;
+  const rankedTodayTasks =
+    todayDecision?.rankedCandidates
+      .slice(0, 6)
+      .map((candidate) => candidate.task) ?? [];
+  const runwayTodayTasks =
+    todayDecision?.mode === "overloaded" ||
+    todayDecision?.mode === "capacity-limited" ||
+    todayDecision?.mode === "unresolved-active"
+      ? []
+      : rankedTodayTasks;
+  const refreshTodayEvidence = async () => {
+    await Promise.all([
+      shell.refresh(),
+      priorityQuery.refetch(),
+      calendarQuery.refetch(),
+      lifeForceQuery.refetch()
+    ]);
+  };
+  const startTodayTask = async (taskId: string) => {
+    await shell.startTaskNow(taskId);
+    await Promise.all([shell.refresh(), priorityQuery.refetch()]);
+  };
   const nextMilestone =
     shell.snapshot.today.milestoneRewards.find((reward) => !reward.completed) ??
     shell.snapshot.today.milestoneRewards[0] ??
@@ -116,47 +181,15 @@ export function TodayPage() {
             event.status !== "cancelled" &&
             eventFallsOnDay(event, todayRange)
         )
-        .sort(
-          (left, right) =>
-            new Date(left.startAt).getTime() - new Date(right.startAt).getTime()
-        ),
+        .sort((left, right) => {
+          const timeDelta =
+            new Date(left.startAt).getTime() -
+            new Date(right.startAt).getTime();
+          return timeDelta !== 0 ? timeDelta : left.id < right.id ? -1 : 1;
+        }),
     [calendarQuery.data?.calendar.events, todayRange]
   );
   const visibleTodayEvents = todayEvents.slice(0, MAX_VISIBLE_TODAY_EVENTS);
-  const hasTodayData =
-    shell.snapshot.lifeForce !== undefined ||
-    directive !== null ||
-    shell.snapshot.overview.topTasks.length > 0 ||
-    shell.snapshot.today.dueHabits.length > 0 ||
-    shell.snapshot.today.dailyQuests.length > 0 ||
-    shell.snapshot.today.milestoneRewards.length > 0 ||
-    todayEvents.length > 0;
-
-  if (!hasTodayData && !calendarQuery.isLoading) {
-    return (
-      <div className="grid gap-4">
-        <PageHero
-          title="Today"
-          titleText="Today"
-          description="Start a task, earn XP, and keep today's work clear."
-          badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
-        />
-        <EmptyState
-          eyebrow={t("common.todayPage.heroEyebrow")}
-          title={t("common.todayPage.emptyTitle")}
-          description={t("common.todayPage.emptyDescription")}
-          action={
-            <Link
-              to="/goals"
-              className="inline-flex min-h-10 min-w-max shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--ui-ink-on-accent)] transition hover:opacity-90"
-            >
-              {t("common.todayPage.emptyAction")}
-            </Link>
-          }
-        />
-      </div>
-    );
-  }
 
   const widgets: SurfaceWidgetDefinition[] = [
     {
@@ -175,13 +208,92 @@ export function TodayPage() {
             title="Today"
             titleText="Today"
             description={
-              directive?.description ??
-              "Start one real task, collect XP, and keep today's work moving."
+              directive
+                ? `${todayDecision?.mode === "continue-active" ? "Active now" : "Next"}: ${directive.title}.`
+                : priorityQuery.isLoading
+                  ? "Loading the current work decision."
+                  : priorityQuery.isError
+                    ? "The current work decision is temporarily unavailable."
+                    : (todayDecision?.summary ??
+                      "No priority decision is available.")
             }
             badge={`${shell.snapshot.metrics.weeklyXp} weekly xp`}
           />
         </TodayHeroBox>
       )
+    },
+    {
+      id: "priority",
+      title: "Next useful work",
+      description:
+        "One deterministic recommendation with urgency, schedule, capacity, and active-context evidence.",
+      defaultWidth: 12,
+      defaultHeight: 4,
+      minWidth: 6,
+      removable: false,
+      defaultTitleVisible: false,
+      defaultDescriptionVisible: false,
+      render: () =>
+        priorityQuery.isLoading && !todayDecision ? (
+          <section
+            aria-labelledby="today-priority-loading-title"
+            aria-busy="true"
+            className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
+          >
+            <div>
+              <h2
+                id="today-priority-loading-title"
+                className="text-base font-semibold text-[var(--ui-ink-strong)]"
+              >
+                Loading next useful work
+              </h2>
+              <p className={`mt-2 text-sm ${todaySoftTextClass}`}>
+                Forge is checking active work, timing, and capacity.
+              </p>
+            </div>
+          </section>
+        ) : priorityQuery.isError || !todayDecision ? (
+          <section
+            aria-labelledby="today-priority-error-title"
+            className={`${todayInnerPanelClass} grid min-h-44 place-items-center px-4 py-8 text-center`}
+          >
+            <div>
+              <h2
+                id="today-priority-error-title"
+                className="text-base font-semibold text-[var(--ui-ink-strong)]"
+              >
+                Next useful work is unavailable
+              </h2>
+              <p role="alert" className={`mt-2 text-sm ${todaySoftTextClass}`}>
+                The server could not build a current decision. No fallback
+                ranking has been applied.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                pending={priorityQuery.isFetching}
+                pendingLabel="Retrying"
+                className="mt-4"
+                onClick={() => void priorityQuery.refetch()}
+              >
+                <RefreshCcw className="size-3.5" />
+                Retry decision
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <TodayPriorityPanel
+            decision={todayDecision}
+            onStartTask={startTodayTask}
+            refreshing={Boolean(
+              priorityQuery.isFetching ||
+              calendarQuery.isFetching ||
+              lifeForceQuery.isFetching
+            )}
+            onRefresh={refreshTodayEvidence}
+          />
+        )
     },
     {
       id: "life-force",
@@ -193,7 +305,7 @@ export function TodayPage() {
       render: () => (
         <LifeForceTodayCard
           selectedUserIds={shell.selectedUserIds}
-          fallbackLifeForce={shell.snapshot.lifeForce!}
+          fallbackLifeForce={lifeForce}
           onRefresh={shell.refresh}
         />
       )
@@ -232,7 +344,7 @@ export function TodayPage() {
                   <ProgressMeter
                     value={
                       (shell.snapshot.metrics.currentLevelXp /
-                        shell.snapshot.metrics.nextLevelXp) *
+                        Math.max(1, shell.snapshot.metrics.nextLevelXp)) *
                       100
                     }
                     tone="tertiary"
@@ -277,7 +389,7 @@ export function TodayPage() {
       render: ({ compact }) => (
         <TodayRunwayBox>
           <DailyRunway
-            tasks={shell.snapshot.overview.topTasks}
+            tasks={runwayTodayTasks}
             timeline={shell.snapshot.today.timeline}
             goals={shell.snapshot.goals}
             tags={shell.snapshot.tags}
@@ -285,7 +397,7 @@ export function TodayPage() {
             selectedTaskId={directive?.id ?? null}
             onSelectTask={(taskId) => navigate(`/tasks/${taskId}`)}
             onStartTask={async (taskId) => {
-              await shell.startTaskNow(taskId);
+              await startTodayTask(taskId);
             }}
             onMove={async (taskId, nextStatus) => {
               await shell.patchTaskStatus(taskId, nextStatus);
@@ -333,11 +445,43 @@ export function TodayPage() {
               </Link>
             </div>
             {todayEvents.length === 0 ? (
-              <div
-                className={`${todayInnerPanelClass} px-4 py-4 text-sm ${todaySoftTextClass}`}
-              >
-                Nothing is scheduled yet for today.
-              </div>
+              calendarQuery.isLoading ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`${todayInnerPanelClass} px-4 py-4 text-sm ${todaySoftTextClass}`}
+                >
+                  Loading today&apos;s calendar.
+                </div>
+              ) : calendarQuery.isError ? (
+                <div
+                  role="alert"
+                  className={`${todayInnerPanelClass} grid gap-3 px-4 py-4 text-sm ${todaySoftTextClass}`}
+                >
+                  <span>
+                    Calendar events are unavailable. The Today decision still
+                    uses saved task timeboxes.
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    pending={calendarQuery.isFetching}
+                    pendingLabel="Retrying"
+                    className="w-fit"
+                    onClick={() => void calendarQuery.refetch()}
+                  >
+                    <RefreshCcw className="size-3.5" />
+                    Retry calendar
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  className={`${todayInnerPanelClass} px-4 py-4 text-sm ${todaySoftTextClass}`}
+                >
+                  Nothing is scheduled yet for today.
+                </div>
+              )
             ) : (
               visibleTodayEvents.map((event) => (
                 <button
@@ -405,18 +549,37 @@ export function TodayPage() {
               <div
                 className={`mt-3 break-words text-base font-semibold ${todayStrongTextClass}`}
               >
-                {directive?.title ?? "Pick a task from the runway"}
+                {directive?.title ??
+                  (todayDecision?.mode === "overloaded"
+                    ? "No new task recommended"
+                    : todayDecision?.mode === "capacity-limited"
+                      ? "No task fits current capacity"
+                      : todayDecision?.mode === "unresolved-active"
+                        ? "Active work needs review"
+                        : todayDecision?.mode === "no-work"
+                          ? "No startable work"
+                          : priorityQuery.isLoading
+                            ? "Loading current work"
+                            : "Pick a task from the runway")}
               </div>
               <div className={`mt-2 text-sm leading-6 ${todaySoftTextClass}`}>
                 {directive?.description ??
-                  "Once a task is active, the timer rail and this panel stay aligned."}
+                  (todayDecision?.mode === "overloaded"
+                    ? "Capacity is overloaded, so Today is not recommending a new start."
+                    : todayDecision?.mode === "capacity-limited"
+                      ? "The remaining AP budget is smaller than every open task. Split or replan before starting."
+                      : todayDecision?.mode === "unresolved-active"
+                        ? "Resolve the live run before starting other work."
+                        : todayDecision?.mode === "no-work"
+                          ? "No startable task is available in the selected scope."
+                          : "Once a task is active, the timer rail and this panel stay aligned.")}
               </div>
-              {directive ? (
+              {directive && todayDecision?.mode === "ready" ? (
                 <button
                   type="button"
                   className="mt-4 inline-flex min-h-10 max-w-full items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--primary)_24%,transparent)] bg-[var(--ui-accent-soft)] px-3.5 py-2 text-sm font-medium text-[var(--primary)] shadow-[var(--ui-shadow-soft)] transition hover:bg-[var(--ui-accent-soft-hover)]"
                   onClick={async () => {
-                    await shell.startTaskNow(directive.id);
+                    await startTodayTask(directive.id);
                   }}
                 >
                   Start work

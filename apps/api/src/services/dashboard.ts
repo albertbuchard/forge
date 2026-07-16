@@ -2,7 +2,11 @@ import { listGoals } from "../repositories/goals.js";
 import { listActivityEvents } from "../repositories/activity-events.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import { listHabits } from "../repositories/habits.js";
-import { buildNotesSummaryByEntity } from "../repositories/notes.js";
+import {
+  buildNotesSummaryByEntity,
+  filterNoteActivityEventsForScope,
+  type NoteReadScope
+} from "../repositories/notes.js";
 import { listTagsByIds, listTags } from "../repositories/tags.js";
 import { listTasks } from "../repositories/tasks.js";
 import { buildGamificationDashboardSignals } from "./gamification.js";
@@ -53,24 +57,37 @@ function priorityWeight(task: Task): number {
 }
 
 function dueDateWeight(task: Task): number {
-  return task.dueDate ? Date.parse(`${task.dueDate}T00:00:00.000Z`) : Number.POSITIVE_INFINITY;
+  return task.dueDate
+    ? Date.parse(`${task.dueDate}T00:00:00.000Z`)
+    : Number.POSITIVE_INFINITY;
 }
 
 function takeExecutionSlice(tasks: Task[], limit = 4): Task[] {
   return tasks.slice(0, limit);
 }
 
-function buildExecutionBuckets(tasks: Task[], todayIso: string, weekEndIso: string): DashboardExecutionBucket[] {
+function buildExecutionBuckets(
+  tasks: Task[],
+  todayIso: string,
+  weekEndIso: string
+): DashboardExecutionBucket[] {
   const activeTasks = tasks.filter((task) => task.status !== "done");
-  const overdue = activeTasks.filter((task) => task.dueDate !== null && task.dueDate < todayIso).sort((left, right) => {
-    const dueDelta = dueDateWeight(left) - dueDateWeight(right);
-    if (dueDelta !== 0) {
-      return dueDelta;
-    }
-    return priorityWeight(right) - priorityWeight(left);
-  });
+  const overdue = activeTasks
+    .filter((task) => task.dueDate !== null && task.dueDate < todayIso)
+    .sort((left, right) => {
+      const dueDelta = dueDateWeight(left) - dueDateWeight(right);
+      if (dueDelta !== 0) {
+        return dueDelta;
+      }
+      return priorityWeight(right) - priorityWeight(left);
+    });
   const dueSoon = activeTasks
-    .filter((task) => task.dueDate !== null && task.dueDate >= todayIso && task.dueDate <= weekEndIso)
+    .filter(
+      (task) =>
+        task.dueDate !== null &&
+        task.dueDate >= todayIso &&
+        task.dueDate <= weekEndIso
+    )
     .sort((left, right) => {
       const dueDelta = dueDateWeight(left) - dueDateWeight(right);
       if (dueDelta !== 0) {
@@ -89,51 +106,85 @@ function buildExecutionBuckets(tasks: Task[], todayIso: string, weekEndIso: stri
     });
   const recentlyCompleted = tasks
     .filter((task) => task.status === "done" && task.completedAt !== null)
-    .sort((left, right) => Date.parse(right.completedAt ?? "") - Date.parse(left.completedAt ?? ""))
+    .sort(
+      (left, right) =>
+        Date.parse(right.completedAt ?? "") - Date.parse(left.completedAt ?? "")
+    )
     .slice(0, 4);
 
   return [
     {
       id: "overdue",
       label: "Overdue pressure",
-      summary: overdue.length > 0 ? "Clear the oldest slips before they poison momentum." : "Nothing overdue right now.",
+      summary:
+        overdue.length > 0
+          ? "Clear the oldest slips before they poison momentum."
+          : "Nothing overdue right now.",
       tone: "urgent",
       tasks: takeExecutionSlice(overdue)
     },
     {
       id: "due_soon",
       label: "Due this week",
-      summary: dueSoon.length > 0 ? "Short-horizon commitments that need protection now." : "The next seven days look open.",
+      summary:
+        dueSoon.length > 0
+          ? "Short-horizon commitments that need protection now."
+          : "The next seven days look open.",
       tone: "accent",
       tasks: takeExecutionSlice(dueSoon)
     },
     {
       id: "focus_now",
       label: "Focus now",
-      summary: focusNow.length > 0 ? "Highest-signal work already in motion." : "No focus lane selected yet.",
+      summary:
+        focusNow.length > 0
+          ? "Highest-signal work already in motion."
+          : "No focus lane selected yet.",
       tone: "neutral",
       tasks: takeExecutionSlice(focusNow)
     },
     {
       id: "recently_completed",
       label: "Recent wins",
-      summary: recentlyCompleted.length > 0 ? "Completed work that is still feeding momentum." : "No completed work yet.",
+      summary:
+        recentlyCompleted.length > 0
+          ? "Completed work that is still feeding momentum."
+          : "No completed work yet.",
       tone: "success",
       tasks: recentlyCompleted
     }
   ].map((bucket) => dashboardExecutionBucketSchema.parse(bucket));
 }
 
-function buildGoalSummary(tasks: Task[], goalId: string): Pick<DashboardGoal, "progress" | "totalTasks" | "completedTasks" | "earnedPoints" | "momentumLabel"> {
+function buildGoalSummary(
+  tasks: Task[],
+  goalId: string
+): Pick<
+  DashboardGoal,
+  | "progress"
+  | "totalTasks"
+  | "completedTasks"
+  | "earnedPoints"
+  | "momentumLabel"
+> {
   const relatedTasks = tasks.filter((task) => task.goalId === goalId);
   const totalTasks = relatedTasks.length;
-  const completedTasks = relatedTasks.filter((task) => task.status === "done").length;
+  const completedTasks = relatedTasks.filter(
+    (task) => task.status === "done"
+  ).length;
   const earnedPoints = relatedTasks
     .filter((task) => task.status === "done")
     .reduce((sum, task) => sum + task.points, 0);
-  const progress = totalTasks === 0 ? 0 : Math.min(100, Math.round((completedTasks / totalTasks) * 100));
+  const progress =
+    totalTasks === 0
+      ? 0
+      : Math.min(100, Math.round((completedTasks / totalTasks) * 100));
   const momentumLabel =
-    completedTasks === 0 ? "Needs ignition" : completedTasks >= Math.ceil(totalTasks / 2) ? "Strong momentum" : "Building pace";
+    completedTasks === 0
+      ? "Needs ignition"
+      : completedTasks >= Math.ceil(totalTasks / 2)
+        ? "Strong momentum"
+        : "Building pace";
   return { progress, totalTasks, completedTasks, earnedPoints, momentumLabel };
 }
 
@@ -144,6 +195,7 @@ export function getDashboard(
     tasks?: Task[];
     habits?: Habit[];
     projects?: ProjectSummary[];
+    noteScope?: NoteReadScope;
   } = {}
 ): DashboardPayload {
   const goals =
@@ -164,13 +216,23 @@ export function getDashboard(
   const totalPoints = tasks
     .filter((task) => task.status === "done")
     .reduce((sum, task) => sum + task.points, 0);
-  const focusTasks = tasks.filter((task) => task.status === "focus" || task.status === "in_progress").length;
-  const alignedCompletedTasks = tasks.filter(
-    (task) => task.status === "done" && task.goalId !== null && task.tagIds.length > 0
+  const focusTasks = tasks.filter(
+    (task) => task.status === "focus" || task.status === "in_progress"
   ).length;
-  const overdueTasks = tasks.filter((task) => task.status !== "done" && task.dueDate !== null && task.dueDate < todayIso).length;
+  const alignedCompletedTasks = tasks.filter(
+    (task) =>
+      task.status === "done" && task.goalId !== null && task.tagIds.length > 0
+  ).length;
+  const overdueTasks = tasks.filter(
+    (task) =>
+      task.status !== "done" && task.dueDate !== null && task.dueDate < todayIso
+  ).length;
   const dueThisWeek = tasks.filter(
-    (task) => task.status !== "done" && task.dueDate !== null && task.dueDate >= todayIso && task.dueDate <= weekEndIso
+    (task) =>
+      task.status !== "done" &&
+      task.dueDate !== null &&
+      task.dueDate >= todayIso &&
+      task.dueDate <= weekEndIso
   ).length;
   const stats = dashboardStatsSchema.parse({
     totalPoints,
@@ -193,10 +255,12 @@ export function getDashboard(
   const projects =
     options.projects ?? listProjectSummaries({ userIds: options.userIds });
 
-  const suggestedTags = tags.filter((tag) => ["value", "execution"].includes(tag.kind)).slice(0, 6);
-  const owners = [...new Set(tasks.map((task) => task.owner).filter(Boolean))].sort((left, right) =>
-    left.localeCompare(right)
-  );
+  const suggestedTags = tags
+    .filter((tag) => ["value", "execution"].includes(tag.kind))
+    .slice(0, 6);
+  const owners = [
+    ...new Set(tasks.map((task) => task.owner).filter(Boolean))
+  ].sort((left, right) => left.localeCompare(right));
   const executionBuckets = buildExecutionBuckets(tasks, todayIso, weekEndIso);
   const {
     profile: gamification,
@@ -211,7 +275,13 @@ export function getDashboard(
     task: new Set(tasks.map((task) => task.id)),
     habit: new Set(habits.map((habit) => habit.id))
   };
-  const recentActivity = listActivityEvents({ limit: 36, userIds: options.userIds })
+  const recentActivity = filterNoteActivityEventsForScope(
+    listActivityEvents({
+      limit: 36,
+      userIds: options.userIds
+    }),
+    options.noteScope ?? { userIds: options.userIds }
+  )
     .filter((event) => {
       if (event.entityType === "goal") {
         return visibleIds.goal.has(event.entityId);
@@ -228,7 +298,27 @@ export function getDashboard(
       return true;
     })
     .slice(0, 12);
-  const notesSummaryByEntity = buildNotesSummaryByEntity();
+  const notesSummaryByEntity = buildNotesSummaryByEntity(
+    [
+      ...goals.map((goal) => ({
+        entityType: "goal" as const,
+        entityId: goal.id
+      })),
+      ...projects.map((project) => ({
+        entityType: "project" as const,
+        entityId: project.id
+      })),
+      ...tasks.map((task) => ({
+        entityType: "task" as const,
+        entityId: task.id
+      })),
+      ...habits.map((habit) => ({
+        entityType: "habit" as const,
+        entityId: habit.id
+      }))
+    ],
+    options.noteScope ?? { userIds: options.userIds }
+  );
   return dashboardPayloadSchema.parse({
     stats,
     goals: goalCards,

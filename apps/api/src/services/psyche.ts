@@ -1,6 +1,6 @@
 import { getDomainBySlug } from "../repositories/domains.js";
 import { listInsights } from "../repositories/collaboration.js";
-import { listNotes } from "../repositories/notes.js";
+import { listNotesPage } from "../repositories/notes.js";
 import { filterOwnedEntities } from "../repositories/entity-ownership.js";
 import {
   listBehaviorPatterns,
@@ -13,7 +13,10 @@ import {
   listTriggerReports
 } from "../repositories/psyche.js";
 import { getDevrageMetricPayload } from "./devrage.js";
-import { psycheOverviewPayloadSchema, type PsycheOverviewPayload } from "../psyche-types.js";
+import {
+  psycheOverviewPayloadSchema,
+  type PsycheOverviewPayload
+} from "../psyche-types.js";
 
 const PSYCHE_ENTITY_TYPE_SET = new Set([
   "psyche_value",
@@ -24,6 +27,29 @@ const PSYCHE_ENTITY_TYPE_SET = new Set([
   "flashcard",
   "trigger_report"
 ]);
+const PSYCHE_OVERVIEW_NOTE_LIMIT = 200;
+const NOTE_PAGE_LIMIT = 100;
+
+function listPsycheOverviewNotes(userIds?: string[]) {
+  const notes: ReturnType<typeof listNotesPage>["notes"] = [];
+  let cursor: string | undefined;
+  do {
+    const page = listNotesPage({
+      userIds,
+      limit: Math.min(
+        NOTE_PAGE_LIMIT,
+        PSYCHE_OVERVIEW_NOTE_LIMIT - notes.length
+      ),
+      cursor
+    });
+    notes.push(...page.notes);
+    cursor = page.nextCursor ?? undefined;
+    if (!page.hasMore || notes.length >= PSYCHE_OVERVIEW_NOTE_LIMIT) {
+      break;
+    }
+  } while (cursor);
+  return notes;
+}
 
 export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
   const domain = getDomainBySlug("psyche");
@@ -31,22 +57,59 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
     throw new Error("Psyche domain is not available");
   }
 
-  const values = filterOwnedEntities("psyche_value", listPsycheValues(), userIds);
-  const patterns = filterOwnedEntities("behavior_pattern", listBehaviorPatterns(), userIds);
+  const values = filterOwnedEntities(
+    "psyche_value",
+    listPsycheValues(),
+    userIds
+  );
+  const patterns = filterOwnedEntities(
+    "behavior_pattern",
+    listBehaviorPatterns(),
+    userIds
+  );
   const behaviors = filterOwnedEntities("behavior", listBehaviors(), userIds);
-  const beliefs = filterOwnedEntities("belief_entry", listBeliefEntries(), userIds);
-  const modes = filterOwnedEntities("mode_profile", listModeProfiles(), userIds);
-  const flashcards = filterOwnedEntities("flashcard", listFlashcards(), userIds);
-  const reports = filterOwnedEntities("trigger_report", listTriggerReports(5), userIds);
+  const beliefs = filterOwnedEntities(
+    "belief_entry",
+    listBeliefEntries(),
+    userIds
+  );
+  const modes = filterOwnedEntities(
+    "mode_profile",
+    listModeProfiles(),
+    userIds
+  );
+  const flashcards = filterOwnedEntities(
+    "flashcard",
+    listFlashcards(),
+    userIds
+  );
+  const reports = filterOwnedEntities(
+    "trigger_report",
+    listTriggerReports(5),
+    userIds
+  );
   const schemaCatalog = listSchemaCatalog();
-  const notes = filterOwnedEntities("note", listNotes({ limit: 200 }), userIds);
-  const openInsights = filterOwnedEntities("insight", listInsights({ limit: 100 }), userIds).filter(
-    (insight) => insight.entityType && PSYCHE_ENTITY_TYPE_SET.has(insight.entityType)
+  const notes = filterOwnedEntities(
+    "note",
+    listPsycheOverviewNotes(userIds),
+    userIds
+  );
+  const openInsights = filterOwnedEntities(
+    "insight",
+    listInsights({ limit: 100 }),
+    userIds
+  ).filter(
+    (insight) =>
+      insight.entityType && PSYCHE_ENTITY_TYPE_SET.has(insight.entityType)
   ).length;
-  const openNotes = notes.filter((note) => note.links.some((link) => PSYCHE_ENTITY_TYPE_SET.has(link.entityType))).length;
+  const openNotes = notes.filter((note) =>
+    note.links.some((link) => PSYCHE_ENTITY_TYPE_SET.has(link.entityType))
+  ).length;
   const committedActions = [
     ...values.flatMap((value) => value.committedActions),
-    ...behaviors.filter((behavior) => behavior.kind === "committed").map((behavior) => behavior.title),
+    ...behaviors
+      .filter((behavior) => behavior.kind === "committed")
+      .map((behavior) => behavior.title),
     ...reports.flatMap((report) => report.nextMoves)
   ];
   const devrageMetric = getDevrageMetricPayload();
@@ -55,8 +118,14 @@ export function getPsycheOverview(userIds?: string[]): PsycheOverviewPayload {
     .map((schema) => {
       const activationCount =
         beliefs.filter((belief) => belief.schemaId === schema.id).length +
-        behaviors.filter((behavior) => behavior.linkedSchemaIds.includes(schema.id)).length +
-        reports.filter((report) => report.schemaLinks.includes(schema.id) || report.schemaLinks.includes(schema.slug)).length;
+        behaviors.filter((behavior) =>
+          behavior.linkedSchemaIds.includes(schema.id)
+        ).length +
+        reports.filter(
+          (report) =>
+            report.schemaLinks.includes(schema.id) ||
+            report.schemaLinks.includes(schema.slug)
+        ).length;
       return {
         schemaId: schema.id,
         title: schema.title,

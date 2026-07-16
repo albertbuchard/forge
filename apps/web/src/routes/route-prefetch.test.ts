@@ -15,6 +15,8 @@ describe("route module prefetch", () => {
     ["/projects/project_123", "projectDetail"],
     ["/projects/hierarchy", "projectHierarchy"],
     ["/strategies/strategy_123", "strategyDetail"],
+    ["/people", "people"],
+    ["/people/person_123", "personDetail"],
     ["/sports/workouts/workout_123", "workoutDetail"],
     [
       "/psyche/questionnaires/instrument_123/edit",

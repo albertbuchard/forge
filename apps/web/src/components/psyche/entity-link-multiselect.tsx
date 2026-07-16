@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import { createPortal } from "react-dom";
 import { Plus, Search, X } from "lucide-react";
 import { EntityBadge } from "@/components/ui/entity-badge";
@@ -24,6 +31,10 @@ function appendUnique(values: string[], next: string) {
   return values.includes(next) ? values : [...values, next];
 }
 
+function getOptionId(listboxId: string, value: string) {
+  return `${listboxId}-option-${encodeURIComponent(value)}`;
+}
+
 export function EntityLinkMultiSelect({
   options,
   selectedValues,
@@ -32,6 +43,7 @@ export function EntityLinkMultiSelect({
   emptyMessage = "No matching entries yet.",
   createLabel = "Create",
   onCreate,
+  onSearch,
   className,
   variant = "default"
 }: {
@@ -42,15 +54,23 @@ export function EntityLinkMultiSelect({
   emptyMessage?: string;
   createLabel?: string;
   onCreate?: (query: string) => Promise<EntityLinkOption>;
+  onSearch?: (query: string) => Promise<EntityLinkOption[]>;
   className?: string;
   variant?: "default" | "action-bar";
 }) {
+  const instanceId = useId();
+  const comboboxId = `${instanceId}-combobox`;
+  const listboxId = `${instanceId}-listbox`;
+  const statusId = `${instanceId}-status`;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [pendingCreate, setPendingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdOptions, setCreatedOptions] = useState<EntityLinkOption[]>([]);
+  const [remoteOptions, setRemoteOptions] = useState<EntityLinkOption[]>([]);
+  const [searchPending, setSearchPending] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const safeOptions = useMemo(() => options ?? [], [options]);
@@ -67,11 +87,49 @@ export function EntityLinkMultiSelect({
 
   const mergedOptions = useMemo(() => {
     const map = new Map<string, EntityLinkOption>();
-    [...createdOptions, ...safeOptions].forEach((option) => {
+    [...createdOptions, ...remoteOptions, ...safeOptions].forEach((option) => {
       map.set(option.value, option);
     });
     return Array.from(map.values());
-  }, [createdOptions, safeOptions]);
+  }, [createdOptions, remoteOptions, safeOptions]);
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (!open || !onSearch || normalized.length < 2) {
+      setSearchPending(false);
+      setSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    setSearchPending(true);
+    setSearchError(null);
+    const timer = window.setTimeout(() => {
+      void onSearch(normalized)
+        .then((options) => {
+          if (!cancelled) {
+            setRemoteOptions(options);
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setSearchError(
+              error instanceof Error
+                ? error.message
+                : "Forge could not search linked records."
+            );
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearchPending(false);
+          }
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [onSearch, open, query]);
 
   const selectedOptions = useMemo(
     () =>
@@ -105,6 +163,11 @@ export function EntityLinkMultiSelect({
   const hasExactMatch = mergedOptions.some(
     (option) => normalize(option.label) === normalizedQuery
   );
+  const activeOption = open ? filteredOptions[highlightedIndex] : undefined;
+  const showEmptyStatus =
+    open && !searchPending && !searchError && filteredOptions.length === 0;
+  const hasSearchStatus =
+    searchPending || Boolean(searchError) || showEmptyStatus;
 
   useEffect(() => {
     if (!open) {
@@ -253,7 +316,20 @@ export function EntityLinkMultiSelect({
             )}
           />
           <input
+            id={comboboxId}
             type="text"
+            role="combobox"
+            aria-label={placeholder}
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={listboxId}
+            aria-activedescendant={
+              activeOption
+                ? getOptionId(listboxId, activeOption.value)
+                : undefined
+            }
+            aria-describedby={hasSearchStatus ? statusId : undefined}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -261,7 +337,12 @@ export function EntityLinkMultiSelect({
               setOpen(true);
               setHighlightedIndex(0);
             }}
-            onFocus={() => setOpen(true)}
+            onFocus={() => {
+              setOpen(true);
+              setHighlightedIndex((current) =>
+                filteredOptions.length === 0 ? 0 : Math.max(0, current)
+              );
+            }}
             onKeyDown={(event) => {
               if (
                 event.key === "Backspace" &&
@@ -274,6 +355,11 @@ export function EntityLinkMultiSelect({
 
               if (event.key === "ArrowDown") {
                 event.preventDefault();
+                if (!open) {
+                  setOpen(true);
+                  setHighlightedIndex(0);
+                  return;
+                }
                 setOpen(true);
                 setHighlightedIndex((current) =>
                   filteredOptions.length === 0
@@ -285,7 +371,24 @@ export function EntityLinkMultiSelect({
 
               if (event.key === "ArrowUp") {
                 event.preventDefault();
+                if (!open) {
+                  setOpen(true);
+                  setHighlightedIndex(Math.max(0, filteredOptions.length - 1));
+                  return;
+                }
                 setHighlightedIndex((current) => Math.max(0, current - 1));
+                return;
+              }
+
+              if (event.key === "Home" && open && filteredOptions.length > 0) {
+                event.preventDefault();
+                setHighlightedIndex(0);
+                return;
+              }
+
+              if (event.key === "End" && open && filteredOptions.length > 0) {
+                event.preventDefault();
+                setHighlightedIndex(filteredOptions.length - 1);
                 return;
               }
 
@@ -331,8 +434,6 @@ export function EntityLinkMultiSelect({
         ? createPortal(
             <div
               ref={menuRef}
-              role="listbox"
-              aria-multiselectable="true"
               className={cn(
                 "z-[80] overflow-y-auto overscroll-contain rounded-[22px] p-2 [webkit-overflow-scrolling:touch]",
                 actionBarVariant
@@ -342,62 +443,92 @@ export function EntityLinkMultiSelect({
               )}
               style={menuStyle}
             >
-              {filteredOptions.map((option, index) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={false}
-                  className={cn(
-                    "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
-                    index === highlightedIndex
-                      ? actionBarVariant
-                        ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
-                        : "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
-                      : actionBarVariant
-                        ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                        : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
-                  )}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    selectValue(option.value);
-                  }}
-                  onClick={() => selectValue(option.value)}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {option.kind ? (
-                        <EntityBadge
-                          kind={option.kind}
-                          label={option.label}
-                          compact
-                          gradient={false}
-                        />
-                      ) : option.menuBadge ? (
-                        option.menuBadge
-                      ) : option.badge ? (
-                        option.badge
-                      ) : (
-                        option.label
-                      )}
-                    </div>
-                    {option.description ? (
-                      <div
-                        className={cn(
-                          "mt-1 text-xs leading-5",
-                          actionBarVariant
-                            ? "text-[var(--ui-ink-soft)]"
-                            : "text-[var(--ui-ink-soft)]"
+              <div
+                id={listboxId}
+                role="listbox"
+                aria-label={`${placeholder} results`}
+                aria-multiselectable="true"
+                aria-busy={searchPending}
+              >
+                {filteredOptions.map((option, index) => (
+                  <button
+                    key={option.value}
+                    id={getOptionId(listboxId, option.value)}
+                    type="button"
+                    role="option"
+                    aria-selected={false}
+                    className={cn(
+                      "flex w-full items-start justify-between gap-3 rounded-[18px] px-3 py-2.5 text-left transition",
+                      index === highlightedIndex
+                        ? actionBarVariant
+                          ? "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                          : "bg-[var(--ui-surface-3)] text-[var(--ui-ink-strong)]"
+                        : actionBarVariant
+                          ? "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                          : "text-[var(--ui-ink-medium)] hover:bg-[var(--ui-surface-hover)] hover:text-[var(--ui-ink-strong)]"
+                    )}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      selectValue(option.value);
+                    }}
+                    onClick={() => selectValue(option.value)}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {option.kind ? (
+                          <EntityBadge
+                            kind={option.kind}
+                            label={option.label}
+                            compact
+                            gradient={false}
+                          />
+                        ) : option.menuBadge ? (
+                          option.menuBadge
+                        ) : option.badge ? (
+                          option.badge
+                        ) : (
+                          option.label
                         )}
-                      >
-                        {option.description}
                       </div>
-                    ) : null}
-                  </div>
-                </button>
-              ))}
+                      {option.description ? (
+                        <div
+                          className={cn(
+                            "mt-1 text-xs leading-5",
+                            actionBarVariant
+                              ? "text-[var(--ui-ink-soft)]"
+                              : "text-[var(--ui-ink-soft)]"
+                          )}
+                        >
+                          {option.description}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {searchPending ? (
+                <div
+                  id={statusId}
+                  role="status"
+                  aria-live="polite"
+                  className="px-3 py-2.5 text-sm text-[var(--ui-ink-soft)]"
+                >
+                  Searching Forge records…
+                </div>
+              ) : null}
+
+              {searchError ? (
+                <div
+                  id={statusId}
+                  role="alert"
+                  className="px-3 py-2.5 text-sm text-[var(--danger)]"
+                >
+                  {searchError}
+                </div>
+              ) : null}
 
               {!hasExactMatch && normalizedQuery && onCreate ? (
                 <button
@@ -425,9 +556,11 @@ export function EntityLinkMultiSelect({
                 </button>
               ) : null}
 
-              {filteredOptions.length === 0 &&
-              (!normalizedQuery || hasExactMatch || !onCreate) ? (
+              {showEmptyStatus ? (
                 <div
+                  id={statusId}
+                  role="status"
+                  aria-live="polite"
                   className={cn(
                     "px-3 py-2.5 text-sm",
                     actionBarVariant
@@ -444,7 +577,10 @@ export function EntityLinkMultiSelect({
         : null}
 
       {createError ? (
-        <div className="text-sm text-[color-mix(in_srgb,var(--danger)_74%,var(--ui-ink-strong)_26%)]">
+        <div
+          role="alert"
+          className="text-sm text-[color-mix(in_srgb,var(--danger)_74%,var(--ui-ink-strong)_26%)]"
+        >
           {createError}
         </div>
       ) : null}

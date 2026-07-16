@@ -1,6 +1,6 @@
 ---
 name: forge-codex
-description: Use Forge's curated MCP tools to read, create, update, link, review, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
+description: Use Forge's curated MCP tools to read, create, update, link, review, and navigate Forge records and specialized domain surfaces. Trigger for Forge planning, People and peer sharing, calendar, preferences, Psyche, questionnaires, health, wiki, artifacts, Movement, Life Events, Life Force, Workbench, agent-runtime, and guided question-flow requests where Codex must choose the correct batch or dedicated API path.
 ---
 
 # Forge Codex
@@ -55,7 +55,9 @@ submit artifact passwords. Read-model surfaces include `operator_overview`,
 practical decision the read should support before adding write-shaped questions.
 Preferences Workspace is also read-model-only. Use it to explain inferred scores from
 judgments, signals, overrides, evidence count, and uncertainty before offering a
-dedicated Preferences action.
+dedicated Preferences action. A workspace read never initializes or refreshes state;
+if it is missing, report that state and use an explicit Preferences action only after
+the user chooses it.
 Movement, Life Events, Life Force, and Workbench use dedicated route
 families and must not be forced through batch CRUD. Forge is explicitly multi-user: every stored entity can
 belong to a typed `human` or `bot` user through `userId`, reads can scope to one or
@@ -118,14 +120,45 @@ For logistical records, keep the reflection short and ask for the operational de
 Use the route execution handoff before any read, write, run, repair, or publish call:
 freeze the accepted user-facing target, choose exactly one lane, use batch CRUD only
 for catalog entities, use named tools or documented routes for specialized CRUD and
-action workflows, and for Movement, Life Events, Life Force, Workbench, or Artifact Store verify `routeKey`,
+action workflows, and verify an action workflow's selected operation against live
+onboarding `actionEntities.routeKeys`, `routeTools`, and `methodRoutes` before calling.
+For Movement, Life Events, Life Force, Workbench, or Artifact Store verify `routeKey`,
 method, path, and `pathParams` from live onboarding `methodRoutes` before calling.
 Never hide placeholders in `query` or `body`, and never guess a nearby path.
 
 - Batch CRUD is the default for normal stored entities, including `goal`, `project`,
-  `strategy`, `task`, `habit`, `tag`, `note`, `insight`, `calendar_event`, `life_event`,
+  `strategy`, `task`, `habit`, `tag`, `person`, `note`, `insight`, `calendar_event`, `life_event`,
   `work_block_template`, `task_timebox`, all main Psyche records, basic Preferences
   CRUD records, `questionnaire_instrument`, `sleep_session`, and `workout_session`.
+- `person` is an owner-scoped local record about someone in the user's life. It is
+  not a Forge `User`, agent identity, peer credential, pairing, or sharing grant.
+  Search, create, update, soft-delete, restore, and replace its general `links`
+  through `forge_search_entities`, `forge_create_entities`,
+  `forge_update_entities`, `forge_delete_entities`, and
+  `forge_restore_entities`. Search the intended owner by name or alias before
+  creating a possible duplicate. Ask only for the accepted display name, owner, and
+  context that serves the user's stated purpose. Do not ask for contact details,
+  birthday data, private notes, or sensitive facts by default.
+- `forge_call_people_route` exposes only these server operation IDs:
+  `listPeopleReadModel`, `getPersonContext`, `scanPeopleWikiCandidates`,
+  `previewPeopleWikiAssociations`, `applyPeopleWikiAssociations`,
+  `interpretPersonQuestion`, `executePersonQuestion`, and
+  `listPersonQuestionHistory`. Use the exact route-key variant schema. People reads
+  require `people:read:basic`; private, contact, sensitive, and restricted fields
+  need their narrower read scopes; Wiki association steps require the published
+  People and Wiki scopes; typed questions require `people:read:basic` plus
+  `peer:query`.
+- `forge_call_peer_route` exposes only `listPeerRequests`,
+  `listPeerRelationships`, `getPeerRelationship`, `listPeerDevices`,
+  `listPeerGrants`, `getPeerSyncStatus`, and `getPeerDiagnostics`. These status
+  reads require `peer:status`. Both People and peer tools require a configured
+  local agent token with the listed scopes. An operator session does not substitute
+  for that token.
+- Pairing acceptance, invitation control, consent changes, grant acceptance,
+  countering, widening or revocation, relationship revocation, device approval or
+  removal, resync requests, approval credentials, and human-presence ceremonies are
+  human-only. They are absent from agent tools. Never emulate them with batch CRUD or
+  a nearby route.
 - `wiki_page`, `calendar_connection`, and `artifact` are specialized CRUD surfaces.
   Use `forge_call_wiki_route` for the complete Wiki lifecycle, the narrower Wiki
   helpers for settled operations, `forge_call_calendar_connection_route` for the
@@ -216,6 +249,28 @@ Concrete route-key examples for internal use:
   `{"routeKey":"snooze","pathParams":{"id":"attn:insight:ins_123"},"body":{"until":"2026-07-11T09:00:00.000Z","note":"Review after the morning planning block."}}`
 - Attention restore:
   `{"routeKey":"restore","pathParams":{"id":"attn:insight:ins_123"}}`
+- Person search before create:
+  `{"searches":[{"entityTypes":["person"],"query":"Jon","userIds":["user_operator"],"limit":20}]}`
+- Person create after the user accepts the wording:
+  `{"operations":[{"entityType":"person","data":{"userId":"user_operator","displayName":"Jon","relationshipCategory":"friend","shortDescription":"Friend I often cycle with."}}]}`
+- People collection read:
+  `{"routeKey":"listPeopleReadModel","query":{"userId":"user_operator","query":"Jon","limit":20}}`
+- Calendar availability interpretation:
+  `{"routeKey":"interpretPersonQuestion","pathParams":{"personId":"person_jon"},"body":{"question":"What is Jon doing next Monday?","timeZone":"Europe/Zurich"}}`
+- Goal-horizon interpretation:
+  `{"routeKey":"interpretPersonQuestion","pathParams":{"personId":"person_jon"},"body":{"question":"What are Jon's big goals for the next few months?","timeZone":"Europe/Zurich"}}`
+- Cycling aggregate interpretation:
+  `{"routeKey":"interpretPersonQuestion","pathParams":{"personId":"person_jon"},"body":{"question":"How much has Jon been cycling this month?","timeZone":"Europe/Zurich"}}`
+- Typed question execution: pass the `interpretationId`, `interpretationHash`, and
+  complete typed `query` returned by `interpretPersonQuestion` unchanged to
+  `executePersonQuestion`. Do not hand-author a broader projection, interval, field
+  list, or precision. The active directional grant still limits the result.
+- Typed question reporting: preserve `result.state` and
+  `result.metadata.source`, `asOf`, `receivedAt`, `validUntil`,
+  `completeness`, `precision`, and `redactedFields`. Say when an answer is
+  cached or stale, name material redactions, and never infer withheld fields.
+- Existing peer relationship status:
+  `{"routeKey":"getPeerRelationship","pathParams":{"relationshipId":"peer_relationship_123"}}`
 - Movement all-time read:
   `{"routeKey":"allTime","query":{"userIds":["user_operator"]}}`
 - Movement timeline read:
@@ -260,11 +315,11 @@ Concrete route-key examples for internal use:
 - Life Force fatigue signal:
   `{"routeKey":"fatigueSignal","body":{"signal":"tired","intensity":7,"note":"Sharp post-lunch dip after clinic admin."}}`
 - Workbench flow catalog:
-  `{"routeKey":"listFlows","query":{"includeArchived":false}}`
+  `{"routeKey":"listFlows","query":{"status":"enabled","limit":24,"offset":0}}`
 - Workbench flow detail:
   `{"routeKey":"flowDetail","pathParams":{"id":"flow_research_digest"}}`
 - Workbench box catalog:
-  `{"routeKey":"boxCatalog"}`
+  `{"routeKey":"boxCatalog","query":{"limit":24,"offset":0}}`
 - Workbench flow creation:
   `{"routeKey":"createFlow","body":{"title":"Research digest","slug":"research-digest","description":"Turn a topic into a cited digest with a stable published summary.","nodes":[],"edges":[]}}`
 - Workbench flow edit:
@@ -292,7 +347,8 @@ Concrete route-key examples for internal use:
 - Artifact metadata list:
   `{"routeKey":"list","query":{"query":"thesis budget","formatFamily":"spreadsheet","limit":20}}`
 - Artifact trusted upload:
-  `{"routeKey":"createWithBytes","body":{"originalFileName":"budget.xlsx","contentBase64":"<base64>","title":"Thesis budget workbook","sourceLabel":"Uploaded by the operator from local files","useLlmEnrichment":true,"links":[{"entityType":"project","entityId":"project_thesis","relationship":"evidence"}]}}`
+  `{"routeKey":"createWithBytes","body":{"idempotencyKey":"artifact-upload-budget-2026-07-16","originalFileName":"budget.xlsx","contentBase64":"<base64>","title":"Thesis budget workbook","sourceLabel":"Uploaded by the operator from local files","useLlmEnrichment":true,"links":[{"entityType":"project","entityId":"project_thesis","relationship":"evidence"}]}}`
+  Keep that per-file `idempotencyKey` unchanged only when retrying the exact same upload after a timeout or interrupted response. Use a new key when bytes or metadata change; Forge derives agent provenance from the authenticated token.
 - Artifact generic entity-link replacement:
   `{"routeKey":"replaceGenericLinks","pathParams":{"id":"artifact_123"},"body":{"links":[{"entityType":"wiki_page","entityId":"note_thesis_budget","relationship":"embedded_reference"}]}}`
 - Artifact audit read:
@@ -337,8 +393,21 @@ Workflow rule:
 Completion rule:
 
 - Completed work should preserve
-  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }`.
-- `linkedGitRefIds[]` points to canonical Forge git refs.
+  `completionReport = { modifiedFiles[], workSummary, linkedGitRefIds[] }` and
+  send the referenced canonical records in `gitRefs`.
+- `modifiedFiles` supports at most 256 safe repository-relative paths of at most
+  512 characters each. `workSummary` supports 8,000 characters.
+  `linkedGitRefIds` supports at most 64 IDs of at most 128 characters each.
+- `gitRefs` supports at most 64 commit, branch, or pull-request records. Each
+  record requires `refType` and `refValue`; any `url` must use HTTP or HTTPS.
+- Every `linkedGitRefIds` value must identify one of the resulting task Git refs.
+- Completing a task run is atomic. Repeating the exact terminal closeout is
+  idempotent; changing the report, Git refs, or closeout note on replay conflicts.
+- A quick or native completion may truthfully leave `closeoutState: deferred`.
+  Read the task back after completion and inspect `closeoutState`,
+  `completionReport`, and `gitRefs` before claiming that closeout evidence exists.
+- Releasing a task run accepts only `actor`, `note`, and `closeoutNote`. It does
+  not accept completion evidence and does not complete the task.
 - Default workflow is direct commits to `main`.
 - Do not assume feature branches or pull requests unless the user explicitly
   asks for them.
@@ -597,7 +666,10 @@ Surface rule:
      `forge_update_preferences_score` also requires `itemId`. Use a signal for
      favorite, veto, must-have, bookmark, neutral, or compare-later language, and
      reserve score override for an explicit correction or protection of inferred
-     state.
+     state. Treat `neutral` as removal of the current direct effect, not neutral
+     evidence: prior signals stay in history, but they no longer add direct weight,
+     evidence, or confidence. After writing, report the returned effective signal,
+     score, status, and confidence instead of predicting the result.
 5. Specialized CRUD entities are `wiki_page` and `calendar_connection`.
    Use wiki pages whenever the user wants durable memory for a book, article, paper,
    source, concept, person, conversation, project reference, recurring explanation,
@@ -605,22 +677,28 @@ Surface rule:
 6. Action and workflow entities are `task_run`, `questionnaire_run`, the
    preferences game and judgment/signal tools, calendar sync/setup flows, work-log
    adjustments, and similar action-heavy operations.
-7. Read-model-only surfaces include operator overview/context, calendar overview,
+7. Read-model-only surfaces include Today priority, operator overview/context, calendar overview,
    Preferences Workspace, sleep overview, sports overview, training load, weight loss, and the
    self-observation calendar.
    In `forge_get_agent_onboarding.entityRouteModel.readModelOnlySurfaces`,
    operator, calendar, Preferences, self-observation, sleep, sports, training-load, and
    weight-loss read models are
    available under camelCase names and entity-style aliases where useful,
-   including `operatorOverview`, `operatorContext`, `calendarOverview`,
+   including `todayPriority`, `operatorOverview`, `operatorContext`, `calendarOverview`,
    `sleepOverview`, `sportsOverview`, `trainingLoad`, `weightLoss`, `preferencesWorkspace`, `operator_overview`,
-   `operator_context`, `calendar_overview`, `self_observation`,
+   `today_priority`, `operator_context`, `calendar_overview`, `self_observation`,
    `sleep_overview`, `sports_overview`, `training_load`, `weight_loss`, and `preferences_workspace`. Treat those as
    read-only overview surfaces, not batch CRUD entities.
    Use `forge_get_operator_overview` for broad Forge status,
    `forge_get_operator_context` for current work and risk, and
    `forge_get_calendar_overview` before calendar-aware planning or scheduling
    mutations.
+   Use `forge_get_today_priority` when the user asks what to do next. Follow its
+   explicit ready, continue-active, unresolved-active, overloaded,
+   capacity-limited, or no-work state instead of choosing the first focus,
+   backlog, or blocked task. Its schedule evidence covers task timeboxes; read
+   `forge_get_calendar_overview` separately when meetings or other calendar
+   events matter.
    Use `forge_get_preferences_workspace` before explaining an inferred ranking, and
    ground it in supporting judgments, signals, overrides, evidence count, and
    uncertainty before offering a dedicated Preferences action.
@@ -630,7 +708,12 @@ Surface rule:
    - `forge_focus_task_run`
    - `forge_complete_task_run`
    - `forge_release_task_run`
-   - include `closeoutNote` when the work summary should become a durable linked note
+   - on completion, forward bounded `completionReport`, canonical `gitRefs`, and
+     optional `closeoutNote`; exact terminal replay is idempotent and changed
+     closeout evidence conflicts
+   - read the task back because quick or native completion may truthfully leave
+     `closeoutState: deferred`
+   - release accepts only `actor`, `note`, and `closeoutNote`, never completion evidence
 9. Store structured recommendations with `forge_post_insight`.
 10. Use `forge_adjust_work_minutes` for `work_adjustment` when the user wants a
     truthful signed minute correction on an existing task or project.
@@ -782,6 +865,11 @@ Surface rule:
   `PUT /api/v1/life-force/templates/:weekday`, and real-time tired or recovered
   reports are `POST /api/v1/life-force/fatigue-signals`.
 - Workbench lane hints: flow catalog reads use `GET /api/v1/workbench/flows`,
+  return compact bounded summaries, and accept `q`, repeated `kind`,
+  `homeSurfaceId`, and `status`, plus `limit` and `offset`. Box catalog reads are
+  also bounded and accept `q`, repeated `category`, `surfaceId`, and `source`.
+  Follow `hasMore` by adding the returned item count to `offset`; use
+  `status=enabled` or `status=disabled` because Workbench has no archive lifecycle.
   flow creation uses `POST /api/v1/workbench/flows`, saved-flow edits and deletion use
   `PATCH /api/v1/workbench/flows/:id` and `DELETE /api/v1/workbench/flows/:id`,
   execution uses `/api/v1/workbench/flows/:id/run` or `/api/v1/workbench/run`,
@@ -821,6 +909,23 @@ Surface rule:
   `questionnaire_instrument { title, sourceClass, availability, isSelfReport, versionLabel, definition, scoring, provenance }`,
   `sleep_session { startedAt, endedAt }`,
   `workout_session { workoutType, startedAt, endedAt }`.
+- For `event_type` and `emotion_definition`, put the intended owner scope in each
+  `forge_search_entities.searches[].userIds` array. Put one stable
+  `forge_create_entities.operations[].idempotencyKey` on each intended create and
+  reuse it only for an exact retry of the same owner, entity type, and payload.
+  Changed payload reuse conflicts; a soft-deleted target must be restored, and hard
+  deletion leaves the key terminal rather than allowing recreation.
+- When Psyche authentication is enabled, dedicated event-type and emotion-definition
+  routes require `psyche.read` or `psyche.write`. Agent use through shared batch
+  routes also requires base `read` or `write` for search, or base `write` for
+  mutations, plus the corresponding Psyche scope.
+- For `trigger_report`, keep missing chain segments missing and leave
+  `memoryClarity` as `unspecified` unless the user rates it as `clear`, `partial`,
+  or `uncertain`. Save a sparse `draft` when the user wants to pause. Store a
+  tentative hypothesis, fit, or correction only with explicit
+  `interpretationConsent: true`, and ask whether it fits before treating it as
+  part of the record. Read the current report before updating and pass its
+  `expectedRevision` so a stale edit cannot overwrite a newer one.
 
 ## Behavioral rules
 

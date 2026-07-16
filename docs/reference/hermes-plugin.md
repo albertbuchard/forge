@@ -60,9 +60,18 @@ Its job is to expose the same curated Forge operating surface as the OpenClaw pl
 - bounded canonical pin reads and actor-scoped recent history through
   `forge_call_entity_navigation_route`; pin and unpin remain human-operator-only
 - wiki memory reads, search, ingest, health checks, and page upserts
+- bounded wiki summary pagination through offset 9,999 and read-only ranked search with a 500-character query, 20-token FTS, and offset 999 ceiling before full page retrieval
 - sleep and sports overview reads plus reflective metadata updates on individual sessions
 - visual handoff to the Forge UI when the UI is genuinely the better surface
 - bundled Psyche interview playbooks so Hermes explores values, patterns, behaviors, beliefs, modes, and trigger reports with active listening before storing them
+
+Task-timebox recommendations are read-only, require the user's IANA `timezone`,
+and return at most 12 slots. Direct create requires `taskId`, `title`, `startsAt`,
+and `endsAt`; it also accepts `status`, `overrideReason`, `activityPresetKey`,
+`customSustainRateApPerHour`, and `userId`. The AP preset must be `deep_work`,
+`admin`, `maintenance`, `meeting`, `recovery_break`, `holiday_leisure`,
+`light_context`, or `task_inherited`. Provider-backed deletion is hidden from
+normal reads while Forge completes durable, idempotent remote cleanup.
 
 ## Install
 
@@ -222,7 +231,7 @@ Forge's multi-user model is explicit:
 
 Forge's newer wiki and health surfaces follow the same rule:
 
-- wiki pages live in the same shared Forge memory system and should use the dedicated wiki tools, not the generic entity batch routes
+- wiki pages live in the same shared Forge memory system and should use the dedicated wiki tools, not the generic entity batch routes; scoped tokens can access shared spaces and only their allowed users' personal spaces, including maintenance and ingest jobs
 - sleep and sports sessions stay linkable across human and bot-owned goals, projects, habits, notes, and Psyche records
 - the sports UI route is `/sports`, but the backend overview route remains `/api/v1/health/fitness`
 - Life Events use both paths deliberately: shared batch CRUD for normal `life_event` records and generic links; dedicated Life Event routes for chronology reads, one-event reads, calendar sync, calendar-to-Life-Event conversion, ticket artifact import, and travel-status reads

@@ -15,6 +15,8 @@ import {
   downloadArtifact,
   downloadArtifactWithPassword,
   getArtifact,
+  listArtifactAuditEvents,
+  listArtifactVersions,
   listArtifacts,
   patchArtifact,
   patchArtifactTrust,
@@ -63,8 +65,6 @@ const mockArtifact: Artifact = {
   shortDescription: "Budget workbook for thesis planning.",
   description: "Uploaded from the operator's local files.",
   originalFileName: "budget.xlsx",
-  storageKey: "sha256/aa/bb/hash.bin",
-  storagePath: "/tmp/forge/artifacts/blobs/aa/bb/hash.bin",
   contentSha256: "hash",
   byteSize: 2048,
   storedContentSha256: "hash",
@@ -107,7 +107,7 @@ const mockArtifact: Artifact = {
         message: "Workbook has one external relationship to review."
       }
     ],
-    extractedTextSample: "",
+    extractedTextAvailable: false,
     extractedTextTruncated: false
   },
   enrichmentResults: {},
@@ -144,7 +144,6 @@ vi.mock("@/lib/api", () => ({
         artifactId: "artifact_123",
         versionNumber: 1,
         contentSha256: "hash",
-        storageKey: "sha256/aa/bb/hash.bin",
         byteSize: 2048,
         storedContentSha256: "hash",
         storedByteSize: 2048,
@@ -155,7 +154,11 @@ vi.mock("@/lib/api", () => ({
         createdByActor: "Trusted Artifact Agent",
         createdAt: "2026-06-28T00:00:00.000Z"
       }
-    ]
+    ],
+    total: 1,
+    limit: 10,
+    offset: 0,
+    hasMore: false
   })),
   listArtifactAuditEvents: vi.fn(async () => ({
     events: [
@@ -168,7 +171,11 @@ vi.mock("@/lib/api", () => ({
         metadata: {},
         createdAt: "2026-06-28T00:00:00.000Z"
       }
-    ]
+    ],
+    total: 1,
+    limit: 10,
+    offset: 0,
+    hasMore: false
   })),
   downloadArtifact: vi.fn(async () => ({
     blob: new Blob(["plain"]),
@@ -253,8 +260,8 @@ describe("ArtifactsPage", () => {
     });
     expect(screen.getByText("Precise metadata")).toBeInTheDocument();
     expect(
-      screen.getByText("/tmp/forge/artifacts/blobs/aa/bb/hash.bin")
-    ).toBeInTheDocument();
+      screen.queryByText("/tmp/forge/artifacts/blobs/aa/bb/hash.bin")
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Operator local files")).toBeInTheDocument();
     expect(screen.getByText("user_operator")).toBeInTheDocument();
     expect(screen.getByText(/"department": "Research"/)).toBeInTheDocument();
@@ -441,8 +448,260 @@ describe("ArtifactsPage", () => {
       ]
     });
     expect(
-      await screen.findByText("2 uploaded · 0 failed")
+      await screen.findByText("2 uploaded · 0 failed · 0 canceled")
     ).toBeInTheDocument();
+  });
+
+  it("applies bulk defaults and restores keyboard focus after per-file editing", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: {
+        files: [
+          new File(["first"], "first.txt", { type: "text/plain" }),
+          new File(["second"], "second.txt", { type: "text/plain" })
+        ]
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Review each file before upload"
+      })
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Default short description"), {
+      target: { value: "Shared interview evidence." }
+    });
+    fireEvent.change(screen.getByLabelText("Default source or provenance"), {
+      target: { value: "Research interview folder" }
+    });
+    fireEvent.change(screen.getByLabelText("Default source kind"), {
+      target: { value: "external_reference" }
+    });
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Use LLM enrichment as a bulk default"
+      })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply defaults to queued files" })
+    );
+
+    expect(
+      screen.getByLabelText("Short description for first.txt")
+    ).toHaveValue("Shared interview evidence.");
+    expect(
+      screen.getByLabelText("Short description for second.txt")
+    ).toHaveValue("Shared interview evidence.");
+
+    const firstDetails = screen.getAllByRole("button", { name: /details/i })[0];
+    fireEvent.click(firstDetails);
+    expect(await screen.findByLabelText("Source kind")).toHaveValue(
+      "external_reference"
+    );
+    expect(
+      screen.getByRole("switch", {
+        name: "Use configured LLM to fill missing metadata for this file"
+      })
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.queryByRole("option", { name: /agent upload/i })
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "First interview transcript" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /back to file queue/i })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: /details/i })[0]
+      ).toHaveFocus();
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /details/i })[0]);
+    expect(await screen.findByLabelText("Title")).toHaveValue(
+      "First interview transcript"
+    );
+  });
+
+  it("keeps retry identity after partial failure and explains duplicate bytes", async () => {
+    const attemptByFile = new Map<string, number>();
+    vi.mocked(uploadArtifact).mockImplementation(async (input, options) => {
+      options?.onProgress?.(55);
+      const attempt = (attemptByFile.get(input.originalFileName) ?? 0) + 1;
+      attemptByFile.set(input.originalFileName, attempt);
+      if (input.originalFileName === "retry.txt" && attempt === 1) {
+        throw new Error("The safety scanner was temporarily unavailable.");
+      }
+      return {
+        artifact: {
+          ...mockArtifact,
+          id: `${input.originalFileName}-${attempt}`,
+          title: input.title ?? input.originalFileName,
+          originalFileName: input.originalFileName,
+          contentSha256: "shared-content-hash"
+        }
+      };
+    });
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: {
+        files: [
+          new File(["same"], "saved.txt", { type: "text/plain" }),
+          new File(["same"], "retry.txt", { type: "text/plain" })
+        ]
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    expect(
+      await screen.findByText("1 uploaded · 1 failed · 0 canceled")
+    ).toBeInTheDocument();
+    const failedCalls = vi
+      .mocked(uploadArtifact)
+      .mock.calls.filter(([input]) => input.originalFileName === "retry.txt");
+    expect(failedCalls).toHaveLength(1);
+    const retryKey = failedCalls[0]?.[1]?.idempotencyKey;
+    expect(retryKey).toMatch(/^artifact-ui-/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry retry.txt" }));
+    expect(
+      await screen.findByText("2 uploaded · 0 failed · 0 canceled")
+    ).toBeInTheDocument();
+    const retryCalls = vi
+      .mocked(uploadArtifact)
+      .mock.calls.filter(([input]) => input.originalFileName === "retry.txt");
+    expect(retryCalls).toHaveLength(2);
+    expect(retryCalls[1]?.[1]?.idempotencyKey).toBe(retryKey);
+    expect(
+      screen.getAllByText(/reused the verified stored blob/i)
+    ).toHaveLength(2);
+  });
+
+  it("describes duplicate encrypted bytes as independent ciphertext representations", async () => {
+    vi.mocked(uploadArtifact).mockImplementation(async (input) => ({
+      artifact: {
+        ...mockArtifact,
+        id: `encrypted-${input.originalFileName}`,
+        title: input.title ?? input.originalFileName,
+        originalFileName: input.originalFileName,
+        contentSha256: "shared-encrypted-plaintext-hash",
+        contentProtection: {
+          mode: "password_encrypted",
+          encryptedAt: "2026-07-01T00:00:00.000Z",
+          algorithm: "libsodium-secretstream-xchacha20poly1305",
+          kdf: "argon2id",
+          kdfParams: { memlimit: 19922944, opslimit: 2, parallelism: 1 },
+          passwordHint: null
+        }
+      }
+    }));
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: {
+        files: [
+          new File(["same"], "encrypted-a.txt", { type: "text/plain" }),
+          new File(["same"], "encrypted-b.txt", { type: "text/plain" })
+        ]
+      }
+    });
+    fireEvent.click(
+      screen.getByLabelText("Encrypt file content with a password")
+    );
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "sample passphrase" }
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "sample passphrase" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    expect(
+      await screen.findByText("2 uploaded · 0 failed · 0 canceled")
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/independently encrypted ciphertext representation/i)
+    ).toHaveLength(2);
+    expect(
+      screen.queryByText(/reused the verified stored blob/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("cancels and safely retries one in-flight file", async () => {
+    let attempt = 0;
+    vi.mocked(uploadArtifact).mockImplementation(async (input, options) => {
+      attempt += 1;
+      options?.onProgress?.(35);
+      if (attempt === 1) {
+        await new Promise<never>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              const error = new Error("Upload canceled.");
+              error.name = "AbortError";
+              reject(error);
+            },
+            { once: true }
+          );
+        });
+      }
+      return {
+        artifact: {
+          ...mockArtifact,
+          id: "artifact-cancel-retry",
+          title: input.title ?? input.originalFileName,
+          originalFileName: input.originalFileName
+        }
+      };
+    });
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: {
+        files: [new File(["cancel"], "cancel.txt", { type: "text/plain" })]
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /upload artifacts/i }));
+
+    const cancelButton = await screen.findByRole("button", {
+      name: "Cancel cancel.txt"
+    });
+    const firstKey =
+      vi.mocked(uploadArtifact).mock.calls[0]?.[1]?.idempotencyKey;
+    fireEvent.click(cancelButton);
+    expect(
+      await screen.findByText("0 uploaded · 0 failed · 1 canceled")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry cancel.txt" }));
+    expect(
+      await screen.findByText("1 uploaded · 0 failed · 0 canceled")
+    ).toBeInTheDocument();
+    expect(vi.mocked(uploadArtifact).mock.calls[1]?.[1]?.idempotencyKey).toBe(
+      firstKey
+    );
   });
 
   it("keeps the guided upload queue bounded and reports files it cannot add", async () => {
@@ -468,6 +727,71 @@ describe("ArtifactsPage", () => {
     expect(screen.getByText("25 of 25 files")).toBeInTheDocument();
     expect(screen.getByLabelText("Artifact files")).toBeDisabled();
     expect(screen.queryByText("evidence-25.txt")).not.toBeInTheDocument();
+  });
+
+  it("rejects empty and oversized files before reading them", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    const empty = new File([], "empty.txt", { type: "text/plain" });
+    const oversized = new File(["x"], "oversized.txt", {
+      type: "text/plain"
+    });
+    Object.defineProperty(oversized, "size", {
+      configurable: true,
+      value: 100 * 1024 * 1024 + 1
+    });
+    const valid = new File(["valid"], "valid.txt", { type: "text/plain" });
+
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: { files: [empty, oversized, valid] }
+    });
+
+    expect(
+      await screen.findByText(
+        "Empty files cannot be added to the Artifact Store. Artifact files may not exceed 100 MiB each."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("valid.txt")).toBeInTheDocument();
+    expect(screen.queryByText("empty.txt")).not.toBeInTheDocument();
+    expect(screen.queryByText("oversized.txt")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 25 files")).toBeInTheDocument();
+    expect(uploadArtifact).not.toHaveBeenCalled();
+  });
+
+  it("clears the transient upload password when the guided flow is dismissed", async () => {
+    renderArtifactsPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    fireEvent.change(screen.getByLabelText("Artifact files"), {
+      target: {
+        files: [new File(["secret"], "secret.txt", { type: "text/plain" })]
+      }
+    });
+    fireEvent.click(
+      screen.getByLabelText("Encrypt file content with a password")
+    );
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "transient passphrase" }
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "transient passphrase" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /close dialog/i }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /add artifacts/i })
+    );
+    expect(screen.getByText("No files selected yet.")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByLabelText("Encrypt file content with a password")
+    );
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.getByLabelText("Confirm password")).toHaveValue("");
   });
 
   it("uses a guided relationship flow and saves normalized general entity links", async () => {
@@ -672,6 +996,11 @@ describe("ArtifactsPage", () => {
             password: "sample passphrase",
             passwordHint: "shared hint"
           }
+        }),
+        expect.objectContaining({
+          idempotencyKey: expect.stringMatching(/^artifact-ui-/),
+          onProgress: expect.any(Function),
+          signal: expect.objectContaining({ aborted: false })
         })
       );
     });
@@ -849,5 +1178,146 @@ describe("ArtifactsPage", () => {
     expect(screen.getByRole("button", { name: /^download$/i })).toBeDisabled();
     expect(downloadArtifact).not.toHaveBeenCalled();
     expect(downloadArtifactWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("paginates Artifact history deliberately and retries a failed page only on request", async () => {
+    let secondVersionPageAttempts = 0;
+    let secondAuditPageAttempts = 0;
+    vi.mocked(listArtifactVersions).mockImplementation(
+      async (_artifactId, options = {}) => {
+        if ((options.offset ?? 0) === 0) {
+          return {
+            versions: [
+              {
+                id: "version_11",
+                artifactId: "artifact_123",
+                versionNumber: 11,
+                contentSha256: "hash-11",
+                byteSize: 2048,
+                storedContentSha256: "hash-11",
+                storedByteSize: 2048,
+                contentProtection: mockArtifact.contentProtection,
+                originalFileName: "budget-11.xlsx",
+                scanResults: {},
+                enrichmentResults: {},
+                createdByActor: "Artifact operator",
+                createdAt: "2026-07-16T10:00:00.000Z"
+              }
+            ],
+            total: 11,
+            limit: 10,
+            offset: 0,
+            hasMore: true
+          };
+        }
+        secondVersionPageAttempts += 1;
+        if (secondVersionPageAttempts === 1) {
+          throw new Error("Version history page is temporarily unavailable.");
+        }
+        return {
+          versions: [
+            {
+              id: "version_1",
+              artifactId: "artifact_123",
+              versionNumber: 1,
+              contentSha256: "hash-1",
+              byteSize: 1024,
+              storedContentSha256: "hash-1",
+              storedByteSize: 1024,
+              contentProtection: mockArtifact.contentProtection,
+              originalFileName: "budget-1.xlsx",
+              scanResults: {},
+              enrichmentResults: {},
+              createdByActor: "Artifact operator",
+              createdAt: "2026-07-01T10:00:00.000Z"
+            }
+          ],
+          total: 11,
+          limit: 10,
+          offset: 10,
+          hasMore: false
+        };
+      }
+    );
+    vi.mocked(listArtifactAuditEvents).mockImplementation(
+      async (_artifactId, options = {}) => {
+        const offset = options.offset ?? 0;
+        if (offset > 0) {
+          secondAuditPageAttempts += 1;
+          if (secondAuditPageAttempts === 1) {
+            throw new Error("Audit history page is temporarily unavailable.");
+          }
+        }
+        return {
+          events: [
+            {
+              id: offset === 0 ? "audit_11" : "audit_1",
+              artifactId: "artifact_123",
+              eventType: offset === 0 ? "artifact.latest" : "artifact.oldest",
+              actor: "Artifact operator",
+              source: "ui",
+              metadata: {},
+              createdAt: "2026-07-16T10:00:00.000Z"
+            }
+          ],
+          total: 11,
+          limit: 10,
+          offset,
+          hasMore: offset === 0
+        };
+      }
+    );
+    vi.mocked(listArtifacts).mockResolvedValue({
+      artifacts: [mockArtifact],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false
+    });
+    vi.mocked(getArtifact).mockResolvedValue({ artifact: mockArtifact });
+
+    renderArtifactsPage();
+    expect(await screen.findByText("Version 11")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Next artifact version page"
+      })
+    );
+    expect(
+      await screen.findByText(
+        "Version history page is temporarily unavailable."
+      )
+    ).toBeInTheDocument();
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+    expect(secondVersionPageAttempts).toBe(1);
+    expect(
+      screen.getByRole("button", { name: "Previous page" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry versions" }));
+    expect(await screen.findByText("Version 1")).toBeInTheDocument();
+    expect(listArtifactVersions).toHaveBeenLastCalledWith("artifact_123", {
+      limit: 10,
+      offset: 10
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Next artifact audit page" })
+    );
+    expect(
+      await screen.findByText("Audit history page is temporarily unavailable.")
+    ).toBeInTheDocument();
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+    expect(secondAuditPageAttempts).toBe(1);
+    expect(
+      screen.getByRole("button", { name: "Previous page" })
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry audit history" })
+    );
+    expect(await screen.findByText("artifact.oldest")).toBeInTheDocument();
+    expect(listArtifactAuditEvents).toHaveBeenLastCalledWith("artifact_123", {
+      limit: 10,
+      offset: 10
+    });
   });
 });

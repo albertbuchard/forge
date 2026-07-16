@@ -610,8 +610,29 @@ Use this intake progression:
 4. For tasks, ask for the one focused AI session outcome, where it should live
    under an issue, and capture the execution contract in `aiInstructions`. Tasks
    can also preserve `executionMode` and `acceptanceCriteria` when useful.
-5. For completed tasks, preserve modified files, work summary, and linked
-   commits through `completionReport`.
+5. For completed tasks, preserve modified files, work summary, and linked Git
+   reference IDs through `completionReport`, and send the referenced canonical
+   commit, branch, or pull-request records in `gitRefs`.
+6. After completion, read the task back and verify `closeoutState`,
+   `completionReport`, and `gitRefs` before claiming that evidence was stored.
+
+Closeout rules:
+
+- `completionReport.modifiedFiles` supports at most 256 safe repository-relative
+  paths of at most 512 characters each. `workSummary` supports 8,000 characters.
+  `linkedGitRefIds` supports at most 64 IDs of at most 128 characters each.
+- `gitRefs` supports at most 64 records. Each requires `refType` and `refValue`;
+  any `url` must use HTTP or HTTPS. Every linked ID must resolve to a resulting
+  task Git ref.
+- `forge_complete_task_run` stores the report, Git refs, optional
+  `closeoutNote`, task state, time, rewards, and activity atomically. Repeating
+  the exact terminal closeout is idempotent; changing closeout evidence on replay
+  conflicts.
+- Quick or native completion may truthfully leave `closeoutState: deferred` when
+  no closeout evidence was captured. Report that state directly instead of
+  inventing evidence.
+- `forge_release_task_run` accepts only `actor`, `note`, and `closeoutNote`. It
+  does not accept `completionReport` or `gitRefs` and does not complete the task.
 
 Do not ask for separate user-story references, target-file fields, pattern-ref
 fields, definition-of-done fields, or recommended-order fields. Keep rich
@@ -783,6 +804,7 @@ internally before asking questions:
 
 - `attentionInbox` and `attention_inbox`
 - `entityNavigation` and `entity_navigation`
+- `todayPriority` and `today_priority`
 - `operatorOverview` and `operator_overview`
 - `operatorContext` and `operator_context`
 - `calendarOverview` and `calendar_overview`
@@ -802,7 +824,8 @@ Use this as an internal checklist when simulating or handling an entity flow. Do
 read this table to the user. It exists so the agent can ask natural questions while
 still knowing the exact write/read family before it acts.
 
-- `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `note`, `insight`,
+- `goal`, `project`, `strategy`, `task`, `habit`, `tag`, `person`,
+  `note`, `insight`,
   `calendar_event`, `work_block_template`, and `task_timebox`: normal stored Forge
   entities. Search, create, update, delete, and restore through the shared batch
   entity routes.
@@ -1602,6 +1625,65 @@ Preferred opening question:
 
 - "What do you want this tag to help you notice or find again later?"
 
+## Person
+
+Aim: keep a useful private record of someone in the user's life without turning the
+conversation into a contact form or collecting personal details without a reason.
+
+Arc:
+
+1. Reflect who the user appears to mean and what they want Forge to help them
+   remember, understand, or connect.
+2. Search the intended owner's Person records by display name and aliases before
+   creating a possible duplicate.
+3. Ask for the name the user recognizes and one useful piece of relationship context
+   only when either is still missing.
+4. Ask about a link to a Wiki profile, event, goal, project, artifact, note, or Psyche
+   record only when that connection should remain navigable.
+5. Leave contacts, birthdays, private notes, and sensitive facts unasked unless the
+   user says they are useful for this purpose.
+6. If the user wants to connect two Forge installations, move to the separate
+   human-controlled pairing and sharing flow. Do not encode pairing or consent as
+   Person fields or entity links.
+7. Use dedicated People reads for source-labelled local and shared context. Run a
+   typed question only against an existing grant and only within its returned scope.
+
+Helpful follow-up lanes:
+
+- who the user means and which local Forge user owns the record
+- what one piece of context will make the Person recognizable or useful later
+- whether an existing Person with the same name or alias is the intended record
+- which existing Forge records should stay linked
+- whether the request is local memory or an existing-grant question
+
+Route note:
+
+- `person` is a normal batch-first entity. Use `forge_search_entities`,
+  `forge_create_entities`, `forge_update_entities`, `forge_delete_entities`, and
+  `forge_restore_entities` for search, create, update, soft delete, and restore.
+- Person links use the general `links: [{ entityType, entityId, relationship,
+anchorKey? }]` contract in the batch create or update.
+- A Person is a private local record about someone. It is not a local `User`, agent
+  identity, peer credential, pairing, or grant.
+- Use `forge_call_people_route` only for its published People reads, reviewed Wiki
+  association steps, and typed-question steps. Use `forge_call_peer_route` only for
+  published status, diagnostics, and existing-grant query support.
+- Agents cannot accept pairing, change consent, widen or revoke a grant, approve or
+  remove a device, request a resync, manage approval credentials, or perform a
+  human-presence ceremony.
+
+Ready to save when:
+
+- the intended person and owning local user are clear
+- the accepted display name is clear
+- one useful context sentence is present when the name alone would be ambiguous
+- any requested links are identified
+- no optional personal detail is being collected without a stated use
+
+Preferred opening question:
+
+- "Who is this person to you, and what would be useful for Forge to help you remember or connect?"
+
 ## Note
 
 Aim: preserve the useful context and link it to the right places without turning the
@@ -1622,6 +1704,16 @@ Helpful follow-up lanes:
 - whether it is durable or should expire
 - whether part of the detail belongs in a note while the cleaner structure belongs on
   another entity
+
+Route note:
+
+- `note` is a normal batch-first entity. Search, create, update, soft delete, and
+  restore it through the shared entity tools unless the user needs the dedicated
+  bounded Notes page API.
+- Notes use the general `links` model and can link to any compatible Forge entity.
+- When Psyche authentication is enabled, reading Psyche-linked notes requires
+  `psyche.read`; creating, updating, deleting, or restoring them requires
+  `psyche.note`.
 
 Ready to save when:
 
@@ -1718,7 +1810,8 @@ Arc:
    proposing a write.
 4. For trusted upload, ask what the file should help someone retrieve, prove, review,
    or preserve, then ask only for missing filename, purpose, provenance, or source
-   path. Verify upload authority without requesting a password.
+   path. Verify upload authority without requesting a password. Give each file one
+   stable idempotency key and keep it unchanged only across an exact transport retry.
 5. For a metadata update, ask for the smallest newly true change and what provenance,
    trust state, scan interpretation, or retrieval wording must remain intact.
 6. For rescan, LLM enrichment, or trust-state work, read current metadata and scan
@@ -1766,6 +1859,10 @@ Routing rule:
   download, decrypt, open, execute, preview, transform, submit passwords, or
   autonomously process stored file bytes. Agents may read `contentProtection` mode and
   password hints as metadata only.
+- Forge derives agent identity and acting-user provenance from the authenticated
+  token. Do not claim another agent or an out-of-scope user in the upload body. Reuse
+  an upload idempotency key only for identical bytes and normalized metadata; use a
+  new key for a deliberate new artifact.
 - OpenAPI documents human-only download and encryption paths for the web/operator
   surface, but those paths are intentionally absent from `forge_call_artifact_route`
   and must not be called by agents.
@@ -1775,7 +1872,7 @@ Ready to act when:
 - list, metadata read, versions, or audit has a practical question plus any required
   filter or exact artifact id
 - trusted upload has upload authority, file bytes, original filename, purpose, and
-  provenance or source path without a password
+  provenance or source path without a password, plus one stable per-file retry key
 - metadata update, rescan, enrichment, or trust change has a current read, exact
   artifact, intended change, preservation need, and enrichment authorization when used
 - link replacement has the complete desired general `entity_links` set
@@ -2036,6 +2133,48 @@ Ready to review when:
 Preferred opening question:
 
 - "What current work, risk, or next move are you trying to check?"
+
+## Today Priority
+
+Aim: use Forge's current evidence to decide the next useful work without inventing a
+fallback task.
+
+Arc:
+
+1. Clarify the user scope only when several owners are visible or the request is
+   ambiguous.
+2. Read the Today priority decision before recommending a task.
+3. Reflect its state plainly: start, continue active work, resolve a conflict, recover
+   capacity, choose smaller work, or stop because nothing is startable.
+4. Read calendar overview separately when meetings or other events should constrain
+   the user's choice.
+
+Helpful follow-up lanes:
+
+- whose work the decision should cover
+- whether the user is choosing a new start or checking an active run
+- whether meetings or non-task calendar events change the available window
+- whether stale evidence should be refreshed before acting
+
+Route note:
+
+- `today_priority` is a read-model-only surface. Use
+  `forge_get_today_priority` or `/api/v1/today/priority`; do not mutate it through
+  batch CRUD.
+- Schedule evidence in this decision comes from task timeboxes. Use
+  `forge_get_calendar_overview` for meetings and other calendar events.
+- Follow the returned `ready`, `continue-active`, `unresolved-active`, `overloaded`,
+  `capacity-limited`, or `no-work` state. Do not replace a stop state with the first
+  focus, backlog, or blocked task.
+
+Ready to review when:
+
+- the relevant user scope is clear enough
+- the user has said whether calendar events beyond task timeboxes matter
+
+Preferred opening question:
+
+- "What decision are you trying to make about today's next work?"
 
 ## Self Observation
 
@@ -2477,6 +2616,8 @@ Route note:
 - `preferences_workspace` is a read-model-only surface. Use
   `forge_get_preferences_workspace` or `GET /api/v1/preferences/workspace`; do not
   create, update, or delete it through batch CRUD.
+- A missing workspace read returns `404` and must remain pure. Do not turn that GET
+  into an implicit refresh; initialize only through an explicit user-chosen action.
 - Follow-up writes use the dedicated comparison-game, context-merge,
   enqueue-from-entity, judgment, signal, or score-override tool. Do not mutate the
   read model or guess a generic Preferences route.
@@ -2532,10 +2673,11 @@ compare-later with the context that makes it interpretable later.
 
 Arc:
 
-1. Ask what item the user wants to mark.
-2. Ask what signal they want to give it.
-3. Ask what domain or context this belongs to if that is still unclear.
-4. Ask about strength only if the user is expressing a gradient rather than a simple mark.
+1. Read the exact item and current Preferences workspace before proposing a write.
+2. Reflect the current direct mark, context sharing and decay, and any conflict with existing comparisons.
+3. Ask what signal the user wants only when their intent is not already clear.
+4. Explain which current mark will be replaced; ask about strength only when the user expresses a gradient.
+5. After saving, use the returned score and effective signal to explain the actual status, score, and confidence.
 
 Helpful follow-up lanes:
 
@@ -2547,12 +2689,16 @@ Route note:
 
 - `preference_signal` is an action workflow. Submit it through
   `POST /api/v1/preferences/signals` with the preferences signal tool, not batch CRUD.
+- `neutral` clears the current direct effect in that context. It preserves the
+  audit history but adds no direct weight, evidence count, or confidence; the
+  remaining evidence determines the returned score and status.
 
 Ready to act when:
 
 - the item is clear
 - the signal type is clear
-- the context is clear enough if it changes interpretation
+- the owner, domain, and context are clear
+- the user understands which direct mark and model effect will be replaced
 
 Preferred opening question:
 
@@ -3106,25 +3252,41 @@ Arc:
 1. Ask what preference question this catalog is meant to support.
 2. Ask what domain or concept area it belongs to.
 3. Ask what kinds of items should be included or excluded.
-4. Offer a working catalog name once the purpose is clear.
+4. Confirm the owner when several human or bot users are in scope.
+5. Ask whether a goal, project, task, note, calendar record, Psyche record, artifact, or other Forge entity gives the catalog useful context.
+6. Offer a working catalog name once the purpose is clear.
 
 Helpful follow-up lanes:
 
 - what decision or taste question this catalog should help answer
 - what belongs in scope
 - what would make the catalog immediately useful instead of bloated
+- which existing Forge records explain why the catalog exists
+- whether an apparent duplicate should update the current catalog or remain distinct
 
 Route note:
 
 - `preference_catalog` is normal stored Preferences CRUD. Use the shared batch entity
   routes unless the user is playing the comparison game or submitting a judgment or
   signal.
+- Store relationships through the general `links` field backed by `entity_links`.
+  Do not invent a catalog-specific link route.
+- Creator source and actor are stamped by Forge. Do not ask the user to manufacture
+  provenance that the authenticated request already supplies.
+- Soft deletion moves a catalog to the Forge bin. Use `forge_restore_entities` when
+  the user wants it back; require explicit confirmation before hard deletion.
 
 Ready to save when:
 
 - the catalog has a stable purpose
 - the domain is clear
 - the boundary of what belongs inside is clear enough
+- the owner is unambiguous
+- any useful general links are explicit, or the user has chosen to leave them empty
+
+After saving, read the catalog back and verify its owner, purpose, boundaries,
+links, and creator provenance. If Forge reports a normalized-title conflict, show
+the existing catalog and ask whether the user meant to update it.
 
 Preferred opening question:
 
@@ -3194,8 +3356,8 @@ Helpful follow-up lanes:
 
 Route note:
 
-- Ordinary `preference_context` create, update, delete, restore, and search use the
-  shared batch entity tools.
+- Ordinary `preference_context` create, update, immediate delete, and search use the
+  shared batch entity tools. Context deletion is not restorable.
 - Read the current contexts through `GET /api/v1/preferences/contexts` or one exact
   context through `GET /api/v1/preferences/contexts/:id`.
 - An accepted merge uses `forge_merge_preferences_contexts` or
@@ -3415,6 +3577,21 @@ Route note:
   storage. Search and mutate it through the shared entity routes after the lived
   category, boundary, and wording are clear enough. Do not treat it as a generic tag
   or route it through `self_observation`.
+- Search before create. Built-in entries have `system: true` and are read-only; custom
+  entries are owner-scoped. Create accepts only `label`, optional `description`, and
+  optional `userId`. Do not invent `aliases`: wording equivalent after Unicode NFKC
+  default case folding, punctuation, and whitespace normalization is a duplicate
+  within one owner scope.
+- Batch agent search should set `searches[].userIds` and requires base `read` or
+  `write` plus `psyche.read`; batch mutations require base `write` plus
+  `psyche.write`. Dedicated routes require only the corresponding Psyche scope. Put a
+  stable `operations[].idempotencyKey` on each create and reuse it only for an exact
+  retry.
+- Preserve the report's own event wording in `customEventType`. A rename or deletion
+  of the reusable entry must not rewrite that historical wording; hard deletion clears
+  only the reusable reference. Soft-deleted references survive unrelated report
+  updates and return on restore. Hard deletion leaves the create key terminal, so a
+  delayed retry cannot recreate the entry.
 
 Ready to save when:
 
@@ -3457,6 +3634,21 @@ Route note:
   for storage. Search and mutate it through the shared entity routes after the felt
   signature, boundary, and wording are clear enough. Do not treat it as a generic
   dictionary item.
+- Search before create. Built-in entries have `system: true` and are read-only; custom
+  entries are owner-scoped. Create accepts only `label`, optional `description`,
+  optional `category`, and optional `userId`. Do not invent `aliases` or `bodySignals`:
+  wording equivalent after Unicode NFKC default case folding, punctuation, and
+  whitespace normalization is a duplicate within one owner scope.
+- Batch agent search should set `searches[].userIds` and requires base `read` or
+  `write` plus `psyche.read`; batch mutations require base `write` plus
+  `psyche.write`. Dedicated routes require only the corresponding Psyche scope. Put a
+  stable `operations[].idempotencyKey` on each create and reuse it only for an exact
+  retry.
+- Preserve each report emotion's own `label` when linking a reusable definition. A
+  rename or deletion must not rewrite that historical wording; hard deletion clears
+  only the reusable reference. Soft-deleted references survive unrelated report
+  updates and return on restore. Hard deletion leaves the create key terminal, so a
+  delayed retry cannot recreate the entry.
 
 Ready to save when:
 

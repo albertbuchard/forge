@@ -21,10 +21,23 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>com.albertbuchard.ForgeCompanion.people</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>forge-companion</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.154</string>
+	<string>1.0.155</string>
 	<key>CFBundleVersion</key>
-	<string>36</string>
+	<string>37</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tailscale</string>
@@ -51,7 +64,7 @@
 		<string>_forge._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Forge Companion uses the camera to scan the pairing QR code from Forge Settings.</string>
+	<string>Forge Companion uses the camera to scan owner pairing and peer invitation QR codes.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Forge Companion reads Health data to sync sleep, workouts, and recovery into Forge.</string>
 	<key>NSHealthUpdateUsageDescription</key>

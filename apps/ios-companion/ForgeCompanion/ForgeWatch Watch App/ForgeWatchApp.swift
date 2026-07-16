@@ -8,7 +8,15 @@ struct ForgeWatch_Watch_AppApp: App {
     init() {
         let arguments = ProcessInfo.processInfo.arguments
         let previewMode = arguments.contains("--forge-watch-preview")
-        let model = WatchAppModel(preview: previewMode)
+        let previewScenario = arguments
+            .first(where: { $0.hasPrefix("--forge-watch-preview-state=") })
+            .map { $0.replacingOccurrences(of: "--forge-watch-preview-state=", with: "") }
+            .flatMap(ForgeWatchPreviewScenario.init(rawValue:))
+            ?? .standard
+        let model = WatchAppModel(
+            preview: previewMode,
+            previewScenario: previewScenario
+        )
         if let surfaceArgument = arguments.first(where: { $0.hasPrefix("--forge-watch-surface=") }) {
             let rawValue = surfaceArgument.replacingOccurrences(of: "--forge-watch-surface=", with: "")
             model.selectedSurface = WatchSurface(rawValue: rawValue) ?? model.selectedSurface

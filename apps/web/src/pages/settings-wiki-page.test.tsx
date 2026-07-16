@@ -28,7 +28,17 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/settings/settings-section-nav", () => ({
-  SettingsSectionNav: () => <nav>Settings navigation</nav>
+  SettingsSectionNav: () => <nav>Settings navigation</nav>,
+  SettingsStateFrame: ({
+    children
+  }: {
+    children: import("react").ReactNode;
+  }) => (
+    <>
+      <nav>Settings navigation</nav>
+      {children}
+    </>
+  )
 }));
 
 vi.mock("@/components/shell/page-hero", () => ({

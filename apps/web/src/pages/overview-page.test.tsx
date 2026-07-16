@@ -5,7 +5,7 @@ import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { OverviewPage } from "@/pages/overview-page";
+import { buildOverviewXpFallback, OverviewPage } from "@/pages/overview-page";
 import type { ForgeSnapshot } from "@/lib/types";
 import { createAppStore } from "@/store/store";
 
@@ -283,6 +283,13 @@ function createSnapshot(): ForgeSnapshot {
 }
 
 describe("OverviewPage", () => {
+  it("builds a contract-complete XP fallback without a cast", () => {
+    const fallback = buildOverviewXpFallback(createSnapshot());
+    expect(fallback.timezone).toBeTruthy();
+    expect(fallback.scope.mode).toBe("operator_fallback");
+    expect(fallback.dailyAmbientCap).toBeGreaterThan(0);
+  });
+
   beforeEach(() => {
     getSettingsMock.mockResolvedValue({
       settings: {

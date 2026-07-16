@@ -41,6 +41,9 @@
     "build:openclaw-plugin": "npm --prefix plugins/openclaw run build",
     "test:forge-memory": "npm --prefix packages/forge-memory test",
     "pack:forge-memory": "cd packages/forge-memory && npm pack",
+    "verify:connectivity-service": "npm --prefix packages/forge-connectivity-service run verify",
+    "audit:connectivity-service": "npm --prefix packages/forge-connectivity-service run audit",
+    "pack:connectivity-service": "cd packages/forge-connectivity-service && npm pack",
     "release:ios-companion:audit": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh audit",
     "release:ios-companion:validate": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh validate",
     "release:ios-companion:testflight": "bash ./apps/ios-companion/scripts/publish-forge-companion.sh testflight",
@@ -51,6 +54,15 @@
     "media:web:docs-fixture": "node --import tsx ./scripts/docs/prepare-web-docs-screenshot-data.ts",
     "media:web:docs-screenshots": "node ./scripts/docs/capture-web-docs-screenshots.mjs",
     "check:openclaw-plugin": "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts",
+    "check:people-sharing-release": "node ./scripts/ci/check-people-sharing-release.mjs",
+    "check:people-sharing-migration-parity": "node ./scripts/ci/check-people-sharing-migration-parity.mjs",
+    "test:people-sharing": "node ./scripts/ci/run-people-sharing-tests.mjs",
+    "test:people-performance": "node --test ./scripts/perf/people-performance.test.mjs",
+    "check:people-performance": "node ./scripts/perf/people-performance.mjs --mode release",
+    "test:people-upgrade-restore": "node --test ./scripts/ci/check-people-upgrade-restore.test.mjs",
+    "check:people-upgrade-restore": "node ./scripts/ci/check-people-upgrade-restore.mjs --mode release",
+    "test:people-packed-surfaces": "node --test ./scripts/smoke/people-packed-surfaces.test.mjs",
+    "test:people-sharing-release-gate": "node --test ./scripts/ci/check-people-sharing-release.test.mjs ./scripts/ci/check-people-sharing-migration-parity.test.mjs ./scripts/ci/check-people-upgrade-restore.test.mjs ./scripts/smoke/people-packed-surfaces.test.mjs",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write ."
   },
@@ -69,6 +81,8 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@radix-ui/react-dialog": "^1.1.14",
     "@reduxjs/toolkit": "^2.11.2",
+    "@simplewebauthn/browser": "13.3.0",
+    "@simplewebauthn/server": "13.3.2",
     "@sinclair/typebox": "^0.34.49",
     "@tanstack/react-query": "^5.80.10",
     "@tanstack/react-table": "^8.21.3",
@@ -108,12 +122,13 @@
     "tailwind-merge": "^3.3.1",
     "tsdav": "^2.1.8",
     "zod": "^3.25.67",
+    "zod-to-json-schema": "3.25.2",
     "zustand": "^5.0.5"
   },
   "overrides": {
     "axios": "^1.16.0",
     "follow-redirects": "^1.16.0",
-    "hono": "4.12.14",
+    "hono": "4.12.30",
     "ip-address": "^10.2.0",
     "markdown-it": "^14.2.0"
   },
@@ -130,7 +145,8 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react-swc": "^3.10.2",
-    "concurrently": "^9.2.1",
+    "ajv": "^8.20.0",
+    "concurrently": "^10.0.3",
     "eslint": "^9.29.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -139,10 +155,10 @@
     "prettier": "^3.5.3",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.11",
-    "tsx": "^4.19.3",
+    "tsx": "^4.23.1",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.34.0",
-    "vite": "^6.3.5",
-    "vitest": "^3.2.4"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
   }
 }

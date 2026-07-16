@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { XpCommandDeck } from "@/components/xp/xp-command-deck";
 import { PageHero } from "@/components/shell/page-hero";
 import { useForgeShell } from "@/components/shell/app-shell";
@@ -18,10 +21,10 @@ import {
   ensureOperatorSession,
   getPsycheOverview,
   getXpMetrics,
-  listRewardLedger,
   listRewardRules,
   patchRewardRule
 } from "@/lib/api";
+import { getRuntimeTimeZone } from "@/lib/date-keys";
 import type { RewardRule, RewardableEntityType } from "@/lib/types";
 
 type RewardableOption = {
@@ -77,36 +80,36 @@ function parseRecordJson(raw: string) {
 
 export function SettingsRewardsPage() {
   const shell = useForgeShell();
+  const selectedUserIds = Array.isArray(shell.selectedUserIds)
+    ? shell.selectedUserIds
+    : [];
   const queryClient = useQueryClient();
   const [selectedRuleId, setSelectedRuleId] = useState("");
   const [ruleConfigError, setRuleConfigError] = useState<string | null>(null);
   const [bonusMetadataError, setBonusMetadataError] = useState<string | null>(
     null
   );
+  const bonusIdempotencyKeyRef = useRef<string | null>(null);
 
   const operatorSessionQuery = useQuery({
     queryKey: ["forge-operator-session"],
     queryFn: ensureOperatorSession
   });
   const operatorReady = operatorSessionQuery.isSuccess;
+  const runtimeTimezone = getRuntimeTimeZone();
 
   const xpQuery = useQuery({
-    queryKey: ["forge-xp-metrics"],
-    queryFn: getXpMetrics
+    queryKey: ["forge-xp-metrics", runtimeTimezone, ...selectedUserIds],
+    queryFn: () => getXpMetrics(selectedUserIds, runtimeTimezone)
   });
   const rewardRulesQuery = useQuery({
     queryKey: ["forge-reward-rules"],
     queryFn: listRewardRules,
     enabled: operatorReady
   });
-  const rewardLedgerQuery = useQuery({
-    queryKey: ["forge-reward-ledger"],
-    queryFn: () => listRewardLedger(30),
-    enabled: operatorReady
-  });
   const psycheOverviewQuery = useQuery({
-    queryKey: ["forge-psyche-overview"],
-    queryFn: async () => (await getPsycheOverview()).overview
+    queryKey: ["forge-psyche-overview", ...selectedUserIds],
+    queryFn: async () => (await getPsycheOverview(selectedUserIds)).overview
   });
 
   const rewardRuleForm = useForm<RewardRuleFormValues>({
@@ -133,8 +136,7 @@ export function SettingsRewardsPage() {
   const invalidateRewards = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["forge-xp-metrics"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-reward-rules"] }),
-      queryClient.invalidateQueries({ queryKey: ["forge-reward-ledger"] })
+      queryClient.invalidateQueries({ queryKey: ["forge-reward-rules"] })
     ]);
   };
 
@@ -157,7 +159,10 @@ export function SettingsRewardsPage() {
 
   const bonusMutation = useMutation({
     mutationFn: createManualRewardGrant,
-    onSuccess: invalidateRewards
+    onSuccess: () => {
+      bonusIdempotencyKeyRef.current = null;
+      void invalidateRewards();
+    }
   });
 
   const rewardRules = useMemo(
@@ -266,30 +271,39 @@ export function SettingsRewardsPage() {
   }, [selectedRule, rewardRuleForm]);
 
   const xpMetrics = xpQuery.data?.metrics;
-  const rewardLedger = rewardLedgerQuery.data?.ledger ?? [];
-  const manualBonusEvents = rewardLedger
+  const manualBonusEvents = (xpMetrics?.recentLedger ?? [])
     .filter((event) => event.metadata.manual === true)
     .slice(0, 8);
+  const selectedBonusType = bonusForm.watch("entityType");
+  const selectedBonusOptions = rewardableOptionsByType[selectedBonusType] ?? [];
+  const selectedBonusId = bonusForm.watch("entityId");
+  const selectedBonusIsValid = selectedBonusOptions.some(
+    (option) => option.id === selectedBonusId
+  );
 
   if (operatorSessionQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings · Rewards"
-        title="Loading reward controls"
-        description="Establishing the operator session and fetching reward configuration."
-        columns={2}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Settings · Rewards"
+          title="Loading reward controls"
+          description="Establishing the operator session and fetching reward configuration."
+          columns={2}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings · Rewards"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Rewards"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
@@ -297,7 +311,7 @@ export function SettingsRewardsPage() {
     <div className="mx-auto grid w-full max-w-[1220px] gap-5">
       <PageHero
         title="Rewards"
-        description="XP command deck, reward rule editor, manual bonus grants, and ledger history."
+        description="Current XP and streak state, automatic reward rules, and auditable manual adjustments."
       />
 
       <SettingsSectionNav />
@@ -306,15 +320,49 @@ export function SettingsRewardsPage() {
         <Card>
           <div className={rewardEyebrowClass}>Reward operations</div>
           <div className="mt-4 grid gap-4">
-            {xpMetrics ? (
+            {xpQuery.isLoading ? (
+              <SurfaceSkeleton
+                eyebrow="Selected-user progression"
+                title="Reading the reward ledger"
+                description="Calculating level, streak, weekly XP, and recent changes."
+                columns={2}
+                blocks={4}
+              />
+            ) : xpQuery.isError ? (
+              <div
+                role="alert"
+                className={`${rewardPanelClass} text-sm ${rewardBodyClass}`}
+              >
+                <div className={`font-medium ${rewardTitleClass}`}>
+                  Progression could not be loaded
+                </div>
+                <div className="mt-2">
+                  {xpQuery.error instanceof Error
+                    ? xpQuery.error.message
+                    : "The reward ledger request failed."}
+                </div>
+                <Button
+                  className="mt-4"
+                  size="sm"
+                  onClick={() => void xpQuery.refetch()}
+                >
+                  Retry progression
+                </Button>
+              </div>
+            ) : xpMetrics ? (
               <XpCommandDeck
                 profile={xpMetrics.profile}
                 achievements={xpMetrics.achievements}
                 milestoneRewards={xpMetrics.milestoneRewards}
                 momentumPulse={xpMetrics.momentumPulse}
                 recentLedger={xpMetrics.recentLedger}
+                scopeLabel={xpMetrics.scope.label}
               />
-            ) : null}
+            ) : (
+              <div className={`${rewardPanelClass} text-sm ${rewardBodyClass}`}>
+                No progression state is available for the selected user scope.
+              </div>
+            )}
 
             {xpMetrics ? (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -337,7 +385,25 @@ export function SettingsRewardsPage() {
                 <div className={`font-medium ${rewardTitleClass}`}>
                   Reward rule editor
                 </div>
-                {rewardRules.length > 0 ? (
+                {rewardRulesQuery.isLoading ? (
+                  <div className={`mt-4 text-sm ${rewardBodyClass}`}>
+                    Loading reward rules...
+                  </div>
+                ) : rewardRulesQuery.isError ? (
+                  <div
+                    role="alert"
+                    className={`mt-4 text-sm ${rewardWarningClass}`}
+                  >
+                    Reward rules could not be loaded.{" "}
+                    <button
+                      type="button"
+                      className="font-medium underline underline-offset-4"
+                      onClick={() => void rewardRulesQuery.refetch()}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : rewardRules.length > 0 ? (
                   <form
                     className="mt-4 grid gap-4"
                     onSubmit={rewardRuleForm.handleSubmit(async (values) => {
@@ -392,6 +458,10 @@ export function SettingsRewardsPage() {
                         {...rewardRuleForm.register("description")}
                       />
                     </label>
+                    <p className={`text-xs leading-5 ${rewardFaintClass}`}>
+                      Rule changes apply to future reward events. Existing
+                      ledger entries keep their original value and provenance.
+                    </p>
                     <label className="flex min-w-0 items-center justify-between gap-3 rounded-[18px] border border-[var(--ui-border-subtle)] bg-[var(--ui-surface-1)] px-4 py-3">
                       <span className={rewardBodyClass}>Rule is active</span>
                       <input
@@ -409,7 +479,10 @@ export function SettingsRewardsPage() {
                       />
                     </label>
                     {ruleConfigError ? (
-                      <div className={`text-sm ${rewardWarningClass}`}>
+                      <div
+                        role="alert"
+                        className={`text-sm ${rewardWarningClass}`}
+                      >
                         {ruleConfigError}
                       </div>
                     ) : null}
@@ -423,7 +496,7 @@ export function SettingsRewardsPage() {
                   </form>
                 ) : (
                   <div className={`mt-4 text-sm ${rewardBodyClass}`}>
-                    Loading reward rules...
+                    No reward rules are configured.
                   </div>
                 )}
               </div>
@@ -433,23 +506,54 @@ export function SettingsRewardsPage() {
                 <div className={`font-medium ${rewardTitleClass}`}>
                   Manual bonus XP
                 </div>
+                <p className={`mt-2 text-xs leading-5 ${rewardFaintClass}`}>
+                  Manual adjustments are recorded in the ledger but never extend
+                  the streak.
+                </p>
+                {psycheOverviewQuery.isLoading ? (
+                  <div
+                    role="status"
+                    className={`mt-3 text-xs leading-5 ${rewardFaintClass}`}
+                  >
+                    Loading Psyche reward targets...
+                  </div>
+                ) : psycheOverviewQuery.isError ? (
+                  <div
+                    role="alert"
+                    className={`mt-3 text-xs leading-5 ${rewardWarningClass}`}
+                  >
+                    Psyche reward targets could not be loaded. Other target
+                    types remain available.{" "}
+                    <button
+                      type="button"
+                      className="font-medium underline underline-offset-4"
+                      onClick={() => void psycheOverviewQuery.refetch()}
+                    >
+                      Retry Psyche targets
+                    </button>
+                  </div>
+                ) : null}
                 <form
                   className="mt-4 grid gap-4"
                   onSubmit={bonusForm.handleSubmit(async (values) => {
                     try {
                       setBonusMetadataError(null);
                       const metadata = parseRecordJson(values.metadataJson);
+                      bonusIdempotencyKeyRef.current ??= crypto.randomUUID();
                       await bonusMutation.mutateAsync({
                         entityType: values.entityType,
                         entityId: values.entityId,
                         deltaXp: values.deltaXp,
                         reasonTitle: values.reasonTitle,
                         reasonSummary: values.reasonSummary,
-                        metadata
+                        metadata: {
+                          ...metadata,
+                          idempotencyKey: bonusIdempotencyKeyRef.current
+                        }
                       });
                       bonusForm.reset({
                         ...values,
-                        entityId: "",
+                        entityId: selectedBonusOptions[0]?.id ?? "",
                         reasonTitle: "Operator bonus",
                         reasonSummary:
                           "Manual boost for a meaningful action captured with good provenance.",
@@ -490,11 +594,7 @@ export function SettingsRewardsPage() {
                         className={rewardSelectClass}
                         {...bonusForm.register("entityId")}
                       >
-                        {(
-                          rewardableOptionsByType[
-                            bonusForm.watch("entityType")
-                          ] ?? []
-                        ).map((option) => (
+                        {selectedBonusOptions.map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.label}
                           </option>
@@ -540,17 +640,27 @@ export function SettingsRewardsPage() {
                     />
                   </label>
                   {bonusMetadataError ? (
-                    <div className={`text-sm ${rewardWarningClass}`}>
+                    <div
+                      role="alert"
+                      className={`text-sm ${rewardWarningClass}`}
+                    >
                       {bonusMetadataError}
                     </div>
                   ) : null}
                   <Button
                     type="submit"
+                    disabled={!selectedBonusIsValid}
                     pending={bonusMutation.isPending}
                     pendingLabel="Issuing bonus"
                   >
                     Issue bonus XP
                   </Button>
+                  {selectedBonusOptions.length === 0 ? (
+                    <div className={`text-sm ${rewardBodyClass}`}>
+                      No eligible {selectedBonusType.replaceAll("_", " ")}{" "}
+                      target is available in the selected user scope.
+                    </div>
+                  ) : null}
                 </form>
                 {bonusMutation.data ? (
                   <div className={rewardSuccessPanelClass}>
@@ -565,7 +675,7 @@ export function SettingsRewardsPage() {
             {/* Manual bonus history */}
             <div className={rewardPanelClass}>
               <div className={`font-medium ${rewardTitleClass}`}>
-                Manual bonus history
+                Recent manual adjustments
               </div>
               <div className="mt-4 grid gap-3">
                 {manualBonusEvents.length === 0 ? (
@@ -603,7 +713,8 @@ export function SettingsRewardsPage() {
                       <div
                         className={`mt-2 break-words text-xs uppercase tracking-[0.16em] [overflow-wrap:anywhere] ${rewardFaintClass}`}
                       >
-                        {event.entityType} · {event.entityId} ·{" "}
+                        {event.entityType} · {event.entityId} · {event.source}
+                        {event.actor ? ` · ${event.actor}` : ""} ·{" "}
                         {new Date(event.createdAt).toLocaleString()}
                       </div>
                     </div>

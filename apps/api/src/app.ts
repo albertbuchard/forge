@@ -54,11 +54,18 @@ import {
   getPublishedAiConnectorOutput,
   getAiConnectorBySlug,
   getAiConnectorConversationReadModel,
+  ensureLegacyProcessorsMigrated,
   listAiConnectorRunsPage,
-  listAiConnectors,
   runAiConnector,
   updateAiConnector
 } from "./repositories/ai-connectors.js";
+import {
+  DEFAULT_WORKBENCH_CATALOG_LIMIT,
+  MAX_WORKBENCH_CATALOG_LIMIT,
+  MAX_WORKBENCH_CATALOG_QUERY_LENGTH,
+  listWorkbenchBoxCatalogPage,
+  listWorkbenchFlowCatalogPage
+} from "./repositories/workbench-catalog.js";
 import {
   createAiProcessor,
   createAiProcessorLink,
@@ -93,10 +100,6 @@ import {
   saveSurfaceLayout
 } from "./repositories/surface-layouts.js";
 import {
-  buildConnectorOutputCatalogEntry,
-  listForgeBoxCatalog
-} from "./connectors/box-registry.js";
-import {
   createHabit,
   createHabitCheckIn,
   deleteHabitCheckIn,
@@ -108,9 +111,15 @@ import { listDomains } from "./repositories/domains.js";
 import {
   buildNotesSummaryByEntity,
   createNote,
+  filterNoteActivityEventsForScope,
   getNoteById,
+  getNoteByIdIncludingDeleted,
+  isNoteVisibleToScope,
   listNotesByObservedAtRange,
   listNotes,
+  listNotesPage,
+  resolveNoteMutationUserId,
+  type NoteReadScope,
   updateNote
 } from "./repositories/notes.js";
 import {
@@ -122,17 +131,19 @@ import {
   deleteWikiProfile,
   getWikiHealth,
   getWikiIngestJob,
+  getWikiIngestJobSpaceId,
   getWikiHomePageDetail,
+  getWikiPageAccessRecord,
   getWikiPageDetail,
   getWikiPageDetailBySlug,
+  getWikiSpaceById,
   getWikiSettingsPayload,
   ingestWikiSource,
   countWikiIngestJobs,
   listWikiIngestJobs,
   listWikiLlmProfiles,
   listWikiPageTree,
-  listWikiPages,
-  listWikiSpaces,
+  listWikiPagesPage,
   processWikiIngestJob,
   reindexWikiEmbeddings,
   reindexWikiEmbeddingsSchema,
@@ -147,12 +158,16 @@ import {
   upsertWikiEmbeddingProfileSchema,
   upsertWikiLlmProfile,
   upsertWikiLlmProfileSchema,
+  toWikiPageSummary,
+  wikiPageListQuerySchema,
   wikiSearchQuerySchema
 } from "./repositories/wiki-memory.js";
 import {
   filterOwnedEntities,
+  getEntityOwnerId,
   setEntityOwner
 } from "./repositories/entity-ownership.js";
+import { getDeletedEntityRecord } from "./repositories/deleted-entities.js";
 import {
   createBehavior,
   createBehaviorPattern,
@@ -181,7 +196,8 @@ import {
   listModeProfiles,
   listPsycheValues,
   listSchemaCatalog,
-  listTriggerReports,
+  listTriggerReportsPage,
+  requirePsycheVocabularyWriteScope,
   updateBehavior,
   updateBehaviorPattern,
   updateBeliefEntry,
@@ -215,22 +231,23 @@ import {
   createPreferenceContext,
   createPreferenceItem,
   createPreferenceItemFromEntity,
-  deletePreferenceCatalog,
-  deletePreferenceCatalogItem,
   deletePreferenceContext,
   deletePreferenceItem,
   getPreferenceCatalogById,
   getPreferenceCatalogItemById,
   getPreferenceContextById,
   getPreferenceItemById,
+  getPreferenceItemScoreForContext,
+  getPreferenceProfileById,
   getPreferenceWorkspace,
-  listPreferenceCatalogItems,
-  listPreferenceCatalogs,
+  listPreferenceCatalogItemPage,
+  listPreferenceCatalogPage,
   listPreferenceContexts,
   listPreferenceItems,
   mergePreferenceContexts,
+  refreshPreferenceWorkspace,
   startPreferenceGame,
-  submitAbsoluteSignal,
+  submitAbsoluteSignalWithReceipt,
   submitPairwiseJudgment,
   updatePreferenceCatalog,
   updatePreferenceCatalogItem,
@@ -258,9 +275,11 @@ import type {
 } from "@/lib/knowledge-graph-types.js";
 import {
   createManualRewardGrant,
+  ensureDefaultRewardRules,
   getRewardRuleById,
   listRewardLedger,
   listRewardRules,
+  RewardIdempotencyConflictError,
   recordWorkAdjustmentReward,
   recordSessionEvent,
   updateRewardRule
@@ -304,6 +323,7 @@ import {
   claimTaskRun,
   completeTaskRun,
   focusTaskRun,
+  getTaskRunById,
   heartbeatTaskRun,
   listTaskRuns,
   recoverTimedOutTaskRuns,
@@ -368,6 +388,7 @@ import {
   buildGamificationProfile,
   buildXpMetricsPayloadModel,
   LockedGamificationCosmeticError,
+  reconcileGamificationProgress,
   updateGamificationEquipmentSelection
 } from "./services/gamification.js";
 import {
@@ -387,6 +408,8 @@ import {
   createEntities,
   deleteEntities,
   deleteEntity,
+  getEntityById,
+  getCrudEntityCapabilityMatrix,
   getSettingsBinPayload,
   restoreEntities,
   searchEntities,
@@ -396,6 +419,7 @@ import {
   artifactEnrichmentRequestSchema,
   artifactEncryptRequestSchema,
   artifactHistoryQuerySchema,
+  artifactIdempotencyKeySchema,
   artifactListQuerySchema,
   artifactMetadataPatchSchema,
   artifactPasswordDownloadSchema,
@@ -413,6 +437,7 @@ import {
   readArtifactDownload,
   replaceArtifactEntityLinks,
   rescanArtifact,
+  serializeArtifactPublicPayload,
   updateArtifactMetadata
 } from "./services/artifacts.js";
 import { getPsycheOverview } from "./services/psyche.js";
@@ -440,6 +465,7 @@ import {
   updateDataManagementSettings
 } from "./services/data-management.js";
 import { getWeeklyReviewPayload } from "./services/reviews.js";
+import { buildTodayPriorityDecision } from "./services/today-priority.js";
 import { finalizeWeeklyReviewClosure } from "./repositories/weekly-reviews.js";
 import {
   createTaskRunWatchdog,
@@ -452,6 +478,7 @@ import {
   completeGoogleCalendarOauth,
   completeMicrosoftCalendarOauth,
   createCalendarConnection,
+  deleteTaskTimeboxProjection,
   discoverMacOSLocalCalendarSources,
   deleteCalendarEventProjection,
   discoverCalendarConnection,
@@ -471,6 +498,7 @@ import {
   listCalendarProviderMetadata,
   updateCalendarConnectionSelection
 } from "./services/calendar-runtime.js";
+import { isValidTimeZone } from "./services/calendar-time.js";
 import {
   consumeOpenAiCodexOauthCredentials,
   getOpenAiCodexOauthSession,
@@ -488,6 +516,8 @@ import {
   createModeProfileSchema,
   createPsycheValueSchema,
   createTriggerReportSchema,
+  triggerReportListQuerySchema,
+  triggerReportRouteUpdateSchema,
   updateBehaviorSchema,
   updateBeliefEntrySchema,
   updateBehaviorPatternSchema,
@@ -495,8 +525,7 @@ import {
   updateEventTypeSchema,
   updateModeGuideSessionSchema,
   updateModeProfileSchema,
-  updatePsycheValueSchema,
-  updateTriggerReportSchema
+  updatePsycheValueSchema
 } from "./psyche-types.js";
 import {
   createQuestionnaireInstrumentSchema,
@@ -508,11 +537,15 @@ import {
 import {
   createPreferenceCatalogItemSchema,
   createPreferenceCatalogSchema,
+  preferenceCatalogLinkInputSchema,
   createPreferenceContextSchema,
   createPreferenceItemSchema,
   enqueueEntityPreferenceItemSchema,
   mergePreferenceContextsSchema,
+  preferenceCatalogItemListQuerySchema,
+  preferenceCatalogListQuerySchema,
   preferenceWorkspaceQuerySchema,
+  refreshPreferenceWorkspaceSchema,
   startPreferenceGameSchema,
   submitAbsoluteSignalSchema,
   submitPairwiseJudgmentSchema,
@@ -557,6 +590,7 @@ import {
   batchRestoreEntitiesSchema,
   batchSearchEntitiesSchema,
   batchUpdateEntitiesSchema,
+  crudEntityTypeSchema,
   createGoalSchema,
   createInsightFeedbackSchema,
   createInsightSchema,
@@ -587,6 +621,7 @@ import {
   diagnosticLogListQuerySchema,
   disconnectAgentRuntimeSessionSchema,
   eventsListQuerySchema,
+  gitHelperSearchQuerySchema,
   heartbeatAgentRuntimeSessionSchema,
   operatorLogWorkSchema,
   projectBoardPayloadSchema,
@@ -599,10 +634,11 @@ import {
   habitListQuerySchema,
   taskContextPayloadSchema,
   taskRunClaimSchema,
+  taskRunCompleteSchema,
   taskRunFocusSchema,
-  taskRunFinishSchema,
   taskRunHeartbeatSchema,
   taskRunListQuerySchema,
+  taskRunReleaseSchema,
   taskSplitCreateSchema,
   taskListQuerySchema,
   tagSuggestionRequestSchema,
@@ -643,6 +679,7 @@ import {
   type TaskTimeSummary,
   type WorkAdjustmentEntityType
 } from "./types.js";
+import type { Person } from "./people-types.js";
 import {
   getAttentionInboxItem,
   listAttentionInbox,
@@ -656,6 +693,33 @@ import {
 } from "./services/entity-navigation.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { registerWebRoutes } from "./web.js";
+import { registerPeopleRoutes } from "./routes/people.js";
+import { registerPeerSharingRoutes } from "./routes/peer-sharing.js";
+import { persistPeerPairingConfirmation } from "./repositories/peer-pairing.js";
+import { authenticatePeerCompanionRequest } from "./services/peer-companion-auth.js";
+import {
+  DelegatingPeerCoreGateway,
+  startPeerRuntime,
+  type PeerRuntimeHandle,
+  type PeerRuntimeLaunchDependencies
+} from "./services/peer-runtime.js";
+import { redactPersonForAuth } from "./services/people-redaction.js";
+import {
+  canAccessWikiNote as canAccessWikiNoteForScope,
+  canAccessWikiSpace as canAccessWikiSpaceForScope,
+  filterAccessibleWikiNotes as filterAccessibleWikiNotesForScope,
+  listAccessibleWikiSpaces as listAccessibleWikiSpacesForScope,
+  requireWikiNoteAccess,
+  requireWikiPageAccess as requireWikiPageAccessForScope,
+  requireWikiSpaceAccess as requireWikiSpaceAccessForScope,
+  requireWikiUserScope as requireWikiUserScopeForScope,
+  resolveWikiMutationSpaceId as resolveWikiMutationSpaceIdForScope,
+  resolveWikiSpaceIdForAccess as resolveWikiSpaceIdForAccessForScope
+} from "./services/wiki-authorization.js";
+import {
+  findNestedPsycheNoteLinkEntityTypes,
+  findPsycheNoteLinkEntityTypes
+} from "./services/nested-note-authorization.js";
 import { createManagerRuntime } from "./managers/runtime.js";
 import { isManagerError } from "./managers/type-guards.js";
 import {
@@ -2063,11 +2127,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     minimumCreateFields: ["label"],
     relationshipRules: [
       "Trigger reports can reference one event type through eventTypeId.",
-      "Use event types to normalize repeated report categories instead of inventing new wording every time."
+      "Trigger reports also store customEventType as the user's raw wording, so a preset never removes the option to use their own words.",
+      "Built-in event types are read-only. Custom event types are owner-scoped and can be soft-deleted or restored; a hard-deleted create keeps its idempotency key permanently consumed.",
+      "Dedicated Psyche vocabulary routes require psyche.read or psyche.write. Batch agent routes additionally require base read or write alongside the corresponding Psyche scope."
     ],
     searchHints: [
-      "Search by label before creating a new event type.",
-      "Prefer existing event types when one clearly fits the situation."
+      "Search event_type by label through the shared batch entity search before creating.",
+      "Labels are compared after Unicode NFKC default case folding plus punctuation and whitespace normalization; Forge does not expose a separate aliases field.",
+      "Prefer an existing event type only when it clearly fits; otherwise preserve customEventType in the user's own words."
     ],
     fieldGuide: [
       {
@@ -2082,6 +2149,12 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         required: false,
         description: "What kind of incident this event type represents.",
         defaultValue: ""
+      },
+      {
+        name: "userId",
+        type: "string | null",
+        required: false,
+        description: "Owner of this custom vocabulary entry."
       }
     ]
   },
@@ -2092,11 +2165,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     minimumCreateFields: ["label"],
     relationshipRules: [
       "Trigger report emotions can reference an emotion definition through emotionDefinitionId.",
-      "Use emotion definitions to normalize repeated emotional labels across reports."
+      "Every trigger-report emotion also stores its raw label, so the user's own word remains available even when a reusable definition is selected.",
+      "Built-in emotion definitions are read-only. Custom definitions are owner-scoped and can be soft-deleted or restored; a hard-deleted create keeps its idempotency key permanently consumed.",
+      "Dedicated Psyche vocabulary routes require psyche.read or psyche.write. Batch agent routes additionally require base read or write alongside the corresponding Psyche scope."
     ],
     searchHints: [
-      "Search by label before creating a new emotion definition.",
-      "Prefer an existing emotion definition when the label already captures the feeling well."
+      "Search emotion_definition by label through the shared batch entity search before creating.",
+      "Labels are compared after Unicode NFKC default case folding plus punctuation and whitespace normalization; Forge does not expose a separate aliases field.",
+      "Prefer an existing definition only when it captures the feeling; otherwise keep the raw report label in the user's own words."
     ],
     fieldGuide: [
       {
@@ -2119,6 +2195,12 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         description:
           "Optional grouping such as threat, grief, anger, or connection.",
         defaultValue: ""
+      },
+      {
+        name: "userId",
+        type: "string | null",
+        required: false,
+        description: "Owner of this custom vocabulary entry."
       }
     ]
   },
@@ -2846,18 +2928,20 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
   {
     entityType: "trigger_report",
     purpose:
-      "A structured reflective incident report that ties situation, emotions, thoughts, behaviors, consequences, and next moves together.",
+      "A structured reflective incident report that keeps observable situation, memory clarity, body cues, emotions, thoughts, behaviors, consequences, user reflection, optional consented hypothesis, and next moves distinct.",
     minimumCreateFields: ["title"],
     relationshipRules: [
       "Trigger reports can link to values, goals, projects, tasks, patterns, behaviors, beliefs, and modes.",
       "A report is the best container for one specific emotionally meaningful episode.",
-      "Use reports when you need one event chain, not just a generic pattern."
+      "Use reports when you need one event chain, not just a generic pattern.",
+      "Use shared batch CRUD for normal agent reads and writes. The direct Psyche report routes power the web view and expose bounded pages, owner scope, idempotent create, and revision-checked update.",
+      "Do not infer missing memory. A tentative hypothesis requires interpretationConsent and a fit-or-correction response."
     ],
     searchHints: [
       "Search by title, event wording, or linked entities before creating a duplicate report."
     ],
     examples: [
-      '{"title":"Partner said we need to talk and I spiraled","customEventType":"relationship threat","eventSituation":"My partner texted that we needed to talk tonight.","emotions":[{"label":"fear","intensity":85},{"label":"shame","intensity":60}],"thoughts":[{"text":"This means I messed everything up."}],"behaviors":[{"text":"Paced, catastrophized, and checked my phone repeatedly"}],"nextMoves":["Wait until we speak before predicting the outcome","Write down the facts I actually know"]}'
+      '{"title":"Partner said we need to talk and I spiraled","customEventType":"relationship threat","eventSituation":"My partner texted that we needed to talk tonight.","memoryClarity":"clear","bodyCues":["tight chest","shallow breathing"],"emotions":[{"label":"fear","intensity":85},{"label":"shame","intensity":60}],"thoughts":[{"text":"This means I messed everything up."}],"behaviors":[{"text":"Paced, catastrophized, and checked my phone repeatedly"}],"reflection":"The uncertainty was hard to tolerate.","interpretationConsent":true,"hypothesis":"One possibility is that checking tried to reduce the uncertainty quickly.","hypothesisFit":"fits","nextMoves":["Wait until we speak before predicting the outcome","Write down the facts I actually know"]}'
     ],
     fieldGuide: [
       {
@@ -2905,6 +2989,22 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         nullable: true
       },
       {
+        name: "memoryClarity",
+        type: "unspecified|clear|partial|uncertain",
+        required: false,
+        description: "How reliable or complete the remembered sequence feels.",
+        enumValues: ["unspecified", "clear", "partial", "uncertain"],
+        defaultValue: "unspecified"
+      },
+      {
+        name: "bodyCues",
+        type: "string[]",
+        required: false,
+        description:
+          "Body sensations, impulses, posture, breathing changes, numbness, or shutdown noticed in the episode.",
+        defaultValue: []
+      },
+      {
         name: "emotions",
         type: "array",
         required: false,
@@ -2933,6 +3033,45 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         required: false,
         description:
           "Object with selfShortTerm, selfLongTerm, othersShortTerm, othersLongTerm string arrays."
+      },
+      {
+        name: "reflection",
+        type: "string",
+        required: false,
+        description: "The user's own meaning or reflection about the episode.",
+        defaultValue: ""
+      },
+      {
+        name: "interpretationConsent",
+        type: "boolean",
+        required: false,
+        description:
+          "Explicit permission to store a tentative interpretive hypothesis.",
+        defaultValue: false
+      },
+      {
+        name: "hypothesis",
+        type: "string",
+        required: false,
+        description:
+          "One tentative episode-bound interpretation. Requires interpretationConsent true.",
+        defaultValue: ""
+      },
+      {
+        name: "hypothesisFit",
+        type: "not_reviewed|fits|partly_fits|does_not_fit",
+        required: false,
+        description: "The user's fit judgment for the tentative hypothesis.",
+        enumValues: ["not_reviewed", "fits", "partly_fits", "does_not_fit"],
+        defaultValue: "not_reviewed"
+      },
+      {
+        name: "hypothesisCorrection",
+        type: "string",
+        required: false,
+        description:
+          "What is missing, overstated, or different when the hypothesis does not fully fit.",
+        defaultValue: ""
       },
       {
         name: "linkedPatternIds",
@@ -3032,6 +3171,7 @@ const AGENT_ONBOARDING_BATCH_ROUTE_BASES = {
   habit: "/api/v1/habits",
   tag: "/api/v1/tags",
   note: "/api/v1/notes",
+  person: "/api/v1/people",
   insight: "/api/v1/insights",
   calendar_event: "/api/v1/calendar/events",
   work_block_template: "/api/v1/calendar/work-block-templates",
@@ -3064,6 +3204,8 @@ type OnboardingEntityClassification =
   | "read_model_only_surface";
 
 const AGENT_ONBOARDING_READ_MODEL_ROUTES = {
+  todayPriority: "/api/v1/today/priority",
+  today_priority: "/api/v1/today/priority",
   sleepOverview: "/api/v1/health/sleep",
   sleep_overview: "/api/v1/health/sleep",
   sportsOverview: "/api/v1/health/fitness",
@@ -3127,16 +3269,16 @@ function buildPreferredMutationPath(entityType: string) {
     return "Use shared batch CRUD for ordinary life_event create, search, update, delete, and restore. Use dedicated Life Event routes for chronology and actions: GET /api/v1/life-events/timeline, POST /api/v1/life-events/:id/calendar-sync, POST /api/v1/life-events/from-calendar-event, POST /api/v1/life-events/import-ticket, and GET /api/v1/life-events/:id/travel-status.";
   }
   if (entityType === "questionnaire_instrument") {
-    return "Use shared batch CRUD for ordinary questionnaire_instrument create, update, delete, restore, and search. Read the library or one instrument through GET /api/v1/psyche/questionnaires and GET /api/v1/psyche/questionnaires/:id. Use POST /api/v1/psyche/questionnaires/:id/clone, /draft, or /publish only for clone and version-state lifecycle.";
+    return "Use shared batch CRUD for ordinary questionnaire_instrument create, update, immediate delete, and search. Questionnaire deletion is not restorable. Read the library or one instrument through GET /api/v1/psyche/questionnaires and GET /api/v1/psyche/questionnaires/:id. Use POST /api/v1/psyche/questionnaires/:id/clone, /draft, or /publish only for clone and version-state lifecycle.";
   }
   if (entityType === "preference_context") {
-    return "Use shared batch CRUD for ordinary preference_context create, update, delete, restore, and search. Read the current contexts through GET /api/v1/preferences/contexts or one exact context through GET /api/v1/preferences/contexts/:id. Use POST /api/v1/preferences/contexts/merge only when the user explicitly wants to consolidate one source context into one target context; do not emulate a merge with batch deletion.";
+    return "Use shared batch CRUD for ordinary preference_context create, update, immediate delete, and search. Context deletion is not restorable. Read the current contexts through GET /api/v1/preferences/contexts or one exact context through GET /api/v1/preferences/contexts/:id. Use POST /api/v1/preferences/contexts/merge only when the user explicitly wants to consolidate one source context into one target context; do not emulate a merge with batch deletion.";
   }
   if (entityType === "preference_item") {
-    return "Use shared batch CRUD for ordinary standalone preference_item create, update, delete, restore, and search. Use POST /api/v1/preferences/items/from-entity only to validate and enqueue an existing Forge entity as a comparison candidate. Use POST /api/v1/preferences/judgments or POST /api/v1/preferences/signals for new preference evidence. Use PATCH /api/v1/preferences/items/:id/score only for an explicit manual correction or protection of inferred score state after reading the Preferences Workspace.";
+    return "Use shared batch CRUD for ordinary standalone preference_item create, update, immediate delete, and search. Preference-item deletion is not restorable. Use POST /api/v1/preferences/items/from-entity only to validate and enqueue an existing Forge entity as a comparison candidate. Use POST /api/v1/preferences/judgments or POST /api/v1/preferences/signals for new preference evidence. Use PATCH /api/v1/preferences/items/:id/score only for an explicit manual correction or protection of inferred score state after reading the Preferences Workspace.";
   }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
-    return "/api/v1/entities/create | /api/v1/entities/update | /api/v1/entities/delete | /api/v1/entities/restore | /api/v1/entities/search";
+    return buildSharedBatchRouteList(entityType);
   }
   switch (entityType) {
     case "wiki_page":
@@ -3146,7 +3288,7 @@ function buildPreferredMutationPath(entityType: string) {
     case "artifact":
       return "Use GET /api/v1/artifacts with limit/offset for paged metadata listing, POST /api/v1/artifacts for trusted file upload, GET/PATCH /api/v1/artifacts/:id for metadata, POST /api/v1/artifacts/:id/links for generic entity links, POST /api/v1/artifacts/:id/scan for static rescans, POST /api/v1/artifacts/:id/enrich for optional LLM metadata enrichment, POST /api/v1/artifacts/:id/trust for trusted state changes, and GET /api/v1/artifacts/:id/versions plus /audit for history. Human-only download/password/encrypt routes exist in OpenAPI but are intentionally absent from agent route tools; do not call GET or POST /api/v1/artifacts/:id/download or POST /api/v1/artifacts/:id/encrypt from an agent. Agents can see contentProtection mode and password hints but must not receive, store, submit, or route passwords. Batch CRUD may search, patch metadata, soft-delete, restore, and hard-delete metadata only; it must not create file artifacts or download bytes.";
     case "task_run":
-      return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work.";
+      return "Use the task-run action routes to start, heartbeat, focus, complete, or release live work. Complete may atomically store bounded completionReport, Git refs, and a generic linked closeout Note; release is handoff-note-only and never completes the task.";
     case "questionnaire_run":
       return "Use the questionnaire-run action routes to start, patch answers, and complete the run.";
     case "preference_judgment":
@@ -3182,18 +3324,34 @@ function buildPreferredMutationPath(entityType: string) {
   }
 }
 
+function buildSharedBatchRouteList(entityType: string) {
+  const capability = getCrudEntityCapabilityMatrix().find(
+    (entry) => entry.entityType === entityType
+  );
+  const routes = [
+    "/api/v1/entities/create",
+    "/api/v1/entities/update",
+    "/api/v1/entities/delete"
+  ];
+  if (capability?.inBin) {
+    routes.push("/api/v1/entities/restore");
+  }
+  routes.push("/api/v1/entities/search");
+  return routes.join(" | ");
+}
+
 function buildPreferredMutationTool(entityType: string) {
   if (entityType === "life_event") {
-    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_call_life_event_route";
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_call_life_event_route";
   }
   if (entityType === "questionnaire_instrument") {
-    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_list_questionnaires | forge_get_questionnaire | forge_clone_questionnaire | forge_ensure_questionnaire_draft | forge_publish_questionnaire_draft";
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_list_questionnaires | forge_get_questionnaire | forge_clone_questionnaire | forge_ensure_questionnaire_draft | forge_publish_questionnaire_draft";
   }
   if (entityType === "preference_context") {
-    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_merge_preferences_contexts";
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_merge_preferences_contexts";
   }
   if (entityType === "preference_item") {
-    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_restore_entities | forge_search_entities | forge_get_preferences_workspace | forge_enqueue_preferences_item_from_entity | forge_submit_preferences_judgment | forge_submit_preferences_signal | forge_update_preferences_score";
+    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_get_preferences_workspace | forge_enqueue_preferences_item_from_entity | forge_submit_preferences_judgment | forge_submit_preferences_signal | forge_update_preferences_score";
   }
   if (entityType === "sleep_session") {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_sleep_session for reflective enrichment after review";
@@ -3202,7 +3360,16 @@ function buildPreferredMutationTool(entityType: string) {
     return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities | forge_update_workout_session for reflective enrichment after review";
   }
   if (entityType in AGENT_ONBOARDING_BATCH_ROUTE_BASES) {
-    return "forge_create_entities | forge_update_entities | forge_delete_entities | forge_search_entities";
+    const capability = getCrudEntityCapabilityMatrix().find(
+      (entry) => entry.entityType === entityType
+    );
+    return [
+      "forge_create_entities",
+      "forge_update_entities",
+      "forge_delete_entities",
+      ...(capability?.inBin ? ["forge_restore_entities"] : []),
+      "forge_search_entities"
+    ].join(" | ");
   }
   switch (entityType) {
     case "wiki_page":
@@ -3314,7 +3481,7 @@ const QUESTION_FLOW_SPECIALIZED_ROUTE_HINTS = {
   life_force:
     "Specialized route surface: lifeForce. Route tool: forge_call_life_force_route. Route keys: overview, profile, weekdayTemplate, fatigueSignal.",
   workbench:
-    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow."
+    "Specialized route surface: workbench. Route tool: forge_call_workbench_route. Route keys: listFlows, flowDetail, flowById, flowBySlug, publishedOutput, runHistory, runs, runDetail, runNodes, nodeResult, latestNodeOutput, boxCatalog, createFlow, updateFlow, deleteFlow, runFlow, runByPayload, chatFlow. Catalog reads are paged; follow hasMore with the returned offset plus item count."
 } as const satisfies Record<string, string>;
 
 function enrichOnboardingEntityGuide<
@@ -3375,6 +3542,111 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         description: "Optional tag family.",
         enumValues: ["value", "category", "execution"],
         defaultValue: "category"
+      }
+    ]
+  }),
+  enrichOnboardingEntityGuide({
+    entityType: "person",
+    purpose:
+      "A private, owner-scoped record for someone in the user's life. A Person is not a local Forge User, agent identity, or peer credential.",
+    minimumCreateFields: ["userId", "displayName"],
+    relationshipRules: [
+      "Use shared batch CRUD for ordinary create, search, update, soft delete, and restore.",
+      "Use links with { entityType, entityId, relationship, anchorKey? } to connect a Person through Forge's general entity-link graph.",
+      "Keep contact methods, private notes, birthdays, and personal facts optional; do not collect them unless they serve the user's stated purpose.",
+      "Pairing and directional sharing are separate human-controlled workflows. Creating a Person never pairs another Forge or grants access.",
+      "Use dedicated People reads for the bounded collection and one Person's source-labelled context. Use typed question routes only against an existing active grant."
+    ],
+    searchHints: [
+      "Search display names and aliases in the intended owner scope before creating a possible duplicate.",
+      "Do not merge people by name, phone number, or email without explicit human review."
+    ],
+    examples: [
+      '{"userId":"user_operator","displayName":"Jon","relationshipCategory":"friend","shortDescription":"Friend I often cycle with."}',
+      '{"userId":"user_operator","displayName":"Maya","links":[{"entityType":"note","entityId":"wiki_maya","relationship":"profile_page"}]}'
+    ],
+    fieldGuide: [
+      {
+        name: "userId",
+        type: "string",
+        required: true,
+        description:
+          "Owning local Forge user id. This is not the Person's identity."
+      },
+      {
+        name: "displayName",
+        type: "string",
+        required: true,
+        description: "The name the owner uses to recognize this person."
+      },
+      {
+        name: "preferredName",
+        type: "string",
+        required: false,
+        description: "Optional preferred name."
+      },
+      {
+        name: "relationshipCategory",
+        type: "string",
+        required: false,
+        description: "Optional broad relationship category."
+      },
+      {
+        name: "relationshipLabel",
+        type: "string",
+        required: false,
+        description: "Optional relationship wording in the owner's language."
+      },
+      {
+        name: "shortDescription",
+        type: "string",
+        required: false,
+        description: "Brief context that makes the record useful later."
+      },
+      {
+        name: "description",
+        type: "string",
+        required: false,
+        description: "Optional fuller local context."
+      },
+      {
+        name: "privateNotes",
+        type: "string",
+        required: false,
+        description:
+          "Optional private notes. Requires the corresponding private People read scope."
+      },
+      {
+        name: "aliases",
+        type: "Array<{ alias, kind? }>",
+        required: false,
+        description:
+          "Optional names used only for local recognition and search.",
+        defaultValue: []
+      },
+      {
+        name: "contacts",
+        type: "array",
+        required: false,
+        description:
+          "Optional private contact methods with explicit visibility.",
+        defaultValue: []
+      },
+      {
+        name: "facts",
+        type: "array",
+        required: false,
+        description:
+          "Optional structured, provenance-bearing facts with sensitivity and confidence.",
+        defaultValue: []
+      },
+      {
+        name: "links",
+        type: "Array<{ entityType, entityId, relationship?, anchorKey? }>",
+        required: false,
+        description:
+          "Authorized general Forge entity links. Replacing links requires access to both endpoints.",
+        defaultValue: []
       }
     ]
   }),
@@ -3577,14 +3849,17 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "A reusable concept list inside one preference domain, used to seed or organize comparison candidates.",
     minimumCreateFields: ["userId", "domain", "title"],
     relationshipRules: [
-      "Preference catalogs are simple entities and should default to batch CRUD.",
+      "Preference catalogs are normal stored entities and should default to batch CRUD, including restore after soft deletion.",
+      "Use general entity links in links; do not invent a catalog-specific relationship route.",
+      "Owner and creator provenance are server-stamped and immutable after creation.",
       "Catalog items belong to one preference_catalog through catalogId."
     ],
     searchHints: [
-      "Search by title and domain before creating another concept list."
+      "Search by owner, title, and domain before creating another concept list.",
+      "Read the saved catalog after create or update to verify boundaries, links, and provenance."
     ],
     examples: [
-      '{"userId":"user_operator","domain":"food","title":"Cafe shortlist"}'
+      '{"userId":"user_operator","domain":"food","title":"Cafe shortlist","description":"Compare breakfast meeting options.","scopeIn":"Quiet cafes within walking distance.","scopeOut":"Takeaway-only counters.","links":[{"entityType":"goal","entityId":"goal_health","relationship":"supports"}]}'
     ],
     fieldGuide: [
       {
@@ -3611,6 +3886,27 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         required: false,
         description: "Optional catalog summary.",
         defaultValue: ""
+      },
+      {
+        name: "scopeIn",
+        type: "string",
+        required: false,
+        description: "What belongs in this comparison pool.",
+        defaultValue: ""
+      },
+      {
+        name: "scopeOut",
+        type: "string",
+        required: false,
+        description: "What should remain outside this comparison pool.",
+        defaultValue: ""
+      },
+      {
+        name: "links",
+        type: "array",
+        required: false,
+        description: "General Forge entity links stored through entity_links.",
+        defaultValue: []
       },
       {
         name: "slug",
@@ -3732,7 +4028,7 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
       "One modeled preference candidate that may stand alone or point back to another Forge entity.",
     minimumCreateFields: ["userId", "domain", "label"],
     relationshipRules: [
-      "Preference items are normal stored entities and should use shared batch CRUD for ordinary standalone create, update, delete, restore, and search.",
+      "Preference items are normal stored entities and should use shared batch CRUD for ordinary standalone create, update, immediate delete, and search. Deletion is not restorable.",
       "When an existing Forge entity should become a comparison candidate, use the dedicated enqueue-from-entity action so Forge validates the source, derives its identity, and queues it for comparison.",
       "Use judgments and signals as new preference evidence. Use a score override only for an explicit correction or protection of inferred state after reading the current workspace evidence.",
       "They can optionally point back to another Forge entity through sourceEntityType and sourceEntityId, but agents should not hand-build that linkage when the dedicated enqueue action fits."
@@ -3948,10 +4244,12 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     minimumCreateFields: [],
     relationshipRules: [
       "Preference signals are action-heavy records, not batch CRUD entities.",
-      "Use the dedicated signal route so the profile and evidence model stay aligned."
+      "Use the dedicated signal route so the profile and evidence model stay aligned.",
+      "neutral clears the current direct effect while preserving prior signal history; it contributes no direct weight, evidence count, or confidence."
     ],
     searchHints: [
-      "Confirm the item, signal type, and context before storing a new direct signal."
+      "Read the exact item and current workspace, then confirm only a missing owner, domain, context, or signal type before storing a direct mark.",
+      "After saving, explain the returned effective signal, score, status, and confidence."
     ],
     fieldGuide: []
   }),
@@ -4355,6 +4653,8 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For action workflows such as task_run, work_adjustment, questionnaire_run, preference_judgment, preference_signal, and self_observation, keep the question focused on the missing action detail and do not downgrade the request into generic batch CRUD.",
   "For read-model-only health surfaces such as sleep_overview, sports_overview, and training_load, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, training-load context, or cardiovascular target analysis. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
   "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
+  "For a Person record, first understand who the user means and what remembering or connecting this person should make easier. Search by name and aliases before creating, ask only for missing context that changes later usefulness, and leave contact details, private notes, birthdays, and sensitive facts optional unless the user explicitly wants them recorded.",
+  "Keep Person, local User, and remote peer relationship distinct. Creating or linking a Person never pairs another Forge or changes sharing. Agents may read source-labelled People context and use an already active directional grant for registered typed questions, but pairing acceptance, device trust, and every grant change remain human-controlled.",
   "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
   "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
 ] as const;
@@ -4371,6 +4671,22 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask why it matters now.",
       "Distinguish the goal from a project or task.",
       "Clarify horizon and status only after the meaning is clear."
+    ]
+  },
+  {
+    focus: "person",
+    openingQuestion:
+      "Who is this person to you, and what would be useful for Forge to help you remember or connect?",
+    coachingGoal:
+      "Create a useful private relationship record without turning the conversation into a contact form or collecting personal details without purpose.",
+    askSequence: [
+      "Reflect who the user appears to mean and the practical reason for keeping the record.",
+      "Search the intended owner scope by display name and aliases before creating a possible duplicate.",
+      "Ask for the preferred display name and one piece of context only when either is still unclear.",
+      "Ask about links to a Wiki profile, shared event, goal, project, artifact, or Psyche context only when the user wants that connection to remain navigable.",
+      "Leave contact methods, birthday detail, private notes, and sensitive facts unasked unless they directly serve the user's stated purpose.",
+      "If the user wants to connect two Forge installations, move to the separate human pairing and sharing flow; do not represent consent as Person fields or generic links.",
+      "Use shared batch CRUD for Person create, update, soft delete, restore, and search. Use dedicated People routes for bounded context, Wiki association review, and confirmed typed questions."
     ]
   },
   {
@@ -4837,11 +5153,11 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     coachingGoal:
       "Store a direct preference signal such as favorite, veto, bookmark, or compare-later with enough context to interpret it later.",
     askSequence: [
-      "Ask what item the user wants to mark.",
-      "Ask what signal they want to give it.",
-      "Ask what domain or context this belongs to if that is still unclear.",
-      "Use the dedicated preference signal action route instead of batch CRUD once the item and signal are clear.",
-      "Ask about strength only if the user is expressing a gradient rather than a simple mark."
+      "Read the exact item and current Preferences Workspace before asking the user to reconstruct model state.",
+      "Reflect the current direct mark, context sharing and decay, and any conflict with pairwise evidence; ask what should change only when the requested signal is still unclear.",
+      "Confirm one owner, domain, and context when any of them remain ambiguous, and explain which current direct mark the new signal will replace.",
+      "Use the dedicated preference signal action route instead of batch CRUD once the item and signal are clear; ask about strength only for an expressed gradient.",
+      "Treat neutral as removal of the current direct effect while preserving audit history, then explain the returned effective signal, score, status, and confidence."
     ]
   },
   {
@@ -5013,7 +5329,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask for one recent example if the boundary is still abstract.",
       "Clarify what belongs inside this event type and what should stay outside it.",
       "Offer one concise candidate label once the repeated moment is clear.",
-      "Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only after the category itself feels accurate."
+      "Search existing event_type labels before creating; if none fits, preserve the user's own report wording and save the accepted custom label through batch CRUD."
     ]
   },
   {
@@ -5029,7 +5345,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Ask what distinguishes it from nearby emotions if that matters.",
       "Ask what the feeling tends to signal, protect, warn about, long for, or demand.",
       "Offer one concise definition in the user's language and invite correction.",
-      "Link it to trigger reports, modes, beliefs, or patterns only after the definition feels steady."
+      "Search existing emotion_definition labels before creating; if none fits, keep the user's own emotion word in the report and save the accepted reusable label through batch CRUD."
     ]
   }
 ] as const;
@@ -5171,16 +5487,17 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "belief_entry",
     useWhen:
-      "Use for a belief, rule, or self-statement that keeps showing up in reactions, especially when the user can phrase it as a sentence.",
+      "Use for a belief, rule, prediction, or self-statement the user wants to preserve, understand, review, update, or examine, especially when it can be phrased as one sentence.",
     coachingGoal:
-      "Turn implicit self-talk or a likely schema theme into one explicit belief statement that can be tested and linked to patterns, reports, and modes without forcing the user into a debate too early.",
+      "Help the user name one belief sentence accurately, understand the danger or protection it carries when useful, and keep capture, update, and examination distinct so the user is never pushed into debating or replacing the belief before it feels understood.",
     askSequence: [
-      "Anchor the belief in one recent moment or reaction before abstracting it.",
-      "Reflect the likely belief sentence in the user's own words and ask for confirmation or correction.",
-      "Condense it into one saveable statement only after the wording feels accurate.",
-      "Decide whether it is absolute or conditional after the sentence lands.",
-      "Estimate how true it feels from 0 to 100 only if that helps the user understand its grip or guide later review.",
-      "Explore evidence, origin, and a flexible alternative only if the user wants to examine or soften the belief now.",
+      "Distinguish direct capture, current activation or guided formulation, review or narrow update, and optional examination or flexible-belief work.",
+      "For direct capture, keep the user's serviceable sentence, reflect the felt stake once, ask one accuracy or consent question, and save without demanding a new episode, confidence rating, evidence list, origin story, or alternative belief.",
+      "For review or update, search for and read the exact existing belief first, then ask which sentence, prediction, context, or function is newly true or inaccurate and patch only that accepted change; do not force sparse older records through full create intake.",
+      "For guided formulation, anchor in one recent moment and keep what was directly observed separate from what the moment rapidly came to mean about self, other people, safety, worth, or outcome.",
+      "Once a concrete cue and fast meaning are visible, offer at most one tentative hypothesis about the rule, prediction, danger, or protective function, then ask one fit-or-correction question before condensing the accepted belief sentence in the user's own words.",
+      "Decide whether the accepted sentence is absolute or conditional only after the sentence lands. Estimate how true it feels from 0 to 100 only when that helps the user understand its grip or compare change over time.",
+      "Explore evidence, origin, and a flexible alternative only if the user chooses examination. Keep observed evidence, the user's interpretation, and the agent's hypothesis distinct; do not make the user prove the pain or treat a flexible sentence as a rebuttal.",
       "Link a schemaId only when a real schema catalog match is known."
     ],
     requiredForCreate: ["statement", "beliefType"],
@@ -5211,7 +5528,10 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Do not argue the user out of the belief. Reflect it, understand its function, and then collaboratively test for flexibility.",
       "Do not rush to confidence, evidence, or flexible alternatives before the user feels the belief has been captured.",
       "When the wording is nearly there, ask whether it feels true enough before you move into confidence, evidence, or alternative-belief details.",
-      "A useful hypothesis should name the rule or prediction the moment seems to activate and then invite correction before saving it as the belief sentence."
+      "A useful hypothesis should name the rule or prediction the moment seems to activate and then invite correction before saving it as the belief sentence.",
+      "Keep the user's belief sentence, observable events or evidence, and the agent's tentative interpretation in separate lanes. Never save a rejected hypothesis as though the user endorsed it.",
+      "For a narrow update, read the current belief and preserve accepted history, evidence, links, and alternatives unless the user explicitly changes them.",
+      "Belief create, update, delete, restore, and search remain on shared batch CRUD; examination is a conversation lane, not a separate mutation route."
     ]
   },
   {
@@ -5266,31 +5586,38 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
   {
     focus: "mode_guide_session",
     useWhen:
-      "Use when the user is in a live reaction or is unsure which mode is active and needs a gentle structured exploration before committing to a durable mode profile.",
+      "Use when the user is in a live reaction, wants to begin or resume a guided mode inquiry, needs to review one, or wants to close the inquiry without prematurely committing to a durable mode profile.",
     coachingGoal:
-      "Guide a present-moment inquiry that names the likely active mode, gathers the user's answers cleanly, and leaves a traceable bridge toward later mode work.",
+      "Separate immediate steadiness from guided mapping, preserve the user's existing answers when resuming, keep interpretations optional and tentative, and leave a traceable bridge toward later mode work only when the user wants it.",
     askSequence: [
-      "Anchor the exploration in one current or recent situation.",
-      "Ask what the part is feeling, saying, trying to stop, or trying to make happen.",
-      "Ask what the part fears and what it seems to need.",
-      "Reflect the answers back in plain language before suggesting any candidate mode labels.",
-      "Offer one or two candidate interpretations only after enough evidence is present."
+      "Distinguish immediate support, a new guided inquiry, resuming or reviewing an existing session, and closing or deriving a durable mode profile.",
+      "If the user is activated, ask what needs steadying now and stay with the smallest tolerable slice; do not require mode identification before support or before preserving a partial session.",
+      "For resume, review, or update, search for and read the exact existing session first, summarize the accepted answers and tentative results already present, and ask only what is newly true, inaccurate, or still unfinished.",
+      "For a new guided inquiry, anchor in one current or recent situation and ask what the part is feeling, saying, trying to stop, or trying to make happen.",
+      "Ask what the part fears or needs one lane at a time, reflecting each answer before deepening.",
+      "Offer at most one candidate interpretation only after the user's answers support it, then ask one fit-or-correction question; a candidate label is optional, not the price of completing the session.",
+      "When closing, distinguish the user's accepted wording from tentative results and ask whether to pause for later, preserve the session as complete, or derive a durable mode_profile from a recurring formulation the user accepts."
     ],
     requiredForCreate: ["summary", "answers"],
     highValueOptionalFields: [],
     exampleQuestions: [
+      "What needs attention first: getting steadier right now, continuing where you left off, or making sense of this part?",
       "What just happened that brought this up right now?",
       "What just happened before this part came online?",
       "If this part had a voice, what would it be saying?",
       "What is it trying to protect you from?",
       "What does it seem to need from you or from someone else?",
-      "Would it be helpful if I suggest one or two possible mode labels, with reasons?"
+      "Would it help if I offer one tentative reading of what this part is trying to do, so you can correct it?",
+      "Do you want to pause this for later, close the inquiry here, or turn the accepted formulation into a durable mode profile?"
     ],
     notes: [
-      "A mode_guide_session is the exploration worksheet, not the final identity claim.",
+      "A mode_guide_session is a process record, not a final identity claim or a requirement to settle on a mode label.",
+      "When resuming or reviewing, read the exact session first and preserve prior answers and results unless the user explicitly corrects them; patch only the smallest newly true change.",
+      "Immediate support does not depend on completing or saving a session. A partial session can preserve what the user has said so far when they want to stop and resume later.",
       "Store the user's answers faithfully and keep interpretations tentative unless the user wants a durable mode_profile.",
       "Use candidate mode interpretations as testable hypotheses tied to the user's answers, not as certain labels.",
-      "After enough answers are visible, offer one hypothesis about what the active part is trying to stop, force, prevent, or secure before proposing any durable mode label."
+      "After enough answers are visible, offer at most one hypothesis about what the active part is trying to stop, force, prevent, or secure before proposing any durable mode label.",
+      "Closing a mode guide session without a candidate label is valid. Create or update a mode_profile only when the user recognizes a recurring durable formulation and wants that separate record."
     ]
   },
   {
@@ -5367,10 +5694,17 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "customEventType",
       "eventSituation",
       "occurredAt",
+      "memoryClarity",
+      "bodyCues",
       "emotions",
       "thoughts",
       "behaviors",
       "consequences",
+      "reflection",
+      "interpretationConsent",
+      "hypothesis",
+      "hypothesisFit",
+      "hypothesisCorrection",
       "modeTimeline",
       "nextMoves",
       "linkedPatternIds",
@@ -5393,8 +5727,9 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Do not turn the report into a worksheet dump before the felt stake is clear; reflect what made the episode matter before asking for the full chain.",
       "If the user becomes overwhelmed, slow down, summarize, and return to one segment of the chain at a time instead of pushing for the full report in one turn.",
       "A title plus the meaningful episode slice the user has already supplied is enough for a provisional draft when they want to save and return later; preserve missing segments as missing instead of inventing or interrogating for them.",
-      "For an update, preserve the existing chain and change only the newly true segment unless the user is deliberately reformulating the whole report.",
-      "Keep what happened, what the user inferred, and the agent's hypothesis visibly distinct. Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible."
+      "For an update, read the current report, preserve the existing chain, pass expectedRevision, and change only the newly true segment unless the user is deliberately reformulating the whole report.",
+      "Keep what happened, what the user inferred, and the agent's hypothesis visibly distinct. Only hypothesize about the incident sequence after the situation, emotion, meaning, behavior, and consequence are at least partly visible.",
+      "Store hypothesis fields only after explicit interpretationConsent. Ask whether the hypothesis fits, partly fits, or does not fit, and preserve the user's correction."
     ]
   },
   {
@@ -5412,24 +5747,21 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only after the category itself feels accurate."
     ],
     requiredForCreate: ["label"],
-    highValueOptionalFields: [
-      "description",
-      "linkedReportIds",
-      "linkedPatternIds",
-      "linkedBeliefIds",
-      "linkedModeIds"
-    ],
+    highValueOptionalFields: ["description", "userId"],
     exampleQuestions: [
       "What kind of moment keeps happening that you want future reports to name the same way each time?",
       "What feels threatened, exposed, relieved, or important in those moments?",
       "What would make a future incident count as this type instead of a nearby one?",
-      "Which reports or patterns should this help organize later?"
+      "Whose vocabulary should this reusable label belong to?"
     ],
     notes: [
       "event_type is a Psyche taxonomy record, but it still needs active listening because it names emotionally meaningful episodes.",
       "Do not open with pure label wording unless the lived category and boundary are already clear.",
       "Offer a candidate label after the repeated moment is understood, and keep the user's wording when it already fits.",
-      "Once one recurring example is clear, offer one hypothesis about the repeated emotional or relational stake that future reports need this event type to preserve."
+      "Once one recurring example is clear, offer one hypothesis about the repeated emotional or relational stake that future reports need this event type to preserve.",
+      "Search event_type through the shared batch entity route before creating. Built-in labels are read-only; custom labels are owner-scoped.",
+      "Forge compares labels after Unicode, case, punctuation, and whitespace normalization. It has no separate alias field, so do not invent one.",
+      "Trigger reports store customEventType as the user's raw wording. Updating or deleting a reusable label must not rewrite that historical wording."
     ]
   },
   {
@@ -5447,26 +5779,21 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Link it to trigger reports, modes, beliefs, or patterns only after the definition feels steady."
     ],
     requiredForCreate: ["label"],
-    highValueOptionalFields: [
-      "description",
-      "family",
-      "bodySignals",
-      "linkedReportIds",
-      "linkedModeIds",
-      "linkedBeliefIds",
-      "linkedPatternIds"
-    ],
+    highValueOptionalFields: ["description", "category", "userId"],
     exampleQuestions: [
       "When this feeling is present, what tells you it is this feeling and not a nearby one?",
       "What body signal, urge, image, thought, or relational meaning identifies it?",
       "What does this feeling usually warn about, long for, protect, or demand?",
-      "Which reports or patterns should use this label later?"
+      "Whose vocabulary should this reusable label belong to?"
     ],
     notes: [
       "emotion_definition is a Psyche taxonomy record, not a generic dictionary entry.",
       "Start from the lived feeling before asking for category or browsing fields.",
       "Once the lived signature is visible, offer one hypothesis about what the emotion warns about, protects, demands, or longs for before saving the reusable definition.",
-      "If the user already gives a good label, reflect the felt signature and ask only for the one boundary or definition detail that still matters."
+      "If the user already gives a good label, reflect the felt signature and ask only for the one boundary or definition detail that still matters.",
+      "Search emotion_definition through the shared batch entity route before creating. Built-in labels are read-only; custom labels are owner-scoped.",
+      "Forge compares labels after Unicode, case, punctuation, and whitespace normalization. It has no separate alias or bodySignals field, so do not invent either.",
+      "Each trigger-report emotion stores its raw label. Updating or deleting a reusable definition must not rewrite that historical wording."
     ]
   }
 ] as const;
@@ -5546,6 +5873,9 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "behavior") {
     return "Ready on one of two paths. Direct save or update: when clear entity-specific wording names one observable action and its away, committed, or recovery kind, there is explicit save or update intent plus the exact existing target for an update, and one accuracy or consent check confirms the wording; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when one concrete example identifies the observable action, at least one cue, and the kind-specific shape: an away move has the user's urge wording, immediate protective payoff, later cost, and one tentative hypothesis followed by a fit-or-correction check; a committed action has its value-directed move and relevant cue without forced avoidance fields; a recovery move has the rupture or activation plus an observable repair or return action without forced away fields. One final accuracy or consent check must confirm the saveable record shape before shared batch CRUD. For a sparse existing behavior, read the exact record and make only the accepted update; never force full create backfill.";
+  }
+  if (guide.entityType === "mode_guide_session") {
+    return "Ready on the selected Mode Guide lane. Immediate support is ready whenever the user needs help getting steadier and does not require a save. A new, partial, or direct-save session is ready for shared batch CRUD when one recognizable situation or present need, a faithful summary, the answers gathered so far, and one accuracy or consent check are clear; do not require a candidate mode label, a completed inquiry, or a new hypothesis. Resume, review, or update is ready only after reading the exact existing session, separating accepted prior answers and tentative results from what is newly true or inaccurate, and limiting the patch to that change. Guided formulation may use at most one tentative hypothesis followed by one fit-or-correction check. Closing may preserve the session without a durable label; create or link a mode_profile only when the user accepts a recurring formulation and wants that separate record.";
   }
   if (THERAPEUTIC_QUESTION_FLOW_ENTITIES.has(guide.entityType)) {
     return "Ready on one of two paths. Direct save or update: when the user supplies clear entity-specific wording and explicit save or update intent, plus the exact existing target for an update, reflect it and ask at most one accuracy or consent question; do not require a new concrete example or hypothesis before shared batch CRUD. Guided formulation: ready when at least one concrete example has become a user-recognized working formulation, any tentative hypothesis used has been accepted or corrected with one fit-or-correction check, and one accuracy or consent check confirms the saveable record shape is true enough to save through shared batch CRUD.";
@@ -5691,16 +6021,135 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     example: "{}"
   },
   {
+    toolName: "forge_get_operator_overview",
+    summary: "Read the compact Forge operator overview.",
+    whenToUse:
+      "Use as the default first read for broad Forge questions before choosing a narrower entity, action, or domain workflow.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Pass userIds only when the requested scope differs from the effective agent scope.",
+      "Use the returned ids and drill-down hints instead of guessing a write target."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_get_operator_context",
+    summary: "Read the current operational work context.",
+    whenToUse:
+      "Use before task-run decisions, work adjustments, or questions about current focus, active runs, and the task board.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "This is the read model for task_run and work_adjustment action workflows.",
+      "Pass userIds only when the requested scope differs from the effective agent scope."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_get_current_work",
+    summary: "Read a focused current-work view from the operator context.",
+    whenToUse:
+      "Use when the user asks what is running, what is in focus, or what work should happen next.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "This is a narrower interpretation of the operator context, not a separate write model.",
+      "Read before starting another run when duplicate active work is plausible."
+    ],
+    example: "{}"
+  },
+  {
+    toolName: "forge_get_today_priority",
+    summary: "Read Forge's canonical decision about the next useful work.",
+    whenToUse:
+      "Use when the user asks what to do next, whether to continue active work, or whether current capacity and task timeboxes make a new start unsafe.",
+    inputShape:
+      "{ userIds?: string[], timeZone?: string, candidateLimit?: number }",
+    requiredFields: [],
+    notes: [
+      "The response distinguishes ready, continue-active, unresolved-active, overloaded, capacity-limited, and no-work states.",
+      "Schedule evidence comes from Forge task timeboxes. Read the calendar overview separately when meetings or other calendar events matter to the decision.",
+      "Use one selected user when Life Force capacity should affect the ranking."
+    ],
+    example:
+      '{"userIds":["user_operator"],"timeZone":"Europe/Zurich","candidateLimit":24}'
+  },
+  {
+    toolName: "forge_get_psyche_overview",
+    summary: "Read the aggregate Psyche state.",
+    whenToUse:
+      "Use before cross-record Psyche review, recommendations, or updates when the relevant belief, mode, pattern, value, behavior, or trigger report is not already known.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Do not substitute the overview for reading an exact existing record before patching it.",
+      "Keep agent interpretations tentative and separate from the user's accepted wording."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_get_psyche_schema_catalog",
+    summary: "Read the reference-only Psyche schema catalog.",
+    whenToUse:
+      "Use before linking a belief entry to a schema or discussing schema concepts by id.",
+    inputShape: "{}",
+    requiredFields: [],
+    notes: [
+      "Schema catalog entries are reference concepts, not user-owned belief records.",
+      "Do not create or update catalog entries through normal entity CRUD."
+    ],
+    example: "{}"
+  },
+  {
+    toolName: "forge_get_xp_metrics",
+    summary: "Read current XP, level, streak, momentum, and rewards.",
+    whenToUse:
+      "Use for a focused reward or progress read when the broader operator overview is unnecessary.",
+    inputShape: "{}",
+    requiredFields: [],
+    notes: ["This is a read-only metrics tool."],
+    example: "{}"
+  },
+  {
+    toolName: "forge_get_weekly_review",
+    summary: "Read the current weekly review.",
+    whenToUse:
+      "Use when the user wants a weekly reflection, trend review, wins, or reward framing.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Ask what decision or reflection the review should support before proposing new records.",
+      "Pass userIds only when the requested scope differs from the effective agent scope."
+    ],
+    example: "{}"
+  },
+  {
+    toolName: "forge_get_ui_entrypoint",
+    summary: "Get the live Forge web UI entrypoint.",
+    whenToUse:
+      "Use only when visual review or editing is genuinely easier than completing the operation through agent tools.",
+    inputShape: "{}",
+    requiredFields: [],
+    notes: [
+      "Do not use the UI as a fallback for normal entity batch CRUD or a known action tool."
+    ],
+    example: "{}"
+  },
+  {
     toolName: "forge_search_entities",
     summary: "Search Forge entities before create or update.",
     whenToUse:
       "Use when duplicate risk exists or when you need ids before mutating.",
     inputShape:
-      "{ searches: Array<{ entityTypes?: CrudEntityType[], query?: string, ids?: string[], status?: string[], linkedTo?: { entityType, id }, includeDeleted?: boolean, limit?: number, clientRef?: string }> }",
+      "{ searches: Array<{ entityTypes?: CrudEntityType[], query?: string, ids?: string[], status?: string[], userIds?: string[], linkedTo?: { entityType, id }, includeDeleted?: boolean, limit?: number, clientRef?: string }> }",
     requiredFields: ["searches"],
     notes: [
       "searches is always an array, even for a single search.",
-      "linkedTo is useful when looking for items under one parent entity."
+      "linkedTo is useful when looking for items under one parent entity.",
+      "For event_type and emotion_definition, searches[].userIds selects the effective custom-vocabulary owner scope; built-ins remain visible.",
+      "Batch vocabulary search requires base read or write plus psyche.read when Psyche authentication is enabled; dedicated vocabulary reads require psyche.read.",
+      "Note search is indexed and owner/Wiki scoped. When Psyche authentication is enabled, Psyche-linked notes are returned only with psyche.read."
     ],
     example:
       '{"searches":[{"entityTypes":["goal"],"query":"Create meaningfully","limit":10,"clientRef":"goal-search-1"}]}'
@@ -5711,7 +6160,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use after explicit save intent and after duplicate checks when needed. This is the default create path for simple Forge entities; do not spray one-off direct mutation routes when the batch contract already covers the record.",
     inputShape:
-      "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, data: object }> }",
+      "{ atomic?: boolean, operations: Array<{ entityType: CrudEntityType, clientRef?: string, idempotencyKey?: string, data: object }> }",
     requiredFields: [
       "operations",
       "operations[].entityType",
@@ -5720,7 +6169,10 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     notes: [
       "entityType alone is never enough; full data is required.",
       "Batch multiple related creates together when they come from one user ask.",
+      "Use one stable operations[].idempotencyKey for each intended event_type or emotion_definition create and reuse it only for an exact retry. Changed payload reuse conflicts; after hard deletion the key remains terminal and cannot recreate the entry.",
+      "Batch vocabulary create requires base write plus psyche.write when Psyche authentication is enabled; dedicated vocabulary creates require psyche.write.",
       "Goal, project, and task creates can include notes: [{ contentMarkdown, author?, tags?, destroyAt?, links? }] and Forge will auto-link those notes to the newly created entity.",
+      "Creating a note linked to a Psyche entity requires psyche.note when Psyche authentication is enabled.",
       "The same batch create route also handles calendar_event, work_block_template, task_timebox, sleep_session, workout_session, preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument.",
       "Calendar-event creates still trigger downstream projection sync when a writable provider calendar is selected."
     ],
@@ -5745,6 +6197,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Project lifecycle is status-driven: patch project.status to active, paused, or completed instead of looking for separate suspend, restart, or finish routes.",
       "Setting project.status to completed finishes the project and auto-completes linked unfinished tasks through the normal task completion path.",
       "Task and project scheduling rules stay on these same entity patches. Update task.schedulingRules, task.plannedDurationSeconds, or project.schedulingRules here.",
+      "Updating a Psyche-linked note, or adding a Psyche link to a note, requires psyche.note when Psyche authentication is enabled.",
       "Use this same route to move or relink calendar_event records, edit work_block_template, task_timebox, sleep_session, or workout_session records, and do normal field updates on preference_catalog, preference_catalog_item, preference_context, preference_item, and questionnaire_instrument."
     ],
     example:
@@ -5765,6 +6218,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "Delete defaults to soft.",
       "Use mode=hard only for explicit permanent removal.",
       "Restoration is only possible after soft delete.",
+      "Deleting a Psyche-linked note requires psyche.note when Psyche authentication is enabled.",
       "calendar_event, work_block_template, task_timebox, sleep_session, and workout_session are immediate deletions: calendar events delete remote projections too, and these records do not go through the settings bin."
     ],
     example:
@@ -5782,7 +6236,10 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       "operations[].entityType",
       "operations[].id"
     ],
-    notes: ["Restore only works for soft-deleted entities."],
+    notes: [
+      "Restore only works for soft-deleted entities.",
+      "Restoring a Psyche-linked note requires psyche.note when Psyche authentication is enabled."
+    ],
     example:
       '{"operations":[{"entityType":"goal","id":"goal_123","clientRef":"goal-restore-1"}]}'
   },
@@ -5806,13 +6263,15 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use when browsing a space catalog, choosing a page to open, or building a crawl plan without ranking search results yet.",
     inputShape:
-      '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer }',
+      '{ spaceId?: string, kind?: "wiki"|"evidence", limit?: integer, offset?: integer }',
     requiredFields: [],
     notes: [
-      "This returns the explicit page catalog, not a search-ranked result list.",
-      "Use forge_search_wiki when recall or ranking matters."
+      "This returns compact page summaries plus limit, offset, hasMore, and nextOffset; fetch full content with forge_get_wiki_page.",
+      "Use forge_search_wiki when recall or ranking matters.",
+      "Offsets are bounded from 0 through 9999; nextOffset is null at the 10000-row terminal window."
     ],
-    example: '{"spaceId":"wiki_space_shared","kind":"wiki","limit":100}'
+    example:
+      '{"spaceId":"wiki_space_shared","kind":"wiki","limit":50,"offset":0}'
   },
   {
     toolName: "forge_get_wiki_page",
@@ -5835,14 +6294,16 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use when the agent needs recall across the explicit wiki memory surface instead of only structured entities.",
     inputShape:
-      '{ spaceId?: string, kind?: "wiki"|"evidence", mode?: "text"|"semantic"|"entity"|"hybrid", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer }',
+      '{ spaceId?: string, kind?: "wiki"|"evidence", mode?: "text"|"semantic"|"entity"|"hybrid", query?: string, profileId?: string, linkedEntity?: { entityType, entityId }, limit?: integer, offset?: integer }',
     requiredFields: [],
     notes: [
-      "Hybrid search combines exact slug or title matches, FTS, entity links, and optional embeddings.",
-      "If no embedding profile is configured, semantic and hybrid fall back to non-vector signals."
+      "Exact titles rank above exact aliases and slugs, followed by title fragments, weighted full-text content, entity links, and optional embeddings.",
+      "Results include compact page summaries, matchKind, snippet, limit, offset, hasMore, nextOffset, and warnings.",
+      "Hybrid search falls back to text ranking with a warning when semantic ranking is unavailable; semantic-only failures remain errors.",
+      "Queries are limited to 500 characters and the first 20 FTS tokens; offsets are bounded from 0 through 999."
     ],
     example:
-      '{"spaceId":"wiki_space_shared","mode":"hybrid","query":"landing page inspiration","limit":12}'
+      '{"spaceId":"wiki_space_shared","mode":"hybrid","query":"landing page inspiration","limit":20,"offset":0}'
   },
   {
     toolName: "forge_upsert_wiki_page",
@@ -6209,6 +6670,144 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"itemId":"preference_item_keyboard","userId":"user_operator","domain":"tools","contextId":"preference_context_deep_work","manualScore":0.9,"confidenceLock":0.8}'
   },
   {
+    toolName: "forge_list_questionnaires",
+    summary: "List the Psyche questionnaire library.",
+    whenToUse:
+      "Use to identify an instrument before review, clone, draft, publish, or run work.",
+    inputShape: "{ userIds?: string[] }",
+    requiredFields: [],
+    notes: [
+      "Use shared batch CRUD for ordinary questionnaire_instrument create, update, immediate delete, and search. Deletion is not restorable.",
+      "This dedicated read exposes instrument version and lifecycle state."
+    ],
+    example: '{"userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_get_questionnaire",
+    summary: "Read one questionnaire instrument and its versions.",
+    whenToUse:
+      "Use before changing lifecycle state, publishing a draft, or asking the user to reconstruct an existing instrument.",
+    inputShape: "{ questionnaireId: string, userIds?: string[] }",
+    requiredFields: ["questionnaireId"],
+    notes: [
+      "Read the exact instrument and current draft before publish confirmation.",
+      "questionnaireId identifies the instrument, not a questionnaire run."
+    ],
+    example:
+      '{"questionnaireId":"questionnaire_instrument_123","userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_clone_questionnaire",
+    summary: "Clone one questionnaire into a separate user-owned instrument.",
+    whenToUse:
+      "Use only when the user wants a distinct copy rather than an edit to the existing instrument.",
+    inputShape: "{ questionnaireId: string, userId?: string|null }",
+    requiredFields: ["questionnaireId"],
+    notes: [
+      "Read the source instrument first and confirm why a separate copy is needed.",
+      "userId optionally selects the owner of the clone."
+    ],
+    example:
+      '{"questionnaireId":"questionnaire_instrument_123","userId":"user_operator"}'
+  },
+  {
+    toolName: "forge_ensure_questionnaire_draft",
+    summary: "Create or return the editable draft for one questionnaire.",
+    whenToUse:
+      "Use after reading the exact instrument when the user wants an editable version-state change.",
+    inputShape: "{ questionnaireId: string }",
+    requiredFields: ["questionnaireId"],
+    notes: [
+      "This is a lifecycle action, not ordinary questionnaire field CRUD.",
+      "The operation is idempotent for an existing draft."
+    ],
+    example: '{"questionnaireId":"questionnaire_instrument_123"}'
+  },
+  {
+    toolName: "forge_publish_questionnaire_draft",
+    summary: "Publish the current questionnaire draft.",
+    whenToUse:
+      "Use only after reading the current draft, summarizing material changes, and receiving explicit publish confirmation.",
+    inputShape: "{ questionnaireId: string, label?: string }",
+    requiredFields: ["questionnaireId"],
+    notes: [
+      "label is optional and names the published version.",
+      "Do not treat ordinary batch update intent as publish consent."
+    ],
+    example:
+      '{"questionnaireId":"questionnaire_instrument_123","label":"2026 review"}'
+  },
+  {
+    toolName: "forge_start_questionnaire_run",
+    summary: "Start one answer run for a questionnaire and user.",
+    whenToUse:
+      "Use when the exact instrument and respondent are known and the user wants to begin a run.",
+    inputShape:
+      "{ questionnaireId: string, userId: string, versionId?: string|null }",
+    requiredFields: ["questionnaireId", "userId"],
+    notes: [
+      "versionId is optional; omit it to use the instrument's current runnable version.",
+      "Do not create questionnaire_run through shared batch CRUD."
+    ],
+    example:
+      '{"questionnaireId":"questionnaire_instrument_123","userId":"user_operator"}'
+  },
+  {
+    toolName: "forge_get_questionnaire_run",
+    summary: "Read one questionnaire run with answers and scoring context.",
+    whenToUse:
+      "Use before continuing, reviewing, updating, or completing an existing run.",
+    inputShape: "{ runId: string, userIds?: string[] }",
+    requiredFields: ["runId"],
+    notes: [
+      "Preserve accepted answers and progress; ask only for missing or corrected answers.",
+      "runId identifies the answer session, not the instrument."
+    ],
+    example: '{"runId":"questionnaire_run_123","userIds":["user_operator"]}'
+  },
+  {
+    toolName: "forge_update_questionnaire_run",
+    summary: "Save answers or progress on one in-progress questionnaire run.",
+    whenToUse:
+      "Use after reading the run when the user supplies new answers, corrections, or progress.",
+    inputShape:
+      "{ runId: string, answers?: object[], progressIndex?: integer|null }",
+    requiredFields: ["runId"],
+    notes: [
+      "Send only the answer or progress changes that are newly true.",
+      "Do not complete the run unless the user has finished and wants completion."
+    ],
+    example:
+      '{"runId":"questionnaire_run_123","answers":[{"itemId":"item_1","value":3}],"progressIndex":1}'
+  },
+  {
+    toolName: "forge_complete_questionnaire_run",
+    summary: "Complete and score one questionnaire run.",
+    whenToUse:
+      "Use after reading the exact run and confirming that the respondent is finished.",
+    inputShape: "{ runId: string }",
+    requiredFields: ["runId"],
+    notes: [
+      "Completion persists the note-backed self-observation output.",
+      "Do not use completion merely to save partial answers."
+    ],
+    example: '{"runId":"questionnaire_run_123"}'
+  },
+  {
+    toolName: "forge_get_self_observation_calendar",
+    summary: "Read note-backed self-observations over a bounded interval.",
+    whenToUse:
+      "Use before reviewing observations or updating an exact observed note.",
+    inputShape: "{ userIds?: string[], from?: string, to?: string }",
+    requiredFields: [],
+    notes: [
+      "Write self-observation through note batch CRUD with frontmatter.observedAt; do not invent a standalone self_observation mutation route.",
+      "Use from and to to keep the review interval bounded."
+    ],
+    example:
+      '{"userIds":["user_operator"],"from":"2026-07-01T00:00:00.000Z","to":"2026-07-07T23:59:59.999Z"}'
+  },
+  {
     toolName: "forge_get_sleep_overview",
     summary:
       "Read the sleep surface with recent nights, scores, regularity, stage averages, and linked reflective context.",
@@ -6436,6 +7035,19 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
       '{"provider":"apple","label":"Primary Apple","username":"operator@example.com","password":"app-password","selectedCalendarUrls":["https://caldav.icloud.com/.../Family/"],"forgeCalendarUrl":"https://caldav.icloud.com/.../Forge/","createForgeCalendar":false}'
   },
   {
+    toolName: "forge_sync_calendar_connection",
+    summary: "Synchronize one existing calendar connection.",
+    whenToUse:
+      "Use after reading the exact connection when the user wants Forge to pull and push the provider's current changes.",
+    inputShape: "{ connectionId: string }",
+    requiredFields: ["connectionId"],
+    notes: [
+      "Use the dedicated calendar connection lifecycle, not shared batch CRUD.",
+      "Read the returned sync result before claiming that remote projection succeeded."
+    ],
+    example: '{"connectionId":"calendar_connection_123"}'
+  },
+  {
     toolName: "forge_create_work_block_template",
     summary:
       "Create a recurring half-day, holiday, or custom work-block template.",
@@ -6506,10 +7118,11 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     requiredFields: ["entityType", "entityId", "deltaXp", "reasonTitle"],
     notes: [
       "Requires rewards.manage and write scopes.",
-      "Use this for explicit operator judgement, not as a substitute for normal task_run or habit check-in rewards."
+      "Use this for explicit operator judgement, not as a substitute for normal task_run or habit check-in rewards.",
+      "metadata.manual, metadata.qualifiesForStreak, and metadata.idempotencyFingerprint are server-owned and must not be sent. Use metadata.idempotencyKey for retry-safe requests."
     ],
     example:
-      '{"entityType":"habit","entityId":"habit_morning_training","deltaXp":18,"reasonTitle":"Operator bonus","reasonSummary":"Stayed with the habit through unusual travel friction.","metadata":{"manual":true,"source":"agent"}}'
+      '{"entityType":"habit","entityId":"habit_morning_training","deltaXp":18,"reasonTitle":"Operator bonus","reasonSummary":"Stayed with the habit through unusual travel friction.","metadata":{"idempotencyKey":"travel-friction-2026-07-16","source":"agent"}}'
   },
   {
     toolName: "forge_post_insight",
@@ -6548,16 +7161,18 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use for completion-style retroactive work, not for starting a live session or adjusting minutes on an existing record.",
     inputShape:
-      "{ taskId?: string, title?: string, description?: string, summary?: string, goalId?: string|null, projectId?: string|null, owner?: string, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[], closeoutNote?: { contentMarkdown: string, author?: string|null, tags?: string[], destroyAt?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
+      "{ taskId?: string, title?: string, description?: string, summary?: string<=8000, goalId?: string|null, projectId?: string|null, owner?: string, userId?: string|null, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[<=64], completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskId or title"],
     notes: [
       "Use taskId when logging work against an existing task.",
       "Use title when a new completed work item should be created and logged.",
       "Use forge_adjust_work_minutes for signed minute corrections on existing tasks or projects.",
-      "closeoutNote persists the work summary as a real linked note."
+      "completionReport.linkedGitRefIds must all exist in the resulting gitRefs; caller-supplied valid Git ref IDs are preserved.",
+      "closeoutNote persists a real linked note and may link generic visible Forge entities, including Artifacts.",
+      "The task, completion report, Git refs, closeout note, rewards, and activity are committed atomically. A done task reports closeoutState complete only when completionReport.workSummary is nonempty; otherwise it reports deferred."
     ],
     example:
-      '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40,"closeoutNote":{"contentMarkdown":"Finished the review draft, cleaned the note structure, and left one follow-up for QA."}}'
+      '{"taskId":"task_123","summary":"Finished the review draft and cleaned the notes.","points":40,"completionReport":{"workSummary":"Finished the review draft and cleaned the note structure.","modifiedFiles":["apps/api/src/app.ts"],"linkedGitRefIds":["draft-ref-123"]},"gitRefs":[{"id":"draft-ref-123","refType":"commit","provider":"github","repository":"albertbuchard/forge","refValue":"abc123","url":"https://github.com/albertbuchard/forge/commit/abc123"}],"closeoutNote":{"contentMarkdown":"Finished the review draft and left one follow-up for QA."}}'
   },
   {
     toolName: "forge_start_task_run",
@@ -6606,14 +7221,18 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     summary: "Finish an active run as completed work.",
     whenToUse: "Use when the user has finished the live work block.",
     inputShape:
-      "{ taskRunId: string, actor?: string, note?: string, closeoutNote?: { contentMarkdown: string, author?: string|null, tags?: string[], destroyAt?: string|null, links?: Array<{ entityType, entityId, anchorKey? }> } }",
+      "{ taskRunId: string, actor?: string<=160, note?: string<=4000, completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
     requiredFields: ["taskRunId"],
     notes: [
       "This is the truthful way to finish live work and award completion effects.",
-      "closeoutNote persists a real linked note instead of only updating the transient run note."
+      "completionReport.linkedGitRefIds must all exist in the resulting task gitRefs; caller-supplied valid Git ref IDs are preserved.",
+      "closeoutNote persists a real linked note and may link generic visible Forge entities, including Artifacts.",
+      "Completion atomically stores the report, Git refs, closeout note, run transition, task done state, timebox, rewards, and activity.",
+      "The durable task_run_completed activity binds a canonical SHA-256 closeout fingerprint. Replaying the exact same terminal input succeeds; changed evidence returns 409 task_run_closeout_conflict.",
+      "A completed task returns closeoutState complete only when completionReport.workSummary is nonempty. Missing or empty structured evidence is not fabricated and returns deferred."
     ],
     example:
-      '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft","closeoutNote":{"contentMarkdown":"Completed the draft review and listed the follow-up fixes."}}'
+      '{"taskRunId":"run_123","actor":"aurel","note":"Finished the review draft","completionReport":{"workSummary":"Completed the draft review and listed the follow-up fixes.","modifiedFiles":["apps/api/src/repositories/task-runs.ts"],"linkedGitRefIds":["draft-ref-123"]},"gitRefs":[{"id":"draft-ref-123","refType":"commit","provider":"github","repository":"albertbuchard/forge","refValue":"abc123","url":"https://github.com/albertbuchard/forge/commit/abc123"}],"closeoutNote":{"contentMarkdown":"Completed the draft review and listed the follow-up fixes."}}'
   },
   {
     toolName: "forge_release_task_run",
@@ -6625,7 +7244,8 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     requiredFields: ["taskRunId"],
     notes: [
       "Use this instead of faking a stop by only changing task status.",
-      "closeoutNote is useful for documenting blockers or handoff context."
+      "closeoutNote is useful for documenting blockers or handoff context.",
+      "Release accepts only actor, note, and closeoutNote. It never accepts completionReport or gitRefs and does not complete the task."
     ],
     example:
       '{"taskRunId":"run_123","actor":"aurel","note":"Stopping for now; blocked on feedback","closeoutNote":{"contentMarkdown":"Blocked on feedback from design before I can continue."}}'
@@ -6740,6 +7360,15 @@ function buildAgentOnboardingPayload(request: {
       "psyche.note",
       "psyche.insight",
       "psyche.mode",
+      "wiki:read",
+      "people:read:basic",
+      "people:read:private",
+      "people:read:contacts",
+      "people:read:sensitive",
+      "people:read:restricted",
+      "people:write",
+      "peer:status",
+      "peer:query",
       "artifact.readMetadata",
       "artifact.create",
       "artifact.uploadBytes",
@@ -7065,7 +7694,12 @@ function buildAgentOnboardingPayload(request: {
                 "offset"
               ]
             },
-            createWithBytes: { method: "POST", path: "/api/v1/artifacts" },
+            createWithBytes: {
+              method: "POST",
+              path: "/api/v1/artifacts",
+              headerParams: ["Idempotency-Key"],
+              bodyParams: ["idempotencyKey"]
+            },
             readMetadata: { method: "GET", path: "/api/v1/artifacts/:id" },
             updateMetadata: { method: "PATCH", path: "/api/v1/artifacts/:id" },
             rescan: { method: "POST", path: "/api/v1/artifacts/:id/scan" },
@@ -7086,6 +7720,7 @@ function buildAgentOnboardingPayload(request: {
             "Agents can see contentProtection mode and password hints, but must not receive, store, submit, or route artifact passwords.",
             "Do not execute, preview, parse externally, decrypt, or transform stored file bytes autonomously.",
             "Use general entity links for relationships; do not create artifact-specific link models.",
+            "Give every upload a stable Idempotency-Key header or body idempotencyKey. Retry the same file with the same key after a timeout or cancellation; a changed payload with that key is rejected.",
             "Use limit and offset for artifact list calls; do not bulk-load large Artifact Stores.",
             "Use batch CRUD only for artifact metadata search/update/delete/restore, never for file-byte creation."
           ]
@@ -7093,6 +7728,34 @@ function buildAgentOnboardingPayload(request: {
       },
       actionEntities: {
         task_run: {
+          classification: "action_workflow_entity",
+          aliases: ["taskRun", "task run"],
+          summary:
+            "Read current work, then start, maintain, focus, complete, or release a truthful task run through named action tools.",
+          routeKeys: [
+            "readContext",
+            "start",
+            "heartbeat",
+            "focus",
+            "complete",
+            "release"
+          ],
+          routeTools: {
+            readContext: "forge_get_operator_context",
+            start: "forge_start_task_run",
+            heartbeat: "forge_heartbeat_task_run",
+            focus: "forge_focus_task_run",
+            complete: "forge_complete_task_run",
+            release: "forge_release_task_run"
+          },
+          methodRoutes: {
+            readContext: "GET /api/v1/operator/context",
+            start: "POST /api/v1/tasks/:id/runs",
+            heartbeat: "POST /api/v1/task-runs/:id/heartbeat",
+            focus: "POST /api/v1/task-runs/:id/focus",
+            complete: "POST /api/v1/task-runs/:id/complete",
+            release: "POST /api/v1/task-runs/:id/release"
+          },
           readModel: "/api/v1/operator/context",
           actions: {
             start: "/api/v1/tasks/:id/runs",
@@ -7100,25 +7763,101 @@ function buildAgentOnboardingPayload(request: {
             focus: "/api/v1/task-runs/:id/focus",
             complete: "/api/v1/task-runs/:id/complete",
             release: "/api/v1/task-runs/:id/release"
-          }
+          },
+          notes: [
+            "Read current work first when another active run or calendar block could change the action.",
+            "Use the named action tool for the selected operation; do not create task_run through batch CRUD.",
+            "Complete atomically stores bounded completionReport, Git refs, an optional generic linked closeout Note, task done state, timebox, rewards, and activity. Every linkedGitRefId must exist in the resulting task Git refs.",
+            "Exact completed-run replays succeed through a durable SHA-256 closeout fingerprint; changed closeout evidence returns task_run_closeout_conflict.",
+            "Completion without a nonempty completionReport.workSummary is truthfully deferred; do not fabricate evidence. Release accepts only handoff note fields and never completes the task."
+          ]
         },
         work_adjustment: {
+          classification: "action_workflow_entity",
+          aliases: ["workAdjustment", "work adjustment"],
+          summary:
+            "Read current work and apply one signed retrospective minute correction to an existing task or project.",
+          routeKeys: ["readContext", "adjustMinutes"],
+          routeTools: {
+            readContext: "forge_get_operator_context",
+            adjustMinutes: "forge_adjust_work_minutes"
+          },
+          methodRoutes: {
+            readContext: "GET /api/v1/operator/context",
+            adjustMinutes: "POST /api/v1/work-adjustments"
+          },
           readModel: "/api/v1/operator/context",
           actions: {
             adjustMinutes: "/api/v1/work-adjustments"
           },
           writeModel:
-            "Apply a signed minute correction to an existing task or project. Use this instead of creating a fake task_run for work that already happened."
+            "Apply a signed minute correction to an existing task or project. Use this instead of creating a fake task_run for work that already happened.",
+          notes: [
+            "Identify the exact task or project, signed minute delta, and any useful audit note.",
+            "Use forge_log_work only when the real product action is logging completed work rather than correcting tracked minutes."
+          ]
         },
         questionnaire_run: {
+          classification: "action_workflow_entity",
+          aliases: ["questionnaireRun", "questionnaire run"],
+          summary:
+            "Start, read, update, and complete a user-owned questionnaire answer session without treating it as generic entity CRUD.",
+          routeKeys: ["start", "read", "update", "complete"],
+          routeTools: {
+            start: "forge_start_questionnaire_run",
+            read: "forge_get_questionnaire_run",
+            update: "forge_update_questionnaire_run",
+            complete: "forge_complete_questionnaire_run"
+          },
+          methodRoutes: {
+            start: "POST /api/v1/psyche/questionnaires/:id/runs",
+            read: "GET /api/v1/psyche/questionnaire-runs/:id",
+            update: "PATCH /api/v1/psyche/questionnaire-runs/:id",
+            complete: "POST /api/v1/psyche/questionnaire-runs/:id/complete"
+          },
           read: "/api/v1/psyche/questionnaire-runs/:id",
           actions: {
             start: "/api/v1/psyche/questionnaires/:id/runs",
             update: "/api/v1/psyche/questionnaire-runs/:id",
             complete: "/api/v1/psyche/questionnaire-runs/:id/complete"
-          }
+          },
+          notes: [
+            "Read an existing run before continuing, correcting, reviewing, or completing it; preserve accepted answers and progress.",
+            "Completion requires finished-answer intent and is distinct from saving partial answers."
+          ]
         },
         preferences: {
+          classification: "action_workflow_entity",
+          aliases: ["preferenceActions", "preference actions"],
+          summary:
+            "Read the Preferences Workspace, then run comparison, context-merge, entity-enqueue, judgment, signal, or score-override actions with their exact tools.",
+          routeKeys: [
+            "workspace",
+            "startGame",
+            "mergeContexts",
+            "enqueueFromEntity",
+            "submitJudgment",
+            "submitSignal",
+            "overrideScore"
+          ],
+          routeTools: {
+            workspace: "forge_get_preferences_workspace",
+            startGame: "forge_start_preferences_game",
+            mergeContexts: "forge_merge_preferences_contexts",
+            enqueueFromEntity: "forge_enqueue_preferences_item_from_entity",
+            submitJudgment: "forge_submit_preferences_judgment",
+            submitSignal: "forge_submit_preferences_signal",
+            overrideScore: "forge_update_preferences_score"
+          },
+          methodRoutes: {
+            workspace: "GET /api/v1/preferences/workspace",
+            startGame: "POST /api/v1/preferences/game/start",
+            mergeContexts: "POST /api/v1/preferences/contexts/merge",
+            enqueueFromEntity: "POST /api/v1/preferences/items/from-entity",
+            submitJudgment: "POST /api/v1/preferences/judgments",
+            submitSignal: "POST /api/v1/preferences/signals",
+            overrideScore: "PATCH /api/v1/preferences/items/:id/score"
+          },
           workspace: "/api/v1/preferences/workspace",
           actions: {
             startGame: "/api/v1/preferences/game/start",
@@ -7127,40 +7866,156 @@ function buildAgentOnboardingPayload(request: {
             submitJudgment: "/api/v1/preferences/judgments",
             submitSignal: "/api/v1/preferences/signals",
             overrideScore: "/api/v1/preferences/items/:id/score"
-          }
+          },
+          notes: [
+            "Read the workspace first unless the user already supplied the exact user, domain, context, and item ids required by the selected action.",
+            "Normal preference_catalog, preference_catalog_item, preference_context, and preference_item records use shared batch CRUD.",
+            "Preference catalog and preference_catalog_item soft deletes move records to the bin and forge_restore_entities restores them; contexts and standalone items retain immediate deletion."
+          ]
         },
         preference_judgment: {
+          classification: "action_workflow_entity",
+          aliases: ["preferenceJudgment", "preference judgment"],
+          summary:
+            "Read the relevant workspace pair and submit one pairwise judgment through the dedicated action.",
+          routeKeys: ["readWorkspace", "submit"],
+          routeTools: {
+            readWorkspace: "forge_get_preferences_workspace",
+            submit: "forge_submit_preferences_judgment"
+          },
+          methodRoutes: {
+            readWorkspace: "GET /api/v1/preferences/workspace",
+            submit: "POST /api/v1/preferences/judgments"
+          },
           readModel: "/api/v1/preferences/workspace",
           action: "/api/v1/preferences/judgments",
           tool: "forge_submit_preferences_judgment",
           writeModel:
-            "Submit one pairwise preference judgment through the dedicated Preferences action route, not batch CRUD."
+            "Submit one pairwise preference judgment through the dedicated Preferences action route, not batch CRUD.",
+          notes: [
+            "The submit tool requires userId, domain, contextId, two distinct item ids, and outcome.",
+            "Use a direct preference signal instead when there is no pairwise comparison."
+          ]
         },
         preference_signal: {
+          classification: "action_workflow_entity",
+          aliases: ["preferenceSignal", "preference signal"],
+          summary:
+            "Read the exact preference item and context, then submit one direct signal through the dedicated action.",
+          routeKeys: ["readWorkspace", "submit"],
+          routeTools: {
+            readWorkspace: "forge_get_preferences_workspace",
+            submit: "forge_submit_preferences_signal"
+          },
+          methodRoutes: {
+            readWorkspace: "GET /api/v1/preferences/workspace",
+            submit: "POST /api/v1/preferences/signals"
+          },
           readModel: "/api/v1/preferences/workspace",
           action: "/api/v1/preferences/signals",
           tool: "forge_submit_preferences_signal",
           writeModel:
-            "Submit one direct preference signal through the dedicated Preferences action route, not batch CRUD."
+            "Submit one direct preference signal through the dedicated Preferences action route, not batch CRUD.",
+          notes: [
+            "The submit tool requires userId, domain, contextId, itemId, and signalType.",
+            "Do not translate favorite, veto, bookmark, or compare-later intent into a batch item patch.",
+            "neutral clears the current direct effect without deleting history or adding direct weight, evidence, or confidence.",
+            "The response returns the recorded signal and recomputed score, including the exact effectiveSignal."
+          ]
         },
         questionnaires: {
+          classification: "action_workflow_entity",
+          aliases: ["questionnaireLifecycle", "questionnaire lifecycle"],
+          summary:
+            "Read questionnaire instruments and perform only clone, draft, or publish lifecycle actions through dedicated tools.",
+          routeKeys: ["list", "detail", "clone", "ensureDraft", "publishDraft"],
+          routeTools: {
+            list: "forge_list_questionnaires",
+            detail: "forge_get_questionnaire",
+            clone: "forge_clone_questionnaire",
+            ensureDraft: "forge_ensure_questionnaire_draft",
+            publishDraft: "forge_publish_questionnaire_draft"
+          },
+          methodRoutes: {
+            list: "GET /api/v1/psyche/questionnaires",
+            detail: "GET /api/v1/psyche/questionnaires/:id",
+            clone: "POST /api/v1/psyche/questionnaires/:id/clone",
+            ensureDraft: "POST /api/v1/psyche/questionnaires/:id/draft",
+            publishDraft: "POST /api/v1/psyche/questionnaires/:id/publish"
+          },
           list: "/api/v1/psyche/questionnaires",
           detail: "/api/v1/psyche/questionnaires/:id",
           actions: {
             clone: "/api/v1/psyche/questionnaires/:id/clone",
             ensureDraft: "/api/v1/psyche/questionnaires/:id/draft",
             publishDraft: "/api/v1/psyche/questionnaires/:id/publish"
-          }
+          },
+          notes: [
+            "Ordinary questionnaire_instrument create, update, immediate delete, and search stay on shared batch CRUD. Deletion is not restorable.",
+            "Read the current instrument and draft before publishing, then obtain explicit publish confirmation."
+          ]
         },
         selfObservation: {
+          classification: "action_workflow_entity",
+          aliases: ["self_observation", "self observation"],
+          summary:
+            "Read the bounded self-observation calendar, then search, create, or update the exact note-backed observation through shared note tools.",
+          routeKeys: [
+            "readCalendar",
+            "searchObservedNotes",
+            "createObservedNote",
+            "updateObservedNote"
+          ],
+          routeTools: {
+            readCalendar: "forge_get_self_observation_calendar",
+            searchObservedNotes: "forge_search_entities",
+            createObservedNote: "forge_create_entities",
+            updateObservedNote: "forge_update_entities"
+          },
+          methodRoutes: {
+            readCalendar: "GET /api/v1/psyche/self-observation/calendar",
+            searchObservedNotes: "POST /api/v1/entities/search",
+            createObservedNote: "POST /api/v1/entities/create",
+            updateObservedNote: "POST /api/v1/entities/update"
+          },
           read: "/api/v1/psyche/self-observation/calendar",
           writeModel:
-            "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement."
+            "Create or update an observed note with frontmatter.observedAt. Manual reflections usually carry the Self-observation tag, while movement sync can also publish rolling observed notes tagged movement.",
+          notes: [
+            "There is no standalone self_observation mutation route or CRUD entity.",
+            "Use a stronger Psyche container when the user is formulating a trigger episode, recurring loop, behavior, belief, or mode."
+          ]
         },
         self_observation: {
+          classification: "action_workflow_entity",
+          aliases: ["selfObservation", "self observation"],
+          summary:
+            "Alias of the note-backed self-observation workflow; normalize it to one read/search/create/update flow.",
+          routeKeys: [
+            "readCalendar",
+            "searchObservedNotes",
+            "createObservedNote",
+            "updateObservedNote"
+          ],
+          routeTools: {
+            readCalendar: "forge_get_self_observation_calendar",
+            searchObservedNotes: "forge_search_entities",
+            createObservedNote: "forge_create_entities",
+            updateObservedNote: "forge_update_entities"
+          },
+          methodRoutes: {
+            readCalendar: "GET /api/v1/psyche/self-observation/calendar",
+            searchObservedNotes: "POST /api/v1/entities/search",
+            createObservedNote: "POST /api/v1/entities/create",
+            updateObservedNote: "POST /api/v1/entities/update"
+          },
           read: "/api/v1/psyche/self-observation/calendar",
           writeModel:
-            "Read the self-observation calendar, then create or update an observed note with frontmatter.observedAt; do not invent a standalone self_observation CRUD route."
+            "Read the self-observation calendar, then create or update an observed note with frontmatter.observedAt; do not invent a standalone self_observation CRUD route.",
+          notes: [
+            "Normalize this snake_case alias with selfObservation and test the user-facing flow once.",
+            "Search and patch an exact observed note instead of forcing a sparse existing observation through fresh intake."
+          ]
         }
       },
       specializedDomainSurfaces: {
@@ -7554,6 +8409,8 @@ function buildAgentOnboardingPayload(request: {
           },
           notes: [
             "Workbench is a dedicated execution surface, not a batch CRUD entity family.",
+            "Flow and box catalogs are bounded pages. Start with limit 24, use q plus repeated kind, homeSurfaceId, status, category, surfaceId, or source filters as published by OpenAPI, and follow hasMore with offset plus the number of returned items. Do not request includeArchived: Workbench currently exposes enabled and disabled endpoint state, not an archive lifecycle.",
+            "The flow catalog returns compact summaries without graph bodies or run payloads. Use flowDetail only after selecting an exact flow whose graph, public inputs, outputs, or recent runs are needed.",
             "Route-selection questions are internal. User-facing questions should ask whether the user needs the saved flow, its input contract, one run, one node, or the public result instead of reciting Workbench route keys.",
             "`flowDetail` is the plain saved-flow detail route-key alias for `flowById`, and `runHistory` is the plain run-history route-key alias for `runs`. Keep the older keys valid for existing agents, but prefer the clearer aliases in new examples and guidance.",
             "Use the flow routes when the agent needs stable public input contracts, published outputs, node-level results, or reusable execution history.",
@@ -7692,6 +8549,7 @@ function buildAgentOnboardingPayload(request: {
     },
     verificationPaths: {
       context: "/api/v1/context",
+      todayPriority: "/api/v1/today/priority",
       xpMetrics: "/api/v1/metrics/xp",
       weeklyReview: "/api/v1/reviews/weekly",
       sleepOverview: "/api/v1/health/sleep",
@@ -7786,6 +8644,7 @@ function buildAgentOnboardingPayload(request: {
         "forge_get_user_directory",
         "forge_get_operator_context",
         "forge_get_current_work",
+        "forge_get_today_priority",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
@@ -7813,6 +8672,32 @@ function buildAgentOnboardingPayload(request: {
       ],
       attentionWorkflow: ["forge_call_attention_route"],
       entityNavigationWorkflow: ["forge_call_entity_navigation_route"],
+      preferencesWorkflow: [
+        "forge_get_preferences_workspace",
+        "forge_start_preferences_game",
+        "forge_merge_preferences_contexts",
+        "forge_enqueue_preferences_item_from_entity",
+        "forge_submit_preferences_judgment",
+        "forge_submit_preferences_signal",
+        "forge_update_preferences_score"
+      ],
+      questionnaireWorkflow: [
+        "forge_list_questionnaires",
+        "forge_get_questionnaire",
+        "forge_clone_questionnaire",
+        "forge_ensure_questionnaire_draft",
+        "forge_publish_questionnaire_draft",
+        "forge_start_questionnaire_run",
+        "forge_get_questionnaire_run",
+        "forge_update_questionnaire_run",
+        "forge_complete_questionnaire_run"
+      ],
+      selfObservationWorkflow: [
+        "forge_get_self_observation_calendar",
+        "forge_search_entities",
+        "forge_create_entities",
+        "forge_update_entities"
+      ],
       entityWorkflow: [
         "forge_search_entities",
         "forge_create_entities",
@@ -7945,7 +8830,7 @@ function buildAgentOnboardingPayload(request: {
       updateRule:
         "Each update operation must include entityType, id, and patch. For projects, lifecycle changes are status patches: active to restart, paused to suspend, completed to finish. Keep task and project scheduling rules on those same patch payloads. Official habit outcomes can also be logged through forge_update_entities by patching the habit with checkIn: { status, dateKey?, note?, description? } instead of route-hunting. Calendar-event updates still run downstream provider projection sync, and manual health-session field edits belong on the batch route by default rather than on the reflective review helpers.",
       specializedRouteToolRule:
-        "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools.",
+        "forge_call_movement_route, forge_call_life_event_route, forge_call_life_force_route, and forge_call_workbench_route expect { routeKey, pathParams?, query?, body? }. Use toolInputCatalog as the compact input reminder, then verify the selected routeKey against entityRouteModel.specializedDomainSurfaces routeKeys and methodRoutes before calling. Fill every methodRoutes placeholder with pathParams using names such as id, weekday, slug, runId, nodeId, or pointId, use query for read filters and userIds, and use body only for POST, PATCH, or PUT route keys. Do not put required IDs, artifact ids, weekdays, flow ids, or node ids inside routeKey, query, or body when the published path has a placeholder. The Life Force overview route key maps to GET /api/v1/life-force; do not invent /api/v1/life-force/overview. Life Events timeline maps to GET /api/v1/life-events/timeline, while stored life_event create/update/delete/search still use the shared batch entity tools. Workbench listFlows and boxCatalog are bounded: start with limit 24, apply the published filters, and continue only while hasMore is true by adding the returned item count to offset; use status=enabled or status=disabled rather than inventing includeArchived.",
       attentionRouteToolRule:
         "forge_call_attention_route expects { routeKey, pathParams?, query?, body? }. Use list with state, limit, offset, and optional effective-scope filters; use snooze, dismiss, or restore only with pathParams.id from a current result and only when allowedActions includes that action. Snooze requires body.until; dismiss may include body.note; restore needs no body.",
       entityNavigationRouteToolRule:
@@ -8088,14 +8973,26 @@ function parseIdempotencyKey(headers: Record<string, unknown>): string | null {
     return null;
   }
   if (Array.isArray(raw)) {
-    throw new Error("Idempotency-Key must be a single header value");
+    throw new HttpError(
+      400,
+      "invalid_idempotency_key",
+      "Idempotency-Key must be a single header value"
+    );
   }
   if (typeof raw !== "string") {
-    throw new Error("Idempotency-Key must be a string");
+    throw new HttpError(
+      400,
+      "invalid_idempotency_key",
+      "Idempotency-Key must be a string"
+    );
   }
   const key = raw.trim();
   if (!key || key.length > 128) {
-    throw new Error("Idempotency-Key must be between 1 and 128 characters");
+    throw new HttpError(
+      400,
+      "invalid_idempotency_key",
+      "Idempotency-Key must be between 1 and 128 characters"
+    );
   }
   return key;
 }
@@ -8652,7 +9549,8 @@ function buildV1Context(
     enforceUserIds: false,
     projectIds: [],
     tagIds: []
-  }
+  },
+  noteScope: Omit<NoteReadScope, "userIds"> = {}
 ) {
   const now = new Date();
   const users = listUsers();
@@ -8698,7 +9596,8 @@ function buildV1Context(
     goals,
     projects,
     tasks,
-    habits
+    habits,
+    noteScope: { ...noteScope, userIds: scopedUserIdsForReads }
   });
   const selectedUsers =
     validScopedUserIds !== undefined
@@ -8716,7 +9615,11 @@ function buildV1Context(
     dashboard,
     overview: getOverviewContext(now, {
       userIds: scopedUserIdsForReads,
-      dashboard
+      dashboard,
+      noteScope: {
+        ...noteScope,
+        userIds: scopedUserIdsForReads
+      }
     }),
     today: getTodayContext(now, {
       userIds: scopedUserIdsForReads,
@@ -8817,6 +9720,7 @@ function buildXpMetricsPayload(
     tasks?: Task[];
     habits?: Habit[];
     userIds?: string[];
+    timezone?: string;
   } = {}
 ) {
   const goals = input.goals ?? listGoals();
@@ -8826,7 +9730,8 @@ function buildXpMetricsPayload(
     goals,
     tasks,
     habits,
-    userIds: input.userIds
+    userIds: input.userIds,
+    timezone: input.timezone
   });
 }
 
@@ -8896,6 +9801,44 @@ function describeWorkAdjustment(input: {
   };
 }
 
+function buildTodayPriorityFromSnapshot(input: {
+  tasks: Task[];
+  activeTaskRuns: ReturnType<typeof listTaskRuns>;
+  selectedUserIds: string[];
+  directiveTaskId: string | null;
+  lifeForce: ReturnType<typeof buildLifeForcePayload>;
+  snapshotGeneratedAt: string;
+  candidateLimit?: number;
+  timeZone?: string;
+  now: Date;
+}) {
+  const decisionUserId =
+    input.selectedUserIds.length === 1 ? input.selectedUserIds[0]! : null;
+  const scheduleGeneratedAt = input.now.toISOString();
+  const timeboxes = listTaskTimeboxes({
+    from: new Date(input.now.getTime() - 36 * 60 * 60 * 1_000).toISOString(),
+    to: new Date(input.now.getTime() + 36 * 60 * 60 * 1_000).toISOString(),
+    userIds:
+      input.selectedUserIds.length > 0 ? input.selectedUserIds : undefined
+  });
+
+  return buildTodayPriorityDecision({
+    tasks: input.tasks,
+    activeTaskRuns: input.activeTaskRuns,
+    userId: decisionUserId,
+    directiveTaskId: input.directiveTaskId,
+    lifeForce: decisionUserId ? input.lifeForce : undefined,
+    timeboxes,
+    candidateLimit: input.candidateLimit,
+    snapshotGeneratedAt: input.snapshotGeneratedAt,
+    calendarGeneratedAt: scheduleGeneratedAt,
+    calendarState: "ready",
+    capacityState: decisionUserId ? "ready" : "partial",
+    now: input.now,
+    timeZone: input.timeZone ?? getRuntimeTimeZone()
+  });
+}
+
 function buildOperatorContext(
   scope: Pick<
     EffectiveReadScope,
@@ -8905,13 +9848,16 @@ function buildOperatorContext(
     enforceUserIds: false,
     projectIds: [],
     tagIds: []
-  }
+  },
+  options: { noteScope?: NoteReadScope } = {}
 ) {
+  const now = new Date();
   const users = listUsers();
-  const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
-    scope,
-    validUserIds: users.map((user) => user.id)
-  });
+  const { validScopedUserIds, scopedUserIdsForReads } =
+    normalizeScopedUserIdsForReads({
+      scope,
+      validUserIds: users.map((user) => user.id)
+    });
   const tasks = applyTaskScope(
     filterOwnedEntities("task", listTasks(), scopedUserIdsForReads),
     scope
@@ -8952,14 +9898,55 @@ function buildOperatorContext(
   const focusTasks = tasks.filter(
     (task) => task.status === "focus" || task.status === "in_progress"
   );
+  const recentTaskRuns = listTaskRuns({
+    limit: 12,
+    userIds: scopedUserIdsForReads
+  });
+  const activeTaskRuns = listTaskRuns({
+    active: true,
+    limit: 25,
+    userIds: scopedUserIdsForReads
+  });
+  const generatedAt = now.toISOString();
+  const todayDecision = buildTodayPriorityFromSnapshot({
+    tasks,
+    activeTaskRuns,
+    selectedUserIds: validScopedUserIds ?? [],
+    directiveTaskId:
+      getTodayContext(now, { userIds: scopedUserIdsForReads }).directive.task
+        ?.id ?? null,
+    lifeForce: buildLifeForcePayload(now, scopedUserIdsForReads),
+    snapshotGeneratedAt: generatedAt,
+    now
+  });
   const recommendedNextTask =
-    focusTasks[0] ??
-    tasks.find((task) => task.status === "backlog") ??
-    tasks.find((task) => task.status === "blocked") ??
-    null;
+    todayDecision.mode === "ready" || todayDecision.mode === "continue-active"
+      ? todayDecision.task
+      : null;
+  const xp = buildXpMetricsPayload({
+    goals,
+    tasks,
+    habits: scopedHabits,
+    userIds: scopedUserIdsForReads
+  });
+  const recentLedger = xp.recentLedger.filter((entry) => {
+    if (
+      options.noteScope?.includePsyche === false &&
+      isPsycheEntityType(entry.entityType)
+    ) {
+      return false;
+    }
+    if (entry.entityType !== "note" || !options.noteScope) {
+      return true;
+    }
+    const note = getNoteByIdIncludingDeleted(entry.entityId, {
+      skipCleanup: true
+    });
+    return Boolean(note && isNoteVisibleToScope(note, options.noteScope));
+  });
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     activeProjects: activeProjects.slice(0, 8),
     focusTasks: focusTasks.slice(0, 12),
     dueHabits: scopedHabits,
@@ -8972,21 +9959,16 @@ function buildOperatorContext(
       blocked: tasks.filter((task) => task.status === "blocked").slice(0, 20),
       done: tasks.filter((task) => task.status === "done").slice(0, 20)
     },
-    recentActivity: listActivityEvents({
-      limit: 20,
-      userIds: scopedUserIdsForReads
-    }),
-    recentTaskRuns: listTaskRuns({
-      limit: 12,
-      userIds: scopedUserIdsForReads
-    }),
+    recentActivity: filterNoteActivityEventsForScope(
+      listActivityEvents({
+        limit: 60,
+        userIds: scopedUserIdsForReads
+      }),
+      options.noteScope ?? { userIds: scopedUserIdsForReads }
+    ).slice(0, 20),
+    recentTaskRuns,
     recommendedNextTask,
-    xp: buildXpMetricsPayload({
-      goals,
-      tasks,
-      habits: scopedHabits,
-      userIds: scopedUserIdsForReads
-    })
+    xp: { ...xp, recentLedger }
   };
 }
 
@@ -9051,6 +10033,13 @@ function buildOperatorOverviewRouteGuide() {
         summary:
           "Operational task board, focus queue, recent activity, and XP state for assistant workflows.",
         requiredScope: null
+      },
+      {
+        id: "today_priority",
+        path: "/api/v1/today/priority",
+        summary:
+          "Canonical next-work decision with active-run, urgency, task-timebox, and Life Force evidence.",
+        requiredScope: "read or write"
       },
       {
         id: "psyche_overview",
@@ -9771,19 +10760,26 @@ function buildRecentNoteDigest(input: {
   fromDateKey: string;
   toDateKey: string;
   userIds?: string[];
+  noteScope: NoteReadScope;
 }) {
-  const observed = listNotesByObservedAtRange({
-    from: input.from,
-    to: input.to,
-    userIds: input.userIds,
-    limit: 40
-  });
-  const updated = listNotes({
-    updatedFrom: input.fromDateKey,
-    updatedTo: input.toDateKey,
-    userIds: input.userIds,
-    limit: 40
-  });
+  const observed = listNotesByObservedAtRange(
+    {
+      from: input.from,
+      to: input.to,
+      userIds: input.userIds,
+      limit: 40
+    },
+    input.noteScope
+  );
+  const updated = listNotesPage(
+    {
+      updatedFrom: input.fromDateKey,
+      updatedTo: input.toDateKey,
+      userIds: input.userIds,
+      limit: 40
+    },
+    input.noteScope
+  ).notes;
   const notesById = new Map<string, Note>();
   for (const note of [...observed, ...updated]) {
     notesById.set(note.id, note);
@@ -9871,6 +10867,7 @@ function buildOperatorOverview(request: {
   hostname: string;
   headers: Record<string, unknown>;
   query?: Record<string, unknown>;
+  noteScope: NoteReadScope;
 }) {
   const auth = parseRequestAuth(request.headers);
   const readScope = resolveEffectiveReadScope(request.query, auth);
@@ -9928,8 +10925,13 @@ function buildOperatorOverview(request: {
     new Set(goals.map((goal) => goal.id)),
     new Set(tasks.map((task) => task.id))
   );
-  const operator = compactOperatorContext(buildOperatorContext(readScope));
-  const overview = getOverviewContext(now, { userIds });
+  const operator = compactOperatorContext(
+    buildOperatorContext(readScope, { noteScope: request.noteScope })
+  );
+  const overview = getOverviewContext(now, {
+    userIds,
+    noteScope: request.noteScope
+  });
   const today = compactDailyContext(getTodayContext(now, { userIds }));
   const yesterday = compactDailyContext(
     getTodayContext(addDays(now, -1), { userIds })
@@ -9960,7 +10962,8 @@ function buildOperatorOverview(request: {
     to: todayRange.to,
     fromDateKey: yesterdayRange.dateKey,
     toDateKey: todayRange.dateKey,
-    userIds
+    userIds,
+    noteScope: request.noteScope
   });
 
   return {
@@ -10071,6 +11074,8 @@ export async function buildServer(
     seedDemoData?: boolean;
     taskRunWatchdog?: false | TaskRunWatchdogOptions;
     devrageMetricSync?: boolean;
+    peerRuntime?: false | PeerRuntimeLaunchDependencies;
+    eventStreamPollIntervalMs?: number;
   } = {}
 ) {
   const managers = createManagerRuntime({ dataRoot: options.dataRoot });
@@ -10090,18 +11095,45 @@ export async function buildServer(
     dataRoot: options.dataRoot
   });
   configureDatabase({ dataRoot: runtimeConfig.dataRoot ?? undefined });
+  managers.secrets.configure(resolveDataDir());
   configureDatabaseSeeding(options.seedDemoData ?? false);
   await managers.migration.initialize();
   ensureSystemUsers();
   getSettings();
+  ensureDefaultRewardRules();
+  ensureLegacyProcessorsMigrated();
   const app = Fastify({
     logger: false,
     rewriteUrl: (request) => rewriteMountPath(request.url ?? "/")
+  });
+  const peerCore = new DelegatingPeerCoreGateway();
+  let peerRuntime: PeerRuntimeHandle | null = null;
+  app.addHook("onReady", async () => {
+    if (peerRuntime) return;
+    const started = await startPeerRuntime({
+      ownerUserId: getDefaultUser().id,
+      dataDir: resolveDataDir(),
+      dependencies:
+        options.peerRuntime === false
+          ? { environment: { FORGE_PEER_ENABLED: "0" } }
+          : { ...options.peerRuntime, secrets: managers.secrets }
+    });
+    try {
+      peerCore.activate(started.gateway);
+      peerRuntime = started;
+    } catch (error) {
+      await started.stop();
+      throw error;
+    }
   });
   const taskRunWatchdog =
     options.taskRunWatchdog === false
       ? null
       : createTaskRunWatchdog(options.taskRunWatchdog);
+  const eventStreamPollIntervalMs = Math.max(
+    10,
+    options.eventStreamPollIntervalMs ?? 3_000
+  );
 
   await app.register(cors, {
     origin: (origin, callback) => {
@@ -10206,6 +11238,7 @@ export async function buildServer(
       clearInterval(devrageMetricTimer);
     }
     taskRunWatchdog?.stop();
+    await peerRuntime?.stop();
     await stopCompanionIroh();
     await managers.backgroundJobs.stop();
   });
@@ -10385,7 +11418,10 @@ export async function buildServer(
   const toActivityContext = (context: ReturnType<typeof authenticateRequest>) =>
     ({
       actor: context.actor,
-      source: context.source
+      source: context.source,
+      userIds: context.token?.scopePolicy.userIds ?? [],
+      projectIds: context.token?.scopePolicy.projectIds ?? [],
+      tagIds: context.token?.scopePolicy.tagIds ?? []
     }) as const;
   const applyBatchCalendarEntityEffects = async (
     results: Array<{
@@ -10563,6 +11599,523 @@ export async function buildServer(
     managers.authorization.requireAnyTokenScope(context, scopes, detail);
     return context;
   };
+  const taskMatchesAuthScope = (
+    task: ReturnType<typeof getTaskById>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!task || !context.token) {
+      return Boolean(task);
+    }
+    const scope = context.token.scopePolicy;
+    if (
+      scope.userIds.length > 0 &&
+      filterOwnedEntities("task", [task], scope.userIds).length === 0
+    ) {
+      return false;
+    }
+    if (
+      scope.projectIds.length > 0 &&
+      (!task.projectId || !scope.projectIds.includes(task.projectId))
+    ) {
+      return false;
+    }
+    return (
+      scope.tagIds.length === 0 ||
+      task.tagIds.some((tagId) => scope.tagIds.includes(tagId))
+    );
+  };
+  const getTaskForAuth = (
+    id: string,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const task = getTaskById(id);
+    return taskMatchesAuthScope(task, context) ? task : undefined;
+  };
+  const filterTasksForAuth = <
+    T extends NonNullable<ReturnType<typeof getTaskById>>
+  >(
+    tasks: T[],
+    context: ReturnType<typeof authenticateRequest>
+  ) => tasks.filter((task) => taskMatchesAuthScope(task, context));
+  const assertTaskResultScope = (
+    task: NonNullable<ReturnType<typeof getTaskById>>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!taskMatchesAuthScope(task, context)) {
+      throw new HttpError(
+        403,
+        "task_scope_forbidden",
+        "The resulting task is outside this token's allowed task scope."
+      );
+    }
+  };
+  const getTaskRunForAuth = (
+    id: string,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const run = getTaskRunById(id);
+    return run && getTaskForAuth(run.taskId, context) ? run : undefined;
+  };
+  const filterTaskRunsForAuth = (
+    runs: ReturnType<typeof listTaskRuns>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => runs.filter((run) => Boolean(getTaskForAuth(run.taskId, context)));
+  const hasTokenScope = (
+    context: ReturnType<typeof authenticateRequest>,
+    scope: string
+  ) => Boolean(context.session || context.token?.scopes.includes(scope));
+  const toWikiUserScope = (
+    context: ReturnType<typeof authenticateRequest>
+  ) => ({
+    userIds: context.token?.scopePolicy.userIds ?? []
+  });
+  const noteReadScopeForAuth = (
+    context: ReturnType<typeof authenticateRequest>,
+    userIds?: string[]
+  ): NoteReadScope => ({
+    userIds,
+    accessibleSpaceIds: listAccessibleWikiSpacesForScope(
+      toWikiUserScope(context),
+      "read"
+    ).map((space) => space.id),
+    includePsyche:
+      !isPsycheAuthRequired() || hasTokenScope(context, "psyche.read")
+  });
+  const listVisibleActivityForAuth = (
+    query: ReturnType<typeof activityListQuerySchema.parse>,
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const userIds = resolveEffectiveUserIdsForReads(
+      query.userIds ? { userIds: query.userIds } : undefined,
+      context
+    );
+    const requestedLimit = query.limit;
+    const visible = filterNoteActivityEventsForScope(
+      listActivityEvents({ ...query, userIds, limit: undefined }),
+      noteReadScopeForAuth(context, userIds)
+    );
+    return requestedLimit ? visible.slice(0, requestedLimit) : visible;
+  };
+  const getLatestVisibleActivityForAuth = (
+    context: ReturnType<typeof authenticateRequest>
+  ) => {
+    const userIds = resolveEffectiveUserIdsForReads(undefined, context);
+    return (
+      filterNoteActivityEventsForScope(
+        listActivityEvents({ userIds, limit: 100 }),
+        noteReadScopeForAuth(context, userIds)
+      )[0] ?? null
+    );
+  };
+  const payloadLinksToPerson = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+    const links = (value as Record<string, unknown>).links;
+    return (
+      Array.isArray(links) &&
+      links.some(
+        (link) =>
+          link !== null &&
+          typeof link === "object" &&
+          ((link as Record<string, unknown>).entityType === "person" ||
+            (link as Record<string, unknown>).targetEntityType === "person")
+      )
+    );
+  };
+  const requirePeopleBatchMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    operations: Array<{
+      entityType: CrudEntityType;
+      data?: unknown;
+      patch?: unknown;
+    }>
+  ) => {
+    if (
+      operations.some(
+        (operation) =>
+          operation.entityType === "person" ||
+          payloadLinksToPerson(operation.data) ||
+          payloadLinksToPerson(operation.patch)
+      )
+    ) {
+      managers.authorization.requireAllTokenScopes(
+        context,
+        ["people:write", "people:read:basic"],
+        { entityType: "person", routeFamily: "entity_batch" }
+      );
+    }
+  };
+  const requireNestedPsycheNoteMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    payload: unknown,
+    routeFamily: string
+  ) => {
+    if (!isPsycheAuthRequired()) {
+      return;
+    }
+    const entityTypes = findNestedPsycheNoteLinkEntityTypes(payload);
+    if (entityTypes.length > 0) {
+      managers.authorization.requireTokenScope(context, "psyche.note", {
+        entityTypes,
+        routeFamily
+      });
+    }
+  };
+  const requireTaskCloseoutNoteMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    payload: unknown,
+    routeFamily: string
+  ) => {
+    requireNestedPsycheNoteMutationAccess(context, payload, routeFamily);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return;
+    }
+    const record = payload as Record<string, unknown>;
+    const notes = [
+      ...(Array.isArray(record.notes) ? record.notes : []),
+      ...(record.closeoutNote ? [record.closeoutNote] : [])
+    ];
+    const artifactIds = new Set<string>();
+    for (const note of notes) {
+      if (!note || typeof note !== "object" || Array.isArray(note)) {
+        continue;
+      }
+      const links = (note as Record<string, unknown>).links;
+      if (!Array.isArray(links)) {
+        continue;
+      }
+      for (const link of links) {
+        if (!link || typeof link !== "object" || Array.isArray(link)) {
+          continue;
+        }
+        const candidate = link as Record<string, unknown>;
+        if (
+          candidate.entityType === "artifact" &&
+          typeof candidate.entityId === "string"
+        ) {
+          artifactIds.add(candidate.entityId);
+        }
+      }
+    }
+    for (const artifactId of artifactIds) {
+      if (
+        !hasTokenScope(context, "artifact.readMetadata") ||
+        !getArtifactById(artifactId, toActivityContext(context))
+      ) {
+        throw new HttpError(404, "artifact_not_found", "Artifact not found.");
+      }
+    }
+  };
+  const requirePsycheNoteBatchMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    operations: Array<{
+      entityType: CrudEntityType;
+      id?: string;
+      data?: unknown;
+      patch?: unknown;
+    }>
+  ) => {
+    if (!isPsycheAuthRequired()) {
+      return;
+    }
+    for (const operation of operations) {
+      const nestedEntityTypes = [
+        ...findNestedPsycheNoteLinkEntityTypes(operation.data),
+        ...findNestedPsycheNoteLinkEntityTypes(operation.patch)
+      ];
+      if (nestedEntityTypes.length > 0) {
+        managers.authorization.requireTokenScope(context, "psyche.note", {
+          entityTypes: Array.from(new Set(nestedEntityTypes)),
+          routeFamily: "entity_batch"
+        });
+      }
+      if (operation.entityType !== "note") {
+        continue;
+      }
+      const current = operation.id
+        ? getNoteByIdIncludingDeleted(operation.id)
+        : undefined;
+      const visibleCurrent =
+        current &&
+        filterOwnedEntities(
+          "note",
+          [current],
+          context.token?.scopePolicy.userIds ?? []
+        ).length > 0 &&
+        canAccessWikiNoteForScope(toWikiUserScope(context), current, "write")
+          ? current
+          : undefined;
+      const psycheEntityTypes = Array.from(
+        new Set([
+          ...findPsycheNoteLinkEntityTypes(operation.data),
+          ...findPsycheNoteLinkEntityTypes(operation.patch),
+          ...(visibleCurrent?.links
+            .filter((link) => isPsycheEntityType(link.entityType))
+            .map((link) => link.entityType) ?? [])
+        ])
+      );
+      if (psycheEntityTypes.length > 0) {
+        managers.authorization.requireTokenScope(context, "psyche.note", {
+          entityTypes: psycheEntityTypes,
+          routeFamily: "entity_batch"
+        });
+      }
+    }
+  };
+  const PSYCHE_VOCABULARY_ENTITY_TYPES = [
+    "event_type",
+    "emotion_definition"
+  ] as const;
+  const isPsycheVocabularyEntityType = (
+    entityType: string
+  ): entityType is (typeof PSYCHE_VOCABULARY_ENTITY_TYPES)[number] =>
+    PSYCHE_VOCABULARY_ENTITY_TYPES.includes(
+      entityType as (typeof PSYCHE_VOCABULARY_ENTITY_TYPES)[number]
+    );
+  const filterPsycheVocabularyForReads = <
+    T extends { id: string; system: boolean }
+  >(
+    entityType: (typeof PSYCHE_VOCABULARY_ENTITY_TYPES)[number],
+    entities: T[],
+    userIds?: string[]
+  ) => {
+    const decorated = filterOwnedEntities(entityType, entities);
+    if (!userIds || userIds.length === 0) {
+      return decorated;
+    }
+    const allowedUserIds = new Set(userIds);
+    return decorated.filter(
+      (entity) =>
+        entity.system ||
+        (entity.userId !== null && allowedUserIds.has(entity.userId)) ||
+        entity.assigneeUserIds.some((userId) => allowedUserIds.has(userId))
+    );
+  };
+  const requirePsycheVocabularyBatchMutationAccess = (
+    context: ReturnType<typeof authenticateRequest>,
+    operations: Array<{ entityType: CrudEntityType; id?: string }>
+  ) => {
+    const vocabularyOperations = operations.filter((operation) =>
+      isPsycheVocabularyEntityType(operation.entityType)
+    );
+    if (vocabularyOperations.length === 0) {
+      return;
+    }
+    if (isPsycheAuthRequired()) {
+      managers.authorization.requireTokenScope(context, "psyche.write", {
+        entityTypes: PSYCHE_VOCABULARY_ENTITY_TYPES,
+        routeFamily: "entity_batch"
+      });
+    }
+    const activityContext = toActivityContext(context);
+    for (const operation of vocabularyOperations) {
+      if (
+        !operation.id ||
+        !isPsycheVocabularyEntityType(operation.entityType)
+      ) {
+        continue;
+      }
+      const entity =
+        operation.entityType === "event_type"
+          ? getEventTypeById(operation.id)
+          : getEmotionDefinitionById(operation.id);
+      const snapshot =
+        entity ??
+        getDeletedEntityRecord(operation.entityType, operation.id)?.snapshot;
+      requirePsycheVocabularyWriteScope(
+        operation.entityType,
+        operation.id,
+        activityContext,
+        snapshot as Record<string, unknown> | undefined
+      );
+    }
+  };
+  const redactBatchPersonPayload = <T>(
+    payload: T,
+    context: ReturnType<typeof authenticateRequest>
+  ): T => {
+    if (context.session || !payload || typeof payload !== "object") {
+      return payload;
+    }
+    const redactEntity = (value: unknown) =>
+      redactPersonForAuth(value as Person, context, {
+        includePrivate: true
+      });
+    const redactResult = (value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+      }
+      const record = value as Record<string, unknown>;
+      const next: Record<string, unknown> = { ...record };
+      if (record.entityType === "person" && record.entity) {
+        next.entity = redactEntity(record.entity);
+      }
+      if (Array.isArray(record.matches)) {
+        next.matches = record.matches.map((match) => {
+          if (!match || typeof match !== "object" || Array.isArray(match)) {
+            return match;
+          }
+          const matchRecord = match as Record<string, unknown>;
+          if (matchRecord.entityType !== "person") {
+            return match;
+          }
+          const redacted: Record<string, unknown> = {
+            ...matchRecord,
+            entity: redactEntity(matchRecord.entity)
+          };
+          if (
+            matchRecord.deletedRecord &&
+            typeof matchRecord.deletedRecord === "object" &&
+            !Array.isArray(matchRecord.deletedRecord)
+          ) {
+            const deletedRecord = matchRecord.deletedRecord as Record<
+              string,
+              unknown
+            >;
+            redacted.deletedRecord = {
+              ...deletedRecord,
+              snapshot: redactEntity(deletedRecord.snapshot)
+            };
+          }
+          return redacted;
+        });
+      }
+      return next;
+    };
+    const envelope = payload as Record<string, unknown>;
+    if (!Array.isArray(envelope.results)) {
+      return payload;
+    }
+    return {
+      ...envelope,
+      results: envelope.results.map(redactResult)
+    } as T;
+  };
+  const redactBatchArtifactPayload = <T>(payload: T): T => {
+    if (!payload || typeof payload !== "object") {
+      return payload;
+    }
+    const redactArtifactMatch = (value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+      }
+      const match = value as Record<string, unknown>;
+      if (match.entityType !== "artifact") {
+        return match;
+      }
+      return serializeArtifactPublicPayload(match);
+    };
+    const envelope = payload as Record<string, unknown>;
+    if (!Array.isArray(envelope.results)) {
+      return payload;
+    }
+    return {
+      ...envelope,
+      results: envelope.results.map((result) => {
+        if (!result || typeof result !== "object" || Array.isArray(result)) {
+          return result;
+        }
+        const record = result as Record<string, unknown>;
+        if (record.entityType === "artifact") {
+          return serializeArtifactPublicPayload(record);
+        }
+        if (!Array.isArray(record.matches)) {
+          return record;
+        }
+        return {
+          ...record,
+          matches: record.matches.map(redactArtifactMatch)
+        };
+      })
+    } as T;
+  };
+  const redactBatchPreferencePayload = <T>(
+    payload: T,
+    transformCatalog: (
+      catalog: Record<string, unknown> & { id: string }
+    ) => Record<string, unknown> & { id: string }
+  ): T => {
+    if (!payload || typeof payload !== "object") {
+      return payload;
+    }
+    const redactCatalogRecord = (value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+      }
+      const record = value as Record<string, unknown>;
+      if (
+        record.entityType !== "preference_catalog" ||
+        !record.entity ||
+        typeof record.entity !== "object" ||
+        Array.isArray(record.entity)
+      ) {
+        return record;
+      }
+      const next: Record<string, unknown> = {
+        ...record,
+        entity: transformCatalog(
+          record.entity as Record<string, unknown> & { id: string }
+        )
+      };
+      if (
+        record.deletedRecord &&
+        typeof record.deletedRecord === "object" &&
+        !Array.isArray(record.deletedRecord)
+      ) {
+        const deletedRecord = record.deletedRecord as Record<string, unknown>;
+        if (
+          deletedRecord.snapshot &&
+          typeof deletedRecord.snapshot === "object" &&
+          !Array.isArray(deletedRecord.snapshot)
+        ) {
+          next.deletedRecord = {
+            ...deletedRecord,
+            snapshot: transformCatalog(
+              deletedRecord.snapshot as Record<string, unknown> & { id: string }
+            )
+          };
+        }
+      }
+      return next;
+    };
+    const envelope = payload as Record<string, unknown>;
+    if (!Array.isArray(envelope.results)) {
+      return payload;
+    }
+    return {
+      ...envelope,
+      results: envelope.results.map((result) => {
+        if (!result || typeof result !== "object" || Array.isArray(result)) {
+          return result;
+        }
+        const record = result as Record<string, unknown>;
+        if (Array.isArray(record.matches)) {
+          return {
+            ...record,
+            matches: record.matches.map(redactCatalogRecord)
+          };
+        }
+        return redactCatalogRecord(record);
+      })
+    } as T;
+  };
+  const redactBatchEntityPayload = <T>(
+    payload: T,
+    context: ReturnType<typeof authenticateRequest>,
+    transformPreferenceCatalog?: (
+      catalog: Record<string, unknown> & { id: string }
+    ) => Record<string, unknown> & { id: string }
+  ) => {
+    const personRedacted = redactBatchPersonPayload(payload, context);
+    const preferenceRedacted = transformPreferenceCatalog
+      ? redactBatchPreferencePayload(
+          personRedacted,
+          transformPreferenceCatalog
+        )
+      : personRedacted;
+    return redactBatchArtifactPayload(preferenceRedacted);
+  };
   const requirePsycheScopedAccess = (
     headers: Record<string, unknown>,
     scopes: string[],
@@ -10726,12 +12279,37 @@ export async function buildServer(
     return context;
   };
 
+  await registerPeopleRoutes(app, {
+    authenticate: authenticateRequest,
+    authorization: managers.authorization,
+    secrets: managers.secrets,
+    peerCore
+  });
+  await registerPeerSharingRoutes(app, {
+    authenticate: authenticateRequest,
+    authenticateCompanion: (request) =>
+      authenticatePeerCompanionRequest(request, {
+        secrets: managers.secrets
+      }),
+    authorization: managers.authorization,
+    secrets: managers.secrets,
+    peerCore,
+    devWebOrigin: process.env.FORGE_DEV_WEB_ORIGIN?.trim() || null,
+    persistPairingConfirmation: persistPeerPairingConfirmation
+  });
+
   app.get("/api/v1/artifacts", async (request) => {
-    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
-      route: "/api/v1/artifacts"
-    });
-    return listArtifactsPage(
-      artifactListQuerySchema.parse(request.query ?? {})
+    const auth = requireArtifactReadAccess(
+      request.headers as Record<string, unknown>,
+      {
+        route: "/api/v1/artifacts"
+      }
+    );
+    return serializeArtifactPublicPayload(
+      listArtifactsPage(
+        artifactListQuerySchema.parse(request.query ?? {}),
+        auth
+      )
     );
   });
   app.post(
@@ -10742,26 +12320,50 @@ export async function buildServer(
         request.headers as Record<string, unknown>,
         { route: "/api/v1/artifacts" }
       );
-      const artifact = await createArtifactFromUpload(
-        artifactUploadSchema.parse(request.body ?? {}),
+      const body = artifactUploadSchema.parse(request.body ?? {});
+      const rawHeaderKey = request.headers["idempotency-key"];
+      const headerKeyValue = Array.isArray(rawHeaderKey)
+        ? rawHeaderKey[0]
+        : rawHeaderKey;
+      const headerKey = headerKeyValue
+        ? artifactIdempotencyKeySchema.parse(headerKeyValue)
+        : undefined;
+      if (
+        headerKey &&
+        body.idempotencyKey &&
+        headerKey !== body.idempotencyKey
+      ) {
+        throw new HttpError(
+          400,
+          "artifact_idempotency_key_conflict",
+          "The Idempotency-Key header and body idempotencyKey must match when both are provided."
+        );
+      }
+      const result = await createArtifactFromUpload(
+        { ...body, idempotencyKey: headerKey ?? body.idempotencyKey },
         auth,
         { llm: managers.llm }
       );
-      reply.code(201);
-      return { artifact };
+      reply
+        .header("Idempotency-Replayed", result.replayed ? "true" : "false")
+        .code(result.replayed ? 200 : 201);
+      return {
+        artifact: serializeArtifactPublicPayload(result.artifact)
+      };
     }
   );
   app.get("/api/v1/artifacts/:id", async (request, reply) => {
-    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
-      route: "/api/v1/artifacts/:id"
-    });
+    const auth = requireArtifactReadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id" }
+    );
     const { id } = request.params as { id: string };
-    const artifact = getArtifactById(id);
+    const artifact = getArtifactById(id, auth);
     if (!artifact) {
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.patch("/api/v1/artifacts/:id", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(
@@ -10793,7 +12395,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.get("/api/v1/artifacts/:id/download", async (request, reply) => {
     const auth = requireArtifactDownloadAccess(
@@ -10825,7 +12427,7 @@ export async function buildServer(
       }
     });
     return reply
-      .header("content-type", result.artifact.detectedMimeType)
+      .header("content-type", "application/octet-stream")
       .header("content-length", String(result.bytes.byteLength))
       .header("content-disposition", `attachment; filename="${fileName}"`)
       .send(result.bytes);
@@ -10862,7 +12464,7 @@ export async function buildServer(
       }
     });
     return reply
-      .header("content-type", result.artifact.detectedMimeType)
+      .header("content-type", "application/octet-stream")
       .header("content-length", String(result.bytes.byteLength))
       .header("content-disposition", `attachment; filename="${fileName}"`)
       .send(result.bytes);
@@ -10882,7 +12484,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.post("/api/v1/artifacts/:id/scan", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(
@@ -10895,7 +12497,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.post("/api/v1/artifacts/:id/enrich", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(
@@ -10920,7 +12522,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.post("/api/v1/artifacts/:id/links", async (request, reply) => {
     const auth = requireArtifactMetadataWriteAccess(
@@ -10941,7 +12543,7 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.post("/api/v1/artifacts/:id/trust", async (request, reply) => {
     const auth = requireArtifactTrustAccess(
@@ -10958,35 +12560,41 @@ export async function buildServer(
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return { artifact };
+    return { artifact: serializeArtifactPublicPayload(artifact) };
   });
   app.get("/api/v1/artifacts/:id/versions", async (request, reply) => {
-    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
-      route: "/api/v1/artifacts/:id/versions"
-    });
+    const auth = requireArtifactReadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/versions" }
+    );
     const { id } = request.params as { id: string };
-    if (!getArtifactById(id)) {
+    const page = listArtifactVersionsPage(
+      id,
+      artifactHistoryQuerySchema.parse(request.query ?? {}),
+      auth
+    );
+    if (!page) {
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return listArtifactVersionsPage(
-      id,
-      artifactHistoryQuerySchema.parse(request.query ?? {})
-    );
+    return serializeArtifactPublicPayload(page);
   });
   app.get("/api/v1/artifacts/:id/audit", async (request, reply) => {
-    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
-      route: "/api/v1/artifacts/:id/audit"
-    });
+    const auth = requireArtifactReadAccess(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/artifacts/:id/audit" }
+    );
     const { id } = request.params as { id: string };
-    if (!getArtifactById(id)) {
+    const page = listArtifactAuditEventsPage(
+      id,
+      artifactHistoryQuerySchema.parse(request.query ?? {}),
+      auth
+    );
+    if (!page) {
       reply.code(404);
       return { error: "Artifact not found" };
     }
-    return listArtifactAuditEventsPage(
-      id,
-      artifactHistoryQuerySchema.parse(request.query ?? {})
-    );
+    return serializeArtifactPublicPayload(page);
   });
 
   app.get("/api/health", async () => buildHealthPayload(taskRunWatchdog));
@@ -11000,7 +12608,11 @@ export async function buildServer(
             runtime: {
               pid: process.pid,
               storageRoot: getEffectiveDataRoot(),
-              basePath: runtimeConfig.basePath
+              basePath: runtimeConfig.basePath,
+              packageName:
+                process.env.FORGE_RUNTIME_PACKAGE_NAME?.trim() || null,
+              packageVersion:
+                process.env.FORGE_RUNTIME_PACKAGE_VERSION?.trim() || null
             }
           }
         : {})
@@ -11118,10 +12730,63 @@ export async function buildServer(
       request.headers as Record<string, unknown>
     );
     const query = request.query as Record<string, unknown>;
-    const context = buildV1Context(resolveEffectiveReadScope(query, auth));
+    const context = buildV1Context(resolveEffectiveReadScope(query, auth), {
+      accessibleSpaceIds: listAccessibleWikiSpacesForScope(
+        toWikiUserScope(auth),
+        "read"
+      ).map((space) => space.id),
+      includePsyche:
+        !isPsycheAuthRequired() || hasTokenScope(auth, "psyche.read")
+    });
     return shouldUseShellContextProfile(query)
       ? compactV1ContextForShell(context)
       : context;
+  });
+  app.get("/api/v1/today/priority", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/today/priority" }
+    );
+    const rawQuery = request.query as Record<string, unknown>;
+    const query = z
+      .object({
+        timeZone: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .refine(isValidTimeZone, "timeZone must be a valid IANA timezone")
+          .optional(),
+        candidateLimit: z.coerce.number().int().min(1).max(100).default(24)
+      })
+      .passthrough()
+      .parse(rawQuery);
+    resolveEffectiveUserIdsForReads(rawQuery, auth);
+    const context = buildV1Context(resolveEffectiveReadScope(rawQuery, auth), {
+      accessibleSpaceIds: listAccessibleWikiSpacesForScope(
+        toWikiUserScope(auth),
+        "read"
+      ).map((space) => space.id),
+      includePsyche:
+        !isPsycheAuthRequired() || hasTokenScope(auth, "psyche.read")
+    });
+    const selectedUserIds = context.userScope.selectedUserIds;
+    const now = new Date();
+
+    return {
+      decision: buildTodayPriorityFromSnapshot({
+        tasks: context.tasks,
+        activeTaskRuns: context.activeTaskRuns,
+        selectedUserIds,
+        directiveTaskId: context.today.directive.task?.id ?? null,
+        lifeForce: context.lifeForce,
+        candidateLimit: query.candidateLimit,
+        snapshotGeneratedAt: context.meta.generatedAt,
+        now,
+        timeZone: query.timeZone ?? getRuntimeTimeZone()
+      })
+    };
   });
   app.get("/api/v1/life-force", async (request) => ({
     lifeForce: buildLifeForcePayload(
@@ -11188,6 +12853,15 @@ export async function buildServer(
   });
   app.get("/api/v1/knowledge-graph", async (request) => {
     const query = request.query as Record<string, unknown>;
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/knowledge-graph" }
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
+    const includePeople = Boolean(
+      auth.session || auth.token?.scopes.includes("people:read:basic")
+    );
     const readString = (value: unknown) =>
       typeof value === "string" ? value.trim() : "";
     const readList = (key: string) => {
@@ -11205,25 +12879,41 @@ export async function buildServer(
         : null;
 
     return {
-      graph: buildKnowledgeGraph(resolveScopedUserIds(query), {
-        q: readString(query.q) || null,
-        entityKinds: readList(
-          "entityKind"
-        ) as KnowledgeGraphQuery["entityKinds"],
-        relationKinds: readList(
-          "relationKind"
-        ) as KnowledgeGraphQuery["relationKinds"],
-        tags: readList("tag"),
-        owners: readList("owner"),
-        updatedFrom: readString(query.updatedFrom) || null,
-        updatedTo: readString(query.updatedTo) || null,
-        limit,
-        focusNodeId: readString(query.focusNodeId) || null
-      })
+      graph: buildKnowledgeGraph(
+        userIds,
+        {
+          q: readString(query.q) || null,
+          entityKinds: readList(
+            "entityKind"
+          ) as KnowledgeGraphQuery["entityKinds"],
+          relationKinds: readList(
+            "relationKind"
+          ) as KnowledgeGraphQuery["relationKinds"],
+          tags: readList("tag"),
+          owners: readList("owner"),
+          updatedFrom: readString(query.updatedFrom) || null,
+          updatedTo: readString(query.updatedTo) || null,
+          limit,
+          focusNodeId: readString(query.focusNodeId) || null
+        },
+        {
+          includePeople,
+          noteScope: noteReadScopeForAuth(auth, userIds)
+        }
+      )
     };
   });
   app.get("/api/v1/knowledge-graph/focus", async (request, reply) => {
     const query = request.query as Record<string, unknown>;
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/knowledge-graph/focus" }
+    );
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
+    const includePeople = Boolean(
+      auth.session || auth.token?.scopes.includes("people:read:basic")
+    );
     const entityType =
       typeof query.entityType === "string" ? query.entityType.trim() : "";
     const entityId =
@@ -11240,7 +12930,11 @@ export async function buildServer(
       focus: buildKnowledgeGraphFocus(
         entityType as KnowledgeGraphEntityType,
         entityId,
-        resolveScopedUserIds(query)
+        userIds,
+        {
+          includePeople,
+          noteScope: noteReadScopeForAuth(auth, userIds)
+        }
       )
     };
   });
@@ -12802,31 +14496,39 @@ export async function buildServer(
     return { sleep };
   });
   app.get("/api/v1/operator/context", async (request) => {
-    const auth = requireAuthenticatedActor(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
-      {
-        route: "/api/v1/operator/context"
-      }
+      ["read", "write"],
+      { route: "/api/v1/operator/context" }
     );
+    const query = request.query as Record<string, unknown>;
+    const readScope = resolveEffectiveReadScope(query, auth);
+    const { scopedUserIdsForReads } = normalizeScopedUserIdsForReads({
+      scope: readScope,
+      validUserIds: listUsers().map((user) => user.id)
+    });
     return {
       context: buildOperatorContext(
-        resolveEffectiveReadScope(
-          request.query as Record<string, unknown>,
-          auth
-        )
+        readScope,
+        { noteScope: noteReadScopeForAuth(auth, scopedUserIdsForReads) }
       )
     };
   });
   app.get("/api/v1/operator/overview", async (request) => {
-    requireAuthenticatedActor(request.headers as Record<string, unknown>, {
-      route: "/api/v1/operator/overview"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/operator/overview" }
+    );
+    const query = request.query as Record<string, unknown>;
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     return {
       overview: buildOperatorOverview({
         protocol: request.protocol,
         hostname: request.hostname,
         headers: request.headers as Record<string, unknown>,
-        query: request.query as Record<string, unknown>
+        query,
+        noteScope: noteReadScopeForAuth(auth, userIds)
       })
     };
   });
@@ -12845,12 +14547,30 @@ export async function buildServer(
     return { overview: getPsycheOverview(userIds) };
   });
   app.get("/api/v1/psyche/metrics", async (request) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/metrics" }
     );
-    return { metrics: getPsycheMetricsViewData() };
+    const rawQuery = request.query as Record<string, unknown>;
+    const query = z
+      .object({
+        timeZone: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .refine(isValidTimeZone, "timeZone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(rawQuery);
+    return {
+      metrics: getPsycheMetricsViewData({
+        userIds: resolveEffectiveUserIdsForReads(rawQuery, auth),
+        timeZone: query.timeZone
+      })
+    };
   });
   app.get("/api/v1/psyche/questionnaires", async (request) => {
     requirePsycheScopedAccess(
@@ -13643,16 +15363,21 @@ export async function buildServer(
     return { session };
   });
   app.get("/api/v1/psyche/event-types", async (request) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/event-types" }
     );
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
     );
     return {
-      eventTypes: filterOwnedEntities("event_type", listEventTypes(), userIds)
+      eventTypes: filterPsycheVocabularyForReads(
+        "event_type",
+        listEventTypes(),
+        userIds
+      )
     };
   });
   app.post("/api/v1/psyche/event-types", async (request, reply) => {
@@ -13663,35 +15388,35 @@ export async function buildServer(
     );
     const eventType = createEventType(
       createEventTypeSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      {
+        ...toActivityContext(auth),
+        idempotencyKey: parseIdempotencyKey(
+          request.headers as Record<string, unknown>
+        )
+      }
     );
-    syncEntityOwnerFromBody({
-      entityType: "event_type",
-      entityId: eventType.id,
-      body: request.body,
-      fallbackLabel: auth.actor,
-      assignDefaultWhenMissing: true
-    });
     reply.code(201);
     return { eventType };
   });
   app.get("/api/v1/psyche/event-types/:id", async (request, reply) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/event-types/:id" }
     );
     const { id } = request.params as { id: string };
-    const eventType = getEventTypeById(id);
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    const rawEventType = getEventTypeById(id);
+    const eventType = rawEventType
+      ? filterPsycheVocabularyForReads("event_type", [rawEventType], userIds)[0]
+      : undefined;
     if (!eventType) {
       reply.code(404);
       return { error: "Event type not found" };
     }
-    syncEntityOwnerFromBody({
-      entityType: "event_type",
-      entityId: eventType.id,
-      body: request.body
-    });
     return { eventType };
   });
   app.patch("/api/v1/psyche/event-types/:id", async (request, reply) => {
@@ -13719,6 +15444,13 @@ export async function buildServer(
       { route: "/api/v1/psyche/event-types/:id" }
     );
     const { id } = request.params as { id: string };
+    const existing = getEventTypeById(id);
+    requirePsycheVocabularyWriteScope(
+      "event_type",
+      id,
+      toActivityContext(auth),
+      existing as unknown as Record<string, unknown> | undefined
+    );
     const eventType = deleteEntity(
       "event_type",
       id,
@@ -13732,16 +15464,17 @@ export async function buildServer(
     return { eventType };
   });
   app.get("/api/v1/psyche/emotions", async (request) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/emotions" }
     );
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
     );
     return {
-      emotions: filterOwnedEntities(
+      emotions: filterPsycheVocabularyForReads(
         "emotion_definition",
         listEmotionDefinitions(),
         userIds
@@ -13756,35 +15489,39 @@ export async function buildServer(
     );
     const emotion = createEmotionDefinition(
       createEmotionDefinitionSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      {
+        ...toActivityContext(auth),
+        idempotencyKey: parseIdempotencyKey(
+          request.headers as Record<string, unknown>
+        )
+      }
     );
-    syncEntityOwnerFromBody({
-      entityType: "emotion_definition",
-      entityId: emotion.id,
-      body: request.body,
-      fallbackLabel: auth.actor,
-      assignDefaultWhenMissing: true
-    });
     reply.code(201);
     return { emotion };
   });
   app.get("/api/v1/psyche/emotions/:id", async (request, reply) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/emotions/:id" }
     );
     const { id } = request.params as { id: string };
-    const emotion = getEmotionDefinitionById(id);
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    const rawEmotion = getEmotionDefinitionById(id);
+    const emotion = rawEmotion
+      ? filterPsycheVocabularyForReads(
+          "emotion_definition",
+          [rawEmotion],
+          userIds
+        )[0]
+      : undefined;
     if (!emotion) {
       reply.code(404);
       return { error: "Emotion definition not found" };
     }
-    syncEntityOwnerFromBody({
-      entityType: "emotion_definition",
-      entityId: emotion.id,
-      body: request.body
-    });
     return { emotion };
   });
   app.patch("/api/v1/psyche/emotions/:id", async (request, reply) => {
@@ -13812,6 +15549,13 @@ export async function buildServer(
       { route: "/api/v1/psyche/emotions/:id" }
     );
     const { id } = request.params as { id: string };
+    const existing = getEmotionDefinitionById(id);
+    requirePsycheVocabularyWriteScope(
+      "emotion_definition",
+      id,
+      toActivityContext(auth),
+      existing as unknown as Record<string, unknown> | undefined
+    );
     const emotion = deleteEntity(
       "emotion_definition",
       id,
@@ -13825,21 +15569,19 @@ export async function buildServer(
     return { emotion };
   });
   app.get("/api/v1/psyche/reports", async (request) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/reports" }
     );
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
-    );
-    return {
-      reports: filterOwnedEntities(
-        "trigger_report",
-        listTriggerReports(),
-        userIds
-      )
-    };
+    const rawQuery = request.query as Record<string, unknown>;
+    const query = triggerReportListQuerySchema.parse(rawQuery);
+    const userIds = resolveEffectiveUserIdsForReads(rawQuery, auth);
+    return listTriggerReportsPage({
+      limit: query.limit,
+      cursor: query.cursor,
+      userIds
+    });
   });
   app.post("/api/v1/psyche/reports", async (request, reply) => {
     const auth = requirePsycheScopedAccess(
@@ -13849,40 +15591,49 @@ export async function buildServer(
     );
     const report = createTriggerReport(
       createTriggerReportSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+      {
+        ...toActivityContext(auth),
+        idempotencyKey: parseIdempotencyKey(
+          request.headers as Record<string, unknown>
+        )
+      }
     );
-    syncEntityOwnerFromBody({
-      entityType: "trigger_report",
-      entityId: report.id,
-      body: request.body,
-      fallbackLabel: auth.actor,
-      assignDefaultWhenMissing: true
-    });
     reply.code(201);
     return { report };
   });
   app.get("/api/v1/psyche/reports/:id", async (request, reply) => {
-    requirePsycheScopedAccess(
+    const auth = requirePsycheScopedAccess(
       request.headers as Record<string, unknown>,
       ["psyche.read"],
       { route: "/api/v1/psyche/reports/:id" }
     );
     const { id } = request.params as { id: string };
-    const report = getTriggerReportById(id);
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    const report = getTriggerReportById(id, { userIds });
     if (!report) {
       reply.code(404);
       return { error: "Trigger report not found" };
     }
-    return {
-      report,
-      notes: listNotes({
+    const notes = filterAccessibleWikiNotesForScope(
+      toWikiUserScope(auth),
+      listNotes({
         linkedEntityType: "trigger_report",
         linkedEntityId: id,
+        userIds,
         limit: 50
       }),
+      "read"
+    );
+    return {
+      report,
+      notes,
       insights: listInsights({
         entityType: "trigger_report",
         entityId: id,
+        userIds,
         limit: 50
       })
     };
@@ -13896,18 +15647,13 @@ export async function buildServer(
     const { id } = request.params as { id: string };
     const report = updateTriggerReport(
       id,
-      updateTriggerReportSchema.parse(request.body ?? {}),
+      triggerReportRouteUpdateSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
     if (!report) {
       reply.code(404);
       return { error: "Trigger report not found" };
     }
-    syncEntityOwnerFromBody({
-      entityType: "trigger_report",
-      entityId: report.id,
-      body: request.body
-    });
     return { report };
   });
   app.delete("/api/v1/psyche/reports/:id", async (request, reply) => {
@@ -13917,10 +15663,15 @@ export async function buildServer(
       { route: "/api/v1/psyche/reports/:id" }
     );
     const { id } = request.params as { id: string };
+    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
+    if (!getTriggerReportById(id, { userIds })) {
+      reply.code(404);
+      return { error: "Trigger report not found" };
+    }
     const report = deleteEntity(
       "trigger_report",
       id,
-      entityDeleteQuerySchema.parse(request.query ?? {}),
+      { mode: "soft" },
       toActivityContext(auth)
     );
     if (!report) {
@@ -13929,25 +15680,64 @@ export async function buildServer(
     }
     return { report };
   });
+  const requireScopedNoteOwnership = (
+    auth: ReturnType<typeof authenticateRequest>,
+    note: ReturnType<typeof getNoteById>
+  ) => {
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      note &&
+      allowedUserIds.length > 0 &&
+      filterOwnedEntities("note", [note], allowedUserIds).length === 0
+    ) {
+      throw new HttpError(404, "note_not_found", "Note not found.");
+    }
+  };
+
   app.get("/api/v1/notes", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/notes" }
+    );
     const query = notesListQuerySchema.parse(request.query ?? {});
-    if (isPsycheEntityType(query.linkedEntityType)) {
+    const psycheLinkedEntityType = [
+      query.linkedEntityType,
+      ...query.linkedTo.map((link) => link.entityType)
+    ].find(isPsycheEntityType);
+    if (psycheLinkedEntityType) {
       requirePsycheScopedAccess(
         request.headers as Record<string, unknown>,
         ["psyche.read"],
         {
           route: "/api/v1/notes",
-          entityType: query.linkedEntityType
+          entityType: psycheLinkedEntityType
         }
       );
     }
-    return {
-      notes: filterOwnedEntities("note", listNotes(query), query.userIds)
-    };
+    const canReadPsycheNotes =
+      !isPsycheAuthRequired() || hasTokenScope(auth, "psyche.read");
+    const effectiveUserIds = resolveEffectiveUserIdsForReads(
+      query.userIds.length > 0 ? { userIds: query.userIds } : undefined,
+      auth
+    );
+    const accessibleSpaceIds = listAccessibleWikiSpacesForScope(
+      toWikiUserScope(auth),
+      "read"
+    ).map((space) => space.id);
+    return listNotesPage(
+      { ...query, userIds: effectiveUserIds },
+      {
+        accessibleSpaceIds,
+        includePsyche: canReadPsycheNotes
+      }
+    );
   });
   app.post("/api/v1/notes", async (request, reply) => {
     const input = createNoteSchema.parse(request.body ?? {});
-    const firstLinkedEntityType = input.links[0]?.entityType;
+    const firstLinkedEntityType =
+      input.links.find((link) => isPsycheEntityType(link.entityType))
+        ?.entityType ?? input.links[0]?.entityType;
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
       firstLinkedEntityType,
@@ -13956,14 +15746,36 @@ export async function buildServer(
         entityType: firstLinkedEntityType ?? null
       }
     );
-    const note = createNote(input, toActivityContext(auth));
+    const userId = resolveNoteMutationUserId(
+      input.userId,
+      auth.token?.scopePolicy.userIds ?? []
+    );
+    const spaceId = resolveWikiMutationSpaceIdForScope(toWikiUserScope(auth), {
+      ...input,
+      userId
+    });
+    const note = createNote(
+      { ...input, userId, spaceId },
+      toActivityContext(auth)
+    );
     reply.code(201);
     return { note };
   });
   app.get("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/notes/:id" }
+    );
     const current = getNoteById(id);
-    const psycheEntityType = current?.links.find((link) =>
+    if (!current) {
+      reply.code(404);
+      return { error: "Note not found" };
+    }
+    requireScopedNoteOwnership(auth, current);
+    requireWikiNoteAccess(toWikiUserScope(auth), current, "read");
+    const psycheEntityType = current.links.find((link) =>
       isPsycheEntityType(link.entityType)
     )?.entityType;
     if (psycheEntityType) {
@@ -13976,18 +15788,30 @@ export async function buildServer(
         }
       );
     }
-    if (!current) {
-      reply.code(404);
-      return { error: "Note not found" };
-    }
     return { note: current };
   });
   app.patch("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const patch = updateNoteSchema.parse(request.body ?? {});
+    const actor = requireAuthenticatedActor(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/notes/:id" }
+    );
     const current = getNoteById(id);
+    if (!current) {
+      reply.code(404);
+      return { error: "Note not found" };
+    }
+    requireScopedNoteOwnership(actor, current);
+    requireWikiNoteAccess(toWikiUserScope(actor), current, "write");
     const linkedEntityType =
-      current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+      current.links.find((link) => isPsycheEntityType(link.entityType))
+        ?.entityType ??
+      patch.links?.find((link) => isPsycheEntityType(link.entityType))
+        ?.entityType ??
+      current?.links[0]?.entityType ??
+      patch.links?.[0]?.entityType ??
+      null;
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
       linkedEntityType,
@@ -13996,7 +15820,32 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
-    const note = updateNote(id, patch, toActivityContext(auth));
+    const userId =
+      patch.userId === undefined
+        ? undefined
+        : resolveNoteMutationUserId(
+            patch.userId,
+            auth.token?.scopePolicy.userIds ?? []
+          );
+    requireWikiUserScopeForScope(
+      toWikiUserScope(auth),
+      userId ?? current.userId
+    );
+    const nextSpaceId = patch.spaceId
+      ? resolveWikiMutationSpaceIdForScope(toWikiUserScope(auth), {
+          ...patch,
+          userId: userId ?? current.userId
+        })
+      : current.spaceId;
+    const note = updateNote(
+      id,
+      {
+        ...patch,
+        ...(userId !== undefined ? { userId } : {}),
+        ...(nextSpaceId ? { spaceId: nextSpaceId } : {})
+      },
+      toActivityContext(auth)
+    );
     if (!note) {
       reply.code(404);
       return { error: "Note not found" };
@@ -14005,11 +15854,21 @@ export async function buildServer(
   });
   app.delete("/api/v1/notes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const actor = requireAuthenticatedActor(
+      request.headers as Record<string, unknown>,
+      { route: "/api/v1/notes/:id" }
+    );
     const current = getNoteById(id);
+    if (!current) {
+      reply.code(404);
+      return { error: "Note not found" };
+    }
+    requireScopedNoteOwnership(actor, current);
+    requireWikiNoteAccess(toWikiUserScope(actor), current, "write");
     const linkedEntityType =
-      current?.links.find((link) => isPsycheEntityType(link.entityType))
+      current.links.find((link) => isPsycheEntityType(link.entityType))
         ?.entityType ??
-      current?.links[0]?.entityType ??
+      current.links[0]?.entityType ??
       null;
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
@@ -14031,13 +15890,94 @@ export async function buildServer(
     }
     return { note };
   });
+  type WikiSpaceAuth = ReturnType<typeof requireScopedAccess>;
+  type WikiSpaceAccessMode = "read" | "write";
+  const canAccessWikiSpace = (
+    auth: WikiSpaceAuth,
+    space: ReturnType<typeof getWikiSpaceById>,
+    mode: WikiSpaceAccessMode
+  ) => canAccessWikiSpaceForScope(toWikiUserScope(auth), space, mode);
+  const listAccessibleWikiSpaces = (
+    auth: WikiSpaceAuth,
+    mode: WikiSpaceAccessMode
+  ) => listAccessibleWikiSpacesForScope(toWikiUserScope(auth), mode);
+  const requireWikiSpaceAccess = (
+    auth: WikiSpaceAuth,
+    spaceId: string,
+    mode: WikiSpaceAccessMode
+  ) => requireWikiSpaceAccessForScope(toWikiUserScope(auth), spaceId, mode);
+  const resolveWikiSpaceIdForAccess = (
+    auth: WikiSpaceAuth,
+    requestedSpaceId: string | undefined,
+    mode: WikiSpaceAccessMode
+  ) =>
+    resolveWikiSpaceIdForAccessForScope(
+      toWikiUserScope(auth),
+      requestedSpaceId,
+      mode
+    );
+  const requireWikiUserScope = (
+    auth: WikiSpaceAuth,
+    userId: string | null | undefined
+  ) => requireWikiUserScopeForScope(toWikiUserScope(auth), userId);
+  const resolveWikiMutationSpaceId = (
+    auth: WikiSpaceAuth,
+    input: { spaceId?: string; userId?: string | null }
+  ) => resolveWikiMutationSpaceIdForScope(toWikiUserScope(auth), input);
+  const resolveWikiMaintenanceSpaceId = (
+    auth: WikiSpaceAuth,
+    requestedSpaceId: string | undefined
+  ) => {
+    if (requestedSpaceId?.trim()) {
+      return requireWikiSpaceAccess(auth, requestedSpaceId.trim(), "write").id;
+    }
+    if ((auth.token?.scopePolicy.userIds ?? []).length > 0) {
+      throw new HttpError(
+        400,
+        "wiki_space_selection_required",
+        "Scoped wiki maintenance requires an explicit accessible spaceId."
+      );
+    }
+    return undefined;
+  };
+  const requireWikiPageAccess = (
+    auth: WikiSpaceAuth,
+    pageId: string,
+    mode: WikiSpaceAccessMode
+  ) => requireWikiPageAccessForScope(toWikiUserScope(auth), pageId, mode);
+  const requireWikiIngestJobSpaceAccess = (
+    auth: WikiSpaceAuth,
+    jobId: string,
+    mode: WikiSpaceAccessMode
+  ) => {
+    const spaceId = getWikiIngestJobSpaceId(jobId);
+    if (
+      !spaceId ||
+      !canAccessWikiSpace(auth, getWikiSpaceById(spaceId), mode)
+    ) {
+      throw new HttpError(
+        404,
+        "wiki_ingest_job_not_found",
+        "Wiki ingest job not found."
+      );
+    }
+    return spaceId;
+  };
   app.get("/api/v1/wiki/settings", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/settings" }
     );
-    return { settings: getWikiSettingsPayload() };
+    const settings = getWikiSettingsPayload();
+    return {
+      settings: {
+        ...settings,
+        spaces: settings.spaces.filter((space) =>
+          canAccessWikiSpace(auth, space, "read")
+        )
+      }
+    };
   });
   app.post("/api/v1/wiki/settings/llm-profiles", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
@@ -14138,25 +16078,38 @@ export async function buildServer(
     }
   );
   app.get("/api/v1/wiki/spaces", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/spaces" }
     );
-    return { spaces: listWikiSpaces() };
+    return { spaces: listAccessibleWikiSpaces(auth, "read") };
   });
   app.post("/api/v1/wiki/spaces", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/spaces"
-    });
-    const space = createWikiSpace(
-      createWikiSpaceSchema.parse(request.body ?? {})
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/spaces" }
     );
+    const input = createWikiSpaceSchema.parse(request.body ?? {});
+    requireWikiUserScope(auth, input.ownerUserId);
+    if (
+      input.visibility === "personal" &&
+      !input.ownerUserId &&
+      (auth.token?.scopePolicy.userIds ?? []).length > 0
+    ) {
+      throw new HttpError(
+        403,
+        "wiki_user_scope_required",
+        "Scoped tokens must assign personal wiki spaces to an allowed user."
+      );
+    }
+    const space = createWikiSpace(input);
     reply.code(201);
     return { space };
   });
   app.get("/api/v1/wiki/pages", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/pages" }
@@ -14165,25 +16118,33 @@ export async function buildServer(
       spaceId?: string;
       kind?: Note["kind"];
       limit?: string;
+      offset?: string;
       includeHidden?: string;
     };
+    const parsed = wikiPageListQuerySchema.parse({
+      ...query,
+      spaceId: resolveWikiSpaceIdForAccess(auth, query.spaceId, "read"),
+      includeHidden:
+        query.includeHidden === undefined
+          ? false
+          : z.enum(["true", "false"]).parse(query.includeHidden) === "true"
+    });
+    const page = listWikiPagesPage(parsed);
     return {
-      pages: listWikiPages({
-        spaceId: query.spaceId,
-        kind: query.kind,
-        limit: query.limit ? Number(query.limit) : undefined,
-        includeHidden: query.includeHidden === "true"
-      })
+      ...page,
+      pages: page.pages.map(toWikiPageSummary)
     };
   });
   app.get("/api/v1/wiki/home", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/home" }
     );
     const query = request.query as { spaceId?: string };
-    const payload = getWikiHomePageDetail({ spaceId: query.spaceId });
+    const payload = getWikiHomePageDetail({
+      spaceId: resolveWikiSpaceIdForAccess(auth, query.spaceId, "read")
+    });
     if (!payload) {
       reply.code(404);
       return { error: "Wiki home page not found" };
@@ -14191,21 +16152,23 @@ export async function buildServer(
     return payload;
   });
   app.get("/api/v1/wiki/tree", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/tree" }
     );
-    const query = request.query as {
-      spaceId?: string;
-      kind?: Note["kind"];
-    };
-    return {
-      tree: listWikiPageTree({
-        spaceId: query.spaceId,
-        kind: query.kind ?? "wiki"
+    const query = z
+      .object({
+        spaceId: z.string().trim().optional(),
+        kind: z.enum(["wiki", "evidence"]).default("wiki"),
+        limit: z.coerce.number().int().positive().max(500).default(500)
       })
-    };
+      .parse(request.query ?? {});
+    return listWikiPageTree({
+      spaceId: resolveWikiSpaceIdForAccess(auth, query.spaceId, "read"),
+      kind: query.kind,
+      limit: query.limit
+    });
   });
   app.post("/api/v1/wiki/pages", async (request, reply) => {
     const input = createNoteSchema.parse({
@@ -14221,17 +16184,19 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
-    const note = createNote(input, toActivityContext(auth));
+    const spaceId = resolveWikiMutationSpaceId(auth, input);
+    const note = createNote({ ...input, spaceId }, toActivityContext(auth));
     reply.code(201);
     return getWikiPageDetail(note.id);
   });
   app.get("/api/v1/wiki/pages/:id", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/pages/:id" }
     );
     const { id } = request.params as { id: string };
+    requireWikiPageAccess(auth, id, "read");
     const payload = getWikiPageDetail(id);
     if (!payload) {
       reply.code(404);
@@ -14240,14 +16205,17 @@ export async function buildServer(
     return payload;
   });
   app.get("/api/v1/wiki/by-slug/:slug", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/by-slug/:slug" }
     );
     const { slug } = request.params as { slug: string };
     const query = request.query as { spaceId?: string };
-    const payload = getWikiPageDetailBySlug({ spaceId: query.spaceId, slug });
+    const payload = getWikiPageDetailBySlug({
+      spaceId: resolveWikiSpaceIdForAccess(auth, query.spaceId, "read"),
+      slug
+    });
     if (!payload) {
       reply.code(404);
       return { error: "Wiki page not found" };
@@ -14256,19 +16224,40 @@ export async function buildServer(
   });
   app.patch("/api/v1/wiki/pages/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const patch = updateNoteSchema.parse(request.body ?? {});
-    const current = getNoteById(id);
-    const linkedEntityType =
-      current?.links[0]?.entityType ?? patch.links?.[0]?.entityType ?? null;
+    const access = getWikiPageAccessRecord(id);
     const auth = requireNoteAccess(
       request.headers as Record<string, unknown>,
-      linkedEntityType,
+      access?.linkedEntityType,
       {
         route: "/api/v1/wiki/pages/:id",
-        entityType: linkedEntityType
+        entityType: access?.linkedEntityType
       }
     );
-    const note = updateNote(id, patch, toActivityContext(auth));
+    const currentAccess = requireWikiPageAccess(auth, id, "write");
+    const patch = updateNoteSchema.parse(request.body ?? {});
+    const nextLinkedEntityType = patch.links?.[0]?.entityType ?? null;
+    if (
+      nextLinkedEntityType &&
+      nextLinkedEntityType !== currentAccess.linkedEntityType
+    ) {
+      requireNoteAccess(
+        request.headers as Record<string, unknown>,
+        nextLinkedEntityType,
+        {
+          route: "/api/v1/wiki/pages/:id",
+          entityType: nextLinkedEntityType
+        }
+      );
+    }
+    requireWikiUserScope(auth, patch.userId);
+    const nextSpaceId = patch.spaceId
+      ? resolveWikiMutationSpaceId(auth, patch)
+      : currentAccess.spaceId;
+    const note = updateNote(
+      id,
+      { ...patch, spaceId: nextSpaceId },
+      toActivityContext(auth)
+    );
     if (!note) {
       reply.code(404);
       return { error: "Wiki page not found" };
@@ -14277,24 +16266,20 @@ export async function buildServer(
   });
   app.delete("/api/v1/wiki/pages/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const current = getNoteById(id);
-    if (!current || (current.kind !== "wiki" && current.kind !== "evidence")) {
-      reply.code(404);
-      return { error: "Wiki page not found" };
-    }
-    if (current.slug === "index") {
+    const access = getWikiPageAccessRecord(id);
+    const auth = requireNoteAccess(
+      request.headers as Record<string, unknown>,
+      access?.linkedEntityType,
+      {
+        route: "/api/v1/wiki/pages/:id",
+        entityType: access?.linkedEntityType
+      }
+    );
+    const currentAccess = requireWikiPageAccess(auth, id, "write");
+    if (currentAccess.isHomePage) {
       reply.code(400);
       return { error: "The wiki home page cannot be deleted." };
     }
-    const linkedEntityType = current.links[0]?.entityType ?? null;
-    const auth = requireNoteAccess(
-      request.headers as Record<string, unknown>,
-      linkedEntityType,
-      {
-        route: "/api/v1/wiki/pages/:id",
-        entityType: linkedEntityType
-      }
-    );
     const deleted = deleteEntity(
       "note",
       id,
@@ -14312,38 +16297,56 @@ export async function buildServer(
     };
   });
   app.post("/api/v1/wiki/search", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/search" }
     );
-    return searchWikiPages(
-      wikiSearchQuerySchema.parse(request.body ?? {}),
-      managers.secrets
-    );
+    const parsed = wikiSearchQuerySchema.parse(request.body ?? {});
+    const readableSpaces = listAccessibleWikiSpaces(auth, "read");
+    const spaceId = parsed.spaceId
+      ? resolveWikiSpaceIdForAccess(auth, parsed.spaceId, "read")
+      : undefined;
+    return searchWikiPages({ ...parsed, spaceId }, managers.secrets, {
+      allowedSpaceIds: readableSpaces.map((space) => space.id)
+    });
   });
   app.get("/api/v1/wiki/health", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/health" }
     );
+    const input = syncWikiVaultSchema.parse(request.query ?? {});
     return {
-      health: getWikiHealth(syncWikiVaultSchema.parse(request.query ?? {}))
+      health: getWikiHealth({
+        spaceId: resolveWikiSpaceIdForAccess(auth, input.spaceId, "read")
+      })
     };
   });
   app.post("/api/v1/wiki/sync", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/sync"
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/sync" }
+    );
+    const input = syncWikiVaultSchema.parse(request.body ?? {});
+    return syncWikiVaultFromDisk({
+      spaceId: resolveWikiMaintenanceSpaceId(auth, input.spaceId)
     });
-    return syncWikiVaultFromDisk(syncWikiVaultSchema.parse(request.body ?? {}));
   });
   app.post("/api/v1/wiki/reindex", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/reindex"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/reindex" }
+    );
+    const input = reindexWikiEmbeddingsSchema.parse(request.body ?? {});
     return reindexWikiEmbeddings(
-      reindexWikiEmbeddingsSchema.parse(request.body ?? {}),
+      {
+        ...input,
+        spaceId: resolveWikiMaintenanceSpaceId(auth, input.spaceId)
+      },
       managers.secrets
     );
   });
@@ -14364,8 +16367,12 @@ export async function buildServer(
       : [];
   const resolveMappedIngestEntity = (
     entityType: CrudEntityType,
-    entityId: string
+    entityId: string,
+    auth: ReturnType<typeof authenticateRequest>
   ) => {
+    if (entityType === "task" && !getTaskForAuth(entityId, auth)) {
+      return null;
+    }
     const result = searchEntities({
       searches: [
         {
@@ -14499,32 +16506,36 @@ export async function buildServer(
         return { entityType: "project", entityId: project.id };
       }
       case "task": {
-        const task = createTask(
-          {
-            title,
-            description: summary,
-            status: "backlog",
-            priority: "medium",
-            owner: auth.actor ?? "Forge",
-            userId:
-              typeof suggestedFields.userId === "string"
-                ? (suggestedFields.userId as string)
-                : null,
-            goalId: readStringField(suggestedFields, "goalId").trim() || null,
-            projectId:
-              readStringField(suggestedFields, "projectId").trim() || null,
-            dueDate: null,
-            effort: "deep",
-            energy: "steady",
-            points: Number(suggestedFields.points ?? 40) || 40,
-            plannedDurationSeconds: null,
-            schedulingRules: null,
-            tagIds: readStringArrayField(suggestedFields, "tagIds"),
-            actionCostBand: "standard",
-            notes: []
-          },
-          toActivityContext(auth)
-        );
+        const task = runInTransaction(() => {
+          const created = createTask(
+            {
+              title,
+              description: summary,
+              status: "backlog",
+              priority: "medium",
+              owner: auth.actor ?? "Forge",
+              userId:
+                typeof suggestedFields.userId === "string"
+                  ? (suggestedFields.userId as string)
+                  : null,
+              goalId: readStringField(suggestedFields, "goalId").trim() || null,
+              projectId:
+                readStringField(suggestedFields, "projectId").trim() || null,
+              dueDate: null,
+              effort: "deep",
+              energy: "steady",
+              points: Number(suggestedFields.points ?? 40) || 40,
+              plannedDurationSeconds: null,
+              schedulingRules: null,
+              tagIds: readStringArrayField(suggestedFields, "tagIds"),
+              actionCostBand: "standard",
+              notes: []
+            },
+            toActivityContext(auth)
+          );
+          assertTaskResultScope(created, auth);
+          return created;
+        });
         return { entityType: "task", entityId: task.id };
       }
       case "habit": {
@@ -14742,21 +16753,34 @@ export async function buildServer(
     }
   };
   app.get("/api/v1/wiki/ingest-jobs", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/ingest-jobs" }
     );
     const query = request.query as { spaceId?: string; limit?: string };
+    const spaceId = query.spaceId
+      ? resolveWikiSpaceIdForAccess(auth, query.spaceId, "read")
+      : undefined;
+    const allowedSpaceIds =
+      (auth.token?.scopePolicy.userIds ?? []).length > 0
+        ? listAccessibleWikiSpaces(auth, "read").map((space) => space.id)
+        : undefined;
     return {
-      jobs: listWikiIngestJobs({
-        spaceId: query.spaceId,
-        limit: query.limit ? Number(query.limit) : undefined
-      }),
-      total: countWikiIngestJobs({ spaceId: query.spaceId })
+      jobs: listWikiIngestJobs(
+        {
+          spaceId,
+          limit: query.limit ? Number(query.limit) : undefined
+        },
+        { allowedSpaceIds }
+      ),
+      total: countWikiIngestJobs({ spaceId }, { allowedSpaceIds })
     };
   });
   app.post("/api/v1/wiki/ingest-jobs/uploads", async (request, reply) => {
+    requireAuthenticatedActor(request.headers as Record<string, unknown>, {
+      route: "/api/v1/wiki/ingest-jobs/uploads"
+    });
     const parts = request.parts();
     const fields = new Map<string, string>();
     const files: Array<{
@@ -14793,10 +16817,14 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
+    const spaceId = resolveWikiMutationSpaceId(auth, {
+      spaceId: fields.get("spaceId") || undefined,
+      userId: null
+    });
 
     const result = await createUploadedWikiIngestJob(
       {
-        spaceId: fields.get("spaceId") || undefined,
+        spaceId,
         titleHint: fields.get("titleHint") || undefined,
         llmProfileId: fields.get("llmProfileId") || undefined,
         parseStrategy:
@@ -14825,6 +16853,9 @@ export async function buildServer(
     return result;
   });
   app.post("/api/v1/wiki/ingest-jobs", async (request, reply) => {
+    requireAuthenticatedActor(request.headers as Record<string, unknown>, {
+      route: "/api/v1/wiki/ingest-jobs"
+    });
     const payload = createWikiIngestJobSchema.parse(request.body ?? {});
     const linkedEntityType = payload.linkedEntityHints[0]?.entityType ?? null;
     const auth = requireNoteAccess(
@@ -14835,9 +16866,13 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
-    const result = await ingestWikiSource(payload, {
-      actor: auth.actor ?? null
-    });
+    const spaceId = resolveWikiMutationSpaceId(auth, payload);
+    const result = await ingestWikiSource(
+      { ...payload, spaceId },
+      {
+        actor: auth.actor ?? null
+      }
+    );
     const jobId = result.job?.job.id;
     if (jobId) {
       enqueueWikiIngestJob(jobId);
@@ -14846,12 +16881,13 @@ export async function buildServer(
     return result;
   });
   app.get("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/wiki/ingest-jobs/:id" }
     );
     const { id } = request.params as { id: string };
+    requireWikiIngestJobSpaceAccess(auth, id, "read");
     const job = getWikiIngestJob(id);
     if (!job) {
       reply.code(404);
@@ -14860,10 +16896,13 @@ export async function buildServer(
     return job;
   });
   app.post("/api/v1/wiki/ingest-jobs/:id/rerun", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/ingest-jobs/:id/rerun"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id/rerun" }
+    );
     const { id } = request.params as { id: string };
+    requireWikiIngestJobSpaceAccess(auth, id, "write");
     try {
       const result = await rerunWikiIngestJob(id, {
         actor:
@@ -14894,10 +16933,13 @@ export async function buildServer(
     }
   });
   app.post("/api/v1/wiki/ingest-jobs/:id/resume", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/ingest-jobs/:id/resume"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id/resume" }
+    );
     const { id } = request.params as { id: string };
+    requireWikiIngestJobSpaceAccess(auth, id, "write");
     const job = getWikiIngestJob(id);
     if (!job) {
       reply.code(404);
@@ -14932,10 +16974,13 @@ export async function buildServer(
     };
   });
   app.delete("/api/v1/wiki/ingest-jobs/:id", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/wiki/ingest-jobs/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/wiki/ingest-jobs/:id" }
+    );
     const { id } = request.params as { id: string };
+    requireWikiIngestJobSpaceAccess(auth, id, "write");
     try {
       const deleted = deleteWikiIngestJob(id);
       if (!deleted) {
@@ -14961,6 +17006,7 @@ export async function buildServer(
       { route: "/api/v1/wiki/ingest-jobs/:id/review" }
     );
     const { id } = request.params as { id: string };
+    requireWikiIngestJobSpaceAccess(auth, id, "write");
     const reviewed = await reviewWikiIngestJob(
       id,
       reviewWikiIngestJobSchema.parse(request.body ?? {}),
@@ -14971,7 +17017,7 @@ export async function buildServer(
         publishEntity: (proposal) =>
           publishIngestProposalEntity(proposal, auth),
         resolveMappedEntity: (entityType, entityId) =>
-          resolveMappedIngestEntity(entityType, entityId)
+          resolveMappedIngestEntity(entityType, entityId, auth)
       }
     );
     if (!reviewed) {
@@ -15010,48 +17056,60 @@ export async function buildServer(
     return { goal };
   });
   app.get("/api/v1/tasks", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskListQuerySchema.parse(request.query ?? {});
     return {
-      tasks: filterOwnedEntities("task", listTasks(query), query.userIds)
+      tasks: filterTasksForAuth(listTasks(query), auth)
     };
   });
   app.get("/api/v1/work-items", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskListQuerySchema.parse(request.query ?? {});
     return {
-      workItems: filterOwnedEntities("task", listTasks(query), query.userIds)
+      workItems: filterTasksForAuth(listTasks(query), auth)
     };
   });
   app.get("/api/v1/work-items/board", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskListQuerySchema.parse(request.query ?? {});
     const userIds = query.userIds;
     return {
       goals: filterOwnedEntities("goal", listGoals(), userIds),
       strategies: listStrategies({ userIds }),
       projects: listProjectSummaries({ userIds }),
-      workItems: filterOwnedEntities("task", listTasks(query), userIds)
+      workItems: filterTasksForAuth(listTasks(query), auth)
     };
   });
   app.get("/api/v1/work-items/hierarchy", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskListQuerySchema.parse(request.query ?? {});
     const userIds = query.userIds;
     return {
       goals: filterOwnedEntities("goal", listGoals(), userIds),
       strategies: listStrategies({ userIds }),
       projects: listProjectSummaries({ userIds }),
-      workItems: filterOwnedEntities("task", listTasks(query), userIds)
+      workItems: filterTasksForAuth(listTasks(query), auth)
     };
   });
-  app.get("/api/v1/git-helper/overview", async () => ({
-    git: await getGitHelperOverview()
-  }));
+  app.get("/api/v1/git-helper/overview", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/git-helper/overview"
+    });
+    return { git: await getGitHelperOverview() };
+  });
   app.get("/api/v1/git-helper/search", async (request) => {
-    const query = z
-      .object({
-        kind: z.enum(["branch", "commit", "pull_request"]),
-        query: z.string().optional(),
-        repository: z.string().optional()
-      })
-      .parse(request.query ?? {});
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/v1/git-helper/search"
+    });
+    const query = gitHelperSearchQuerySchema.parse(request.query ?? {});
     return {
       git: await searchGitHelperRefs(query)
     };
@@ -15421,8 +17479,17 @@ export async function buildServer(
     return { project };
   });
   app.get("/api/v1/projects/:id/board", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/projects/:id/board" }
+    );
     const { id } = request.params as { id: string };
-    const payload = getProjectBoard(id);
+    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
+    const payload = getProjectBoard(id, {
+      userIds,
+      noteScope: noteReadScopeForAuth(auth, userIds)
+    });
     if (!payload) {
       reply.code(404);
       return { error: "Project not found" };
@@ -15477,96 +17544,517 @@ export async function buildServer(
     }
     return { user };
   });
+  const requirePreferenceCatalogOwner = (
+    catalog: { userId: string } | undefined,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!catalog) {
+      return;
+    }
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (allowedUserIds.length > 0 && !allowedUserIds.includes(catalog.userId)) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        "Preference catalog not found."
+      );
+    }
+  };
+  const requirePreferenceUserScope = (
+    userId: string,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (allowedUserIds.length > 0 && !allowedUserIds.includes(userId)) {
+      throw new HttpError(
+        404,
+        "preferences_record_not_found",
+        "Preference record not found."
+      );
+    }
+  };
+  const resolvePreferenceSingleOwnerUserId = (
+    query: Record<string, unknown> | undefined,
+    auth: ReturnType<typeof authenticateRequest>,
+    bodyUserId: string | null | undefined,
+    operation: "read" | "mutation"
+  ) => {
+    const queryUserIds = resolveScopedUserIds(query) ?? [];
+    if (queryUserIds.length > 1) {
+      throw new HttpError(
+        400,
+        "preferences_user_selection_ambiguous",
+        "Preference operations require exactly one selected Forge user."
+      );
+    }
+
+    const queryUserId = queryUserIds[0] ?? null;
+    const normalizedBodyUserId = bodyUserId?.trim() || null;
+    if (
+      queryUserId &&
+      normalizedBodyUserId &&
+      queryUserId !== normalizedBodyUserId
+    ) {
+      throw new HttpError(
+        400,
+        "preferences_user_selection_conflict",
+        "The selected query user and body userId must identify the same Forge user for Preferences."
+      );
+    }
+
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    const requestedUserId = normalizedBodyUserId ?? queryUserId;
+    if (
+      requestedUserId &&
+      allowedUserIds.length > 0 &&
+      !allowedUserIds.includes(requestedUserId)
+    ) {
+      throw new HttpError(
+        403,
+        "user_scope_forbidden",
+        "The requested user scope is outside this token's allowed users."
+      );
+    }
+
+    if (!requestedUserId && allowedUserIds.length > 1) {
+      throw new HttpError(
+        400,
+        "preferences_user_selection_required",
+        operation === "read"
+          ? "This token can read preferences for several Forge users; select exactly one user."
+          : "This token can write preferences for several Forge users; select exactly one user."
+      );
+    }
+
+    const effectiveUserId =
+      requestedUserId ?? allowedUserIds[0] ?? getDefaultUser().id;
+    if (!listUsers().some((user) => user.id === effectiveUserId)) {
+      throw new HttpError(
+        404,
+        "preferences_user_not_found",
+        `Forge user ${effectiveUserId} does not exist.`
+      );
+    }
+    return effectiveUserId;
+  };
+  const resolvePreferenceReadUserId = (
+    query: Record<string, unknown> | undefined,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => resolvePreferenceSingleOwnerUserId(query, auth, undefined, "read");
+  const resolvePreferenceMutationUserId = (
+    query: Record<string, unknown> | undefined,
+    auth: ReturnType<typeof authenticateRequest>,
+    bodyUserId: string
+  ) => resolvePreferenceSingleOwnerUserId(query, auth, bodyUserId, "mutation");
+  const requirePreferenceProfileOwner = (
+    profileId: string | undefined,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (!profileId) {
+      return;
+    }
+    const profile = getPreferenceProfileById(profileId);
+    if (profile) {
+      requirePreferenceUserScope(profile.userId, auth);
+    }
+  };
+  const requirePreferenceSourceReadAccess = (
+    input: { entityType: CrudEntityType; entityId: string },
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (input.entityType === "person") {
+      managers.authorization.requireTokenScope(auth, "people:read:basic", {
+        entityType: "person",
+        routeFamily: "preferences"
+      });
+    }
+    if (input.entityType === "note") {
+      requireWikiNoteAccess(
+        toWikiUserScope(auth),
+        getNoteById(input.entityId),
+        "read"
+      );
+      return;
+    }
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    const sourceEntity = getEntityById(input.entityType, input.entityId);
+    const ownerUserId =
+      getEntityOwnerId(input.entityType, input.entityId) ??
+      (typeof sourceEntity?.userId === "string" ? sourceEntity.userId : null);
+    if (
+      !sourceEntity ||
+      (allowedUserIds.length > 0 &&
+        (ownerUserId === null || !allowedUserIds.includes(ownerUserId)))
+    ) {
+      throw new HttpError(
+        404,
+        "preferences_source_entity_not_found",
+        "Preference source entity not found."
+      );
+    }
+  };
+  const requirePreferenceCatalogLinkAccess = (
+    links: unknown,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    if (links === undefined) {
+      return;
+    }
+    for (const link of z.array(preferenceCatalogLinkInputSchema).parse(links)) {
+      requirePreferenceSourceReadAccess(link, auth);
+    }
+  };
+  type PreferenceCatalogReadRecord = NonNullable<
+    ReturnType<typeof getPreferenceCatalogById>
+  >;
+  const filterPreferenceCatalogLinksForRead = <
+    T extends { links: PreferenceCatalogReadRecord["links"] }
+  >(
+    catalog: T,
+    auth: ReturnType<typeof authenticateRequest>
+  ): T => ({
+    ...catalog,
+    links: catalog.links.filter((link) => {
+      try {
+        requirePreferenceSourceReadAccess(
+          {
+            entityType: link.targetEntityType as CrudEntityType,
+            entityId: link.targetEntityId
+          },
+          auth
+        );
+        return true;
+      } catch (error) {
+        if (
+          error instanceof HttpError &&
+          (error.statusCode === 403 || error.statusCode === 404)
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    })
+  });
+  const transformPreferenceCatalogForBatchRead = (
+    catalog: Record<string, unknown> & { id: string },
+    auth: ReturnType<typeof authenticateRequest>
+  ): Record<string, unknown> & { id: string } => {
+    if (!Array.isArray(catalog.links)) {
+      return catalog;
+    }
+    return filterPreferenceCatalogLinksForRead(
+      {
+        ...catalog,
+        links: catalog.links as PreferenceCatalogReadRecord["links"]
+      },
+      auth
+    );
+  };
+  const redactPreferenceBatchPayload = <T>(
+    payload: T,
+    auth: ReturnType<typeof authenticateRequest>
+  ) =>
+    redactBatchEntityPayload(payload, auth, (catalog) =>
+      transformPreferenceCatalogForBatchRead(catalog, auth)
+    );
+  const filterPreferenceWorkspaceCatalogLinksForRead = <
+    T extends { catalogs: PreferenceCatalogReadRecord[] }
+  >(
+    workspace: T,
+    auth: ReturnType<typeof authenticateRequest>
+  ): T => ({
+    ...workspace,
+    catalogs: workspace.catalogs.map((catalog) =>
+      filterPreferenceCatalogLinksForRead(catalog, auth)
+    )
+  });
+  const requirePreferenceCatalogBatchLinkAccess = (
+    operations: Array<{
+      entityType: CrudEntityType;
+      id?: string;
+      data?: Record<string, unknown>;
+      patch?: Record<string, unknown>;
+    }>,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    for (const operation of operations) {
+      if (operation.entityType !== "preference_catalog") {
+        continue;
+      }
+      if (operation.patch) {
+        const catalog = operation.id
+          ? getPreferenceCatalogById(operation.id)
+          : undefined;
+        requirePreferenceCatalogOwner(catalog, auth);
+        if (!catalog) {
+          throw new HttpError(
+            404,
+            "preferences_catalog_not_found",
+            "Preference catalog not found."
+          );
+        }
+      }
+      requirePreferenceCatalogLinkAccess(
+        operation.data?.links ?? operation.patch?.links,
+        auth
+      );
+    }
+  };
+
   app.get("/api/v1/preferences/workspace", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/preferences/workspace" }
     );
+    const query = preferenceWorkspaceQuerySchema.parse(request.query ?? {});
+    const userId = resolvePreferenceReadUserId({ userId: query.userId }, auth);
     return {
-      workspace: getPreferenceWorkspace(
-        preferenceWorkspaceQuerySchema.parse(request.query ?? {})
+      workspace: filterPreferenceWorkspaceCatalogLinksForRead(
+        getPreferenceWorkspace({ ...query, userId }),
+        auth
+      )
+    };
+  });
+  app.post("/api/v1/preferences/workspace/refresh", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/workspace/refresh" }
+    );
+    const input = refreshPreferenceWorkspaceSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    return {
+      workspace: filterPreferenceWorkspaceCatalogLinksForRead(
+        refreshPreferenceWorkspace(input, toActivityContext(auth)),
+        auth
       )
     };
   });
   app.post("/api/v1/preferences/game/start", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/game/start"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/game/start"
+      }
+    );
+    const input = startPreferenceGameSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    if (input.catalogId) {
+      requirePreferenceCatalogOwner(
+        getPreferenceCatalogById(input.catalogId),
+        auth
+      );
+    }
     return {
-      workspace: startPreferenceGame(
-        startPreferenceGameSchema.parse(request.body ?? {})
+      workspace: filterPreferenceWorkspaceCatalogLinksForRead(
+        startPreferenceGame(input),
+        auth
       )
     };
   });
-  app.get("/api/v1/preferences/catalogs", async () => ({
-    catalogs: listPreferenceCatalogs()
-  }));
-  app.post("/api/v1/preferences/catalogs", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalogs"
+  app.get("/api/v1/preferences/catalogs", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/catalogs" }
+    );
+    const query = preferenceCatalogListQuerySchema.parse(request.query ?? {});
+    const page = listPreferenceCatalogPage({
+      domain: query.domain,
+      query: query.query,
+      limit: query.limit,
+      offset: query.offset,
+      cursor: query.cursor,
+      userIds: resolveEffectiveUserIdsForReads(
+        request.query as Record<string, unknown>,
+        auth
+      )
     });
+    return {
+      ...page,
+      catalogs: page.catalogs.map((catalog) =>
+        filterPreferenceCatalogLinksForRead(catalog, auth)
+      )
+    };
+  });
+  app.post("/api/v1/preferences/catalogs", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/catalogs"
+      }
+    );
+    const input = createPreferenceCatalogSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    requirePreferenceCatalogLinkAccess(input.links, auth);
     const catalog = createPreferenceCatalog(
-      createPreferenceCatalogSchema.parse(request.body ?? {})
+      input,
+      toActivityContext(auth),
+      parseIdempotencyKey(request.headers as Record<string, unknown>)
     );
     reply.code(201);
     return { catalog };
   });
-  app.get("/api/v1/preferences/catalogs/:id", async (request, reply) => {
+  app.get("/api/v1/preferences/catalogs/:id", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/catalogs/:id" }
+    );
     const { id } = request.params as { id: string };
     const catalog = getPreferenceCatalogById(id);
+    requirePreferenceCatalogOwner(catalog, auth);
     if (!catalog) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        "Preference catalog not found."
+      );
+    }
+    return { catalog: filterPreferenceCatalogLinksForRead(catalog, auth) };
+  });
+  app.patch("/api/v1/preferences/catalogs/:id", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/catalogs/:id"
+      }
+    );
+    const { id } = request.params as { id: string };
+    const existing = getPreferenceCatalogById(id);
+    requirePreferenceCatalogOwner(existing, auth);
+    if (!existing) {
+      throw new HttpError(
+        404,
+        "preferences_catalog_not_found",
+        "Preference catalog not found."
+      );
+    }
+    const patch = updatePreferenceCatalogSchema.parse(request.body ?? {});
+    requirePreferenceCatalogLinkAccess(patch.links, auth);
+    return {
+      catalog: updatePreferenceCatalog(id, patch, toActivityContext(auth))
+    };
+  });
+  app.delete("/api/v1/preferences/catalogs/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/catalogs/:id"
+      }
+    );
+    const { id } = request.params as { id: string };
+    const existing = getPreferenceCatalogById(id, true);
+    requirePreferenceCatalogOwner(existing, auth);
+    if (!existing) {
       reply.code(404);
       return { error: "Preferences catalog not found" };
     }
-    return { catalog };
-  });
-  app.patch("/api/v1/preferences/catalogs/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalogs/:id"
-    });
-    const { id } = request.params as { id: string };
+    if (existing.archived) {
+      return { catalog: existing };
+    }
     return {
-      catalog: updatePreferenceCatalog(
-        id,
-        updatePreferenceCatalogSchema.parse(request.body ?? {})
-      )
+      catalog:
+        deleteEntity(
+          "preference_catalog",
+          id,
+          { mode: "soft", reason: "Archived from Preferences" },
+          toActivityContext(auth)
+        ) ??
+        getPreferenceCatalogById(id, true) ??
+        existing
     };
   });
-  app.delete("/api/v1/preferences/catalogs/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalogs/:id"
-    });
-    const { id } = request.params as { id: string };
-    return { catalog: deletePreferenceCatalog(id) };
-  });
-  app.get("/api/v1/preferences/catalog-items", async () => ({
-    items: listPreferenceCatalogItems()
-  }));
-  app.post("/api/v1/preferences/catalog-items", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalog-items"
-    });
-    const item = createPreferenceCatalogItem(
-      createPreferenceCatalogItemSchema.parse(request.body ?? {})
+  app.get("/api/v1/preferences/catalog-items", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/catalog-items" }
     );
+    const query = preferenceCatalogItemListQuerySchema.parse(
+      request.query ?? {}
+    );
+    return listPreferenceCatalogItemPage({
+      userIds: resolveEffectiveUserIdsForReads(
+        request.query as Record<string, unknown>,
+        auth
+      ),
+      catalogIds: query.catalogId ? [query.catalogId] : undefined,
+      query: query.query,
+      limit: query.limit,
+      offset: query.offset,
+      cursor: query.cursor
+    });
+  });
+  app.post("/api/v1/preferences/catalog-items", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/catalog-items"
+      }
+    );
+    const input = createPreferenceCatalogItemSchema.parse(request.body ?? {});
+    requirePreferenceCatalogOwner(
+      getPreferenceCatalogById(input.catalogId),
+      auth
+    );
+    const item = createPreferenceCatalogItem(input);
     reply.code(201);
     return { item };
   });
-  app.get("/api/v1/preferences/catalog-items/:id", async (request, reply) => {
+  app.get("/api/v1/preferences/catalog-items/:id", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/catalog-items/:id" }
+    );
     const { id } = request.params as { id: string };
     const item = getPreferenceCatalogItemById(id);
+    requirePreferenceCatalogOwner(
+      item ? getPreferenceCatalogById(item.catalogId) : undefined,
+      auth
+    );
     if (!item) {
-      reply.code(404);
-      return { error: "Preferences catalog item not found" };
+      throw new HttpError(
+        404,
+        "preferences_catalog_item_not_found",
+        "Preference catalog item not found."
+      );
     }
     return { item };
   });
   app.patch("/api/v1/preferences/catalog-items/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalog-items/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/preferences/catalog-items/:id"
+      }
+    );
     const { id } = request.params as { id: string };
+    const current = getPreferenceCatalogItemById(id);
+    requirePreferenceCatalogOwner(
+      current ? getPreferenceCatalogById(current.catalogId) : undefined,
+      auth
+    );
     return {
       item: updatePreferenceCatalogItem(
         id,
@@ -15574,40 +18062,100 @@ export async function buildServer(
       )
     };
   });
-  app.delete("/api/v1/preferences/catalog-items/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/catalog-items/:id"
-    });
-    const { id } = request.params as { id: string };
-    return { item: deletePreferenceCatalogItem(id) };
-  });
-  app.get("/api/v1/preferences/contexts", async () => ({
-    contexts: listPreferenceContexts()
-  }));
-  app.post("/api/v1/preferences/contexts", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/contexts"
-    });
-    const context = createPreferenceContext(
-      createPreferenceContextSchema.parse(request.body ?? {})
+  app.delete(
+    "/api/v1/preferences/catalog-items/:id",
+    async (request, reply) => {
+      const auth = requireScopedAccess(
+        request.headers as Record<string, unknown>,
+        ["write"],
+        {
+          route: "/api/v1/preferences/catalog-items/:id"
+        }
+      );
+      const { id } = request.params as { id: string };
+      const current = getPreferenceCatalogItemById(id, true);
+      requirePreferenceCatalogOwner(
+        current ? getPreferenceCatalogById(current.catalogId, true) : undefined,
+        auth
+      );
+      if (!current) {
+        reply.code(404);
+        return { error: "Preferences catalog item not found" };
+      }
+      if (!getPreferenceCatalogItemById(id)) {
+        return { item: current };
+      }
+      return {
+        item:
+          deleteEntity(
+            "preference_catalog_item",
+            id,
+            { mode: "soft", reason: "Moved to the bin from Preferences" },
+            toActivityContext(auth)
+          ) ?? current
+      };
+    }
+  );
+  app.get("/api/v1/preferences/contexts", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/contexts" }
     );
+    return {
+      contexts: listPreferenceContexts({
+        userIds: resolveEffectiveUserIdsForReads(
+          request.query as Record<string, unknown>,
+          auth
+        )
+      })
+    };
+  });
+  app.post("/api/v1/preferences/contexts", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/contexts" }
+    );
+    const input = createPreferenceContextSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    const context = createPreferenceContext(input);
     reply.code(201);
     return { context };
   });
-  app.get("/api/v1/preferences/contexts/:id", async (request, reply) => {
+  app.get("/api/v1/preferences/contexts/:id", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/contexts/:id" }
+    );
     const { id } = request.params as { id: string };
     const context = getPreferenceContextById(id);
+    requirePreferenceProfileOwner(context?.profileId, auth);
     if (!context) {
-      reply.code(404);
-      return { error: "Preferences context not found" };
+      throw new HttpError(
+        404,
+        "preferences_context_not_found",
+        "Preference context not found."
+      );
     }
     return { context };
   });
   app.patch("/api/v1/preferences/contexts/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/contexts/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/contexts/:id" }
+    );
     const { id } = request.params as { id: string };
+    requirePreferenceProfileOwner(
+      getPreferenceContextById(id)?.profileId,
+      auth
+    );
     return {
       context: updatePreferenceContext(
         id,
@@ -15616,102 +18164,227 @@ export async function buildServer(
     };
   });
   app.delete("/api/v1/preferences/contexts/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/contexts/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/contexts/:id" }
+    );
     const { id } = request.params as { id: string };
+    requirePreferenceProfileOwner(
+      getPreferenceContextById(id)?.profileId,
+      auth
+    );
     return { context: deletePreferenceContext(id) };
   });
   app.post("/api/v1/preferences/contexts/merge", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/contexts/merge"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/contexts/merge" }
+    );
+    const input = mergePreferenceContextsSchema.parse(request.body ?? {});
+    requirePreferenceProfileOwner(
+      getPreferenceContextById(input.sourceContextId)?.profileId,
+      auth
+    );
+    requirePreferenceProfileOwner(
+      getPreferenceContextById(input.targetContextId)?.profileId,
+      auth
+    );
     return {
-      merge: mergePreferenceContexts(
-        mergePreferenceContextsSchema.parse(request.body ?? {})
-      )
+      merge: mergePreferenceContexts(input)
     };
   });
-  app.get("/api/v1/preferences/items", async () => ({
-    items: listPreferenceItems()
-  }));
-  app.post("/api/v1/preferences/items", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/items"
-    });
-    const item = createPreferenceItem(
-      createPreferenceItemSchema.parse(request.body ?? {})
+  app.get("/api/v1/preferences/items", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/items" }
     );
+    return {
+      items: listPreferenceItems({
+        userIds: resolveEffectiveUserIdsForReads(
+          request.query as Record<string, unknown>,
+          auth
+        )
+      })
+    };
+  });
+  app.post("/api/v1/preferences/items", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/items" }
+    );
+    const input = createPreferenceItemSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    if (input.sourceEntityType && input.sourceEntityId) {
+      requirePreferenceSourceReadAccess(
+        {
+          entityType: input.sourceEntityType,
+          entityId: input.sourceEntityId
+        },
+        auth
+      );
+    }
+    const item = createPreferenceItem(input);
     reply.code(201);
     return { item };
   });
-  app.get("/api/v1/preferences/items/:id", async (request, reply) => {
+  app.get("/api/v1/preferences/items/:id", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/preferences/items/:id" }
+    );
     const { id } = request.params as { id: string };
     const item = getPreferenceItemById(id);
+    requirePreferenceProfileOwner(item?.profileId, auth);
     if (!item) {
-      reply.code(404);
-      return { error: "Preferences item not found" };
+      throw new HttpError(
+        404,
+        "preferences_item_not_found",
+        "Preference item not found."
+      );
     }
     return { item };
   });
   app.patch("/api/v1/preferences/items/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/items/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/items/:id" }
+    );
     const { id } = request.params as { id: string };
+    const existing = getPreferenceItemById(id);
+    requirePreferenceProfileOwner(existing?.profileId, auth);
+    const patch = updatePreferenceItemSchema.parse(request.body ?? {});
+    const sourceEntityType =
+      patch.sourceEntityType !== undefined
+        ? patch.sourceEntityType
+        : existing?.sourceEntityType;
+    const sourceEntityId =
+      patch.sourceEntityId !== undefined
+        ? patch.sourceEntityId
+        : existing?.sourceEntityId;
+    if (existing && sourceEntityType && sourceEntityId) {
+      requirePreferenceSourceReadAccess(
+        { entityType: sourceEntityType, entityId: sourceEntityId },
+        auth
+      );
+    }
     return {
-      item: updatePreferenceItem(
-        id,
-        updatePreferenceItemSchema.parse(request.body ?? {})
-      )
+      item: updatePreferenceItem(id, patch)
     };
   });
   app.delete("/api/v1/preferences/items/:id", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/items/:id"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/items/:id" }
+    );
     const { id } = request.params as { id: string };
+    requirePreferenceProfileOwner(getPreferenceItemById(id)?.profileId, auth);
     return { item: deletePreferenceItem(id) };
   });
   app.post("/api/v1/preferences/items/from-entity", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/items/from-entity"
-    });
-    const item = createPreferenceItemFromEntity(
-      enqueueEntityPreferenceItemSchema.parse(request.body ?? {})
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/items/from-entity" }
     );
+    const input = enqueueEntityPreferenceItemSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    requirePreferenceSourceReadAccess(input, auth);
+    const item = createPreferenceItemFromEntity(input);
     reply.code(201);
     return { item };
   });
   app.post("/api/v1/preferences/judgments", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/judgments"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/judgments" }
+    );
+    const input = submitPairwiseJudgmentSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    const idempotencyKey = parseIdempotencyKey(
+      request.headers as Record<string, unknown>
+    );
     const judgment = submitPairwiseJudgment(
-      submitPairwiseJudgmentSchema.parse(request.body ?? {})
+      input,
+      toActivityContext(auth),
+      idempotencyKey
     );
     reply.code(201);
     return { judgment };
   });
   app.post("/api/v1/preferences/signals", async (request, reply) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/signals"
-    });
-    const signal = submitAbsoluteSignal(
-      submitAbsoluteSignalSchema.parse(request.body ?? {})
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/signals" }
     );
-    reply.code(201);
-    return { signal };
+    const input = submitAbsoluteSignalSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    const submission = submitAbsoluteSignalWithReceipt(
+      input,
+      toActivityContext(auth),
+      parseIdempotencyKey(request.headers as Record<string, unknown>)
+    );
+    const score = getPreferenceItemScoreForContext(
+      input.itemId,
+      input.contextId
+    );
+    if (!score) {
+      throw new HttpError(
+        500,
+        "preferences_signal_score_missing",
+        "Preference signal was recorded but its recomputed score is unavailable."
+      );
+    }
+    reply
+      .header(
+        "Idempotency-Replayed",
+        submission.replayed ? "true" : "false"
+      )
+      .code(submission.replayed ? 200 : 201);
+    return { signal: submission.signal, score };
   });
   app.patch("/api/v1/preferences/items/:id/score", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/preferences/items/:id/score"
-    });
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/preferences/items/:id/score" }
+    );
     const { id } = request.params as { id: string };
+    const input = updatePreferenceScoreSchema.parse(request.body ?? {});
+    resolvePreferenceMutationUserId(
+      request.query as Record<string, unknown>,
+      auth,
+      input.userId
+    );
+    requirePreferenceProfileOwner(getPreferenceItemById(id)?.profileId, auth);
     return {
-      workspace: updatePreferenceScore(
-        id,
-        updatePreferenceScoreSchema.parse(request.body ?? {})
+      workspace: filterPreferenceWorkspaceCatalogLinksForRead(
+        updatePreferenceScore(id, input, toActivityContext(auth)),
+        auth
       )
     };
   });
@@ -15744,8 +18417,13 @@ export async function buildServer(
     return { tag };
   });
   app.get("/api/v1/activity", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/activity" }
+    );
     const query = activityListQuerySchema.parse(request.query ?? {});
-    return { activity: listActivityEvents(query) };
+    return { activity: listVisibleActivityForAuth(query, auth) };
   });
   app.post("/api/v1/activity/:id/remove", async (request, reply) => {
     requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
@@ -15764,49 +18442,130 @@ export async function buildServer(
     return { event };
   });
   app.get("/api/v1/metrics", async (request) => {
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/metrics" }
     );
+    const query = z
+      .object({
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(request.query ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     return {
       metrics: buildGamificationOverview(
         filterOwnedEntities("goal", listGoals(), userIds),
         filterOwnedEntities("task", listTasks({ userIds }), userIds),
         filterOwnedEntities("habit", listHabits(), userIds),
         new Date(),
-        { userIds }
+        { userIds, timezone: query.timezone }
       )
     };
   });
   app.get("/api/v1/metrics/xp", async (request) => {
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/metrics/xp" }
     );
+    const query = z
+      .object({
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(request.query ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     return {
       metrics: buildXpMetricsPayload({
         goals: filterOwnedEntities("goal", listGoals(), userIds),
         tasks: filterOwnedEntities("task", listTasks({ userIds }), userIds),
         habits: filterOwnedEntities("habit", listHabits(), userIds),
-        userIds
+        userIds,
+        timezone: query.timezone
       })
     };
   });
   app.get("/api/v1/gamification/catalog", async (request) => {
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/gamification/catalog" }
     );
+    const query = z
+      .object({
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(request.query ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     return {
       catalog: buildGamificationCatalogPayload(
         filterOwnedEntities("goal", listGoals(), userIds),
         filterOwnedEntities("task", listTasks({ userIds }), userIds),
         filterOwnedEntities("habit", listHabits(), userIds),
-        { userIds }
+        { userIds, timezone: query.timezone }
       )
     };
   });
-  app.get("/api/v1/gamification/assets", async () => ({
-    assets: await getGamificationAssetStatus()
-  }));
-  app.post("/api/v1/gamification/assets/install", async (request, reply) => {
+  app.post("/api/v1/gamification/reconcile", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      { route: "/api/v1/gamification/reconcile" }
+    );
+    const input = z
+      .object({
+        userIds: z.array(z.string().trim().min(1)).optional(),
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .strict()
+      .parse(request.body ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(input, auth);
+    const goals = filterOwnedEntities("goal", listGoals(), userIds);
+    const tasks = filterOwnedEntities("task", listTasks({ userIds }), userIds);
+    const habits = filterOwnedEntities("habit", listHabits(), userIds);
+    reconcileGamificationProgress({
+      goals,
+      tasks,
+      habits,
+      userIds,
+      timezone: input.timezone
+    });
+    return {
+      metrics: buildXpMetricsPayload({
+        goals,
+        tasks,
+        habits,
+        userIds,
+        timezone: input.timezone
+      })
+    };
+  });
+  app.get("/api/v1/gamification/assets", async (request) => {
+    requireScopedAccess(request.headers as Record<string, unknown>, ["read"], {
+      route: "/api/v1/gamification/assets"
+    });
+    return { assets: await getGamificationAssetStatus() };
+  });
+  app.post("/api/v1/gamification/assets/install", async (request) => {
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/gamification/assets/install"
     });
@@ -15820,24 +18579,37 @@ export async function buildServer(
         style: await installGamificationAssetStyle(input.style)
       };
     } catch (error) {
-      reply.code(502);
-      return {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not install gamification assets."
-      };
+      throw new HttpError(
+        502,
+        "gamification_asset_install_failed",
+        error instanceof Error
+          ? error.message
+          : "Could not install gamification assets."
+      );
     }
   });
   app.get("/api/v1/gamification/equipment", async (request) => {
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/gamification/equipment" }
     );
+    const query = z
+      .object({
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(request.query ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(query, auth);
     const catalog = buildGamificationCatalogPayload(
       filterOwnedEntities("goal", listGoals(), userIds),
       filterOwnedEntities("task", listTasks({ userIds }), userIds),
       filterOwnedEntities("habit", listHabits(), userIds),
-      { userIds }
+      { userIds, timezone: query.timezone }
     );
     return { equipment: catalog.equipment };
   });
@@ -15845,9 +18617,17 @@ export async function buildServer(
     requireOperatorSession(request.headers as Record<string, unknown>, {
       route: "/api/v1/gamification/equipment"
     });
-    const userIds = resolveScopedUserIds(
-      request.query as Record<string, unknown>
-    );
+    const query = z
+      .object({
+        timezone: z
+          .string()
+          .trim()
+          .refine(isValidTimeZone, "timezone must be a valid IANA timezone")
+          .optional()
+      })
+      .passthrough()
+      .parse(request.query ?? {});
+    const userIds = resolveScopedUserIds(query);
     const equipmentInput = gamificationEquipmentInputSchema.parse(
       request.body ?? {}
     );
@@ -15858,6 +18638,7 @@ export async function buildServer(
           tasks: filterOwnedEntities("task", listTasks({ userIds }), userIds),
           habits: filterOwnedEntities("habit", listHabits(), userIds),
           userIds,
+          timezone: query.timezone,
           equipment: equipmentInput
         })
       };
@@ -16410,11 +19191,22 @@ export async function buildServer(
     }
     return { rule };
   });
+  const requireRewardMutationAccess = (
+    headers: Record<string, unknown>,
+    route: string
+  ) => {
+    const auth = authenticateRequest(headers);
+    managers.authorization.requireAllTokenScopes(
+      auth,
+      ["write", "rewards.manage"],
+      { route }
+    );
+    return auth;
+  };
   app.patch("/api/v1/rewards/rules/:id", async (request, reply) => {
-    const auth = requireScopedAccess(
+    const auth = requireRewardMutationAccess(
       request.headers as Record<string, unknown>,
-      ["rewards.manage", "write"],
-      { route: "/api/v1/rewards/rules/:id" }
+      "/api/v1/rewards/rules/:id"
     );
     const { id } = request.params as { id: string };
     const rule = updateRewardRule(
@@ -16436,17 +19228,125 @@ export async function buildServer(
     return { ledger: listRewardLedger(query) };
   });
   app.post("/api/v1/rewards/bonus", async (request, reply) => {
-    const auth = requireScopedAccess(
+    const auth = requireRewardMutationAccess(
       request.headers as Record<string, unknown>,
-      ["rewards.manage", "write"],
-      { route: "/api/v1/rewards/bonus" }
+      "/api/v1/rewards/bonus"
     );
-    const reward = createManualRewardGrant(
-      createManualRewardGrantSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
+    const input = createManualRewardGrantSchema.parse(request.body ?? {});
+    const target =
+      input.entityType === "system"
+        ? null
+        : getEntityById(input.entityType as CrudEntityType, input.entityId);
+    if (input.entityType !== "system" && !target) {
+      throw new HttpError(
+        404,
+        "reward_target_not_found",
+        "Reward target not found."
+      );
+    }
+    const targetRecord = target ?? {};
+    const targetOwnerUserId =
+      getEntityOwnerId(input.entityType, input.entityId) ??
+      (typeof targetRecord.ownerUserId === "string"
+        ? targetRecord.ownerUserId
+        : typeof targetRecord.userId === "string"
+          ? targetRecord.userId
+          : getDefaultUser().id);
+    const tokenPolicy = auth.token?.scopePolicy;
+    if (
+      tokenPolicy?.userIds.length &&
+      !tokenPolicy.userIds.includes(targetOwnerUserId)
+    ) {
+      throw new HttpError(
+        403,
+        "user_scope_forbidden",
+        "The reward target is outside this token's allowed users."
+      );
+    }
+    const targetProjectId =
+      input.entityType === "project"
+        ? input.entityId
+        : typeof targetRecord.projectId === "string"
+          ? targetRecord.projectId
+          : null;
+    if (
+      tokenPolicy?.projectIds.length &&
+      (!targetProjectId || !tokenPolicy.projectIds.includes(targetProjectId))
+    ) {
+      throw new HttpError(
+        403,
+        "project_scope_forbidden",
+        "The reward target is outside this token's allowed projects."
+      );
+    }
+    const targetTagIds =
+      input.entityType === "tag"
+        ? [input.entityId]
+        : Array.isArray(targetRecord.tagIds)
+          ? targetRecord.tagIds.filter(
+              (tagId): tagId is string => typeof tagId === "string"
+            )
+          : [];
+    if (
+      tokenPolicy?.tagIds.length &&
+      !targetTagIds.some((tagId) => tokenPolicy.tagIds.includes(tagId))
+    ) {
+      throw new HttpError(
+        403,
+        "tag_scope_forbidden",
+        "The reward target is outside this token's allowed tags."
+      );
+    }
+    const clientMetadata = { ...input.metadata };
+    delete clientMetadata.ownerUserId;
+    let reward;
+    try {
+      reward = createManualRewardGrant(
+        {
+          ...input,
+          metadata: {
+            ...clientMetadata,
+            ownerUserId: targetOwnerUserId
+          }
+        },
+        toActivityContext(auth)
+      );
+    } catch (error) {
+      if (error instanceof RewardIdempotencyConflictError) {
+        throw new HttpError(409, "reward_idempotency_conflict", error.message, {
+          existingRewardId: error.existingReward.id
+        });
+      }
+      throw error;
+    }
+    const rewardUserIds = [targetOwnerUserId];
+    const rewardGoals = filterOwnedEntities("goal", listGoals(), rewardUserIds);
+    const rewardTasks = filterOwnedEntities(
+      "task",
+      listTasks({ userIds: rewardUserIds }),
+      rewardUserIds
     );
+    const rewardHabits = filterOwnedEntities(
+      "habit",
+      listHabits(),
+      rewardUserIds
+    );
+    reconcileGamificationProgress({
+      goals: rewardGoals,
+      tasks: rewardTasks,
+      habits: rewardHabits,
+      userIds: rewardUserIds
+    });
     reply.code(201);
-    return { reward, metrics: buildXpMetricsPayload() };
+    return {
+      reward,
+      metrics: buildXpMetricsPayload({
+        goals: rewardGoals,
+        tasks: rewardTasks,
+        habits: rewardHabits,
+        userIds: rewardUserIds
+      })
+    };
   });
   app.post("/api/v1/session-events", async (request, reply) => {
     const auth = requireAuthenticatedActor(
@@ -16527,12 +19427,15 @@ export async function buildServer(
     return { settings: getSettings() };
   });
   app.get("/api/v1/settings/bin", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/settings/bin" }
     );
-    return { bin: getSettingsBinPayload() };
+    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
+    return {
+      bin: getSettingsBinPayload(noteReadScopeForAuth(auth, userIds))
+    };
   });
   app.get("/api/v1/settings/data", async (request) => {
     requireScopedAccess(
@@ -16619,10 +19522,9 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/projects" }
     );
-    const project = createProject(
-      createProjectSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = createProjectSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "project");
+    const project = createProject(input, toActivityContext(auth));
     reply.code(201);
     return { project };
   });
@@ -16869,8 +19771,55 @@ export async function buildServer(
       return { template };
     }
   );
+  const requireScopedTaskTimeboxTask = (
+    auth: ReturnType<typeof authenticateRequest>,
+    taskId: string
+  ) => {
+    const task = getTaskById(taskId);
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      !task ||
+      (allowedUserIds.length > 0 &&
+        filterOwnedEntities("task", [task], allowedUserIds).length === 0)
+    ) {
+      throw new HttpError(
+        404,
+        "calendar_timebox_task_not_found",
+        "The task for this timebox was not found."
+      );
+    }
+    return task;
+  };
+  const requireScopedTaskTimebox = (
+    auth: ReturnType<typeof authenticateRequest>,
+    timebox: ReturnType<typeof getTaskTimeboxById>
+  ) => {
+    const allowedUserIds = auth.token?.scopePolicy.userIds ?? [];
+    if (
+      !timebox ||
+      (allowedUserIds.length > 0 &&
+        filterOwnedEntities("task_timebox", [timebox], allowedUserIds)
+          .length === 0)
+    ) {
+      throw new HttpError(
+        404,
+        "calendar_timebox_not_found",
+        "Task timebox not found."
+      );
+    }
+    return timebox;
+  };
   app.get("/api/v1/calendar/timeboxes", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/calendar/timeboxes" }
+    );
     const query = calendarOverviewQuerySchema.parse(request.query ?? {});
+    const userIds = resolveEffectiveUserIdsForReads(
+      request.query as Record<string, unknown>,
+      auth
+    );
     const now = new Date();
     const from =
       query.from ??
@@ -16879,17 +19828,22 @@ export async function buildServer(
       query.to ??
       new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
     return {
-      timeboxes: listTaskTimeboxes({ from, to, userIds: query.userIds })
+      timeboxes: listTaskTimeboxes({ from, to, userIds })
     };
   });
   app.get("/api/v1/calendar/timeboxes/:id", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/calendar/timeboxes/:id" }
+    );
     const { id } = request.params as { id: string };
     const timebox = getTaskTimeboxById(id);
     if (!timebox) {
       reply.code(404);
       return { error: "Task timebox not found" };
     }
-    return { timebox };
+    return { timebox: requireScopedTaskTimebox(auth, timebox) };
   });
   app.post("/api/v1/calendar/timeboxes", async (request, reply) => {
     const auth = requireScopedAccess(
@@ -16897,9 +19851,9 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/calendar/timeboxes" }
     );
-    const timebox = createTaskTimebox(
-      createTaskTimeboxSchema.parse(request.body ?? {})
-    );
+    const input = createTaskTimeboxSchema.parse(request.body ?? {});
+    requireScopedTaskTimeboxTask(auth, input.taskId);
+    const timebox = createTaskTimebox(input);
     recordActivityEvent({
       entityType: "task_timebox",
       entityId: timebox.id,
@@ -16923,6 +19877,7 @@ export async function buildServer(
       { route: "/api/v1/calendar/timeboxes/:id" }
     );
     const { id } = request.params as { id: string };
+    requireScopedTaskTimebox(auth, getTaskTimeboxById(id));
     const timebox = updateTaskTimebox(
       id,
       updateTaskTimeboxSchema.parse(request.body ?? {})
@@ -16953,11 +19908,21 @@ export async function buildServer(
       { route: "/api/v1/calendar/timeboxes/:id" }
     );
     const { id } = request.params as { id: string };
+    requireScopedTaskTimebox(auth, getTaskTimeboxById(id));
     const timebox = deleteTaskTimebox(id);
     if (!timebox) {
       reply.code(404);
       return { error: "Task timebox not found" };
     }
+    const projection =
+      timebox.remoteEventId || timebox.connectionId
+        ? await deleteTaskTimeboxProjection(id, managers.secrets)
+        : {
+            state: "not_requested" as const,
+            code: null,
+            message: null,
+            retryable: false
+          };
     recordActivityEvent({
       entityType: "task_timebox",
       entityId: timebox.id,
@@ -16967,18 +19932,27 @@ export async function buildServer(
       actor: auth.actor ?? null,
       source: auth.source,
       metadata: {
-        taskId: timebox.taskId
+        taskId: timebox.taskId,
+        projectionState: projection.state,
+        projectionCode: projection.code
       }
     });
-    return { timebox };
+    return { timebox, projection };
   });
   app.post("/api/v1/calendar/timeboxes/recommend", async (request) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read"],
+      { route: "/api/v1/calendar/timeboxes/recommend" }
+    );
     const input = recommendTaskTimeboxesSchema.parse(request.body ?? {});
+    requireScopedTaskTimeboxTask(auth, input.taskId);
     return {
       timeboxes: suggestTaskTimeboxes(input.taskId, {
         from: input.from,
         to: input.to,
-        limit: input.limit
+        limit: input.limit,
+        timeZone: input.timezone
       })
     };
   });
@@ -17127,11 +20101,9 @@ export async function buildServer(
       { route: "/api/v1/projects/:id" }
     );
     const { id } = request.params as { id: string };
-    const project = updateProject(
-      id,
-      updateProjectSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = updateProjectSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "project");
+    const project = updateProject(id, input, toActivityContext(auth));
     if (!project) {
       reply.code(404);
       return { error: "Project not found" };
@@ -17394,9 +20366,9 @@ export async function buildServer(
       const model = parsed.model.trim();
       const usesSavedBinding = Boolean(
         existing &&
-        provider === existing.provider &&
-        baseUrl === existing.baseUrl &&
-        model === existing.model
+          provider === existing.provider &&
+          baseUrl === existing.baseUrl &&
+          model === existing.model
       );
       const callerApiKey = parsed.apiKey?.trim() || null;
       if (existing && !usesSavedBinding && !callerApiKey) {
@@ -17681,6 +20653,77 @@ export async function buildServer(
       .default(DEFAULT_AI_CONNECTOR_RUN_HISTORY_LIMIT),
     offset: z.coerce.number().int().min(0).optional().default(0)
   });
+  const normalizeRepeatedWorkbenchQuery = (value: unknown) =>
+    value === undefined ? [] : Array.isArray(value) ? value : [value];
+  const workbenchFlowCatalogQuerySchema = z
+    .object({
+      q: z
+        .string()
+        .trim()
+        .max(MAX_WORKBENCH_CATALOG_QUERY_LENGTH)
+        .optional()
+        .default(""),
+      kind: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z
+          .array(z.enum(["functor", "chat"]))
+          .max(2)
+          .default([])
+      ),
+      homeSurfaceId: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z.array(z.string().trim().min(1).max(100)).max(20).default([])
+      ),
+      status: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z
+          .array(z.enum(["enabled", "disabled"]))
+          .max(2)
+          .default([])
+      ),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_WORKBENCH_CATALOG_LIMIT)
+        .optional()
+        .default(DEFAULT_WORKBENCH_CATALOG_LIMIT),
+      offset: z.coerce.number().int().min(0).optional().default(0)
+    })
+    .strict();
+  const workbenchBoxCatalogQuerySchema = z
+    .object({
+      q: z
+        .string()
+        .trim()
+        .max(MAX_WORKBENCH_CATALOG_QUERY_LENGTH)
+        .optional()
+        .default(""),
+      category: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z.array(z.string().trim().min(1).max(100)).max(20).default([])
+      ),
+      surfaceId: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z.array(z.string().trim().min(1).max(100)).max(20).default([])
+      ),
+      source: z.preprocess(
+        normalizeRepeatedWorkbenchQuery,
+        z
+          .array(z.enum(["forge", "flow_output"]))
+          .max(2)
+          .default([])
+      ),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_WORKBENCH_CATALOG_LIMIT)
+        .optional()
+        .default(DEFAULT_WORKBENCH_CATALOG_LIMIT),
+      offset: z.coerce.number().int().min(0).optional().default(0)
+    })
+    .strict();
   const registerFlowApiRoutes = (
     basePath: string,
     noun: string,
@@ -17701,20 +20744,15 @@ export async function buildServer(
           route: catalogPath
         }
       );
-      return {
-        boxes: [
-          ...listForgeBoxCatalog(),
-          ...listAiConnectors().flatMap((connector) =>
-            connector.publishedOutputs.map((output) =>
-              buildConnectorOutputCatalogEntry({
-                connectorId: connector.id,
-                title: connector.title,
-                outputId: output.id
-              })
-            )
-          )
-        ]
-      };
+      const query = workbenchBoxCatalogQuerySchema.parse(request.query ?? {});
+      return listWorkbenchBoxCatalogPage({
+        q: query.q,
+        categories: query.category,
+        surfaceIds: query.surfaceId,
+        sources: query.source,
+        limit: query.limit,
+        offset: query.offset
+      });
     });
     app.get(basePath, async (request) => {
       requireScopedAccess(
@@ -17724,8 +20762,18 @@ export async function buildServer(
           route: basePath
         }
       );
+      const query = workbenchFlowCatalogQuerySchema.parse(request.query ?? {});
+      const { flows, ...page } = listWorkbenchFlowCatalogPage({
+        q: query.q,
+        kinds: query.kind,
+        homeSurfaceIds: query.homeSurfaceId,
+        statuses: query.status,
+        limit: query.limit,
+        offset: query.offset
+      });
       return {
-        [collectionKey]: listAiConnectors()
+        [collectionKey]: flows,
+        ...page
       };
     });
     app.post(basePath, async (request, reply) => {
@@ -18127,23 +21175,31 @@ export async function buildServer(
     return { token };
   });
   app.get("/api/v1/task-runs", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskRunListQuerySchema.parse(request.query ?? {});
-    return { taskRuns: listTaskRuns(query) };
+    return { taskRuns: filterTaskRunsForAuth(listTaskRuns(query), auth) };
   });
   app.get("/api/v1/events/meta", async () => ({
     events: buildEventStreamMeta()
   }));
   app.get("/api/v1/events/stream", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/events/stream" }
+    );
     reply.hijack();
-    reply.raw.write(`retry: 3000\n`);
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no"
     });
+    reply.raw.write(`retry: 3000\n`);
 
-    let lastActivityId = listActivityEvents({ limit: 1 })[0]?.id ?? null;
+    let lastActivityId = getLatestVisibleActivityForAuth(auth)?.id ?? null;
     const emit = (event: string, payload: unknown) => {
       reply.raw.write(`event: ${event}\n`);
       reply.raw.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -18159,13 +21215,13 @@ export async function buildServer(
     }, 15_000);
 
     const poll = setInterval(() => {
-      const latest = listActivityEvents({ limit: 1 })[0] ?? null;
+      const latest = getLatestVisibleActivityForAuth(auth);
       if (!latest || latest.id === lastActivityId) {
         return;
       }
       lastActivityId = latest.id;
       emit("activity", latest);
-    }, 3_000);
+    }, eventStreamPollIntervalMs);
 
     request.raw.on("close", () => {
       clearInterval(heartbeat);
@@ -18174,10 +21230,29 @@ export async function buildServer(
     });
   });
 
-  app.get("/api/dashboard", async () => getDashboard());
-  app.get("/api/context/overview", async (_request, reply) => {
+  app.get("/api/dashboard", async (request) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const scope = resolveEffectiveReadScope(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    return buildV1Context(scope, {
+      accessibleSpaceIds: noteReadScopeForAuth(auth).accessibleSpaceIds,
+      includePsyche: noteReadScopeForAuth(auth).includePsyche
+    }).dashboard;
+  });
+  app.get("/api/context/overview", async (request, reply) => {
     markCompatibilityRoute(reply);
-    return getOverviewContext();
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
+    return getOverviewContext(new Date(), {
+      userIds,
+      noteScope: noteReadScopeForAuth(auth, userIds)
+    });
   });
   app.get("/api/context/today", async (_request, reply) => {
     markCompatibilityRoute(reply);
@@ -18193,13 +21268,21 @@ export async function buildServer(
   });
   app.get("/api/tasks", async (request, reply) => {
     markCompatibilityRoute(reply);
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskListQuerySchema.parse(request.query ?? {});
-    return { tasks: listTasks(query) };
+    return { tasks: filterTasksForAuth(listTasks(query), auth) };
   });
   app.get("/api/activity", async (request, reply) => {
     markCompatibilityRoute(reply);
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/activity" }
+    );
     const query = activityListQuerySchema.parse(request.query ?? {});
-    return { activity: listActivityEvents(query) };
+    return { activity: listVisibleActivityForAuth(query, auth) };
   });
   app.get("/api/tags", async (_request, reply) => {
     markCompatibilityRoute(reply);
@@ -18213,13 +21296,22 @@ export async function buildServer(
   });
   app.get("/api/task-runs", async (request, reply) => {
     markCompatibilityRoute(reply);
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const query = taskRunListQuerySchema.parse(request.query ?? {});
-    return { taskRuns: listTaskRuns(query) };
+    return { taskRuns: filterTaskRunsForAuth(listTaskRuns(query), auth) };
   });
-  app.get("/api/task-runs/watchdog", async () => ({
-    watchdog: taskRunWatchdog?.getStatus() ?? null
-  }));
-  app.post("/api/task-runs/watchdog/reconcile", async (_request, reply) => {
+  app.get("/api/task-runs/watchdog", async (request) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/task-runs/watchdog"
+    });
+    return { watchdog: taskRunWatchdog?.getStatus() ?? null };
+  });
+  app.post("/api/task-runs/watchdog/reconcile", async (request, reply) => {
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/task-runs/watchdog/reconcile"
+    });
     if (!taskRunWatchdog) {
       reply.code(409);
       return {
@@ -18238,26 +21330,89 @@ export async function buildServer(
   app.get("/api/openclaw/context", async (request, reply) => {
     markCompatibilityRoute(reply);
     const query = taskListQuerySchema.parse(request.query ?? {});
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
+    const scope = resolveEffectiveReadScope(
+      request.query as Record<string, unknown>,
+      auth
+    );
+    const context = buildV1Context(scope, {
+      accessibleSpaceIds: noteReadScopeForAuth(auth).accessibleSpaceIds,
+      includePsyche: noteReadScopeForAuth(auth).includePsyche
+    });
+    const requestedTaskIds = new Set(listTasks(query).map((task) => task.id));
     return {
-      metrics: buildGamificationProfile(listGoals(), listTasks(), listHabits()),
-      dashboard: getDashboard(),
-      overview: getOverviewContext(),
-      today: getTodayContext(),
-      risk: getRiskContext(),
-      goals: listGoals(),
-      projects: listProjectSummaries(),
-      tags: listTags(),
-      tasks: listTasks(query),
-      habits: listHabits(),
-      activeTaskRuns: listTaskRuns({ active: true, limit: 25 }),
-      activity: listActivityEvents({ limit: 25 })
+      metrics: context.metrics,
+      dashboard: context.dashboard,
+      overview: context.overview,
+      today: context.today,
+      risk: context.risk,
+      goals: context.goals,
+      projects: context.projects,
+      tags: context.tags,
+      tasks: context.tasks.filter((task) => requestedTaskIds.has(task.id)),
+      habits: context.habits,
+      activeTaskRuns: context.activeTaskRuns,
+      activity: context.activity
     };
   });
 
+  const buildTaskContextForAuth = (
+    id: string,
+    auth: ReturnType<typeof authenticateRequest>
+  ) => {
+    const userIds = resolveEffectiveUserIdsForReads(undefined, auth);
+    const task = getTaskForAuth(id, auth);
+    if (!task) {
+      return undefined;
+    }
+    const noteScope = noteReadScopeForAuth(auth, userIds);
+    const taskRuns = filterTaskRunsForAuth(
+      listTaskRuns({ taskId: id, limit: 10, userIds }),
+      auth
+    );
+    const rawGoal = task.goalId ? getGoalById(task.goalId) : undefined;
+    const goal = rawGoal
+      ? (filterOwnedEntities("goal", [rawGoal], userIds)[0] ?? null)
+      : null;
+    const project = task.projectId
+      ? (listProjectSummaries({ userIds }).find(
+          (entry) => entry.id === task.projectId
+        ) ?? null)
+      : null;
+    return taskContextPayloadSchema.parse({
+      task,
+      goal,
+      project,
+      activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
+      taskRuns,
+      activity: filterNoteActivityEventsForScope(
+        listActivityEventsForTask(id, 20, userIds),
+        noteScope
+      ),
+      notesSummaryByEntity: buildNotesSummaryByEntity(
+        [
+          { entityType: "task", entityId: task.id },
+          ...(task.goalId
+            ? [{ entityType: "goal" as const, entityId: task.goalId }]
+            : []),
+          ...(task.projectId
+            ? [{ entityType: "project" as const, entityId: task.projectId }]
+            : [])
+        ],
+        noteScope
+      )
+    });
+  };
+
   app.get("/api/tasks/:id", async (request, reply) => {
     markCompatibilityRoute(reply);
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const { id } = request.params as { id: string };
-    const task = getTaskById(id);
+    const task = getTaskForAuth(id, auth);
     if (!task) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18265,8 +21420,11 @@ export async function buildServer(
     return { task };
   });
   app.get("/api/v1/tasks/:id", async (request, reply) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const { id } = request.params as { id: string };
-    const task = getTaskById(id);
+    const task = getTaskForAuth(id, auth);
     if (!task) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18274,8 +21432,11 @@ export async function buildServer(
     return { task };
   });
   app.get("/api/v1/work-items/:id", async (request, reply) => {
+    const auth = authenticateRequest(
+      request.headers as Record<string, unknown>
+    );
     const { id } = request.params as { id: string };
-    const workItem = getTaskById(id);
+    const workItem = getTaskForAuth(id, auth);
     if (!workItem) {
       reply.code(404);
       return { error: "Work item not found" };
@@ -18285,73 +21446,46 @@ export async function buildServer(
 
   app.get("/api/tasks/:id/context", async (request, reply) => {
     markCompatibilityRoute(reply);
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/tasks/:id/context" }
+    );
     const { id } = request.params as { id: string };
-    const task = getTaskById(id);
-    if (!task) {
+    const context = buildTaskContextForAuth(id, auth);
+    if (!context) {
       reply.code(404);
       return { error: "Task not found" };
     }
-
-    const taskRuns = listTaskRuns({ taskId: id, limit: 10 });
-    return taskContextPayloadSchema.parse({
-      task,
-      goal: task.goalId ? (getGoalById(task.goalId) ?? null) : null,
-      project: task.projectId
-        ? (listProjectSummaries().find(
-            (project) => project.id === task.projectId
-          ) ?? null)
-        : null,
-      activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
-      taskRuns,
-      activity: listActivityEventsForTask(id, 20),
-      notesSummaryByEntity: buildNotesSummaryByEntity()
-    });
+    return context;
   });
   app.get("/api/v1/tasks/:id/context", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/tasks/:id/context" }
+    );
     const { id } = request.params as { id: string };
-    const task = getTaskById(id);
-    if (!task) {
+    const context = buildTaskContextForAuth(id, auth);
+    if (!context) {
       reply.code(404);
       return { error: "Task not found" };
     }
-
-    const taskRuns = listTaskRuns({ taskId: id, limit: 10 });
-    return taskContextPayloadSchema.parse({
-      task,
-      goal: task.goalId ? (getGoalById(task.goalId) ?? null) : null,
-      project: task.projectId
-        ? (listProjectSummaries().find(
-            (project) => project.id === task.projectId
-          ) ?? null)
-        : null,
-      activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
-      taskRuns,
-      activity: listActivityEventsForTask(id, 20),
-      notesSummaryByEntity: buildNotesSummaryByEntity()
-    });
+    return context;
   });
   app.get("/api/v1/work-items/:id/context", async (request, reply) => {
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["read", "write"],
+      { route: "/api/v1/work-items/:id/context" }
+    );
     const { id } = request.params as { id: string };
-    const workItem = getTaskById(id);
-    if (!workItem) {
+    const context = buildTaskContextForAuth(id, auth);
+    if (!context) {
       reply.code(404);
       return { error: "Work item not found" };
     }
-
-    const taskRuns = listTaskRuns({ taskId: id, limit: 10 });
-    return taskContextPayloadSchema.parse({
-      task: workItem,
-      goal: workItem.goalId ? (getGoalById(workItem.goalId) ?? null) : null,
-      project: workItem.projectId
-        ? (listProjectSummaries().find(
-            (project) => project.id === workItem.projectId
-          ) ?? null)
-        : null,
-      activeTaskRun: taskRuns.find((run) => run.status === "active") ?? null,
-      taskRuns,
-      activity: listActivityEventsForTask(id, 20),
-      notesSummaryByEntity: buildNotesSummaryByEntity()
-    });
+    return context;
   });
 
   app.post("/api/goals", async (request, reply) => {
@@ -18361,10 +21495,9 @@ export async function buildServer(
       ["write"],
       { route: "/api/goals" }
     );
-    const goal = createGoal(
-      createGoalSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = createGoalSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "goal");
+    const goal = createGoal(input, toActivityContext(auth));
     reply.code(201);
     return { goal };
   });
@@ -18374,10 +21507,9 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/goals" }
     );
-    const goal = createGoal(
-      createGoalSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = createGoalSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "goal");
+    const goal = createGoal(input, toActivityContext(auth));
     reply.code(201);
     return { goal };
   });
@@ -18390,11 +21522,9 @@ export async function buildServer(
       { route: "/api/goals/:id" }
     );
     const { id } = request.params as { id: string };
-    const goal = updateGoal(
-      id,
-      updateGoalSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = updateGoalSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "goal");
+    const goal = updateGoal(id, input, toActivityContext(auth));
     if (!goal) {
       reply.code(404);
       return { error: "Goal not found" };
@@ -18408,11 +21538,9 @@ export async function buildServer(
       { route: "/api/v1/goals/:id" }
     );
     const { id } = request.params as { id: string };
-    const goal = updateGoal(
-      id,
-      updateGoalSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = updateGoalSchema.parse(request.body ?? {});
+    requireNestedPsycheNoteMutationAccess(auth, input, "goal");
+    const goal = updateGoal(id, input, toActivityContext(auth));
     if (!goal) {
       reply.code(404);
       return { error: "Goal not found" };
@@ -18512,13 +21640,18 @@ export async function buildServer(
       { route: "/api/tasks" }
     );
     const input = createTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
     const idempotencyKey = parseIdempotencyKey(
       request.headers as Record<string, unknown>
     );
     const activity = toActivityContext(auth);
-    const result = idempotencyKey
-      ? createTaskWithIdempotency(input, idempotencyKey, activity)
-      : { task: createTask(input, activity), replayed: false };
+    const result = runInTransaction(() => {
+      const created = idempotencyKey
+        ? createTaskWithIdempotency(input, idempotencyKey, activity)
+        : { task: createTask(input, activity), replayed: false };
+      assertTaskResultScope(created.task, auth);
+      return created;
+    });
     if (result.replayed) {
       reply.code(200).header("Idempotency-Replayed", "true");
     } else {
@@ -18533,13 +21666,18 @@ export async function buildServer(
       { route: "/api/v1/tasks" }
     );
     const input = createTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
     const idempotencyKey = parseIdempotencyKey(
       request.headers as Record<string, unknown>
     );
     const activity = toActivityContext(auth);
-    const result = idempotencyKey
-      ? createTaskWithIdempotency(input, idempotencyKey, activity)
-      : { task: createTask(input, activity), replayed: false };
+    const result = runInTransaction(() => {
+      const created = idempotencyKey
+        ? createTaskWithIdempotency(input, idempotencyKey, activity)
+        : { task: createTask(input, activity), replayed: false };
+      assertTaskResultScope(created.task, auth);
+      return created;
+    });
     if (result.replayed) {
       reply.code(200).header("Idempotency-Replayed", "true");
     } else {
@@ -18554,13 +21692,18 @@ export async function buildServer(
       { route: "/api/v1/work-items" }
     );
     const input = createTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
     const idempotencyKey = parseIdempotencyKey(
       request.headers as Record<string, unknown>
     );
     const activity = toActivityContext(auth);
-    const result = idempotencyKey
-      ? createTaskWithIdempotency(input, idempotencyKey, activity)
-      : { task: createTask(input, activity), replayed: false };
+    const result = runInTransaction(() => {
+      const created = idempotencyKey
+        ? createTaskWithIdempotency(input, idempotencyKey, activity)
+        : { task: createTask(input, activity), replayed: false };
+      assertTaskResultScope(created.task, auth);
+      return created;
+    });
     if (result.replayed) {
       reply.code(200).header("Idempotency-Replayed", "true");
     } else {
@@ -18577,6 +21720,10 @@ export async function buildServer(
       { route: "/api/tasks/:id/runs" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
     const input = taskRunClaimSchema.parse(request.body ?? {});
     const result = claimTaskRun(id, input, new Date(), toActivityContext(auth));
     reply.code(result.replayed ? 200 : 201);
@@ -18592,6 +21739,10 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id/runs" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
     const input = taskRunClaimSchema.parse(request.body ?? {});
     const result = claimTaskRun(id, input, new Date(), toActivityContext(auth));
     reply.code(result.replayed ? 200 : 201);
@@ -18609,11 +21760,19 @@ export async function buildServer(
       { route: "/api/tasks/:id" }
     );
     const { id } = request.params as { id: string };
-    const task = updateTask(
-      id,
-      updateTaskSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
+    const input = updateTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
+    const task = runInTransaction(() => {
+      const updated = updateTask(id, input, toActivityContext(auth));
+      if (updated) {
+        assertTaskResultScope(updated, auth);
+      }
+      return updated;
+    });
     if (!task) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18627,11 +21786,19 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id" }
     );
     const { id } = request.params as { id: string };
-    const task = updateTask(
-      id,
-      updateTaskSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
+    const input = updateTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
+    const task = runInTransaction(() => {
+      const updated = updateTask(id, input, toActivityContext(auth));
+      if (updated) {
+        assertTaskResultScope(updated, auth);
+      }
+      return updated;
+    });
     if (!task) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18645,11 +21812,19 @@ export async function buildServer(
       { route: "/api/v1/work-items/:id" }
     );
     const { id } = request.params as { id: string };
-    const workItem = updateTask(
-      id,
-      updateTaskSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Work item not found" };
+    }
+    const input = updateTaskSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task");
+    const workItem = runInTransaction(() => {
+      const updated = updateTask(id, input, toActivityContext(auth));
+      if (updated) {
+        assertTaskResultScope(updated, auth);
+      }
+      return updated;
+    });
     if (!workItem) {
       reply.code(404);
       return { error: "Work item not found" };
@@ -18663,11 +21838,22 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id/split" }
     );
     const { id } = request.params as { id: string };
-    const result = splitTask(
-      id,
-      taskSplitCreateSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
+    const result = runInTransaction(() => {
+      const split = splitTask(
+        id,
+        taskSplitCreateSchema.parse(request.body ?? {}),
+        toActivityContext(auth)
+      );
+      if (split) {
+        assertTaskResultScope(split.parent, auth);
+        split.children.forEach((child) => assertTaskResultScope(child, auth));
+      }
+      return split;
+    });
     if (!result) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18713,41 +21899,55 @@ export async function buildServer(
     return { workItem };
   });
   app.post("/api/v1/operator/log-work", async (request, reply) => {
-    const auth = requireScopedAccess(
+    const auth = requireRewardMutationAccess(
       request.headers as Record<string, unknown>,
-      ["write", "rewards.manage"],
-      { route: "/api/v1/operator/log-work" }
+      "/api/v1/operator/log-work"
     );
     const input = operatorLogWorkSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "operator_log_work");
 
-    if (input.taskId) {
-      const task = updateTask(
-        input.taskId,
-        {
-          title:
-            input.title && input.title.trim().length > 0
-              ? input.title
-              : undefined,
-          description:
-            typeof input.description === "string"
-              ? input.description
-              : input.summary.trim().length > 0
-                ? input.summary
+    const taskId = input.taskId;
+    if (taskId) {
+      if (!getTaskForAuth(taskId, auth)) {
+        reply.code(404);
+        return { error: "Task not found" };
+      }
+      const task = runInTransaction(() => {
+        const updated = updateTask(
+          taskId,
+          {
+            title:
+              input.title && input.title.trim().length > 0
+                ? input.title
                 : undefined,
-          goalId: input.goalId,
-          projectId: input.projectId,
-          owner: input.owner,
-          status: input.status ?? "done",
-          priority: input.priority,
-          dueDate: input.dueDate,
-          effort: input.effort,
-          energy: input.energy,
-          points: input.points,
-          tagIds: input.tagIds,
-          notes: input.closeoutNote ? [input.closeoutNote] : undefined
-        },
-        toActivityContext(auth)
-      );
+            description:
+              typeof input.description === "string"
+                ? input.description
+                : input.summary.trim().length > 0
+                  ? input.summary
+                  : undefined,
+            goalId: input.goalId,
+            projectId: input.projectId,
+            owner: input.owner,
+            userId: input.userId,
+            status: input.status ?? "done",
+            priority: input.priority,
+            dueDate: input.dueDate,
+            effort: input.effort,
+            energy: input.energy,
+            points: input.points,
+            tagIds: input.tagIds,
+            completionReport: input.completionReport,
+            gitRefs: input.gitRefs,
+            notes: input.closeoutNote ? [input.closeoutNote] : undefined
+          },
+          toActivityContext(auth)
+        );
+        if (updated) {
+          assertTaskResultScope(updated, auth);
+        }
+        return updated;
+      });
       if (!task) {
         reply.code(404);
         return { error: "Task not found" };
@@ -18755,38 +21955,44 @@ export async function buildServer(
       return { task, xp: buildXpMetricsPayload() };
     }
 
-    const task = createTask(
-      createTaskSchema.parse({
-        title: input.title,
-        description:
-          typeof input.description === "string"
-            ? input.description
-            : input.summary.trim().length > 0
-              ? input.summary
-              : "",
-        goalId: input.goalId ?? null,
-        projectId: input.projectId ?? null,
-        owner: input.owner ?? "Albert",
-        status: input.status ?? "done",
-        priority: input.priority ?? "medium",
-        dueDate: input.dueDate ?? null,
-        effort: input.effort ?? "deep",
-        energy: input.energy ?? "steady",
-        points: input.points ?? 40,
-        tagIds: input.tagIds ?? [],
-        notes: input.closeoutNote ? [input.closeoutNote] : []
-      }),
-      toActivityContext(auth)
-    );
+    const task = runInTransaction(() => {
+      const created = createTask(
+        createTaskSchema.parse({
+          title: input.title,
+          description:
+            typeof input.description === "string"
+              ? input.description
+              : input.summary.trim().length > 0
+                ? input.summary
+                : "",
+          goalId: input.goalId ?? null,
+          projectId: input.projectId ?? null,
+          owner: input.owner ?? "Albert",
+          userId: input.userId,
+          status: input.status ?? "done",
+          priority: input.priority ?? "medium",
+          dueDate: input.dueDate ?? null,
+          effort: input.effort ?? "deep",
+          energy: input.energy ?? "steady",
+          points: input.points ?? 40,
+          tagIds: input.tagIds ?? [],
+          completionReport: input.completionReport,
+          gitRefs: input.gitRefs ?? [],
+          notes: input.closeoutNote ? [input.closeoutNote] : []
+        }),
+        toActivityContext(auth)
+      );
+      assertTaskResultScope(created, auth);
+      return created;
+    });
 
     reply.code(201);
     return { task, xp: buildXpMetricsPayload() };
   });
   app.post("/api/v1/work-adjustments", async (request, reply) => {
-    const auth = requireScopedAccess(
+    const auth = requireRewardMutationAccess(
       request.headers as Record<string, unknown>,
-      ["write", "rewards.manage"],
-      { route: "/api/v1/work-adjustments" }
+      "/api/v1/work-adjustments"
     );
     const input = createWorkAdjustmentSchema.parse(request.body ?? {});
     const currentTarget = resolveWorkAdjustmentTarget(
@@ -18884,8 +22090,18 @@ export async function buildServer(
       { route: "/api/v1/tasks/:id/uncomplete" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task not found" };
+    }
     uncompleteTaskSchema.parse(request.body ?? {});
-    const task = uncompleteTask(id, toActivityContext(auth));
+    const task = runInTransaction(() => {
+      const updated = uncompleteTask(id, toActivityContext(auth));
+      if (updated) {
+        assertTaskResultScope(updated, auth);
+      }
+      return updated;
+    });
     if (!task) {
       reply.code(404);
       return { error: "Task not found" };
@@ -18953,12 +22169,15 @@ export async function buildServer(
     }
   );
   app.post("/api/v1/life-events/import-ticket", async (request, reply) => {
+    requireArtifactReadAccess(request.headers as Record<string, unknown>, {
+      route: "/api/v1/life-events/import-ticket"
+    });
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/life-events/import-ticket" }
     );
-    const result = importLifeEventTicket(
+    const result = await importLifeEventTicket(
       lifeEventTicketImportInputSchema.parse(request.body ?? {}),
       toActivityContext(auth)
     );
@@ -18988,12 +22207,14 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/entities/create" }
     );
-    const result = createEntities(
-      batchCreateEntitiesSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = batchCreateEntitiesSchema.parse(request.body ?? {});
+    requirePeopleBatchMutationAccess(auth, input.operations);
+    requirePsycheNoteBatchMutationAccess(auth, input.operations);
+    requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
+    requirePreferenceCatalogBatchLinkAccess(input.operations, auth);
+    const result = createEntities(input, toActivityContext(auth));
     await applyBatchCalendarEntityEffects(result.results, auth, "create");
-    return result;
+    return redactPreferenceBatchPayload(result, auth);
   });
   app.post("/api/v1/entities/update", async (request) => {
     const auth = requireScopedAccess(
@@ -19001,12 +22222,14 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/entities/update" }
     );
-    const result = updateEntities(
-      batchUpdateEntitiesSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = batchUpdateEntitiesSchema.parse(request.body ?? {});
+    requirePeopleBatchMutationAccess(auth, input.operations);
+    requirePsycheNoteBatchMutationAccess(auth, input.operations);
+    requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
+    requirePreferenceCatalogBatchLinkAccess(input.operations, auth);
+    const result = updateEntities(input, toActivityContext(auth));
     await applyBatchCalendarEntityEffects(result.results, auth, "update");
-    return result;
+    return redactPreferenceBatchPayload(result, auth);
   });
   app.post("/api/v1/entities/delete", async (request) => {
     const auth = requireScopedAccess(
@@ -19014,32 +22237,187 @@ export async function buildServer(
       ["write"],
       { route: "/api/v1/entities/delete" }
     );
-    const result = deleteEntities(
-      batchDeleteEntitiesSchema.parse(request.body ?? {}),
-      toActivityContext(auth)
-    );
+    const input = batchDeleteEntitiesSchema.parse(request.body ?? {});
+    requirePeopleBatchMutationAccess(auth, input.operations);
+    requirePsycheNoteBatchMutationAccess(auth, input.operations);
+    requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
+    const result = deleteEntities(input, toActivityContext(auth));
     await applyBatchCalendarEntityEffects(result.results, auth, "delete");
-    return result;
+    return redactPreferenceBatchPayload(result, auth);
   });
   app.post("/api/v1/entities/restore", async (request) => {
-    requireScopedAccess(request.headers as Record<string, unknown>, ["write"], {
-      route: "/api/v1/entities/restore"
-    });
-    return restoreEntities(
-      batchRestoreEntitiesSchema.parse(request.body ?? {})
+    const auth = requireScopedAccess(
+      request.headers as Record<string, unknown>,
+      ["write"],
+      {
+        route: "/api/v1/entities/restore"
+      }
+    );
+    const input = batchRestoreEntitiesSchema.parse(request.body ?? {});
+    requirePeopleBatchMutationAccess(auth, input.operations);
+    requirePsycheNoteBatchMutationAccess(auth, input.operations);
+    requirePsycheVocabularyBatchMutationAccess(auth, input.operations);
+    return redactPreferenceBatchPayload(
+      restoreEntities(input, toActivityContext(auth)),
+      auth
     );
   });
   app.post("/api/v1/entities/search", async (request) => {
-    requireScopedAccess(
+    const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["read", "write"],
       { route: "/api/v1/entities/search" }
     );
-    return searchEntities(batchSearchEntitiesSchema.parse(request.body ?? {}));
+    const input = batchSearchEntitiesSchema.parse(request.body ?? {});
+    const canReadPeople = hasTokenScope(auth, "people:read:basic");
+    const canReadPsycheVocabulary =
+      !isPsycheAuthRequired() ||
+      Boolean(auth.session) ||
+      hasTokenScope(auth, "psyche.read");
+    for (const search of input.searches) {
+      const searchesPreferenceCatalogs =
+        !search.entityTypes ||
+        search.entityTypes.length === 0 ||
+        search.entityTypes.includes("preference_catalog");
+      if (searchesPreferenceCatalogs && search.linkedTo) {
+        requirePreferenceSourceReadAccess(
+          {
+            entityType: search.linkedTo.entityType,
+            entityId: search.linkedTo.id
+          },
+          auth
+        );
+      }
+      if (
+        search.linkedTo?.entityType === "person" ||
+        search.entityTypes?.includes("person")
+      ) {
+        managers.authorization.requireTokenScope(auth, "people:read:basic", {
+          entityType: "person",
+          routeFamily: "entity_batch"
+        });
+      }
+      if (
+        search.linkedTo?.entityType === "event_type" ||
+        search.linkedTo?.entityType === "emotion_definition" ||
+        search.entityTypes?.some(isPsycheVocabularyEntityType)
+      ) {
+        if (isPsycheAuthRequired()) {
+          managers.authorization.requireTokenScope(auth, "psyche.read", {
+            entityTypes: PSYCHE_VOCABULARY_ENTITY_TYPES,
+            routeFamily: "entity_batch"
+          });
+        }
+      }
+    }
+    const preparedSearches = input.searches.map((search) => ({
+      ...search,
+      entityTypes:
+        search.entityTypes ??
+        crudEntityTypeSchema.options.filter(
+          (entityType) =>
+            (canReadPeople || entityType !== "person") &&
+            (canReadPsycheVocabulary ||
+              !isPsycheVocabularyEntityType(entityType))
+        ),
+      userIds: resolveEffectiveUserIdsForReads(
+        search.userIds ? { userIds: search.userIds } : undefined,
+        auth
+      )
+    }));
+    const result = searchEntities(
+      { ...input, searches: preparedSearches },
+      {
+        includePsycheNotes:
+          !isPsycheAuthRequired() || hasTokenScope(auth, "psyche.read"),
+        taskScope: {
+          userIds: auth.token?.scopePolicy.userIds ?? [],
+          projectIds: auth.token?.scopePolicy.projectIds ?? [],
+          tagIds: auth.token?.scopePolicy.tagIds ?? []
+        },
+        artifactScope: {
+          userIds: auth.token?.scopePolicy.userIds ?? [],
+          projectIds: auth.token?.scopePolicy.projectIds ?? [],
+          tagIds: auth.token?.scopePolicy.tagIds ?? []
+        },
+        transformEntityForRead: (entityType, entity) =>
+          entityType === "preference_catalog"
+            ? transformPreferenceCatalogForBatchRead(entity, auth)
+            : entity
+      }
+    );
+    if (canReadPsycheVocabulary) {
+      result.results.forEach((searchResult, index) => {
+        const search = preparedSearches[index];
+        if (!search || !("matches" in searchResult)) {
+          return;
+        }
+        const vocabularyEntityTypes = search.entityTypes?.filter(
+          isPsycheVocabularyEntityType
+        );
+        if (!vocabularyEntityTypes || vocabularyEntityTypes.length === 0) {
+          return;
+        }
+        const systemResult = searchEntities({
+          searches: [
+            {
+              ...search,
+              entityTypes: vocabularyEntityTypes,
+              userIds: undefined,
+              includeDeleted: false
+            }
+          ]
+        }).results[0];
+        if (!systemResult || !("matches" in systemResult)) {
+          return;
+        }
+        type BatchSearchMatch = {
+          entityType: CrudEntityType;
+          id: string;
+          entity?: unknown;
+        };
+        const systemResultMatches = (
+          systemResult as {
+            matches?: BatchSearchMatch[];
+          }
+        ).matches;
+        const currentMatches = (
+          searchResult as {
+            matches?: BatchSearchMatch[];
+          }
+        ).matches;
+        if (!systemResultMatches || !currentMatches) {
+          return;
+        }
+        const systemMatches = systemResultMatches.filter(
+          (match) =>
+            match.entity &&
+            typeof match.entity === "object" &&
+            !Array.isArray(match.entity) &&
+            (match.entity as Record<string, unknown>).system === true
+        );
+        const merged = [...systemMatches, ...currentMatches];
+        const seen = new Set<string>();
+        (searchResult as { matches: BatchSearchMatch[] }).matches = merged
+          .filter((match) => {
+            const key = `${match.entityType}:${match.id}`;
+            if (seen.has(key)) {
+              return false;
+            }
+            seen.add(key);
+            return true;
+          })
+          .slice(0, search.limit);
+      });
+    }
+    return redactPreferenceBatchPayload(result, auth);
   });
 
   app.post("/api/task-runs/recover", async (request, reply) => {
     markCompatibilityRoute(reply);
+    requireOperatorSession(request.headers as Record<string, unknown>, {
+      route: "/api/task-runs/recover"
+    });
     const payload = taskRunListQuerySchema
       .pick({ limit: true })
       .parse(request.body ?? {});
@@ -19054,18 +22432,26 @@ export async function buildServer(
       { route: "/api/task-runs/:id/heartbeat" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
     const input = taskRunHeartbeatSchema.parse(request.body ?? {});
     return {
       taskRun: heartbeatTaskRun(id, input, new Date(), toActivityContext(auth))
     };
   });
-  app.post("/api/v1/task-runs/:id/heartbeat", async (request) => {
+  app.post("/api/v1/task-runs/:id/heartbeat", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/task-runs/:id/heartbeat" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
     const input = taskRunHeartbeatSchema.parse(request.body ?? {});
     return {
       taskRun: heartbeatTaskRun(id, input, new Date(), toActivityContext(auth))
@@ -19080,18 +22466,26 @@ export async function buildServer(
       { route: "/api/task-runs/:id/focus" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
     const input = taskRunFocusSchema.parse(request.body ?? {});
     return {
       taskRun: focusTaskRun(id, input, new Date(), toActivityContext(auth))
     };
   });
-  app.post("/api/v1/task-runs/:id/focus", async (request) => {
+  app.post("/api/v1/task-runs/:id/focus", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/task-runs/:id/focus" }
     );
     const { id } = request.params as { id: string };
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
     const input = taskRunFocusSchema.parse(request.body ?? {});
     return {
       taskRun: focusTaskRun(id, input, new Date(), toActivityContext(auth))
@@ -19106,19 +22500,29 @@ export async function buildServer(
       { route: "/api/task-runs/:id/complete" }
     );
     const { id } = request.params as { id: string };
-    const input = taskRunFinishSchema.parse(request.body ?? {});
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
+    const input = taskRunCompleteSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_complete");
     return {
       taskRun: completeTaskRun(id, input, new Date(), toActivityContext(auth))
     };
   });
-  app.post("/api/v1/task-runs/:id/complete", async (request) => {
+  app.post("/api/v1/task-runs/:id/complete", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/task-runs/:id/complete" }
     );
     const { id } = request.params as { id: string };
-    const input = taskRunFinishSchema.parse(request.body ?? {});
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
+    const input = taskRunCompleteSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_complete");
     return {
       taskRun: completeTaskRun(id, input, new Date(), toActivityContext(auth))
     };
@@ -19132,19 +22536,29 @@ export async function buildServer(
       { route: "/api/task-runs/:id/release" }
     );
     const { id } = request.params as { id: string };
-    const input = taskRunFinishSchema.parse(request.body ?? {});
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
+    const input = taskRunReleaseSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_release");
     return {
       taskRun: releaseTaskRun(id, input, new Date(), toActivityContext(auth))
     };
   });
-  app.post("/api/v1/task-runs/:id/release", async (request) => {
+  app.post("/api/v1/task-runs/:id/release", async (request, reply) => {
     const auth = requireScopedAccess(
       request.headers as Record<string, unknown>,
       ["write"],
       { route: "/api/v1/task-runs/:id/release" }
     );
     const { id } = request.params as { id: string };
-    const input = taskRunFinishSchema.parse(request.body ?? {});
+    if (!getTaskRunForAuth(id, auth)) {
+      reply.code(404);
+      return { error: "Task run not found" };
+    }
+    const input = taskRunReleaseSchema.parse(request.body ?? {});
+    requireTaskCloseoutNoteMutationAccess(auth, input, "task_run_release");
     return {
       taskRun: releaseTaskRun(id, input, new Date(), toActivityContext(auth))
     };

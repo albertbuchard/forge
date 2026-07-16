@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db.js";
-import { eventLogEntrySchema, type ActivitySource, type EventLogEntry, type EventsListQuery } from "../types.js";
+import {
+  eventLogEntrySchema,
+  type ActivitySource,
+  type EventLogEntry,
+  type EventsListQuery
+} from "../types.js";
 
 type EventLogRow = {
   id: string;
@@ -14,7 +19,8 @@ type EventLogRow = {
   created_at: string;
 };
 
-type EventMetadataValue = string | number | boolean | null;
+type EventMetadataScalar = string | number | boolean | null;
+type EventMetadataValue = EventMetadataScalar | EventMetadataScalar[];
 
 export type EventLogInput = {
   eventKind: string;
@@ -35,12 +41,18 @@ function mapEvent(row: EventLogRow): EventLogEntry {
     actor: row.actor,
     source: row.source,
     causedByEventId: row.caused_by_event_id,
-    metadata: JSON.parse(row.metadata_json) as Record<string, EventMetadataValue>,
+    metadata: JSON.parse(row.metadata_json) as Record<
+      string,
+      EventMetadataValue
+    >,
     createdAt: row.created_at
   });
 }
 
-export function recordEventLog(input: EventLogInput, now = new Date()): EventLogEntry {
+export function recordEventLog(
+  input: EventLogInput,
+  now = new Date()
+): EventLogEntry {
   const event = eventLogEntrySchema.parse({
     id: `log_${randomUUID().replaceAll("-", "").slice(0, 10)}`,
     eventKind: input.eventKind,
@@ -91,7 +103,8 @@ export function listEventLog(filters: EventsListQuery = {}): EventLogEntry[] {
     params.push(filters.eventKind);
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const limitSql = filters.limit ? "LIMIT ?" : "";
   if (filters.limit) {
     params.push(filters.limit);

@@ -8,6 +8,8 @@ import pytest
 
 from forge_hermes import tools
 from forge_hermes.catalog import (
+    ARTIFACT_ROUTE_EXAMPLES,
+    ARTIFACT_ROUTE_SPECS,
     ATTENTION_ROUTE_SPECS,
     CALENDAR_CONNECTION_ROUTE_SPECS,
     ENTITY_NAVIGATION_ROUTE_SPECS,
@@ -17,6 +19,8 @@ from forge_hermes.catalog import (
     WIKI_ROUTE_SPECS,
     WORKBENCH_ROUTE_EXAMPLES,
     WORKBENCH_ROUTE_SPECS,
+    complete_task_run_body,
+    complete_task_run_path,
     release_task_run_body,
     release_task_run_path,
     sports_overview_path,
@@ -82,6 +86,149 @@ def test_release_task_run_body_omits_empty_optionals():
     }
 
 
+def test_complete_task_run_schema_and_body_forward_all_closeout_evidence():
+    spec = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_complete_task_run"
+    )
+    release = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_release_task_run"
+    )
+    properties = spec["parameters"]["properties"]
+    report = properties["completionReport"]
+    git_refs = properties["gitRefs"]
+
+    assert spec["parameters"]["additionalProperties"] is False
+    assert set(properties) == {
+        "taskRunId",
+        "actor",
+        "note",
+        "completionReport",
+        "gitRefs",
+        "closeoutNote",
+    }
+    assert properties["actor"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "description": "Optional actor label.",
+    }
+    assert properties["note"] == {
+        "type": "string",
+        "maxLength": 4000,
+        "description": "Optional completion note.",
+    }
+    assert report["additionalProperties"] is False
+    assert report["properties"]["modifiedFiles"] == {
+        "type": "array",
+        "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Safe repository-relative path without traversal.",
+        },
+        "maxItems": 256,
+        "uniqueItems": True,
+    }
+    assert report["properties"]["workSummary"] == {
+        "type": "string",
+        "maxLength": 8000,
+    }
+    assert report["properties"]["linkedGitRefIds"] == {
+        "type": "array",
+        "items": {"type": "string", "minLength": 1, "maxLength": 128},
+        "maxItems": 64,
+        "uniqueItems": True,
+    }
+    assert git_refs["maxItems"] == 64
+    assert git_refs["items"]["required"] == ["refType", "refValue"]
+    git_ref_properties = git_refs["items"]["properties"]
+    assert git_ref_properties["id"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+    }
+    assert git_ref_properties["refType"] == {
+        "type": "string",
+        "enum": ["commit", "branch", "pull_request"],
+    }
+    assert git_ref_properties["provider"] == {
+        "type": "string",
+        "maxLength": 64,
+        "default": "git",
+    }
+    assert git_ref_properties["repository"] == {
+        "type": "string",
+        "maxLength": 255,
+        "default": "",
+    }
+    assert git_ref_properties["refValue"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512,
+    }
+    assert git_refs["items"]["properties"]["url"] == {
+        "anyOf": [
+            {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://",
+                "maxLength": 2048,
+            },
+            {"type": "null"},
+        ]
+    }
+    assert git_ref_properties["displayTitle"] == {
+        "type": "string",
+        "maxLength": 512,
+        "default": "",
+    }
+    assert set(release["parameters"]["properties"]) == {
+        "taskRunId",
+        "actor",
+        "note",
+        "closeoutNote",
+    }
+    assert "completionReport" not in release["parameters"]["properties"]
+    assert "gitRefs" not in release["parameters"]["properties"]
+    assert "exact terminal replay is idempotent" in spec["description"]
+    assert "changed closeout evidence conflicts" in spec["description"]
+    assert "closeoutState deferred" in spec["description"]
+    assert "never accepts completionReport or gitRefs" in release["description"]
+
+    closeout = {
+        "actor": "  Albert  ",
+        "note": "  Completed  ",
+        "completionReport": {
+            "modifiedFiles": ["plugins/hermes/forge_hermes/catalog.py"],
+            "workSummary": "Forwarded the complete PLAN-17 evidence contract.",
+            "linkedGitRefIds": ["commit_abc123"],
+        },
+        "gitRefs": [
+            {
+                "id": "commit_abc123",
+                "refType": "commit",
+                "provider": "github",
+                "repository": "albertbuchard/forge",
+                "refValue": "abc123",
+                "url": "https://github.com/albertbuchard/forge/commit/abc123",
+                "displayTitle": "PLAN-17 closeout",
+            }
+        ],
+        "closeoutNote": {"contentMarkdown": "Durable closeout evidence."},
+    }
+    assert complete_task_run_path({"taskRunId": " run_123 "}) == (
+        "/api/v1/task-runs/run_123/complete"
+    )
+    assert complete_task_run_body(closeout, None) == {
+        "actor": "Albert",
+        "note": "Completed",
+        "completionReport": closeout["completionReport"],
+        "gitRefs": closeout["gitRefs"],
+        "closeoutNote": closeout["closeoutNote"],
+    }
+
+
 def test_sports_overview_path_uses_compact_aggregates():
     assert sports_overview_path({}) == "/api/v1/health/fitness?compact=1"
     assert sports_overview_path(
@@ -89,6 +236,30 @@ def test_sports_overview_path_uses_compact_aggregates():
     ) == (
         "/api/v1/health/fitness?userIds=user_operator"
         "&userIds=user_coach&compact=1"
+    )
+
+
+def test_today_priority_tool_uses_bounded_scope_and_timezone_query():
+    spec = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_get_today_priority"
+    )
+    candidate_limit = spec["parameters"]["properties"]["candidateLimit"]
+    assert candidate_limit == {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 24,
+        "description": "Maximum ranked candidates to return.",
+    }
+    assert spec["path_builder"](
+        {
+            "userIds": ["user_operator", "user_coach"],
+            "timeZone": "Europe/Zurich",
+            "candidateLimit": 12,
+        }
+    ) == (
+        "/api/v1/today/priority?userIds=user_operator"
+        "&userIds=user_coach&timeZone=Europe%2FZurich&candidateLimit=12"
     )
 
 
@@ -184,6 +355,94 @@ def test_update_entities_tool_description_mentions_habit_checkins():
 
     assert "habit.patch.checkIn" in description
     assert "official habit outcome logging" in description
+
+
+def test_batch_entity_tool_schemas_match_server_bounds_and_retry_contract():
+    specs = {tool["name"]: tool for tool in TOOL_CATALOG}
+    expected = {
+        "forge_create_entities": ("operations", 100),
+        "forge_update_entities": ("operations", 100),
+        "forge_delete_entities": ("operations", 100),
+        "forge_restore_entities": ("operations", 100),
+        "forge_search_entities": ("searches", 50),
+    }
+
+    for tool_name, (array_name, max_items) in expected.items():
+        array = specs[tool_name]["parameters"]["properties"][array_name]
+        assert array["minItems"] == 1
+        assert array["maxItems"] == max_items
+
+    create_operation = specs["forge_create_entities"]["parameters"]["properties"][
+        "operations"
+    ]["items"]
+    assert create_operation["properties"]["idempotencyKey"]["maxLength"] == 128
+
+    search = specs["forge_search_entities"]["parameters"]["properties"][
+        "searches"
+    ]["items"]
+    assert search["properties"]["limit"]["maximum"] == 200
+    assert search["properties"]["userIds"]["type"] == "array"
+    assert search["properties"]["userIds"]["items"] == {"type": "string"}
+
+
+def test_task_timebox_recommendation_is_a_read_only_post_with_timezone():
+    spec = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_recommend_task_timeboxes"
+    )
+    properties = spec["parameters"]["properties"]
+
+    assert spec["method"] == "POST"
+    assert spec["path"] == "/api/v1/calendar/timeboxes/recommend"
+    assert spec["write"] is False
+    assert properties["limit"]["maximum"] == 12
+    assert "timezone" in properties
+    assert tools._resolve_write(spec, {"taskId": "task_123"}, "POST") is False
+
+
+def test_task_timebox_direct_create_matches_the_closed_server_contract():
+    spec = next(
+        tool for tool in TOOL_CATALOG if tool["name"] == "forge_create_task_timebox"
+    )
+    properties = spec["parameters"]["properties"]
+
+    assert spec["method"] == "POST"
+    assert spec["path"] == "/api/v1/calendar/timeboxes"
+    assert spec["write"] is True
+    assert spec["parameters"]["required"] == [
+        "taskId",
+        "title",
+        "startsAt",
+        "endsAt",
+    ]
+    assert set(properties) == {
+        "taskId",
+        "projectId",
+        "title",
+        "startsAt",
+        "endsAt",
+        "source",
+        "status",
+        "overrideReason",
+        "activityPresetKey",
+        "customSustainRateApPerHour",
+        "userId",
+    }
+    assert properties["status"]["enum"] == [
+        "planned",
+        "active",
+        "completed",
+        "cancelled",
+    ]
+    assert properties["activityPresetKey"]["anyOf"][0]["enum"] == [
+        "deep_work",
+        "admin",
+        "maintenance",
+        "meeting",
+        "recovery_break",
+        "holiday_leisure",
+        "light_context",
+        "task_inherited",
+    ]
 
 
 def test_live_contract_descriptions_prevent_catalog_and_update_drift():
@@ -285,6 +544,18 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "sync",
         "update",
     ]
+    assert "write" not in WIKI_ROUTE_SPECS["search"]
+    wiki_list = specs["forge_list_wiki_pages"]
+    wiki_search = specs["forge_search_wiki"]
+    assert wiki_list["parameters"]["properties"]["limit"]["maximum"] == 500
+    assert wiki_list["parameters"]["properties"]["offset"]["maximum"] == 9999
+    assert wiki_list["path_builder"](
+        {"spaceId": "wiki_space_shared", "limit": 25, "offset": 50}
+    ) == "/api/v1/wiki/pages?spaceId=wiki_space_shared&limit=25&offset=50"
+    assert wiki_search["parameters"]["properties"]["limit"]["maximum"] == 50
+    assert wiki_search["parameters"]["properties"]["offset"]["maximum"] == 999
+    assert wiki_search["parameters"]["properties"]["query"]["maxLength"] == 500
+    assert "write" not in wiki_search
     assert set(
         specs["forge_call_movement_route"]["parameters"]["properties"]["routeKey"]["enum"]
     ) >= {
@@ -335,6 +606,18 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "nodeResult",
         "latestNodeOutput",
     }
+    assert specs["forge_call_artifact_route"]["parameters"]["properties"][
+        "routeKey"
+    ]["enum"] == sorted(ARTIFACT_ROUTE_SPECS)
+    assert specs["forge_call_artifact_route"]["parameters"]["examples"] == (
+        ARTIFACT_ROUTE_EXAMPLES
+    )
+    assert "stable per-file idempotencyKey" in specs[
+        "forge_call_artifact_route"
+    ]["description"]
+    assert "normalizes agent provenance" in specs[
+        "forge_call_artifact_route"
+    ]["description"]
     attention_route_description = specs["forge_call_attention_route"]["parameters"][
         "properties"
     ]["routeKey"]["description"]
@@ -404,6 +687,7 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         "forge_call_movement_route",
         "forge_call_life_force_route",
         "forge_call_workbench_route",
+        "forge_call_artifact_route",
     ]:
         properties = specs[tool_name]["parameters"]["properties"]
         assert (
@@ -435,6 +719,10 @@ def test_specialized_domain_tools_are_explicit_route_key_tools():
         WIKI_ROUTE_SPECS,
         {"routeKey": "readBySlug", "pathParams": {"slug": "research/method 1"}},
     ) == "/api/v1/wiki/by-slug/research%2Fmethod%201"
+    assert specialized_route_path(
+        ARTIFACT_ROUTE_SPECS,
+        {"routeKey": "readMetadata", "pathParams": {"id": "artifact/1"}},
+    ) == "/api/v1/artifacts/artifact%2F1"
     assert specialized_route_path(
         LIFE_FORCE_ROUTE_SPECS,
         {"routeKey": "weekdayTemplate", "pathParams": {"weekday": "monday"}},

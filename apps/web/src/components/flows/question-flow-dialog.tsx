@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   useCallback,
   useEffect,
@@ -263,24 +263,28 @@ export function FlowField({
   children: ReactNode;
 }) {
   return (
-    <label className="grid min-w-0 max-w-full gap-2">
-      <span className="flex min-w-0 max-w-full items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
-        <span className="min-w-0 break-words">{label}</span>
-        {labelHelp ? (
-          <InfoTooltip content={labelHelp} label={`Explain ${label}`} />
-        ) : null}
-      </span>
-      {description ? (
-        <span className="min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
-          {description}
+    <div className="grid min-w-0 max-w-full gap-2">
+      <label className="grid min-w-0 max-w-full gap-2">
+        <span className="flex min-w-0 max-w-full items-center gap-2 text-sm font-medium text-[var(--ui-ink-strong)]">
+          <span className="min-w-0 break-words">{label}</span>
+          {labelHelp ? (
+            <InfoTooltip content={labelHelp} label={`Explain ${label}`} />
+          ) : null}
         </span>
-      ) : null}
-      {children}
+        {description ? (
+          <span className="min-w-0 break-words text-sm leading-6 text-[var(--ui-ink-soft)]">
+            {description}
+          </span>
+        ) : null}
+        {children}
+      </label>
       {hint ? <FieldHint>{hint}</FieldHint> : null}
       {error ? (
-        <span className="text-sm text-[var(--danger)]">{error}</span>
+        <span role="alert" className="text-sm text-[var(--danger)]">
+          {error}
+        </span>
       ) : null}
-    </label>
+    </div>
   );
 }
 
@@ -308,6 +312,7 @@ export function FlowChoiceGrid({
           <button
             key={option.value}
             type="button"
+            aria-pressed={selected}
             className={cn(
               "min-w-0 max-w-full overflow-hidden rounded-[22px] border px-4 py-4 text-left transition",
               selected
@@ -348,6 +353,7 @@ export function QuestionFlowDialog<TValue>({
   resolveError,
   resolveContinueNudge,
   resolveContinueBlocker,
+  resolveContinueBlockerTone,
   initialStepId,
   contentClassName,
   draftPersistenceKey
@@ -374,12 +380,17 @@ export function QuestionFlowDialog<TValue>({
     stepId: string,
     value: TValue
   ) => string | null | undefined;
+  resolveContinueBlockerTone?: (
+    stepId: string,
+    value: TValue
+  ) => "guidance" | "error";
   initialStepId?: string;
   contentClassName?: string;
   draftPersistenceKey?: string;
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobileFlow();
+  const prefersReducedMotion = useReducedMotion();
   const [stepIndex, setStepIndex] = useState(0);
   const previousOpenRef = useRef(false);
   const previousInitialStepIdRef = useRef(initialStepId);
@@ -437,6 +448,10 @@ export function QuestionFlowDialog<TValue>({
   const continueBlocker =
     step && stepIndex < totalSteps - 1
       ? resolveContinueBlocker?.(step.id, value)
+      : null;
+  const continueBlockerTone =
+    step && continueBlocker
+      ? (resolveContinueBlockerTone?.(step.id, value) ?? "error")
       : null;
 
   const persistDraft = useCallback(() => {
@@ -571,11 +586,22 @@ export function QuestionFlowDialog<TValue>({
                     Step {stepIndex + 1} of {totalSteps}
                   </span>
                 </div>
-                <div className="mt-2 h-1.5 rounded-full bg-[var(--ui-surface-2)]">
+                <div
+                  className="mt-2 h-1.5 rounded-full bg-[var(--ui-surface-2)]"
+                  role="progressbar"
+                  aria-label={`${title} progress`}
+                  aria-valuemin={1}
+                  aria-valuemax={totalSteps}
+                  aria-valuenow={stepIndex + 1}
+                  aria-valuetext={`Step ${stepIndex + 1} of ${totalSteps}`}
+                >
                   <motion.div
                     className="h-full rounded-full bg-[linear-gradient(90deg,var(--primary),var(--secondary))]"
                     animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.35, ease: "easeOut" }}
+                    transition={{
+                      duration: prefersReducedMotion ? 0 : 0.35,
+                      ease: "easeOut"
+                    }}
                   />
                 </div>
               </div>
@@ -592,50 +618,66 @@ export function QuestionFlowDialog<TValue>({
             data-testid="question-flow-canvas"
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6 md:py-5"
           >
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step.id}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -18 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
-                className="flex min-h-full min-w-0 flex-col gap-5"
-              >
-                <div className="flex min-h-full min-w-0 flex-col justify-start">
-                  {step.eyebrow ? (
-                    <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--secondary)]">
-                      {step.eyebrow}
-                    </div>
-                  ) : null}
-                  <h3 className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-[var(--ui-ink-strong)]">
-                    {step.title}
-                  </h3>
-                  {step.description ? (
-                    <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
-                      {step.description}
-                    </p>
-                  ) : null}
-                  {visibleError ? (
-                    <div className="mt-4 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]">
-                      {renderDialogMessageBlock(visibleError)}
-                    </div>
-                  ) : null}
-                  <div className="mt-5 grid flex-1 content-start gap-5">
-                    {step.render(value, setValue)}
+            <motion.div
+              key={step.id}
+              data-testid="question-flow-step"
+              data-step-id={step.id}
+              initial={prefersReducedMotion ? false : { opacity: 0.72, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: prefersReducedMotion ? 0 : 0.2,
+                ease: "easeOut"
+              }}
+              className="flex min-h-full min-w-0 flex-col gap-5"
+            >
+              <div className="flex min-h-full min-w-0 flex-col justify-start">
+                {step.eyebrow ? (
+                  <div className="font-label text-[11px] uppercase tracking-[0.18em] text-[var(--secondary)]">
+                    {step.eyebrow}
                   </div>
+                ) : null}
+                <h3
+                  aria-live="polite"
+                  className="mt-1.5 font-display text-[clamp(1.45rem,2.15vw,2rem)] leading-tight text-[var(--ui-ink-strong)]"
+                >
+                  {step.title}
+                </h3>
+                {step.description ? (
+                  <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[var(--ui-ink-soft)]">
+                    {step.description}
+                  </p>
+                ) : null}
+                {visibleError ? (
+                  <div
+                    role="alert"
+                    aria-live="assertive"
+                    className="mt-4 rounded-[20px] border border-[color-mix(in_srgb,var(--danger)_28%,var(--ui-border-subtle)_72%)] bg-[var(--ui-danger-soft)] px-4 py-3 text-sm leading-6 text-[color-mix(in_srgb,var(--danger)_76%,var(--ui-ink-strong)_24%)]"
+                  >
+                    {renderDialogMessageBlock(visibleError)}
+                  </div>
+                ) : null}
+                <div className="mt-5 grid flex-1 content-start gap-5">
+                  {step.render(value, setValue)}
                 </div>
-              </motion.div>
-            </AnimatePresence>
+              </div>
+            </motion.div>
           </div>
 
           <div className="sticky bottom-0 border-t border-[var(--ui-border-subtle)] bg-[var(--surface-glass)] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl md:px-6 md:pb-3">
             <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-between">
               <div
                 id="question-flow-continue-guidance"
+                role={continueBlockerTone === "error" ? "alert" : "status"}
+                aria-live="polite"
                 className={cn(
                   "min-w-0 text-[12px] sm:block",
                   continueBlocker
-                    ? "order-first w-full text-[var(--danger)] sm:order-none sm:w-auto"
+                    ? cn(
+                        "order-first w-full sm:order-none sm:w-auto",
+                        continueBlockerTone === "guidance"
+                          ? "text-[var(--ui-ink-soft)]"
+                          : "text-[var(--danger)]"
+                      )
                     : "hidden shrink text-[var(--ui-ink-faint)]"
                 )}
               >

@@ -40,6 +40,33 @@ latest_tag="$(
 release_file="apps/ios-companion/release/release.yml"
 [[ -f "$release_file" ]] || fail "missing $release_file"
 
+connectivity_package="packages/forge-connectivity-service/package.json"
+connectivity_workflow=".github/workflows/release-connectivity-service.yml"
+[[ -f "$connectivity_package" ]] || fail "missing $connectivity_package"
+[[ -f "$connectivity_workflow" ]] || fail "missing $connectivity_workflow"
+
+connectivity_version="$(
+  node -e 'process.stdout.write(require(process.argv[1]).version)' "./$connectivity_package"
+)"
+[[ "$connectivity_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || fail "invalid Forge Connectivity Service version $connectivity_version"
+
+latest_connectivity_tag="$(
+  git tag -l 'connectivity-v*' \
+    | sed -E 's/^connectivity-v//' \
+    | awk '/^[0-9]+\.[0-9]+\.[0-9]+$/ { print }' \
+    | while read -r version; do
+        printf '%s %s\n' "$(version_key "$version")" "$version"
+      done \
+    | sort \
+    | tail -1 \
+    | awk '{print $2}'
+)"
+
+if [[ -n "$latest_connectivity_tag" && "$(version_key "$connectivity_version")" < "$(version_key "$latest_connectivity_tag")" ]]; then
+  fail "Forge Connectivity Service version $connectivity_version is older than release $latest_connectivity_tag"
+fi
+
 working_version="$(awk -F'"' '/marketing:/ { print $2; exit }' "$release_file")"
 [[ -n "$working_version" ]] || fail "could not read marketing version from $release_file"
 

@@ -542,6 +542,7 @@ export function PsycheSchemasBeliefsPage() {
       customEventType: "",
       eventSituation: title,
       occurredAt: null,
+      bodyCues: [],
       emotions: [],
       thoughts: [],
       behaviors: [],
@@ -563,6 +564,12 @@ export function PsycheSchemasBeliefsPage() {
       schemaLinks: [],
       modeTimeline: [],
       nextMoves: [],
+      memoryClarity: "unspecified",
+      reflection: "",
+      hypothesis: "",
+      hypothesisFit: "not_reviewed",
+      hypothesisCorrection: "",
+      interpretationConsent: false,
       userId: draft.userId
     });
     prependEntityToCollection(

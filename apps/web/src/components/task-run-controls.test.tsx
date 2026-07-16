@@ -27,6 +27,7 @@ const task: Task = {
   acceptanceCriteria: [],
   blockerLinks: [],
   completionReport: null,
+  closeoutState: "not_applicable",
   gitRefs: [],
   completedAt: null,
   createdAt: "2026-03-22T09:00:00.000Z",
@@ -140,6 +141,48 @@ describe("TaskRunControls", () => {
       actor: "Albert",
       note: "Writing the discussion bridge."
     });
+  });
+
+  it("hands completion to the guided closeout when that entry point is available", () => {
+    const onRequestComplete = vi.fn();
+    const onComplete = vi.fn();
+
+    render(
+      <TaskRunControls
+        task={task}
+        activeTaskRun={activeTaskRun}
+        pending={false}
+        errorMessage={null}
+        onClaim={vi.fn()}
+        onHeartbeat={vi.fn()}
+        onComplete={onComplete}
+        onRequestComplete={onRequestComplete}
+        onRelease={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /complete task/i }));
+
+    expect(onRequestComplete).toHaveBeenCalledWith("run_1");
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("disables completion when the surface has no completion handler", () => {
+    render(
+      <TaskRunControls
+        task={task}
+        activeTaskRun={activeTaskRun}
+        pending={false}
+        errorMessage={null}
+        onClaim={vi.fn()}
+        onHeartbeat={vi.fn()}
+        onRelease={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: /complete task/i })
+    ).toBeDisabled();
   });
 
   it("bounds planned and heartbeat minutes before starting a run", async () => {

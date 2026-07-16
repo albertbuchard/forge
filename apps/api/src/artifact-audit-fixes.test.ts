@@ -42,6 +42,14 @@ async function createAgentToken(input: {
   return (response.json() as { token: { token: string } }).token.token;
 }
 
+function getArtifactStoragePath(artifactId: string): string {
+  const row = getDatabase()
+    .prepare("SELECT storage_path FROM artifacts WHERE id = ?")
+    .get(artifactId) as { storage_path: string } | undefined;
+  assert.ok(row);
+  return row.storage_path;
+}
+
 test("artifact trust changes require the reasoned route and are atomic with audit", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-artifact-trust-")
@@ -122,6 +130,17 @@ test("artifact trust changes require the reasoned route and are atomic with audi
     });
     assert.equal(trustedPatch.statusCode, 200);
 
+    const disabledDownload = await app.inject({
+      method: "GET",
+      url: `/api/v1/artifacts/${artifactId}/download`,
+      headers: { cookie }
+    });
+    assert.equal(disabledDownload.statusCode, 409);
+    assert.equal(
+      (disabledDownload.json() as { code: string }).code,
+      "artifact_download_unavailable"
+    );
+
     const versionPage = await app.inject({
       method: "GET",
       url: `/api/v1/artifacts/${artifactId}/versions?limit=1&offset=0`,
@@ -140,6 +159,8 @@ test("artifact trust changes require the reasoned route and are atomic with audi
     assert.equal(versionPageBody.limit, 1);
     assert.equal(versionPageBody.offset, 0);
     assert.equal(versionPageBody.hasMore, false);
+    assert.equal(versionPage.body.includes("trust,1"), false);
+    assert.equal(versionPage.body.includes("extractedTextSample"), false);
 
     const auditPage = await app.inject({
       method: "GET",
@@ -241,11 +262,13 @@ test("artifact blobs are verified before reuse and download without deletion", a
     assert.equal(reusableUpload.statusCode, 201);
     const reusableArtifact = (
       reusableUpload.json() as {
-        artifact: { id: string; storagePath: string };
+        artifact: { id: string };
       }
     ).artifact;
+    assert.equal("storagePath" in reusableArtifact, false);
+    const reusableStoragePath = getArtifactStoragePath(reusableArtifact.id);
     const sameSizeCorruption = Buffer.alloc(reusableBytes.byteLength, 0x78);
-    await writeFile(reusableArtifact.storagePath, sameSizeCorruption);
+    await writeFile(reusableStoragePath, sameSizeCorruption);
 
     const rejectedReuse = await app.inject({
       method: "POST",
@@ -262,10 +285,7 @@ test("artifact blobs are verified before reuse and download without deletion", a
       (rejectedReuse.json() as { code: string }).code,
       "artifact_blob_integrity_mismatch"
     );
-    assert.deepEqual(
-      await readFile(reusableArtifact.storagePath),
-      sameSizeCorruption
-    );
+    assert.deepEqual(await readFile(reusableStoragePath), sameSizeCorruption);
 
     const reusableMetadata = await app.inject({
       method: "GET",
@@ -296,14 +316,16 @@ test("artifact blobs are verified before reuse and download without deletion", a
     assert.equal(downloadUpload.statusCode, 201);
     const downloadArtifact = (
       downloadUpload.json() as {
-        artifact: { id: string; storagePath: string };
+        artifact: { id: string };
       }
     ).artifact;
+    assert.equal("storagePath" in downloadArtifact, false);
+    const downloadStoragePath = getArtifactStoragePath(downloadArtifact.id);
     const wrongSizedCorruption = Buffer.concat([
       downloadBytes,
       Buffer.from("unexpected")
     ]);
-    await writeFile(downloadArtifact.storagePath, wrongSizedCorruption);
+    await writeFile(downloadStoragePath, wrongSizedCorruption);
 
     const rejectedDownload = await app.inject({
       method: "GET",
@@ -315,10 +337,22 @@ test("artifact blobs are verified before reuse and download without deletion", a
       (rejectedDownload.json() as { code: string }).code,
       "artifact_blob_integrity_mismatch"
     );
-    assert.deepEqual(
-      await readFile(downloadArtifact.storagePath),
-      wrongSizedCorruption
+    assert.equal(rejectedDownload.body.includes("storageKey"), false);
+    assert.equal(rejectedDownload.body.includes("sha256/"), false);
+    assert.deepEqual(await readFile(downloadStoragePath), wrongSizedCorruption);
+
+    const rejectedRescan = await app.inject({
+      method: "POST",
+      url: `/api/v1/artifacts/${downloadArtifact.id}/scan`,
+      headers: { cookie }
+    });
+    assert.equal(rejectedRescan.statusCode, 409, rejectedRescan.body);
+    assert.equal(
+      (rejectedRescan.json() as { code: string }).code,
+      "artifact_blob_integrity_mismatch"
     );
+    assert.equal(rejectedRescan.body.includes("storageKey"), false);
+    assert.equal(rejectedRescan.body.includes("sha256/"), false);
 
     const downloadMetadata = await app.inject({
       method: "GET",
@@ -347,6 +381,22 @@ test("artifact blobs are verified before reuse and download without deletion", a
         (event) => event.eventType === "artifact.blob_integrity_mismatch"
       )
     );
+    const persistedIntegrityHistory = JSON.stringify({
+      audit: getDatabase()
+        .prepare(
+          `SELECT metadata_json FROM artifact_audit_events
+           WHERE artifact_id = ?`
+        )
+        .all(downloadArtifact.id),
+      events: getDatabase()
+        .prepare(
+          `SELECT metadata_json FROM event_log
+           WHERE entity_type = 'artifact' AND entity_id = ?`
+        )
+        .all(downloadArtifact.id)
+    });
+    assert.equal(persistedIntegrityHistory.includes("storageKey"), false);
+    assert.equal(persistedIntegrityHistory.includes("sha256/"), false);
   } finally {
     await app.close();
     closeDatabase();

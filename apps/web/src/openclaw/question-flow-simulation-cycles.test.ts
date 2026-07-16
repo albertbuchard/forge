@@ -102,8 +102,27 @@ async function loadAgentContractPayloads() {
             methodRoutes?: Record<string, string>;
           }
         >;
+        actionEntities: Record<
+          string,
+          {
+            classification: string;
+            aliases: string[];
+            summary: string;
+            routeKeys: string[];
+            routeTools: Record<string, string>;
+            methodRoutes: Record<string, string>;
+            notes: string[];
+          }
+        >;
         readModelOnlySurfaces: Record<string, string>;
       };
+      toolInputCatalog: Array<{
+        toolName: string;
+        inputShape: string;
+        requiredFields: string[];
+        notes: string[];
+      }>;
+      recommendedPluginTools: Record<string, string[]>;
     },
     openApi: openApiResponse.json() as {
       paths: Record<string, Record<string, unknown>>;
@@ -202,6 +221,7 @@ describe("question flow simulation cycles", () => {
     "Task",
     "Habit",
     "Tag",
+    "Person",
     "Note",
     "Wiki Page",
     "Artifact",
@@ -215,6 +235,7 @@ describe("question flow simulation cycles", () => {
     "Work Adjustment",
     "Operator Overview",
     "Operator Context",
+    "Today Priority",
     "Self Observation",
     "Sleep Session",
     "Workout Session",
@@ -265,6 +286,8 @@ describe("question flow simulation cycles", () => {
     Task: "Add the next concrete AI-session task under that project.",
     Habit: "Track a negative habit where I avoid starting difficult writing.",
     Tag: "Create a tag for things that belong to professional identity repair.",
+    Person:
+      "Remember Jon as the friend I cycle with, without collecting contact details I did not ask to store.",
     Note: "Preserve this reflection without turning it into a full Psyche record yet.",
     "Wiki Page":
       "Create a durable reference page for a recurring research method.",
@@ -287,6 +310,8 @@ describe("question flow simulation cycles", () => {
       "Review Forge overall to decide what needs attention first.",
     "Operator Context":
       "Inspect current work, risk, and next moves before changing anything.",
+    "Today Priority":
+      "Decide what useful work to do next without ignoring active work or current capacity.",
     "Self Observation": "Log what I noticed in the moment before I disengaged.",
     "Sleep Session": "Attach reflective context to last night's poor sleep.",
     "Workout Session": "Connect a hard workout to mood and recovery context.",
@@ -354,6 +379,16 @@ describe("question flow simulation cycles", () => {
     Task: ["add", "update", "review", "place"],
     Habit: ["add", "update", "review", "check-in"],
     Tag: ["add", "update", "review", "link"],
+    Person: [
+      "search",
+      "add",
+      "update",
+      "review",
+      "link",
+      "soft-delete",
+      "restore",
+      "typed-question"
+    ],
     Note: ["add", "update", "review", "link"],
     "Wiki Page": [
       "browse",
@@ -393,6 +428,7 @@ describe("question flow simulation cycles", () => {
     "Work Adjustment": ["add", "correct", "review", "audit"],
     "Operator Overview": ["review", "navigate", "interpret", "follow-up"],
     "Operator Context": ["review", "navigate", "interpret", "follow-up"],
+    "Today Priority": ["decide", "continue", "pause", "review-evidence"],
     "Self Observation": ["observe", "review", "link", "route"],
     "Sleep Session": ["add", "update", "review", "enrich"],
     "Workout Session": ["add", "update", "review", "enrich"],
@@ -433,9 +469,23 @@ describe("question flow simulation cycles", () => {
     Value: ["formulate", "direct-save", "update", "link"],
     "Behavior Pattern": ["formulate", "direct-save", "update", "review"],
     Behavior: ["formulate", "direct-save", "update", "link"],
-    Belief: ["formulate", "direct-save", "update", "review"],
+    Belief: [
+      "formulate",
+      "direct-save",
+      "update",
+      "review",
+      "examine",
+      "flexible-alternative"
+    ],
     "Mode Profile": ["formulate", "direct-save", "update", "link"],
-    "Mode Guide Session": ["guide", "formulate", "update", "link"],
+    "Mode Guide Session": [
+      "immediate-support",
+      "start",
+      "resume",
+      "review",
+      "close",
+      "derive-mode-profile"
+    ],
     Flashcard: ["retrieve", "create", "update", "link"],
     "Trigger Report": ["capture", "formulate", "update", "link"],
     "Event Type": ["formulate", "direct-save", "update", "review"],
@@ -487,6 +537,44 @@ describe("question flow simulation cycles", () => {
     cycle3: behaviorKindScenarios
   } as const;
 
+  const modeGuideSessionStateScenarios = {
+    immediate_support:
+      "I am inside the reaction now and need help getting steadier before we name anything.",
+    start:
+      "Start a guided inquiry into the part that wants me to hide this draft.",
+    resume:
+      "Continue the saved mode inquiry from where I stopped yesterday without asking me to retell it.",
+    review:
+      "Review the current session and help me correct one interpretation that no longer fits.",
+    close:
+      "Preserve what we learned and close the session without forcing a mode label."
+  } as const;
+
+  const modeGuideSessionStateCoverageByCycle = {
+    cycle1: modeGuideSessionStateScenarios,
+    cycle2: modeGuideSessionStateScenarios,
+    cycle3: modeGuideSessionStateScenarios
+  } as const;
+
+  const beliefIntentScenarios = {
+    direct_capture:
+      "Save the sentence 'If they see this, they will know I am not legitimate' without making me prove it first.",
+    current_activation:
+      "This belief is active right now; help me understand the danger it is predicting.",
+    narrow_update:
+      "Read my existing belief and change only the prediction that no longer fits.",
+    examine:
+      "Help me separate what actually happened from what the moment made it mean, then examine what strengthens or weakens the belief.",
+    flexible_alternative:
+      "The belief feels understood now; help me draft a more flexible sentence without erasing why the old one formed."
+  } as const;
+
+  const beliefIntentCoverageByCycle = {
+    cycle1: beliefIntentScenarios,
+    cycle2: beliefIntentScenarios,
+    cycle3: beliefIntentScenarios
+  } as const;
+
   const expectedApiPosture: Record<
     (typeof nonPsycheSections)[number] | (typeof psycheSections)[number],
     | "batch"
@@ -504,6 +592,7 @@ describe("question flow simulation cycles", () => {
     Task: "batch",
     Habit: "batch",
     Tag: "batch",
+    Person: "batch",
     Note: "batch",
     "Wiki Page": "specializedCrud",
     Artifact: "specializedCrud",
@@ -517,6 +606,7 @@ describe("question flow simulation cycles", () => {
     "Work Adjustment": "action",
     "Operator Overview": "readModel",
     "Operator Context": "readModel",
+    "Today Priority": "readModel",
     "Self Observation": "action",
     "Sleep Session": "batch",
     "Workout Session": "batch",
@@ -558,6 +648,7 @@ describe("question flow simulation cycles", () => {
     task: "Task",
     habit: "Habit",
     tag: "Tag",
+    person: "Person",
     note: "Note",
     insight: "Insight",
     calendar_event: "Calendar Event",
@@ -607,6 +698,8 @@ describe("question flow simulation cycles", () => {
     attention_inbox: "Attention",
     entityNavigation: "Entity Navigation",
     entity_navigation: "Entity Navigation",
+    todayPriority: "Today Priority",
+    today_priority: "Today Priority",
     operatorOverview: "Operator Overview",
     operator_overview: "Operator Overview",
     operatorContext: "Operator Context",
@@ -969,6 +1062,46 @@ describe("question flow simulation cycles", () => {
       }
     }
 
+    for (const [cycleName, stateScenarios] of Object.entries(
+      modeGuideSessionStateCoverageByCycle
+    )) {
+      expect(
+        Object.keys(stateScenarios).sort(),
+        `${cycleName} should exercise every Mode Guide session state`
+      ).toEqual(["close", "immediate_support", "resume", "review", "start"]);
+      for (const [state, scenario] of Object.entries(stateScenarios)) {
+        expect(
+          scenario,
+          `${cycleName} Mode Guide ${state} scenario should be user-facing`
+        ).not.toMatch(
+          /\b(API|CRUD|endpoint|payload|mutation path|route key|schema field)\b/i
+        );
+      }
+    }
+
+    for (const [cycleName, beliefScenarios] of Object.entries(
+      beliefIntentCoverageByCycle
+    )) {
+      expect(
+        Object.keys(beliefScenarios).sort(),
+        `${cycleName} should exercise every Belief intent`
+      ).toEqual([
+        "current_activation",
+        "direct_capture",
+        "examine",
+        "flexible_alternative",
+        "narrow_update"
+      ]);
+      for (const [intent, scenario] of Object.entries(beliefScenarios)) {
+        expect(
+          scenario,
+          `${cycleName} Belief ${intent} scenario should be user-facing`
+        ).not.toMatch(
+          /\b(API|CRUD|endpoint|payload|mutation path|route key|schema field)\b/i
+        );
+      }
+    }
+
     for (const section of nonPsycheSections) {
       expect(simulatedUserScenarios[section], `${section} scenario`).toMatch(
         /\w/
@@ -1100,6 +1233,9 @@ describe("question flow simulation cycles", () => {
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
         /accuracy or consent/i
       );
+      if (entityType === "mode_guide_session") {
+        continue;
+      }
       expect(flow?.readinessCheck, `${entityType} readiness`).toMatch(
         /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*exact existing target[\s\S]*do not require a new concrete example or hypothesis[\s\S]*shared batch CRUD/i
       );
@@ -1118,6 +1254,32 @@ describe("question flow simulation cycles", () => {
       /Direct save or update[\s\S]*observable action[\s\S]*away, committed, or recovery kind[\s\S]*do not require a new concrete example or hypothesis[\s\S]*Guided formulation[\s\S]*at least one cue[\s\S]*away move has the user's urge wording, immediate protective payoff, later cost[\s\S]*committed action has its value-directed move[\s\S]*without forced avoidance fields[\s\S]*recovery move has the rupture or activation[\s\S]*without forced away fields[\s\S]*sparse existing behavior[\s\S]*never force full create backfill/i
     );
     expect(behaviorFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+
+    const beliefFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "belief_entry"
+    )?.questionFlow;
+    expect(beliefFlow?.askSequence.join("\n")).toMatch(
+      /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or narrow update[\s\S]*optional examination[\s\S]*one accuracy or consent question[\s\S]*without demanding a new episode, confidence rating, evidence list, origin story, or alternative belief[\s\S]*read the exact existing belief first[\s\S]*patch only that accepted change[\s\S]*directly observed separate from[\s\S]*rapidly came to mean[\s\S]*at most one tentative hypothesis[\s\S]*fit-or-correction[\s\S]*observed evidence, the user's interpretation, and the agent's hypothesis distinct/i
+    );
+    expect(beliefFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+
+    const modeGuideFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "mode_guide_session"
+    )?.questionFlow;
+    expect(modeGuideFlow?.openingQuestion).toMatch(
+      /getting steadier right now[\s\S]*continuing where you left off[\s\S]*making sense of this part/i
+    );
+    expect(modeGuideFlow?.askSequence.join("\n")).toMatch(
+      /immediate support[\s\S]*new guided inquiry[\s\S]*resuming or reviewing an existing session[\s\S]*closing or deriving a durable mode profile[\s\S]*what needs steadying now[\s\S]*read the exact existing session first[\s\S]*accepted answers and tentative results[\s\S]*newly true, inaccurate, or still unfinished[\s\S]*at most one candidate interpretation[\s\S]*fit-or-correction[\s\S]*candidate label is optional[\s\S]*pause for later[\s\S]*mode_profile/i
+    );
+    expect(modeGuideFlow?.readinessCheck).toMatch(
+      /Immediate support[\s\S]*does not require a save[\s\S]*new, partial, or direct-save session[\s\S]*shared batch CRUD[\s\S]*summary[\s\S]*answers gathered so far[\s\S]*accuracy or consent[\s\S]*do not require a candidate mode label[\s\S]*Resume, review, or update[\s\S]*reading the exact existing session[\s\S]*limiting the patch to that change[\s\S]*Guided formulation[\s\S]*at most one tentative hypothesis[\s\S]*fit-or-correction[\s\S]*Closing may preserve the session without a durable label[\s\S]*mode_profile/i
+    );
+    expect(modeGuideFlow?.apiAccessHint).toMatch(
       /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
     );
 
@@ -2835,6 +2997,93 @@ describe("question flow simulation cycles", () => {
     expect(onboardingSource).toMatch(
       /saved flow chat follow-ups[\s\S]*POST \/api\/v1\/workbench\/flows\/:id\/chat[\s\S]*new run, note, or generic entity update/i
     );
+  });
+
+  it("cycle 3 retest: every action workflow exposes callable tools and exact methods without route guessing", async () => {
+    const { onboarding, openApi } = await loadAgentContractPayloads();
+    const catalogByTool = new Map(
+      onboarding.toolInputCatalog.flatMap((guide) =>
+        guide.toolName
+          .split(" | ")
+          .map((toolName) => [toolName, guide] as const)
+      )
+    );
+
+    for (const [workflowName, workflow] of Object.entries(
+      onboarding.entityRouteModel.actionEntities
+    )) {
+      expect(workflow.classification).toBe("action_workflow_entity");
+      expect(workflow.aliases.length).toBeGreaterThan(0);
+      expect(workflow.summary.trim()).not.toBe("");
+      expect(workflow.notes.length).toBeGreaterThan(0);
+      expect(Object.keys(workflow.routeTools).sort()).toEqual(
+        [...workflow.routeKeys].sort()
+      );
+      expect(Object.keys(workflow.methodRoutes).sort()).toEqual(
+        [...workflow.routeKeys].sort()
+      );
+
+      for (const routeKey of workflow.routeKeys) {
+        const toolName = workflow.routeTools[routeKey];
+        expect(
+          catalogByTool.has(toolName),
+          `${workflowName}.${routeKey} should expose the ${toolName} input contract`
+        ).toBe(true);
+        const { method, path } = parseMethodRoute(
+          workflow.methodRoutes[routeKey]
+        );
+        expect(
+          openApi.paths[path]?.[method],
+          `${workflowName}.${routeKey} should resolve to ${method.toUpperCase()} ${path}`
+        ).toBeDefined();
+      }
+    }
+
+    expect(
+      onboarding.entityRouteModel.actionEntities.selfObservation.routeTools
+    ).toEqual(
+      onboarding.entityRouteModel.actionEntities.self_observation.routeTools
+    );
+    expect(
+      onboarding.entityRouteModel.actionEntities.selfObservation.methodRoutes
+    ).toEqual(
+      onboarding.entityRouteModel.actionEntities.self_observation.methodRoutes
+    );
+
+    for (const [workflowName, tools] of Object.entries(
+      onboarding.recommendedPluginTools
+    )) {
+      for (const toolName of tools) {
+        expect(
+          catalogByTool.has(toolName),
+          `${workflowName} should document required inputs for ${toolName}`
+        ).toBe(true);
+      }
+    }
+
+    expect(
+      catalogByTool.get("forge_start_questionnaire_run")?.requiredFields
+    ).toEqual(["questionnaireId", "userId"]);
+    expect(
+      catalogByTool.get("forge_update_questionnaire_run")?.requiredFields
+    ).toEqual(["runId"]);
+    expect(
+      catalogByTool.get("forge_publish_questionnaire_draft")?.notes.join(" ")
+    ).toMatch(/publish consent|publish confirmation/i);
+    expect(
+      catalogByTool.get("forge_get_self_observation_calendar")?.notes.join(" ")
+    ).toMatch(/note batch CRUD[\s\S]*no.*standalone self_observation/i);
+
+    for (const skillSource of [
+      readRepoFile("plugins/openclaw/skills/forge-openclaw/SKILL.md"),
+      readRepoFile("plugins/hermes/skill.md"),
+      readRepoFile("plugins/hermes/forge_hermes/skill.md"),
+      readRepoFile("plugins/codex/skills/forge-codex/SKILL.md")
+    ]) {
+      expect(skillSource).toMatch(
+        /actionEntities\.routeKeys[\s\S]*routeTools[\s\S]*methodRoutes/i
+      );
+    }
   });
 
   it("cycle 3 retest: follow-ups, flashcard support, and specialized path params stay explicit", () => {

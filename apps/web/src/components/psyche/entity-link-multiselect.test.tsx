@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
+  waitFor,
   within
 } from "@testing-library/react";
 import {
@@ -66,8 +68,72 @@ describe("EntityLinkMultiSelect", () => {
     const listbox = screen.getByRole("listbox");
     expect(within(clipShell).queryByRole("listbox")).toBeNull();
     expect(listbox).toBeInTheDocument();
-    expect(listbox).toHaveClass("overflow-y-auto");
-    expect(listbox.style.position).toBe("fixed");
+    expect(listbox.parentElement).toHaveClass("overflow-y-auto");
+    expect(listbox.parentElement?.style.position).toBe("fixed");
+  });
+
+  it("wires stable combobox relationships and supports keyboard navigation", () => {
+    function Example() {
+      const [selectedValues, setSelectedValues] = useState<string[]>([]);
+
+      return (
+        <EntityLinkMultiSelect
+          options={OPTIONS}
+          selectedValues={selectedValues}
+          onChange={setSelectedValues}
+          placeholder="Keyboard entity search"
+        />
+      );
+    }
+
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+
+    render(<Example />);
+
+    const input = screen.getByRole("combobox", {
+      name: "Keyboard entity search"
+    });
+    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(input).toHaveAttribute("aria-autocomplete", "list");
+
+    fireEvent.focus(input);
+
+    const listbox = screen.getByRole("listbox", {
+      name: "Keyboard entity search results"
+    });
+    const options = within(listbox).getAllByRole("option");
+    const listboxId = listbox.id;
+    expect(listboxId).not.toBe("");
+    expect(input).toHaveAttribute("aria-controls", listboxId);
+    expect(input).toHaveAttribute("aria-activedescendant", options[0]?.id);
+    expect(options[0]).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input).toHaveAttribute("aria-activedescendant", options[1]?.id);
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.focus(input);
+    expect(screen.getByRole("listbox").id).toBe(listboxId);
+    fireEvent.keyDown(input, { key: "Home" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Forge option 2")).toBeInTheDocument();
+    expect(input).toHaveAttribute("aria-expanded", "false");
   });
 
   it("filters matches and selects an option from the overlay list", () => {
@@ -107,5 +173,145 @@ describe("EntityLinkMultiSelect", () => {
     fireEvent.click(screen.getByRole("option", { name: /forge option 11/i }));
 
     expect(screen.getByText("Forge option 11")).toBeInTheDocument();
+  });
+
+  it("searches remote Forge entities and merges the results", async () => {
+    const onSearch = vi.fn().mockResolvedValue([
+      {
+        value: "artifact:artifact_1",
+        label: "Breakfast brief",
+        description: "Artifact"
+      }
+    ] satisfies EntityLinkOption[]);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+    render(
+      <EntityLinkMultiSelect
+        options={[]}
+        selectedValues={[]}
+        onChange={() => undefined}
+        onSearch={onSearch}
+        placeholder="Search every entity"
+      />
+    );
+    const input = screen.getByPlaceholderText("Search every entity");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "breakfast" } });
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith("breakfast"));
+    expect(
+      await screen.findByRole("option", { name: /breakfast brief/i })
+    ).toBeInTheDocument();
+  });
+
+  it("announces remote loading and empty results through the combobox status", async () => {
+    let resolveSearch: ((options: EntityLinkOption[]) => void) | undefined;
+    const onSearch = vi.fn(
+      () =>
+        new Promise<EntityLinkOption[]>((resolve) => {
+          resolveSearch = resolve;
+        })
+    );
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+    render(
+      <EntityLinkMultiSelect
+        options={[]}
+        selectedValues={[]}
+        onChange={() => undefined}
+        onSearch={onSearch}
+        placeholder="Remote entity search"
+        emptyMessage="No remote entities found."
+      />
+    );
+
+    const input = screen.getByRole("combobox", {
+      name: "Remote entity search"
+    });
+    expect(input).not.toHaveAttribute("aria-describedby");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "missing" } });
+
+    const loadingStatus = await screen.findByRole("status");
+    expect(loadingStatus).toHaveTextContent("Searching Forge records");
+    expect(input).toHaveAttribute("aria-describedby", loadingStatus.id);
+    expect(screen.getByRole("listbox")).toHaveAttribute("aria-busy", "true");
+    await waitFor(() => expect(onSearch).toHaveBeenCalledWith("missing"));
+
+    await act(async () => {
+      resolveSearch?.([]);
+      await Promise.resolve();
+    });
+
+    const emptyStatus = await screen.findByRole("status");
+    expect(emptyStatus).toHaveTextContent("No remote entities found.");
+    expect(input).toHaveAttribute("aria-describedby", emptyStatus.id);
+    expect(screen.getByRole("listbox")).toHaveAttribute("aria-busy", "false");
+  });
+
+  it("announces remote search errors without also announcing an empty result", async () => {
+    const onSearch = vi
+      .fn()
+      .mockRejectedValue(new Error("Entity search failed"));
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 24,
+          y: 140,
+          width: 320,
+          height: 48,
+          top: 140,
+          right: 344,
+          bottom: 188,
+          left: 24,
+          toJSON: () => ({})
+        }) as DOMRect
+    );
+    render(
+      <EntityLinkMultiSelect
+        options={[]}
+        selectedValues={[]}
+        onChange={() => undefined}
+        onSearch={onSearch}
+        placeholder="Failing entity search"
+        emptyMessage="No entities available."
+      />
+    );
+
+    const input = screen.getByRole("combobox", {
+      name: "Failing entity search"
+    });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "broken" } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Entity search failed");
+    expect(input).toHaveAttribute("aria-describedby", alert.id);
+    expect(
+      screen.queryByText("No entities available.")
+    ).not.toBeInTheDocument();
   });
 });

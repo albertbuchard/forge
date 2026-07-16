@@ -104,6 +104,19 @@ export function listEntityLinksForEntity(
   return rows.map(mapRow);
 }
 
+export function deleteEntityLinksForEntity(
+  entityType: string,
+  entityId: string
+) {
+  return getDatabase()
+    .prepare(
+      `DELETE FROM entity_links
+       WHERE (source_entity_type = ? AND source_entity_id = ?)
+          OR (target_entity_type = ? AND target_entity_id = ?)`
+    )
+    .run(entityType, entityId, entityType, entityId);
+}
+
 export function replaceEntityLinksForSource(input: {
   sourceEntityType: string;
   sourceEntityId: string;
@@ -120,6 +133,64 @@ export function replaceEntityLinksForSource(input: {
          AND source_entity_id = ?`
     )
     .run(input.sourceEntityType, input.sourceEntityId);
+  const statement = getDatabase().prepare(
+    `INSERT OR IGNORE INTO entity_links (
+      source_entity_type, source_entity_id, target_entity_type, target_entity_id,
+      anchor_key, relationship, created_by_actor, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const link of normalized) {
+    statement.run(
+      input.sourceEntityType,
+      input.sourceEntityId,
+      link.entityType,
+      link.entityId,
+      link.anchorKey,
+      link.relationship,
+      input.actor ?? null,
+      createdAt
+    );
+  }
+}
+
+export function replaceEntityLinksForSourceRelationships(input: {
+  sourceEntityType: string;
+  sourceEntityId: string;
+  relationships: string[];
+  links: EntityLinkInput[];
+  actor?: string | null;
+  now?: Date;
+}) {
+  const relationships = [
+    ...new Set(
+      input.relationships
+        .map((relationship) => relationship.trim())
+        .filter(Boolean)
+    )
+  ];
+  const managedRelationships = new Set(relationships);
+  const normalized = normalizeEntityLinks(input.links);
+  const unmanagedLink = normalized.find(
+    (link) => !managedRelationships.has(link.relationship)
+  );
+  if (unmanagedLink) {
+    throw new Error(
+      `Relationship ${unmanagedLink.relationship} is outside this managed replacement set.`
+    );
+  }
+
+  if (relationships.length > 0) {
+    getDatabase()
+      .prepare(
+        `DELETE FROM entity_links
+         WHERE source_entity_type = ?
+           AND source_entity_id = ?
+           AND relationship IN (${relationships.map(() => "?").join(", ")})`
+      )
+      .run(input.sourceEntityType, input.sourceEntityId, ...relationships);
+  }
+
+  const createdAt = (input.now ?? new Date()).toISOString();
   const statement = getDatabase().prepare(
     `INSERT OR IGNORE INTO entity_links (
       source_entity_type, source_entity_id, target_entity_type, target_entity_id,

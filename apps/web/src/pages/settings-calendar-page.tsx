@@ -16,7 +16,10 @@ import {
   type QuestionFlowStep
 } from "@/components/flows/question-flow-dialog";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -514,23 +517,27 @@ export function SettingsCalendarPage() {
     calendarsQuery.isLoading
   ) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings · Calendar"
-        title="Loading calendar settings"
-        description="Checking the operator session and loading provider connections."
-        columns={2}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Settings · Calendar"
+          title="Loading calendar settings"
+          description="Checking the operator session and loading provider connections."
+          columns={2}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings · Calendar"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Calendar"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
@@ -543,20 +550,22 @@ export function SettingsCalendarPage() {
     !calendarsQuery.data
   ) {
     return (
-      <ErrorState
-        eyebrow="Settings · Calendar"
-        error={
-          settingsQuery.error ??
-          connectionsQuery.error ??
-          calendarsQuery.error ??
-          new Error("Calendar settings are unavailable.")
-        }
-        onRetry={() => {
-          void settingsQuery.refetch();
-          void connectionsQuery.refetch();
-          void calendarsQuery.refetch();
-        }}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Calendar"
+          error={
+            settingsQuery.error ??
+            connectionsQuery.error ??
+            calendarsQuery.error ??
+            new Error("Calendar settings are unavailable.")
+          }
+          onRetry={() => {
+            void settingsQuery.refetch();
+            void connectionsQuery.refetch();
+            void calendarsQuery.refetch();
+          }}
+        />
+      </SettingsStateFrame>
     );
   }
 

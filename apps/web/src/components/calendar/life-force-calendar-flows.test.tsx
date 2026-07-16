@@ -10,7 +10,10 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorkBlockFlowDialog } from "@/components/calendar/work-block-flow-dialog";
-import { TimeboxPlanningDialog } from "@/components/calendar/timebox-planning-dialog";
+import {
+  getPlanningRangeDateKeys,
+  TimeboxPlanningDialog
+} from "@/components/calendar/timebox-planning-dialog";
 import { CalendarEventFlowDialog } from "@/components/calendar/calendar-event-flow-dialog";
 import { I18nProvider } from "@/lib/i18n";
 import type { Task } from "@/lib/types";
@@ -79,6 +82,23 @@ describe("Life Force calendar flows", () => {
         timeboxes: []
       }
     });
+  });
+
+  it("derives inclusive planning dates in the planning timezone from an exclusive instant range", () => {
+    expect(
+      getPlanningRangeDateKeys(
+        "2026-04-12T23:30:00.000Z",
+        "2026-04-20T22:00:00.000Z",
+        "Europe/Zurich"
+      )
+    ).toEqual({ minDateKey: "2026-04-13", maxDateKey: "2026-04-20" });
+    expect(
+      getPlanningRangeDateKeys(
+        "2026-04-13T06:30:00.000Z",
+        "2026-04-20T07:00:00.000Z",
+        "America/Los_Angeles"
+      )
+    ).toEqual({ minDateKey: "2026-04-12", maxDateKey: "2026-04-19" });
   });
 
   it("shows the default Life Force drain when shaping a recurring work block", async () => {
@@ -196,6 +216,69 @@ describe("Life Force calendar flows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("4.2 AP/h")).toBeInTheDocument();
     expect(screen.getByText("8.3 AP")).toBeInTheDocument();
+  });
+
+  it("keeps suggested-slot selection separate from its editable AP controls", async () => {
+    recommendTaskTimeboxesMock.mockResolvedValue({
+      timeboxes: [
+        {
+          id: "timebox_accessible",
+          taskId: "task_1",
+          projectId: null,
+          title: "Accessible focus slot",
+          startsAt: "2026-04-13T09:00:00.000Z",
+          endsAt: "2026-04-13T10:00:00.000Z",
+          source: "suggested"
+        }
+      ]
+    });
+    const tasks = [
+      {
+        id: "task_1",
+        title: "Accessible task",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        goalId: null,
+        projectId: null,
+        dueDate: null,
+        effort: "steady",
+        energy: "steady",
+        points: 50,
+        plannedDurationSeconds: 3600,
+        schedulingRules: null,
+        sortOrder: 1,
+        completedAt: null,
+        createdAt: "2026-04-12T08:00:00.000Z",
+        updatedAt: "2026-04-12T08:00:00.000Z",
+        tagIds: []
+      }
+    ] as unknown as Task[];
+
+    renderWithProviders(
+      <TimeboxPlanningDialog
+        open
+        onOpenChange={vi.fn()}
+        tasks={tasks}
+        from="2026-04-13T00:00:00.000Z"
+        to="2026-04-20T00:00:00.000Z"
+        onCreateTimebox={vi.fn(async () => {})}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const selection = await screen.findByRole("button", {
+      name: /Accessible focus slot/i
+    });
+    expect(selection).toHaveAttribute("aria-pressed", "true");
+    const activitySelect = await screen.findByDisplayValue("Task default");
+    const rateInput = screen.getByPlaceholderText(
+      "Leave empty to use the activity profile"
+    );
+    expect(activitySelect.closest("button")).toBeNull();
+    expect(rateInput.closest("button")).toBeNull();
+    activitySelect.focus();
+    expect(activitySelect).toHaveFocus();
   });
 
   it("lets the user switch to manual planning after reviewing the day", async () => {
@@ -447,6 +530,98 @@ describe("Life Force calendar flows", () => {
         endsAt: "2026-04-16T14:30:00.000Z"
       })
     );
+  });
+
+  it("reads an edited timebox AP preset and custom rate from action-profile metadata", async () => {
+    recommendTaskTimeboxesMock.mockResolvedValue({ timeboxes: [] });
+    const tasks = [
+      {
+        id: "task_1",
+        title: "Metadata task",
+        status: "focus",
+        priority: "medium",
+        owner: "Albert",
+        goalId: null,
+        projectId: null,
+        dueDate: null,
+        effort: "steady",
+        energy: "steady",
+        points: 50,
+        plannedDurationSeconds: 3600,
+        schedulingRules: null,
+        sortOrder: 1,
+        completedAt: null,
+        createdAt: "2026-04-12T08:00:00.000Z",
+        updatedAt: "2026-04-12T08:00:00.000Z",
+        tagIds: []
+      }
+    ] as unknown as Task[];
+    renderWithProviders(
+      <TimeboxPlanningDialog
+        open
+        onOpenChange={vi.fn()}
+        tasks={tasks}
+        from="2026-04-13T00:00:00.000Z"
+        to="2026-04-20T00:00:00.000Z"
+        editingTimebox={
+          {
+            id: "timebox_metadata",
+            taskId: "task_1",
+            projectId: null,
+            connectionId: null,
+            calendarId: null,
+            remoteEventId: null,
+            linkedTaskRunId: null,
+            status: "planned",
+            source: "manual",
+            title: "Metadata block",
+            startsAt: "2026-04-16T14:00:00.000Z",
+            endsAt: "2026-04-16T15:00:00.000Z",
+            overrideReason: null,
+            actionProfile: {
+              id: "profile_metadata",
+              profileKey: "task_timebox_timebox_metadata",
+              title: "Metadata block",
+              entityType: "task_timebox",
+              mode: "container",
+              startupAp: 0,
+              totalCostAp: 11,
+              expectedDurationSeconds: 3600,
+              sustainRateApPerHour: 11,
+              demandWeights: {
+                activation: 0.1,
+                focus: 0.3,
+                vigor: 0.1,
+                composure: 0.1,
+                flow: 0.4
+              },
+              doubleCountPolicy: "container_only",
+              sourceMethod: "manual",
+              costBand: "light",
+              recoveryEffect: 0,
+              metadata: {
+                activityPresetKey: "admin",
+                customSustainRateApPerHour: 11
+              },
+              createdAt: "2026-04-12T08:00:00.000Z",
+              updatedAt: "2026-04-12T08:00:00.000Z"
+            },
+            createdAt: "2026-04-12T08:00:00.000Z",
+            updatedAt: "2026-04-12T08:00:00.000Z",
+            userId: "user_operator",
+            user: null
+          } as never
+        }
+        onCreateTimebox={vi.fn(async () => {})}
+        onUpdateTimebox={vi.fn(async () => {})}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByDisplayValue("Admin")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Leave empty to use the activity profile")
+    ).toHaveValue(11);
   });
 
   it("lets the user delete an existing timebox from the guided modal", async () => {

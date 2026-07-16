@@ -1,14 +1,37 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  NATIVE_SOURCE_MANIFEST_FILE,
+  NATIVE_SOURCE_SIGNATURE_FILE,
+  createNativeSourceManifest,
+  serializeNativeSourceManifest,
+  validateNativeSourceManifest,
+  verifyNativeSourceBundle
+} from "../../packages/forge-memory/lib/native-source-manifest.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const pluginRoot = path.join(repoRoot, "plugins/openclaw");
 const tempRoot = mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"));
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");
+const peerSourceTarget = path.join(tempRoot, "forge-peer-target");
+const peerSocketPath = path.join(tempRoot, "forge-peer.sock");
+const peerStateRoot = path.join(tempRoot, "forge-peer-state");
 const port = 43170 + Math.floor(Math.random() * 1000);
+const ownerUserId = "user_operator";
+const releaseMode = (process.env.FORGE_RELEASE_MODE ?? "").trim();
+const requireSignedSource =
+  process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
+  ["full", "prepare", "publish-from-tag"].includes(releaseMode);
 let child = null;
 
 function run(command, args, options = {}) {
@@ -28,7 +51,7 @@ function run(command, args, options = {}) {
 }
 
 async function waitForHealth() {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 60_000;
   let lastError = null;
   while (Date.now() < deadline) {
     if (child?.exitCode !== null) {
@@ -47,7 +70,139 @@ async function waitForHealth() {
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
-  throw new Error(`packed runtime did not become healthy: ${lastError?.message ?? "timed out"}`);
+  throw new Error(
+    `packed runtime did not become healthy: ${lastError?.message ?? "timed out"}`
+  );
+}
+
+async function verifyPackedForgePeerSource(installedPluginRoot) {
+  const sourceRoot = path.join(installedPluginRoot, "dist", "forge-peer-src");
+  const cargoManifest = path.join(sourceRoot, "Cargo.toml");
+  const cargoLock = path.join(sourceRoot, "Cargo.lock");
+  const manifestPath = path.join(sourceRoot, NATIVE_SOURCE_MANIFEST_FILE);
+  const signaturePath = path.join(sourceRoot, NATIVE_SOURCE_SIGNATURE_FILE);
+  for (const requiredPath of [
+    sourceRoot,
+    cargoManifest,
+    cargoLock,
+    manifestPath
+  ]) {
+    if (!existsSync(requiredPath)) {
+      throw new Error(
+        `packed runtime omitted ${path.relative(installedPluginRoot, requiredPath)}`
+      );
+    }
+  }
+
+  const runtimePackage = JSON.parse(
+    readFileSync(path.join(installedPluginRoot, "package.json"), "utf8")
+  );
+  const manifest = validateNativeSourceManifest(
+    JSON.parse(readFileSync(manifestPath, "utf8"))
+  );
+  if (manifest.runtimePackageVersion !== runtimePackage.version) {
+    throw new Error(
+      `forge-peer source targets runtime ${manifest.runtimePackageVersion}, expected ${runtimePackage.version}`
+    );
+  }
+  const recomputed = await createNativeSourceManifest({
+    sourceRoot,
+    packageVersion: manifest.packageVersion,
+    runtimePackageVersion: manifest.runtimePackageVersion,
+    commitSha: manifest.commitSha,
+    generatedAt: new Date(manifest.generatedAt),
+    signingKeyId: manifest.signingKeyId
+  });
+  if (
+    serializeNativeSourceManifest(recomputed) !==
+    serializeNativeSourceManifest(manifest)
+  ) {
+    throw new Error(
+      "packed forge-peer source does not match its manifest file set"
+    );
+  }
+
+  if (existsSync(signaturePath)) {
+    await verifyNativeSourceBundle({
+      sourceRoot,
+      expectedRuntimePackageVersion: runtimePackage.version
+    });
+  } else if (requireSignedSource) {
+    throw new Error(
+      `FORGE_RELEASE_MODE=${releaseMode} requires a signed forge-peer source bundle`
+    );
+  }
+
+  run(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--release",
+      "--manifest-path",
+      cargoManifest,
+      "--bin",
+      "forge-peer"
+    ],
+    {
+      cwd: sourceRoot,
+      timeout: 600_000,
+      env: { ...process.env, CARGO_TARGET_DIR: peerSourceTarget }
+    }
+  );
+
+  const binaryName =
+    process.platform === "win32" ? "forge-peer.exe" : "forge-peer";
+  const binaryPath = path.join(peerSourceTarget, "release", binaryName);
+  if (!existsSync(binaryPath)) {
+    throw new Error(
+      "locked packed forge-peer build did not produce its daemon binary"
+    );
+  }
+  return { binaryPath, sourceRoot };
+}
+
+async function verifyPackedPeerDaemon(installedPluginRoot) {
+  const gatewayModulePath = path.join(
+    installedPluginRoot,
+    "dist",
+    "server",
+    "apps",
+    "api",
+    "src",
+    "services",
+    "peer-core-ipc-gateway.js"
+  );
+  const { UnixSocketPeerCoreGateway } = await import(
+    pathToFileURL(gatewayModulePath).href
+  );
+  const gateway = new UnixSocketPeerCoreGateway({
+    socketPath: peerSocketPath,
+    ownerUserId
+  });
+  const health = await gateway.health();
+  if (
+    !health.enabled ||
+    !health.healthy ||
+    health.protocolVersion !== "forge-peer/1"
+  ) {
+    throw new Error(
+      `packed forge-peer daemon health failed: ${JSON.stringify(health)}`
+    );
+  }
+  const identity = await gateway.localIdentity({ ownerUserId });
+  if (
+    !identity?.principal?.id ||
+    !identity?.principal?.rootPublicKey ||
+    identity?.principal?.trustState !== "verified" ||
+    !identity?.device?.id ||
+    identity?.device?.principalId !== identity?.principal?.id
+  ) {
+    throw new Error(
+      `packed forge-peer daemon identity failed: ${JSON.stringify(identity)}`
+    );
+  }
+  return { health, identity };
 }
 
 function readSetCookie(headers) {
@@ -67,30 +222,40 @@ function cookiePairFromSetCookie(headers) {
 }
 
 async function verifyPackedIrohPairing() {
-  const sessionResponse = await fetch(`http://127.0.0.1:${port}/api/v1/auth/operator-session`, {
-    headers: {
-      accept: "application/json",
-      host: `127.0.0.1:${port}`
+  const sessionResponse = await fetch(
+    `http://127.0.0.1:${port}/api/v1/auth/operator-session`,
+    {
+      headers: {
+        accept: "application/json",
+        host: `127.0.0.1:${port}`
+      }
     }
-  });
+  );
   if (!sessionResponse.ok) {
-    throw new Error(`operator session bootstrap failed with HTTP ${sessionResponse.status}`);
+    throw new Error(
+      `operator session bootstrap failed with HTTP ${sessionResponse.status}`
+    );
   }
-  const cookie = cookiePairFromSetCookie(readSetCookie(sessionResponse.headers));
+  const cookie = cookiePairFromSetCookie(
+    readSetCookie(sessionResponse.headers)
+  );
   if (!cookie) {
     throw new Error("operator session bootstrap did not return a cookie");
   }
 
-  const response = await fetch(`http://127.0.0.1:${port}/api/v1/health/pairing-sessions`, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      cookie,
-      host: `127.0.0.1:${port}`
-    },
-    body: JSON.stringify({ userId: null, transportMode: "iroh" })
-  });
+  const response = await fetch(
+    `http://127.0.0.1:${port}/api/v1/health/pairing-sessions`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        cookie,
+        host: `127.0.0.1:${port}`
+      },
+      body: JSON.stringify({ userId: null, transportMode: "iroh" })
+    }
+  );
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(
@@ -107,9 +272,67 @@ async function verifyPackedIrohPairing() {
     body?.qrPayload?.transport?.localBaseUrl !== `http://127.0.0.1:${port}` ||
     !body?.qrPayload?.transport?.pairPayload?.node_id
   ) {
-    throw new Error(`packed runtime did not create an Iroh pairing: ${JSON.stringify(body)}`);
+    throw new Error(
+      `packed runtime did not create an Iroh pairing: ${JSON.stringify(body)}`
+    );
   }
-  return body;
+  return { body, cookie };
+}
+
+async function verifyPackedPeopleApi(cookie) {
+  const createdResponse = await fetch(
+    `http://127.0.0.1:${port}/api/v1/entities/create`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        cookie,
+        host: `127.0.0.1:${port}`
+      },
+      body: JSON.stringify({
+        atomic: true,
+        operations: [
+          {
+            entityType: "person",
+            clientRef: "packed-runtime-person",
+            idempotencyKey: "packed-runtime-person-v1",
+            data: {
+              userId: ownerUserId,
+              displayName: "Packed runtime Person",
+              relationshipCategory: "colleague",
+              shortDescription: "Isolated packed-runtime verification record."
+            }
+          }
+        ]
+      })
+    }
+  );
+  const created = await createdResponse.json().catch(() => null);
+  if (!createdResponse.ok || created?.results?.[0]?.ok !== true) {
+    throw new Error(
+      `packed runtime Person create failed with HTTP ${createdResponse.status}: ${JSON.stringify(created)}`
+    );
+  }
+
+  const listResponse = await fetch(
+    `http://127.0.0.1:${port}/api/v1/people?limit=20&source=both&sort=display_name&direction=asc`,
+    {
+      headers: { accept: "application/json", cookie, host: `127.0.0.1:${port}` }
+    }
+  );
+  const listed = await listResponse.json().catch(() => null);
+  if (
+    !listResponse.ok ||
+    !Array.isArray(listed?.people) ||
+    !listed.people.some(
+      (person) => person.displayName === "Packed runtime Person"
+    )
+  ) {
+    throw new Error(
+      `packed runtime People list failed with HTTP ${listResponse.status}: ${JSON.stringify(listed)}`
+    );
+  }
 }
 
 try {
@@ -123,26 +346,51 @@ try {
     path.join(tempRoot, "package.json"),
     `${JSON.stringify({ name: "forge-packed-runtime-smoke", private: true, type: "module" }, null, 2)}\n`
   );
-  run("npm", ["install", "--silent", "--ignore-scripts", "--legacy-peer-deps", tarball], {
-    cwd: tempRoot
-  });
+  run(
+    "npm",
+    ["install", "--silent", "--ignore-scripts", "--legacy-peer-deps", tarball],
+    {
+      cwd: tempRoot
+    }
+  );
 
-  const installedPluginRoot = path.join(tempRoot, "node_modules", "forge-openclaw-plugin");
-  const sourceManifest = path.join(installedPluginRoot, "dist", "companion-iroh-src", "Cargo.toml");
+  const installedPluginRoot = path.join(
+    tempRoot,
+    "node_modules",
+    "forge-openclaw-plugin"
+  );
+  const sourceManifest = path.join(
+    installedPluginRoot,
+    "dist",
+    "companion-iroh-src",
+    "Cargo.toml"
+  );
   if (!existsSync(sourceManifest)) {
-    throw new Error("packed runtime did not include companion-iroh-src/Cargo.toml");
+    throw new Error(
+      "packed runtime did not include companion-iroh-src/Cargo.toml"
+    );
   }
-  run("cargo", [
-    "build",
-    "--release",
-    "--manifest-path",
-    sourceManifest,
-    "--bin",
-    "forge-companion-iroh"
-  ], {
-    cwd: path.dirname(sourceManifest),
-    timeout: 180_000
-  });
+  run(
+    "cargo",
+    [
+      "build",
+      "--locked",
+      "--release",
+      "--manifest-path",
+      sourceManifest,
+      "--bin",
+      "forge-companion-iroh"
+    ],
+    {
+      cwd: path.dirname(sourceManifest),
+      timeout: 180_000,
+      env: {
+        ...process.env,
+        CARGO_TARGET_DIR: path.join(tempRoot, "companion-iroh-target")
+      }
+    }
+  );
+  const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot);
 
   mkdirSync(installRoot, { recursive: true });
   child = spawn(
@@ -153,6 +401,11 @@ try {
       env: {
         ...process.env,
         FORGE_DATA_ROOT: dataRoot,
+        FORGE_PEER_BIN: peerRuntime.binaryPath,
+        FORGE_PEER_ENABLED: "1",
+        FORGE_PEER_REQUIRED: "1",
+        FORGE_PEER_SOCKET_PATH: peerSocketPath,
+        FORGE_PEER_STATE_DIR: peerStateRoot,
         HOST: "127.0.0.1",
         PORT: String(port)
       },
@@ -170,9 +423,18 @@ try {
 
   const health = await waitForHealth();
   if (health.backend !== "forge-node-runtime") {
-    throw new Error(`packed runtime health returned unexpected backend ${health.backend}`);
+    throw new Error(
+      `packed runtime health returned unexpected backend ${health.backend}`
+    );
   }
-  await verifyPackedIrohPairing();
+  await verifyPackedPeerDaemon(installedPluginRoot);
+  const pairing = await verifyPackedIrohPairing();
+  await verifyPackedPeopleApi(pairing.cookie);
+  if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {
+    throw new Error(
+      "packed companion pairing did not expose its verified Iroh node id"
+    );
+  }
   console.log("packed openclaw runtime smoke passed");
 } finally {
   if (child && child.exitCode === null) {
@@ -186,10 +448,5 @@ try {
     });
     if (child.exitCode === null) child.kill("SIGKILL");
   }
-  rmSync(tempRoot, {
-    recursive: true,
-    force: true,
-    maxRetries: 8,
-    retryDelay: 250
-  });
+  console.log(`packed runtime evidence preserved at ${tempRoot}`);
 }

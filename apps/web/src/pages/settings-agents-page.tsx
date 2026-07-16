@@ -13,7 +13,10 @@ import {
   TokenRevealDialog,
   type TokenRevealState
 } from "@/components/settings/token-reveal-dialog";
-import { SettingsSectionNav } from "@/components/settings/settings-section-nav";
+import {
+  SettingsSectionNav,
+  SettingsStateFrame
+} from "@/components/settings/settings-section-nav";
 import { PageHero } from "@/components/shell/page-hero";
 import { SurfaceSkeleton } from "@/components/experience/surface-skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -492,33 +495,39 @@ export function SettingsAgentsPage() {
   // ── Loading / error gates ─────────────────────────────────────────────────
   if (operatorSessionQuery.isLoading || settingsQuery.isLoading) {
     return (
-      <SurfaceSkeleton
-        eyebrow="Settings · Agents"
-        title="Loading agent console"
-        description="Establishing the operator session and loading agent configuration."
-        columns={2}
-        blocks={6}
-      />
+      <SettingsStateFrame>
+        <SurfaceSkeleton
+          eyebrow="Settings · Agents"
+          title="Loading agent console"
+          description="Establishing the operator session and loading agent configuration."
+          columns={2}
+          blocks={6}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (operatorSessionQuery.isError) {
     return (
-      <ErrorState
-        eyebrow="Settings · Agents"
-        error={operatorSessionQuery.error}
-        onRetry={() => void operatorSessionQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Agents"
+          error={operatorSessionQuery.error}
+          onRetry={() => void operatorSessionQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
   if (settingsQuery.isError || !settings) {
     return (
-      <ErrorState
-        eyebrow="Settings · Agents"
-        error={settingsQuery.error ?? new Error("Could not load settings.")}
-        onRetry={() => void settingsQuery.refetch()}
-      />
+      <SettingsStateFrame>
+        <ErrorState
+          eyebrow="Settings · Agents"
+          error={settingsQuery.error ?? new Error("Could not load settings.")}
+          onRetry={() => void settingsQuery.refetch()}
+        />
+      </SettingsStateFrame>
     );
   }
 
