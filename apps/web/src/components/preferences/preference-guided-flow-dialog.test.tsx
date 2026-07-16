@@ -388,7 +388,8 @@ describe("PreferenceGuidedFlowDialog", () => {
         kind: "signal",
         itemId: signalScore.itemId,
         signalType: "neutral",
-        strength: 1
+        strength: 1,
+        idempotencyKey: expect.any(String)
       })
     );
   });

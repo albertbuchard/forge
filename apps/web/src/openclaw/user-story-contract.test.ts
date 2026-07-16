@@ -132,6 +132,7 @@ describe("Forge user-story product contract", () => {
       "CAL",
       "KNOW",
       "ART",
+      "PEOPLE",
       "PREF",
       "PSY",
       "HEALTH",

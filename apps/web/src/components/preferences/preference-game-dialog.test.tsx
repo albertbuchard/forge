@@ -221,13 +221,17 @@ describe("PreferenceGameDialog", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Favorite for Deep focus" })
     );
-    expect(onSignal).toHaveBeenCalledWith("item_left", "favorite");
+    expect(onSignal).toHaveBeenCalledWith(
+      "item_left",
+      "favorite",
+      expect.any(String)
+    );
   });
 
   it("locks duplicate signal input and offers an idempotent retry after an ambiguous failure", async () => {
     let resolveSignal!: () => void;
     const onSignal = vi.fn(
-      () =>
+      (_itemId: string, _signalType: string, _idempotencyKey: string) =>
         new Promise<void>((resolve) => {
           resolveSignal = resolve;
         })
@@ -246,6 +250,8 @@ describe("PreferenceGameDialog", () => {
     fireEvent.click(vetoButton);
     fireEvent.click(vetoButton);
     expect(onSignal).toHaveBeenCalledTimes(1);
+    const firstIdempotencyKey = onSignal.mock.calls[0]?.[2];
+    expect(firstIdempotencyKey).toEqual(expect.any(String));
     expect(
       screen.getByRole("button", { name: "Favorite for Deep focus" })
     ).toBeDisabled();
@@ -270,7 +276,11 @@ describe("PreferenceGameDialog", () => {
       screen.getByRole("button", { name: "Retry Veto for Deep focus" })
     );
     expect(onSignal).toHaveBeenCalledTimes(2);
-    expect(onSignal).toHaveBeenLastCalledWith("item_left", "veto");
+    expect(onSignal).toHaveBeenLastCalledWith(
+      "item_left",
+      "veto",
+      firstIdempotencyKey
+    );
   });
 
   it("keeps a just-applied signal available for replacement after the pair advances", async () => {
@@ -350,7 +360,11 @@ describe("PreferenceGameDialog", () => {
         name: "Clear effect for Deep focus"
       })
     );
-    expect(onSignal).toHaveBeenLastCalledWith("item_left", "neutral");
+    expect(onSignal).toHaveBeenLastCalledWith(
+      "item_left",
+      "neutral",
+      expect.any(String)
+    );
   });
 
   it("submits at most one judgment for a pair while the request is pending", async () => {

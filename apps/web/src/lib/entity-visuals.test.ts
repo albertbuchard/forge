@@ -18,6 +18,7 @@ describe("entity visuals", () => {
       "habit",
       "tag",
       "note",
+      "person",
       "wiki_page",
       "wiki_space",
       "insight",
@@ -65,6 +66,7 @@ describe("entity visuals", () => {
     expect(getEntityKindForCrudEntityType("goal")).toBe("goal");
     expect(getEntityKindForCrudEntityType("tag")).toBe("tag");
     expect(getEntityKindForCrudEntityType("insight")).toBe("insight");
+    expect(getEntityKindForCrudEntityType("person")).toBe("person");
     expect(getEntityKindForCrudEntityType("work_block_template")).toBe(
       "work_block"
     );
@@ -80,9 +82,9 @@ describe("entity visuals", () => {
     expect(getEntityKindForCrudEntityType("note", { noteKind: "wiki" })).toBe(
       "wiki_page"
     );
-    expect(getEntityKindForCrudEntityType("note", { noteKind: "evidence" })).toBe(
-      "note"
-    );
+    expect(
+      getEntityKindForCrudEntityType("note", { noteKind: "evidence" })
+    ).toBe("note");
   });
 
   it("maps workbench flow kinds to dedicated entity identities", () => {

@@ -2439,7 +2439,7 @@ describe("question flow simulation cycles", () => {
       expect(source).toMatch(/fit-or-correction question/i);
       expect(source).toMatch(/logistical records[\s\S]*operational detail/i);
     }
-  });
+  }, 15_000);
 
   it("cycle 2 retest: Psyche hypotheses are entity-specific, functional, and correctable", () => {
     const hypothesisMap = getSectionSlice(

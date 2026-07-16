@@ -10,10 +10,13 @@ import { PsycheSchemasBeliefsPage } from "@/pages/psyche-schemas-beliefs-page";
 import { PsycheValuesPage } from "@/pages/psyche-values-page";
 import type { ForgeSnapshot } from "@/lib/types";
 
-const { useForgeShellMock, useQueryMock } = vi.hoisted(() => ({
-  useForgeShellMock: vi.fn(),
-  useQueryMock: vi.fn()
-}));
+const { useForgeShellMock, useInfiniteQueryMock, useQueryMock } = vi.hoisted(
+  () => ({
+    useForgeShellMock: vi.fn(),
+    useInfiniteQueryMock: vi.fn(),
+    useQueryMock: vi.fn()
+  })
+);
 
 vi.mock("@/components/shell/app-shell", () => ({
   useForgeShell: useForgeShellMock
@@ -25,6 +28,7 @@ vi.mock("@tanstack/react-query", async () => {
   );
   return {
     ...actual,
+    useInfiniteQuery: useInfiniteQueryMock,
     useQuery: useQueryMock
   };
 });
@@ -248,7 +252,10 @@ function renderWithProviders(
 
 describe("psyche route states", () => {
   it("keeps preferences and sleep inside the shared psyche nav instead of duplicate promo cards", () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
     useQueryMock.mockReturnValue(
       createQueryResult({
         data: {
@@ -289,7 +296,10 @@ describe("psyche route states", () => {
   });
 
   it("shows a loading state for the values route", () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
     useQueryMock.mockReturnValue(
       createQueryResult({ isLoading: true, isPending: true })
     );
@@ -300,15 +310,17 @@ describe("psyche route states", () => {
   });
 
   it("shows a recoverable error state for the reports route", () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
-    useQueryMock.mockImplementation((options: { queryKey?: unknown[] }) =>
-      options.queryKey?.[0] === "forge-psyche-reports"
-        ? createQueryResult({
-            isError: true,
-            error: new Error("reports failed")
-          })
-        : createQueryResult({ data: {} })
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
+    useInfiniteQueryMock.mockReturnValue(
+      createQueryResult({
+        isError: true,
+        error: new Error("reports failed")
+      })
     );
+    useQueryMock.mockReturnValue(createQueryResult({ data: {} }));
 
     renderWithProviders(<PsycheReportsPage />);
 
@@ -318,7 +330,10 @@ describe("psyche route states", () => {
   });
 
   it("shows the shared empty state for the values route", () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
     useQueryMock.mockReturnValue(createQueryResult({ data: { values: [] } }));
 
     renderWithProviders(<PsycheValuesPage />);
@@ -383,7 +398,10 @@ describe("psyche route states", () => {
   });
 
   it("teaches the mode flow with placeholders and inline help", async () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
     useQueryMock.mockImplementation((options: { queryKey?: unknown[] }) => {
       switch (options.queryKey?.[0]) {
         case "forge-psyche-modes":
@@ -422,7 +440,10 @@ describe("psyche route states", () => {
   });
 
   it("separates maladaptive and adaptive schemas on the beliefs route", () => {
-    useForgeShellMock.mockReturnValue({ snapshot: createSnapshot() });
+    useForgeShellMock.mockReturnValue({
+      snapshot: createSnapshot(),
+      selectedUserIds: []
+    });
     useQueryMock.mockImplementation((options: { queryKey?: unknown[] }) => {
       switch (options.queryKey?.[0]) {
         case "forge-psyche-schema-catalog":

@@ -370,7 +370,7 @@ export function PsycheVocabularyFlowDialog({
                   : "justify-start bg-[var(--ui-surface-3)]"
               )}
             >
-              <span className="size-5 rounded-full bg-white shadow-sm" />
+              <span className="size-5 rounded-full bg-[var(--ui-ink-strong)] shadow-sm" />
             </span>
             <span className="min-w-0">
               <span className="block font-medium text-[var(--ui-ink-strong)]">

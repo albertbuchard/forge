@@ -10,7 +10,11 @@ import { OverviewPage } from "@/pages/overview-page";
 import { ProjectDetailPage } from "@/pages/project-detail-page";
 import { ProjectsPage } from "@/pages/projects-page";
 import { TodayPage } from "@/pages/today-page";
-import type { CalendarSchedulingRules, ForgeSnapshot } from "@/lib/types";
+import type {
+  CalendarSchedulingRules,
+  ForgeSnapshot,
+  TodayPriorityDecision
+} from "@/lib/types";
 import { createAppStore } from "@/store/store";
 
 const { useForgeShellMock, useCommandCenterStoreMock, useQueryMock } =
@@ -496,24 +500,49 @@ describe("core route states", () => {
       snapshot: createSnapshot(),
       patchTaskStatus: vi.fn()
     });
-    useQueryMock.mockReturnValue({
-      data: {
-        calendar: {
-          generatedAt: "2026-04-03T08:00:00.000Z",
-          providers: [],
-          connections: [],
-          calendars: [],
-          events: [],
-          workBlockTemplates: [],
-          workBlockInstances: [],
-          timeboxes: []
-        }
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn()
-    });
+    const noWorkDecision: TodayPriorityDecision = {
+      contractVersion: 1,
+      generatedAt: "2026-04-03T08:00:00.000Z",
+      mode: "no-work",
+      confidence: "full",
+      decisionUserId: "user_default",
+      task: null,
+      activeRun: null,
+      activeRunCount: 0,
+      summary: "No open, startable work is available.",
+      rankedCandidates: [],
+      selectedCandidate: null,
+      alternatives: [],
+      evidence: [],
+      blockedTaskCount: 0,
+      needsRefresh: false,
+      isLoading: false
+    };
+    useQueryMock.mockImplementation(
+      ({ queryKey }: { queryKey: readonly string[] }) => ({
+        data:
+          queryKey[0] === "forge-today-priority"
+            ? { decision: noWorkDecision }
+            : queryKey[0] === "forge-calendar-overview"
+              ? {
+                  calendar: {
+                    generatedAt: "2026-04-03T08:00:00.000Z",
+                    providers: [],
+                    connections: [],
+                    calendars: [],
+                    events: [],
+                    workBlockTemplates: [],
+                    workBlockInstances: [],
+                    timeboxes: []
+                  }
+                }
+              : undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn()
+      })
+    );
 
     renderWithProviders(<TodayPage />);
 
