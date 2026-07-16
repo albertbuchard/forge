@@ -4853,6 +4853,12 @@ function validationErrorMessage(Value, schema, value) {
   return `${firstError.path || "input"}: ${firstError.message}`;
 }
 
+function toMcpInputSchema(parameters) {
+  return parameters.type === "object"
+    ? parameters
+    : { ...parameters, type: "object" };
+}
+
 function resolveMcpAgentProvider() {
   const rawProvider = process.env.FORGE_AGENT_PROVIDER?.trim().toLowerCase();
   if (ADAPTERS.includes(rawProvider)) return rawProvider;
@@ -5077,7 +5083,7 @@ async function runMcp() {
         name: tool.name,
         title: tool.label,
         description: tool.description,
-        inputSchema: tool.parameters
+        inputSchema: toMcpInputSchema(tool.parameters)
       }))
     )
   }));
