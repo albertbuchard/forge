@@ -598,7 +598,17 @@ await removeCompiledTests(path.join(pluginDistDir, "server"));
 await patchCompiledJsSpecifiers(path.join(pluginDistDir, "server"));
 await run("npm", ["run", "build"], repoRoot);
 
-await cp(repoWebDistDir, pluginDistDir, { recursive: true, force: true });
+const packagedGamificationRoot = path.join(repoWebDistDir, "gamification");
+await cp(repoWebDistDir, pluginDistDir, {
+  recursive: true,
+  force: true,
+  filter(sourcePath) {
+    return (
+      sourcePath !== packagedGamificationRoot &&
+      !sourcePath.startsWith(`${packagedGamificationRoot}${path.sep}`)
+    );
+  }
+});
 await removePackagedGamificationAssets();
 await packageCompanionIroh();
 await packageForgePeer(nativeSourcePrivateKey);
