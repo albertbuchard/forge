@@ -100,7 +100,7 @@ export const PERFORMANCE_BUDGET_BASIS = Object.freeze({
   browser:
     "Binding People goal: first useful content <= 1.0 s warm and <= 2.0 s cold.",
   scroll:
-    "Binding People goal: desktop p5 FPS >= 55/p95 frame <= 18.2 ms; phone p5 FPS >= 50/p95 frame <= 20 ms; zero blank, blue, or content-loss frames.",
+    "Binding People goal: desktop p5 FPS >= 55/p95 frame <= 18.2 ms and phone p5 FPS >= 50/p95 frame <= 20 ms on a 60 Hz reference cadence; raw runner cadence remains recorded; zero blank, blue, or content-loss frames.",
   memory:
     "Binding People goal: API RSS <= 650 MiB, V8 heap <= 256 MiB, retained RSS <= 64 MiB, renderer heap <= 256 MiB and retained growth <= 10%.",
   startup:

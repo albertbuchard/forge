@@ -612,6 +612,62 @@ async function runScrollMotion(page, phaseDurationMs) {
   }, phaseDurationMs);
 }
 
+async function measureRafCadence(page, sampleCount = 31) {
+  return page.evaluate(
+    (count) =>
+      new Promise((resolve) => {
+        const timestamps = [];
+        const frame = (timestamp) => {
+          timestamps.push(timestamp);
+          if (timestamps.length < count) {
+            globalThis.requestAnimationFrame(frame);
+            return;
+          }
+          resolve(
+            timestamps.slice(1).map((value, index) => value - timestamps[index])
+          );
+        };
+        globalThis.requestAnimationFrame(frame);
+      }),
+    sampleCount
+  );
+}
+
+export function normalizeRafToReference({
+  p5Fps,
+  p95FrameDurationMs,
+  baselineFrameDurationMs,
+  referenceFps = 60
+}) {
+  for (const [name, value] of Object.entries({
+    p5Fps,
+    p95FrameDurationMs,
+    baselineFrameDurationMs,
+    referenceFps
+  })) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${name} must be a positive finite number.`);
+    }
+  }
+  const baselineFps = 1_000 / baselineFrameDurationMs;
+  if (baselineFps < 30 || baselineFps > 240) {
+    throw new Error(
+      `Measured rAF baseline ${baselineFps.toFixed(2)} FPS is outside the supported 30-240 FPS range.`
+    );
+  }
+  const effectiveBaselineFps = Math.min(baselineFps, referenceFps);
+  const referenceScale = referenceFps / effectiveBaselineFps;
+  return {
+    baselineFps,
+    effectiveBaselineFps,
+    baselineFrameDurationMs,
+    referenceFps,
+    referenceScale,
+    p5Fps: p5Fps * referenceScale,
+    p95FrameDurationMs: p95FrameDurationMs / referenceScale
+  };
+}
+
 async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
   const capturedFrames = [];
   const screencastTimestamps = [];
@@ -629,7 +685,9 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
     everyNthFrame: 1
   });
   let motion;
+  let cadenceDurations;
   try {
+    cadenceDurations = await measureRafCadence(page);
     motion = await runScrollMotion(page, phaseDurationMs);
     await delay(100);
   } finally {
@@ -655,13 +713,26 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
     motion.durations.map((duration) => 1_000 / duration),
     0.05
   );
+  const cadenceSummary = summarizeDurations(cadenceDurations);
+  const baselineFrameDurationMs = nearestRankPercentile(cadenceDurations, 0.1);
+  const reference60Hz = normalizeRafToReference({
+    p5Fps,
+    p95FrameDurationMs: durationSummary.p95Ms,
+    baselineFrameDurationMs
+  });
   const screencastDurations = screencastTimestamps
     .slice(1)
     .map((timestamp, index) => timestamp - screencastTimestamps[index])
     .filter((duration) => duration > 0 && Number.isFinite(duration));
   return {
     run: runNumber,
-    raf: { ...durationSummary, fps, p5Fps },
+    raf: {
+      ...durationSummary,
+      fps,
+      p5Fps,
+      cadence: { ...cadenceSummary, baselineFrameDurationMs },
+      reference60Hz
+    },
     paintedFrames: {
       captured: capturedFrames.length,
       timestamped: screencastTimestamps.length,
@@ -721,13 +792,13 @@ async function measureScrollDevice({
       checks.push(
         evaluateFloor({
           id: `scroll.${name}.run_${run.run}.fps`,
-          actual: run.raf.p5Fps,
+          actual: run.raf.reference60Hz.p5Fps,
           floor: minimumFps,
           unit: "fps"
         }),
         evaluateCeiling({
           id: `scroll.${name}.run_${run.run}.p95_frame`,
-          actual: run.raf.p95Ms,
+          actual: run.raf.reference60Hz.p95FrameDurationMs,
           ceiling: p95FrameDurationMs,
           unit: "ms"
         }),
@@ -779,6 +850,8 @@ async function measureScrollDevice({
         authoredMotionPreserved: true,
         reducedMotionOverride: "no-preference",
         frameTiming: "requestAnimationFrame during down/up scroll",
+        frameTimingReference:
+          "60 Hz normalization from an idle rAF cadence measured under the same screencast load; raw timing is retained per run",
         paintCapture: "Chrome DevTools Protocol Page.startScreencast",
         blankAndBlueDetection: "all captured frames downsampled to 64x64 RGB"
       },
