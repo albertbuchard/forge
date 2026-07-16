@@ -384,6 +384,7 @@ test("entity navigation calendar targets preserve their concrete entity type", a
         id: string;
       }
     ).id;
+    setEntityOwner("task", taskId, "user_operator");
     const created = await app.inject({
       method: "POST",
       url: "/api/v1/entities/create",
@@ -459,6 +460,13 @@ test("entity navigation calendar targets preserve their concrete entity type", a
 test("entity navigation preference targets preserve the owning user and domain", async () => {
   await withTestServer(async (app) => {
     const cookie = await issueOperatorSessionCookie(app);
+    const refreshResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/workspace/refresh",
+      headers: { cookie },
+      payload: { userId: "user_operator", domain: "food" }
+    });
+    assert.equal(refreshResponse.statusCode, 200, refreshResponse.body);
     const workspaceResponse = await app.inject({
       method: "GET",
       url: "/api/v1/preferences/workspace?userId=user_operator&domain=food",

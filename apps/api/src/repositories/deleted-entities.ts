@@ -9,6 +9,10 @@ import {
   type DeletedEntityRecord,
   type SettingsBinPayload
 } from "../types.js";
+import {
+  buildEntityAssigneeIndex,
+  buildEntityOwnerIndex
+} from "./entity-ownership.js";
 
 type DeletionContext = {
   source: ActivitySource;
@@ -207,6 +211,8 @@ export function cascadeSoftDeleteAnchoredCollaboration(
     .prepare(
       `SELECT DISTINCT
          notes.id AS id,
+         notes.kind AS kind,
+         notes.space_id AS space_id,
          notes.content_markdown AS content_markdown,
          notes.content_plain AS content_plain,
          notes.author AS author,
@@ -227,6 +233,8 @@ export function cascadeSoftDeleteAnchoredCollaboration(
     )
     .all(parentEntityType, parentEntityId) as Array<{
     id: string;
+    kind: string;
+    space_id: string;
     content_markdown: string;
     content_plain: string;
     author: string | null;
@@ -237,6 +245,9 @@ export function cascadeSoftDeleteAnchoredCollaboration(
     updated_at: string;
   }>;
   if (noteRows.length > 0) {
+    const noteIds = noteRows.map((row) => row.id);
+    const ownersByNoteId = buildEntityOwnerIndex("note", noteIds);
+    const assigneesByNoteId = buildEntityAssigneeIndex("note", noteIds);
     const placeholders = noteRows.map(() => "?").join(", ");
     const linkRows = getDatabase()
       .prepare(
@@ -279,6 +290,8 @@ export function cascadeSoftDeleteAnchoredCollaboration(
             : `Linked to ${parentEntityType.replaceAll("_", " ")}`,
         snapshot: {
           id: row.id,
+          kind: row.kind,
+          spaceId: row.space_id,
           contentMarkdown: row.content_markdown,
           contentPlain: row.content_plain,
           author: row.author,
@@ -287,6 +300,9 @@ export function cascadeSoftDeleteAnchoredCollaboration(
           destroyAt: row.destroy_at,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
+          userId: ownersByNoteId.get(row.id)?.userId ?? null,
+          ownerUserId: ownersByNoteId.get(row.id)?.userId ?? null,
+          assigneeUserIds: assigneesByNoteId.get(row.id)?.assigneeUserIds ?? [],
           links: linksByNoteId.get(row.id) ?? []
         },
         deleteReason,

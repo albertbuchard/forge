@@ -2839,12 +2839,12 @@ function computeScores(options: {
       }
       return right.signal.createdAt.localeCompare(left.signal.createdAt);
     })[0]?.signal;
-    const bookmarked = statusSignal
-      ? statusSignal.signalType === "bookmark"
-      : (existing?.bookmarked ?? 0) === 1;
-    const compareLater = statusSignal
-      ? statusSignal.signalType === "compare_later"
-      : (existing?.compare_later ?? 0) === 1;
+    const bookmarked =
+      (existing?.bookmarked ?? 0) === 1 ||
+      statusSignal?.signalType === "bookmark";
+    const compareLater =
+      (existing?.compare_later ?? 0) === 1 ||
+      statusSignal?.signalType === "compare_later";
     const status = deriveStatus({
       manualStatus: existing?.manual_status ?? null,
       score,

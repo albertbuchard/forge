@@ -420,7 +420,7 @@ test("OpenAPI publishes a closed and complete Preferences route inventory", () =
       post: ["400", "401", "403", "404", "409", "500"]
     },
     "/api/v1/preferences/signals": {
-      post: ["400", "401", "403", "404", "500"]
+      post: ["400", "401", "403", "404", "409", "500"]
     },
     "/api/v1/preferences/items/{id}/score": {
       patch: ["400", "401", "403", "404", "500"]

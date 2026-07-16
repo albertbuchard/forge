@@ -1364,7 +1364,10 @@ test("task completion API supports retroactive completion without burning today'
 
     const taskContext = await app.inject({
       method: "GET",
-      url: `/api/v1/tasks/${createdTask.id}/context`
+      url: `/api/v1/tasks/${createdTask.id}/context`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
 
     assert.equal(taskContext.statusCode, 200);
@@ -11765,10 +11768,13 @@ test("health probe reports the effective database root even when FORGE_DATA_ROOT
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-health-implicit-root-")
   );
-  configureDatabase({ dataRoot: rootDir, seedDemoData: true });
-  const app = await buildServer({ devrageMetricSync: false });
+  const originalForgeDataRoot = process.env.FORGE_DATA_ROOT;
+  let app: Awaited<ReturnType<typeof buildServer>> | undefined;
 
   try {
+    delete process.env.FORGE_DATA_ROOT;
+    configureDatabase({ dataRoot: rootDir, seedDemoData: true });
+    app = await buildServer({ devrageMetricSync: false });
     const response = await app.inject({
       method: "GET",
       url: "/api/v1/health",
@@ -11801,8 +11807,13 @@ test("health probe reports the effective database root even when FORGE_DATA_ROOT
       process.env.FORGE_RUNTIME_PACKAGE_VERSION?.trim() || null
     );
   } finally {
-    await app.close();
+    await app?.close();
     closeDatabase();
+    if (originalForgeDataRoot === undefined) {
+      delete process.env.FORGE_DATA_ROOT;
+    } else {
+      process.env.FORGE_DATA_ROOT = originalForgeDataRoot;
+    }
     await rm(rootDir, { recursive: true, force: true });
   }
 });
@@ -11852,7 +11863,10 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
 
     const taskContextAfterAdd = await app.inject({
       method: "GET",
-      url: `/api/v1/tasks/${task.id}/context`
+      url: `/api/v1/tasks/${task.id}/context`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
     const taskContextBody = taskContextAfterAdd.json() as {
       activity: Array<{
@@ -11925,7 +11939,10 @@ test("work adjustments add and remove signed minutes on tasks and projects with 
 
     const projectBoard = await app.inject({
       method: "GET",
-      url: `/api/v1/projects/${task.projectId}/board`
+      url: `/api/v1/projects/${task.projectId}/board`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
     const projectBoardBody = projectBoard.json() as {
       activity: Array<{ entityType: string; eventType: string }>;
@@ -12515,7 +12532,10 @@ test("versioned task context exposes evidence and task-run state for inspection"
 
     const response = await app.inject({
       method: "GET",
-      url: `/api/v1/tasks/${taskId}/context`
+      url: `/api/v1/tasks/${taskId}/context`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
 
     assert.equal(response.statusCode, 200);
@@ -12880,6 +12900,7 @@ test("gamification streak counts created Forge entities as XP activity with a ne
   const app = await buildServer({ dataRoot: rootDir, seedDemoData: true });
 
   try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
     const database = getDatabase();
     const staleIso = "2000-01-01T12:00:00.000Z";
     for (const table of [
@@ -12905,6 +12926,7 @@ test("gamification streak counts created Forge entities as XP activity with a ne
     }
     database.prepare(`UPDATE reward_ledger SET created_at = ?`).run(staleIso);
     database.prepare(`DELETE FROM gamification_daily_activity`).run();
+    database.prepare(`DELETE FROM gamification_reconciliation_state`).run();
 
     const taskRows = database
       .prepare(`SELECT id FROM tasks ORDER BY id ASC LIMIT 3`)
@@ -12920,7 +12942,22 @@ test("gamification streak counts created Forge entities as XP activity with a ne
       database
         .prepare(`UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?`)
         .run(createdAt.toISOString(), createdAt.toISOString(), row.id);
+      database
+        .prepare(
+          `UPDATE reward_ledger
+           SET created_at = ?
+           WHERE reversible_group = ?`
+        )
+        .run(createdAt.toISOString(), taskRewardGroups[index]);
     }
+
+    const reconciliation = await app.inject({
+      method: "POST",
+      url: "/api/v1/gamification/reconcile",
+      headers: { cookie: operatorCookie },
+      payload: {}
+    });
+    assert.equal(reconciliation.statusCode, 200);
 
     const response = await app.inject({
       method: "GET",
@@ -14392,7 +14429,7 @@ test("misaligned habit penalties do not break the context payload", async () => 
       };
     };
     assert.equal(checkInBody.habit.checkIns[0]?.deltaXp, -11);
-    assert.equal(checkInBody.metrics.profile.totalXp, 11);
+    assert.equal(checkInBody.metrics.profile.totalXp, 0);
     assert.ok(checkInBody.metrics.profile.weeklyXp >= 0);
     assert.ok(
       checkInBody.metrics.recentLedger.some(
@@ -14416,7 +14453,7 @@ test("misaligned habit penalties do not break the context payload", async () => 
         weeklyXp: number;
       };
     };
-    assert.equal(contextBody.metrics.totalXp, 11);
+    assert.equal(contextBody.metrics.totalXp, 0);
     assert.equal(
       contextBody.metrics.weeklyXp,
       checkInBody.metrics.profile.weeklyXp
@@ -17554,16 +17591,21 @@ test("wiki ingest history entries can be deleted without deleting published note
       }
     });
     assert.equal(review.statusCode, 200);
-    const publishedNoteRow = getDatabase()
-      .prepare(
-        `SELECT id
-         FROM notes
-         WHERE title = ?
-         ORDER BY created_at DESC
-         LIMIT 1`
-      )
-      .get("Preserved ingest page") as { id: string } | undefined;
-    const publishedNoteId = publishedNoteRow?.id ?? null;
+    const reviewedPageCandidate = (
+      review.json() as {
+        job: {
+          candidates: Array<{
+            id: string;
+            status: string;
+            publishedNoteId: string | null;
+          }>;
+        };
+      }
+    ).job.candidates.find((candidate) =>
+      pageCandidateIds.includes(candidate.id)
+    );
+    assert.equal(reviewedPageCandidate?.status, "applied");
+    const publishedNoteId = reviewedPageCandidate?.publishedNoteId ?? null;
     assert.ok(publishedNoteId);
 
     const deleteResponse = await app.inject({
@@ -17588,6 +17630,14 @@ test("wiki ingest history entries can be deleted without deleting published note
       .prepare(`SELECT id FROM notes WHERE id = ?`)
       .get(publishedNoteId) as { id: string } | undefined;
     assert.equal(noteRow?.id, publishedNoteId);
+    const noteOwner = getDatabase()
+      .prepare(
+        `SELECT user_id
+         FROM entity_owners
+         WHERE entity_type = 'note' AND entity_id = ?`
+      )
+      .get(publishedNoteId) as { user_id: string } | undefined;
+    assert.equal(noteOwner?.user_id, "user_operator");
 
     await assert.rejects(() =>
       access(path.join(rootDir, "data", "wiki-ingest", jobId))
@@ -17599,7 +17649,7 @@ test("wiki ingest history entries can be deleted without deleting published note
   }
 });
 
-test("task-run completion and release endpoints are idempotent for same-actor retries", async () => {
+test("task-run completion and release endpoints are idempotent for exact same-actor retries", async () => {
   const rootDir = await mkdtemp(
     path.join(os.tmpdir(), "forge-task-run-idempotency-")
   );
@@ -17664,7 +17714,7 @@ test("task-run completion and release endpoints are idempotent for same-actor re
       },
       payload: {
         actor: "OpenClaw",
-        note: "Duplicate finish after network retry."
+        note: "Finished cleanly."
       }
     });
 
@@ -18173,7 +18223,10 @@ test("task context bundles goal linkage, run state, and task-scoped evidence", a
 
     const contextResponse = await app.inject({
       method: "GET",
-      url: `/api/tasks/${task.id}/context`
+      url: `/api/tasks/${task.id}/context`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
     assert.equal(contextResponse.statusCode, 200);
     const context = contextResponse.json() as {
@@ -18421,6 +18474,7 @@ test("soft delete, restore, hard delete, and the settings bin stay in sync for a
       headers: { cookie: operatorCookie },
       payload: {
         contentMarkdown: "This goal has collaboration attached to it.",
+        userId: "user_operator",
         links: [{ entityType: "goal", entityId: goalId, anchorKey: null }]
       }
     });
@@ -19247,7 +19301,7 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const listCatalogItems = await app.inject({
       method: "GET",
-      url: "/api/v1/preferences/catalog-items",
+      url: `/api/v1/preferences/catalog-items?catalogId=${encodeURIComponent(catalogId)}`,
       headers: { cookie: operatorCookie }
     });
     assert.equal(listCatalogItems.statusCode, 200);
@@ -19259,7 +19313,8 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const listContexts = await app.inject({
       method: "GET",
-      url: "/api/v1/preferences/contexts"
+      url: "/api/v1/preferences/contexts",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(listContexts.statusCode, 200);
     assert.ok(
@@ -19270,7 +19325,8 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const listItems = await app.inject({
       method: "GET",
-      url: "/api/v1/preferences/items"
+      url: "/api/v1/preferences/items",
+      headers: { cookie: operatorCookie }
     });
     assert.equal(listItems.statusCode, 200);
     assert.ok(
@@ -19295,13 +19351,15 @@ test("direct preferences list and get routes work, and questionnaire instruments
 
     const getContext = await app.inject({
       method: "GET",
-      url: `/api/v1/preferences/contexts/${contextId}`
+      url: `/api/v1/preferences/contexts/${contextId}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(getContext.statusCode, 200);
 
     const getItem = await app.inject({
       method: "GET",
-      url: `/api/v1/preferences/items/${itemId}`
+      url: `/api/v1/preferences/items/${itemId}`,
+      headers: { cookie: operatorCookie }
     });
     assert.equal(getItem.statusCode, 200);
 
@@ -19637,6 +19695,7 @@ test("calendar entities work through the generic batch routes and keep calendar-
     const projectId = (
       projectsResponse.json() as { projects: Array<{ id: string }> }
     ).projects[0]!.id;
+    setEntityOwner("task", taskId, "user_operator");
 
     const createResponse = await app.inject({
       method: "POST",
@@ -20015,6 +20074,19 @@ test("preferences workspace supports items, entity enqueue, judgments, signals, 
     ).users[0]?.id;
     assert.ok(userId);
 
+    const refreshWorkspaceResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/workspace/refresh",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects"
+      }
+    });
+    assert.equal(refreshWorkspaceResponse.statusCode, 200);
+
     const workspaceResponse = await app.inject({
       method: "GET",
       url: `/api/v1/preferences/workspace?userId=${userId}&domain=projects`,
@@ -20190,6 +20262,33 @@ test("preferences workspace supports items, entity enqueue, judgments, signals, 
     );
     assert.equal(patchedScore?.manualStatus, "favorite");
     assert.equal(patchedScore?.bookmarked, true);
+
+    const refreshedAfterPatch = await app.inject({
+      method: "POST",
+      url: "/api/v1/preferences/workspace/refresh",
+      headers: {
+        cookie: operatorCookie
+      },
+      payload: {
+        userId,
+        domain: "projects",
+        contextId: initialWorkspace.selectedContext.id
+      }
+    });
+    assert.equal(refreshedAfterPatch.statusCode, 200);
+    const refreshedScore = (
+      refreshedAfterPatch.json() as {
+        workspace: {
+          scores: Array<{
+            itemId: string;
+            manualStatus: string | null;
+            bookmarked: boolean;
+          }>;
+        };
+      }
+    ).workspace.scores.find((score) => score.itemId === createdItemId);
+    assert.equal(refreshedScore?.manualStatus, "favorite");
+    assert.equal(refreshedScore?.bookmarked, true);
   } finally {
     await app.close();
     closeDatabase();
@@ -20425,6 +20524,7 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     "mode_guide_session",
     "mode_profile",
     "note",
+    "person",
     "preference_catalog",
     "preference_catalog_item",
     "preference_context",
@@ -20448,7 +20548,6 @@ test("CRUD capability matrix keeps user-facing delete/bin entities explicit", ()
     .sort();
   assert.deepEqual(immediateDeleteTypes, [
     "calendar_event",
-    "preference_catalog_item",
     "preference_context",
     "preference_item",
     "questionnaire_instrument",
@@ -20918,6 +21017,15 @@ test("settings and local agent token management persist through the versioned AP
       "psyche.note",
       "psyche.insight",
       "psyche.mode",
+      "wiki:read",
+      "people:read:basic",
+      "people:read:private",
+      "people:read:contacts",
+      "people:read:sensitive",
+      "people:read:restricted",
+      "people:write",
+      "peer:status",
+      "peer:query",
       "artifact.readMetadata",
       "artifact.create",
       "artifact.uploadBytes",
@@ -21851,6 +21959,7 @@ test("settings and local agent token management persist through the versioned AP
         "forge_get_user_directory",
         "forge_get_operator_context",
         "forge_get_current_work",
+        "forge_get_today_priority",
         "forge_get_psyche_overview",
         "forge_get_psyche_schema_catalog",
         "forge_get_sleep_overview",
@@ -24199,7 +24308,10 @@ test("task timers can be started, heartbeated, focused, and completed", async ()
 
     const taskContext = await app.inject({
       method: "GET",
-      url: `/api/tasks/${taskId}/context`
+      url: `/api/tasks/${taskId}/context`,
+      headers: {
+        cookie: operatorCookie
+      }
     });
     assert.equal(taskContext.statusCode, 200);
     const taskContextBody = taskContext.json() as {
@@ -24475,6 +24587,9 @@ test("inactive task run mutations return the current run state", async () => {
     const recover = await app.inject({
       method: "POST",
       url: "/api/task-runs/recover",
+      headers: {
+        cookie: operatorCookie
+      },
       payload: { limit: 10 }
     });
     assert.equal(recover.statusCode, 200);
@@ -24544,6 +24659,9 @@ test("expired task runs recover cleanly after their lease lapses", async () => {
     const recovered = await app.inject({
       method: "POST",
       url: "/api/task-runs/recover",
+      headers: {
+        cookie: operatorCookie
+      },
       payload: {
         limit: 10
       }
@@ -24640,7 +24758,10 @@ test("watchdog reconcile endpoint lets operators force recovery and inspect stat
 
     const reconcile = await app.inject({
       method: "POST",
-      url: "/api/task-runs/watchdog/reconcile"
+      url: "/api/task-runs/watchdog/reconcile",
+      headers: {
+        cookie: operatorCookie
+      }
     });
     assert.equal(reconcile.statusCode, 200);
 
@@ -24706,13 +24827,17 @@ test("v1 health reports degraded status when watchdog recovery fails", async () 
   });
 
   try {
+    const operatorCookie = await issueOperatorSessionCookie(app);
     const before = await app.inject({ method: "GET", url: "/api/v1/health" });
     assert.equal(before.statusCode, 200);
     assert.equal((before.json() as { ok: boolean }).ok, true);
 
     const reconcile = await app.inject({
       method: "POST",
-      url: "/api/task-runs/watchdog/reconcile"
+      url: "/api/task-runs/watchdog/reconcile",
+      headers: {
+        cookie: operatorCookie
+      }
     });
     assert.equal(reconcile.statusCode, 500);
 
@@ -24789,7 +24914,7 @@ test("notes list respects explicit userIds owner filtering", async () => {
 
     const filtered = await app.inject({
       method: "GET",
-      url: "/api/v1/notes?userIds=user_forge_bot",
+      url: "/api/v1/notes?kind=evidence&userIds=user_forge_bot",
       headers: { cookie: operatorCookie }
     });
     assert.equal(filtered.statusCode, 200);

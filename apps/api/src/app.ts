@@ -16817,9 +16817,13 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
+    const userId = resolveNoteMutationUserId(
+      undefined,
+      auth.token?.scopePolicy.userIds ?? []
+    );
     const spaceId = resolveWikiMutationSpaceId(auth, {
       spaceId: fields.get("spaceId") || undefined,
-      userId: null
+      userId
     });
 
     const result = await createUploadedWikiIngestJob(
@@ -16834,7 +16838,7 @@ export async function buildServer(
             : "auto",
         entityProposalMode:
           fields.get("entityProposalMode") === "none" ? "none" : "suggest",
-        userId: null,
+        userId,
         createAsKind:
           fields.get("createAsKind") === "evidence" ? "evidence" : "wiki",
         linkedEntityHints
@@ -16866,9 +16870,13 @@ export async function buildServer(
         entityType: linkedEntityType
       }
     );
-    const spaceId = resolveWikiMutationSpaceId(auth, payload);
+    const userId = resolveNoteMutationUserId(
+      payload.userId,
+      auth.token?.scopePolicy.userIds ?? []
+    );
+    const spaceId = resolveWikiMutationSpaceId(auth, { ...payload, userId });
     const result = await ingestWikiSource(
-      { ...payload, spaceId },
+      { ...payload, userId, spaceId },
       {
         actor: auth.actor ?? null
       }

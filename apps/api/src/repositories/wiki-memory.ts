@@ -4305,6 +4305,10 @@ function readWikiIngestInput(jobId: string) {
     return null;
   }
   const payload = parseJsonRecord(row.input_json);
+  const legacyActorUserId = row.created_by_actor
+    ? (getUserById(row.created_by_actor)?.id ?? null)
+    : null;
+  const spaceOwnerUserId = getWikiSpaceById(row.space_id)?.ownerUserId ?? null;
   return createWikiIngestJobSchema.parse({
     spaceId: row.space_id,
     titleHint:
@@ -4339,7 +4343,7 @@ function readWikiIngestInput(jobId: string) {
         ? payload.userId
         : payload.userId === null
           ? null
-          : row.created_by_actor,
+          : (legacyActorUserId ?? spaceOwnerUserId),
     createAsKind: payload.createAsKind === "evidence" ? "evidence" : "wiki",
     linkedEntityHints: Array.isArray(payload.linkedEntityHints)
       ? payload.linkedEntityHints

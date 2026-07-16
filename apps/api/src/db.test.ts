@@ -5,21 +5,35 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 
-import { resolveDatabasePathForDataRoot, resolveDefaultDataRoot } from "./db.js";
+import {
+  resolveDatabasePathForDataRoot,
+  resolveDefaultDataRoot
+} from "./db.js";
 
 test("resolveDefaultDataRoot prefers the tracked monorepo Forge data root when available", () => {
-  const expected = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "..",
-    "..",
-    "..",
-    "data",
-    "forge"
-  );
+  const originalForgeDataRoot = process.env.FORGE_DATA_ROOT;
+  delete process.env.FORGE_DATA_ROOT;
 
-  assert.equal(resolveDefaultDataRoot("/tmp/forge-standalone"), expected);
+  try {
+    const expected = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "..",
+      "..",
+      "..",
+      "data",
+      "forge"
+    );
+
+    assert.equal(resolveDefaultDataRoot("/tmp/forge-standalone"), expected);
+  } finally {
+    if (originalForgeDataRoot === undefined) {
+      delete process.env.FORGE_DATA_ROOT;
+    } else {
+      process.env.FORGE_DATA_ROOT = originalForgeDataRoot;
+    }
+  }
 });
 
 test("resolveDatabasePathForDataRoot prefers the flat runtime database path", async () => {
