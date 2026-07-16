@@ -289,8 +289,8 @@ jobs:
       - name: Initialize isolated release roots
         run: |
           set -euo pipefail
-          data_root="${RUNNER_TEMP}/forge-people-release-data"
-          artifact_root="${RUNNER_TEMP}/forge-people-release-artifacts"
+          data_root="/private/tmp/forge-people-release-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact_root="/private/tmp/forge-people-release-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           test ! -e "${data_root}"
           test ! -e "${artifact_root}"
           npm run check:people-sharing-release -- --initialize-root "${data_root}"
