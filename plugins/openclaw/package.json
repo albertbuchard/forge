@@ -1,6 +1,6 @@
 {
   "name": "forge-openclaw-plugin",
-  "version": "0.3.32",
+  "version": "0.3.33",
   "description": "Curated OpenClaw adapter for the Forge collaboration API, UI entrypoint, and localhost auto-start runtime.",
   "type": "module",
   "license": "Apache-2.0",
@@ -61,6 +61,7 @@
     "@mariozechner/pi-ai": "^0.66.1",
     "@radix-ui/react-dialog": "^1.1.14",
     "@reduxjs/toolkit": "^2.11.2",
+    "@simplewebauthn/server": "13.3.2",
     "@sinclair/typebox": "^0.34.48",
     "@tanstack/react-query": "^5.80.10",
     "@tanstack/react-table": "^8.21.3",

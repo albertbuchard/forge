@@ -461,6 +461,7 @@ test("enabled Iroh with no direct endpoint passes authenticated readiness", asyn
   identity.device.capabilities = [
     "direct_stream",
     "iroh",
+    "http_mailbox",
     "query",
     "projection"
   ];

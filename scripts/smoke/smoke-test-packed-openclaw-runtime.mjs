@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   writeFileSync
 } from "node:fs";
 import os from "node:os";
@@ -20,11 +21,16 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const pluginRoot = path.join(repoRoot, "plugins/openclaw");
-const tempRoot = mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"));
+const tempRoot = realpathSync(
+  mkdtempSync(path.join(os.tmpdir(), "forge-packed-runtime-"))
+);
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");
 const peerSourceTarget = path.join(tempRoot, "forge-peer-target");
-const peerSocketPath = path.join(tempRoot, "forge-peer.sock");
+const peerSocketPath = path.join(
+  realpathSync("/tmp"),
+  `forge-peer-packed-${process.pid}.sock`
+);
 const peerStateRoot = path.join(tempRoot, "forge-peer-state");
 const port = 43170 + Math.floor(Math.random() * 1000);
 const ownerUserId = "user_operator";
@@ -404,6 +410,7 @@ try {
         FORGE_PEER_BIN: peerRuntime.binaryPath,
         FORGE_PEER_ENABLED: "1",
         FORGE_PEER_REQUIRED: "1",
+        FORGE_PEER_ENABLE_IROH: "1",
         FORGE_PEER_SOCKET_PATH: peerSocketPath,
         FORGE_PEER_STATE_DIR: peerStateRoot,
         HOST: "127.0.0.1",

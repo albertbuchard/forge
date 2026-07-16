@@ -854,10 +854,9 @@ async function startSingleOwnerPeerRuntime(input: {
     }
     if (
       !configuration.supervisor.httpMailbox?.enabled &&
-      (identity.device.capabilities.includes("http_mailbox") ||
-        identity.device.transportEndpoints.some(
-          (endpoint) => endpoint.kind === "http_mailbox"
-        ))
+      identity.device.transportEndpoints.some(
+        (endpoint) => endpoint.kind === "http_mailbox"
+      )
     ) {
       throw new PeerRuntimeStartupError(
         "startup",

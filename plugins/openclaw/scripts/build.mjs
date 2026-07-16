@@ -471,12 +471,7 @@ async function packageForgePeer(privateKey) {
   await removePath(sourceDir);
   await mkdir(sourceDir, { recursive: true });
 
-  for (const fileName of [
-    "Cargo.toml",
-    "Cargo.lock",
-    "README.md",
-    ".gitignore"
-  ]) {
+  for (const fileName of ["Cargo.toml", "Cargo.lock", "README.md"]) {
     await copyFile(
       path.join(forgePeerRoot, fileName),
       path.join(sourceDir, fileName)
