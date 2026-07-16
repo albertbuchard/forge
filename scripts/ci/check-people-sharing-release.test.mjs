@@ -151,6 +151,23 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
       executable: "sh"
     }
   );
+  assert.deepEqual(
+    {
+      args: step("forge-peer-policy-audit").args,
+      executable: step("forge-peer-policy-audit").executable
+    },
+    {
+      args: [
+        "deny",
+        "--manifest-path",
+        "packages/forge-peer/Cargo.toml",
+        "--config",
+        "packages/forge-peer/deny.toml",
+        "check"
+      ],
+      executable: "cargo"
+    }
+  );
   assert.deepEqual(step("people-api-sweep").args, [
     "run",
     "test:people-sharing"

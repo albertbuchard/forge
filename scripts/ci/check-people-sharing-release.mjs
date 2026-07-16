@@ -396,7 +396,7 @@ const groups = Object.freeze({
       "--manifest-path",
       "packages/forge-peer/Cargo.toml",
       "--config",
-      "deny.toml",
+      "packages/forge-peer/deny.toml",
       "check"
     ])
   ],
