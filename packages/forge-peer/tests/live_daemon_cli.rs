@@ -48,7 +48,7 @@ use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
-const LIVE_WAIT_TIMEOUT: Duration = Duration::from_secs(120);
+const LIVE_WAIT_TIMEOUT: Duration = Duration::from_mins(2);
 static LIVE_TRANSPORT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct ChildGuard(Child);
