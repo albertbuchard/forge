@@ -38,7 +38,7 @@ describe("discovery and health", () => {
     assert.deepEqual(health.json(), {
       status: "ok",
       service: "forge-connectivity-service",
-      version: "0.1.8",
+      version: "0.1.9",
       storage: { status: "ok", schemaVersion: 3 }
     });
     assert.equal(discovery.json().limits.channelBurstRequests, 30);

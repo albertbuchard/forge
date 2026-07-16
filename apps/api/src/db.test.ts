@@ -3,6 +3,7 @@ import os from "node:os";
 import test from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 
 import {
@@ -10,12 +11,12 @@ import {
   resolveDefaultDataRoot
 } from "./db.js";
 
-test("resolveDefaultDataRoot prefers the tracked monorepo Forge data root when available", () => {
+test("resolveDefaultDataRoot selects an available implicit Forge data root", () => {
   const originalForgeDataRoot = process.env.FORGE_DATA_ROOT;
   delete process.env.FORGE_DATA_ROOT;
 
   try {
-    const expected = path.resolve(
+    const monorepoDataRoot = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "..",
       "..",
@@ -25,6 +26,9 @@ test("resolveDefaultDataRoot prefers the tracked monorepo Forge data root when a
       "data",
       "forge"
     );
+    const expected = existsSync(monorepoDataRoot)
+      ? monorepoDataRoot
+      : path.join(os.homedir(), ".forge");
 
     assert.equal(resolveDefaultDataRoot("/tmp/forge-standalone"), expected);
   } finally {
