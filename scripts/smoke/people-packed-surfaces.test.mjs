@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   writeFileSync
 } from "node:fs";
@@ -18,6 +19,7 @@ import {
   exercisePeopleHttp,
   findFreePort,
   prepareNativeRuntime,
+  resolveSurfaceSocketPath,
   runPackedSurfaceMatrix,
   stopIsolatedManagedRuntimes,
   stopTrackedChild,
@@ -32,6 +34,16 @@ import {
 } from "../../packages/forge-memory/lib/native-source-manifest.mjs";
 
 const VERSION = "1.2.3";
+
+test("packed surface sockets stay below the portable Unix path limit", () => {
+  const evidenceRoot =
+    "/private/tmp/forge-people-release-artifacts-29552760903-1/people-packed-surfaces-evidence";
+  const socketPath = resolveSurfaceSocketPath(evidenceRoot, "openclaw");
+  assert.equal(path.dirname(socketPath), realpathSync(os.tmpdir()));
+  assert.match(path.basename(socketPath), /^fp-[0-9a-f]{12}-openclaw\.sock$/);
+  assert.equal(path.normalize(socketPath), socketPath);
+  assert.ok(Buffer.byteLength(socketPath) <= 100);
+});
 
 const FAKE_SERVER_SOURCE = String.raw`
 import http from "node:http";

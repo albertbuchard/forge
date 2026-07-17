@@ -1718,13 +1718,31 @@ function isolatedEnvironment(context, extra = {}) {
   };
 }
 
+export function resolveSurfaceSocketPath(evidenceRoot, surface) {
+  const runId = createHash("sha256")
+    .update(evidenceRoot)
+    .digest("hex")
+    .slice(0, 12);
+  const socketPath = path.join(
+    realpathSync(os.tmpdir()),
+    `fp-${runId}-${surface}.sock`
+  );
+  if (Buffer.byteLength(socketPath) > 100) {
+    fail(
+      "configuration",
+      "The packed-surface forge-peer socket path exceeds the portable Unix limit."
+    );
+  }
+  return socketPath;
+}
+
 function makeSurfaceContext(surface, records, config, evidenceRoot) {
   const root = path.join(evidenceRoot, "surfaces", surface);
   const homeRoot = path.join(root, "home");
   const dataRoot = path.join(root, "data");
   const installRoot = path.join(root, "install");
   const peerStateRoot = path.join(root, "peer-state");
-  const peerSocketPath = path.join(root, "forge-peer.sock");
+  const peerSocketPath = resolveSurfaceSocketPath(evidenceRoot, surface);
   for (const [candidate, label] of [
     [root, `${surface} root`],
     [homeRoot, `${surface} home`],
