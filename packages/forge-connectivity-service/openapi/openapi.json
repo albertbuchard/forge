@@ -3,7 +3,7 @@
   "info": {
     "title": "Forge Connectivity Service",
     "description": "Content-blind presence, mailbox, and key-package transport for independently operated Forge peers.",
-    "version": "0.1.13",
+    "version": "0.1.14",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"

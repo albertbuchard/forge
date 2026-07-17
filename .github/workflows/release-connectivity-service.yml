@@ -295,6 +295,17 @@ jobs:
           RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         run: |
+          release_tag="connectivity-v${RELEASE_VERSION}"
+          existing_tag="$(git ls-remote --tags origin "refs/tags/${release_tag}" | awk '{print $1}')"
+          if [ -n "${existing_tag}" ]; then
+            test "${existing_tag}" = "${GITHUB_SHA}" || {
+              echo "${release_tag} already points to ${existing_tag}, not ${GITHUB_SHA}." >&2
+              exit 1
+            }
+          else
+            git tag "${release_tag}" "${GITHUB_SHA}"
+            git push origin "refs/tags/${release_tag}"
+          fi
           cat > release/RELEASE_NOTES.md <<EOF
           Forge Connectivity Service ${RELEASE_VERSION}
 
@@ -304,7 +315,7 @@ jobs:
 
           Verify release files with SHA256SUMS, the attached Sigstore bundles, and GitHub artifact attestations. The npm-compatible tarball is attached directly; no npm registry is required to install it.
           EOF
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release create "${release_tag}" \
             --verify-tag \
             --title "Forge Connectivity Service ${RELEASE_VERSION}" \
             --notes-file release/RELEASE_NOTES.md \
