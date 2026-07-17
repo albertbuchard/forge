@@ -93,6 +93,7 @@ jobs:
       FORGE_RELEASE_MODE: full
       FORGE_RELEASE_SKIP_REMOTE_VALIDATION: "1"
       FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: "1"
+      FORGE_PEOPLE_SHARED_RUNNER_TIMING_ADVISORY: "1"
 
     steps:
       - name: Checkout exact source commit

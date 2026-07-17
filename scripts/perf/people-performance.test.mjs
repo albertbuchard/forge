@@ -18,9 +18,11 @@ import {
   PEOPLE_PERFORMANCE_SCHEMA_VERSION,
   RELEASE_PROFILE,
   TEST_PROFILE,
+  asAdvisoryCheck,
   assertNotProtectedDataRoot,
   assertPrivateEvidencePath,
   canonicalJson,
+  evaluateFloor,
   loadBudgets,
   logicalFixtureSha256,
   nearestRankPercentile,
@@ -145,6 +147,21 @@ test("scroll timing is normalized to a 60 Hz reference without hiding dropped fr
       }),
     /outside the supported/u
   );
+});
+
+test("shared-runner timing remains truthful when it is advisory", () => {
+  const measured = evaluateFloor({
+    id: "scroll.desktop.run_1.fps",
+    actual: 49,
+    floor: 55,
+    unit: "fps"
+  });
+  const advisory = asAdvisoryCheck(measured, "shared runner timing");
+  assert.equal(advisory.status, "pass");
+  assert.equal(advisory.measuredStatus, "fail");
+  assert.equal(advisory.actual, 49);
+  assert.equal(advisory.floor, 55);
+  assert.throws(() => asAdvisoryCheck(measured, ""), /requires a reason/u);
 });
 
 test("budget overrides are strict, partial, and reject unknown keys", async (t) => {
@@ -435,6 +452,30 @@ test("evidence validation rejects fake success and malformed documents", () => {
   );
   assert.doesNotThrow(() =>
     validatePeoplePerformanceResult(completeReleaseEvidence(), RELEASE_PROFILE)
+  );
+
+  const advisoryEvidence = completeReleaseEvidence();
+  const timingIndex = advisoryEvidence.browser.checks.findIndex(
+    (check) => check.id === "scroll.desktop.run_1.fps"
+  );
+  advisoryEvidence.browser.checks[timingIndex] = asAdvisoryCheck(
+    evaluateFloor({
+      id: "scroll.desktop.run_1.fps",
+      actual: 49,
+      floor: 55,
+      unit: "fps"
+    }),
+    "shared runner timing"
+  );
+  rebuildReleaseEvidenceChecks(advisoryEvidence);
+  assert.doesNotThrow(() =>
+    validatePeoplePerformanceResult(advisoryEvidence, RELEASE_PROFILE)
+  );
+  advisoryEvidence.browser.checks[timingIndex].measuredStatus = "pass";
+  rebuildReleaseEvidenceChecks(advisoryEvidence);
+  assert.throws(
+    () => validatePeoplePerformanceResult(advisoryEvidence, RELEASE_PROFILE),
+    /advisory check is malformed/u
   );
 
   const missingMetric = completeReleaseEvidence();

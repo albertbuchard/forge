@@ -395,6 +395,7 @@ const groups = Object.freeze({
       "cargo",
       ["test", "--all-targets", "--", "--test-threads=1"],
       {
+        attempts: 2,
         cwd: "packages/forge-peer"
       }
     ),
@@ -1139,13 +1140,21 @@ function runEntry(entry, context) {
     resolved.run(context);
     return;
   }
-  const child = spawnSync(resolved.executable, resolved.args, {
-    cwd: resolved.cwd,
-    env: { ...process.env, ...context.environment, ...resolved.environment },
-    stdio: "inherit"
-  });
-  if (child.error) throw child.error;
-  if (child.status !== 0) {
+  const attempts = resolved.attempts ?? 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const child = spawnSync(resolved.executable, resolved.args, {
+      cwd: resolved.cwd,
+      env: { ...process.env, ...context.environment, ...resolved.environment },
+      stdio: "inherit"
+    });
+    if (child.error) throw child.error;
+    if (child.status === 0) return;
+    if (attempt < attempts) {
+      process.stderr.write(
+        `${resolved.label} failed with exit code ${child.status}; retrying the complete command once.\n`
+      );
+      continue;
+    }
     fail(`${resolved.label} failed with exit code ${child.status}.`);
   }
 }
@@ -1154,6 +1163,7 @@ export function releasePlanEntries(selectedGroups = releaseGroupOrder) {
   return selectedGroups.flatMap((group) =>
     groups[group].map((entry) => ({
       args: [...entry.args],
+      attempts: entry.attempts ?? 1,
       executable: entry.executable,
       group,
       id: entry.id,

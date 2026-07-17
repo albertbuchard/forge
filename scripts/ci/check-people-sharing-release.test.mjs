@@ -78,6 +78,7 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
     "--",
     "--test-threads=1"
   ]);
+  assert.equal(step("forge-peer-tests").attempts, 2);
   assert.ok(
     position("forge-peer-release-binary-admission") <
       position("people-api-sweep")

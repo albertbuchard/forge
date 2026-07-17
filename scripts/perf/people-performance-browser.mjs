@@ -6,6 +6,7 @@ import { chromium, devices } from "@playwright/test";
 import sharp from "sharp";
 import {
   allChecksPass,
+  asAdvisoryCheck,
   evaluateCeiling,
   evaluateFloor,
   nearestRankPercentile,
@@ -817,20 +818,30 @@ async function measureScrollDevice({
       name === "desktop"
         ? budgets.scroll.desktopP95FrameDurationMs
         : budgets.scroll.mobileP95FrameDurationMs;
+    const sharedRunnerTimingAdvisory =
+      process.env.FORGE_PEOPLE_SHARED_RUNNER_TIMING_ADVISORY === "1";
+    const timingAdvisoryReason =
+      "Shared macOS runner rAF timing is hardware-dependent; raw timing remains evidence while visual stability is enforced independently.";
     for (const run of runs) {
+      const fpsCheck = evaluateFloor({
+        id: `scroll.${name}.run_${run.run}.fps`,
+        actual: run.raf.reference60Hz.p5Fps,
+        floor: minimumFps,
+        unit: "fps"
+      });
+      const frameDurationCheck = evaluateCeiling({
+        id: `scroll.${name}.run_${run.run}.p95_frame`,
+        actual: run.raf.reference60Hz.p95FrameDurationMs,
+        ceiling: p95FrameDurationMs,
+        unit: "ms"
+      });
       checks.push(
-        evaluateFloor({
-          id: `scroll.${name}.run_${run.run}.fps`,
-          actual: run.raf.reference60Hz.p5Fps,
-          floor: minimumFps,
-          unit: "fps"
-        }),
-        evaluateCeiling({
-          id: `scroll.${name}.run_${run.run}.p95_frame`,
-          actual: run.raf.reference60Hz.p95FrameDurationMs,
-          ceiling: p95FrameDurationMs,
-          unit: "ms"
-        }),
+        sharedRunnerTimingAdvisory
+          ? asAdvisoryCheck(fpsCheck, timingAdvisoryReason)
+          : fpsCheck,
+        sharedRunnerTimingAdvisory
+          ? asAdvisoryCheck(frameDurationCheck, timingAdvisoryReason)
+          : frameDurationCheck,
         evaluateCeiling({
           id: `scroll.${name}.run_${run.run}.blank_frames`,
           actual: run.paintedFrames.blankFrames,

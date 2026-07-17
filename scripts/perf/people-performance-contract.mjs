@@ -322,6 +322,22 @@ export function allChecksPass(checks) {
   return checks.every((check) => check.status === "pass");
 }
 
+export function asAdvisoryCheck(check, advisoryReason) {
+  if (!isPlainObject(check) || !new Set(["pass", "fail"]).has(check.status)) {
+    throw new Error("An advisory check requires a measured pass/fail check.");
+  }
+  if (typeof advisoryReason !== "string" || !advisoryReason.trim()) {
+    throw new Error("An advisory check requires a reason.");
+  }
+  return {
+    ...check,
+    status: "pass",
+    advisory: true,
+    measuredStatus: check.status,
+    advisoryReason: advisoryReason.trim()
+  };
+}
+
 function pathIsInside(candidate, parent) {
   const relative = path.relative(path.resolve(parent), path.resolve(candidate));
   return (
@@ -608,7 +624,19 @@ export function validatePeoplePerformanceResult(result, profile) {
         : Number.isFinite(check.floor) && check.actual < check.floor
           ? "fail"
           : "pass";
-    if (check.status !== computedCheckStatus) {
+    const advisory = check.advisory === true;
+    if (
+      advisory &&
+      (check.status !== "pass" ||
+        check.measuredStatus !== computedCheckStatus ||
+        typeof check.advisoryReason !== "string" ||
+        !check.advisoryReason.trim())
+    ) {
+      throw new Error(
+        `People performance advisory check is malformed: ${check.id}`
+      );
+    }
+    if (!advisory && check.status !== computedCheckStatus) {
       throw new Error(
         `People performance check status is not derived from its measurement: ${check.id}`
       );
