@@ -169,6 +169,26 @@ test("the shared release gate installs Forge Memory dependencies", () => {
   );
 });
 
+test("every release workflow supports an exact manual publication dispatch", () => {
+  for (const fileName of [
+    "release-forge-memory.yml",
+    "release-openclaw-plugin.yml",
+    "release-hermes-plugin.yml",
+    "release-connectivity-service.yml",
+    "release-ios-companion.yml"
+  ]) {
+    const dispatch = workflow(fileName).on.workflow_dispatch;
+    assert.equal(dispatch.inputs.release_version.required, true, fileName);
+    assert.equal(dispatch.inputs.release_version.type, "string", fileName);
+  }
+  const iosDispatch = workflow("release-ios-companion.yml").on
+    .workflow_dispatch;
+  assert.deepEqual(iosDispatch.inputs.release_mode.options, [
+    "testflight",
+    "app-store"
+  ]);
+});
+
 test("direct publishing scripts require signing and rebuild from the release commit", () => {
   for (const fileName of [
     "release-forge-openclaw-plugin.sh",

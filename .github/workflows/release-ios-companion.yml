@@ -5,6 +5,20 @@ on:
     tags:
       - "ios-testflight-v*"
       - "ios-app-store-v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact Forge Companion version to publish"
+        required: true
+        type: string
+      release_mode:
+        description: "Apple publication channel"
+        required: true
+        default: testflight
+        type: choice
+        options:
+          - testflight
+          - app-store
 
 concurrency:
   group: release-ios-${{ github.ref }}
@@ -51,6 +65,11 @@ jobs:
       - name: Resolve release mode and version
         id: release_meta
         run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "release_mode=${{ inputs.release_mode }}" >> "${GITHUB_OUTPUT}"
+            echo "release_version=${{ inputs.release_version }}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           case "${GITHUB_REF_NAME}" in
             ios-testflight-v*)
               echo "release_mode=testflight" >> "${GITHUB_OUTPUT}"

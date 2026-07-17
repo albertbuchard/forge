@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "hermes-v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact Forge Hermes semver to publish"
+        required: true
+        type: string
 
 concurrency:
   group: release-hermes-${{ github.ref }}
@@ -80,7 +86,7 @@ jobs:
 
       - name: Build and verify release artifacts from tag
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.release_version || github.ref_name }}
           FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH: ${{ runner.temp }}/forge-native-source-ed25519-v1.pem
           FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: "1"
         run: |

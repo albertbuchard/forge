@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "connectivity-v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact Forge Connectivity semver to publish"
+        required: true
+        type: string
 
 concurrency:
   group: release-connectivity-${{ github.ref }}
@@ -61,7 +67,11 @@ jobs:
         id: release_meta
         working-directory: packages/forge-connectivity-service
         run: |
-          RELEASE_VERSION="${GITHUB_REF_NAME#connectivity-v}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            RELEASE_VERSION="${{ inputs.release_version }}"
+          else
+            RELEASE_VERSION="${GITHUB_REF_NAME#connectivity-v}"
+          fi
           if ! printf '%s' "${RELEASE_VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Unsupported connectivity release tag: ${GITHUB_REF_NAME}" >&2
             exit 1
