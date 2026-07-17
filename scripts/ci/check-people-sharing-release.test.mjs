@@ -117,14 +117,15 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
   );
   assert.ok(
     position("people-migration-archive-parity") <
-      position("people-packed-surface-config")
+      position("packed-openclaw-runtime-smoke")
   );
   assert.ok(
-    position("people-packed-surface-config") <
-      position("people-packed-surface-matrix")
+    position("forge-memory-archive") < position("packed-openclaw-runtime-smoke")
   );
-  assert.ok(
-    position("forge-memory-archive") < position("people-packed-surface-config")
+  assert.equal(
+    plan.some((entry) => entry.id === "people-packed-surface-matrix"),
+    false,
+    "the independently tested packed matrix is diagnostic, not a publication blocker"
   );
   assert.ok(position("public-release-privacy") < position("release-guard"));
 
@@ -213,13 +214,6 @@ test("release plan enforces generation, build, Rust, test, and archive order", (
   assert.deepEqual(step("people-migration-archive-parity").args.slice(-2), [
     "--require-archives",
     "openclaw,codex,hermes"
-  ]);
-  assert.deepEqual(step("people-packed-surface-matrix").args, [
-    "./scripts/smoke/people-packed-surfaces.mjs",
-    "--config",
-    "{artifactRoot}/people-packed-surfaces.json",
-    "--output",
-    "{artifactRoot}/people-packed-surfaces-result.json"
   ]);
 });
 

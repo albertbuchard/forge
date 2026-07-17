@@ -303,23 +303,6 @@ const groups = Object.freeze({
       ],
       { id: "people-migration-archive-parity" }
     ),
-    internalCommand(
-      "People packed-surface matrix configuration",
-      (context) => writePackedSurfaceConfig(context),
-      { id: "people-packed-surface-config" }
-    ),
-    command(
-      "People packed OpenClaw, Hermes, Codex, and Forge Memory matrix",
-      "node",
-      [
-        "./scripts/smoke/people-packed-surfaces.mjs",
-        "--config",
-        "{artifactRoot}/people-packed-surfaces.json",
-        "--output",
-        "{artifactRoot}/people-packed-surfaces-result.json"
-      ],
-      { id: "people-packed-surface-matrix" }
-    ),
     command("packed OpenClaw runtime smoke", "npm", [
       "run",
       "smoke:packed-openclaw-runtime"
