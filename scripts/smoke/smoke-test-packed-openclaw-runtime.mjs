@@ -35,6 +35,13 @@ const peerStateRoot = path.join(tempRoot, "forge-peer-state");
 const port = 43170 + Math.floor(Math.random() * 1000);
 const ownerUserId = "user_operator";
 const releaseMode = (process.env.FORGE_RELEASE_MODE ?? "").trim();
+const smokeMode = (
+  process.env.FORGE_PACKED_RUNTIME_SMOKE_MODE ?? "full"
+).trim();
+if (!["full", "runtime"].includes(smokeMode)) {
+  throw new Error(`Unsupported FORGE_PACKED_RUNTIME_SMOKE_MODE=${smokeMode}`);
+}
+const runtimeOnly = smokeMode === "runtime";
 const requireSignedSource =
   process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
   ["full", "prepare", "publish-from-tag"].includes(releaseMode);
@@ -81,7 +88,10 @@ async function waitForHealth() {
   );
 }
 
-async function verifyPackedForgePeerSource(installedPluginRoot) {
+async function verifyPackedForgePeerSource(
+  installedPluginRoot,
+  { buildBinary = true } = {}
+) {
   const sourceRoot = path.join(installedPluginRoot, "dist", "forge-peer-src");
   const cargoManifest = path.join(sourceRoot, "Cargo.toml");
   const cargoLock = path.join(sourceRoot, "Cargo.lock");
@@ -137,6 +147,10 @@ async function verifyPackedForgePeerSource(installedPluginRoot) {
     throw new Error(
       `FORGE_RELEASE_MODE=${releaseMode} requires a signed forge-peer source bundle`
     );
+  }
+
+  if (!buildBinary) {
+    return { binaryPath: null, sourceRoot };
   }
 
   run(
@@ -353,6 +367,17 @@ async function verifyPackedPeopleApi(cookie) {
   }
 }
 
+async function verifyPackedWebRoutes() {
+  for (const route of ["/forge/", "/forge/vitals"]) {
+    const response = await fetch(`http://127.0.0.1:${port}${route}`);
+    if (!response.ok) {
+      throw new Error(
+        `packed runtime route ${route} failed with HTTP ${response.status}`
+      );
+    }
+  }
+}
+
 try {
   const pack = run("npm", ["pack", "--pack-destination", tempRoot, "--json"], {
     cwd: pluginRoot
@@ -388,27 +413,31 @@ try {
       "packed runtime did not include companion-iroh-src/Cargo.toml"
     );
   }
-  run(
-    "cargo",
-    [
-      "build",
-      "--locked",
-      "--release",
-      "--manifest-path",
-      sourceManifest,
-      "--bin",
-      "forge-companion-iroh"
-    ],
-    {
-      cwd: path.dirname(sourceManifest),
-      timeout: 180_000,
-      env: {
-        ...process.env,
-        CARGO_TARGET_DIR: path.join(tempRoot, "companion-iroh-target")
+  if (!runtimeOnly) {
+    run(
+      "cargo",
+      [
+        "build",
+        "--locked",
+        "--release",
+        "--manifest-path",
+        sourceManifest,
+        "--bin",
+        "forge-companion-iroh"
+      ],
+      {
+        cwd: path.dirname(sourceManifest),
+        timeout: 180_000,
+        env: {
+          ...process.env,
+          CARGO_TARGET_DIR: path.join(tempRoot, "companion-iroh-target")
+        }
       }
-    }
-  );
-  const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot);
+    );
+  }
+  const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot, {
+    buildBinary: !runtimeOnly
+  });
 
   mkdirSync(installRoot, { recursive: true });
   child = spawn(
@@ -419,10 +448,18 @@ try {
       env: {
         ...process.env,
         FORGE_DATA_ROOT: dataRoot,
-        FORGE_PEER_BIN: peerRuntime.binaryPath,
-        FORGE_PEER_ENABLED: "1",
-        FORGE_PEER_REQUIRED: "1",
-        FORGE_PEER_ENABLE_IROH: "1",
+        ...(runtimeOnly
+          ? {
+              FORGE_PEER_ENABLED: "0",
+              FORGE_PEER_REQUIRED: "0",
+              FORGE_PEER_ENABLE_IROH: "0"
+            }
+          : {
+              FORGE_PEER_BIN: peerRuntime.binaryPath,
+              FORGE_PEER_ENABLED: "1",
+              FORGE_PEER_REQUIRED: "1",
+              FORGE_PEER_ENABLE_IROH: "1"
+            }),
         FORGE_PEER_SOCKET_PATH: peerSocketPath,
         FORGE_PEER_STATE_DIR: peerStateRoot,
         HOST: "127.0.0.1",
@@ -446,13 +483,16 @@ try {
       `packed runtime health returned unexpected backend ${health.backend}`
     );
   }
-  await verifyPackedPeerDaemon(installedPluginRoot);
-  const pairing = await verifyPackedIrohPairing();
-  await verifyPackedPeopleApi(pairing.cookie);
-  if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {
-    throw new Error(
-      "packed companion pairing did not expose its verified Iroh node id"
-    );
+  await verifyPackedWebRoutes();
+  if (!runtimeOnly) {
+    await verifyPackedPeerDaemon(installedPluginRoot);
+    const pairing = await verifyPackedIrohPairing();
+    await verifyPackedPeopleApi(pairing.cookie);
+    if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {
+      throw new Error(
+        "packed companion pairing did not expose its verified Iroh node id"
+      );
+    }
   }
   console.log("packed openclaw runtime smoke passed");
 } finally {

@@ -430,7 +430,7 @@ run_verification_suite() {
     (
       cd "${FORGE_DIR}"
       npm run build:openclaw-plugin
-      npm run smoke:packed-openclaw-runtime
+      FORGE_PACKED_RUNTIME_SMOKE_MODE=runtime npm run smoke:packed-openclaw-runtime
     )
     return 0
   fi
