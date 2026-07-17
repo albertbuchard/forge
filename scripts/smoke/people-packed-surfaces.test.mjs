@@ -18,7 +18,9 @@ import {
   callMcpPeopleTool,
   exercisePeopleHttp,
   findFreePort,
+  isolatedEnvironment,
   prepareNativeRuntime,
+  resolveOwnerScopedSocketPath,
   resolveSurfaceSocketPath,
   runPackedSurfaceMatrix,
   stopIsolatedManagedRuntimes,
@@ -39,10 +41,35 @@ test("packed surface sockets stay below the portable Unix path limit", () => {
   const evidenceRoot =
     "/private/tmp/forge-people-release-artifacts-29552760903-1/people-packed-surfaces-evidence";
   const socketPath = resolveSurfaceSocketPath(evidenceRoot, "openclaw");
-  assert.equal(path.dirname(socketPath), realpathSync(os.tmpdir()));
+  assert.equal(path.dirname(socketPath), realpathSync("/tmp"));
   assert.match(path.basename(socketPath), /^fp-[0-9a-f]{12}-openclaw\.sock$/);
   assert.equal(path.normalize(socketPath), socketPath);
   assert.ok(Buffer.byteLength(socketPath) <= 100);
+  const ownerSocketPath = resolveOwnerScopedSocketPath(socketPath);
+  assert.equal(
+    path.basename(path.dirname(ownerSocketPath)),
+    createHash("sha256")
+      .update("user_operator", "utf8")
+      .digest("hex")
+      .slice(0, 16)
+  );
+  assert.equal(path.basename(ownerSocketPath), path.basename(socketPath));
+  assert.ok(Buffer.byteLength(ownerSocketPath) <= 100);
+});
+
+test("packed surfaces enable an explicit peer transport provider", () => {
+  const environment = isolatedEnvironment({
+    homeRoot: "/private/tmp/forge-packed-home",
+    root: "/private/tmp/forge-packed-surface",
+    dataRoot: "/private/tmp/forge-packed-data",
+    port: 4317,
+    native: { binaryPath: "/private/tmp/forge-peer" },
+    peerSocketPath: "/private/tmp/forge-peer.sock",
+    peerStateRoot: "/private/tmp/forge-peer-state"
+  });
+  assert.equal(environment.FORGE_PEER_ENABLED, "1");
+  assert.equal(environment.FORGE_PEER_REQUIRED, "1");
+  assert.equal(environment.FORGE_PEER_ENABLE_IROH, "1");
 });
 
 const FAKE_SERVER_SOURCE = String.raw`

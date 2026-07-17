@@ -1696,7 +1696,7 @@ async function probePeerGateway(packageRuntimeRoot, socketPath) {
   };
 }
 
-function isolatedEnvironment(context, extra = {}) {
+export function isolatedEnvironment(context, extra = {}) {
   return {
     ...isolatedToolEnvironment(
       context.homeRoot,
@@ -1709,6 +1709,7 @@ function isolatedEnvironment(context, extra = {}) {
     PORT: String(context.port),
     FORGE_PEER_ENABLED: "1",
     FORGE_PEER_REQUIRED: "1",
+    FORGE_PEER_ENABLE_IROH: "1",
     ...(context.native?.binaryPath
       ? { FORGE_PEER_BIN: context.native.binaryPath }
       : {}),
@@ -1724,7 +1725,7 @@ export function resolveSurfaceSocketPath(evidenceRoot, surface) {
     .digest("hex")
     .slice(0, 12);
   const socketPath = path.join(
-    realpathSync(os.tmpdir()),
+    realpathSync("/tmp"),
     `fp-${runId}-${surface}.sock`
   );
   if (Buffer.byteLength(socketPath) > 100) {
@@ -1734,6 +1735,21 @@ export function resolveSurfaceSocketPath(evidenceRoot, surface) {
     );
   }
   return socketPath;
+}
+
+export function resolveOwnerScopedSocketPath(
+  configuredSocketPath,
+  ownerUserId = "user_operator"
+) {
+  const ownerKey = createHash("sha256")
+    .update(ownerUserId, "utf8")
+    .digest("hex")
+    .slice(0, 16);
+  return path.join(
+    path.dirname(configuredSocketPath),
+    ownerKey,
+    path.basename(configuredSocketPath)
+  );
 }
 
 function makeSurfaceContext(surface, records, config, evidenceRoot) {
@@ -1844,7 +1860,7 @@ async function executeOpenClaw(context, hooks) {
     });
     const peer = await hooks.probePeerGateway(
       packageRoot,
-      context.peerSocketPath
+      resolveOwnerScopedSocketPath(context.peerSocketPath)
     );
     const people = await exercisePeopleHttp({ baseUrl, surface: "openclaw" });
     const peopleTool = await invokeOpenClawPeopleTool(
@@ -1966,7 +1982,7 @@ async function executeHermes(context, hooks) {
     const runtimeRoot = path.join(packageRoot, "runtime");
     const peer = await hooks.probePeerGateway(
       runtimeRoot,
-      context.peerSocketPath
+      resolveOwnerScopedSocketPath(context.peerSocketPath)
     );
     const people = await exercisePeopleHttp({ baseUrl, surface: "hermes" });
     const peopleResult = runCaptured(python, [invocation], {
@@ -2384,7 +2400,7 @@ async function executeForgeMemoryAdapter(context, hooks, adapter) {
     assertForgeRuntimePackageHealth(health, context.config.expectedVersion);
     const peer = await hooks.probePeerGateway(
       runtimeRoot,
-      context.peerSocketPath
+      resolveOwnerScopedSocketPath(context.peerSocketPath)
     );
     const people = await exercisePeopleHttp({ baseUrl, surface: adapter });
     if (adapter === "codex") {
