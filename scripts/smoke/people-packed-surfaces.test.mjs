@@ -20,6 +20,7 @@ import {
   findFreePort,
   isolatedEnvironment,
   prepareNativeRuntime,
+  resolveManagedOwnerSocketPath,
   resolveOwnerScopedSocketPath,
   resolveSurfaceSocketPath,
   runPackedSurfaceMatrix,
@@ -55,6 +56,17 @@ test("packed surface sockets stay below the portable Unix path limit", () => {
   );
   assert.equal(path.basename(ownerSocketPath), path.basename(socketPath));
   assert.ok(Buffer.byteLength(ownerSocketPath) <= 100);
+  assert.equal(
+    resolveManagedOwnerSocketPath("user_operator", "/tmp"),
+    path.join(
+      "/tmp",
+      `forge-peer-${process.getuid()}-${createHash("sha256")
+        .update("user_operator", "utf8")
+        .digest("hex")
+        .slice(0, 16)}`,
+      "control.sock"
+    )
+  );
 });
 
 test("packed surfaces enable an explicit peer transport provider", () => {
@@ -65,11 +77,14 @@ test("packed surfaces enable an explicit peer transport provider", () => {
     port: 4317,
     native: { binaryPath: "/private/tmp/forge-peer" },
     peerSocketPath: "/private/tmp/forge-peer.sock",
-    peerStateRoot: "/private/tmp/forge-peer-state"
+    peerStateRoot: "/private/tmp/forge-peer-state",
+    peerTransportPort: 4318
   });
   assert.equal(environment.FORGE_PEER_ENABLED, "1");
   assert.equal(environment.FORGE_PEER_REQUIRED, "1");
-  assert.equal(environment.FORGE_PEER_ENABLE_IROH, "1");
+  assert.equal(environment.FORGE_PEER_ENABLE_IROH, "0");
+  assert.equal(environment.FORGE_PEER_DIRECT_ENDPOINTS, "127.0.0.1:4318");
+  assert.equal(environment.FORGE_PEER_ALLOW_LOOPBACK_DIRECT, "1");
 });
 
 const FAKE_SERVER_SOURCE = String.raw`

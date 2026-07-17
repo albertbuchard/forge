@@ -1697,6 +1697,12 @@ async function probePeerGateway(packageRuntimeRoot, socketPath) {
 }
 
 export function isolatedEnvironment(context, extra = {}) {
+  if (!Number.isInteger(context.peerTransportPort)) {
+    fail(
+      "configuration",
+      "The packed-surface peer transport port has not been allocated."
+    );
+  }
   return {
     ...isolatedToolEnvironment(
       context.homeRoot,
@@ -1709,7 +1715,9 @@ export function isolatedEnvironment(context, extra = {}) {
     PORT: String(context.port),
     FORGE_PEER_ENABLED: "1",
     FORGE_PEER_REQUIRED: "1",
-    FORGE_PEER_ENABLE_IROH: "1",
+    FORGE_PEER_ENABLE_IROH: "0",
+    FORGE_PEER_DIRECT_ENDPOINTS: `127.0.0.1:${context.peerTransportPort}`,
+    FORGE_PEER_ALLOW_LOOPBACK_DIRECT: "1",
     ...(context.native?.binaryPath
       ? { FORGE_PEER_BIN: context.native.binaryPath }
       : {}),
@@ -1752,6 +1760,30 @@ export function resolveOwnerScopedSocketPath(
   );
 }
 
+export function resolveManagedOwnerSocketPath(
+  ownerUserId = "user_operator",
+  temporaryDirectory = realpathSync(os.tmpdir())
+) {
+  if (typeof process.getuid !== "function") {
+    fail("configuration", "The packed forge-peer runtime requires Unix.");
+  }
+  const ownerKey = createHash("sha256")
+    .update(ownerUserId, "utf8")
+    .digest("hex")
+    .slice(0, 16);
+  return path.join(
+    temporaryDirectory,
+    `forge-peer-${process.getuid()}-${ownerKey}`,
+    "control.sock"
+  );
+}
+
+async function allocateSurfaceTransport(context) {
+  if (!Number.isInteger(context.peerTransportPort)) {
+    context.peerTransportPort = await findFreePort();
+  }
+}
+
 function makeSurfaceContext(surface, records, config, evidenceRoot) {
   const root = path.join(evidenceRoot, "surfaces", surface);
   const homeRoot = path.join(root, "home");
@@ -1783,6 +1815,7 @@ function makeSurfaceContext(surface, records, config, evidenceRoot) {
     installRoot,
     peerStateRoot,
     peerSocketPath,
+    peerTransportPort: null,
     records,
     config,
     evidenceRoot,
@@ -1823,6 +1856,7 @@ async function invokeOpenClawPeopleTool(context, packageRoot, people) {
 }
 
 async function executeOpenClaw(context, hooks) {
+  await allocateSurfaceTransport(context);
   const record = context.records.openclaw;
   const packageRoot = installNpmArchive({
     archivePath: record.archive.path,
@@ -1915,6 +1949,7 @@ function createHermesInvocationScript(context) {
 }
 
 async function executeHermes(context, hooks) {
+  await allocateSurfaceTransport(context);
   const wheel = context.records.hermes.archive.path;
   const venvRoot = path.join(context.installRoot, "venv");
   runCaptured(context.config.pythonCommand, ["-m", "venv", venvRoot], {
@@ -2155,7 +2190,10 @@ function startForgeMemory(context, memoryRoot, adapters) {
     "--port",
     String(context.port),
     "--enable-peer",
-    "--enable-peer-iroh",
+    "--disable-peer-iroh",
+    "--peer-endpoint",
+    `127.0.0.1:${context.peerTransportPort}`,
+    "--allow-loopback-peer",
     "--adapters",
     adapters
   ];
@@ -2357,6 +2395,7 @@ export async function callMcpPeopleTool({
 }
 
 async function executeForgeMemoryAdapter(context, hooks, adapter) {
+  await allocateSurfaceTransport(context);
   const codexRuntimeSnapshotRoot =
     adapter === "codex"
       ? installNpmArchive({
@@ -2400,7 +2439,7 @@ async function executeForgeMemoryAdapter(context, hooks, adapter) {
     assertForgeRuntimePackageHealth(health, context.config.expectedVersion);
     const peer = await hooks.probePeerGateway(
       runtimeRoot,
-      resolveOwnerScopedSocketPath(context.peerSocketPath)
+      resolveManagedOwnerSocketPath()
     );
     const people = await exercisePeopleHttp({ baseUrl, surface: adapter });
     if (adapter === "codex") {
