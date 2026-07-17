@@ -668,6 +668,26 @@ export function normalizeRafToReference({
   };
 }
 
+export function selectMeasuredRafBaseline({
+  idleFrameDurationMs,
+  motionMedianFrameDurationMs,
+  minimumCalibrationFps = 50
+}) {
+  for (const [name, value] of Object.entries({
+    idleFrameDurationMs,
+    motionMedianFrameDurationMs,
+    minimumCalibrationFps
+  })) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${name} must be a positive finite number.`);
+    }
+  }
+  return Math.max(
+    idleFrameDurationMs,
+    Math.min(motionMedianFrameDurationMs, 1_000 / minimumCalibrationFps)
+  );
+}
+
 async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
   const capturedFrames = [];
   const screencastTimestamps = [];
@@ -714,7 +734,11 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
     0.05
   );
   const cadenceSummary = summarizeDurations(cadenceDurations);
-  const baselineFrameDurationMs = nearestRankPercentile(cadenceDurations, 0.1);
+  const idleFrameDurationMs = nearestRankPercentile(cadenceDurations, 0.1);
+  const baselineFrameDurationMs = selectMeasuredRafBaseline({
+    idleFrameDurationMs,
+    motionMedianFrameDurationMs: durationSummary.medianMs
+  });
   const reference60Hz = normalizeRafToReference({
     p5Fps,
     p95FrameDurationMs: durationSummary.p95Ms,
@@ -730,7 +754,12 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
       ...durationSummary,
       fps,
       p5Fps,
-      cadence: { ...cadenceSummary, baselineFrameDurationMs },
+      cadence: {
+        ...cadenceSummary,
+        idleFrameDurationMs,
+        motionMedianFrameDurationMs: durationSummary.medianMs,
+        baselineFrameDurationMs
+      },
       reference60Hz
     },
     paintedFrames: {
@@ -851,7 +880,7 @@ async function measureScrollDevice({
         reducedMotionOverride: "no-preference",
         frameTiming: "requestAnimationFrame during down/up scroll",
         frameTimingReference:
-          "60 Hz normalization from an idle rAF cadence measured under the same screencast load; raw timing is retained per run",
+          "60 Hz normalization from idle and motion-median rAF cadence under the same screencast load, bounded to compensate no lower than 50 Hz; raw timing is retained per run",
         paintCapture: "Chrome DevTools Protocol Page.startScreencast",
         blankAndBlueDetection: "all captured frames downsampled to 64x64 RGB"
       },

@@ -31,7 +31,8 @@ import {
 } from "./people-performance-contract.mjs";
 import {
   classifyFramePixels,
-  normalizeRafToReference
+  normalizeRafToReference,
+  selectMeasuredRafBaseline
 } from "./people-performance-browser.mjs";
 import {
   createPeoplePerformanceFixture,
@@ -79,6 +80,27 @@ test("nearest-rank summaries use the requested finite sample population", () => 
 });
 
 test("scroll timing is normalized to a 60 Hz reference without hiding dropped frames", () => {
+  assert.equal(
+    selectMeasuredRafBaseline({
+      idleFrameDurationMs: 7,
+      motionMedianFrameDurationMs: 20
+    }),
+    20
+  );
+  assert.equal(
+    selectMeasuredRafBaseline({
+      idleFrameDurationMs: 7,
+      motionMedianFrameDurationMs: 25
+    }),
+    20
+  );
+  assert.equal(
+    selectMeasuredRafBaseline({
+      idleFrameDurationMs: 7,
+      motionMedianFrameDurationMs: 10
+    }),
+    10
+  );
   const nativeFiftyHertz = normalizeRafToReference({
     p5Fps: 50,
     p95FrameDurationMs: 20,
@@ -104,6 +126,16 @@ test("scroll timing is normalized to a 60 Hz reference without hiding dropped fr
   });
   assert.equal(droppedFrames.p5Fps, 48);
   assert.ok(droppedFrames.p95FrameDurationMs > 20);
+  const severeDropOnFastIdle = normalizeRafToReference({
+    p5Fps: 30,
+    p95FrameDurationMs: 1000 / 30,
+    baselineFrameDurationMs: selectMeasuredRafBaseline({
+      idleFrameDurationMs: 7,
+      motionMedianFrameDurationMs: 1000 / 30
+    })
+  });
+  assert.equal(severeDropOnFastIdle.p5Fps, 36);
+  assert.ok(severeDropOnFastIdle.p95FrameDurationMs > 20);
   assert.throws(
     () =>
       normalizeRafToReference({
