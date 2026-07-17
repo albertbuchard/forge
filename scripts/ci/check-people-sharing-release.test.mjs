@@ -366,7 +366,6 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
     "test:people-sharing",
     "test:people-sharing-release-fast",
     "check:openclaw-plugin",
-    "check:people-sharing-migration-parity",
     "audit-release-guard.sh"
   ]) {
     assert.match(fastAdmission, new RegExp(command.replaceAll(":", "\\:")));

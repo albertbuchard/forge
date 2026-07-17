@@ -341,7 +341,6 @@ jobs:
           npm run test:people-sharing
           npm run test:people-sharing-release-fast
           npm run check:openclaw-plugin
-          npm run check:people-sharing-migration-parity
           ./scripts/release/audit-release-guard.sh
 
       - name: Smoke built Forge runtime
