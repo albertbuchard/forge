@@ -16,6 +16,7 @@ import {
   createHarnessEvidenceRoot,
   defaultRepoRoot,
   runPeopleUpgradeRestoreHarness,
+  serializeReportForStdout,
   verifyBackupManifest,
   verifyPriorReleaseArtifactBytes,
   verifyPriorReleaseRegistryMetadata
@@ -157,6 +158,36 @@ test("CLI flags fail closed when their value is missing", () => {
     assert.equal(failure.code, "argument_value_missing");
     assert.equal(failure.evidenceRoot, null);
   }
+});
+
+test("CLI help keeps file output and stdout output as distinct contracts", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(defaultRepoRoot, "scripts/ci/check-people-upgrade-restore.mjs"),
+      "--help"
+    ],
+    { cwd: defaultRepoRoot, encoding: "utf8" }
+  );
+  assert.equal(result.status, 0);
+  assert.match(
+    result.stdout,
+    /--output PATH\|-\s+Additional JSON output path or stdout/
+  );
+  assert.doesNotMatch(result.stderr, /Machine-readable report/);
+});
+
+test("file output does not serialize the report a second time", () => {
+  const report = {
+    toJSON() {
+      throw new Error("report should not be serialized for file output");
+    }
+  };
+  assert.equal(serializeReportForStdout(report, "/tmp/report.json"), null);
+  assert.equal(
+    serializeReportForStdout({ status: "passed" }, "-"),
+    '{"status":"passed"}\n'
+  );
 });
 
 test("refuses configured/default roots before creating or inspecting evidence", async () => {

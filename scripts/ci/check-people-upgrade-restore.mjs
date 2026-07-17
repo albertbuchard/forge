@@ -4053,6 +4053,10 @@ function usage() {
   );
 }
 
+export function serializeReportForStdout(report, outputPath) {
+  return outputPath === "-" ? `${JSON.stringify(report)}\n` : null;
+}
+
 async function main() {
   try {
     const options = parseArguments(process.argv.slice(2));
@@ -4066,7 +4070,8 @@ async function main() {
       `People upgrade/restore evidence preserved at ${report.evidenceRoot}\n`
     );
     process.stderr.write(`Machine-readable report: ${reportPath}\n`);
-    process.stdout.write(`${JSON.stringify(report)}\n`);
+    const stdoutPayload = serializeReportForStdout(report, options.outputPath);
+    if (stdoutPayload !== null) process.stdout.write(stdoutPayload);
   } catch (error) {
     const payload = {
       status: "failed",
