@@ -364,9 +364,8 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
   for (const command of [
     "check:server",
     "test:people-sharing",
-    "test:people-sharing-release-gate",
+    "test:people-sharing-release-fast",
     "check:openclaw-plugin",
-    "test:forge-memory",
     "check:people-sharing-migration-parity",
     "audit-release-guard.sh"
   ]) {
@@ -374,7 +373,7 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
   }
   assert.doesNotMatch(
     fastAdmission,
-    /check:people-performance|test:e2e|cargo (test|audit|deny)|xcodebuild/
+    /check:people-performance|test:e2e|test:people-sharing-release-gate|cargo (test|audit|deny)|xcodebuild/
   );
   assert.match(
     stepBlock(reusable, "Run canonical People sharing release gate"),

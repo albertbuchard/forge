@@ -62,6 +62,7 @@
     "test:people-upgrade-restore": "node --test ./scripts/ci/check-people-upgrade-restore.test.mjs",
     "check:people-upgrade-restore": "node ./scripts/ci/check-people-upgrade-restore.mjs --mode release",
     "test:people-packed-surfaces": "node --test ./scripts/smoke/people-packed-surfaces.test.mjs",
+    "test:people-sharing-release-fast": "node --test ./scripts/ci/check-people-sharing-release.test.mjs ./scripts/ci/check-people-sharing-migration-parity.test.mjs",
     "test:people-sharing-release-gate": "node --test ./scripts/ci/check-people-sharing-release.test.mjs ./scripts/ci/check-people-sharing-migration-parity.test.mjs ./scripts/ci/check-people-upgrade-restore.test.mjs ./scripts/smoke/people-packed-surfaces.test.mjs",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write ."
