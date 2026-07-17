@@ -34,6 +34,7 @@ import {
 import {
   classifyFramePixels,
   normalizeRafToReference,
+  positiveFiniteFrameDurations,
   selectMeasuredRafBaseline
 } from "./people-performance-browser.mjs";
 import {
@@ -147,6 +148,14 @@ test("scroll timing is normalized to a 60 Hz reference without hiding dropped fr
       }),
     /outside the supported/u
   );
+});
+
+test("scroll timing ignores duplicate and invalid animation timestamps", () => {
+  assert.deepEqual(
+    positiveFiniteFrameDurations([16.7, 0, Number.NaN, -1, 20]),
+    [16.7, 20]
+  );
+  assert.throws(() => positiveFiniteFrameDurations(null), /must be an array/u);
 });
 
 test("shared-runner timing remains truthful when it is advisory", () => {

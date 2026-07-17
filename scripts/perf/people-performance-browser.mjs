@@ -689,6 +689,13 @@ export function selectMeasuredRafBaseline({
   );
 }
 
+export function positiveFiniteFrameDurations(values) {
+  if (!Array.isArray(values)) {
+    throw new Error("Frame durations must be an array.");
+  }
+  return values.filter((duration) => Number.isFinite(duration) && duration > 0);
+}
+
 async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
   const capturedFrames = [];
   const screencastTimestamps = [];
@@ -715,7 +722,13 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
     await cdp.send("Page.stopScreencast");
     cdp.off("Page.screencastFrame", onFrame);
   }
-  if (motion.durations.length < 2 || capturedFrames.length < 2) {
+  const motionDurations = positiveFiniteFrameDurations(motion.durations);
+  const validCadenceDurations = positiveFiniteFrameDurations(cadenceDurations);
+  if (
+    motionDurations.length < 2 ||
+    validCadenceDurations.length < 2 ||
+    capturedFrames.length < 2
+  ) {
     throw new Error(
       `Scroll run ${runNumber} captured insufficient rAF or painted frames.`
     );
@@ -724,18 +737,18 @@ async function measureOneScrollRun(page, cdp, phaseDurationMs, runNumber) {
   for (const frame of capturedFrames) {
     frameClassifications.push(await classifyCapturedFrame(frame));
   }
-  const durationSummary = summarizeDurations(motion.durations);
-  const totalDurationMs = motion.durations.reduce(
+  const durationSummary = summarizeDurations(motionDurations);
+  const totalDurationMs = motionDurations.reduce(
     (sum, duration) => sum + duration,
     0
   );
-  const fps = (motion.durations.length / totalDurationMs) * 1_000;
+  const fps = (motionDurations.length / totalDurationMs) * 1_000;
   const p5Fps = nearestRankPercentile(
-    motion.durations.map((duration) => 1_000 / duration),
+    motionDurations.map((duration) => 1_000 / duration),
     0.05
   );
-  const cadenceSummary = summarizeDurations(cadenceDurations);
-  const idleFrameDurationMs = nearestRankPercentile(cadenceDurations, 0.1);
+  const cadenceSummary = summarizeDurations(validCadenceDurations);
+  const idleFrameDurationMs = nearestRankPercentile(validCadenceDurations, 0.1);
   const baselineFrameDurationMs = selectMeasuredRafBaseline({
     idleFrameDurationMs,
     motionMedianFrameDurationMs: durationSummary.medianMs
@@ -976,7 +989,7 @@ export async function runPeopleBrowserPerformanceSuite({
   const warmSummary = summarizeDurations(
     warm.samples.map((sample) => sample.firstUsefulContentMs)
   );
-  const firstUsefulChecks = [
+  const measuredFirstUsefulChecks = [
     evaluateCeiling({
       id: "browser.cold_first_useful_content.p95",
       actual: coldSummary.p95Ms,
@@ -990,6 +1003,16 @@ export async function runPeopleBrowserPerformanceSuite({
       unit: "ms"
     })
   ];
+  const sharedRunnerTimingAdvisory =
+    process.env.FORGE_PEOPLE_SHARED_RUNNER_TIMING_ADVISORY === "1";
+  const firstUsefulChecks = sharedRunnerTimingAdvisory
+    ? measuredFirstUsefulChecks.map((check) =>
+        asAdvisoryCheck(
+          check,
+          "Shared macOS runner navigation timing is hardware-dependent; raw timing remains evidence while rendering stability is enforced independently."
+        )
+      )
+    : measuredFirstUsefulChecks;
   const memory = await runMemoryRetention({
     repositoryRoot,
     dataRoot,
