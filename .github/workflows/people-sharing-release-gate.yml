@@ -146,7 +146,9 @@ jobs:
         run: ./scripts/ci/setup-safe-chain-ci.sh
 
       - name: Install repository dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm --prefix packages/forge-memory ci --ignore-scripts
 
       - name: Install Python test dependencies
         run: python3 -m pip install --disable-pip-version-check build==1.4.2 pytest==8.4.2 pyyaml==6.0.3 setuptools==80.9.0 wheel==0.45.1

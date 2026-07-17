@@ -157,6 +157,18 @@ test("release workflows require and clean up the native signing key", () => {
   );
 });
 
+test("the shared release gate installs Forge Memory dependencies", () => {
+  const document = workflow("people-sharing-release-gate.yml");
+  const install = document.jobs["release-gate"].steps.find(
+    (step) => step.name === "Install repository dependencies"
+  );
+  assert.match(install.run, /npm ci/);
+  assert.match(
+    install.run,
+    /npm --prefix packages\/forge-memory ci --ignore-scripts/
+  );
+});
+
 test("direct publishing scripts require signing and rebuild from the release commit", () => {
   for (const fileName of [
     "release-forge-openclaw-plugin.sh",
