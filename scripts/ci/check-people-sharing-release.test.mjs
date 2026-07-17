@@ -352,6 +352,40 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
     return source.slice(start, next === -1 ? source.length : next);
   };
 
+  assert.match(
+    reusable,
+    /full_test:[\s\S]*?default: false[\s\S]*?type: boolean/
+  );
+  assert.match(
+    reusable,
+    /runs-on: \$\{\{ inputs\.full_test && 'macos-26' \|\| 'ubuntu-latest' \}\}/
+  );
+  const fastAdmission = stepBlock(reusable, "Run fast publication admission");
+  for (const command of [
+    "check:server",
+    "test:people-sharing",
+    "test:people-sharing-release-gate",
+    "check:openclaw-plugin",
+    "test:forge-memory",
+    "check:people-sharing-migration-parity",
+    "audit-release-guard.sh"
+  ]) {
+    assert.match(fastAdmission, new RegExp(command.replaceAll(":", "\\:")));
+  }
+  assert.doesNotMatch(
+    fastAdmission,
+    /check:people-performance|test:e2e|cargo (test|audit|deny)|xcodebuild/
+  );
+  assert.match(
+    stepBlock(reusable, "Run canonical People sharing release gate"),
+    /if: \$\{\{ inputs\.full_test \}\}/
+  );
+  const runtimeSmoke = stepBlock(reusable, "Smoke built Forge runtime");
+  assert.match(runtimeSmoke, /if: \$\{\{ !inputs\.full_test \}\}/);
+  assert.match(runtimeSmoke, /api\/v1\/health/);
+  assert.match(runtimeSmoke, /forge\/vitals/);
+  assert.match(runtimeSmoke, /FORGE_DATA_ROOT="\$\{data_root\}"/);
+
   const appleCredentialSecrets = [
     "FORGE_IOS_BUILD_CERTIFICATE_BASE64",
     "FORGE_IOS_P12_PASSWORD",
@@ -373,7 +407,10 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
     );
   }
   assert.match(reusable, /FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY:/);
-  assert.match(reusable, /FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: "1"/);
+  assert.match(
+    reusable,
+    /FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: \$\{\{ inputs\.full_test && '1' \|\| '0' \}\}/
+  );
   assert.doesNotMatch(reusable, /Prepare isolated native release validation/);
 
   assert.match(publication, /release:\n {4}needs: people-release-gate\n/);

@@ -2,6 +2,12 @@ name: Forge People Sharing Release Gate
 
 on:
   workflow_dispatch:
+    inputs:
+      full_test:
+        description: Run the exhaustive performance, Rust, browser, and native suite
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -62,6 +68,11 @@ on:
         description: Require release ancestry and the repository signing key
         required: true
         type: boolean
+      full_test:
+        description: Run the exhaustive performance, Rust, browser, and native suite
+        required: false
+        default: false
+        type: boolean
     secrets:
       FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY:
         description: Production native-source signing key for trusted releases
@@ -81,8 +92,8 @@ concurrency:
 jobs:
   release-gate:
     name: Canonical People release gate
-    runs-on: macos-26
-    timeout-minutes: 240
+    runs-on: ${{ inputs.full_test && 'macos-26' || 'ubuntu-latest' }}
+    timeout-minutes: ${{ inputs.full_test && 240 || 10 }}
     permissions:
       contents: read
     outputs:
@@ -92,7 +103,7 @@ jobs:
       FORGE_IOS_SKIP_REPO_RELEASE_CHECKS: "1"
       FORGE_RELEASE_MODE: full
       FORGE_RELEASE_SKIP_REMOTE_VALIDATION: "1"
-      FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: "1"
+      FORGE_REQUIRE_SIGNED_NATIVE_SOURCE: ${{ inputs.full_test && '1' || '0' }}
       FORGE_PEOPLE_SHARED_RUNNER_TIMING_ADVISORY: "1"
 
     steps:
@@ -133,11 +144,13 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Set up Python
+        if: ${{ inputs.full_test }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Set up Rust
+        if: ${{ inputs.full_test }}
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
@@ -151,9 +164,11 @@ jobs:
           npm --prefix packages/forge-memory ci --ignore-scripts
 
       - name: Install Python test dependencies
+        if: ${{ inputs.full_test }}
         run: python3 -m pip install --disable-pip-version-check build==1.4.2 pytest==8.4.2 pyyaml==6.0.3 setuptools==80.9.0 wheel==0.45.1
 
       - name: Verify reusable gate dependency contract
+        if: ${{ inputs.full_test }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -238,7 +253,9 @@ jobs:
           release_gate = reusable["jobs"]["release-gate"]
           assert release_gate["permissions"] == {"contents": "read"}
           assert release_gate["env"]["FORGE_RELEASE_MODE"] == "full"
-          assert release_gate["env"]["FORGE_REQUIRE_SIGNED_NATIVE_SOURCE"] == "1"
+          assert release_gate["env"]["FORGE_REQUIRE_SIGNED_NATIVE_SOURCE"] == (
+              expression("inputs.full_test && '1' || '0'")
+          )
           gate_steps = {
               step["name"]: step for step in release_gate["steps"]
           }
@@ -252,14 +269,17 @@ jobs:
           PY
 
       - name: Install Rust release audit tools
+        if: ${{ inputs.full_test }}
         run: |
           cargo install cargo-audit --version 0.22.2 --locked
           cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Install Playwright browser
+        if: ${{ inputs.full_test }}
         run: npx playwright install chromium
 
       - name: Prepare native source signing key
+        if: ${{ inputs.full_test }}
         env:
           RELEASE: ${{ inputs.release || false }}
           RELEASE_SIGNING_KEY: ${{ secrets.FORGE_NATIVE_SOURCE_ED25519_PRIVATE_KEY }}
@@ -289,22 +309,69 @@ jobs:
           chmod 600 "${key_path}"
           echo "FORGE_NATIVE_SOURCE_SIGNING_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
 
-      - name: Initialize isolated release roots
+      - name: Initialize gate artifact root
         run: |
           set -euo pipefail
-          data_root="/private/tmp/forge-people-release-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          artifact_root="/private/tmp/forge-people-release-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          test ! -e "${data_root}"
+          artifact_root="${RUNNER_TEMP}/forge-people-release-artifacts"
           test ! -e "${artifact_root}"
-          npm run check:people-sharing-release -- --initialize-root "${data_root}"
           install -d -m 700 "${artifact_root}"
-          {
-            echo "FORGE_PEOPLE_RELEASE_DATA_ROOT=${data_root}"
-            echo "FORGE_PEOPLE_RELEASE_ARTIFACT_ROOT=${artifact_root}"
-          } >> "${GITHUB_ENV}"
+          echo "FORGE_PEOPLE_RELEASE_ARTIFACT_ROOT=${artifact_root}" >> "${GITHUB_ENV}"
+
+      - name: Initialize exhaustive-suite data root
+        if: ${{ inputs.full_test }}
+        run: |
+          set -euo pipefail
+          data_root="${RUNNER_TEMP}/forge-people-release-data"
+          test ! -e "${data_root}"
+          npm run check:people-sharing-release -- --initialize-root "${data_root}"
+          echo "FORGE_PEOPLE_RELEASE_DATA_ROOT=${data_root}" >> "${GITHUB_ENV}"
 
       - name: Run canonical People sharing release gate
+        if: ${{ inputs.full_test }}
         run: npm run check:people-sharing-release
+
+      - name: Run fast publication admission
+        if: ${{ !inputs.full_test }}
+        run: |
+          set -euo pipefail
+          npm run check:server -- --pretty false
+          npm run check -- --pretty false
+          npm run lint
+          npm run build
+          npm run test:people-sharing
+          npm run test:people-sharing-release-gate
+          npm run check:openclaw-plugin
+          npm run test:forge-memory
+          npm run check:people-sharing-migration-parity
+          ./scripts/release/audit-release-guard.sh
+
+      - name: Smoke built Forge runtime
+        if: ${{ !inputs.full_test }}
+        run: |
+          set -euo pipefail
+          data_root="$(mktemp -d "${RUNNER_TEMP}/forge-fast-runtime.XXXXXX")"
+          port=$((4317 + GITHUB_RUN_ATTEMPT))
+          FORGE_DATA_ROOT="${data_root}" HOST=127.0.0.1 PORT="${port}" \
+            node --import tsx apps/api/src/index.ts >"${data_root}/runtime.log" 2>&1 &
+          runtime_pid=$!
+          trap 'kill -TERM "${runtime_pid}" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --show-error \
+              "http://127.0.0.1:${port}/api/v1/health" >"${data_root}/health.json"; then
+              break
+            fi
+            if ! kill -0 "${runtime_pid}" 2>/dev/null; then
+              cat "${data_root}/runtime.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          node -e 'const fs=require("node:fs");const health=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(health.ok!==true)process.exit(1)' "${data_root}/health.json"
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/forge/" >/dev/null
+          curl --fail --silent --show-error "http://127.0.0.1:${port}/forge/vitals" >/dev/null
+          kill -INT "${runtime_pid}"
+          wait "${runtime_pid}"
+          trap - EXIT
 
       - name: Record gate provenance
         id: receipt
@@ -344,6 +411,7 @@ jobs:
             sourceSha: process.env.SOURCE_SHA,
             sourceRef: process.env.GITHUB_REF,
             release: process.env.RELEASE === "true",
+            fullTest: ${{ inputs.full_test || false }},
             runId: process.env.GITHUB_RUN_ID,
             runAttempt: process.env.GITHUB_RUN_ATTEMPT,
             workflowRef: process.env.GITHUB_WORKFLOW_REF,
