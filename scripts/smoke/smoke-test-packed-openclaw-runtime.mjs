@@ -186,14 +186,26 @@ async function verifyPackedPeerDaemon(installedPluginRoot) {
     socketPath: peerSocketPath,
     ownerUserId
   });
-  const health = await gateway.health();
+  const deadline = Date.now() + 60_000;
+  let health = null;
+  while (Date.now() < deadline) {
+    health = await gateway.health();
+    if (
+      health.enabled &&
+      health.healthy &&
+      health.protocolVersion === "forge-peer/1"
+    ) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
   if (
-    !health.enabled ||
+    !health?.enabled ||
     !health.healthy ||
     health.protocolVersion !== "forge-peer/1"
   ) {
     throw new Error(
-      `packed forge-peer daemon health failed: ${JSON.stringify(health)}`
+      `packed forge-peer daemon health failed: ${JSON.stringify(health)}\nstdout:\n${child?.stdoutLog ?? ""}\nstderr:\n${child?.stderrLog ?? ""}`
     );
   }
   const identity = await gateway.localIdentity({ ownerUserId });
