@@ -22,6 +22,127 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(moduleDir, "..");
 const migrationsDir = path.join(apiRoot, "migrations");
 const userSharedForgeDataRoot = path.join(os.homedir(), ".forge");
+const PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION =
+  "104_people_legacy_schema_repair.sql";
+
+const PEOPLE_HARDENING_COLUMNS = [
+  {
+    table: "forge_devices",
+    column: "key_agreement_public_key",
+    definition: "key_agreement_public_key TEXT"
+  },
+  {
+    table: "forge_devices",
+    column: "certificate_serial",
+    definition: "certificate_serial TEXT"
+  },
+  {
+    table: "forge_devices",
+    column: "certificate_hash",
+    definition: "certificate_hash TEXT"
+  },
+  {
+    table: "peer_idempotency_records",
+    column: "response_ciphertext",
+    definition:
+      "response_ciphertext TEXT CHECK (response_ciphertext IS NULL OR length(response_ciphertext) BETWEEN 32 AND 2097152)"
+  },
+  {
+    table: "peer_idempotency_records",
+    column: "response_reference",
+    definition:
+      "response_reference TEXT CHECK (response_reference IS NULL OR length(response_reference) BETWEEN 1 AND 240)"
+  },
+  {
+    table: "peer_remote_records",
+    column: "query_hash",
+    definition:
+      "query_hash TEXT CHECK (query_hash IS NULL OR (length(query_hash) = 64 AND query_hash NOT GLOB '*[^0-9a-f]*'))"
+  },
+  {
+    table: "peer_remote_records",
+    column: "next_event_at",
+    definition:
+      "next_event_at TEXT CHECK (next_event_at IS NULL OR (projection_id IN ('calendar.availability.v1', 'calendar.selected_events.v1') AND julianday(next_event_at) IS NOT NULL))"
+  }
+] as const;
+
+const PEOPLE_OBSOLETE_GLOBAL_IDENTITY_INDEXES = [
+  "idx_forge_principals_public_id_global",
+  "idx_forge_principals_root_key_global",
+  "idx_forge_devices_signing_key_global",
+  "idx_forge_devices_agreement_key_global",
+  "idx_forge_devices_certificate_global",
+  "idx_forge_devices_certificate_hash_global",
+  "idx_forge_devices_private_key_handle_global"
+] as const;
+
+const PEOPLE_OWNER_PARTITION_INDEXES_SQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_principals_owner_root_key
+  ON forge_principals (owner_user_id, root_public_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_devices_owner_signing_key
+  ON forge_devices (owner_user_id, certified_public_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_devices_owner_agreement_key
+  ON forge_devices (owner_user_id, key_agreement_public_key)
+  WHERE key_agreement_public_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_devices_owner_certificate
+  ON forge_devices (owner_user_id, certificate);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_devices_owner_certificate_hash
+  ON forge_devices (owner_user_id, certificate_hash)
+  WHERE certificate_hash IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_devices_owner_private_key_handle
+  ON forge_devices (owner_user_id, private_key_secret_id)
+  WHERE private_key_secret_id IS NOT NULL;
+`;
+
+function hasDatabaseColumn(
+  database: DatabaseSync,
+  table: string,
+  column: string
+) {
+  return (
+    database
+      .prepare(`SELECT 1 FROM pragma_table_info(?) WHERE name = ? LIMIT 1`)
+      .get(table, column) !== undefined
+  );
+}
+
+export async function repairLegacyPeopleSchema(database: DatabaseSync) {
+  // Early 087/088 builds were released before those migration files reached
+  // their final additive form. Restore missing objects without reinstating the
+  // global identity indexes that migration 099 replaced with owner partitions.
+  const peopleSchema = await readFile(
+    path.join(migrationsDir, "087_people_and_peer_sharing.sql"),
+    "utf8"
+  );
+  database.exec(peopleSchema);
+
+  for (const repair of PEOPLE_HARDENING_COLUMNS) {
+    if (!hasDatabaseColumn(database, repair.table, repair.column)) {
+      database.exec(
+        `ALTER TABLE ${repair.table} ADD COLUMN ${repair.definition}`
+      );
+    }
+  }
+
+  const hardeningSchema = await readFile(
+    path.join(migrationsDir, "088_people_peer_identity_hardening.sql"),
+    "utf8"
+  );
+  let repairSchema = hardeningSchema.replace(/ALTER TABLE[\s\S]*?;\s*/gu, "");
+  for (const indexName of PEOPLE_OBSOLETE_GLOBAL_IDENTITY_INDEXES) {
+    repairSchema = repairSchema.replace(
+      new RegExp(
+        `CREATE UNIQUE INDEX IF NOT EXISTS ${indexName}\\s+[\\s\\S]*?;\\s*`,
+        "gu"
+      ),
+      ""
+    );
+    database.exec(`DROP INDEX IF EXISTS ${indexName}`);
+  }
+  database.exec(repairSchema);
+  database.exec(PEOPLE_OWNER_PARTITION_INDEXES_SQL);
+}
 
 function findSourceProjectRoot(startDir: string): string | null {
   let current = path.resolve(startDir);
@@ -164,10 +285,10 @@ function getDatabasePath(): string {
 export function getDatabase(): DatabaseSync {
   if (!db) {
     db = new DatabaseSync(getDatabasePath());
-    db.function(
-      "forge_nfkc_lower",
-      { deterministic: true },
-      (value: unknown) => String(value ?? "").normalize("NFKC").toLowerCase()
+    db.function("forge_nfkc_lower", { deterministic: true }, (value: unknown) =>
+      String(value ?? "")
+        .normalize("NFKC")
+        .toLowerCase()
     );
     db.exec("PRAGMA foreign_keys = ON;");
     db.exec("PRAGMA busy_timeout = 5000;");
@@ -556,6 +677,9 @@ export async function initializeDatabase(): Promise<void> {
     const sql = await readFile(path.join(migrationsDir, file), "utf8");
     database.exec("BEGIN");
     try {
+      if (file === PEOPLE_LEGACY_SCHEMA_REPAIR_MIGRATION) {
+        await repairLegacyPeopleSchema(database);
+      }
       database.exec(sql);
       database
         .prepare("INSERT INTO migrations (id, applied_at) VALUES (?, ?)")

@@ -4655,6 +4655,7 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
   "For read-model-only health surfaces such as sleep_overview, sports_overview, and training_load, use the dedicated overview reads first when the user wants review, pattern interpretation, recovery context, training-load context, or cardiovascular target analysis. Move to sleep_session or workout_session writes only after one specific stored session needs enrichment.",
   "For normal stored Preferences and questionnaire records, use batch CRUD by default; switch to dedicated action routes only for judgments, signals, run answers, clone/draft/publish lifecycle, or visual comparison gameplay.",
   "For a Person record, first understand who the user means and what remembering or connecting this person should make easier. Search by name and aliases before creating, ask only for missing context that changes later usefulness, and leave contact details, private notes, birthdays, and sensitive facts optional unless the user explicitly wants them recorded.",
+  "For Wiki-assisted Person association, treat every extracted name, relationship category or label, short description, and alias as a proposal rather than a fact. Show the exact proposed Person fields, distinguish page evidence from model inference, ask for one focused confirmation or correction, and apply only the accepted associate, create, or skip decision from the current version-bound preview.",
   "Keep Person, local User, and remote peer relationship distinct. Creating or linking a Person never pairs another Forge or changes sharing. Agents may read source-labelled People context and use an already active directional grant for registered typed questions, but pairing acceptance, device trust, and every grant change remain human-controlled.",
   "When the user wants to remember a book, article, paper, source, concept, person, conversation, project reference, recurring explanation, or personal manual, consider wiki_page before note or self_observation.",
   "For meaning-bearing updates, especially in Psyche, briefly say what feels newly true before you ask for the one structural detail that still changes the save."
@@ -4685,6 +4686,7 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
       "Search the intended owner scope by display name and aliases before creating a possible duplicate.",
       "Ask for the preferred display name and one piece of context only when either is still unclear.",
       "Ask about links to a Wiki profile, shared event, goal, project, artifact, or Psyche context only when the user wants that connection to remain navigable.",
+      "For a Wiki association preview, show the exact proposed Person fields and whether each came from page evidence or model inference. Ask the user to accept, correct, or skip that proposal before apply; do not silently turn an inferred relationship into saved local truth.",
       "Leave contact methods, birthday detail, private notes, and sensitive facts unasked unless they directly serve the user's stated purpose.",
       "If the user wants to connect two Forge installations, move to the separate human pairing and sharing flow; do not represent consent as Person fields or generic links.",
       "Use shared batch CRUD for Person create, update, soft delete, restore, and search. Use dedicated People routes for bounded context, Wiki association review, and confirmed typed questions."
@@ -5357,14 +5359,16 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for a lived direction, quality of being, or way of showing up that matters to the user and should guide actions rather than just describe an outcome.",
     coachingGoal:
-      "Clarify the value as a chosen direction, distinguish it from a goal, and gather one concrete way the user wants to embody it now.",
+      "Capture, clarify, or review a value as a chosen direction without turning every save into a full reflection exercise or action plan.",
     askSequence: [
-      "Start with one ordinary recent moment where the value felt alive, absent, or painfully important.",
-      "Ask what mattered in that moment and why it matters now.",
-      "Reflect the direction in the user's own language before separating it from any specific outcome or achievement goal.",
-      "Ask what someone would see this week if the user lived this value a little more.",
-      "Notice tensions, barriers, or situations where the value gets lost.",
-      "Name one small committed action that would move toward the value."
+      "Distinguish direct capture, current conflict or guided clarification, review or narrow update, and optional committed-action planning before choosing the next question.",
+      "For direct capture, reflect the user's value phrase and chosen direction, then ask one accuracy or consent question. Do not demand a recent example, whyItMatters, barriers, a committed action, links, or a hypothesis.",
+      "For review or narrow update, search for and read the exact existing value first. Briefly summarize its accepted direction, why it matters, committed actions, and links, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse value through full create intake.",
+      "For guided clarification, start with one ordinary recent moment where the pull, absence, or conflict around the value felt noticeable, then ask what mattered in that moment and why it matters now.",
+      "Reflect the chosen direction in the user's language and distinguish it from a goal or outcome, a rule or belief, and the observable behavior that might express it.",
+      "Keep what happened, what the user says it meant or revealed, and the agent's interpretation separate. Once one concrete moment is clear, offer at most one tentative hypothesis about the longing, pain, or value conflict that makes the direction alive now, then ask one fit-or-correction question.",
+      "Ask what ordinary behavior would show movement toward the value only when it would clarify the direction. Explore barriers or name a small committed action only when the user wants action planning now; a value can be saved without a current action.",
+      "Offer goal, project, task, behavior, or other Psyche links only when a link would preserve a connection the user already recognizes."
     ],
     requiredForCreate: ["title"],
     highValueOptionalFields: [
@@ -5386,10 +5390,12 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     notes: [
       "Use an ACT-style values clarification stance: values are directions to live toward, not boxes to complete.",
-      "Ask one or two questions at a time, reflect back the user's language, and only then move toward naming committed actions or linked work items.",
+      "Ask one or two questions at a time, reflect back the user's language, and move toward committed actions or linked work items only when the user wants that help.",
       "Reflect the pain, longing, or importance that makes the value alive before narrowing to action.",
       "Once one ordinary moment is clear, offer one tentative hypothesis about the pain, longing, or value conflict that makes this value alive now, then ask whether it lands before turning it into action wording.",
-      "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion."
+      "If the user says they want to understand it first, start with one orienting question before offering a formulation or save suggestion.",
+      "A direct capture can be complete with the accepted value phrase and direction plus one accuracy check; a recent episode, barriers, links, and committed action remain optional.",
+      "Never force a sparse existing value through full create intake. Read it first, preserve accepted wording, actions, and links, and limit the patch to what the user wants changed."
     ]
   },
   {
@@ -5882,6 +5888,9 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "strategy") {
     return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
+  }
+  if (guide.entityType === "psyche_value") {
+    return "Ready on the selected Psyche Value lane. Direct capture is ready for shared batch CRUD when the user's accepted value phrase and chosen direction are clear and one accuracy or consent check confirms them; do not require a fresh episode, whyItMatters, barriers, a committed action, links, or hypothesis. Review or narrow update is ready only after reading the exact existing value, separating its accepted direction, importance, actions, and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse value through full create intake. Guided clarification is ready when one concrete moment supports a user-recognized chosen direction that is distinguished from a goal or outcome, rule or belief, and observable behavior, with at most one tentative hypothesis about longing, pain, or value conflict followed by one fit-or-correction check. Committed-action planning is optional and belongs only when the user wants action help now; a value can be saved without a current action. All Psyche Value writes remain on shared batch CRUD.";
   }
   if (guide.entityType === "behavior_pattern") {
     return "Ready on the selected Behavior Pattern lane. Direct capture is ready for shared batch CRUD when the user's accepted title and supplied pattern wording are clear and one accuracy or consent check confirms them; do not require a fresh episode, complete functional chain, replacement response, links, or hypothesis. Review or narrow update is ready only after reading the exact existing pattern, separating accepted cue, response, function, payoff, cost, preferred response, and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse pattern through full create intake. Guided functional analysis is ready when one concrete recurring example identifies a cue or context, the response sequence or target behavior, and at least one meaningful protective payoff or later cost, with observable events, the user's fast meaning, and at most one tentative functional hypothesis kept distinct and followed by one fit-or-correction check. A preferred response is optional and should be asked only after the current function is understood and the user wants change work. All behavior pattern writes remain on shared batch CRUD.";
@@ -8277,13 +8286,13 @@ function buildAgentOnboardingPayload(request: {
           routeSelectionQuestions: [
             "Is the user saving or changing the local Person record, reading what Forge knows with source labels, reviewing a Wiki association, or asking a question through an existing approved share?",
             "If this concerns an existing person, which exact Person did the current owner-scoped search or list return?",
-            "If this is Wiki association, has the human reviewed the proposed matches before anything is applied?",
+            "If this is Wiki association, has the human reviewed the exact associate, create, or skip decision plus every proposed display name, preferred name, relationship category or label, short description, and alias before anything is applied?",
             "If this is a shared question, what precise question should be answered, and is there already a directional grant that permits it?"
           ],
           notes: [
             "Use shared batch entity search, create, update, soft delete, and restore for the stored person record. Creating a Person never pairs another Forge or grants access.",
             "Dedicated list and context reads require people:read:basic and stay bounded. Private, contact, sensitive, and restricted fields remain redacted unless the token has their exact scopes.",
-            "Wiki association is a scan, preview, then apply sequence. Apply requires people:write plus wiki:read and must use the reviewed preview rather than an inferred match.",
+            "Wiki association is a scan, preview, then apply sequence. Treat extracted Person fields as proposals, separate page evidence from model inference, and ask for one focused confirmation or correction. Apply requires people:write plus wiki:read and must use the accepted associate, create, or skip decision from the current version-bound preview rather than an inferred match.",
             "Typed questions require people:read:basic plus peer:query and an existing directional grant. Preserve result state, source, freshness, precision, completeness, and redactedFields; never infer withheld fields.",
             "Pairing, grant creation or widening, device approval, credential management, and human-presence ceremonies remain human-only."
           ]
@@ -12517,6 +12526,7 @@ export async function buildServer(
   await registerPeopleRoutes(app, {
     authenticate: authenticateRequest,
     authorization: managers.authorization,
+    llm: managers.llm,
     secrets: managers.secrets,
     peerCore
   });

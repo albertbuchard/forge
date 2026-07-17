@@ -1640,12 +1640,16 @@ Arc:
    only when either is still missing.
 4. Ask about a link to a Wiki profile, event, goal, project, artifact, note, or Psyche
    record only when that connection should remain navigable.
-5. Leave contacts, birthdays, private notes, and sensitive facts unasked unless the
+5. For a Wiki association preview, show the exact proposed display name, preferred
+   name, relationship category or label, short description, and aliases. Distinguish
+   page evidence from model inference, then ask the user to accept, correct, or skip
+   the proposal before apply.
+6. Leave contacts, birthdays, private notes, and sensitive facts unasked unless the
    user says they are useful for this purpose.
-6. If the user wants to connect two Forge installations, move to the separate
+7. If the user wants to connect two Forge installations, move to the separate
    human-controlled pairing and sharing flow. Do not encode pairing or consent as
    Person fields or entity links.
-7. Use dedicated People reads for source-labelled local and shared context. Run a
+8. Use dedicated People reads for source-labelled local and shared context. Run a
    typed question only against an existing grant and only within its returned scope.
 
 Helpful follow-up lanes:
@@ -1668,6 +1672,9 @@ anchorKey? }]` contract in the batch create or update.
 - Use `forge_call_people_route` only for its published People reads, reviewed Wiki
   association steps, and typed-question steps. Use `forge_call_peer_route` only for
   published status, diagnostics, and existing-grant query support.
+- Wiki extraction produces proposals, not facts. Apply only an accepted `associate`,
+  `create_person`, or `skip` decision from the current version-bound preview after the
+  user has reviewed every proposed Person field.
 - Agents cannot accept pairing, change consent, widen or revoke a grant, approve or
   remove a device, request a resync, manage approval credentials, or perform a
   human-presence ceremony.
@@ -1678,6 +1685,7 @@ Ready to save when:
 - the accepted display name is clear
 - one useful context sentence is present when the name alone would be ambiguous
 - any requested links are identified
+- any Wiki-derived Person fields have been explicitly accepted, corrected, or skipped
 - no optional personal detail is being collected without a stated use
 
 Preferred opening question:

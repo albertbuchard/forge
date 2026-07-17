@@ -6,6 +6,7 @@ import { getDatabase } from "../db.js";
 import { HttpError } from "../errors.js";
 import type { AuthContext } from "../managers/contracts.js";
 import type { AuthorizationManager } from "../managers/platform/authorization-manager.js";
+import type { LlmManager } from "../managers/platform/llm-manager.js";
 import type { SecretsManager } from "../managers/platform/secrets-manager.js";
 import {
   PEER_API_SCHEMAS,
@@ -40,8 +41,10 @@ import {
 import { getEntityOwnerId } from "../repositories/entity-ownership.js";
 import { getDefaultUser, listUsers } from "../repositories/users.js";
 import {
+  getWikiPageDetail,
   getWikiPageAccessRecord,
-  getWikiSpaceById
+  getWikiSpaceById,
+  listWikiLlmProfiles
 } from "../repositories/wiki-memory.js";
 import {
   applyWikiPersonAssociationPreview,
@@ -85,6 +88,7 @@ import { normalizePersonSearchText } from "../people-types.js";
 type PeopleRouteDependencies = {
   authenticate(headers: Record<string, unknown>): AuthContext;
   authorization: AuthorizationManager;
+  llm: Pick<LlmManager, "runTextPrompt">;
   secrets: SecretsManager;
   peerCore: PeerCoreGateway;
   rateLimiter?: PeerOperationRateLimiter;
@@ -151,6 +155,67 @@ const scanCursorSchema = z
     snapshotHash: z.string().regex(/^[a-f0-9]{64}$/u)
   })
   .strict();
+
+const wikiPeopleEnrichmentRequestSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(240).optional(),
+    peopleRootPageId: z.string().trim().min(1).max(240),
+    candidateIds: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
+    llmProfileId: z.string().trim().min(1).max(240).optional()
+  })
+  .strict();
+
+const wikiPeopleSuggestionSchema = z
+  .object({
+    pageId: z.string().trim().min(1).max(240),
+    displayName: z.string().trim().min(1).max(160),
+    preferredName: z.string().trim().max(160).default(""),
+    relationshipCategory: z
+      .enum([
+        "family",
+        "friend",
+        "partner",
+        "colleague",
+        "community",
+        "professional",
+        "other"
+      ])
+      .default("other"),
+    relationshipLabel: z.string().trim().max(240).default(""),
+    shortDescription: z.string().trim().max(2000).default(""),
+    aliases: z.array(z.string().trim().min(1).max(160)).max(32).default([])
+  })
+  .strict();
+
+const wikiPeopleLlmResponseSchema = z
+  .object({
+    people: z.array(wikiPeopleSuggestionSchema).max(20)
+  })
+  .strict();
+
+function parseWikiPeopleLlmResponse(outputText: string) {
+  const trimmed = outputText.trim().replace(/^```(?:json)?\s*/u, "").replace(/\s*```$/u, "");
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new HttpError(
+      502,
+      "people_wiki_llm_invalid_response",
+      "The configured LLM did not return valid Person suggestions."
+    );
+  }
+  try {
+    return wikiPeopleLlmResponseSchema.parse(
+      JSON.parse(trimmed.slice(start, end + 1))
+    );
+  } catch {
+    throw new HttpError(
+      502,
+      "people_wiki_llm_invalid_response",
+      "The configured LLM returned Person suggestions in an invalid format."
+    );
+  }
+}
 const peerQueryEvidenceSchema = z
   .object({
     grantId: z.string().trim().min(1).max(240),
@@ -207,6 +272,18 @@ type ApiWikiDecision = {
   action: "associate" | "create_person" | "skip";
   personId?: string;
   displayName?: string;
+  preferredName?: string;
+  relationshipCategory?:
+    | "family"
+    | "friend"
+    | "partner"
+    | "colleague"
+    | "community"
+    | "professional"
+    | "other";
+  relationshipLabel?: string;
+  shortDescription?: string;
+  aliases?: string[];
   expectedWikiVersion: string;
   expectedPersonVersion?: string;
 };
@@ -226,7 +303,17 @@ function toServiceWikiDecisions(decisions: ApiWikiDecision[]) {
       return {
         action: "create" as const,
         candidateNoteId: decision.wikiPageId,
-        person: { displayName: decision.displayName },
+        person: {
+          displayName: decision.displayName,
+          preferredName: decision.preferredName,
+          relationshipCategory: decision.relationshipCategory,
+          relationshipLabel: decision.relationshipLabel,
+          shortDescription: decision.shortDescription,
+          aliases: decision.aliases?.map((alias) => ({
+            alias,
+            kind: "name" as const
+          }))
+        },
         expectedWikiVersion: decision.expectedWikiVersion
       };
     }
@@ -1946,6 +2033,122 @@ export async function registerPeopleRoutes(
         scannedCount: scan.scannedCount,
         truncated: scan.truncated
       }
+    };
+  });
+
+  app.post("/api/v1/people/wiki-candidates/enrich", async (request, reply) => {
+    const body = wikiPeopleEnrichmentRequestSchema.parse(request.body ?? {});
+    const actor = authenticatePeopleRoute(
+      dependencies,
+      request.headers as Record<string, unknown>,
+      "scanPeopleWikiCandidates",
+      body.userId
+    );
+    if (!actor.auth.session) {
+      throw new HttpError(
+        403,
+        "people_wiki_llm_human_required",
+        "Wiki People enrichment must be started by the signed-in human."
+      );
+    }
+    consumePeopleRateLimit({
+      limiter,
+      reply,
+      actor,
+      operationId: "scanPeopleWikiCandidates",
+      bucketId: "enrichPeopleWikiCandidates",
+      limit: 10
+    });
+    const root = readWikiRoot(actor.ownerUserId, body.peopleRootPageId);
+    const pages = listWikiPeopleCandidatePagesByIds({
+      userId: actor.ownerUserId,
+      rootSlug: root.slug,
+      spaceId: root.spaceId,
+      candidateIds: body.candidateIds
+    }).filter((page) => page.rootNoteId === root.id);
+    if (pages.length !== new Set(body.candidateIds).size) {
+      throw new HttpError(
+        404,
+        "wiki_people_candidate_not_found",
+        "One or more selected Wiki People pages were not found."
+      );
+    }
+
+    const enabledProfiles = listWikiLlmProfiles().filter(
+      (profile) => profile.enabled
+    );
+    const profile = body.llmProfileId
+      ? enabledProfiles.find((candidate) => candidate.id === body.llmProfileId)
+      : enabledProfiles[0];
+    const fallback = pages.map((page) => ({
+      pageId: page.id,
+      displayName: page.title,
+      preferredName: "",
+      relationshipCategory: "other" as const,
+      relationshipLabel: "",
+      shortDescription: page.summary,
+      aliases: page.aliasesJson
+        ? (JSON.parse(page.aliasesJson) as unknown[]).flatMap((alias) =>
+            typeof alias === "string"
+              ? [alias]
+              : alias &&
+                  typeof alias === "object" &&
+                  typeof (alias as { alias?: unknown }).alias === "string"
+                ? [(alias as { alias: string }).alias]
+                : []
+          )
+        : []
+    }));
+    if (!profile) {
+      return {
+        llmAvailable: false,
+        enriched: false,
+        profile: null,
+        suggestions: fallback
+      };
+    }
+
+    const sources = pages.map((page) => {
+      const detail = getWikiPageDetail(page.id);
+      return {
+        pageId: page.id,
+        title: page.title,
+        summary: page.summary,
+        aliases: fallback.find((item) => item.pageId === page.id)?.aliases ?? [],
+        content: detail?.page.contentMarkdown.slice(0, 6_000) ?? ""
+      };
+    });
+    let outputText: string;
+    try {
+      const response = await dependencies.llm.runTextPrompt(profile, {
+        systemPrompt:
+          "Extract conservative Person record suggestions from reviewed Forge Wiki pages. Return JSON only. Never invent contact details, birthdays, sensitive facts, or relationships not supported by the page.",
+        prompt: `${JSON.stringify(sources)}\n\nReturn exactly {"people":[{"pageId":"...","displayName":"...","preferredName":"","relationshipCategory":"family|friend|partner|colleague|community|professional|other","relationshipLabel":"","shortDescription":"","aliases":[]}]} using one item per supplied pageId.`
+      });
+      outputText = response.outputText;
+    } catch (error) {
+      throw new HttpError(
+        502,
+        "people_wiki_llm_failed",
+        error instanceof Error
+          ? `The configured LLM could not prepare Person suggestions: ${error.message}`
+          : "The configured LLM could not prepare Person suggestions."
+      );
+    }
+    const parsed = parseWikiPeopleLlmResponse(outputText);
+    const suppliedIds = new Set(body.candidateIds);
+    const suggestionsById = new Map(
+      parsed.people
+        .filter((suggestion) => suppliedIds.has(suggestion.pageId))
+        .map((suggestion) => [suggestion.pageId, suggestion] as const)
+    );
+    return {
+      llmAvailable: true,
+      enriched: true,
+      profile: { id: profile.id, label: profile.label, model: profile.model },
+      suggestions: fallback.map(
+        (suggestion) => suggestionsById.get(suggestion.pageId) ?? suggestion
+      )
     };
   });
 

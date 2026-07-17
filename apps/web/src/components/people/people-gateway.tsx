@@ -23,7 +23,9 @@ import type {
   SharedProjection,
   SharePreview,
   WikiAssociationInput,
-  WikiCandidate
+  WikiCandidate,
+  WikiPeopleEnrichment,
+  WikiPersonImportDraft
 } from "@/components/people/people-types";
 
 export class PeopleGatewayError extends Error {
@@ -671,6 +673,39 @@ const wikiScanResponseSchema = z
         truncated: z.boolean()
       })
       .strict()
+  })
+  .strict();
+const wikiPeopleEnrichmentResponseSchema = z
+  .object({
+    llmAvailable: z.boolean(),
+    enriched: z.boolean(),
+    profile: z
+      .object({ id: z.string(), label: z.string(), model: z.string() })
+      .strict()
+      .nullable(),
+    suggestions: z
+      .array(
+        z
+          .object({
+            pageId: z.string(),
+            displayName: z.string(),
+            preferredName: z.string(),
+            relationshipCategory: z.enum([
+              "family",
+              "friend",
+              "partner",
+              "colleague",
+              "community",
+              "professional",
+              "other"
+            ]),
+            relationshipLabel: z.string(),
+            shortDescription: z.string(),
+            aliases: z.array(z.string()).max(32)
+          })
+          .strict()
+      )
+      .max(20)
   })
   .strict();
 const wikiPreviewResponseSchema = z
@@ -3129,6 +3164,26 @@ export function createHttpPeopleGateway(
       return response.candidates.map(mapWikiCandidate);
     },
 
+    async enrichWikiCandidates(pageIds): Promise<WikiPeopleEnrichment> {
+      await ensureRuntimeCapabilities();
+      return parseContract(
+        wikiPeopleEnrichmentResponseSchema,
+        await requestJson("/api/v1/people/wiki-candidates/enrich", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: await ownerUserId(),
+            peopleRootPageId: requireConfigured(
+              peopleRootPageId,
+              "people_root_page_required",
+              "A Wiki People root page id"
+            ),
+            candidateIds: pageIds
+          })
+        }),
+        "Wiki People enrichment response"
+      );
+    },
+
     async applyWikiAssociation(input: WikiAssociationInput) {
       const candidate = wikiCandidates.get(input.pageId);
       if (!candidate) {
@@ -3157,7 +3212,16 @@ export function createHttpPeopleGateway(
             ? {
                 wikiPageId: input.pageId,
                 action: "create_person" as const,
-                displayName: candidate.title,
+                displayName:
+                  input.personDraft?.displayName.trim() || candidate.title,
+                preferredName: input.personDraft?.preferredName ?? "",
+                relationshipCategory:
+                  input.personDraft?.relationshipCategory ?? "other",
+                relationshipLabel:
+                  input.personDraft?.relationshipLabel ?? "",
+                shortDescription:
+                  input.personDraft?.shortDescription ?? candidate.summary,
+                aliases: input.personDraft?.aliases ?? candidate.aliases,
                 expectedWikiVersion: candidate.updatedAt
               }
             : {
@@ -3206,6 +3270,77 @@ export function createHttpPeopleGateway(
         );
       }
       return reloadContext(personId);
+    },
+
+    async importWikiPeople(
+      inputs: WikiPersonImportDraft[]
+    ): Promise<PersonContext[]> {
+      if (inputs.length === 0 || inputs.length > 20) {
+        throw new PeopleGatewayError(
+          "Choose between 1 and 20 Wiki People pages to import at once.",
+          { code: "wiki_people_import_size" }
+        );
+      }
+      const decisions = inputs.map((input) => {
+        const candidate = wikiCandidates.get(input.pageId);
+        if (!candidate) {
+          throw new PeopleGatewayError(
+            "Scan Wiki candidates again before importing People.",
+            { code: "wiki_candidate_version_missing" }
+          );
+        }
+        return {
+          wikiPageId: input.pageId,
+          action: "create_person" as const,
+          displayName: input.displayName,
+          preferredName: input.preferredName,
+          relationshipCategory: input.relationshipCategory,
+          relationshipLabel: input.relationshipLabel,
+          shortDescription: input.shortDescription,
+          aliases: input.aliases,
+          expectedWikiVersion: candidate.updatedAt
+        };
+      });
+      const common = {
+        userId: await ownerUserId(),
+        peopleRootPageId: requireConfigured(
+          peopleRootPageId,
+          "people_root_page_required",
+          "A Wiki People root page id"
+        ),
+        decisions
+      };
+      const preview = parseContract(
+        wikiPreviewResponseSchema,
+        await requestJson("/api/v1/people/wiki-associations/preview", {
+          method: "POST",
+          body: JSON.stringify(common)
+        }),
+        "Wiki People import preview response"
+      );
+      const applied = parseContract(
+        wikiApplyResponseSchema,
+        await requestJson("/api/v1/people/wiki-associations/apply", {
+          method: "POST",
+          body: JSON.stringify({
+            ...common,
+            previewId: preview.preview.id,
+            previewHash: preview.preview.hash,
+            idempotencyKey: makeIdempotencyKey()
+          })
+        }),
+        "Wiki People import response"
+      );
+      const personIds = applied.results.flatMap((result) =>
+        result.personId ? [result.personId] : []
+      );
+      if (personIds.length !== inputs.length) {
+        throw new PeopleGatewayError(
+          "Wiki People import did not return every created Person.",
+          { code: "wiki_people_import_incomplete" }
+        );
+      }
+      return Promise.all(personIds.map((personId) => reloadContext(personId)));
     },
 
     async createPairingInvitation(input) {

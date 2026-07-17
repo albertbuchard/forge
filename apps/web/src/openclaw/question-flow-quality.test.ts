@@ -1007,6 +1007,26 @@ describe("question flow quality coverage", () => {
       ).toMatch(anchor);
     }
 
+    const valueSection = getSectionSlice(psychePlaybook, "Value");
+    expect(valueSection).toMatch(
+      /direct capture[\s\S]*current conflict or guided clarification[\s\S]*review or[\s\S]*narrow update[\s\S]*optional committed-action planning/i
+    );
+    expect(valueSection).toMatch(
+      /For direct capture[\s\S]*value phrase and chosen direction[\s\S]*accuracy or consent question[\s\S]*Do not demand a recent example,[\s\S]*barriers,[\s\S]*committed action, links, or a hypothesis/i
+    );
+    expect(valueSection).toMatch(
+      /read the exact existing value[\s\S]*newly true[\s\S]*patch only that accepted change[\s\S]*Never force[\s\S]*a sparse value through full create intake/i
+    );
+    expect(valueSection).toMatch(
+      /what happened[\s\S]*user says it meant or revealed[\s\S]*agent's[\s\S]*interpretation separate[\s\S]*chosen direction from a goal or outcome,[\s\S]*rule or belief,[\s\S]*observable behavior/i
+    );
+    expect(valueSection).toMatch(
+      /at most one tentative hypothesis[\s\S]*longing, pain, or value conflict[\s\S]*fit-or-correction/i
+    );
+    expect(valueSection).toMatch(
+      /committed action[\s\S]*only when the user wants action[\s\S]*value can be saved without a current action/i
+    );
+
     const behaviorPatternSection = getSectionSlice(
       psychePlaybook,
       "Behavior Pattern"

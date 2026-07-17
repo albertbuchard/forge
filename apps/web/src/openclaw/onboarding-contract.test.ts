@@ -345,6 +345,12 @@ describe("forge onboarding contract", () => {
           );
           continue;
         }
+        if (catalogEntry.entityType === "psyche_value") {
+          expect(flow.readinessCheck).toMatch(
+            /Direct capture[\s\S]*accepted value phrase and chosen direction[\s\S]*Review or narrow update[\s\S]*exact existing value[\s\S]*Guided clarification[\s\S]*longing, pain, or value conflict[\s\S]*Committed-action planning is optional/i
+          );
+          continue;
+        }
         expect(flow.readinessCheck).toMatch(
           /Direct save or update[\s\S]*clear entity-specific wording[\s\S]*explicit save or update intent[\s\S]*do not require a new concrete example or hypothesis/i
         );
@@ -2013,7 +2019,7 @@ describe("forge onboarding contract", () => {
     );
 
     expect(psycheByFocus.get("psyche_value")?.askSequence.join(" ")).toMatch(
-      /ordinary recent moment[\s\S]*Reflect the direction/i
+      /direct capture[\s\S]*review or narrow update[\s\S]*ordinary recent moment[\s\S]*Reflect the chosen direction[\s\S]*committed action only when the user wants action planning/i
     );
     expect(psycheByFocus.get("belief_entry")?.askSequence.join(" ")).toMatch(
       /recent moment[\s\S]*own words[\s\S]*after the sentence lands/i

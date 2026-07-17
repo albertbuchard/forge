@@ -342,6 +342,24 @@ export type WikiAssociationInput = {
   personId: string;
   pageId: string;
   decision: "associate" | "create_person" | "skip";
+  personDraft?: WikiPersonImportDraft;
+};
+
+export type WikiPersonImportDraft = {
+  pageId: string;
+  displayName: string;
+  preferredName: string;
+  relationshipCategory: PersonRelationshipCategory;
+  relationshipLabel: string;
+  shortDescription: string;
+  aliases: string[];
+};
+
+export type WikiPeopleEnrichment = {
+  llmAvailable: boolean;
+  enriched: boolean;
+  profile: { id: string; label: string; model: string } | null;
+  suggestions: WikiPersonImportDraft[];
 };
 
 export type PairingInvitation = {
@@ -477,7 +495,9 @@ export interface PeopleGateway {
   }): Promise<PeoplePendingRequestsPage>;
   reviewRequest(input: RequestReviewDecision): Promise<void>;
   scanWikiCandidates(personId?: string): Promise<WikiCandidate[]>;
+  enrichWikiCandidates(pageIds: string[]): Promise<WikiPeopleEnrichment>;
   applyWikiAssociation(input: WikiAssociationInput): Promise<PersonContext>;
+  importWikiPeople(inputs: WikiPersonImportDraft[]): Promise<PersonContext[]>;
   createPairingInvitation(input: {
     personId: string;
     label?: string;

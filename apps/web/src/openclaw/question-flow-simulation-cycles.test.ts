@@ -1234,6 +1234,7 @@ describe("question flow simulation cycles", () => {
         /accuracy or consent/i
       );
       if (
+        entityType === "psyche_value" ||
         entityType === "mode_guide_session" ||
         entityType === "mode_profile" ||
         entityType === "behavior_pattern"
@@ -1247,6 +1248,19 @@ describe("question flow simulation cycles", () => {
         /Guided formulation[\s\S]*concrete example[\s\S]*tentative hypothesis[\s\S]*fit-or-correction[\s\S]*accuracy or consent[\s\S]*saveable record shape[\s\S]*shared batch CRUD/i
       );
     }
+
+    const valueFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "psyche_value"
+    )?.questionFlow;
+    expect(valueFlow?.askSequence.join("\n")).toMatch(
+      /direct capture[\s\S]*current conflict or guided clarification[\s\S]*review or narrow update[\s\S]*optional committed-action planning[\s\S]*one accuracy or consent question[\s\S]*Do not demand a recent example, whyItMatters, barriers, a committed action, links, or a hypothesis[\s\S]*search for and read the exact existing value first[\s\S]*patch only that accepted change[\s\S]*never force a sparse value through full create intake[\s\S]*goal or outcome, a rule or belief, and the observable behavior[\s\S]*at most one tentative hypothesis[\s\S]*fit-or-correction[\s\S]*only when the user wants action planning[\s\S]*value can be saved without a current action/i
+    );
+    expect(valueFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted value phrase and chosen direction[\s\S]*do not require a fresh episode, whyItMatters, barriers, a committed action, links, or hypothesis[\s\S]*Review or narrow update[\s\S]*exact existing value[\s\S]*never force a sparse value through full create intake[\s\S]*Guided clarification[\s\S]*goal or outcome, rule or belief, and observable behavior[\s\S]*tentative hypothesis about longing, pain, or value conflict[\s\S]*fit-or-correction[\s\S]*Committed-action planning is optional[\s\S]*value can be saved without a current action[\s\S]*shared batch CRUD/i
+    );
+    expect(valueFlow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
 
     const behaviorFlow = onboarding.entityCatalog.find(
       (entry) => entry.entityType === "behavior"

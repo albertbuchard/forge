@@ -46,6 +46,25 @@ const wikiDecisionSchema = () =>
       wikiPageId: idSchema(),
       action: Type.Literal("create_person"),
       displayName: Type.String({ minLength: 1, maxLength: 160 }),
+      preferredName: Type.Optional(Type.String({ maxLength: 160 })),
+      relationshipCategory: Type.Optional(
+        literalUnion([
+          "family",
+          "friend",
+          "partner",
+          "colleague",
+          "community",
+          "professional",
+          "other"
+        ])
+      ),
+      relationshipLabel: Type.Optional(Type.String({ maxLength: 240 })),
+      shortDescription: Type.Optional(Type.String({ maxLength: 2000 })),
+      aliases: Type.Optional(
+        Type.Array(Type.String({ minLength: 1, maxLength: 160 }), {
+          maxItems: 32
+        })
+      ),
       expectedWikiVersion: versionSchema()
     }),
     strictObject({

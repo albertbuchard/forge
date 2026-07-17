@@ -337,6 +337,38 @@ def _people_wiki_decision_schema() -> JsonSchema:
                         "minLength": 1,
                         "maxLength": 160,
                     },
+                    "preferredName": {
+                        "type": "string",
+                        "maxLength": 160,
+                    },
+                    "relationshipCategory": _people_peer_enum(
+                        [
+                            "family",
+                            "friend",
+                            "partner",
+                            "colleague",
+                            "community",
+                            "professional",
+                            "other",
+                        ]
+                    ),
+                    "relationshipLabel": {
+                        "type": "string",
+                        "maxLength": 240,
+                    },
+                    "shortDescription": {
+                        "type": "string",
+                        "maxLength": 2000,
+                    },
+                    "aliases": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 160,
+                        },
+                        "maxItems": 32,
+                    },
                     "expectedWikiVersion": _people_peer_version_schema(),
                 },
                 required=[

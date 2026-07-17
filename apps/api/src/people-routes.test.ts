@@ -117,6 +117,11 @@ async function withPeopleApp(
   await registerPeopleRoutes(app, {
     authenticate: options.authenticate ?? (() => operatorContext()),
     authorization: new AuthorizationManager(),
+    llm: {
+      runTextPrompt: async () => {
+        throw new Error("People route test LLM is unavailable.");
+      }
+    },
     secrets,
     peerCore: options.peerCore ?? new UnavailablePeerCoreGateway(),
     rateLimiter: options.rateLimiter

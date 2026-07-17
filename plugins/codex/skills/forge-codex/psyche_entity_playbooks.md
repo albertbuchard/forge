@@ -1001,23 +1001,42 @@ local emergency services if they are in immediate danger.
 
 ## Value
 
-Aim: clarify a direction to live toward, not a goal to complete.
+Aim: capture, clarify, or review a direction to live toward without turning every
+value save into a full reflection exercise or action plan.
 
 Arc:
 
-1. Ask when the pull or absence of the value felt noticeable recently.
-2. Reflect the longing, pain, or importance that makes the value alive right now.
-3. Ask how living it would look in ordinary behavior.
-4. Separate the value from a performance target.
-5. Ask what gets in the way.
-6. Land on one concrete expression or committed action.
+1. Distinguish direct capture, current conflict or guided clarification, review or
+   narrow update, and optional committed-action planning before choosing the next
+   question.
+2. For direct capture, reflect the user's value phrase and chosen direction, then ask
+   one accuracy or consent question. Do not demand a recent example, `whyItMatters`,
+   barriers, a committed action, links, or a hypothesis.
+3. For review or narrow update, search for and read the exact existing value first.
+   Briefly summarize its accepted direction, importance, actions, and links, ask only
+   what is newly true or inaccurate, and patch only that accepted change. Never force
+   a sparse value through full create intake.
+4. For guided clarification, ask when the pull, absence, or conflict around the value
+   felt noticeable in one ordinary recent moment, then reflect the longing, pain, or
+   importance that makes the direction alive now.
+5. Keep what happened, what the user says it meant or revealed, and the agent's
+   interpretation separate. Distinguish the chosen direction from a goal or outcome,
+   a rule or belief, and the observable behavior that might express it.
+6. Once one concrete moment is clear, offer at most one tentative hypothesis about
+   the longing, pain, or value conflict, then ask one fit-or-correction question.
+7. Ask what ordinary behavior would show the value only when it would clarify the
+   direction.
+8. Explore barriers or land on a committed action only when the user wants action
+   planning now. A value can be saved without a current action.
 
 Helpful follow-up lanes:
 
+- direct capture with one accuracy check
+- exact-record review with only the requested patch
 - what ordinary behavior would show the value
 - what pain, longing, or friction is making it alive right now
-- what blocks living it
-- what one action would express it this week
+- what blocks living it, when the user wants action help
+- what one action would express it this week, when requested
 
 Likely linked entities:
 
@@ -1027,11 +1046,18 @@ Likely linked entities:
 
 Ready to save when:
 
-- the value has a clear name
-- the lived direction is understandable in plain language
-- there is enough detail for `whyItMatters` or one action expression
+- direct capture has an accepted value phrase and understandable chosen direction,
+  plus one accuracy or consent check; it does not require a recent example, barrier,
+  action, links, or hypothesis
+- review or narrow update follows reading the exact existing value, preserves accepted
+  wording, actions, and links, and changes only what the user accepted
+- guided clarification has a user-recognized direction grounded in one concrete
+  moment, with any tentative interpretation accepted or corrected
+- committed action is optional and is not a save gate
 
 Preferred opening question:
+
+For guided clarification:
 
 - "When did the pull or absence of this value feel most noticeable recently?"
 

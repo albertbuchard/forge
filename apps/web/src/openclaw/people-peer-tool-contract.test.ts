@@ -379,6 +379,12 @@ describe("People and peer-sharing agent contract", () => {
     expect(person?.questionFlow?.openingQuestion).toMatch(
       /Who is this person/i
     );
+    expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
+      /page evidence.*model inference/i
+    );
+    expect(person?.questionFlow?.askSequence?.join(" ")).toMatch(
+      /accept, correct, or skip/i
+    );
 
     const expectedPeopleRoutes = PEER_ROUTE_CONTRACTS.filter(
       (route) => route.mcpExposed && route.path.startsWith("/api/v1/people")
@@ -412,6 +418,11 @@ describe("People and peer-sharing agent contract", () => {
         expect(inputGuide?.inputShape).toContain(`"${route.operationId}"`);
       }
     }
+    expect(
+      onboarding.entityRouteModel.specializedDomainSurfaces.people.notes.join(
+        " "
+      )
+    ).toMatch(/current version-bound preview/i);
     expect(onboarding.recommendedPluginTools.peopleWorkflow).toEqual(
       expect.arrayContaining([
         "forge_search_entities",

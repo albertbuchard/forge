@@ -1048,21 +1048,19 @@ function ShellFrame({
             onOpenEditor={() => setNavEditorOpen(true)}
             onRouteIntent={onRouteIntent}
           />
-
-          <ShellNavEditor
-            open={navEditorOpen}
-            onOpenChange={setNavEditorOpen}
-            desktopNavIds={desktopNavIds}
-            onDesktopNavIdsChange={setDesktopNavIds}
-            desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
-            onDesktopSidebarMetricsPositionChange={
-              setDesktopSidebarMetricsPosition
-            }
-            mobileNavIds={mobileNavIds}
-            onMobileNavIdsChange={setMobileNavIds}
-          />
         </div>
       )}
+
+      <ShellNavEditor
+        open={navEditorOpen}
+        onOpenChange={setNavEditorOpen}
+        desktopNavIds={desktopNavIds}
+        onDesktopNavIdsChange={setDesktopNavIds}
+        desktopSidebarMetricsPosition={desktopSidebarMetricsPosition}
+        onDesktopSidebarMetricsPositionChange={setDesktopSidebarMetricsPosition}
+        mobileNavIds={mobileNavIds}
+        onMobileNavIdsChange={setMobileNavIds}
+      />
 
       <ShellBackgroundActivityDialog
         open={backgroundActivityOpen}

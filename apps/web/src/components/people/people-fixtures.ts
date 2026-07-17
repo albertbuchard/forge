@@ -949,6 +949,33 @@ export function createSyntheticPeopleGateway({
       return clone(SYNTHETIC_WIKI_CANDIDATES);
     },
 
+    async enrichWikiCandidates(pageIds) {
+      record("enrichWikiCandidates", pageIds);
+      await wait();
+      failIfRequired();
+      const selected = SYNTHETIC_WIKI_CANDIDATES.filter((candidate) =>
+        pageIds.includes(candidate.pageId)
+      );
+      return clone({
+        llmAvailable: true,
+        enriched: true,
+        profile: {
+          id: "llm_profile_synthetic_people",
+          label: "Synthetic People extractor",
+          model: "synthetic"
+        },
+        suggestions: selected.map((candidate) => ({
+          pageId: candidate.pageId,
+          displayName: candidate.title,
+          preferredName: candidate.aliases[0] ?? "",
+          relationshipCategory: "other" as const,
+          relationshipLabel: "",
+          shortDescription: candidate.excerpt ?? "",
+          aliases: candidate.aliases
+        }))
+      });
+    },
+
     async applyWikiAssociation(input) {
       record("applyWikiAssociation", input);
       await wait();
@@ -972,6 +999,61 @@ export function createSyntheticPeopleGateway({
       }
       contexts.set(input.personId, context);
       return clone(context);
+    },
+
+    async importWikiPeople(inputs) {
+      record("importWikiPeople", inputs);
+      await wait();
+      failIfRequired();
+      if (inputs.length === 0 || inputs.length > 20) {
+        throw new PeopleGatewayError(
+          "Choose between 1 and 20 Wiki People pages to import at once.",
+          { code: "wiki_people_import_size" }
+        );
+      }
+      const imported = inputs.map((input, index) => {
+        const candidate = SYNTHETIC_WIKI_CANDIDATES.find(
+          (item) => item.pageId === input.pageId
+        );
+        if (!candidate) {
+          throw new PeopleGatewayError(
+            "Scan Wiki candidates again before importing People.",
+            { code: "wiki_candidate_version_missing" }
+          );
+        }
+        const id = `person_${String(people.length + index + 1).padStart(6, "0")}`;
+        const summary: PersonSummary = {
+          id,
+          displayName: input.displayName.trim(),
+          preferredName: input.preferredName || null,
+          aliases: input.aliases,
+          relationshipCategory: input.relationshipCategory,
+          relationshipLabel: input.relationshipLabel || null,
+          importance: "normal",
+          shortDescription: input.shortDescription || null,
+          connectionState: "local_only",
+          freshnessState: "live",
+          freshnessLabel: "Imported now",
+          sourceLabel: "Wiki People",
+          lastContactAt: null,
+          updatedAt: PEOPLE_FIXTURE_NOW,
+          pendingRequestCount: 0
+        };
+        const context = buildSyntheticPersonContext(summary, state);
+        context.wikiProfile = {
+          pageId: candidate.pageId,
+          title: candidate.title,
+          spaceLabel: candidate.spaceLabel,
+          excerpt: candidate.excerpt,
+          href: `/wiki/page/${encodeURIComponent(candidate.pageId)}`,
+          associatedAt: PEOPLE_FIXTURE_NOW,
+          completeness: "complete"
+        };
+        contexts.set(id, context);
+        return { summary, context };
+      });
+      people = [...imported.map(({ summary }) => summary), ...people];
+      return clone(imported.map(({ context }) => context));
     },
 
     async createPairingInvitation(input) {

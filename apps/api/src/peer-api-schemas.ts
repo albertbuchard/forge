@@ -159,6 +159,21 @@ export const wikiAssociationDecisionSchema = z.discriminatedUnion("action", [
       wikiPageId: peerApiIdSchema,
       action: z.literal("create_person"),
       displayName: z.string().trim().min(1).max(160),
+      preferredName: z.string().trim().max(160).optional(),
+      relationshipCategory: z
+        .enum([
+          "family",
+          "friend",
+          "partner",
+          "colleague",
+          "community",
+          "professional",
+          "other"
+        ])
+        .optional(),
+      relationshipLabel: z.string().trim().max(240).optional(),
+      shortDescription: z.string().trim().max(2000).optional(),
+      aliases: z.array(z.string().trim().min(1).max(160)).max(32).optional(),
       expectedWikiVersion: peerApiVersionSchema
     })
     .strict(),
