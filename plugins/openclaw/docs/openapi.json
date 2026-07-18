@@ -1704,6 +1704,151 @@
         ],
         "additionalProperties": false
       },
+      "EnrichPeopleWikiCandidatesParams": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "EnrichPeopleWikiCandidatesQuery": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "EnrichPeopleWikiCandidatesBody": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "peopleRootPageId": {
+            "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesBody/properties/userId"
+          },
+          "candidateIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesBody/properties/userId"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "llmProfileId": {
+            "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesBody/properties/userId"
+          }
+        },
+        "required": [
+          "peopleRootPageId",
+          "candidateIds"
+        ],
+        "additionalProperties": false
+      },
+      "EnrichPeopleWikiCandidatesSuccess": {
+        "type": "object",
+        "properties": {
+          "llmAvailable": {
+            "type": "boolean"
+          },
+          "enriched": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "model"
+            ],
+            "additionalProperties": false,
+            "nullable": true
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pageId": {
+                  "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesSuccess/properties/profile/properties/id"
+                },
+                "displayName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "preferredName": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "relationshipCategory": {
+                  "type": "string",
+                  "enum": [
+                    "family",
+                    "friend",
+                    "partner",
+                    "colleague",
+                    "community",
+                    "professional",
+                    "other"
+                  ]
+                },
+                "relationshipLabel": {
+                  "type": "string",
+                  "maxLength": 240
+                },
+                "shortDescription": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "maxItems": 32
+                }
+              },
+              "required": [
+                "pageId",
+                "displayName",
+                "preferredName",
+                "relationshipCategory",
+                "relationshipLabel",
+                "shortDescription",
+                "aliases"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "llmAvailable",
+          "enriched",
+          "profile",
+          "suggestions"
+        ],
+        "additionalProperties": false
+      },
       "PreviewPeopleWikiAssociationsParams": {
         "type": "object",
         "properties": {},
@@ -38332,6 +38477,118 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ScanPeopleWikiCandidatesBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/people/wiki-candidates/enrich": {
+      "post": {
+        "operationId": "enrichPeopleWikiCandidates",
+        "summary": "Prepare reviewed Person suggestions from selected Wiki People pages.",
+        "tags": [
+          "People"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Prepare reviewed Person suggestions from selected Wiki People pages. response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesSuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request did not match the bounded contract.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The authenticated principal is not authorized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested owner-scoped record was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Reviewed or versioned state changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The bounded operation rate was exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The peer or required local service is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-forge-api-family": "people-peer-sharing",
+        "x-forge-principal-classes": [
+          "operator_session"
+        ],
+        "x-forge-required-scopes": [
+          "people:read:basic",
+          "wiki:read"
+        ],
+        "x-forge-human-only": true,
+        "x-forge-mcp-exposed": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPeopleWikiCandidatesBody"
               }
             }
           }

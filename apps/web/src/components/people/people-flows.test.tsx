@@ -13,6 +13,7 @@ import { PeopleConsequenceFlow } from "@/components/people/people-consequence-fl
 import { PersonEditorFlow } from "@/components/people/person-editor-flow";
 import { ShareGrantFlow } from "@/components/people/share-grant-flow";
 import { WikiAssociationFlow } from "@/components/people/wiki-association-flow";
+import { WikiPeopleImportFlow } from "@/components/people/wiki-people-import-flow";
 import {
   buildSyntheticPeople,
   buildSyntheticPersonContext,
@@ -474,6 +475,43 @@ describe("People guided flows", () => {
       pageId: "wiki_candidate_mara",
       decision: "associate"
     });
+  });
+
+  it("imports reviewed Wiki People through configured LLM suggestions", async () => {
+    const gateway = createSyntheticPeopleGateway({ count: 4 });
+    const onImported = vi.fn();
+    renderPeopleUi(
+      <WikiPeopleImportFlow
+        open
+        onOpenChange={vi.fn()}
+        onImported={onImported}
+      />,
+      { gateway }
+    );
+
+    const candidates = await screen.findAllByRole("checkbox");
+    expect(candidates).toHaveLength(2);
+    fireEvent.click(candidates[0]!);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare details" }));
+    expect(
+      await screen.findByText(/Prepared with Synthetic People extractor/i)
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Relationship label"), {
+      target: { value: "Community garden friend" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(screen.getByText(/Community garden friend/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Import 1" }));
+
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1));
+    expect(gateway.inspect().calls.map((call) => call.operation)).toEqual(
+      expect.arrayContaining([
+        "scanWikiCandidates",
+        "enrichWikiCandidates",
+        "importWikiPeople"
+      ])
+    );
   });
 
   it("does not offer scanned pairing when no approved local device is configured", async () => {

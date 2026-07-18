@@ -98,6 +98,23 @@ afterEach(() => {
 });
 
 describe("PeopleCollection", () => {
+  it("opens the Wiki People import from the collection toolbar", async () => {
+    const onImportFromWiki = vi.fn();
+    renderPeopleUi(
+      <PeopleCollection
+        selectedPersonId={null}
+        onSelectPerson={vi.fn()}
+        onAddPerson={vi.fn()}
+        onImportFromWiki={onImportFromWiki}
+      />,
+      { gateway: createSyntheticPeopleGateway({ count: 2 }) }
+    );
+
+    await screen.findByRole("list", { name: "People results" });
+    fireEvent.click(screen.getByRole("button", { name: "Import from Wiki" }));
+    expect(onImportFromWiki).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the 10,000-person virtual-list benchmark bounded, semantic, and stable", async () => {
     const gateway = createSyntheticPeopleGateway({ state: "large" });
     const onSelectPerson = vi.fn();

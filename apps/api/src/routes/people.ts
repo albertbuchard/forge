@@ -156,15 +156,6 @@ const scanCursorSchema = z
   })
   .strict();
 
-const wikiPeopleEnrichmentRequestSchema = z
-  .object({
-    userId: z.string().trim().min(1).max(240).optional(),
-    peopleRootPageId: z.string().trim().min(1).max(240),
-    candidateIds: z.array(z.string().trim().min(1).max(240)).min(1).max(20),
-    llmProfileId: z.string().trim().min(1).max(240).optional()
-  })
-  .strict();
-
 const wikiPeopleSuggestionSchema = z
   .object({
     pageId: z.string().trim().min(1).max(240),
@@ -214,6 +205,24 @@ function parseWikiPeopleLlmResponse(outputText: string) {
       "people_wiki_llm_invalid_response",
       "The configured LLM returned Person suggestions in an invalid format."
     );
+  }
+}
+
+function parseWikiPersonAliases(value: string): string[] {
+  try {
+    const aliases = JSON.parse(value) as unknown;
+    if (!Array.isArray(aliases)) return [];
+    return aliases.flatMap((alias) =>
+      typeof alias === "string"
+        ? [alias]
+        : alias &&
+            typeof alias === "object" &&
+            typeof (alias as { alias?: unknown }).alias === "string"
+          ? [(alias as { alias: string }).alias]
+          : []
+    );
+  } catch {
+    return [];
   }
 }
 const peerQueryEvidenceSchema = z
@@ -2037,25 +2046,25 @@ export async function registerPeopleRoutes(
   });
 
   app.post("/api/v1/people/wiki-candidates/enrich", async (request, reply) => {
-    const body = wikiPeopleEnrichmentRequestSchema.parse(request.body ?? {});
+    const body = PEER_API_SCHEMAS.enrichPeopleWikiCandidates.body!.parse(
+      request.body ?? {}
+    ) as {
+      userId?: string;
+      peopleRootPageId: string;
+      candidateIds: string[];
+      llmProfileId?: string;
+    };
     const actor = authenticatePeopleRoute(
       dependencies,
       request.headers as Record<string, unknown>,
-      "scanPeopleWikiCandidates",
+      "enrichPeopleWikiCandidates",
       body.userId
     );
-    if (!actor.auth.session) {
-      throw new HttpError(
-        403,
-        "people_wiki_llm_human_required",
-        "Wiki People enrichment must be started by the signed-in human."
-      );
-    }
     consumePeopleRateLimit({
       limiter,
       reply,
       actor,
-      operationId: "scanPeopleWikiCandidates",
+      operationId: "enrichPeopleWikiCandidates",
       bucketId: "enrichPeopleWikiCandidates",
       limit: 10
     });
@@ -2087,17 +2096,7 @@ export async function registerPeopleRoutes(
       relationshipCategory: "other" as const,
       relationshipLabel: "",
       shortDescription: page.summary,
-      aliases: page.aliasesJson
-        ? (JSON.parse(page.aliasesJson) as unknown[]).flatMap((alias) =>
-            typeof alias === "string"
-              ? [alias]
-              : alias &&
-                  typeof alias === "object" &&
-                  typeof (alias as { alias?: unknown }).alias === "string"
-                ? [(alias as { alias: string }).alias]
-                : []
-          )
-        : []
+      aliases: page.aliasesJson ? parseWikiPersonAliases(page.aliasesJson) : []
     }));
     if (!profile) {
       return {

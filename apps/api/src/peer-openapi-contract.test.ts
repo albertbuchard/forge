@@ -32,6 +32,12 @@ const expectedSuccessFields: Record<PeerApiOperationId, readonly string[]> = {
   listPeopleReadModel: ["people", "page"],
   getPersonContext: ["context"],
   scanPeopleWikiCandidates: ["candidates", "root", "page", "scan"],
+  enrichPeopleWikiCandidates: [
+    "llmAvailable",
+    "enriched",
+    "profile",
+    "suggestions"
+  ],
   previewPeopleWikiAssociations: ["preview"],
   applyPeopleWikiAssociations: ["previewId", "replayed", "results"],
   createPeerCompanionEnrollmentOptions: [
@@ -195,7 +201,7 @@ test("OpenAPI publishes the exact People and peer route contract", () => {
   const document = buildOpenApiDocument() as OpenApiDocument;
   const declaredTags = new Set(document.tags.map((tag) => tag.name));
 
-  assert.equal(PEER_ROUTE_CONTRACTS.length, 37);
+  assert.equal(PEER_ROUTE_CONTRACTS.length, 38);
   assert.ok(document.components.schemas.CrudEntityType.enum.includes("person"));
   for (const contract of PEER_ROUTE_CONTRACTS) {
     const path = openApiPath(contract.path);

@@ -7,7 +7,7 @@ import {
 } from "./peer-route-contract.js";
 
 test("People and peer route contracts are unique and operation ids are stable", () => {
-  assert.equal(PEER_ROUTE_CONTRACTS.length, 37);
+  assert.equal(PEER_ROUTE_CONTRACTS.length, 38);
   assert.equal(
     new Set(PEER_ROUTE_CONTRACTS.map(peerRouteKey)).size,
     PEER_ROUTE_CONTRACTS.length
@@ -16,6 +16,18 @@ test("People and peer route contracts are unique and operation ids are stable", 
     new Set(PEER_ROUTE_CONTRACTS.map((route) => route.operationId)).size,
     PEER_ROUTE_CONTRACTS.length
   );
+});
+
+test("Wiki People LLM enrichment is human-only and never agent exposed", () => {
+  const route = getPeerRouteContract(
+    "POST",
+    "/api/v1/people/wiki-candidates/enrich"
+  );
+  assert.ok(route);
+  assert.deepEqual(route.principalClasses, ["operator_session"]);
+  assert.equal(route.humanOnly, true);
+  assert.equal(route.mcpExposed, false);
+  assert.deepEqual(route.requiredScopes, ["people:read:basic", "wiki:read"]);
 });
 
 test("secure companion enrollment is operator-only and never agent exposed", () => {

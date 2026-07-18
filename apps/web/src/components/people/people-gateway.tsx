@@ -2555,7 +2555,6 @@ export function createHttpPeopleGateway(
       );
       for (const candidate of page.pages) {
         if (
-          candidate.parentSlug === null &&
           (candidate.slug.toLocaleLowerCase() === "people" ||
             candidate.title.trim().toLocaleLowerCase() === "people")
         ) {

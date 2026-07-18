@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
+  BookUser,
   RefreshCw,
   RotateCcw,
   Search,
@@ -101,11 +102,13 @@ function CollectionSkeleton({ slow }: { slow: boolean }) {
 export function PeopleCollection({
   selectedPersonId,
   onSelectPerson,
-  onAddPerson
+  onAddPerson,
+  onImportFromWiki = () => undefined
 }: {
   selectedPersonId: string | null;
   onSelectPerson: (personId: string) => void;
   onAddPerson: () => void;
+  onImportFromWiki?: () => void;
 }) {
   const gateway = usePeopleGateway();
   const [filters, setFilters] = useState<PeopleCollectionFilters>(
@@ -214,7 +217,7 @@ export function PeopleCollection({
                     : `${total.toLocaleString()} ${total === 1 ? "person" : "people"}${total > people.length ? `, ${people.length.toLocaleString()} loaded` : ""}`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               size="md"
@@ -229,6 +232,14 @@ export function PeopleCollection({
               onClick={() => void collectionQuery.refetch()}
             >
               <RefreshCw className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onImportFromWiki}
+            >
+              <BookUser className="size-4" aria-hidden="true" />
+              Import from Wiki
             </Button>
             <Button type="button" onClick={onAddPerson}>
               <UserRoundPlus className="size-4" aria-hidden="true" />

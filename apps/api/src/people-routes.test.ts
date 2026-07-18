@@ -1436,6 +1436,55 @@ test("Wiki association routes bind previewed versions and replay apply idempoten
   });
 });
 
+test("Wiki People enrichment falls back to page metadata and rejects agents", async () => {
+  let currentAuth = operatorContext();
+  await withPeopleApp(
+    async ({ app, ownerUserId }) => {
+      seedWikiPeoplePage(ownerUserId);
+      const payload = {
+        userId: ownerUserId,
+        peopleRootPageId: "note_people_route_root",
+        candidateIds: ["note_people_route_jon"]
+      };
+      const fallback = await app.inject({
+        method: "POST",
+        url: "/api/v1/people/wiki-candidates/enrich",
+        payload
+      });
+      assert.equal(fallback.statusCode, 200, fallback.body);
+      assert.deepEqual(fallback.json(), {
+        llmAvailable: false,
+        enriched: false,
+        profile: null,
+        suggestions: [
+          {
+            pageId: "note_people_route_jon",
+            displayName: "Jon",
+            preferredName: "",
+            relationshipCategory: "other",
+            relationshipLabel: "",
+            shortDescription: "",
+            aliases: []
+          }
+        ]
+      });
+
+      currentAuth = agentContext(
+        [ownerUserId],
+        ["people:read:basic", "wiki:read"]
+      );
+      const forbidden = await app.inject({
+        method: "POST",
+        url: "/api/v1/people/wiki-candidates/enrich",
+        payload
+      });
+      assert.equal(forbidden.statusCode, 403, forbidden.body);
+      assert.equal(forbidden.json().code, "peer_principal_forbidden");
+    },
+    { authenticate: () => currentAuth }
+  );
+});
+
 test("Wiki candidate route pages beyond 500 rows and rejects stale or rebound cursors", async () => {
   await withPeopleApp(async ({ app, ownerUserId }) => {
     const { createdAt } = seedWikiPeoplePage(ownerUserId);

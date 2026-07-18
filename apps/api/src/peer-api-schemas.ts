@@ -144,6 +144,15 @@ export const peopleWikiCandidateScanSchema = z
   })
   .strict();
 
+export const peopleWikiCandidateEnrichmentSchema = z
+  .object({
+    userId: peerApiIdSchema.optional(),
+    peopleRootPageId: peerApiIdSchema,
+    candidateIds: z.array(peerApiIdSchema).min(1).max(20),
+    llmProfileId: peerApiIdSchema.optional()
+  })
+  .strict();
+
 export const wikiAssociationDecisionSchema = z.discriminatedUnion("action", [
   z
     .object({
@@ -1226,6 +1235,44 @@ const peopleWikiScanResponseSchema = z
       .strict()
   })
   .strict();
+const peopleWikiEnrichmentResponseSchema = z
+  .object({
+    llmAvailable: z.boolean(),
+    enriched: z.boolean(),
+    profile: z
+      .object({
+        id: peerApiIdSchema,
+        label: z.string().trim().min(1).max(160),
+        model: z.string().trim().min(1).max(240)
+      })
+      .strict()
+      .nullable(),
+    suggestions: z
+      .array(
+        z
+          .object({
+            pageId: peerApiIdSchema,
+            displayName: z.string().trim().min(1).max(160),
+            preferredName: z.string().trim().max(160),
+            relationshipCategory: z.enum([
+              "family",
+              "friend",
+              "partner",
+              "colleague",
+              "community",
+              "professional",
+              "other"
+            ]),
+            relationshipLabel: z.string().trim().max(240),
+            shortDescription: z.string().trim().max(2_000),
+            aliases: z.array(z.string().trim().min(1).max(160)).max(32)
+          })
+          .strict()
+      )
+      .min(1)
+      .max(20)
+  })
+  .strict();
 const peopleWikiPreviewResponseSchema = z
   .object({
     preview: z
@@ -1286,6 +1333,10 @@ export const PEER_API_SUCCESS_SCHEMAS: Record<
   scanPeopleWikiCandidates: {
     status: 200,
     schema: peopleWikiScanResponseSchema
+  },
+  enrichPeopleWikiCandidates: {
+    status: 200,
+    schema: peopleWikiEnrichmentResponseSchema
   },
   previewPeopleWikiAssociations: {
     status: 200,
@@ -1488,6 +1539,11 @@ const PEER_API_REQUEST_SCHEMAS: Record<
     params: emptySchema,
     query: emptySchema,
     body: peopleWikiCandidateScanSchema
+  },
+  enrichPeopleWikiCandidates: {
+    params: emptySchema,
+    query: emptySchema,
+    body: peopleWikiCandidateEnrichmentSchema
   },
   previewPeopleWikiAssociations: {
     params: emptySchema,

@@ -874,7 +874,7 @@ describe("People gateway wire contract", () => {
                     id: "wiki_people_discovered",
                     title: "People",
                     slug: "people",
-                    parentSlug: null
+                    parentSlug: "index"
                   }
                 ],
                 limit: 500,

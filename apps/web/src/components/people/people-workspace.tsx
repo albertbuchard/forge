@@ -4,6 +4,7 @@ import { PeopleCollection } from "@/components/people/people-collection";
 import { PeopleRequestsInbox } from "@/components/people/people-requests-inbox";
 import { PersonDetail } from "@/components/people/person-detail";
 import { PersonEditorFlow } from "@/components/people/person-editor-flow";
+import { WikiPeopleImportFlow } from "@/components/people/wiki-people-import-flow";
 import type { PersonContext } from "@/components/people/people-types";
 
 const DESKTOP_WORKSPACE_QUERY = "(min-width: 1024px)";
@@ -48,6 +49,7 @@ export function PeopleWorkspace({
 }) {
   const desktop = useDesktopPeopleWorkspace();
   const [addFlowOpen, setAddFlowOpen] = useState(false);
+  const [wikiImportOpen, setWikiImportOpen] = useState(false);
   const [requestsOpen, setRequestsOpen] = useState(false);
   const showCollection = desktop || !selectedPersonId;
   const showDetail = Boolean(selectedPersonId);
@@ -75,6 +77,7 @@ export function PeopleWorkspace({
               selectedPersonId={selectedPersonId}
               onSelectPerson={onNavigatePerson}
               onAddPerson={() => setAddFlowOpen(true)}
+              onImportFromWiki={() => setWikiImportOpen(true)}
             />
           </aside>
         ) : null}
@@ -116,6 +119,16 @@ export function PeopleWorkspace({
         onSaved={(context: PersonContext) => {
           setAddFlowOpen(false);
           onNavigatePerson(context.person.id);
+        }}
+      />
+      <WikiPeopleImportFlow
+        open={wikiImportOpen}
+        onOpenChange={setWikiImportOpen}
+        onImported={(contexts) => {
+          setWikiImportOpen(false);
+          if (contexts[0]) {
+            onNavigatePerson(contexts[0].person.id);
+          }
         }}
       />
     </div>

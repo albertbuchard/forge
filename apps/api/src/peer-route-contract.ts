@@ -55,6 +55,18 @@ export const PEER_ROUTE_CONTRACTS: readonly PeerRouteContract[] = [
   },
   {
     method: "POST",
+    path: "/api/v1/people/wiki-candidates/enrich",
+    operationId: "enrichPeopleWikiCandidates",
+    tag: "People",
+    summary:
+      "Prepare reviewed Person suggestions from selected Wiki People pages.",
+    principalClasses: ["operator_session"],
+    requiredScopes: ["people:read:basic", "wiki:read"],
+    humanOnly: true,
+    mcpExposed: false
+  },
+  {
+    method: "POST",
     path: "/api/v1/people/wiki-associations/preview",
     operationId: "previewPeopleWikiAssociations",
     tag: "People",

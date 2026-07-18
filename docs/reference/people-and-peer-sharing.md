@@ -53,6 +53,19 @@ page, connection state, shared information, devices, grants, and question histor
 Deleting a Person uses Forge soft deletion. Restore remains available from Settings
 Bin unless preserved peer records make a hard delete unsafe.
 
+Use **Import from Wiki** in the People toolbar to select unlinked pages below the
+configured Wiki People root. Forge can ask an enabled Wiki LLM profile to prepare
+names, relationship labels, descriptions, and aliases from those pages. Every field
+remains editable in the guided review, and Forge creates the selected Person records
+and general Wiki links only after final confirmation. Without an enabled LLM profile,
+the same flow uses the existing page titles, summaries, and aliases.
+
+The enrichment request is `POST /api/v1/people/wiki-candidates/enrich`. It accepts
+1-20 selected page IDs, is available only to an authenticated human operator, and is
+not exposed through MCP or agent plugins. The existing scan, preview, and apply
+contracts remain the API paths for trusted agents performing explicitly reviewed Wiki
+association work.
+
 ## How sharing works
 
 Two Forge installations share through an explicit peer relationship. Pairing and
