@@ -182,7 +182,19 @@ async function verifyPackedForgePeerSource(
   return { binaryPath, sourceRoot };
 }
 
-async function verifyPackedPeerDaemon(installedPluginRoot) {
+function packedPeerEnvironment(binaryPath) {
+  return {
+    ...process.env,
+    FORGE_PEER_BIN: binaryPath,
+    FORGE_PEER_ENABLED: "1",
+    FORGE_PEER_REQUIRED: "1",
+    FORGE_PEER_ENABLE_IROH: "1",
+    FORGE_PEER_SOCKET_PATH: peerSocketPath,
+    FORGE_PEER_STATE_DIR: peerStateRoot
+  };
+}
+
+async function verifyPackedPeerDaemon(installedPluginRoot, binaryPath) {
   const gatewayModulePath = path.join(
     installedPluginRoot,
     "dist",
@@ -193,11 +205,32 @@ async function verifyPackedPeerDaemon(installedPluginRoot) {
     "services",
     "peer-core-ipc-gateway.js"
   );
+  const runtimeModulePath = path.join(
+    installedPluginRoot,
+    "dist",
+    "server",
+    "apps",
+    "api",
+    "src",
+    "services",
+    "peer-runtime.js"
+  );
   const { UnixSocketPeerCoreGateway } = await import(
     pathToFileURL(gatewayModulePath).href
   );
+  const { resolvePeerRuntimeConfiguration } = await import(
+    pathToFileURL(runtimeModulePath).href
+  );
+  const configuration = await resolvePeerRuntimeConfiguration({
+    ownerUserId,
+    dataDir: dataRoot,
+    environment: packedPeerEnvironment(binaryPath)
+  });
+  if (!configuration.enabled || !configuration.supervisor.enabled) {
+    throw new Error("packed forge-peer runtime configuration was disabled");
+  }
   const gateway = new UnixSocketPeerCoreGateway({
-    socketPath: peerSocketPath,
+    socketPath: configuration.supervisor.socketPath,
     ownerUserId
   });
   const deadline = Date.now() + 60_000;
@@ -454,14 +487,7 @@ try {
               FORGE_PEER_REQUIRED: "0",
               FORGE_PEER_ENABLE_IROH: "0"
             }
-          : {
-              FORGE_PEER_BIN: peerRuntime.binaryPath,
-              FORGE_PEER_ENABLED: "1",
-              FORGE_PEER_REQUIRED: "1",
-              FORGE_PEER_ENABLE_IROH: "1"
-            }),
-        FORGE_PEER_SOCKET_PATH: peerSocketPath,
-        FORGE_PEER_STATE_DIR: peerStateRoot,
+          : packedPeerEnvironment(peerRuntime.binaryPath)),
         HOST: "127.0.0.1",
         PORT: String(port)
       },
@@ -485,7 +511,7 @@ try {
   }
   await verifyPackedWebRoutes();
   if (!runtimeOnly) {
-    await verifyPackedPeerDaemon(installedPluginRoot);
+    await verifyPackedPeerDaemon(installedPluginRoot, peerRuntime.binaryPath);
     const pairing = await verifyPackedIrohPairing();
     await verifyPackedPeopleApi(pairing.cookie);
     if (!pairing.body?.qrPayload?.transport?.pairPayload?.node_id) {

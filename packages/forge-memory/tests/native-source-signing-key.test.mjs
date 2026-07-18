@@ -236,6 +236,11 @@ test("prepare releases use fast gates and unsigned integration smoke without wea
     smokeSource,
     /\["full", "prepare", "publish-from-tag"\]/
   );
+  assert.match(smokeSource, /resolvePeerRuntimeConfiguration/);
+  assert.match(
+    smokeSource,
+    /socketPath: configuration\.supervisor\.socketPath/
+  );
 });
 
 test("release builds fail before packaging when the signing key is absent", () => {
