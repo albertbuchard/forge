@@ -436,19 +436,32 @@ of leaving it as warm reflective prose.
 Use this when the user reports an urge, trigger, belief activation, mode activation,
 or asks for a card they can use in the hard moment.
 
+- Distinguish immediate support or retrieval, direct capture, guided formulation, and
+  exact-record review or narrow update before asking card-creation questions.
 - Search existing `flashcard` records first using the user's exact urge sentence,
   trigger situation, tags, and nearby Psyche wording.
 - If a matching card exists, show the card's message first before adding your own
   support. The card is the intervention; the therapist-like wrapper should be brief.
-- If no card fits and the user wants one, formulate the cue or urge sentence and the
-  smallest usable message before asking about visual style, colors, tags, or optional
-  links.
+- If no card fits and the user needs support now, respond to the immediate need first,
+  then ask whether they want to formulate a new card. Do not make support depend on a
+  save.
+- For direct capture, reflect the supplied message and any supplied or clearly
+  inferable retrieval cue, search for a duplicate, and ask one accuracy or consent
+  question. Do not require a fresh episode, interpretation, title, tags, styling,
+  links, or another cue when the user explicitly wants a message-only card.
+- For review or narrow update, search for and read the exact existing card first,
+  preserve its accepted message, cues, tags, styling, and links, and patch only the
+  accepted change. Do not force a sparse card through create intake.
+- If no card fits and the user wants guided formulation, clarify the cue or urge
+  sentence and the smallest usable message before asking about visual style, colors,
+  tags, or optional links. Offer at most one correctable hypothesis about what the
+  message needs to meet in the hard moment.
 - When creating a new card from a belief, mode, trigger report, value, behavior, or
   behavior pattern, preserve the accepted primary formulation first, then derive the
   card from it. Do not turn card creation into a second broad Psyche interview.
-- Ready-to-save minimum: cue or urge sentence, one message the user can recognize
-  while activated, and at least one retrieval cue such as a tag, trigger situation, or
-  linked Psyche record.
+- Ready-to-save minimum: one accepted `message`. Ask for at most one useful retrieval
+  cue when none is supplied or inferable and future retrieval would otherwise be
+  unreliable, but do not block an explicitly requested message-only card.
 
 ## Psyche progressive disclosure
 
@@ -1411,26 +1424,52 @@ Intent-specific alternatives:
 
 ## Flashcard
 
-Aim: craft a small therapeutic card that can be retrieved during a specific urge,
-trigger, belief activation, mode shift, or values-based pivot.
+Aim: retrieve, directly capture, carefully formulate, or narrowly review a small
+therapeutic card for a specific urge, trigger, belief activation, mode shift, or
+values-based pivot without turning every intent into creation intake.
 
 Arc:
 
-1. Start from the exact moment the card should help: the urge sentence, trigger cue,
-   mode activation, belief activation, or situation.
-2. Reflect what the card is trying to interrupt, steady, help the user tolerate, or
-   help the user choose.
-3. Ask for the one simple message that should be centered on the card, or offer one
-   concise working sentence if the user's meaning is clearer than their wording.
-4. Ask for tags, trigger sentence, and trigger situation before the title, because
-   retrieval matters more than the title.
-5. Ask about color, background, typography, image, layout, and visual tone only after
-   the message and retrieval cues are clear.
-6. If the user is in an urge right now, search existing flashcards first, show the
-   matching message first, then support it with brief psychotherapy-informed guidance.
-7. If no matching card exists, create only after the cue or urge sentence and the
-   short message are clear; postpone visual styling until the intervention wording
-   works.
+1. Distinguish immediate support or retrieval, direct capture, guided formulation, and
+   exact-record review or narrow update before asking for a cue or message.
+2. For immediate support or retrieval, search existing flashcards first using the
+   user's exact urge sentence, trigger situation, tags, message, title, and linked
+   Psyche wording. If one fits, show its message first and keep the therapeutic wrapper
+   brief; do not reopen intake or create a duplicate.
+3. For direct capture, reflect the supplied message and any supplied or clearly
+   inferable retrieval cue, search for a duplicate, and ask one accuracy or consent
+   question. Do not manufacture a fresh episode or therapeutic hypothesis, and do not
+   gate the save on title, tags, styling, links, or another cue when the user explicitly
+   wants a message-only card.
+4. For review or narrow update, search for and read the exact existing flashcard first.
+   Preserve its accepted message, title, trigger sentence, trigger situation, tags,
+   styling, and links, ask only what is newly true or inaccurate, and patch only that
+   accepted change. Never force a sparse accepted card through full create intake.
+5. For guided formulation, start from the exact hard moment: the urge sentence,
+   trigger cue, mode activation, belief activation, or situation. Reflect what the card
+   should help interrupt, steady, tolerate, remember, or choose.
+6. Keep the user's stated need separate from the agent's interpretation. Offer at most
+   one tentative hypothesis about what the card needs to meet in the hard moment, ask
+   one fit-or-correction question, then ask for or offer one concise working message in
+   the user's language.
+7. Identify one useful retrieval cue only when future retrieval would otherwise be
+   unreliable. Ask about title, tags, color, background, typography, image, layout,
+   visual tone, or links only when that optional choice changes use.
+8. If no card fits and the user needs support now, address that need first and ask
+   whether they want a new card only after the immediate moment is held.
+
+Storage and preservation contract:
+
+- `flashcard` is a normal stored Psyche entity. Search, read, create, update, delete,
+  and restore it through shared batch entity routes, not a guessed dedicated route.
+- `message` is the only required create field. Use one stable idempotency key for an
+  accepted create and reuse it only for an exact retry.
+- Search before create. For review or update, read the exact card first and preserve
+  sparse accepted wording, cues, tags, visual fields, and links that the user did not
+  ask to change.
+- A cue inferred by the agent remains a proposal until the user accepts it. Do not
+  silently store a therapeutic interpretation as `triggerSentence`,
+  `triggerSituation`, a tag, or a linked Psyche record.
 
 Helpful follow-up lanes:
 
@@ -1452,14 +1491,26 @@ Likely linked entities:
 
 Ready to save when:
 
-- the main `message` is clear enough to show back during the hard moment
-- at least one retrieval cue is clear: tag, trigger sentence, trigger situation, or
-  linked Psyche record
-- title and visual styling are either chosen or intentionally left for later
+- immediate support or retrieval is complete when a matching message has been shown
+  and the immediate need is met; no save is implied
+- direct capture has an accepted `message` and one accuracy or consent check; ask for
+  at most one useful retrieval cue when none is supplied or inferable, but do not block
+  an explicitly requested message-only card
+- review or narrow update follows reading the exact card, preserves sparse accepted
+  fields and links, and changes only the requested field
+- guided formulation has one usable message and a hard-moment cue clear enough for the
+  user to recognize, with any tentative interpretation accepted or corrected
+- title and visual styling remain optional and are asked only when they change use
 
 Preferred opening question:
 
 - "What exact urge sentence or situation should make this card appear?"
+
+Intent-specific alternatives:
+
+- Immediate support: "I will look for the card that matches this urge first."
+- Direct capture: "This already sounds like the card message. Is that wording accurate enough to save?"
+- Existing card: "I have the current card in view. What feels newly true or inaccurate about it?"
 
 ## Trigger Report
 
@@ -1530,19 +1581,36 @@ Intent-specific alternatives:
 
 ## Event Type
 
-Aim: name a repeated emotionally meaningful kind of moment without flattening the
-lived episode into a cold taxonomy.
+Aim: directly capture, carefully formulate, or narrowly review
+a repeated emotionally meaningful kind of moment without flattening the lived episode into a cold taxonomy.
 
 Arc:
 
-1. Ask what kind of moment keeps recurring and why it matters to name it consistently.
-2. Reflect the repeated emotional or relational stake in plain language before wording
-   the category.
-3. Ask for one recent example if the boundary is still abstract.
-4. Clarify what belongs inside this event type and what should stay outside it.
-5. Offer one concise candidate label once the repeated moment is clear.
-6. Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only
-   after the category itself feels accurate.
+1. Distinguish direct capture, guided category formulation, and exact-record review or
+   narrow update before asking for a recent example or deeper meaning.
+2. For direct capture, reflect the supplied label and the recurring kind of moment it
+   names, search normalized built-in and owner-scoped labels for a duplicate, and ask
+   one accuracy or consent question. Do not demand a fresh episode, emotional
+   hypothesis, boundary exercise, links, or optional description when the category is
+   already clear.
+3. For review or narrow update, search for and read the exact existing event type first.
+   State whether it is built-in or custom, summarize its accepted label and description,
+   ask only what is newly true or inaccurate, and patch only that accepted change.
+   Never force a sparse custom entry through create intake and never mutate a built-in
+   label.
+4. For guided formulation, ask for one recent or recurring example only when the
+   category boundary is still abstract, then reflect the repeated emotional or
+   relational stake before wording the category.
+5. Keep the observable kind of moment, the user's meaning, and the agent's
+   interpretation separate. Offer at most one tentative hypothesis about what feels
+   threatened, exposed, relieved, or important, then ask one fit-or-correction question.
+6. Distinguish `event_type` from one `trigger_report` episode, a whole
+   `behavior_pattern` loop, and one `emotion_definition` feeling. Clarify what belongs
+   inside or outside the category only when that boundary would change future report
+   classification.
+7. Offer one concise candidate label once the repeated moment is clear. Preserve raw
+   `customEventType` wording in historical trigger reports, and link beliefs, patterns,
+   modes, or emotion definitions only when a link would help future recognition.
 
 Storage and history contract:
 
@@ -1586,28 +1654,58 @@ Likely linked entities:
 
 Ready to save when:
 
-- the repeated moment is understandable in plain language
-- the boundary is clear enough for future reports to use consistently
-- the label feels accurate enough or has one candidate wording to confirm
+- direct capture has an accepted label, an understandable recurring kind of moment,
+  and one accuracy or consent check; it does not require a fresh episode, hypothesis,
+  boundary exercise, links, or optional description
+- review or narrow update follows reading the exact entry, preserves accepted sparse
+  wording and historical trigger-report text, and changes only the requested custom
+  field; built-in labels remain read-only
+- guided formulation has a repeated moment and boundary clear enough for future reports,
+  with any tentative stake hypothesis accepted or corrected
 
 Preferred opening question:
 
 - "What kind of moment keeps happening that you want future reports to name the same way each time?"
 
+Intent-specific alternatives:
+
+- Direct capture: "It sounds like this label already names the recurring moment. Is that wording accurate enough to save as your reusable event type?"
+- Existing entry: "I have the current event type in view. What feels newly true or inaccurate about its label or description?"
+
 ## Emotion Definition
 
-Aim: define a psychologically meaningful feeling label by its lived signature, not just
-by a dictionary word.
+Aim: directly capture, carefully differentiate, or narrowly review a psychologically
+meaningful feeling label by its lived signature, not just by a dictionary word.
 
 Arc:
 
-1. Ask when this feeling was present recently and what made it recognizable.
-2. Reflect the felt signature before asking for a category or label polish.
-3. Ask what distinguishes it from nearby feelings if the boundary matters.
-4. Ask what the feeling tends to signal, protect, or ask for.
-5. Offer one concise definition in the user's language and invite correction.
-6. Link it to trigger reports, modes, beliefs, or patterns only after the definition
-   feels steady.
+1. Distinguish direct capture, guided differentiation, and exact-record review or
+   narrow update before asking for a recent feeling episode or deeper function.
+2. For direct capture, reflect the supplied label and recognizable meaning, search
+   normalized built-in and owner-scoped labels for a duplicate, and ask one accuracy
+   or consent question. Do not demand a fresh episode, body signature, nearby-feeling
+   contrast, function hypothesis, category, links, or optional description when the
+   definition is already clear.
+3. For review or narrow update, search for and read the exact existing emotion
+   definition first. State whether it is built-in or custom, summarize its accepted
+   label, description, and category, ask only what is newly true or inaccurate, and
+   patch only that accepted change. Never force a sparse custom entry through create
+   intake and never mutate a built-in definition.
+4. For guided differentiation, ask for one recent feeling episode only when the lived
+   signature is unclear. Reflect the felt signature before label polish and identify
+   only the body signal, urge, image, thought, or relational meaning needed for future
+   recognition.
+5. Keep observed cues, the user's emotion word and meaning, and the agent's
+   interpretation separate. Offer at most one tentative hypothesis about what the
+   feeling warns about, protects, demands, or longs for, then ask one fit-or-correction
+   question.
+6. Contrast nearby feelings only when the distinction would change future recognition.
+   Distinguish `emotion_definition` from one raw trigger-report emotion, a belief
+   sentence, a mode state, or a behavior-pattern segment.
+7. Offer one concise definition in the user's language, keep any candidate provisional
+   until its lived signature and future use are clear, preserve historical raw emotion
+   labels, and link reports, modes, beliefs, or patterns only when a link would help
+   recognition.
 
 Storage and history contract:
 
@@ -1652,10 +1750,21 @@ Likely linked entities:
 
 Ready to save when:
 
-- the felt signature is clear enough to recognize later
-- the boundary from nearby feelings is clear enough when it matters
-- the definition can be written in language the user recognizes
+- direct capture has an accepted label and recognizable meaning plus one accuracy or
+  consent check; it does not require a fresh episode, body signature, function
+  hypothesis, category, links, or optional description
+- review or narrow update follows reading the exact entry, preserves sparse accepted
+  and historical wording, and changes only the requested custom field; built-in
+  definitions remain read-only
+- guided differentiation has a lived signature clear enough for future recognition,
+  with any nearby-feeling distinction or tentative function hypothesis accepted or
+  corrected only when it matters
 
 Preferred opening question:
 
 - "When this feeling is present, what tells you it is this feeling and not a nearby one?"
+
+Intent-specific alternatives:
+
+- Direct capture: "It sounds like this label already carries a recognizable meaning for you. Is that definition accurate enough to save?"
+- Existing entry: "I have the current emotion definition in view. What feels newly true or inaccurate about its label, description, or category?"

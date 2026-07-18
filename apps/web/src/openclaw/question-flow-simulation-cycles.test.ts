@@ -2086,6 +2086,7 @@ describe("question flow simulation cycles", () => {
 
   it("cycle 1 retest: Psyche flows contrast nearby containers before saving", () => {
     const contrast = getSectionSlice(psychePlaybook, "Entity Contrast Check");
+    const eventType = getSectionSlice(psychePlaybook, "Event Type");
 
     expect(contrast).toMatch(
       /Do not ask the\s+user to choose from a taxonomy menu/i
@@ -2105,6 +2106,18 @@ describe("question flow simulation cycles", () => {
     );
     expect(contrast).toMatch(
       /one careful\s+hypothesis[\s\S]*protecting[\s\S]*predicts[\s\S]*relief[\s\S]*costs/i
+    );
+    expect(eventType).toMatch(
+      /direct capture[\s\S]*guided category formulation[\s\S]*exact-record review or\s+narrow update/i
+    );
+    expect(eventType).toMatch(
+      /search normalized built-in and owner-scoped labels[\s\S]*one accuracy or consent question/i
+    );
+    expect(eventType).toMatch(
+      /one `trigger_report` episode[\s\S]*whole\s+`behavior_pattern` loop[\s\S]*one `emotion_definition` feeling/i
+    );
+    expect(eventType).toMatch(
+      /historical trigger reports[\s\S]*built-in labels remain read-only/i
     );
   });
 
@@ -2556,6 +2569,32 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 2 retest: Emotion Definition adapts direct, guided, and review intake", () => {
+    const compact = getSectionSlice(entityPlaybook, "Emotion Definition");
+    const deep = getSectionSlice(psychePlaybook, "Emotion Definition");
+
+    for (const section of [compact, deep]) {
+      expect(section).toMatch(
+        /direct capture[\s\S]*guided differentiation[\s\S]*exact-record review or\s+narrow update/i
+      );
+      expect(section).toMatch(
+        /search[\s\S]*normalized built-in and owner-scoped labels[\s\S]*one accuracy\s+or consent\s+question/i
+      );
+      expect(section).toMatch(
+        /read the exact existing emotion\s+definition[\s\S]*built-in[\s\S]*read-only/i
+      );
+      expect(section).toMatch(
+        /observed cues[\s\S]*user's emotion word and meaning[\s\S]*tentative[\s\S]*hypothesis[\s\S]*fit-or-correction/i
+      );
+      expect(section).toMatch(
+        /raw[\s\S]*trigger.report[\s\S]*belief\s+sentence[\s\S]*mode[\s\S]*behavior.pattern/i
+      );
+      expect(section).toMatch(
+        /direct capture has an accepted label[\s\S]*(?:without requiring|does not require)[\s\S]*fresh episode/i
+      );
+    }
+  });
+
   it("cycle 2 retest: specialized mutations and executions verify through dedicated reads", () => {
     const verificationLoop = getSectionSlice(
       entityPlaybook,
@@ -2821,6 +2860,39 @@ describe("question flow simulation cycles", () => {
     );
     expect(psychePlaybook).toMatch(
       /say in plain language what makes you think/i
+    );
+  });
+
+  it("cycle 3 retest: Flashcard adapts retrieval, direct, guided, and review work", () => {
+    const flashcard = getSectionSlice(psychePlaybook, "Flashcard");
+    const support = getSectionSlice(
+      psychePlaybook,
+      "Flashcard support sequence"
+    );
+
+    expect(flashcard).toMatch(
+      /immediate support or retrieval[\s\S]*direct capture[\s\S]*guided formulation[\s\S]*exact-record review or\s+narrow update/i
+    );
+    expect(flashcard).toMatch(
+      /search existing flashcards first[\s\S]*show its message first[\s\S]*do not reopen intake or create a duplicate/i
+    );
+    expect(flashcard).toMatch(
+      /direct capture[\s\S]*one accuracy or consent\s+question[\s\S]*message-only card/i
+    );
+    expect(flashcard).toMatch(
+      /read the exact existing flashcard first[\s\S]*Preserve its accepted message[\s\S]*patch only that\s+accepted change[\s\S]*sparse accepted card/i
+    );
+    expect(flashcard).toMatch(
+      /user's stated need separate from the agent's interpretation[\s\S]*at most\s+one tentative hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(flashcard).toMatch(
+      /shared batch entity routes[\s\S]*not a guessed dedicated route[\s\S]*`message` is the only required create field/i
+    );
+    expect(support).toMatch(
+      /If no card fits and the user needs support now[\s\S]*Do not make support depend on a\s+save/i
+    );
+    expect(support).toMatch(
+      /review or narrow update[\s\S]*read the exact existing card first[\s\S]*Do not force a sparse card through create intake/i
     );
   });
 
@@ -3260,7 +3332,7 @@ describe("question flow simulation cycles", () => {
       /matching card exists[\s\S]*show the card's message first[\s\S]*card is the intervention/i
     );
     expect(flashcardSupport).toMatch(
-      /If no card fits[\s\S]*cue or urge sentence[\s\S]*smallest usable message[\s\S]*visual style, colors, tags, or optional\s+links/i
+      /If no card fits[\s\S]*cue or urge\s+sentence[\s\S]*smallest usable message[\s\S]*visual style, colors,\s+tags, or optional\s+links/i
     );
     expect(hypothesisExamples).toMatch(
       /These are examples of active formulation, not scripts to recite/i

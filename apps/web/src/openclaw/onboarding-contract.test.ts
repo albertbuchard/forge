@@ -1822,6 +1822,15 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
       /message[\s\S]*tags[\s\S]*trigger/i
     );
+    expect(psycheByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /immediate support or retrieval[\s\S]*direct capture[\s\S]*guided formulation[\s\S]*exact-record review or narrow update/i
+    );
+    expect(psycheByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /read the exact existing flashcard first[\s\S]*Preserve its accepted message[\s\S]*patch only that accepted change/i
+    );
+    expect(psycheByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /user's stated need separate from the agent's interpretation[\s\S]*at most one tentative hypothesis[\s\S]*fit-or-correction/i
+    );
     const modeProfilePlaybook = psycheByFocus.get("mode_profile");
     expect(modeProfilePlaybook).toBeDefined();
     const modeProfileSequence =
@@ -2141,6 +2150,9 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("flashcard")?.notes.join(" ")).toMatch(
       /card needs to meet in the hard moment/i
     );
+    expect(psycheByFocus.get("flashcard")?.notes.join(" ")).toMatch(
+      /message-only card[\s\S]*message is the only required create field/i
+    );
     expect(psycheByFocus.get("trigger_report")?.askSequence.join(" ")).toMatch(
       /felt stake[\s\S]*situation, emotion, meaning, behavior, and consequence/i
     );
@@ -2180,27 +2192,60 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /repeated emotional or relational stake/i
     );
+    expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /direct capture[\s\S]*guided category formulation[\s\S]*exact-record review or narrow update/i
+    );
+    expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /read the exact existing event type first[\s\S]*built-in or custom[\s\S]*patch only that accepted change/i
+    );
+    expect(psycheByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
+      /observable kind of moment[\s\S]*user's meaning[\s\S]*tentative hypothesis[\s\S]*fit-or-correction/i
+    );
     expect(psycheByFocus.get("event_type")?.notes.join(" ")).toMatch(
       /future reports need this event type to preserve/i
     );
     expect(
       psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
-    ).toMatch(/felt signature/i);
+    ).toMatch(
+      /direct capture[\s\S]*guided differentiation[\s\S]*exact-record review or narrow update/i
+    );
+    expect(
+      psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
+    ).toMatch(
+      /read the exact existing emotion definition first[\s\S]*built-in or custom[\s\S]*patch only that accepted change/i
+    );
+    expect(
+      psycheByFocus.get("emotion_definition")?.askSequence.join(" ")
+    ).toMatch(
+      /observed cues[\s\S]*user's emotion word and meaning[\s\S]*tentative hypothesis[\s\S]*fit-or-correction/i
+    );
     expect(psycheByFocus.get("emotion_definition")?.notes.join(" ")).toMatch(
       /warns about, protects, demands, or longs for/i
     );
 
     expect(playbookByFocus.get("event_type")?.coachingGoal).toMatch(
-      /Psyche-quality questioning[\s\S]*cold taxonomy/i
+      /capture, formulate, or review[\s\S]*cold taxonomy/i
+    );
+    expect(playbookByFocus.get("flashcard")?.coachingGoal).toMatch(
+      /Retrieve, directly capture, carefully formulate, or narrowly review[\s\S]*creation intake/i
+    );
+    expect(playbookByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /immediate support or retrieval[\s\S]*exact-record review or narrow update/i
+    );
+    expect(playbookByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /message-only card[\s\S]*read the exact existing flashcard first/i
+    );
+    expect(playbookByFocus.get("flashcard")?.askSequence.join(" ")).toMatch(
+      /shared batch CRUD[\s\S]*not a dedicated route family/i
     );
     expect(playbookByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
       /Treat event_type as Psyche taxonomy[\s\S]*Psyche coaching playbook[\s\S]*batch CRUD/i
     );
     expect(playbookByFocus.get("event_type")?.askSequence.join(" ")).toMatch(
-      /emotionally meaningful moment[\s\S]*emotional or relational stake/i
+      /direct capture[\s\S]*exact-record review or narrow update[\s\S]*emotional or relational stake/i
     );
     expect(playbookByFocus.get("emotion_definition")?.coachingGoal).toMatch(
-      /Psyche-quality questioning[\s\S]*lived signature/i
+      /capture, differentiate, or review[\s\S]*dictionary entry/i
     );
     expect(
       playbookByFocus.get("emotion_definition")?.askSequence.join(" ")
@@ -2210,7 +2255,7 @@ describe("forge onboarding contract", () => {
     expect(
       playbookByFocus.get("emotion_definition")?.askSequence.join(" ")
     ).toMatch(
-      /felt signature[\s\S]*signal, protect, warn about, long for, or demand/i
+      /direct capture[\s\S]*exact-record review or narrow update[\s\S]*felt signature[\s\S]*warns about, protects, demands, or longs for/i
     );
   });
 

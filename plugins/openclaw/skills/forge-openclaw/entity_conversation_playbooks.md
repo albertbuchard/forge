@@ -3559,25 +3559,34 @@ Preferred opening question:
 
 ## Event Type
 
-Aim: bridge into the Psyche playbook for a reusable incident category without
-flattening the lived episode into cold taxonomy. `event_type` is a Psyche taxonomy
-record: use the deeper Event Type guidance in `psyche_entity_playbooks.md` when the
-user is exploring meaning, and keep this section as the route and handoff reminder.
+Aim: bridge into the Psyche playbook for direct capture, guided formulation, or narrow
+review of a reusable emotionally meaningful incident category without flattening the
+lived episode into cold taxonomy. `event_type` remains Psyche taxonomy stored through
+shared batch CRUD.
 
 Arc:
 
-1. Ask what kind of emotionally meaningful moment keeps recurring and why naming it
-   consistently would help future trigger reports.
-2. Reflect the repeated moment back in plain language by naming the emotional or
-   relational stake before narrowing the wording.
-3. Ask for one recent example if the boundary is still abstract.
-4. Clarify what belongs inside this event type and what should stay outside it.
-5. Offer one concise candidate label once the repeated moment is clear.
-6. Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only
-   after the category itself feels accurate.
+1. Distinguish direct capture, guided category formulation, and exact-record review or
+   narrow update before asking for an example or emotional stake.
+2. For direct capture, reflect the supplied label and recurring kind of moment, search
+   normalized built-in and owner-scoped labels, and ask one accuracy or consent
+   question. Do not require a fresh episode, hypothesis, boundary exercise, links, or
+   optional description when the category is already clear.
+3. For review or update, search for and read the exact existing event type first. State
+   whether it is built-in or custom, preserve the accepted label and description, and
+   ask only what is newly true or inaccurate. Built-in labels remain read-only.
+4. For guided formulation, ask for one recent or recurring example only when the
+   boundary is unclear. Reflect the repeated moment back in plain language, keep the
+   observable kind of moment, the user's meaning, and at most one tentative emotional
+   or relational hypothesis separate, then ask one fit-or-correction question.
+5. Distinguish this reusable category from one `trigger_report` episode, a whole
+   `behavior_pattern` loop, and one `emotion_definition` feeling. Clarify inclusion or
+   exclusion only when it would change future report classification.
+6. Offer one concise candidate label once the category is clear, preserve historical
+   `customEventType` wording, and use shared batch CRUD for the accepted custom entry.
 
-If the user already offered a candidate label, keep the wording provisional and ask
-what kinds of moments belong inside it before you ask whether the label is right.
+If the user offered a candidate label but its boundary remains unclear,
+ask what kinds of moments belong inside it and which nearby moments should stay outside.
 
 Route note:
 
@@ -3603,33 +3612,55 @@ Route note:
 
 Ready to save when:
 
-- the repeated moment is understandable in plain language
-- the boundary is clear enough for future reports to use consistently
-- the label feels accurate enough or has one candidate wording to confirm
+- direct capture has an accepted label, an understandable recurring kind of moment,
+  and one accuracy or consent check without requiring a fresh episode
+- review or narrow update starts from the exact entry, preserves sparse accepted and
+  historical wording, changes only the requested custom field, and does not mutate a
+  built-in label
+- guided formulation has a boundary clear enough for future reports, with any
+  tentative emotional or relational hypothesis accepted or corrected
 
 Preferred opening question:
 
 - "What kind of moment keeps happening that you want future reports to name the same way each time?"
 
+Intent-specific alternatives:
+
+- Direct capture: "It sounds like this label already names the recurring moment. Is that wording accurate enough to save?"
+- Existing entry: "I have the current event type in view. What feels newly true or inaccurate about its label or description?"
+
 ## Emotion Definition
 
-Aim: `emotion_definition` is a Psyche taxonomy record, so bridge into the Psyche
-playbook for a reusable emotion entry by its lived signature, not by a dictionary
-definition. Use the deeper Emotion Definition guidance in
-`psyche_entity_playbooks.md` when the user is exploring the feeling.
+Aim: bridge into the Psyche playbook for direct capture, guided differentiation, or
+narrow review of a reusable feeling label by its lived signature, not by a dictionary
+definition. `emotion_definition` remains Psyche taxonomy stored through shared batch
+CRUD.
 
 Arc:
 
-1. Ask when this feeling was present recently and what made it recognizable.
-2. Reflect the felt signature back in plain language before asking for category or
-   label polish.
-3. Ask what distinguishes it from nearby emotions if that matters.
-4. Ask what the feeling tends to signal, protect, warn about, long for, or demand.
-5. Offer one concise definition in the user's language and invite correction.
-6. Link it to trigger reports, modes, beliefs, or patterns only after the definition
-   feels steady.
+1. Distinguish direct capture, guided differentiation, and exact-record review or
+   narrow update before asking for a recent episode or deeper function.
+2. For direct capture, reflect the supplied label and recognizable meaning, search
+   normalized built-in and owner-scoped labels, and ask one accuracy or consent
+   question. Do not require a fresh episode, body signature, nearby-feeling contrast,
+   function hypothesis, category, links, or optional description when it is clear.
+3. For review or update, search for and read the exact existing emotion definition
+   first. State whether it is built-in or custom, preserve the accepted label,
+   description, and category, and ask only what is newly true or inaccurate. Built-in
+   definitions remain read-only.
+4. For guided differentiation, ask for one recent feeling episode only when the lived
+   signature is unclear. Reflect the felt signature back in plain language and identify
+   only the body signal, urge, image, thought, or relational meaning needed for future
+   recognition.
+5. Keep observed cues, the user's emotion word and meaning, and at most one tentative
+   function hypothesis separate, then ask one fit-or-correction question.
+6. Contrast nearby feelings only when it would change future recognition. Distinguish
+   this definition from one raw `trigger_report` emotion, a belief sentence, a mode
+   state, or a `behavior_pattern` segment.
+7. Offer one concise definition in the user's language, preserve historical raw
+   emotion labels, and use shared batch CRUD for the accepted custom entry.
 
-Helpful follow-up lanes:
+Helpful guided-differentiation lanes:
 
 - what tells the user this is that feeling and not a nearby one
 - body signal, urge, image, thought, or relational meaning that identifies it
@@ -3639,9 +3670,9 @@ Helpful follow-up lanes:
 Route note:
 
 - `emotion_definition` is psychologically meaningful but still uses shared batch CRUD
-  for storage. Search and mutate it through the shared entity routes after the felt
-  signature, boundary, and wording are clear enough. Do not treat it as a generic
-  dictionary item.
+  for storage. Search and mutate it through the shared entity routes after the
+  intent-specific readiness condition is met. Do not treat it as a generic dictionary
+  item.
 - Search before create. Built-in entries have `system: true` and are read-only; custom
   entries are owner-scoped. Create accepts only `label`, optional `description`,
   optional `category`, and optional `userId`. Do not invent `aliases` or `bodySignals`:
@@ -3660,11 +3691,20 @@ Route note:
 
 Ready to save when:
 
-- the label is clear
-- the felt signature is clear enough to recognize later
-- the boundary from nearby feelings is clear enough when it matters
-- the definition can be written in language the user recognizes
+- direct capture has an accepted label and recognizable meaning plus one accuracy or
+  consent check, without requiring a fresh episode
+- review or narrow update starts from the exact entry, preserves sparse accepted and
+  historical wording, changes only the requested custom field, and does not mutate a
+  built-in definition
+- guided differentiation has a lived signature clear enough for future recognition,
+  with any nearby-feeling distinction or tentative function hypothesis accepted or
+  corrected only when it matters
 
 Preferred opening question:
 
 - "When this feeling is present, what tells you it is this feeling and not a nearby one?"
+
+Intent-specific alternatives:
+
+- Direct capture: "It sounds like this label already carries a recognizable meaning. Is that definition accurate enough to save?"
+- Existing entry: "I have the current emotion definition in view. What feels newly true or inaccurate about its label, description, or category?"

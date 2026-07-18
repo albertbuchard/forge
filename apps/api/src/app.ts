@@ -4968,15 +4968,15 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "What exact moment or urge should this card help you meet?",
     coachingGoal:
-      "Craft a concise therapeutic reminder and retrieval cues before visual styling.",
+      "Retrieve, directly capture, carefully formulate, or narrowly review a concise therapeutic reminder without turning every intent into card-creation intake.",
     askSequence: [
-      "Ask what moment, urge sentence, or trigger situation should bring this flashcard up.",
-      "Reflect what the card is trying to help the user interrupt, remember, tolerate, or choose.",
-      "Ask for the simple message that should be centered on the card, or offer a concise working sentence if the user's meaning is clearer than the wording.",
-      "Ask for tags and trigger wording before asking for a title, because retrieval matters more than the title.",
-      "Ask for color, typography, image, layout, and visual tone only after the message and retrieval cues are clear.",
-      "Use shared batch CRUD for create, update, delete, restore, and search; flashcard is a normal stored Psyche entity, not a dedicated route family.",
-      "When the user reports an urge or trigger, search flashcards by tags, triggerSentence, triggerSituation, message, title, and linked Psyche records, then show the message first with brief psychotherapy-informed support around it."
+      "Distinguish immediate support or retrieval, direct capture, guided formulation, and exact-record review or narrow update before asking card-creation questions.",
+      "For immediate support or retrieval, search existing flashcards first by the user's exact urge sentence, trigger situation, tags, message, title, and linked Psyche records. If one fits, show its message first with only brief psychotherapy-informed support; do not reopen intake or create a duplicate.",
+      "For direct capture, reflect the supplied message and any supplied or clearly inferable retrieval cue, search for a duplicate, and ask one accuracy or consent question. Do not require a fresh episode, therapeutic hypothesis, title, tags, visual styling, or links; if the user explicitly wants a message-only card, the API permits it.",
+      "For review or narrow update, search for and read the exact existing flashcard first. Preserve its accepted message, title, trigger cues, tags, styling, and links, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse card through create intake.",
+      "For guided formulation, start from the exact hard moment or urge cue, reflect what the card should help interrupt, steady, tolerate, remember, or choose, and offer at most one tentative hypothesis about what the message needs to meet before asking one fit-or-correction question.",
+      "Ask for or offer one short message in the user's language, then identify one useful retrieval cue when future retrieval would otherwise be unreliable. Ask about title, tags, color, typography, image, layout, visual tone, or links only when that optional choice changes use.",
+      "Use shared batch CRUD for create, update, delete, restore, and search; flashcard is a normal stored Psyche entity, not a dedicated route family."
     ]
   },
   {
@@ -5324,15 +5324,15 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "What kind of moment keeps happening that you want future reports to name the same way each time?",
     coachingGoal:
-      "Bridge into Psyche-quality questioning for a reusable incident category without flattening the lived episode into cold taxonomy.",
+      "Capture, formulate, or review a reusable incident category without flattening a direct save into an interview or the lived episode into cold taxonomy.",
     askSequence: [
       "Treat event_type as Psyche taxonomy: use the event_type Psyche coaching playbook when the user is exploring meaning, and keep batch CRUD as the storage path.",
-      "Ask what kind of emotionally meaningful moment keeps recurring and why naming it consistently would help future trigger reports.",
-      "Reflect the repeated moment back in plain language by naming the emotional or relational stake before narrowing the wording.",
-      "Ask for one recent example if the boundary is still abstract.",
-      "Clarify what belongs inside this event type and what should stay outside it.",
-      "Offer one concise candidate label once the repeated moment is clear.",
-      "Search existing event_type labels before creating; if none fits, preserve the user's own report wording and save the accepted custom label through batch CRUD."
+      "Distinguish direct capture, guided category formulation, and exact-record review or narrow update before asking for an example or emotional stake.",
+      "For direct capture, reflect the supplied label and the recurring kind of moment it names, search existing normalized built-in and owner-scoped labels for a duplicate, then ask one accuracy or consent question. Do not require a fresh episode, emotional hypothesis, boundary exercise, links, or optional description when the category is already clear.",
+      "For review or narrow update, search for and read the exact existing event type first. State whether it is built-in or custom, preserve its accepted label and description, ask only what is newly true or inaccurate, and patch only that accepted change; built-in labels remain read-only.",
+      "For guided formulation, ask for one recent or recurring example only when the category boundary is still unclear. Reflect the repeated moment back in plain language, then keep the observable kind of moment, the user's meaning, and at most one tentative hypothesis about the emotional or relational stake separate before asking one fit-or-correction question.",
+      "Distinguish event_type from one trigger_report episode, a whole behavior_pattern loop, or one emotion_definition feeling. Clarify what belongs inside or outside the category only when that boundary would change future report classification.",
+      "Offer one concise candidate label once the repeated moment is clear. Preserve each trigger report's raw customEventType wording, and use shared batch CRUD only for the accepted reusable custom label."
     ]
   },
   {
@@ -5340,15 +5340,16 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
     openingQuestion:
       "When this feeling is present, what tells you it is this feeling and not a nearby one?",
     coachingGoal:
-      "Bridge into Psyche-quality questioning for a reusable emotion label by its lived signature, not by a dictionary definition.",
+      "Capture, differentiate, or review a reusable emotion label without turning a direct save into a fresh feeling interview or reducing the definition to a dictionary entry.",
     askSequence: [
       "Treat emotion_definition as Psyche taxonomy: use the emotion_definition Psyche coaching playbook when the user is exploring the feeling, and keep batch CRUD as the storage path.",
-      "Ask when this feeling was present recently and what made it recognizable.",
-      "Reflect the felt signature back in plain language before asking for category or label polish.",
-      "Ask what distinguishes it from nearby emotions if that matters.",
-      "Ask what the feeling tends to signal, protect, warn about, long for, or demand.",
-      "Offer one concise definition in the user's language and invite correction.",
-      "Search existing emotion_definition labels before creating; if none fits, keep the user's own emotion word in the report and save the accepted reusable label through batch CRUD."
+      "Distinguish direct capture, guided differentiation, and exact-record review or narrow update before asking for a recent feeling episode or deeper function.",
+      "For direct capture, reflect the supplied label and recognizable meaning, search existing normalized built-in and owner-scoped labels for a duplicate, and ask one accuracy or consent question. Do not require a fresh episode, body signature, nearby-feeling contrast, function hypothesis, category, links, or optional description when the definition is already clear.",
+      "For review or narrow update, search for and read the exact existing emotion definition first. State whether it is built-in or custom, preserve its accepted label, description, and category, ask only what is newly true or inaccurate, and patch only that accepted change; built-in definitions remain read-only.",
+      "For guided differentiation, ask for one recent feeling episode only when the lived signature is unclear. Reflect the felt signature back in plain language and identify only the body signal, urge, image, thought, or relational meaning needed for future recognition.",
+      "Keep observed cues, the user's emotion word and meaning, and the agent's interpretation separate. Offer at most one tentative hypothesis about what the feeling warns about, protects, demands, or longs for, then ask one fit-or-correction question.",
+      "Contrast nearby feelings only when the distinction would change future recognition. Distinguish the reusable emotion_definition from one raw trigger-report emotion, a belief sentence, a mode state, or a behavior-pattern segment.",
+      "Offer one concise definition in the user's language, keep any candidate provisional until its lived signature and future use are clear, preserve raw labels in historical trigger reports, and use shared batch CRUD for the accepted custom definition."
     ]
   }
 ] as const;
@@ -5643,15 +5644,15 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use when the user wants a small therapeutic reminder card for an urge, trigger sentence, mode activation, belief activation, value reminder, or relapse-prevention moment.",
     coachingGoal:
-      "Help the user craft one brief, memorable, usable message and enough retrieval cues to find it at the exact moment it matters.",
+      "Help the user retrieve, directly capture, carefully formulate, or narrowly review one brief usable message while preserving accepted sparse cards and avoiding unnecessary intake.",
     askSequence: [
-      "Start from the moment when the card should be shown, especially the user's own urge sentence or trigger cue.",
-      "Reflect what the card is trying to interrupt, steady, or help the user remember.",
-      "Ask what the card should say in one simple sentence or short message.",
-      "If the message is almost clear, offer one concise therapeutic wording and invite correction.",
-      "Ask for tags and trigger wording before title because retrieval matters more than the title.",
-      "Ask about color, typography, image, or layout only after the message and retrieval cues are clear.",
-      "Link values, behaviors, patterns, beliefs, modes, or reports only when those links will help future retrieval or coaching."
+      "Distinguish immediate support or retrieval, direct capture, guided formulation, and exact-record review or narrow update before asking for a cue or message.",
+      "For immediate support or retrieval, search existing flashcards first using the user's exact urge sentence, trigger situation, tags, message, title, and linked Psyche wording. If one fits, show its message first and keep the therapeutic wrapper brief; do not make support depend on completing or saving a card.",
+      "For direct capture, reflect the supplied message and any supplied or clearly inferable retrieval cue, search for a duplicate, and ask one accuracy or consent question. Do not manufacture a fresh episode or hypothesis and do not gate the save on title, tags, styling, links, or another retrieval field when the user explicitly wants a message-only card.",
+      "For review or narrow update, search for and read the exact existing flashcard first. Preserve its accepted message, title, trigger sentence, trigger situation, tags, styling, and links, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse accepted card through full create intake.",
+      "For guided formulation, start from the exact hard moment, urge sentence, trigger cue, mode activation, belief activation, or situation. Reflect what the card should help interrupt, steady, tolerate, remember, or choose.",
+      "Keep the user's stated need separate from the agent's interpretation. Offer at most one tentative hypothesis about what the card needs to meet in the hard moment, ask one fit-or-correction question, then ask for or offer one concise message in the user's language.",
+      "Identify one useful retrieval cue only when future retrieval would otherwise be unreliable. Ask about title, tags, visual styling, or links only when that optional choice changes use, and link values, behaviors, patterns, beliefs, modes, or reports only with the user's acceptance."
     ],
     requiredForCreate: ["message"],
     highValueOptionalFields: [
@@ -5684,8 +5685,11 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
       "Use shared batch entity routes for flashcard create, update, delete, restore, and search.",
       "When the user says they feel an urge or trigger, search flashcards by triggerSentence, triggerSituation, tags, message, and linked Psyche records before creating a new card.",
       "When showing a card, display or quote the message first, then add brief grounding, urge-surfing, cognitive defusion, schema-mode, or values-based coaching around it.",
-      "If the cue, urge sentence, mode, belief, or value pivot is clear, offer one hypothesis about what the card needs to meet in the hard moment before polishing its final wording.",
-      "Do not make the user fill styling fields before the therapeutic sentence is clear."
+      "Immediate support is complete when the matching message has been shown and the user's immediate need has been met; do not reopen creation intake unless the user asks for a new card.",
+      "A direct capture can be complete with an accepted message and one accuracy or consent check. Ask for at most one useful retrieval cue when none is supplied or inferable, but preserve an explicitly requested message-only card because message is the only required create field.",
+      "For review or update, read the exact card first, preserve sparse accepted wording, cues, styling, and links, and change only the requested field.",
+      "In guided formulation, if the cue, urge sentence, mode, belief, or value pivot is clear, offer at most one correctable hypothesis about what the card needs to meet in the hard moment before polishing its final wording.",
+      "Do not make the user fill styling fields before the therapeutic sentence is clear, and do not ask for them afterward unless they change use."
     ]
   },
   {
@@ -5755,14 +5759,15 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for a repeated emotionally meaningful kind of moment that should make future trigger reports consistent without erasing the lived stake.",
     coachingGoal:
-      "Help the user name the repeated episode type through a recent example, emotional stake, and boundary from nearby incidents before saving the taxonomy label.",
+      "Help the user directly capture, carefully formulate, or narrowly review a repeated episode type without forcing every intent through a recent example, emotional hypothesis, and boundary exercise.",
     askSequence: [
-      "Ask what kind of moment keeps recurring and why it matters to name it consistently.",
-      "Reflect the repeated emotional or relational stake in plain language before wording the category.",
-      "Ask for one recent example if the boundary is still abstract.",
-      "Clarify what belongs inside this event type and what should stay outside it.",
-      "Offer one concise candidate label once the repeated moment is clear.",
-      "Link it to trigger reports, beliefs, patterns, modes, or emotion definitions only after the category itself feels accurate."
+      "Distinguish direct capture, guided category formulation, and exact-record review or narrow update before asking for a recent example or deeper meaning.",
+      "For direct capture, reflect the user's supplied label and the recurring kind of moment it names, search normalized built-in and owner-scoped labels for a duplicate, and ask one accuracy or consent question. Do not demand a fresh episode, emotional hypothesis, boundary exercise, links, or optional description when the category is already clear.",
+      "For review or narrow update, search for and read the exact existing event type first. State whether it is built-in or custom, summarize its accepted label and description, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse custom entry through create intake and never mutate a built-in label.",
+      "For guided formulation, ask for one recent or recurring example only when the category boundary is still abstract, then reflect the repeated emotional or relational stake before wording the category.",
+      "Keep the observable kind of moment, the user's meaning, and the agent's interpretation separate. Offer at most one tentative hypothesis about what feels threatened, exposed, relieved, or important and ask one fit-or-correction question.",
+      "Distinguish event_type from one trigger_report episode, a whole behavior_pattern loop, and one emotion_definition feeling. Clarify what belongs inside or outside the category only when that boundary would change future report classification.",
+      "Offer one concise candidate label once the repeated moment is clear. Preserve raw customEventType wording in historical trigger reports, and link beliefs, patterns, modes, or emotion definitions only when a link would help future recognition."
     ],
     requiredForCreate: ["label"],
     highValueOptionalFields: ["description", "userId"],
@@ -5774,7 +5779,9 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     notes: [
       "event_type is a Psyche taxonomy record, but it still needs active listening because it names emotionally meaningful episodes.",
-      "Do not open with pure label wording unless the lived category and boundary are already clear.",
+      "A direct capture can be complete with the accepted label and an understandable recurring kind of moment plus one accuracy or consent check; do not manufacture a new episode or interpretation.",
+      "For review or update, read the exact entry first, preserve sparse accepted wording, and change only the requested custom field. Built-in labels are reviewable but read-only.",
+      "Do not open guided formulation with pure label wording unless the lived category and boundary are already clear.",
       "Offer a candidate label after the repeated moment is understood, and keep the user's wording when it already fits.",
       "Once one recurring example is clear, offer one hypothesis about the repeated emotional or relational stake that future reports need this event type to preserve.",
       "Search event_type through the shared batch entity route before creating. Built-in labels are read-only; custom labels are owner-scoped.",
@@ -5787,14 +5794,15 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     useWhen:
       "Use for a reusable feeling label that should help trigger reports and Psyche records name an emotion consistently in the user's own language.",
     coachingGoal:
-      "Define the feeling through its lived signature, boundary from nearby feelings, and likely signal or protective function before saving the label.",
+      "Help the user directly capture, carefully differentiate, or narrowly review a reusable feeling label without forcing every intent through a recent episode, body inventory, nearby-feeling contrast, and function hypothesis.",
     askSequence: [
-      "Ask when this feeling was present recently and what made it recognizable.",
-      "Reflect the felt signature before asking for a category or label polish.",
-      "Ask what distinguishes it from nearby feelings if the boundary matters.",
-      "Ask what the feeling tends to signal, protect, or ask for.",
-      "Offer one concise definition in the user's language and invite correction.",
-      "Link it to trigger reports, modes, beliefs, or patterns only after the definition feels steady."
+      "Distinguish direct capture, guided differentiation, and exact-record review or narrow update before asking for a recent feeling episode or deeper function.",
+      "For direct capture, reflect the supplied label and recognizable meaning, search normalized built-in and owner-scoped labels for a duplicate, and ask one accuracy or consent question. Do not demand a fresh episode, body signature, nearby-feeling contrast, function hypothesis, category, links, or optional description when the definition is already clear.",
+      "For review or narrow update, search for and read the exact existing emotion definition first. State whether it is built-in or custom, summarize its accepted label, description, and category, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse custom entry through create intake and never mutate a built-in definition.",
+      "For guided differentiation, ask for one recent feeling episode only when the lived signature is unclear. Reflect the felt signature before label polish and identify only the body signal, urge, image, thought, or relational meaning needed for future recognition.",
+      "Keep observed cues, the user's emotion word and meaning, and the agent's interpretation separate. Offer at most one tentative hypothesis about what the feeling warns about, protects, demands, or longs for, then ask one fit-or-correction question.",
+      "Contrast nearby feelings only when the distinction would change future recognition. Distinguish emotion_definition from one raw trigger-report emotion, a belief sentence, a mode state, or a behavior-pattern segment.",
+      "Offer one concise definition in the user's language, keep any candidate provisional until its lived signature and future use are clear, preserve historical raw emotion labels, and link trigger reports, modes, beliefs, or patterns only when a link would help recognition."
     ],
     requiredForCreate: ["label"],
     highValueOptionalFields: ["description", "category", "userId"],
@@ -5806,7 +5814,9 @@ const AGENT_ONBOARDING_PSYCHE_PLAYBOOKS = [
     ],
     notes: [
       "emotion_definition is a Psyche taxonomy record, not a generic dictionary entry.",
-      "Start from the lived feeling before asking for category or browsing fields.",
+      "A direct capture can be complete with the accepted label and recognizable meaning plus one accuracy or consent check; do not manufacture a recent episode, body inventory, or interpretation.",
+      "For review or update, read the exact entry first, preserve sparse accepted wording, and change only the requested custom field. Built-in definitions are reviewable but read-only.",
+      "In guided differentiation, start from the lived feeling before asking for category or browsing fields.",
       "Once the lived signature is visible, offer one hypothesis about what the emotion warns about, protects, demands, or longs for before saving the reusable definition.",
       "If the user already gives a good label, reflect the felt signature and ask only for the one boundary or definition detail that still matters.",
       "Search emotion_definition through the shared batch entity route before creating. Built-in labels are read-only; custom labels are owner-scoped.",

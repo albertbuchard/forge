@@ -773,11 +773,40 @@ describe("question flow quality coverage", () => {
     expect(entityPlaybook).toMatch(
       /do not ask a broad review question again[\s\S]*then act/i
     );
-    expect(getSectionSlice(entityPlaybook, "Event Type")).toMatch(
-      /Psyche taxonomy[\s\S]*emotionally meaningful moment[\s\S]*shared batch CRUD/i
+    const eventTypeSection = getSectionSlice(entityPlaybook, "Event Type");
+    expect(eventTypeSection).toMatch(
+      /emotionally meaningful[\s\S]*Psyche taxonomy[\s\S]*shared batch CRUD/i
     );
-    expect(getSectionSlice(entityPlaybook, "Emotion Definition")).toMatch(
-      /Psyche taxonomy[\s\S]*lived signature[\s\S]*shared batch CRUD/i
+    expect(eventTypeSection).toMatch(
+      /direct capture[\s\S]*guided category formulation[\s\S]*exact-record review or\s+narrow update/i
+    );
+    expect(eventTypeSection).toMatch(
+      /read the exact existing event type first[\s\S]*built-in[\s\S]*read-only/i
+    );
+    expect(eventTypeSection).toMatch(
+      /observable kind of moment[\s\S]*user's meaning[\s\S]*tentative emotional[\s\S]*relational hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(eventTypeSection).toMatch(
+      /direct capture has an accepted label[\s\S]*without requiring a fresh episode/i
+    );
+    const emotionDefinitionSection = getSectionSlice(
+      entityPlaybook,
+      "Emotion Definition"
+    );
+    expect(emotionDefinitionSection).toMatch(
+      /lived signature[\s\S]*Psyche taxonomy[\s\S]*shared batch CRUD/i
+    );
+    expect(emotionDefinitionSection).toMatch(
+      /direct capture[\s\S]*guided differentiation[\s\S]*exact-record review or\s+narrow update/i
+    );
+    expect(emotionDefinitionSection).toMatch(
+      /read the exact existing emotion definition[\s\S]*built-in[\s\S]*read-only/i
+    );
+    expect(emotionDefinitionSection).toMatch(
+      /observed cues[\s\S]*user's emotion word and meaning[\s\S]*tentative\s+function hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(emotionDefinitionSection).toMatch(
+      /direct capture has an accepted label[\s\S]*without requiring a fresh episode/i
     );
     expect(entityPlaybook).toMatch(
       /what would make the comparison confusing or unfair if the label stayed as-is/i
@@ -978,7 +1007,11 @@ describe("question flow quality coverage", () => {
         /what needs attention first/i,
         /support, begin, resume, review, or close/i
       ],
-      ["Flashcard", /exact urge sentence or situation/i, /one simple message/i],
+      [
+        "Flashcard",
+        /exact urge sentence or situation/i,
+        /one (?:concise working|usable) message/i
+      ],
       [
         "Trigger Report",
         /what happened in that moment/i,
@@ -1006,6 +1039,23 @@ describe("question flow quality coverage", () => {
         `${section} should stay grounded in lived experience`
       ).toMatch(anchor);
     }
+
+    const flashcardSection = getSectionSlice(psychePlaybook, "Flashcard");
+    expect(flashcardSection).toMatch(
+      /immediate support or retrieval[\s\S]*direct capture[\s\S]*guided formulation[\s\S]*exact-record review or\s+narrow update/i
+    );
+    expect(flashcardSection).toMatch(
+      /read the exact existing flashcard first[\s\S]*preserve[\s\S]*patch only that[\s\S]*accepted change[\s\S]*sparse accepted card/i
+    );
+    expect(flashcardSection).toMatch(
+      /user's stated need separate from the agent's interpretation[\s\S]*at most\s+one tentative hypothesis[\s\S]*fit-or-correction/i
+    );
+    expect(flashcardSection).toMatch(
+      /`message` is the only required create field[\s\S]*explicitly requested message-only card/i
+    );
+    expect(flashcardSection).toMatch(
+      /shared batch entity routes[\s\S]*not a guessed dedicated route/i
+    );
 
     const valueSection = getSectionSlice(psychePlaybook, "Value");
     expect(valueSection).toMatch(
