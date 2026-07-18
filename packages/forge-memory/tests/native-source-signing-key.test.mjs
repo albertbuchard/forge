@@ -231,15 +231,19 @@ test("prepare releases use fast gates and unsigned integration smoke without wea
     /RELEASE_TEST_PROFILE="\$\{FORGE_RELEASE_TEST_PROFILE:-fast\}"/
   );
   assert.match(releaseSource, /FULL_VERIFY_TESTS=\(\s*"npm run test:server"/);
-  assert.match(smokeSource, /\["full", "publish-from-tag"\]\.includes\(releaseMode\)/);
-  assert.doesNotMatch(
+  assert.match(
     smokeSource,
-    /\["full", "prepare", "publish-from-tag"\]/
+    /\["full", "publish-from-tag"\]\.includes\(releaseMode\)/
   );
+  assert.doesNotMatch(smokeSource, /\["full", "prepare", "publish-from-tag"\]/);
   assert.match(smokeSource, /resolvePeerRuntimeConfiguration/);
   assert.match(
     smokeSource,
     /socketPath: configuration\.supervisor\.socketPath/
+  );
+  assert.match(
+    smokeSource,
+    /FORGE_COMPANION_IROH_BIN: companionIrohBinaryPath/
   );
 });
 

@@ -873,6 +873,7 @@ dependencies = [
  "iroh",
  "pkcs8",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "signature",

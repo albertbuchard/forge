@@ -59,11 +59,21 @@ struct ProbeArgs {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    install_tls_crypto_provider()?;
     init_logging();
     match Cli::parse().command {
         Command::Host(args) => run_host(args).await,
         Command::Probe(args) => run_probe(args).await,
     }
+}
+
+fn install_tls_crypto_provider() -> anyhow::Result<()> {
+    if rustls::crypto::CryptoProvider::get_default().is_some() {
+        return Ok(());
+    }
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|_| anyhow!("installing the TLS crypto provider failed"))
 }
 
 async fn run_host(args: HostArgs) -> anyhow::Result<()> {
@@ -472,6 +482,13 @@ fn init_logging() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tls_crypto_provider_installation_is_idempotent() {
+        install_tls_crypto_provider().unwrap();
+        install_tls_crypto_provider().unwrap();
+        assert!(rustls::crypto::CryptoProvider::get_default().is_some());
+    }
 
     #[test]
     fn proxy_url_rejects_absolute_paths() {

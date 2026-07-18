@@ -27,6 +27,14 @@ const tempRoot = realpathSync(
 const installRoot = path.join(tempRoot, "install");
 const dataRoot = path.join(tempRoot, "data");
 const peerSourceTarget = path.join(tempRoot, "forge-peer-target");
+const companionIrohTarget = path.join(tempRoot, "companion-iroh-target");
+const companionIrohBinaryPath = path.join(
+  companionIrohTarget,
+  "release",
+  process.platform === "win32"
+    ? "forge-companion-iroh.exe"
+    : "forge-companion-iroh"
+);
 const peerSocketPath = path.join(
   realpathSync("/tmp"),
   `forge-peer-packed-${process.pid}.sock`
@@ -463,10 +471,15 @@ try {
         timeout: 180_000,
         env: {
           ...process.env,
-          CARGO_TARGET_DIR: path.join(tempRoot, "companion-iroh-target")
+          CARGO_TARGET_DIR: companionIrohTarget
         }
       }
     );
+    if (!existsSync(companionIrohBinaryPath)) {
+      throw new Error(
+        "locked packed companion-Iroh build did not produce its host binary"
+      );
+    }
   }
   const peerRuntime = await verifyPackedForgePeerSource(installedPluginRoot, {
     buildBinary: !runtimeOnly
@@ -488,6 +501,9 @@ try {
               FORGE_PEER_ENABLE_IROH: "0"
             }
           : packedPeerEnvironment(peerRuntime.binaryPath)),
+        ...(!runtimeOnly
+          ? { FORGE_COMPANION_IROH_BIN: companionIrohBinaryPath }
+          : {}),
         HOST: "127.0.0.1",
         PORT: String(port)
       },
