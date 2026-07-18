@@ -45,6 +45,7 @@ VERIFY_TESTS=(
   "npm run check:server -- --pretty false"
   "npm run lint"
   "node --import tsx --test apps/api/src/data-management.test.ts apps/api/src/people-legacy-schema-repair.test.ts apps/api/src/people-routes.test.ts apps/api/src/peer-api-schemas.test.ts apps/api/src/peer-openapi-contract.test.ts apps/api/src/peer-route-contract.test.ts"
+  "npm run test:people-sharing-release-fast"
   "npm run build"
   "npm run build:openclaw-plugin"
   "npm run smoke:packed-openclaw-runtime"

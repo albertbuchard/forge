@@ -231,6 +231,7 @@ test("prepare releases use fast gates and unsigned integration smoke without wea
     /RELEASE_TEST_PROFILE="\$\{FORGE_RELEASE_TEST_PROFILE:-fast\}"/
   );
   assert.match(releaseSource, /FULL_VERIFY_TESTS=\(\s*"npm run test:server"/);
+  assert.match(releaseSource, /npm run test:people-sharing-release-fast/);
   assert.match(
     smokeSource,
     /\["full", "publish-from-tag"\]\.includes\(releaseMode\)/
