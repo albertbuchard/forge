@@ -20,6 +20,7 @@ FORGE_MEMORY_PACKAGE_LOCK_JSON="${FORGE_DIR}/packages/forge-memory/package-lock.
 SAFE_OPENCLAW_HOST_RANGE="2026.6.9"
 DEFAULT_FORGE_PORT=4317
 RELEASE_MODE="${FORGE_RELEASE_MODE:-full}"
+RELEASE_TEST_PROFILE="${FORGE_RELEASE_TEST_PROFILE:-fast}"
 SKIP_UPLOAD="${FORGE_RELEASE_SKIP_UPLOAD:-0}"
 RELEASE_COMMIT_CREATED=0
 RELEASE_TAG_CREATED=0
@@ -40,10 +41,16 @@ VERIFY_TESTS=(
   "npm --prefix packages/forge-memory ci"
   "npm run test:forge-memory"
   "npm exec -- vitest run apps/web/src/openclaw/parity.test.ts apps/web/src/openclaw/index.test.ts apps/web/src/openclaw/api-client.test.ts apps/web/src/openclaw/manifest.test.ts apps/web/src/openclaw/tool-contract.test.ts"
+  "npm run check -- --pretty false"
+  "npm run check:server -- --pretty false"
+  "npm run lint"
+  "node --import tsx --test apps/api/src/data-management.test.ts apps/api/src/people-legacy-schema-repair.test.ts apps/api/src/people-routes.test.ts apps/api/src/peer-api-schemas.test.ts apps/api/src/peer-openapi-contract.test.ts apps/api/src/peer-route-contract.test.ts"
   "npm run build"
-  "npm run test:server"
   "npm run build:openclaw-plugin"
   "npm run smoke:packed-openclaw-runtime"
+)
+FULL_VERIFY_TESTS=(
+  "npm run test:server"
 )
 
 usage() {
@@ -52,6 +59,7 @@ Usage:
   ./scripts/release/release-forge-openclaw-plugin.sh <version|patch|minor|major>
   FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh <version|patch|minor|major>
   FORGE_RELEASE_MODE=publish-from-tag ./scripts/release/release-forge-openclaw-plugin.sh <version>
+  FORGE_RELEASE_TEST_PROFILE=full FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh <version|patch|minor|major>
 
 Examples:
   ./scripts/release/release-forge-openclaw-plugin.sh 1.2.3
@@ -66,6 +74,9 @@ This script:
 4. commits and tags the Forge nested repo
 5. pushes main + tag to origin
 6. publishes forge-openclaw-plugin to npm in full mode, or leaves that step to CI in prepare mode; forge-memory publishes through its GitHub Actions trusted-publishing workflow on the same v<version> tag
+
+The default fast profile runs the bounded publication-critical checks. Set
+FORGE_RELEASE_TEST_PROFILE=full to append the exhaustive server suite.
 EOF
 }
 
@@ -152,6 +163,15 @@ require_valid_release_mode() {
     full|prepare|publish-from-tag) ;;
     *)
       fail "Unsupported FORGE_RELEASE_MODE '${RELEASE_MODE}'. Use full, prepare, or publish-from-tag."
+      ;;
+  esac
+}
+
+require_valid_test_profile() {
+  case "${RELEASE_TEST_PROFILE}" in
+    fast|full) ;;
+    *)
+      fail "Unsupported FORGE_RELEASE_TEST_PROFILE '${RELEASE_TEST_PROFILE}'. Use fast or full."
       ;;
   esac
 }
@@ -443,6 +463,15 @@ run_verification_suite() {
       eval "${command_text}"
     )
   done
+  if [[ "${RELEASE_TEST_PROFILE}" == "full" ]]; then
+    for command_text in "${FULL_VERIFY_TESTS[@]}"; do
+      echo "+ ${command_text}"
+      (
+        cd "${FORGE_DIR}"
+        eval "${command_text}"
+      )
+    done
+  fi
 }
 
 create_release_commit() {
@@ -518,6 +547,7 @@ main() {
   }
 
   require_valid_release_mode
+  require_valid_test_profile
   require_command git
   require_command cargo
   require_command node

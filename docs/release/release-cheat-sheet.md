@@ -87,6 +87,14 @@ Release flow:
 FORGE_RELEASE_MODE=prepare ./scripts/release/release-forge-openclaw-plugin.sh patch
 ```
 
+This uses the bounded `fast` release profile by default. Run the exhaustive server
+matrix separately when needed:
+
+```bash
+FORGE_RELEASE_TEST_PROFILE=full FORGE_RELEASE_MODE=prepare \
+  ./scripts/release/release-forge-openclaw-plugin.sh patch
+```
+
 The workflow verifies the tag is on `main`, checks that
 `packages/forge-memory/package.json` matches the shared tag version, runs the
 package smoke tests, packs the tarball, smoke-runs the packed CLI, then
