@@ -209,6 +209,35 @@ test("direct publishing scripts require signing and rebuild from the release com
   }
 });
 
+test("prepare releases use fast gates and unsigned integration smoke without weakening publication", () => {
+  const releaseSource = requireText(
+    path.join(
+      forgeRoot,
+      "scripts",
+      "release",
+      "release-forge-openclaw-plugin.sh"
+    )
+  );
+  const smokeSource = requireText(
+    path.join(
+      forgeRoot,
+      "scripts",
+      "smoke",
+      "smoke-test-packed-openclaw-runtime.mjs"
+    )
+  );
+  assert.match(
+    releaseSource,
+    /RELEASE_TEST_PROFILE="\$\{FORGE_RELEASE_TEST_PROFILE:-fast\}"/
+  );
+  assert.match(releaseSource, /FULL_VERIFY_TESTS=\(\s*"npm run test:server"/);
+  assert.match(smokeSource, /\["full", "publish-from-tag"\]\.includes\(releaseMode\)/);
+  assert.doesNotMatch(
+    smokeSource,
+    /\["full", "prepare", "publish-from-tag"\]/
+  );
+});
+
 test("release builds fail before packaging when the signing key is absent", () => {
   const environment = {
     ...process.env,

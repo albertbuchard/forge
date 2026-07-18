@@ -44,7 +44,7 @@ if (!["full", "runtime"].includes(smokeMode)) {
 const runtimeOnly = smokeMode === "runtime";
 const requireSignedSource =
   process.env.FORGE_REQUIRE_SIGNED_NATIVE_SOURCE === "1" ||
-  ["full", "prepare", "publish-from-tag"].includes(releaseMode);
+  ["full", "publish-from-tag"].includes(releaseMode);
 let child = null;
 
 function run(command, args, options = {}) {
