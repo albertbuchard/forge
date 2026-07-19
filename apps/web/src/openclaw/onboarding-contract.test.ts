@@ -1444,7 +1444,9 @@ describe("forge onboarding contract", () => {
       onboarding.toolInputCatalog.map((entry) => entry.toolName)
     );
     expect(
-      onboarding.toolInputCatalog.some((entry) => entry.toolName.includes(" | "))
+      onboarding.toolInputCatalog.some((entry) =>
+        entry.toolName.includes(" | ")
+      )
     ).toBe(false);
     for (const [workflowName, tools] of Object.entries(
       onboarding.recommendedPluginTools ?? {}
@@ -1745,10 +1747,91 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("goal")).toEqual(
       expect.objectContaining({
         routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /without turning an explicit save or narrow correction into a values interview/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided clarification, and exact-record review or narrow update/i
+          ),
+          expect.stringMatching(/read the exact existing goal first/i),
+          expect.stringMatching(/Use shared batch CRUD for every Goal/i)
+        ]),
         apiAccessHint: expect.stringMatching(
           /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/goals/
         )
       })
+    );
+    const goalQuestionFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "goal"
+    )?.questionFlow;
+    expect(goalQuestionFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*Forge requires only the title[\s\S]*Review or narrow update[\s\S]*exact existing goal[\s\S]*never force a sparse goal through full create intake[\s\S]*Guided clarification[\s\S]*All Goal writes remain on shared batch CRUD/i
+    );
+    expect(playbookByFocus.get("habit")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /without turning a direct save, narrow correction, or today's outcome into a full habit-design interview/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided habit design, exact-record review or narrow update, and check-in or outcome correction/i
+          ),
+          expect.stringMatching(/read the exact existing habit first/i),
+          expect.stringMatching(
+            /negative Resisted to stored missed[\s\S]*negative Performed to stored done/i
+          ),
+          expect.stringMatching(/forge_update_entities[\s\S]*patch\.checkIn/i)
+        ]),
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/update[\s\S]*\/api\/v1\/habits/
+        )
+      })
+    );
+    const habitCatalogEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "habit"
+    );
+    expect(habitCatalogEntry?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "checkIn",
+          type: expect.stringMatching(/update-only/i),
+          description: expect.stringMatching(
+            /forge_update_entities[\s\S]*Resisted maps to missed[\s\S]*Performed maps to done/i
+          )
+        })
+      ])
+    );
+    expect(habitCatalogEntry?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*Review or narrow update[\s\S]*Guided design[\s\S]*positive Done=done[\s\S]*negative Resisted=missed[\s\S]*forge_update_entities[\s\S]*patch\.checkIn/i
+    );
+    expect(playbookByFocus.get("insight")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /grounded interpretation[\s\S]*evidence[\s\S]*user's meaning[\s\S]*agent's hypothesis distinct/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, evidence-guided synthesis, exact-record review or narrow update, and read-only review/i
+          ),
+          expect.stringMatching(/read the exact existing insight first/i),
+          expect.stringMatching(
+            /observed evidence[\s\S]*user says it means[\s\S]*tentative interpretation/i
+          ),
+          expect.stringMatching(/Use shared batch CRUD for every Insight/i)
+        ]),
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/insights/
+        )
+      })
+    );
+    const insightQuestionFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "insight"
+    )?.questionFlow;
+    expect(insightQuestionFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*three required fields[\s\S]*Read-only review[\s\S]*do not manufacture a write[\s\S]*Narrow update[\s\S]*sparse optional metadata[\s\S]*Evidence-guided synthesis[\s\S]*tentative agent hypothesis[\s\S]*fit-or-correction[\s\S]*All Insight writes remain on shared batch CRUD/i
     );
     expect(playbookByFocus.get("wiki_page")).toEqual(
       expect.objectContaining({
@@ -2042,7 +2125,9 @@ describe("forge onboarding contract", () => {
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(
       /tentative functional-analysis hypothesis/i
     );
-    expect(psycheByFocus.get("behavior_pattern")?.askSequence.join(" ")).toMatch(
+    expect(
+      psycheByFocus.get("behavior_pattern")?.askSequence.join(" ")
+    ).toMatch(
       /direct capture[\s\S]*guided functional analysis[\s\S]*review or narrow update[\s\S]*search for and read the exact existing behavior pattern first[\s\S]*patch only that accepted change[\s\S]*trigger_report for one episode[\s\S]*behavior for one observable move[\s\S]*belief_entry for one central sentence[\s\S]*goal for a desired outcome[\s\S]*rapidly made it mean[\s\S]*at most one tentative functional hypothesis[\s\S]*fit-or-correction/i
     );
     expect(psycheByFocus.get("behavior_pattern")?.notes.join(" ")).toMatch(

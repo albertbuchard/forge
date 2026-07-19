@@ -1972,6 +1972,13 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
         required: false,
         description: "XP removed on misaligned check-ins.",
         defaultValue: 8
+      },
+      {
+        name: "checkIn",
+        type: "update-only { status: done|missed, dateKey?, timezone?, note?, description? }",
+        required: false,
+        description:
+          "Official habit outcome written through forge_update_entities with habit.patch.checkIn. For positive habits, Done maps to done and Missed maps to missed. For negative habits, Resisted maps to missed and Performed maps to done. Omit dateKey only when today's runtime-local date is intended."
       }
     ]
   },
@@ -4664,15 +4671,17 @@ const AGENT_ONBOARDING_CONVERSATION_RULES = [
 const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "goal",
-    openingQuestion: "What direction are you trying to keep hold of here?",
+    openingQuestion:
+      "Are you naming a direction, making sense of why it matters, or updating a goal that already exists?",
     coachingGoal:
-      "Clarify the direction and why it matters, not just produce a title.",
+      "Help the user preserve a chosen direction without turning an explicit save or narrow correction into a values interview.",
     askSequence: [
-      "Ask what direction or outcome the user wants to keep in view.",
-      "Reflect the deeper stake in plain language before moving on.",
-      "Ask why it matters now.",
-      "Distinguish the goal from a project or task.",
-      "Clarify horizon and status only after the meaning is clear."
+      "Distinguish direct capture, guided clarification, and exact-record review or narrow update before asking why the goal matters or how it should be placed.",
+      "For direct capture, reflect the user's supplied title and chosen direction, search normalized titles for a duplicate, and ask one accuracy or consent question. Do not demand a description, why-now explanation, success measure, horizon, status, links, owner, tags, notes, or target points when the title already names the direction clearly.",
+      "For review or narrow update, search for and read the exact existing goal first. Summarize its accepted title, direction or body, horizon, status, and meaningful links, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse existing goal through full create intake.",
+      "For guided clarification, ask what direction or outcome the user wants to keep in view, reflect the deeper stake in plain language, and ask why it matters now only when the answer would change the direction or wording.",
+      "Distinguish a durable goal direction from a project with a bounded deliverable or a task with one concrete next action. Offer one concise working title and ask whether it fits rather than making the user formulate it alone.",
+      "Clarify horizon, status, owner, placement, or links only when the detail changes later review, responsibility, or navigation. Use shared batch CRUD for every Goal create, update, delete, restore, or search."
     ]
   },
   {
@@ -4742,15 +4751,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "habit",
     openingQuestion:
-      "What recurring move are you trying to strengthen or interrupt?",
+      "Are you defining a recurring move to strengthen or interrupt, adjusting it, or recording what happened today?",
     coachingGoal:
-      "Define the recurring behavior and cadence clearly enough for honest later check-ins.",
+      "Make the recurring action and honest check-in meaning clear without turning a direct save, narrow correction, or today's outcome into a full habit-design interview.",
     askSequence: [
-      "Ask what the recurring behavior is in plain language.",
-      "Ask whether doing it is aligned or a slip.",
-      "Ask what an honest hit or miss would look like in an ordinary week.",
-      "Ask about cadence and what counts as an honest check-in in practice.",
-      "Ask about links only if they will help later review."
+      "Distinguish direct capture, guided habit design, exact-record review or narrow update, and check-in or outcome correction before asking about cadence or motivation.",
+      "For direct capture, reflect the user's observable recurring action, search normalized titles for a duplicate, and ask one accuracy or consent question. Ask whether the habit is positive or negative only when doing the named action does not already make aligned versus misaligned meaning clear; do not demand a description, cadence discussion, links, XP settings, or an underlying psychological formulation.",
+      "For review or narrow update, search for and read the exact existing habit first. Summarize its accepted action, polarity, cadence, status, check-in meaning, and meaningful links, ask only what is newly true or inaccurate, and patch only that accepted change; never force a sparse habit through full create intake.",
+      "For guided design, ask what one observable action counts, whether doing it is aligned or a slip, and what an honest check-in means. Ask about frequency, target count, or weekdays only when the user does not accept the daily default or the recurrence would otherwise be ambiguous.",
+      "If the user is describing a recurring protective or avoidance loop rather than only a behavior to track, reflect that distinction and offer a linked behavior_pattern without making Psyche formulation a prerequisite for saving the habit.",
+      "For a check-in, read the exact habit first and ask only for the user-facing outcome and a date when it is not today. Map positive Done to stored done and positive Missed to stored missed; map negative Resisted to stored missed and negative Performed to stored done. Use forge_update_entities with entityType habit and patch.checkIn, then read the habit back. Do not ask the user to choose raw done or missed when polarity changes what those values mean.",
+      "Ask for a check-in note, description, timezone, links, reward, or penalty only when the user says that detail matters. Use shared batch CRUD for Habit definition changes and official check-ins; do not invent a dedicated agent check-in tool."
     ]
   },
   {
@@ -4818,13 +4829,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "insight",
     openingQuestion:
-      "What is the clearest thing you want future-you or the agent to remember from this?",
+      "Are you saving an insight you already have, asking Forge to derive one from evidence, or reviewing an existing insight?",
     coachingGoal:
-      "Capture one grounded observation or recommendation clearly enough that it remains useful later.",
+      "Preserve a grounded interpretation and useful recommendation while keeping evidence, the user's meaning, and the agent's hypothesis distinct.",
     askSequence: [
-      "Ask what pattern, tension, or observation should be remembered.",
-      "Ask what entity or timeframe it belongs to, if any.",
-      "Ask what recommendation, caution, or invitation should remain explicit."
+      "Distinguish direct capture, evidence-guided synthesis, exact-record review or narrow update, and read-only review before asking for context or recommendations.",
+      "For direct capture, reflect the supplied observation and recommendation, search recent insights for a semantic duplicate, offer a concise title only if one is missing, and ask one accuracy or consent question. Do not demand an entity link, timeframe, rationale, confidence score, evidence array, visibility, status, CTA label, or origin metadata when title, summary, and recommendation are already clear.",
+      "For read-only review or narrow update, search for and read the exact existing insight first. Separate its accepted title, summary, recommendation, rationale, confidence, evidence, timeframe, links, status, and visibility from what is newly true or inaccurate; answer the review question before proposing a write, and patch only the accepted change without backfilling sparse optional metadata.",
+      "For evidence-guided synthesis, read the relevant Forge records or overview before asking the user to reconstruct them. State the observed evidence first, reflect what the user says it means, then offer at most one tentative interpretation or recommendation and ask whether it fits or what needs correction.",
+      "Keep source evidence, the user's interpretation, and the agent's hypothesis visibly separate. Do not present confidence as certainty, and do not invent evidence to make the insight sound stronger.",
+      "Distinguish insight from a note that preserves raw detail, self_observation for one observed moment, wiki_page for durable reusable knowledge, task for an action, and trigger_report, belief_entry, behavior_pattern, mode_profile, or another Psyche record for the primary psychological material. Offer links only after the primary containers are clear; never use an insight to replace them.",
+      "Before saving, summarize the proposed title, grounded summary, and recommendation in the user's language, identify any evidence or interpretation uncertainty that matters, and ask one accuracy or consent question. Use shared batch CRUD for every Insight create, update, delete, restore, or search."
     ]
   },
   {
@@ -5962,6 +5977,15 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "preference_item") {
     return "Ready on the selected Preference Item lane. Review is ready after reading the exact item and Preferences Workspace for the selected user, domain, and context. Ordinary standalone create or update is ready for shared batch CRUD when the candidate, domain, accepted wording, and duplicate check are clear. Enqueue is ready when the exact existing Forge entity, user, domain, and source-identity duplicate check are clear; use forge_enqueue_preferences_item_from_entity rather than hand-building source links. Judgment or signal is ready when the exact context and item or pair plus truthful outcome or signal are clear. Score override is ready only after the workspace evidence is explained, the user explicitly chooses correction or protection rather than new evidence, the exact item, user, domain, and context are known, and at least one override field is intentionally changed. Never use batch CRUD for enqueue, judgment, signal, or score override actions.";
   }
+  if (guide.entityType === "goal") {
+    return "Ready on the selected Goal lane. Direct capture is ready for shared batch CRUD when an accepted title names the chosen direction and one accuracy or consent check confirms the save; Forge requires only the title, so do not require a description, why-now explanation, success measure, horizon, status, links, owner, tags, notes, or target points. Review or narrow update is ready only after reading the exact existing goal, separating its accepted title, direction, horizon, status, and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse goal through full create intake. Guided clarification is ready when the durable direction and accepted wording are clear enough to distinguish the goal from a project or task; why it matters and horizon are required only when they change the meaning or later use. All Goal writes remain on shared batch CRUD.";
+  }
+  if (guide.entityType === "habit") {
+    return "Ready on the selected Habit lane. Direct capture is ready for shared batch CRUD when an accepted title names one observable recurring action, polarity is explicit only when aligned versus misaligned meaning is otherwise ambiguous, and one accuracy or consent check confirms the save; do not require a description, custom cadence, links, XP settings, or Psyche formulation. Review or narrow update is ready only after reading the exact existing habit and isolating the smallest accepted definition change without backfilling a sparse record. Guided design is ready when the observable action, honest success or slip meaning, and any non-default cadence needed for unambiguous check-ins are clear. A check-in is ready after reading the exact habit and resolving the user-facing outcome plus a non-today date when needed: positive Done=done, positive Missed=missed, negative Resisted=missed, and negative Performed=done. Log or correct it through forge_update_entities with entityType habit and patch.checkIn; do not guess a dedicated agent check-in tool.";
+  }
+  if (guide.entityType === "insight") {
+    return "Ready on the selected Insight lane. Direct capture is ready for shared batch CRUD when the accepted title, grounded summary, and recommendation satisfy Forge's three required fields and one accuracy or consent check confirms them; do not require a link, timeframe, rationale, confidence, evidence, visibility, status, CTA label, or origin metadata. Read-only review is ready after reading the exact existing insight and its evidence; do not manufacture a write. Narrow update is ready only after that exact read separates accepted content and evidence from the smallest newly true or inaccurate change, without backfilling sparse optional metadata. Evidence-guided synthesis is ready when observed Forge evidence, the user's interpretation, and at most one tentative agent hypothesis or recommendation remain distinct, any consequential uncertainty is named, one fit-or-correction check is complete, and the user accepts title, summary, and recommendation. If a note, self_observation, wiki_page, task, trigger_report, belief_entry, behavior_pattern, mode_profile, or another primary record fits better, settle or link that container first. All Insight writes remain on shared batch CRUD.";
+  }
   if (guide.classification === "specialized_crud_entity") {
     return "Ready when the specialized object, lifecycle action, and any route placeholder or provenance detail are clear enough to use the published specialized CRUD route.";
   }
@@ -7059,8 +7083,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   },
   {
     toolName: "forge_log_body_checkin",
-    summary:
-      "Record a body-composition check-in for trend calculations.",
+    summary: "Record a body-composition check-in for trend calculations.",
     whenToUse:
       "Use when the operator wants to preserve weight, circumference, body-fat, photo-asset, or body-composition notes.",
     inputShape:
@@ -7075,8 +7098,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   },
   {
     toolName: "forge_log_appearance_checkin",
-    summary:
-      "Record an appearance check-in with bounded visual-look scores.",
+    summary: "Record an appearance check-in with bounded visual-look scores.",
     whenToUse:
       "Use when the operator wants to preserve muscle fullness, leanness, vascularity, puffiness, visual bloat, posture confidence, outfit fit, or overall aesthetic score.",
     inputShape:
@@ -7137,8 +7159,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
   },
   {
     toolName: "forge_start_nutrition_experiment",
-    summary:
-      "Create a structured N-of-1 nutrition experiment.",
+    summary: "Create a structured N-of-1 nutrition experiment.",
     whenToUse:
       "Use after reviewing current patterns when the operator accepts a testable intervention, outcome metric, and experiment framing.",
     inputShape:
@@ -7362,7 +7383,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     whenToUse:
       "Use for completion-style retroactive work, not for starting a live session or adjusting minutes on an existing record.",
     inputShape:
-      "{ taskId?: string, title?: string, description?: string, summary?: string<=8000, goalId?: string|null, projectId?: string|null, owner?: string, userId?: string|null, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[<=64], completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
+      '{ taskId?: string, title?: string, description?: string, summary?: string<=8000, goalId?: string|null, projectId?: string|null, owner?: string, userId?: string|null, status?: TaskStatus, priority?: TaskPriority, dueDate?: string|null, effort?: TaskEffort, energy?: TaskEnergy, points?: number, tagIds?: string[<=64], completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: "commit"|"branch"|"pull_request", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }',
     requiredFields: ["taskId or title"],
     notes: [
       "Use taskId when logging work against an existing task.",
@@ -7422,7 +7443,7 @@ export const AGENT_ONBOARDING_TOOL_INPUT_CATALOG = [
     summary: "Finish an active run as completed work.",
     whenToUse: "Use when the user has finished the live work block.",
     inputShape:
-      "{ taskRunId: string, actor?: string<=160, note?: string<=4000, completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: \"commit\"|\"branch\"|\"pull_request\", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }",
+      '{ taskRunId: string, actor?: string<=160, note?: string<=4000, completionReport?: { workSummary?: string<=8000, modifiedFiles?: repositoryRelativePath[<=256, each<=512], linkedGitRefIds?: string[<=64, each<=128] }, gitRefs?: Array<=64<{ id?: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, refType: "commit"|"branch"|"pull_request", provider?: string<=64, repository?: string<=255, refValue: string<=512, url?: http(s)Url<=2048|null, displayTitle?: string<=512 }>, closeoutNote?: { contentMarkdown: string<=16000, author?: string<=160|null, tags?: string[<=24], destroyAt?: string|null, links?: Array<=64<{ entityType, entityId, anchorKey? }> } }',
     requiredFields: ["taskRunId"],
     notes: [
       "This is the truthful way to finish live work and award completion effects.",
@@ -12363,10 +12384,7 @@ export async function buildServer(
   ) => {
     const personRedacted = redactBatchPersonPayload(payload, context);
     const preferenceRedacted = transformPreferenceCatalog
-      ? redactBatchPreferencePayload(
-          personRedacted,
-          transformPreferenceCatalog
-        )
+      ? redactBatchPreferencePayload(personRedacted, transformPreferenceCatalog)
       : personRedacted;
     return redactBatchArtifactPayload(preferenceRedacted);
   };
@@ -14763,10 +14781,9 @@ export async function buildServer(
       validUserIds: listUsers().map((user) => user.id)
     });
     return {
-      context: buildOperatorContext(
-        readScope,
-        { noteScope: noteReadScopeForAuth(auth, scopedUserIdsForReads) }
-      )
+      context: buildOperatorContext(readScope, {
+        noteScope: noteReadScopeForAuth(auth, scopedUserIdsForReads)
+      })
     };
   });
   app.get("/api/v1/operator/overview", async (request) => {
@@ -18623,10 +18640,7 @@ export async function buildServer(
       );
     }
     reply
-      .header(
-        "Idempotency-Replayed",
-        submission.replayed ? "true" : "false"
-      )
+      .header("Idempotency-Replayed", submission.replayed ? "true" : "false")
       .code(submission.replayed ? 200 : 201);
     return { signal: submission.signal, score };
   });
@@ -20629,9 +20643,9 @@ export async function buildServer(
       const model = parsed.model.trim();
       const usesSavedBinding = Boolean(
         existing &&
-          provider === existing.provider &&
-          baseUrl === existing.baseUrl &&
-          model === existing.model
+        provider === existing.provider &&
+        baseUrl === existing.baseUrl &&
+        model === existing.model
       );
       const callerApiKey = parsed.apiKey?.trim() || null;
       if (existing && !usesSavedBinding && !callerApiKey) {

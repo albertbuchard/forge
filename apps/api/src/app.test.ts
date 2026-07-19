@@ -21210,7 +21210,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(goalConversationPlaybook);
     assert.match(
       goalConversationPlaybook.openingQuestion,
-      /trying to keep hold of here/i
+      /naming a direction[\s\S]*updating a goal/i
     );
     const taskConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -21252,7 +21252,7 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(insightConversationPlaybook);
     assert.match(
       insightConversationPlaybook.openingQuestion,
-      /future-you or the agent/i
+      /saving an insight[\s\S]*reviewing an existing insight/i
     );
     const tagConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(

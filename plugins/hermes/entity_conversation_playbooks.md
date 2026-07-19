@@ -1394,15 +1394,35 @@ Use these when the user is correcting or revising something that already exists.
 
 ## Goal
 
-Aim: clarify the direction and why it matters, not just produce a title.
+Aim: help the user preserve a chosen direction without turning an explicit save
+or narrow correction into a values interview.
+
+Choose the lane first:
+
+- direct capture
+- guided clarification
+- exact-record review or narrow update
 
 Arc:
 
-1. Ask what direction or outcome the user wants to keep in view.
-2. Reflect back the deeper stake in plain language before moving on.
-3. Ask why it matters now.
-4. Distinguish the goal from a project or task if needed.
-5. Clarify horizon and status only after the meaning is clear.
+1. For direct capture, reflect the supplied title and chosen direction, search
+   normalized titles for a duplicate, and ask one accuracy or consent question.
+   Do not demand a description, why-now explanation, success measure, horizon,
+   status, links, owner, tags, notes, or target points when the title already
+   names the direction clearly.
+2. For review or narrow update, search for and read the exact existing goal
+   first. Summarize its accepted title, direction or body, horizon, status, and
+   meaningful links. Ask only what is newly true or inaccurate, preserve sparse
+   accepted records, and patch only that accepted change.
+3. For guided clarification, ask what direction or outcome the user wants to
+   keep in view. Reflect the deeper stake in plain language and ask why it
+   matters now only when the answer would change the direction or wording.
+4. Distinguish a durable goal direction from a project with a bounded
+   deliverable or a task with one concrete next action. Offer one concise
+   working title and ask whether it fits rather than making the user formulate
+   it alone.
+5. Clarify horizon, status, owner, placement, or links only when the detail
+   changes later review, responsibility, or navigation.
 
 Helpful follow-up lanes:
 
@@ -1412,13 +1432,19 @@ Helpful follow-up lanes:
 
 Ready to save when:
 
-- the goal has a stable name
-- the direction is understandable in plain language
-- the horizon is clear enough if it matters
+- direct capture has an accepted title that names the chosen direction and one
+  accuracy or consent check; Forge's API requires only the title
+- review or narrow update has read the exact existing goal and isolated the
+  smallest accepted change without backfilling a sparse record
+- guided clarification has a durable direction and accepted wording that are
+  distinct from a project or task
+- why it matters and horizon are present only when they change the goal's
+  meaning or later use
+- every write uses shared batch CRUD
 
 Preferred opening question:
 
-- "What direction are you trying to keep hold of here?"
+- "Are you naming a direction, making sense of why it matters, or updating a goal that already exists?"
 
 ## Project
 
@@ -1570,15 +1596,44 @@ Preferred opening question:
 
 ## Habit
 
-Aim: define the recurring behavior and the cadence in a way that makes later check-ins
-unambiguous.
+Aim: make the recurring action and honest check-in meaning clear without turning a
+direct save, narrow correction, or today's outcome into a full habit-design interview.
+
+Choose the lane first:
+
+- direct capture
+- guided habit design
+- exact-record review or narrow update
+- check-in or outcome correction
 
 Arc:
 
-1. Ask what recurring move the user is trying to strengthen or loosen.
-2. Ask whether doing it is aligned or a slip.
-3. Ask what honest success or failure looks like in practice.
-4. Ask about cadence and links only after the behavior is concrete.
+1. For direct capture, reflect the observable recurring action, search normalized
+   titles for a duplicate, and ask one accuracy or consent question. Ask whether
+   it is positive or negative only when doing the named action does not already
+   make aligned versus misaligned meaning clear. Do not demand a description,
+   cadence discussion, links, XP settings, or an underlying psychological
+   formulation.
+2. For review or narrow update, search for and read the exact existing habit
+   first. Summarize its accepted action, polarity, cadence, status, check-in
+   meaning, and meaningful links. Ask only what is newly true or inaccurate,
+   preserve sparse accepted records, and patch only that accepted change.
+3. For guided design, ask what one observable action counts, whether doing it is
+   aligned or a slip, and what an honest check-in means. Ask about frequency,
+   target count, or weekdays only when the daily default is not accepted or the
+   recurrence would otherwise be ambiguous.
+4. If the user is describing a recurring protective or avoidance loop rather
+   than only a behavior to track, reflect that distinction and offer a linked
+   `behavior_pattern`. Do not make Psyche formulation a prerequisite for saving
+   the habit.
+5. For a check-in, read the exact habit first and ask only for the user-facing
+   outcome and a date when it is not today. Map positive `Done` to stored `done`
+   and positive `Missed` to stored `missed`; map negative `Resisted` to stored
+   `missed` and negative `Performed` to stored `done`. Do not ask the user to
+   choose raw `done` or `missed` when polarity changes what they mean.
+6. Write or correct the official outcome with `forge_update_entities`,
+   `entityType: "habit"`, and `patch.checkIn`, then read the habit back. Do not
+   invent a dedicated agent check-in tool.
 
 Helpful follow-up lanes:
 
@@ -1589,13 +1644,19 @@ Helpful follow-up lanes:
 
 Ready to save when:
 
-- the recurring behavior is specific
-- polarity is clear
-- the cadence and success condition are clear enough to check in honestly
+- direct capture has an accepted title naming one observable action, polarity
+  only when its meaning is ambiguous, and one accuracy or consent check
+- review or narrow update has read the exact habit and isolated the smallest
+  accepted definition change without backfilling a sparse record
+- guided design has an observable action, honest success or slip meaning, and
+  only the non-default cadence needed for unambiguous check-ins
+- a check-in has read the exact habit and resolved the user-facing outcome plus
+  a non-today date when needed before using `habit.patch.checkIn`
+- definition changes and official check-ins both use shared batch CRUD
 
 Preferred opening question:
 
-- "What recurring move are you trying to strengthen or interrupt?"
+- "Are you defining a recurring move to strengthen or interrupt, adjusting it, or recording what happened today?"
 
 ## Tag
 
@@ -1895,14 +1956,46 @@ Preferred opening question:
 
 ## Insight
 
-Aim: capture one grounded observation or recommendation clearly enough that it stays
-useful later.
+Aim: preserve a grounded interpretation and useful recommendation while keeping
+evidence, the user's meaning, and the agent's hypothesis distinct.
+
+Choose the lane first:
+
+- direct capture
+- evidence-guided synthesis
+- exact-record review or narrow update
+- read-only review
 
 Arc:
 
-1. Ask what pattern, tension, or observation should be remembered.
-2. Ask what entity or timeframe it belongs to, if any.
-3. Ask what recommendation, caution, or invitation should remain explicit.
+1. For direct capture, reflect the supplied observation and recommendation,
+   search recent insights for a semantic duplicate, offer a concise title only
+   if one is missing, and ask one accuracy or consent question. Do not demand an
+   entity link, timeframe, rationale, confidence score, evidence array,
+   visibility, status, CTA label, or origin metadata when title, summary, and
+   recommendation are already clear.
+2. For read-only review or narrow update, search for and read the exact existing
+   insight first. Separate its accepted title, summary, recommendation,
+   rationale, confidence, evidence, timeframe, links, status, and visibility
+   from what is newly true or inaccurate. Answer the review question before
+   proposing a write, preserve sparse optional metadata, and patch only the
+   accepted change.
+3. For evidence-guided synthesis, read the relevant Forge records or overview
+   before asking the user to reconstruct them. State the observed evidence
+   first, reflect what the user says it means, then offer at most one tentative
+   interpretation or recommendation and ask whether it fits or needs correction.
+4. Keep source evidence, the user's interpretation, and the agent's hypothesis
+   visibly separate. Do not present confidence as certainty or invent evidence
+   to make the insight sound stronger.
+5. Distinguish `insight` from a `note` that preserves raw detail,
+   `self_observation` for one observed moment, `wiki_page` for durable reusable
+   knowledge, `task` for an action, and `trigger_report`, `belief_entry`,
+   `behavior_pattern`, `mode_profile`, or another Psyche record for the primary
+   psychological material. Offer links only after the primary containers are
+   clear; never use an insight to replace them.
+6. Before saving, summarize the proposed title, grounded summary, and
+   recommendation in the user's language, identify consequential uncertainty,
+   and ask one accuracy or consent question.
 
 Helpful follow-up lanes:
 
@@ -1912,13 +2005,22 @@ Helpful follow-up lanes:
 
 Ready to save when:
 
-- the observation has a stable title or phrase
-- the summary is clear
-- the recommendation is explicit
+- direct capture has the three required fields: accepted title, grounded
+  summary, and recommendation, plus one accuracy or consent check
+- read-only review has read the exact insight and its evidence without
+  manufacturing a write
+- narrow update has isolated the smallest accepted change without backfilling
+  sparse optional metadata
+- evidence-guided synthesis keeps observed evidence, the user's interpretation,
+  and at most one tentative agent hypothesis distinct, names consequential
+  uncertainty, and receives one fit-or-correction check
+- a better primary note, self-observation, wiki, task, or Psyche container has
+  been settled or linked first when needed
+- every Insight write uses shared batch CRUD
 
 Preferred opening question:
 
-- "What is the clearest thing you want future-you or the agent to remember from this?"
+- "Are you saving an insight you already have, asking Forge to derive one from evidence, or reviewing an existing insight?"
 
 ## Calendar Event
 

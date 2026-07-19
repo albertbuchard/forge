@@ -2595,6 +2595,107 @@ describe("question flow simulation cycles", () => {
     }
   });
 
+  it("cycle 1 retest: Goal adapts direct, guided, and review intake", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Goal");
+    const onboarding = await loadOnboardingPayload();
+    const flow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "goal"
+    )?.questionFlow;
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided clarification[\s\S]*exact-record review or narrow update/i
+    );
+    expect(compact).toMatch(
+      /search[\s\S]*normalized titles[\s\S]*one accuracy or consent question[\s\S]*Do not demand a description[\s\S]*why-now explanation[\s\S]*target points/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing goal[\s\S]*newly true or inaccurate[\s\S]*preserve sparse[\s\S]*patch only that accepted change/i
+    );
+    expect(compact).toMatch(
+      /durable goal direction[\s\S]*project with a bounded[\s\S]*deliverable[\s\S]*task with one concrete next action[\s\S]*working title[\s\S]*whether it fits/i
+    );
+    expect(compact).toMatch(
+      /Forge's API requires only the title[\s\S]*why it matters and horizon are present only when they change[\s\S]*shared batch CRUD/i
+    );
+    expect(flow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted title names the chosen direction[\s\S]*Forge requires only the title[\s\S]*Review or narrow update[\s\S]*exact existing goal[\s\S]*never force a sparse goal through full create intake[\s\S]*Guided clarification[\s\S]*distinguish the goal from a project or task[\s\S]*All Goal writes remain on shared batch CRUD/i
+    );
+  });
+
+  it("cycle 2 retest: Habit separates design, review, and truthful check-ins", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Habit");
+    const onboarding = await loadOnboardingPayload();
+    const habit = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "habit"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided habit design[\s\S]*exact-record review or narrow update[\s\S]*check-in or outcome correction/i
+    );
+    expect(compact).toMatch(
+      /observable recurring action[\s\S]*normalized[\s\S]*duplicate[\s\S]*one accuracy or consent question[\s\S]*Do not demand a description[\s\S]*XP settings[\s\S]*psychological[\s\S]*formulation/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing habit[\s\S]*polarity[\s\S]*cadence[\s\S]*check-in[\s\S]*newly true or inaccurate[\s\S]*preserve sparse[\s\S]*patch only that accepted change/i
+    );
+    expect(compact).toMatch(
+      /protective or avoidance loop[\s\S]*behavior_pattern[\s\S]*Do not make Psyche formulation a prerequisite/i
+    );
+    expect(compact).toMatch(
+      /positive `Done`[\s\S]*stored[\s\S]*`done`[\s\S]*positive `Missed`[\s\S]*stored[\s\S]*`missed`[\s\S]*negative `Resisted`[\s\S]*stored[\s\S]*`missed`[\s\S]*negative `Performed`[\s\S]*stored[\s\S]*`done`/i
+    );
+    expect(compact).toMatch(
+      /forge_update_entities[\s\S]*entityType: "habit"[\s\S]*patch\.checkIn[\s\S]*read the habit back[\s\S]*Do not[\s\S]*dedicated agent check-in tool/i
+    );
+    expect(habit?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "checkIn",
+          type: expect.stringMatching(/update-only[\s\S]*done\|missed/i),
+          description: expect.stringMatching(
+            /forge_update_entities[\s\S]*negative habits[\s\S]*Resisted maps to missed[\s\S]*Performed maps to done/i
+          )
+        })
+      ])
+    );
+    expect(habit?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*observable recurring action[\s\S]*polarity is explicit only when[\s\S]*Review or narrow update[\s\S]*exact existing habit[\s\S]*Guided design[\s\S]*non-default cadence[\s\S]*positive Done=done[\s\S]*negative Resisted=missed[\s\S]*forge_update_entities[\s\S]*patch\.checkIn[\s\S]*do not guess a dedicated agent check-in tool/i
+    );
+  });
+
+  it("cycle 3 retest: Insight separates capture, evidence synthesis, and exact review", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Insight");
+    const onboarding = await loadOnboardingPayload();
+    const flow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "insight"
+    )?.questionFlow;
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*evidence-guided synthesis[\s\S]*exact-record review or narrow update[\s\S]*read-only review/i
+    );
+    expect(compact).toMatch(
+      /semantic duplicate[\s\S]*concise title only[\s\S]*if one is missing[\s\S]*one accuracy or consent question[\s\S]*Do not demand an[\s\S]*entity link[\s\S]*confidence score[\s\S]*origin metadata[\s\S]*title, summary, and[\s\S]*recommendation/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing[\s\S]*insight first[\s\S]*evidence[\s\S]*newly true or inaccurate[\s\S]*Answer the review question before[\s\S]*write[\s\S]*preserve sparse optional metadata[\s\S]*patch only the[\s\S]*accepted change/i
+    );
+    expect(compact).toMatch(
+      /read the relevant Forge records or overview[\s\S]*observed evidence[\s\S]*user says it means[\s\S]*at most one tentative[\s\S]*interpretation or recommendation[\s\S]*fits or needs correction/i
+    );
+    expect(compact).toMatch(
+      /source evidence[\s\S]*user's interpretation[\s\S]*agent's hypothesis[\s\S]*Do not present confidence as certainty[\s\S]*invent evidence/i
+    );
+    expect(compact).toMatch(
+      /note[\s\S]*raw detail[\s\S]*self_observation[\s\S]*observed moment[\s\S]*wiki_page[\s\S]*reusable[\s\S]*task[\s\S]*action[\s\S]*trigger_report[\s\S]*belief_entry[\s\S]*behavior_pattern[\s\S]*mode_profile[\s\S]*primary[\s\S]*psychological material/i
+    );
+    expect(flow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted title, grounded summary, and recommendation[\s\S]*three required fields[\s\S]*do not require a link[\s\S]*Read-only review[\s\S]*exact existing insight and its evidence[\s\S]*do not manufacture a write[\s\S]*Narrow update[\s\S]*without backfilling sparse optional metadata[\s\S]*Evidence-guided synthesis[\s\S]*observed Forge evidence[\s\S]*user's interpretation[\s\S]*tentative agent hypothesis[\s\S]*fit-or-correction[\s\S]*All Insight writes remain on shared batch CRUD/i
+    );
+    expect(flow?.apiAccessHint).toMatch(
+      /Route posture: batch_crud_entity[\s\S]*\/api\/v1\/entities\/create[\s\S]*forge_create_entities/i
+    );
+  });
+
   it("cycle 2 retest: specialized mutations and executions verify through dedicated reads", () => {
     const verificationLoop = getSectionSlice(
       entityPlaybook,

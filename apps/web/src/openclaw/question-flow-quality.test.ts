@@ -31,7 +31,11 @@ function getSectionSlice(document: string, section: string) {
 describe("question flow quality coverage", () => {
   it("covers every non-Psyche entity flow with intent-first guidance", () => {
     const scenarios = [
-      ["Goal", /keep hold of here/i, /why it matters now/i],
+      [
+        "Goal",
+        /naming a direction[\s\S]*updating a goal/i,
+        /direct capture[\s\S]*exact-record review or narrow update/i
+      ],
       ["Project", /make true in your life or work/i, /bounded workstream/i],
       [
         "Strategy",
@@ -39,7 +43,11 @@ describe("question flow quality coverage", () => {
         /execution contract/i
       ],
       ["Task", /next concrete move here/i, /one-session work item/i],
-      ["Habit", /strengthen or interrupt/i, /honest check-in/i],
+      [
+        "Habit",
+        /defining a recurring move[\s\S]*recording what happened today/i,
+        /check-in or outcome correction/i
+      ],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
       ["Note", /worth preserving in a note/i, /durable or temporary/i],
       [
@@ -52,7 +60,11 @@ describe("question flow quality coverage", () => {
         /find, verify, preserve, or change about this file/i,
         /trusted-file lifecycle/i
       ],
-      ["Insight", /future-you or the agent/i, /practical recommendation/i],
+      [
+        "Insight",
+        /saving an insight[\s\S]*derive one from evidence[\s\S]*reviewing an existing insight/i,
+        /source evidence[\s\S]*agent's hypothesis/i
+      ],
       ["Calendar Event", /what time should Forge hold/i, /timezone/i],
       [
         "Work Block Template",
@@ -1109,10 +1121,7 @@ describe("question flow quality coverage", () => {
     expect(behaviorSection).toMatch(
       /sparse legacy records[\s\S]*direct save or update[\s\S]*does not require a fresh episode or hypothesis/i
     );
-    const modeProfileSection = getSectionSlice(
-      psychePlaybook,
-      "Mode Profile"
-    );
+    const modeProfileSection = getSectionSlice(psychePlaybook, "Mode Profile");
     expect(modeProfileSection).toMatch(
       /direct capture[\s\S]*current activation or guided formulation[\s\S]*review or[\s\S]*narrow update[\s\S]*derivation from an accepted Mode Guide session/i
     );
