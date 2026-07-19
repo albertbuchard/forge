@@ -154,7 +154,6 @@ One-time Apple-side setup:
    - `com.albertbuchard.ForgeCompanion`
    - `com.albertbuchard.ForgeCompanion.watchkitapp`
    - `com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch`
-   - `com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension`
 3. Make sure app category, pricing, availability, export compliance, privacy
    questionnaire, and age rating are complete
 4. Create an App Store Connect API key with permission to upload builds and manage
@@ -211,9 +210,8 @@ Optional in either setup:
 - `FORGE_IOS_P12_PASSWORD`
 - `FORGE_IOS_KEYCHAIN_PASSWORD`
 - either `FORGE_IOS_PROVISIONING_PROFILES_BASE64`
-- or these four split secrets:
+- or these three split secrets:
 - `FORGE_IOS_PROFILE_APP_BASE64`
-- `FORGE_IOS_PROFILE_SCREENTIME_BASE64`
 - `FORGE_IOS_PROFILE_WATCH_APP_BASE64`
 - `FORGE_IOS_PROFILE_WATCH_EXTENSION_BASE64`
 
@@ -226,10 +224,10 @@ Formatting note:
 - `FORGE_IOS_BUILD_CERTIFICATE_BASE64` should be the base64 body of the exported `.p12`
 - `FORGE_IOS_PROVISIONING_PROFILES_BASE64` should be one or more base64
   `.mobileprovision` payloads separated by newlines, but GitHub secret size limits
-  may require using the four split profile secrets instead
+  may require using the three split profile secrets instead
 - the provisioning-profile secret set must cover the iPhone app, watch app, watch
-  extension, and screen-time report extension bundle ids used by
-  `ForgeCompanion.xcodeproj`
+  extension bundle ids used by `ForgeCompanion.xcodeproj`. The disabled Screen Time
+  report extension remains in source but is not embedded or signed for production.
 
 ## Local Prep Commands
 

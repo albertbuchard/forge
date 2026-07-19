@@ -113,8 +113,10 @@ The deeper transport reference lives in `docs/reference/companion-iroh.md`.
 
 ## App Store release automation
 
-This repo now includes a one-command Apple release flow for the iPhone companion,
-its embedded watch targets, and the Screen Time report extension.
+This repo now includes a one-command Apple release flow for the iPhone companion
+and its embedded watch targets. The disabled Screen Time report extension remains
+in source for a future deliberate restoration, but is not embedded or signed in
+production archives.
 
 Public entrypoint:
 
@@ -131,7 +133,7 @@ falls back to Homebrew Ruby bootstrap when no suitable Ruby is available. It als
 repairs a missing `rubygems.org` source for that Ruby automatically and can unlock a
 local signing keychain when `FORGE_IOS_KEYCHAIN_PASSWORD` is set. Every lane checks
 the protected launch, fullscreen, background-processing, input, and encryption plist
-contract. Archive lanes also verify that every configured app, watch, and extension
+contract. Archive lanes also verify that every configured app and watch
 bundle is embedded with the exact requested marketing version and build number.
 The `audit` mode needs no Apple credentials, archive, or signing identity.
 
@@ -165,8 +167,7 @@ Before the script can publish successfully, make sure App Store Connect / Apple
 Developer already has:
 
 - an app record for `Forge Companion`
-- the iPhone, watch companion, watch extension, and Screen Time report extension
-  bundle ids configured correctly
+- the iPhone, watch companion, and watch extension bundle ids configured correctly
 - an App Store Connect API key with permission to upload builds and manage releases
 - a persistent Apple Distribution certificate export and matching provisioning
   profiles prepared for CI import
@@ -194,9 +195,8 @@ For GitHub-hosted CI, also add:
 - `FORGE_IOS_KEYCHAIN_PASSWORD`
 - either `FORGE_IOS_PROVISIONING_PROFILES_BASE64` as newline-delimited base64
   `.mobileprovision` payloads
-- or these four secrets when the combined payload is too large for GitHub Actions:
-  `FORGE_IOS_PROFILE_APP_BASE64`, `FORGE_IOS_PROFILE_SCREENTIME_BASE64`,
-  `FORGE_IOS_PROFILE_WATCH_APP_BASE64`, and
+- or these three secrets when the combined payload is too large for GitHub Actions:
+  `FORGE_IOS_PROFILE_APP_BASE64`, `FORGE_IOS_PROFILE_WATCH_APP_BASE64`, and
   `FORGE_IOS_PROFILE_WATCH_EXTENSION_BASE64`
 
 Do not rely on Xcode-managed automatic signing on ephemeral GitHub runners. That

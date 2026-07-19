@@ -12,6 +12,7 @@ const STARTUP_TIMEOUT_MS = 15_000;
 const HEALTHCHECK_TIMEOUT_MS = 1_500;
 const HEALTHCHECK_INTERVAL_MS = 250;
 const EXISTING_RUNTIME_GRACE_MS = 3_000;
+const STARTUP_LOCK_STALE_MS = STARTUP_TIMEOUT_MS * 2;
 const MAX_PORT_SCAN_ATTEMPTS = 20;
 const FORGE_PLUGIN_ID = "forge-openclaw-plugin";
 
@@ -49,6 +50,11 @@ type ForgeRuntimeExitDetails = {
   code: number | null;
   signal: NodeJS.Signals | null;
   logPath: string | null;
+};
+
+type ForgeRuntimeStartupLockOwner = {
+  pid: number;
+  acquiredAt: string;
 };
 
 export type ForgeRuntimeStopResult = {
@@ -119,6 +125,13 @@ function getRuntimeStatePath(config: ForgePluginConfig) {
 
 function getRuntimeStateDir() {
   return path.join(homedir(), ".openclaw", "run", FORGE_PLUGIN_ID);
+}
+
+function getRuntimeStartupLockPath(config: ForgePluginConfig) {
+  return path.join(
+    getRuntimeStateDir(),
+    `${getRuntimeStateOrigin(config)}-${config.port}.startup.lock`
+  );
 }
 
 function getRuntimeStateOrigin(config: ForgePluginConfig) {
@@ -306,6 +319,81 @@ function processExists(pid: number) {
   } catch (error) {
     return !(error instanceof Error) || !("code" in error) || error.code !== "ESRCH";
   }
+}
+
+async function readRuntimeStartupLockOwner(
+  lockPath: string
+): Promise<ForgeRuntimeStartupLockOwner | null> {
+  try {
+    const payload = await readFile(path.join(lockPath, "owner.json"), "utf8");
+    const parsed = JSON.parse(payload) as Partial<ForgeRuntimeStartupLockOwner>;
+    if (
+      typeof parsed.pid !== "number" ||
+      !Number.isFinite(parsed.pid) ||
+      typeof parsed.acquiredAt !== "string" ||
+      !Number.isFinite(Date.parse(parsed.acquiredAt))
+    ) {
+      return null;
+    }
+    return {
+      pid: Math.trunc(parsed.pid),
+      acquiredAt: parsed.acquiredAt
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function acquireRuntimeStartupLock(
+  config: ForgePluginConfig,
+  expectedDataRoot: string | null
+): Promise<(() => Promise<void>) | null> {
+  const lockPath = getRuntimeStartupLockPath(config);
+  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+  await mkdir(getRuntimeStateDir(), { recursive: true });
+
+  while (Date.now() < deadline) {
+    try {
+      await mkdir(lockPath);
+      const owner: ForgeRuntimeStartupLockOwner = {
+        pid: process.pid,
+        acquiredAt: new Date().toISOString()
+      };
+      await writeFile(
+        path.join(lockPath, "owner.json"),
+        `${JSON.stringify(owner, null, 2)}\n`,
+        "utf8"
+      );
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true });
+      };
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
+        throw error;
+      }
+    }
+
+    const probe = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
+    if (probe.healthy && isExpectedDataRoot(expectedDataRoot, probe.storageRoot)) {
+      return null;
+    }
+
+    const owner = await readRuntimeStartupLockOwner(lockPath);
+    const ownerIsStale =
+      owner !== null &&
+      (!processExists(owner.pid) ||
+        Date.now() - Date.parse(owner.acquiredAt) > STARTUP_LOCK_STALE_MS);
+    if (ownerIsStale) {
+      await rm(lockPath, { recursive: true, force: true });
+      continue;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, HEALTHCHECK_INTERVAL_MS));
+  }
+
+  throw new Error(
+    `Forge runtime startup on ${config.baseUrl} is already owned by another process and did not become healthy within ${STARTUP_TIMEOUT_MS}ms.`
+  );
 }
 
 async function cleanupSupersededManagedRuntimes(config: ForgePluginConfig, expectedDataRoot: string | null) {
@@ -793,27 +881,70 @@ export async function ensureForgeRuntimeReady(config: ForgePluginConfig) {
   }
 
   startupPromise = (async () => {
-    const probeBeforeStart = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-    if (probeBeforeStart.healthy && isExpectedDataRoot(expectedDataRoot, probeBeforeStart.storageRoot)) {
+    const releaseStartupLock = await acquireRuntimeStartupLock(
+      config,
+      expectedDataRoot
+    );
+    if (!releaseStartupLock) {
       return;
     }
-    startupRuntimeKey = runtimeKey(config);
-    if (!(await isPortAvailable("127.0.0.1", config.port))) {
-      await relocateLocalRuntimePort(config);
-      startupRuntimeKey = runtimeKey(config);
-      const probeAfterRelocation = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-      if (probeAfterRelocation.healthy && isExpectedDataRoot(expectedDataRoot, probeAfterRelocation.storageRoot)) {
+    try {
+      const probeBeforeStart = await probeForgeRuntime(
+        config,
+        HEALTHCHECK_TIMEOUT_MS
+      );
+      if (
+        probeBeforeStart.healthy &&
+        isExpectedDataRoot(expectedDataRoot, probeBeforeStart.storageRoot)
+      ) {
         return;
       }
-    }
-    await ensurePackagedRuntimeDependencies(plan, config);
-    if (!managedRuntimeChild || managedRuntimeKey !== key || managedRuntimeChild.killed) {
-      await spawnManagedRuntime(config, plan);
-    }
-    await waitForRuntime(config, STARTUP_TIMEOUT_MS, managedRuntimeChild?.pid ?? null);
-    const probeAfterStart = await probeForgeRuntime(config, HEALTHCHECK_TIMEOUT_MS);
-    if (!probeAfterStart.healthy || !isExpectedDataRoot(expectedDataRoot, probeAfterStart.storageRoot)) {
-      throw new Error(formatRuntimeDataRootMismatch(config, expectedDataRoot!, probeAfterStart.storageRoot));
+      startupRuntimeKey = runtimeKey(config);
+      if (!(await isPortAvailable("127.0.0.1", config.port))) {
+        await relocateLocalRuntimePort(config);
+        startupRuntimeKey = runtimeKey(config);
+        const probeAfterRelocation = await probeForgeRuntime(
+          config,
+          HEALTHCHECK_TIMEOUT_MS
+        );
+        if (
+          probeAfterRelocation.healthy &&
+          isExpectedDataRoot(expectedDataRoot, probeAfterRelocation.storageRoot)
+        ) {
+          return;
+        }
+      }
+      await ensurePackagedRuntimeDependencies(plan, config);
+      if (
+        !managedRuntimeChild ||
+        managedRuntimeKey !== key ||
+        managedRuntimeChild.killed
+      ) {
+        await spawnManagedRuntime(config, plan);
+      }
+      await waitForRuntime(
+        config,
+        STARTUP_TIMEOUT_MS,
+        managedRuntimeChild?.pid ?? null
+      );
+      const probeAfterStart = await probeForgeRuntime(
+        config,
+        HEALTHCHECK_TIMEOUT_MS
+      );
+      if (
+        !probeAfterStart.healthy ||
+        !isExpectedDataRoot(expectedDataRoot, probeAfterStart.storageRoot)
+      ) {
+        throw new Error(
+          formatRuntimeDataRootMismatch(
+            config,
+            expectedDataRoot!,
+            probeAfterStart.storageRoot
+          )
+        );
+      }
+    } finally {
+      await releaseStartupLock();
     }
   })().finally(() => {
     startupPromise = null;

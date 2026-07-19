@@ -465,8 +465,7 @@ def verify_project_bundle_ids!(config)
   expected = {
     "ForgeCompanion" => config.dig(:app, :primary_bundle_id),
     "ForgeWatch Watch App" => config.dig(:app, :watch_bundle_ids, 0),
-    "ForgeWatchExtension" => config.dig(:app, :watch_bundle_ids, 1),
-    "ForgeScreenTimeReportExtension" => config.dig(:app, :extension_bundle_ids, 0)
+    "ForgeWatchExtension" => config.dig(:app, :watch_bundle_ids, 1)
   }
 
   expected.each do |target_name, bundle_id|
@@ -604,8 +603,7 @@ def release_target_names
   [
     "ForgeCompanion",
     "ForgeWatch Watch App",
-    "ForgeWatchExtension",
-    "ForgeScreenTimeReportExtension"
+    "ForgeWatchExtension"
   ]
 end
 
@@ -896,8 +894,7 @@ def release_target_bundle_ids
   {
     "ForgeCompanion" => read_build_setting(target_name: "ForgeCompanion", key: "PRODUCT_BUNDLE_IDENTIFIER"),
     "ForgeWatch Watch App" => read_build_setting(target_name: "ForgeWatch Watch App", key: "PRODUCT_BUNDLE_IDENTIFIER"),
-    "ForgeWatchExtension" => read_build_setting(target_name: "ForgeWatchExtension", key: "PRODUCT_BUNDLE_IDENTIFIER"),
-    "ForgeScreenTimeReportExtension" => read_build_setting(target_name: "ForgeScreenTimeReportExtension", key: "PRODUCT_BUNDLE_IDENTIFIER")
+    "ForgeWatchExtension" => read_build_setting(target_name: "ForgeWatchExtension", key: "PRODUCT_BUNDLE_IDENTIFIER")
   }
 end
 

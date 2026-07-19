@@ -1,5 +1,5 @@
-Forge Companion 1.0.168 adds People and selective Forge-to-Forge sharing.
+Forge Companion 1.0.169 adds People and selective Forge-to-Forge sharing.
 
 Create and link Person records, pair another Forge by QR code, and review exactly what each person can receive. Shared information keeps its source, freshness, precision, and revocation state.
 
-iPhone handles pairing and human approvals. Apple Watch can open deliberately pinned People records. Existing Forge data and companion pairing are preserved.
+iPhone handles pairing and human approvals. Apple Watch can open deliberately pinned People records. This update also restores reliable sync with existing companion versions and preserves existing Forge data and pairing.

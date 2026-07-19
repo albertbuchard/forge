@@ -283,7 +283,6 @@ test("unsigned archive admission requires every native bundle and rejects signin
     const archive = path.join(root, "ForgeCompanion-unsigned.xcarchive");
     const bundles = [
       "Products/Applications/ForgeCompanion.app",
-      "Products/Applications/ForgeCompanion.app/PlugIns/ForgeScreenTimeReportExtension.appex",
       "Products/Applications/ForgeCompanion.app/Watch/ForgeWatch Watch App.app",
       "Products/Applications/ForgeCompanion.app/Watch/ForgeWatch Watch App.app/PlugIns/ForgeWatchExtension.appex"
     ];
@@ -299,6 +298,19 @@ test("unsigned archive admission requires every native bundle and rejects signin
   assert.equal(
     assertUnsignedIosArchive(valid.archive),
     realpathSync(valid.archive)
+  );
+
+  const screenTimeEmbedded = createArchive("forge-screen-time-ios-archive");
+  mkdirSync(
+    path.join(
+      screenTimeEmbedded.archive,
+      "Products/Applications/ForgeCompanion.app/PlugIns/ForgeScreenTimeReportExtension.appex"
+    ),
+    { recursive: true }
+  );
+  assert.throws(
+    () => assertUnsignedIosArchive(screenTimeEmbedded.archive),
+    /must not embed the disabled Screen Time extension/
   );
 
   const signed = createArchive("forge-signed-ios-archive");
@@ -390,7 +402,6 @@ test("reusable CI has no Apple credentials while iOS publication remains fail-cl
     "FORGE_IOS_KEYCHAIN_PASSWORD",
     "FORGE_IOS_PROVISIONING_PROFILES_BASE64",
     "FORGE_IOS_PROFILE_APP_BASE64",
-    "FORGE_IOS_PROFILE_SCREENTIME_BASE64",
     "FORGE_IOS_PROFILE_WATCH_APP_BASE64",
     "FORGE_IOS_PROFILE_WATCH_EXTENSION_BASE64",
     "FORGE_ASC_KEY_ID",

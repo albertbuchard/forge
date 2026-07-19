@@ -895,7 +895,6 @@ export function assertProtectedReleaseStateUnchanged(
 export function assertUnsignedIosArchive(candidate) {
   const requiredDirectories = [
     "Products/Applications/ForgeCompanion.app",
-    "Products/Applications/ForgeCompanion.app/PlugIns/ForgeScreenTimeReportExtension.appex",
     "Products/Applications/ForgeCompanion.app/Watch/ForgeWatch Watch App.app",
     "Products/Applications/ForgeCompanion.app/Watch/ForgeWatch Watch App.app/PlugIns/ForgeWatchExtension.appex"
   ];
@@ -904,6 +903,15 @@ export function assertUnsignedIosArchive(candidate) {
     fail("Unsigned iOS admission output must be a real xcarchive directory.");
   }
   const canonicalArchive = realpathSync(candidate);
+  const disabledScreenTimeExtension = path.join(
+    canonicalArchive,
+    "Products/Applications/ForgeCompanion.app/PlugIns/ForgeScreenTimeReportExtension.appex"
+  );
+  if (existsSync(disabledScreenTimeExtension)) {
+    fail(
+      "Unsigned iOS admission archive must not embed the disabled Screen Time extension."
+    );
+  }
   const archivePlist = path.join(canonicalArchive, "Info.plist");
   const plistMetadata = lstatSync(archivePlist);
   if (!plistMetadata.isFile() || plistMetadata.isSymbolicLink()) {

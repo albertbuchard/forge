@@ -105,7 +105,6 @@
 		994978D8CD08859187B7FE58 /* dracula.json in Resources */ = {isa = PBXBuildFile; fileRef = 31A83A563B26CCDA7F1721B6 /* dracula.json */; };
 		9F986E5B0046BCA20652BE4C /* rose-pine-moon.json in Resources */ = {isa = PBXBuildFile; fileRef = CEC035122131067EB6564289 /* rose-pine-moon.json */; };
 		A0D29BA35E3F456EF59A51AA /* one-dark-pro-D.json in Resources */ = {isa = PBXBuildFile; fileRef = B581CDAE6D6E5B9AB7C8B4D4 /* one-dark-pro-D.json */; };
-		A1B2C3D4E5F60718293A4B5C /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8FA0A1EC0034341F6FD6810C /* ForgeScreenTimeReportExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1F53A485A7E1BA560A3F4DF /* gruvbox-dark-soft.json in Resources */ = {isa = PBXBuildFile; fileRef = DB9C2430B57AD5C324EA2346 /* gruvbox-dark-soft.json */; };
 		A395943C15CABF29A6B60BA1 /* oscurange-C.json in Resources */ = {isa = PBXBuildFile; fileRef = 994F4CFD9D237C208A6485FE /* oscurange-C.json */; };
 		A4FFAD65585480CCAAF6ED11 /* ScreenTimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2327ADEA6C0795C6628C4268 /* ScreenTimeStore.swift */; };
@@ -175,13 +174,6 @@
 			remoteGlobalIDString = A3D7B3F69A15FB337E820D99;
 			remoteInfo = ForgeCompanion;
 		};
-		B1C2D3E4F5061728394A5B6C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D7BDBCC2AC0457C8DAB50B41;
-			remoteInfo = ForgeScreenTimeReportExtension;
-		};
 		CE220BB95379375A2C32B5DB /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4F8558956D3C63F60D8E5542 /* Project object */;
@@ -206,17 +198,6 @@
 			dstSubfolderSpec = 13;
 			files = (
 				E5E0F5A7CE1D866094AC8849 /* ForgeWatchExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C1D2E3F40516273849A5B6C7 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				A1B2C3D4E5F60718293A4B5C /* ForgeScreenTimeReportExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -729,13 +710,11 @@
 				8A44D08DB737DE4FD062D54F /* Sources */,
 				CCF67C05D25DFD6505CD9782 /* Resources */,
 				ACD5BC0A9881069976E522A7 /* Frameworks */,
-				C1D2E3F40516273849A5B6C7 /* Embed Foundation Extensions */,
 				F2A3B4C5D6E7F8091A2B3C4D /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				D1E2F3041526374859A6B7C8 /* PBXTargetDependency */,
 				F3A4B5C6D7E8F9012A3B4C5D /* PBXTargetDependency */,
 			);
 			name = ForgeCompanion;
@@ -1138,11 +1117,6 @@
 			target = A3D7B3F69A15FB337E820D99 /* ForgeCompanion */;
 			targetProxy = 59A2508E530D6D8B95677332 /* PBXContainerItemProxy */;
 		};
-		D1E2F3041526374859A6B7C8 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D7BDBCC2AC0457C8DAB50B41 /* ForgeScreenTimeReportExtension */;
-			targetProxy = B1C2D3E4F5061728394A5B6C /* PBXContainerItemProxy */;
-		};
 		F2A7D809B1659085AF87DF01 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 7716D39194A1C5D167013748 /* ForgeWatchExtension */;
@@ -1168,7 +1142,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1244,7 +1218,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Forge;
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.albertbuchard.ForgeCompanion;
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1287,7 +1261,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1311,7 +1285,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1331,7 +1305,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitapp.ForgeWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1388,7 +1362,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1468,7 +1442,7 @@
 					"$(inherited)",
 					"$(SRCROOT)/RustBridge/build/$(PLATFORM_NAME)-$(CURRENT_ARCH)",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lforge_companion_iroh",
@@ -1496,7 +1470,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.ForgeScreenTimeReportExtension;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1577,7 +1551,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitappTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1602,7 +1576,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.168;
+				MARKETING_VERSION = 1.0.169;
 				PRODUCT_BUNDLE_IDENTIFIER = com.albertbuchard.ForgeCompanion.watchkitappTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;

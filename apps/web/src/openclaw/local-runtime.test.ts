@@ -189,6 +189,77 @@ describe("forge local runtime", () => {
     }
   });
 
+  it("waits for another process startup lease instead of spawning a competing runtime", async () => {
+    const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
+    vi.stubEnv("HOME", tempHome);
+    try {
+      const spawnMock = vi.fn();
+      vi.doMock("node:child_process", async (importOriginal) => {
+        const actual = await importOriginal<typeof import("node:child_process")>();
+        return {
+          ...actual,
+          spawn: spawnMock,
+          default: {
+            ...("default" in actual && actual.default ? actual.default : {}),
+            spawn: spawnMock
+          }
+        };
+      });
+
+      const { mkdirSync, writeFileSync } = await import("node:fs");
+      const stateDir = path.join(
+        tempHome,
+        ".openclaw",
+        "run",
+        "forge-openclaw-plugin"
+      );
+      const lockPath = path.join(stateDir, "127.0.0.1-4317.startup.lock");
+      mkdirSync(lockPath, { recursive: true });
+      writeFileSync(
+        path.join(lockPath, "owner.json"),
+        `${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`
+      );
+
+      let probeCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          probeCount += 1;
+          if (probeCount < 3) {
+            throw new Error("runtime is still starting");
+          }
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              runtime: {
+                pid: process.pid,
+                storageRoot: "/tmp/shared-forge-root",
+                basePath: "/forge/"
+              }
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" }
+            }
+          );
+        })
+      );
+
+      const { ensureForgeRuntimeReady } = await import("./local-runtime");
+      await ensureForgeRuntimeReady(
+        createLocalConfig({
+          dataRoot: "/tmp/shared-forge-root",
+          portSource: "configured"
+        })
+      );
+
+      expect(spawnMock).not.toHaveBeenCalled();
+      expect(probeCount).toBeGreaterThanOrEqual(3);
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a healthy runtime when the configured dataRoot does not match", async () => {
     const tempHome = mkdtempSync(path.join(tmpdir(), "forge-runtime-home-"));
     vi.stubEnv("HOME", tempHome);
