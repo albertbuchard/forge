@@ -1543,7 +1543,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       "Forge stores the canonical event first; provider copies are downstream projections.",
       "Use links to connect the event to goals, projects, tasks, habits, notes, or Psyche entities.",
       "If preferredCalendarId is omitted, Forge uses the default writable connected calendar when one exists.",
-      "Set preferredCalendarId to null only when the user explicitly wants Forge-only storage."
+      "Set preferredCalendarId to null only when the user explicitly wants Forge-only storage.",
+      "Mirrored external provider events are read-only for updates. Read the exact event and create a separate Forge-owned copy only with the user's consent before updating it.",
+      "A recurring provider event requires recurrenceEditScope for an update; single-occurrence edits are supported for editable events, while series edits from an expanded occurrence remain provider-only.",
+      "Calendar event deletion is immediate, is not restorable through Forge, and attempts to delete every associated writable remote provider event or projected copy."
     ],
     searchHints: [
       "Search by title or linked entity before creating a duplicate event.",
@@ -1629,6 +1632,13 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
           "Writable connected calendar to project into. Omit it to use the default writable connected calendar. Set null only to force Forge-only storage.",
         defaultValue: "default writable connected calendar when available",
         nullable: true
+      },
+      {
+        name: "recurrenceEditScope",
+        type: "update-only single|series",
+        required: false,
+        description:
+          "Required only when updating a recurring provider source. Use single for one editable occurrence. Series edits from an expanded occurrence are not supported in Forge and must be handled in the provider."
       },
       {
         name: "links",
@@ -1986,9 +1996,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
     entityType: "note",
     purpose:
       "A first-class Markdown note entity that can link to one or many Forge entities.",
-    minimumCreateFields: ["contentMarkdown", "links"],
+    minimumCreateFields: ["contentMarkdown"],
     relationshipRules: [
       "Notes can link to goals, projects, tasks, Psyche records, and other supported Forge entities.",
+      "Links are optional; a standalone note with an empty links array is valid when the user only wants to preserve wording.",
       "When nested under another create flow, notes auto-link to that new entity and can optionally include extra links.",
       "Agents can also create standalone notes directly through forge_create_entities with entityType note."
     ],
@@ -2035,8 +2046,16 @@ const AGENT_ONBOARDING_ENTITY_CATALOG_BASE = [
       {
         name: "links",
         type: "Array<{ entityType, entityId, anchorKey? }>",
-        required: true,
-        description: "Entities this note should link to."
+        required: false,
+        description: "Optional entities this note should link to.",
+        defaultValue: []
+      },
+      {
+        name: "expectedRevisionHash",
+        type: "update-only string",
+        required: false,
+        description:
+          "Revision hash from the exact current note read. Include it when changing note content so a stale update cannot overwrite a newer revision."
       }
     ]
   },
@@ -4704,18 +4723,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "project",
     openingQuestion:
-      "If this became a real project, what would you be trying to make true in your life or work?",
+      "Are you naming a project you already understand, shaping its boundary, or updating one that exists?",
     coachingGoal:
-      "Turn an intention into a bounded workstream with a clear outcome.",
+      "Help the user preserve or shape a bounded workstream under an exact parent goal without turning a direct save or narrow correction into a project workshop.",
     askSequence: [
-      "Ask what this piece of work is trying to make true.",
-      "Reflect the emerging boundary so the user can hear what is in scope.",
-      "Ask what outcome would make the project feel real or complete for now.",
-      "Ask what belongs in the project PRD or brief when the user is shaping delivery rather than only naming a project.",
-      "Ask what belongs inside the boundary and what can stay out if the scope still feels muddy.",
-      "Ask which goal it belongs under.",
-      "Land on a working name once the scope is clear.",
-      "Clarify lifecycle status, workflow lane, owner, human/bot assignees, scheduling rules, and notes only after the scope is clear."
+      "Distinguish direct capture, guided project shaping, exact-record review or narrow update, and read-only review before asking about outcome, scope, or delivery details.",
+      "For direct capture, reflect the supplied title, resolve the exact existing parent Goal, search for the normalized title inside that Goal, and ask one accuracy or consent question. Forge requires only goalId and title; do not demand an outcome statement, description, PRD, scope boundary, lifecycle status, workflow lane, owner, assignees, scheduling rules, tags, links, notes, points, or color.",
+      "For review or narrow update, search for and read the exact existing Project first. Answer read-only questions before proposing a write; preserve its accepted title, parent Goal, description, PRD, lifecycle status, workflow lane, ownership, assignees, scheduling, and links, then patch only what is newly true or inaccurate. Never force a sparse existing Project through full create intake.",
+      "For guided shaping, ask, 'What would you be trying to make true through this work?' and reflect the emerging boundary. Ask what outcome would make it complete enough, what belongs inside the boundary and what can stay out if the scope still feels muddy, and what belongs in the project PRD or brief only when the user wants help shaping delivery.",
+      "Every Project requires an existing parent Goal. If no suitable Goal exists, help the user choose or create one as a separate accepted step before creating the Project; do not imply that intentionally absent is valid.",
+      "Distinguish a Project as a bounded multi-step deliverable or workstream from a Goal that names a direction and a Task or Issue that names executable work. Offer a concise working title when the user wants help naming it.",
+      "Keep lifecycle status separate from the board workflow lane. Ask about either, plus owner, human/bot assignees, scheduling rules, tags, links, or notes, only when the detail changes delivery, responsibility, or later navigation.",
+      "Use shared batch CRUD for every Project search, create, update, soft delete, and restore; do not invent a dedicated Project route."
     ]
   },
   {
@@ -4779,15 +4798,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "note",
-    openingQuestion: "What about this feels worth preserving in a note?",
+    openingQuestion:
+      "Are you saving wording you already have, working out what belongs in the note, or reviewing an existing note?",
     coachingGoal:
-      "Preserve the useful context and link it to the right places without turning the note into a dump.",
+      "Preserve supplied wording without friction, while helping the user shape or connect it only when that changes what the note is for.",
     askSequence: [
-      "Ask what the note needs to preserve.",
-      "Ask what sentence future-you would need to recover from this note later.",
-      "Ask what entities it should stay attached to.",
-      "Ask whether it should be durable or temporary.",
-      "Ask about tags or author only if they help retrieval or handoff."
+      "Distinguish direct capture, guided shaping, exact-record review or narrow update, and read-only review before asking about links or durability.",
+      "For direct capture, reflect the supplied Markdown, search a distinctive phrase for a duplicate when that risk is real, and ask one accuracy or consent question. Forge requires only contentMarkdown; do not demand a title, future-use sentence, links, tags, author, memory label, or expiry.",
+      "For review or narrow update, read the exact existing note first after resolving it by id. Preserve its accepted body, links, tags, author, expiry, and ownership; answer a read-only question before proposing a write, and patch only what is newly true or inaccurate.",
+      "When changing note content, carry expectedRevisionHash from the exact read so a stale agent update cannot overwrite a newer revision. If the revision conflicts, reread and discuss the current note instead of retrying blindly.",
+      "For guided shaping, ask what the note needs to preserve and what sentence future-you would need to recover from this note later, then offer one concise draft in the user's language. Use that retrieval question only when it would change the body, title, tags, links, or durability.",
+      "Offer a Wiki page for durable reusable synthesis, self_observation for one observed moment, or a primary Psyche record when the material belongs there, but never make reclassification a prerequisite for preserving a standalone note.",
+      "Use shared batch CRUD for Note search, create, update, soft delete, and restore. Respect psyche.read and psyche.note when the exact note is Psyche-linked."
     ]
   },
   {
@@ -4845,14 +4867,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "calendar_event",
     openingQuestion:
-      "What time should Forge hold for this event in your local timezone?",
+      "Are you scheduling a new event, checking one already on the calendar, or changing one?",
     coachingGoal:
-      "Make the event legible as a real commitment in time, with the right timezone and links.",
+      "Make the event truthful in time and provider ownership without turning a direct save, read-only review, or narrow correction into a scheduling form.",
     askSequence: [
-      "Ask what the event is.",
-      "Ask when it starts and ends in local time.",
-      "Ask where it belongs or what it supports.",
-      "Ask whether it should stay Forge-only only if that choice matters."
+      "Distinguish direct capture, guided scheduling, exact-record review or narrow update, read-only review, and delete before asking for location, links, or provider placement.",
+      "For direct capture, reflect the supplied title and time, search for a matching title in the overlapping interval, and ask only for the missing start, end or duration, or timezone interpretation. Once accepted title, offset-bearing startAt and endAt with end after start, and one accuracy or consent check are present, save; Forge requires only title, startAt, and endAt. Do not demand description, location, place details, links, event type, categories, availability, all-day state, activity settings, owner, or calendar selection.",
+      "When the user gives local clock wording, resolve it to offset-bearing instants using the intended IANA timezone. Ask about timezone or daylight-saving ambiguity only when it could change the actual instant; do not make the user format ISO timestamps.",
+      "For review, narrow update, or delete, search for and read the exact existing Calendar Event first. Answer read-only questions before proposing a write, preserve accepted timing, timezone, place, links, provider mapping, ownership, recurrence, and optional metadata, and patch only what is newly true or inaccurate.",
+      "For updates, if the exact read shows external provider ownership, keep the event read-only. Explain that it must be changed in the provider or, with explicit consent, copied into a new Forge-owned event; do not retry a batch update against the mirror.",
+      "If the exact read shows a recurring provider source and the user still wants an edit, ask whether it concerns one occurrence or the series. Use recurrenceEditScope single only for an editable occurrence. Forge cannot edit the series from an expanded occurrence, so direct series work to the provider rather than claiming the update succeeded. Do not ask recurrence scope for a non-recurring event.",
+      "Omit preferredCalendarId to use the default writable connected calendar. Set it to null only when the user explicitly wants Forge-only storage, and ask for a particular calendar only when placement matters.",
+      "Before delete, summarize the exact event, its ownership, and its provider mapping, then obtain explicit confirmation because Forge marks the local event deleted immediately, has no restore, and attempts to delete every associated writable remote provider event or projected copy. Use shared batch CRUD for Calendar Event search, create, update, and delete; provider projection happens downstream, so do not invent a dedicated event route."
     ]
   },
   {
@@ -5911,6 +5937,12 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "life_event") {
     return "Ready when the Life Event's working title or significance, start/end span or event target, place when it changes matching, and selected lane are clear: shared batch CRUD for ordinary saves and links, or the published Life Events route key for timeline, detail, calendar match, ticket import, or travel-status work.";
   }
+  if (guide.entityType === "project") {
+    return "Ready on the selected Project lane. Direct capture is ready for shared batch CRUD when an accepted title and exact existing parent goalId are clear, a normalized-title duplicate search has run inside that Goal, and one accuracy or consent check confirms the save; Forge requires only goalId and title, so do not require an outcome statement, description, PRD, scope boundary, lifecycle status, workflow lane, owner, assignees, scheduling, tags, links, notes, points, or color. Read-only review is ready after reading the exact existing Project and must not manufacture a write. Narrow update is ready only after that exact read separates accepted title, parent Goal, description, PRD, status, workflow lane, ownership, assignees, scheduling, and links from the smallest newly true or inaccurate change; never force a sparse Project through full create intake. Guided shaping is ready when the bounded multi-step deliverable, accepted title, and exact parent Goal are clear; outcome, boundary, and PRD detail are needed only when they change delivery. A Project cannot have an intentionally absent parent Goal: choose or create one as a separate accepted step first. Keep lifecycle status separate from workflowStatus. All Project writes remain on shared batch CRUD.";
+  }
+  if (guide.entityType === "calendar_event") {
+    return "Ready on the selected Calendar Event lane. Direct capture is ready for shared batch CRUD when an accepted title, offset-bearing startAt and endAt with end after start, a duplicate search in the overlapping interval, and one accuracy or consent check are complete; Forge requires only title, startAt, and endAt, so do not require description, location, place, links, event type, categories, availability, all-day state, activity settings, owner, or calendar selection. Resolve local clock wording through the intended IANA timezone and ask only when timezone or daylight-saving ambiguity changes the instant. Read-only review is ready after reading the exact existing event and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change and verifies ownership and recurrence: external provider mirrors remain read-only for updates; recurring provider sources require recurrenceEditScope, with single supported for an editable occurrence and expanded-occurrence series edits handled in the provider. Omit preferredCalendarId for the default writable connected calendar; set null only for an explicit Forge-only choice. Delete is ready only after an exact read of ownership and provider mapping plus explicit confirmation that Forge marks the local event deleted immediately, has no restore, and attempts to delete every associated writable remote provider event or projected copy. All Calendar Event search, create, update, and delete operations remain on shared batch CRUD; provider projection is downstream.";
+  }
   if (guide.entityType === "strategy") {
     return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
   }
@@ -5976,6 +6008,9 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "preference_item") {
     return "Ready on the selected Preference Item lane. Review is ready after reading the exact item and Preferences Workspace for the selected user, domain, and context. Ordinary standalone create or update is ready for shared batch CRUD when the candidate, domain, accepted wording, and duplicate check are clear. Enqueue is ready when the exact existing Forge entity, user, domain, and source-identity duplicate check are clear; use forge_enqueue_preferences_item_from_entity rather than hand-building source links. Judgment or signal is ready when the exact context and item or pair plus truthful outcome or signal are clear. Score override is ready only after the workspace evidence is explained, the user explicitly chooses correction or protection rather than new evidence, the exact item, user, domain, and context are known, and at least one override field is intentionally changed. Never use batch CRUD for enqueue, judgment, signal, or score override actions.";
+  }
+  if (guide.entityType === "note") {
+    return "Ready on the selected Note lane. Direct capture is ready for shared batch CRUD when accepted contentMarkdown and one accuracy or consent check are present; links default to an empty array, so do not require a title, future-use explanation, link, tag, author, memory label, expiry, or alternate container. Read-only review is ready after reading the exact current note and must not manufacture a write. Narrow update is ready only after that exact read separates accepted body and metadata from the smallest newly true or inaccurate change; include expectedRevisionHash from the read when changing content, and reread rather than retry blindly after a revision conflict. Guided shaping is ready when the user accepts one faithful draft and any title, link, tag, or durability detail that materially changes retrieval. A Wiki page, self_observation, or primary Psyche record may be offered when it fits better, but preserving a standalone note never depends on reclassification. All Note search, create, update, soft delete, and restore operations remain on shared batch CRUD, with psyche.read and psyche.note enforced for Psyche-linked notes.";
   }
   if (guide.entityType === "goal") {
     return "Ready on the selected Goal lane. Direct capture is ready for shared batch CRUD when an accepted title names the chosen direction and one accuracy or consent check confirms the save; Forge requires only the title, so do not require a description, why-now explanation, success measure, horizon, status, links, owner, tags, notes, or target points. Review or narrow update is ready only after reading the exact existing goal, separating its accepted title, direction, horizon, status, and links from what is newly true or inaccurate, and limiting the patch to that accepted change; never force a sparse goal through full create intake. Guided clarification is ready when the durable direction and accepted wording are clear enough to distinguish the goal from a project or task; why it matters and horizon are required only when they change the meaning or later use. All Goal writes remain on shared batch CRUD.";

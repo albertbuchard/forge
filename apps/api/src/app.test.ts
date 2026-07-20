@@ -21229,11 +21229,13 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(noteConversationPlaybook);
     assert.match(
       noteConversationPlaybook.openingQuestion,
-      /worth preserving in a note/i
+      /saving wording[\s\S]*working out what belongs in the note[\s\S]*reviewing an existing note/i
     );
     assert.ok(
       noteConversationPlaybook.askSequence.some((step) =>
-        /durable or temporary/i.test(step)
+        /direct capture, guided shaping, exact-record review or narrow update, and read-only review/i.test(
+          step
+        )
       )
     );
     const wikiConversationPlaybook =

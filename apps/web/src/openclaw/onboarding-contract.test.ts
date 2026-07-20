@@ -54,8 +54,11 @@ async function loadOnboardingPayload() {
       classification: string;
       purpose?: string;
       relationshipRules?: string[];
+      minimumCreateFields?: string[];
       fieldGuide?: Array<{
         name: string;
+        type?: string;
+        required?: boolean;
         description?: string;
         defaultValue?: unknown;
         enumValues?: string[];
@@ -1743,6 +1746,131 @@ describe("forge onboarding contract", () => {
       ).toMatch(/\?$/);
       expect(entry.openingQuestion).toBe(entry.exampleQuestions?.[0]);
     }
+
+    expect(playbookByFocus.get("note")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /Preserve supplied wording without friction/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided shaping, exact-record review or narrow update, and read-only review/i
+          ),
+          expect.stringMatching(/Forge requires only contentMarkdown/i),
+          expect.stringMatching(/expectedRevisionHash/i),
+          expect.stringMatching(/Use shared batch CRUD for Note/i)
+        ]),
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/notes/
+        )
+      })
+    );
+    const noteCatalogEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "note"
+    );
+    expect(noteCatalogEntry?.minimumCreateFields).toEqual(["contentMarkdown"]);
+    expect(noteCatalogEntry?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "links",
+          required: false,
+          defaultValue: []
+        }),
+        expect.objectContaining({
+          name: "expectedRevisionHash",
+          type: expect.stringMatching(/update-only/i),
+          description: expect.stringMatching(/stale update/i)
+        })
+      ])
+    );
+    expect(noteCatalogEntry?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*contentMarkdown[\s\S]*links default to an empty array[\s\S]*Read-only review[\s\S]*exact current note[\s\S]*Narrow update[\s\S]*expectedRevisionHash[\s\S]*revision conflict[\s\S]*All Note search, create, update, soft delete, and restore operations remain on shared batch CRUD/i
+    );
+
+    expect(playbookByFocus.get("project")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /exact parent goal[\s\S]*without turning a direct save or narrow correction into a project workshop/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided project shaping, exact-record review or narrow update, and read-only review/i
+          ),
+          expect.stringMatching(/read the exact existing Project first/i),
+          expect.stringMatching(
+            /Every Project requires an existing parent Goal[\s\S]*do not imply that intentionally absent is valid/i
+          ),
+          expect.stringMatching(/Use shared batch CRUD for every Project/i)
+        ]),
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/projects/
+        )
+      })
+    );
+    const projectCatalogEntry = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "project"
+    );
+    expect(projectCatalogEntry?.minimumCreateFields).toEqual([
+      "goalId",
+      "title"
+    ]);
+    expect(projectCatalogEntry?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*exact existing parent goalId[\s\S]*Forge requires only goalId and title[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*never force a sparse Project through full create intake[\s\S]*Guided shaping[\s\S]*cannot have an intentionally absent parent Goal[\s\S]*lifecycle status separate from workflowStatus[\s\S]*All Project writes remain on shared batch CRUD/i
+    );
+
+    const calendarEventCatalog = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "calendar_event"
+    );
+    expect(calendarEventCatalog?.minimumCreateFields).toEqual([
+      "title",
+      "startAt",
+      "endAt"
+    ]);
+    expect(calendarEventCatalog?.relationshipRules?.join(" ")).toMatch(
+      /external provider events are read-only for updates[\s\S]*recurring provider event requires recurrenceEditScope[\s\S]*deletion is immediate[\s\S]*not restorable[\s\S]*attempts to delete every associated writable remote provider event or projected copy/i
+    );
+    expect(calendarEventCatalog?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "recurrenceEditScope",
+          type: expect.stringMatching(/update-only[\s\S]*single\|series/i),
+          description: expect.stringMatching(
+            /single[\s\S]*editable occurrence[\s\S]*Series edits[\s\S]*not supported[\s\S]*provider/i
+          )
+        })
+      ])
+    );
+    expect(playbookByFocus.get("calendar_event")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        coachingGoal: expect.stringMatching(
+          /truthful in time and provider ownership[\s\S]*without turning a direct save, read-only review, or narrow correction into a scheduling form/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided scheduling, exact-record review or narrow update, read-only review, and delete/i
+          ),
+          expect.stringMatching(
+            /read the exact existing Calendar Event first/i
+          ),
+          expect.stringMatching(/external provider ownership[\s\S]*read-only/i),
+          expect.stringMatching(
+            /recurring provider source[\s\S]*recurrenceEditScope single[\s\S]*series[\s\S]*provider/i
+          ),
+          expect.stringMatching(
+            /marks the local event deleted immediately[\s\S]*no restore[\s\S]*associated writable remote provider event or projected copy[\s\S]*shared batch CRUD/i
+          )
+        ]),
+        apiAccessHint: expect.stringMatching(
+          /\/api\/v1\/entities\/create[\s\S]*\/api\/v1\/calendar\/events/
+        )
+      })
+    );
+    expect(calendarEventCatalog?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*offset-bearing startAt and endAt[\s\S]*Forge requires only title, startAt, and endAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*external provider mirrors remain read-only for updates[\s\S]*recurrenceEditScope[\s\S]*Omit preferredCalendarId[\s\S]*Set null only[\s\S]*Delete[\s\S]*ownership and provider mapping[\s\S]*no restore[\s\S]*writable remote provider event or projected copy[\s\S]*All Calendar Event search, create, update, and delete operations remain on shared batch CRUD/i
+    );
 
     expect(playbookByFocus.get("goal")).toEqual(
       expect.objectContaining({

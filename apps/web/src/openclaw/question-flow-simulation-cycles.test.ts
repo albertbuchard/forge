@@ -35,7 +35,14 @@ async function loadOnboardingPayload() {
       entityType: string;
       classification: string;
       preferredReadPath: string | null;
-      fieldGuide?: Array<{ name: string; description?: string }>;
+      minimumCreateFields?: string[];
+      fieldGuide?: Array<{
+        name: string;
+        type?: string;
+        required?: boolean;
+        description?: string;
+        defaultValue?: unknown;
+      }>;
       questionFlow: {
         openingQuestion: string;
         coachingGoal: string;
@@ -2296,10 +2303,10 @@ describe("question flow simulation cycles", () => {
       /emotionally loaded but the record is still non-Psyche[\s\S]*lived stake once[\s\S]*operational question/i
     );
     expect(entityPlaybook).toMatch(
-      /what sentence future-you would need to recover from this note later/i
+      /what sentence\s+future-you would need to recover from this note later/i
     );
     expect(entityPlaybook).toMatch(
-      /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
+      /what belongs[\s\S]*inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
     );
     expect(entityPlaybook).toMatch(
       /situation -> cue -> emotion\/body -> thought\/meaning -> behavior\/urge/i
@@ -2593,6 +2600,136 @@ describe("question flow simulation cycles", () => {
         /direct capture has an accepted label[\s\S]*(?:without requiring|does not require)[\s\S]*fresh episode/i
       );
     }
+  });
+
+  it("current cycle 1 retest: Note preserves direct wording and revision-safe updates", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Note");
+    const onboarding = await loadOnboardingPayload();
+    const note = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "note"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided shaping[\s\S]*exact-record review or narrow update[\s\S]*read-only review/i
+    );
+    expect(compact).toMatch(
+      /supplied Markdown[\s\S]*distinctive phrase[\s\S]*one accuracy or consent question[\s\S]*requires only `contentMarkdown`[\s\S]*do not demand a title[\s\S]*memory label[\s\S]*expiry/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing note first[\s\S]*Answer a\s+read-only question before proposing a write[\s\S]*patch only what is newly true or[\s\S]*inaccurate/i
+    );
+    expect(compact).toMatch(
+      /`expectedRevisionHash`[\s\S]*stale agent update[\s\S]*reread[\s\S]*instead of retrying blindly/i
+    );
+    expect(compact).toMatch(
+      /Wiki page[\s\S]*`self_observation`[\s\S]*primary Psyche record[\s\S]*never make reclassification a prerequisite/i
+    );
+    expect(note?.minimumCreateFields).toEqual(["contentMarkdown"]);
+    expect(note?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "links",
+          required: false,
+          defaultValue: []
+        }),
+        expect.objectContaining({
+          name: "expectedRevisionHash",
+          type: expect.stringMatching(/update-only/i)
+        })
+      ])
+    );
+    expect(note?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*accepted contentMarkdown[\s\S]*links default to an empty array[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*expectedRevisionHash[\s\S]*revision conflict[\s\S]*standalone note never depends on reclassification[\s\S]*shared batch CRUD/i
+    );
+  });
+
+  it("current cycle 2 retest: Project adapts capture, shaping, review, and required placement", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Project");
+    const onboarding = await loadOnboardingPayload();
+    const project = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "project"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided project shaping[\s\S]*exact-record review or\s+narrow update[\s\S]*read-only review/i
+    );
+    expect(compact).toMatch(
+      /supplied title[\s\S]*exact existing\s+parent Goal[\s\S]*normalized title inside that Goal[\s\S]*one\s+accuracy or consent question[\s\S]*requires only `goalId` and `title`/i
+    );
+    expect(compact).toMatch(
+      /Do not\s+demand an outcome statement[\s\S]*PRD[\s\S]*workflow lane[\s\S]*scheduling rules[\s\S]*points, or color/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing Project[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly true\s+or inaccurate[\s\S]*Never force a sparse existing Project through full create\s+intake/i
+    );
+    expect(compact).toMatch(
+      /Every Project requires an existing parent Goal[\s\S]*choose or create one as a separate accepted step[\s\S]*Do not imply that an intentionally absent parent is valid/i
+    );
+    expect(compact).toMatch(
+      /bounded multi-step deliverable or workstream[\s\S]*Goal that names a direction[\s\S]*Task or Issue that names executable work/i
+    );
+    expect(compact).toMatch(
+      /lifecycle `status`[\s\S]*board `workflowStatus`[\s\S]*shared batch CRUD[\s\S]*Do not invent a dedicated Project route/i
+    );
+    expect(project?.minimumCreateFields).toEqual(["goalId", "title"]);
+    expect(project?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*exact existing parent goalId[\s\S]*Forge requires only goalId and title[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*never force a sparse Project through full create intake[\s\S]*Guided shaping[\s\S]*cannot have an intentionally absent parent Goal[\s\S]*lifecycle status separate from workflowStatus[\s\S]*All Project writes remain on shared batch CRUD/i
+    );
+  });
+
+  it("current cycle 3 retest: Calendar Event adapts capture, review, recurrence, and delete", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Calendar Event");
+    const onboarding = await loadOnboardingPayload();
+    const calendarEvent = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "calendar_event"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided scheduling[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*delete/i
+    );
+    expect(compact).toMatch(
+      /matching[\s\S]*overlapping interval[\s\S]*requires only `title`, `startAt`, and `endAt`[\s\S]*Do not demand[\s\S]*calendar selection/i
+    );
+    expect(compact).toMatch(
+      /local clock wording[\s\S]*offset-bearing instants[\s\S]*IANA timezone[\s\S]*daylight-saving ambiguity[\s\S]*Do not make the user format ISO/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing[\s\S]*Calendar Event first[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly true or[\s\S]*inaccurate/i
+    );
+    expect(compact).toMatch(
+      /external provider ownership[\s\S]*read-only[\s\S]*explicit\s+consent[\s\S]*new Forge-owned event[\s\S]*Do not retry a batch update/i
+    );
+    expect(compact).toMatch(
+      /recurring provider source[\s\S]*one occurrence or the series[\s\S]*recurrenceEditScope: "single"[\s\S]*series from an expanded occurrence[\s\S]*Do not ask recurrence scope for a[\s\S]*non-recurring event/i
+    );
+    expect(compact).toMatch(
+      /Omit `preferredCalendarId`[\s\S]*default writable connected calendar[\s\S]*to `null` only[\s\S]*Forge-only storage/i
+    );
+    expect(compact).toMatch(
+      /Before delete[\s\S]*ownership[\s\S]*provider mapping[\s\S]*explicit\s+confirmation/i
+    );
+    expect(compact).toMatch(
+      /local event deleted[\s\S]*immediately[\s\S]*no restore[\s\S]*associated writable[\s\S]*remote provider event or projected copy/i
+    );
+    expect(compact).toMatch(
+      /shared batch CRUD[\s\S]*do\s+not invent a dedicated event[\s\S]*route/i
+    );
+    expect(calendarEvent?.minimumCreateFields).toEqual([
+      "title",
+      "startAt",
+      "endAt"
+    ]);
+    expect(calendarEvent?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "recurrenceEditScope",
+          type: expect.stringMatching(/update-only[\s\S]*single\|series/i)
+        })
+      ])
+    );
+    expect(calendarEvent?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*offset-bearing startAt and endAt[\s\S]*Forge requires only title, startAt, and endAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*external provider mirrors remain read-only for updates[\s\S]*recurrenceEditScope[\s\S]*Omit preferredCalendarId[\s\S]*Set null only[\s\S]*Delete[\s\S]*ownership and provider mapping[\s\S]*no restore[\s\S]*writable remote provider event or projected copy[\s\S]*All Calendar Event search, create, update, and delete operations remain on shared batch CRUD/i
+    );
   });
 
   it("cycle 1 retest: Goal adapts direct, guided, and review intake", async () => {

@@ -1448,21 +1448,42 @@ Preferred opening question:
 
 ## Project
 
-Aim: turn an intention into a bounded workstream with a clear outcome.
+Aim: preserve or shape a bounded workstream under an exact parent Goal without
+turning a direct save or narrow correction into a project workshop.
 
 Arc:
 
-1. Ask what this piece of work is trying to make true.
-2. Reflect the emerging boundary so the user can hear what is in scope.
-3. Ask what outcome would make it feel real or complete for now.
-4. Ask what belongs in the project PRD or brief when the user is shaping delivery
-   rather than only naming a project.
-5. Ask what belongs inside the boundary and what can stay out if the scope still
-   feels muddy.
-6. Ask which goal it belongs under.
-7. Land on a working name once the scope is clear.
-8. Clarify lifecycle status, workflow lane, owner, human/bot assignees, scheduling
-   rules, and notes only after the scope is clear.
+1. Distinguish direct capture, guided project shaping, exact-record review or
+   narrow update, and read-only review before asking about outcome, scope, or
+   delivery details.
+2. For direct capture, reflect the supplied title, resolve the exact existing
+   parent Goal, search for the normalized title inside that Goal, and ask one
+   accuracy or consent question. Forge requires only `goalId` and `title`. Do not
+   demand an outcome statement, description, PRD, scope boundary, lifecycle
+   status, workflow lane, owner, assignees, scheduling rules, tags, links, notes,
+   points, or color.
+3. For review or narrow update, search for and read the exact existing Project
+   first. Answer read-only questions before proposing a write. Preserve its
+   accepted title, parent Goal, description, PRD, lifecycle status, workflow lane,
+   ownership, assignees, scheduling, and links, then patch only what is newly true
+   or inaccurate. Never force a sparse existing Project through full create
+   intake.
+4. For guided shaping, ask, "What would you be trying to make true through this
+   work?" and reflect the emerging boundary. Ask what outcome would make it complete
+   enough, what belongs inside the boundary and what can stay out if the scope still
+   feels muddy, and what belongs in the project PRD or brief only when the user wants
+   help shaping delivery.
+5. Every Project requires an existing parent Goal. If no suitable Goal exists,
+   help the user choose or create one as a separate accepted step before creating
+   the Project. Do not imply that an intentionally absent parent is valid.
+6. Distinguish a Project as a bounded multi-step deliverable or workstream from a
+   Goal that names a direction and a Task or Issue that names executable work.
+   Offer a concise working title when the user wants help naming it.
+7. Keep lifecycle `status` separate from the board `workflowStatus` lane. Ask about
+   either, plus owner, human/bot assignees, scheduling rules, tags, links, or notes,
+   only when the detail changes delivery, responsibility, or later navigation.
+8. Use shared batch CRUD for every Project search, create, update, soft delete, and
+   restore. Do not invent a dedicated Project route.
 
 Helpful follow-up lanes:
 
@@ -1475,13 +1496,18 @@ Helpful follow-up lanes:
 
 Ready to save when:
 
-- the project has a clear name
-- the outcome is concrete enough to recognize later
-- its parent goal is known or intentionally absent
+- direct capture has an accepted title, the exact existing parent Goal, a duplicate
+  check inside that Goal, and one accuracy or consent check
+- review or narrow update has read the exact existing Project and isolated the
+  smallest accepted change without backfilling a sparse record
+- guided shaping has a bounded multi-step deliverable, accepted title, and exact
+  parent Goal; outcome, boundary, and PRD detail are present only when they change
+  delivery
+- every write uses shared batch CRUD
 
 Preferred opening question:
 
-- "If this became a real project, what would you be trying to make true in your life or work?"
+- "Are you naming a project you already understand, shaping its boundary, or updating one that exists?"
 
 ## Strategy
 
@@ -1755,30 +1781,54 @@ Preferred opening question:
 
 ## Note
 
-Aim: preserve the useful context and link it to the right places without turning the
-note into a dumping ground.
+Aim: preserve supplied wording without friction, while helping the user shape or
+connect it only when that changes what the note is for.
+
+Choose the lane first:
+
+- direct capture
+- guided shaping
+- exact-record review or narrow update
+- read-only review
 
 Arc:
 
-1. Ask what the note needs to preserve.
-2. Ask what sentence future-you would need to recover from this note later.
-3. Ask what entities it should stay attached to.
-4. Ask whether it should be durable or temporary.
-5. Ask about tags or author only if they will help retrieval or handoff.
+1. For direct capture, reflect the supplied Markdown, search a distinctive phrase for
+   a duplicate when that risk is real, and ask one accuracy or consent question.
+   Forge requires only `contentMarkdown`; do not demand a title, future-use
+   sentence, links, tags, author, memory label, or expiry.
+2. For review or narrow update, read the exact existing note first after resolving it
+   by id.
+   Preserve its accepted body, links, tags, author, expiry, and ownership. Answer a
+   read-only question before proposing a write, and patch only what is newly true or
+   inaccurate.
+3. When changing note content, carry `expectedRevisionHash` from the exact read so a
+   stale agent update cannot overwrite a newer revision. If the revision conflicts,
+   reread and discuss the current note instead of retrying blindly.
+4. For guided shaping, ask what the note needs to preserve and what sentence
+   future-you would need to recover from this note later, then offer one concise draft
+   in the user's language. Use that retrieval question only when it would change the
+   body, title, tags, links, or durability.
+5. Offer a Wiki page for durable reusable synthesis, `self_observation` for one
+   observed moment, or a primary Psyche record when the material belongs there, but
+   never make reclassification a prerequisite for preserving a standalone note.
 
 Helpful follow-up lanes:
 
-- what the note is for later
-- what should stay linked
-- whether it is durable or should expire
-- whether part of the detail belongs in a note while the cleaner structure belongs on
-  another entity
+- what one point the note needs to preserve
+- what future retrieval depends on, only when that changes the saved note
+- whether a link, memory label, or expiry materially helps
+- whether the user wants a standalone note or a linked primary container
 
 Route note:
 
 - `note` is a normal batch-first entity. Search, create, update, soft delete, and
   restore it through the shared entity tools unless the user needs the dedicated
   bounded Notes page API.
+- `contentMarkdown` is the only create minimum. `links` is optional and defaults to
+  an empty array, so an unlinked standalone note is valid.
+- Search with an exact id before review or update. Include the returned
+  `revisionHash` as `patch.expectedRevisionHash` when changing content.
 - Notes use the general `links` model and can link to any compatible Forge entity.
 - When Psyche authentication is enabled, reading Psyche-linked notes requires
   `psyche.read`; creating, updating, deleting, or restoring them requires
@@ -1786,13 +1836,18 @@ Route note:
 
 Ready to save when:
 
-- the note body captures the important point
-- the links are clear
-- durability is clear when relevant
+- direct capture has accepted `contentMarkdown` and one accuracy or consent check
+- read-only review has read the exact note without manufacturing a write
+- narrow update has isolated the smallest accepted change and carries the current
+  revision hash for content changes
+- guided shaping has an accepted faithful draft plus only the retrieval details that
+  materially change later use
+- every Note mutation uses shared batch CRUD with the required Psyche scope when
+  applicable
 
 Preferred opening question:
 
-- "What about this feels worth preserving in a note?"
+- "Are you saving wording you already have, working out what belongs in the note, or reviewing an existing note?"
 
 ## Wiki Page
 
@@ -2024,31 +2079,81 @@ Preferred opening question:
 
 ## Calendar Event
 
-Aim: make the event legible as a real commitment in time, with the right timezone and
-links.
+Aim: make the event truthful in time and provider ownership without turning a direct
+save, read-only review, or narrow correction into a scheduling form.
+
+Choose the lane first:
+
+- direct capture
+- guided scheduling
+- exact-record review or narrow update
+- read-only review
+- delete
 
 Arc:
 
-1. Ask what the event is.
-2. Ask when it starts and ends in local time.
-3. Ask where it belongs or what it supports.
-4. Ask whether it should stay Forge-only only if that choice matters.
+1. For direct capture, reflect the supplied title and time, search for a matching
+   title in the overlapping interval, and ask only for the missing start, end or
+   duration, or timezone interpretation. Once the accepted title, offset-bearing
+   `startAt` and `endAt` with end after start, and one accuracy or consent check are
+   present, save. Forge requires only `title`, `startAt`, and `endAt`. Do not demand
+   description, location, place details, links, event type, categories,
+   availability, all-day state, activity settings, owner, or calendar selection.
+2. When the user gives local clock wording, resolve it to offset-bearing instants
+   using the intended IANA timezone. Ask about timezone or daylight-saving ambiguity
+   only when it could change the actual instant. Do not make the user format ISO
+   timestamps.
+3. For review, narrow update, or delete, search for and read the exact existing
+   Calendar Event first. Answer read-only questions before proposing a write.
+   Preserve accepted timing, timezone, place, links, provider mapping, ownership,
+   recurrence, and optional metadata, then patch only what is newly true or
+   inaccurate.
+4. For updates, if the exact read shows external provider ownership, keep the event
+   read-only. Explain that it must be changed in the provider or, with explicit
+   consent, copied into a new Forge-owned event. Do not retry a batch update against
+   the mirror.
+5. If the exact read shows a recurring provider source and the user still wants an
+   edit, ask whether it concerns one occurrence or the series. Use
+   `recurrenceEditScope: "single"` only for an editable occurrence. Forge cannot edit
+   the series from an expanded occurrence, so direct series work to the provider
+   rather than claiming the update succeeded. Do not ask recurrence scope for a
+   non-recurring event.
+6. Omit `preferredCalendarId` to use the default writable connected calendar. Set it
+   to `null` only when the user explicitly wants Forge-only storage. Ask for a
+   particular calendar only when placement matters.
+7. Ask where the event belongs or what it supports only when a place or link changes
+   attendance, preparation, navigation, or later retrieval.
+8. Before delete, summarize the exact event, its ownership, and its provider mapping,
+   then obtain explicit confirmation. Forge marks the local event deleted
+   immediately, has no restore, and attempts to delete every associated writable
+   remote provider event or projected copy. Use shared batch CRUD for Calendar Event
+   search, create, update, and delete. Provider projection happens downstream; do
+   not invent a dedicated event route.
 
 Helpful follow-up lanes:
 
 - exact start and end time
-- local timezone if there is ambiguity
-- linked goal, project, task, or note
+- local timezone or daylight-saving interpretation only if there is ambiguity
+- one occurrence versus provider-managed series only for a recurring source
+- linked goal, project, task, or note only when the link changes later use
+- explicit Forge-only storage when the default writable calendar is not wanted
 
 Ready to save when:
 
-- the title is clear
-- the start and end are clear in the user's timezone
-- any important links or storage preference are known
+- direct capture has an accepted title, offset-bearing start and end with end after
+  start, an overlapping duplicate check, and one accuracy or consent check
+- review or narrow update has read the exact event and isolated the smallest accepted
+  change after checking provider ownership and recurrence
+- external provider mirrors remain read-only for updates, and expanded-occurrence
+  series edits are directed to the provider
+- delete has an exact target, ownership and provider mapping plus explicit
+  confirmation of immediate, non-restorable local removal and attempted deletion of
+  every associated writable remote event or projected copy
+- every event write uses shared batch CRUD
 
 Preferred opening question:
 
-- "What time should Forge hold for this event in your local timezone?"
+- "Are you scheduling a new event, checking one already on the calendar, or changing one?"
 
 ## Work Block Template
 

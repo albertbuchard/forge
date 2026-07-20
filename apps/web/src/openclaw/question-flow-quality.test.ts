@@ -36,7 +36,11 @@ describe("question flow quality coverage", () => {
         /naming a direction[\s\S]*updating a goal/i,
         /direct capture[\s\S]*exact-record review or narrow update/i
       ],
-      ["Project", /make true in your life or work/i, /bounded workstream/i],
+      [
+        "Project",
+        /naming a project you already understand[\s\S]*updating one that exists/i,
+        /bounded workstream/i
+      ],
       [
         "Strategy",
         /shaping this strategy, reviewing how execution is going/i,
@@ -49,7 +53,11 @@ describe("question flow quality coverage", () => {
         /check-in or outcome correction/i
       ],
       ["Tag", /help you notice or find again later/i, /inside versus outside/i],
-      ["Note", /worth preserving in a note/i, /durable or temporary/i],
+      [
+        "Note",
+        /saving wording[\s\S]*reviewing an existing note/i,
+        /direct capture[\s\S]*read-only review/i
+      ],
       [
         "Wiki Page",
         /find, preserve, or improve in the wiki/i,
@@ -65,7 +73,11 @@ describe("question flow quality coverage", () => {
         /saving an insight[\s\S]*derive one from evidence[\s\S]*reviewing an existing insight/i,
         /source evidence[\s\S]*agent's hypothesis/i
       ],
-      ["Calendar Event", /what time should Forge hold/i, /timezone/i],
+      [
+        "Calendar Event",
+        /scheduling a new event[\s\S]*changing one/i,
+        /truthful in time[\s\S]*provider ownership/i
+      ],
       [
         "Work Block Template",
         /when should this recurring block repeat/i,
@@ -276,6 +288,67 @@ describe("question flow quality coverage", () => {
     );
     expect(questionnaireInstrumentSection).toMatch(
       /forge_list_questionnaires[\s\S]*forge_get_questionnaire[\s\S]*forge_clone_questionnaire[\s\S]*forge_ensure_questionnaire_draft[\s\S]*forge_publish_questionnaire_draft/i
+    );
+  });
+
+  it("keeps Project capture short while preserving guided shaping and exact placement", () => {
+    const projectSection = getSectionSlice(entityPlaybook, "Project");
+
+    expect(projectSection).toMatch(
+      /direct capture[\s\S]*guided project shaping[\s\S]*exact-record review or\s+narrow update[\s\S]*read-only review/i
+    );
+    expect(projectSection).toMatch(
+      /supplied title[\s\S]*exact existing\s+parent Goal[\s\S]*normalized title inside that Goal[\s\S]*one\s+accuracy or consent question[\s\S]*requires only `goalId` and `title`/i
+    );
+    expect(projectSection).toMatch(
+      /Do not\s+demand an outcome statement[\s\S]*PRD[\s\S]*workflow lane[\s\S]*scheduling rules[\s\S]*points, or color/i
+    );
+    expect(projectSection).toMatch(
+      /read the exact existing Project[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly true\s+or inaccurate[\s\S]*Never force a sparse existing Project through full create\s+intake/i
+    );
+    expect(projectSection).toMatch(
+      /Every Project requires an existing parent Goal[\s\S]*choose or create one as a separate accepted step[\s\S]*intentionally absent parent is valid/i
+    );
+    expect(projectSection).toMatch(
+      /bounded multi-step deliverable or workstream[\s\S]*Goal that names a direction[\s\S]*Task or Issue that names executable work/i
+    );
+    expect(projectSection).toMatch(
+      /lifecycle `status`[\s\S]*board `workflowStatus`[\s\S]*shared batch CRUD[\s\S]*Do not invent a dedicated Project route/i
+    );
+  });
+
+  it("keeps Calendar Event intake minimal while respecting time and provider state", () => {
+    const eventSection = getSectionSlice(entityPlaybook, "Calendar Event");
+
+    expect(eventSection).toMatch(
+      /direct capture[\s\S]*guided scheduling[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*delete/i
+    );
+    expect(eventSection).toMatch(
+      /matching[\s\S]*overlapping interval[\s\S]*requires only `title`, `startAt`, and `endAt`[\s\S]*Do not demand[\s\S]*calendar selection/i
+    );
+    expect(eventSection).toMatch(
+      /local clock wording[\s\S]*offset-bearing instants[\s\S]*IANA timezone[\s\S]*daylight-saving ambiguity[\s\S]*Do not make the user format ISO/i
+    );
+    expect(eventSection).toMatch(
+      /read the exact existing[\s\S]*Calendar Event first[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly true or[\s\S]*inaccurate/i
+    );
+    expect(eventSection).toMatch(
+      /external provider ownership[\s\S]*read-only[\s\S]*explicit\s+consent[\s\S]*new Forge-owned event[\s\S]*Do not retry a batch update/i
+    );
+    expect(eventSection).toMatch(
+      /recurring provider source[\s\S]*one occurrence or the series[\s\S]*recurrenceEditScope: "single"[\s\S]*cannot edit[\s\S]*series from an expanded occurrence[\s\S]*Do not ask recurrence scope for a[\s\S]*non-recurring event/i
+    );
+    expect(eventSection).toMatch(
+      /Omit `preferredCalendarId`[\s\S]*default writable connected calendar[\s\S]*Set it[\s\S]*to `null` only[\s\S]*Forge-only storage/i
+    );
+    expect(eventSection).toMatch(
+      /Before delete[\s\S]*ownership[\s\S]*provider mapping[\s\S]*explicit\s+confirmation/i
+    );
+    expect(eventSection).toMatch(
+      /local event deleted[\s\S]*immediately[\s\S]*no restore[\s\S]*associated writable[\s\S]*remote provider event or projected copy/i
+    );
+    expect(eventSection).toMatch(
+      /shared batch CRUD[\s\S]*do\s+not invent a dedicated event[\s\S]*route/i
     );
   });
 
@@ -711,13 +784,13 @@ describe("question flow quality coverage", () => {
       /Use the wiki tools and[\s\S]*\/api\/v1\/wiki\/pages[\s\S]*family/i
     );
     expect(entityPlaybook).toMatch(
-      /what sentence future-you would need to recover from this note later/i
+      /what sentence\s+future-you would need to recover from this note later/i
     );
     expect(entityPlaybook).toMatch(
       /already gave usable wording[\s\S]*rename it for style/i
     );
     expect(entityPlaybook).toMatch(
-      /what belongs inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
+      /what belongs[\s\S]*inside the boundary and what can stay out if the scope still[\s\S]*feels muddy/i
     );
     expect(entityPlaybook).toMatch(
       /what happened in the situation[\s\S]*Reflect what seems most important[\s\S]*Ask one next question[\s\S]*Do not require every link/i
