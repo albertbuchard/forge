@@ -3548,19 +3548,22 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     entityType: "tag",
     purpose:
       "A shared classification label used across Forge entities and notes.",
-    minimumCreateFields: ["label"],
+    minimumCreateFields: ["name"],
     relationshipRules: [
       "Tags are simple reusable labels, not a substitute for richer entity links.",
-      "They use batch CRUD like other simple entities."
+      "Creating a Tag record does not apply it to another record. Goal and Task records that support stored Tag references use tagIds; Note and Wiki tag fields are their own free-text labels and do not automatically resolve to a stored Tag id.",
+      "Search, create, update, soft delete, and restore use shared batch CRUD. There is no dedicated Tag route family."
     ],
-    searchHints: ["Search by label before creating a near-duplicate tag."],
-    examples: ['{"label":"Deep work","kind":"execution"}'],
+    searchHints: [
+      "Search by name before creating a near-duplicate tag; Forge treats an existing case-insensitive exact name as the same stored Tag."
+    ],
+    examples: ['{"name":"Deep work","kind":"execution"}'],
     fieldGuide: [
       {
-        name: "label",
+        name: "name",
         type: "string",
         required: true,
-        description: "Human-readable tag label."
+        description: "Human-readable stored Tag name."
       },
       {
         name: "kind",
@@ -3684,9 +3687,10 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
     minimumCreateFields: ["startedAt", "endedAt"],
     relationshipRules: [
       "Use batch CRUD for ordinary sleep_session create, update, delete, and search work.",
-      "The direct PATCH route is still available when enriching an existing night with reflective notes after review.",
-      "Do not reach for the reflective helper when a normal batch create or patch already fits the job.",
-      "Sleep deletions are immediate and do not go through the settings bin."
+      "When localDateKey is omitted, Forge derives the canonical night from endedAt in sourceTimezone, so the night is grouped by its local wake date.",
+      "Use forge_update_sleep_session only after reading an exact existing night when enriching qualitySummary, notes, tags, or links; that helper deliberately leaves imported timestamps, source fields, stages, and metrics untouched.",
+      "Do not overwrite provider-backed timing, source, stage, or metric evidence merely to add reflective context. Use a normal batch patch only for an explicit accepted record correction.",
+      "Sleep deletions are immediate, non-restorable, and do not go through the settings bin."
     ],
     searchHints: [
       "Search by linked entities or date window before creating a duplicate manual night."
@@ -3706,6 +3710,14 @@ const AGENT_ONBOARDING_ENTITY_CATALOG = [
         type: "ISO datetime",
         required: true,
         description: "Sleep end timestamp."
+      },
+      {
+        name: "sourceTimezone",
+        type: "IANA timezone",
+        required: false,
+        description:
+          "Timezone used to derive the local wake-date key when localDateKey is omitted.",
+        defaultValue: "UTC"
       },
       {
         name: "timeInBedSeconds",
@@ -4756,15 +4768,18 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   },
   {
     focus: "task",
-    openingQuestion: "What is the next concrete move here?",
+    openingQuestion:
+      "Are you saving a work item you already understand, breaking work down, reviewing one, or closing it out?",
     coachingGoal:
-      "Identify the next concrete one-session work item and place it in the issue/task/subtask hierarchy when that hierarchy matters.",
+      "Preserve a direct work item without hierarchy friction, while helping guided work fit the right issue, task, or subtask level and close out truthfully.",
     askSequence: [
-      "Ask what the next concrete action is.",
-      "Ask whether this is an issue, one-session task, or subtask only when the level is not already obvious.",
-      "Ask where it belongs in the hierarchy: project for an issue, issue for a task, or parent task for a subtask. Use goal or standalone only when the user is intentionally outside the PM hierarchy.",
-      "Capture the execution contract in aiInstructions when the task is for an agent session.",
-      "Ask for due date, priority, owner, human/bot assignees, acceptance criteria, or brief context only when that detail changes execution, accountability, or verification; otherwise save the one-session work item once the action and placement are clear."
+      "Distinguish direct capture, guided breakdown or hierarchy placement, exact-record review or narrow update, read-only review, and closeout before asking for execution or placement details.",
+      "For direct capture, reflect the supplied title, search normalized titles for a duplicate, and ask one accuracy or consent question. Forge requires only title; when level is not supplied it defaults to task and may remain in the inbox without a parent. Do not demand a rewritten action, issue/task/subtask choice, goal, project, parent, description, status, priority, owner, assignees, due date, aiInstructions, executionMode, acceptance criteria, blockers, scheduling, tags, points, notes, or completion evidence.",
+      "For review or narrow update, search for and read the exact existing work item first. Answer read-only questions before proposing a write, preserve accepted level, hierarchy, wording, status, ownership, execution contract, blockers, scheduling, tags, git refs, and completion state, then patch only what is newly true or inaccurate. Never force a sparse existing task through full create intake.",
+      "For guided breakdown, ask what one concrete outcome should become true and whether it is an issue, one-session task, or lightweight subtask only when level changes the work. In hierarchy-aware work, an issue requires a project, a task parent must be an issue, and a subtask parent must be a task; keep intentional inbox or legacy placement available for an ordinary task.",
+      "Capture aiInstructions only when the work is meant for an agent session. Ask for AFK or HITL execution mode, acceptance criteria, blockers, due date, priority, owner, human/bot assignees, or context only when the detail changes execution, accountability, or verification.",
+      "For closeout, read the exact work item and current status first. Record only factual workSummary, modifiedFiles, and linkedGitRefIds that the user or execution evidence supports; leave arrays empty when none apply and never invent evidence. If the user only asks for a status change, honor that narrow update and allow closeout to remain deferred instead of reopening intake.",
+      "Use shared batch CRUD for Task search, create, update, soft delete, and restore. Starting, focusing, heartbeating, completing, or releasing a task_run uses the dedicated Task Run action tools and must not be guessed as Task CRUD."
     ]
   },
   {
@@ -4786,14 +4801,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "tag",
     openingQuestion:
-      "What do you want this tag to help you notice or find again later?",
+      "Are you saving a label you already chose, shaping a reusable category, or reviewing an existing tag?",
     coachingGoal:
-      "Create a label that helps later retrieval or grouping instead of another vague bucket.",
+      "Preserve a clear label quickly when the user already knows it, while offering taxonomy help only when that would improve later retrieval.",
     askSequence: [
-      "Ask what the tag should help the user notice, group, or find later.",
-      "Ask what kinds of records should belong under it and what should stay outside it.",
-      "Offer a concise label if the grouping meaning is clearer than the wording.",
-      "Ask about color, kind, or parent grouping only if that changes how the tag will be used."
+      "Choose among direct capture, guided taxonomy, exact-record review or narrow update, and read-only review before asking for metadata.",
+      "For direct capture, search existing Tags by the supplied name, reflect the accepted name once, and ask only one accuracy or consent question. Forge requires only name; kind defaults to category, color to #71717a, and description to an empty string. Do not require a purpose, inside-versus-outside boundary, kind, color, description, owner, parent grouping, or attachment target.",
+      "For review or narrow update, search for and read the exact existing Tag first. Answer read-only questions before proposing a write, preserve accepted sparse name, kind, color, description, and ownership, ask only what is newly true or inaccurate, and patch only that accepted change.",
+      "For guided taxonomy, ask what the label should help the user notice or retrieve and what nearby label it must remain distinct from only when the wording is ambiguous, a near-duplicate exists, or the user wants help designing a reusable system. Offer one concise name and check whether it fits.",
+      "Ask about kind, color, or description only when the user says it changes grouping or recognition. Forge has no parent-tag field; do not invent one.",
+      "Keep Tag creation separate from attachment. Creating a Tag does not apply it: read the exact target before updating a supported tagIds field, while Note and Wiki records use their own free-text tag labels rather than a stored Tag id.",
+      "Use shared batch CRUD for Tag search, create, update, soft delete, and restore. Do not guess a dedicated Tag route."
     ]
   },
   {
@@ -5023,15 +5041,17 @@ const AGENT_ONBOARDING_ENTITY_CONVERSATION_PLAYBOOKS = [
   {
     focus: "sleep_session",
     openingQuestion:
-      "What about this night feels important enough to remember or connect?",
+      "Are you adding a night manually, reviewing or correcting one, adding context to it, or deleting it?",
     coachingGoal:
-      "Enrich one night's record with reflective context instead of treating it like a generic note.",
+      "Capture or correct one night with minimal timing questions, preserve imported evidence, and make reflection optional and specific.",
     askSequence: [
-      "Ask what about the night feels worth capturing.",
-      "Ask whether the main point is quality, pattern, context, meaning, or links.",
-      "Use the shared batch CRUD path for ordinary sleep_session create or update work, and reserve the reflective helper for enrichment after review.",
-      "Ask what goal, project, task, habit, or Psyche record it should stay connected to.",
-      "Ask about tags only if they will help later review."
+      "Choose among direct manual capture, exact-record review or narrow correction, read-only review, reflective enrichment, and delete before asking for details.",
+      "For direct manual capture, resolve the user's sleep start and wake time into offset-bearing startedAt and endedAt, ensure the end is after the start, search the overlapping interval or local wake date for a duplicate, and ask one accuracy or consent question. Forge requires only startedAt and endedAt; it defaults the source fields for a manual record and derives time in bed, asleep time, awake time, score, and localDateKey. Do not require a quality summary, stage data, metrics, notes, tags, links, source details, or owner when already clear.",
+      "Ask for an IANA timezone only when local clock wording, daylight-saving ambiguity, or the local wake date would otherwise change the stored instants. When localDateKey is omitted, Forge derives it from endedAt in sourceTimezone; do not make the user format ISO timestamps or calculate the wake-date key.",
+      "For review or narrow correction, search for and read the exact existing Sleep Session first. Answer the read-only question before proposing a write, preserve accepted sparse timing, source, provenance, stage, metric, annotation, tag, and link data, and patch only what is newly true or inaccurate. If the record is provider-backed, keep imported evidence separate from the user's correction and do not rewrite raw timing, stages, source, or metrics merely to add context.",
+      "For reflective enrichment, read the exact night first, briefly reflect the one quality, pattern, context, or meaning the user wants preserved, and ask only for a link or tag when it changes later review. Use forge_update_sleep_session for qualitySummary, notes, tags, or links so imported measurement fields remain untouched.",
+      "For delete, read and identify the exact night, explain that deletion is immediate, non-restorable, and bypasses the settings bin, then obtain explicit confirmation before forge_delete_entities.",
+      "Use shared batch CRUD for ordinary Sleep Session search, manual create, narrow correction, and delete. The named sleep helper is only the post-review reflective-enrichment path; there is no restore lane."
     ]
   },
   {
@@ -5943,6 +5963,12 @@ function buildQuestionFlowReadinessCheck(
   if (guide.entityType === "calendar_event") {
     return "Ready on the selected Calendar Event lane. Direct capture is ready for shared batch CRUD when an accepted title, offset-bearing startAt and endAt with end after start, a duplicate search in the overlapping interval, and one accuracy or consent check are complete; Forge requires only title, startAt, and endAt, so do not require description, location, place, links, event type, categories, availability, all-day state, activity settings, owner, or calendar selection. Resolve local clock wording through the intended IANA timezone and ask only when timezone or daylight-saving ambiguity changes the instant. Read-only review is ready after reading the exact existing event and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change and verifies ownership and recurrence: external provider mirrors remain read-only for updates; recurring provider sources require recurrenceEditScope, with single supported for an editable occurrence and expanded-occurrence series edits handled in the provider. Omit preferredCalendarId for the default writable connected calendar; set null only for an explicit Forge-only choice. Delete is ready only after an exact read of ownership and provider mapping plus explicit confirmation that Forge marks the local event deleted immediately, has no restore, and attempts to delete every associated writable remote provider event or projected copy. All Calendar Event search, create, update, and delete operations remain on shared batch CRUD; provider projection is downstream.";
   }
+  if (guide.entityType === "task") {
+    return "Ready on the selected Task lane. Direct capture is ready for shared batch CRUD when an accepted title, normalized-title duplicate search, and one accuracy or consent check are complete; Forge requires only title, defaults an omitted level to task, and permits an ordinary task to remain in the inbox without a parent, so do not require a rewritten action, hierarchy choice, goal, project, parent, description, status, priority, owner, assignees, timing, aiInstructions, execution mode, acceptance criteria, blockers, scheduling, tags, points, notes, or completion evidence. Read-only review is ready after reading the exact existing work item and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change while preserving sparse level, hierarchy, wording, status, ownership, execution, blocker, scheduling, tag, git-ref, and completion state. Guided breakdown is ready when the concrete outcome and any hierarchy that materially changes the work are clear: an issue requires a project, a task parent must be an issue, and a subtask parent must be a task. Closeout is ready after an exact read and accepted status change; preserve only factual workSummary, modifiedFiles, and linkedGitRefIds, and allow closeout to remain deferred when the user requests only a status change. All Task record writes remain on shared batch CRUD; task_run lifecycle actions use their published dedicated tools.";
+  }
+  if (guide.entityType === "tag") {
+    return "Ready on the selected Tag lane. Direct capture is ready for shared batch CRUD after searching by the supplied name, accepting that name, and completing one accuracy or consent check; the agent payload field is name, Forge requires only name, kind defaults to category, color defaults to #71717a, and description defaults to an empty string, so do not require purpose, taxonomy boundaries, kind, color, description, owner, parent grouping, or an attachment target. Read-only review is ready after reading the exact existing Tag and must not manufacture a write. Narrow update is ready only after that exact read isolates the smallest accepted change while preserving sparse name, kind, color, description, and ownership. Guided taxonomy is ready when an ambiguous or near-duplicate label has a clear retrieval purpose and accepted distinction from the nearest existing Tag; do not require this lane for direct capture. Creating a Tag never applies it to another record: update an exact target's supported tagIds separately, while Note and Wiki tags remain their own free-text labels. All Tag search, create, update, soft delete, and restore operations use shared batch CRUD; never guess a dedicated Tag route or parent-tag field.";
+  }
   if (guide.entityType === "strategy") {
     return "Ready on the selected Strategy lane. Review is ready after reading the exact current strategy and answering from its end state, targets, lock state, and active, blocked, out-of-order, or off-plan evidence. A draft create or update is ready for shared batch CRUD when the accepted title, meaningful target or end state, existing project or task nodes, and directed acyclic sequence are clear without missing or duplicate nodes, self-loops, or duplicate edges. Lock is ready only when at least one target, an overview or end-state description, the graph, and explicit acceptance of the summarized contract are present. Unlock is ready only when the user explicitly wants to renegotiate the contract; progress or status changes do not require unlocking. All Strategy writes remain on shared batch CRUD.";
   }
@@ -5966,6 +5992,9 @@ function buildQuestionFlowReadinessCheck(
   }
   if (guide.entityType === "self_observation") {
     return "Ready to save a lightweight note-backed observation when the observed situation and timestamp or observedAt date are clear, at least one meaningful cue, emotion or body signal, thought or meaning, behavior or urge, or consequence is present, and any stronger Psyche container such as trigger_report, behavior_pattern, behavior, belief_entry, mode_profile, mode_guide_session, flashcard, event_type, or emotion_definition has been offered only when the material supports it and accepted or corrected by the user.";
+  }
+  if (guide.entityType === "sleep_session") {
+    return "Ready on the selected Sleep Session lane. Direct manual capture is ready for shared batch CRUD when accepted offset-bearing startedAt and endedAt form an interval with end after start, an overlapping-interval or local-wake-date duplicate search is complete, and one accuracy or consent check confirms the night; Forge requires only startedAt and endedAt, defaults source fields for a manual record, and derives duration, score, and localDateKey, so do not require quality, stages, metrics, reflection, tags, links, source detail, or ownership when already clear. Resolve local clock wording with an IANA timezone only when it changes the instants or wake date. Read-only review is ready after reading the exact existing night and must not manufacture a write. Narrow correction is ready only after that exact read isolates the smallest accepted change while preserving sparse timing, source, provenance, stage, metric, annotation, tag, and link evidence; do not rewrite provider-backed measurement fields merely to add context. Reflective enrichment is ready after reading the exact night and accepting the qualitySummary, notes, tags, or links to preserve through forge_update_sleep_session, which leaves imported measurement fields untouched. Delete is ready only after identifying the exact night and receiving explicit confirmation that deletion is immediate, non-restorable, and bypasses the settings bin. Ordinary search, manual create, narrow correction, and delete use shared batch CRUD; the named helper is only for post-review reflection, and sleep_session has no restore lane.";
   }
   if (guide.entityType === "attention_inbox") {
     return "Ready to list through the published route key without guessing when the user wants help finding what needs a next move. Ready to snooze, dismiss, or restore only after a current Attention read confirms the stable item id and requested action in allowedActions; snooze also needs a future return time. Blocked or overdue work is ready for source resolution, never dismissal.";

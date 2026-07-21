@@ -1141,7 +1141,7 @@ describe("forge skill playbook parity", () => {
       /read the relevant dedicated view before you mutate it/i
     );
     expect(appSource).toMatch(
-      /shared batch CRUD path for ordinary sleep_session create or update work/i
+      /shared batch CRUD for ordinary Sleep Session search, manual create, narrow correction, and delete[\s\S]*named sleep helper is only the post-review reflective-enrichment path/i
     );
     expect(appSource).toMatch(
       /shared batch CRUD path for ordinary workout_session create or update work/i

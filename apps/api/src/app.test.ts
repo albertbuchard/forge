@@ -20906,6 +20906,7 @@ test("settings and local agent token management persist through the versioned AP
           minimumCreateFields: string[];
           relationshipRules: string[];
           fieldGuide: Array<{ name: string; required: boolean }>;
+          questionFlow?: { readinessCheck: string };
         }>;
         entityRouteModel: {
           batchCrudEntities: string[];
@@ -21215,11 +21216,17 @@ test("settings and local agent token management persist through the versioned AP
     const taskConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
         (playbook) => playbook.focus === "task"
-      );
+    );
     assert.ok(taskConversationPlaybook);
+    assert.match(
+      taskConversationPlaybook.openingQuestion,
+      /saving a work item[\s\S]*breaking work down[\s\S]*reviewing one[\s\S]*closing it out/i
+    );
     assert.ok(
       taskConversationPlaybook.askSequence.some((step) =>
-        /next concrete action/i.test(step)
+        /requires only title[\s\S]*defaults to task[\s\S]*inbox without a parent/i.test(
+          step
+        )
       )
     );
     const noteConversationPlaybook =
@@ -21263,7 +21270,31 @@ test("settings and local agent token management persist through the versioned AP
     assert.ok(tagConversationPlaybook);
     assert.match(
       tagConversationPlaybook.openingQuestion,
-      /notice or find again later/i
+      /saving a label[\s\S]*shaping a reusable category[\s\S]*reviewing an existing tag/i
+    );
+    assert.ok(
+      tagConversationPlaybook.askSequence.some((step) =>
+        /direct capture, guided taxonomy, exact-record review or narrow update, and read-only review/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      tagConversationPlaybook.askSequence.some((step) =>
+        /requires only name[\s\S]*kind defaults to category[\s\S]*Do not require a purpose/i.test(
+          step
+        )
+      )
+    );
+    const tagEntityGuide = onboardingBody.onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "tag"
+    );
+    assert.ok(tagEntityGuide);
+    assert.deepEqual(tagEntityGuide.minimumCreateFields, ["name"]);
+    assert.ok(tagEntityGuide.fieldGuide.some((field) => field.name === "name"));
+    assert.match(
+      tagEntityGuide.questionFlow?.readinessCheck ?? "",
+      /agent payload field is name[\s\S]*requires only name[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Creating a Tag never applies it[\s\S]*shared batch CRUD[\s\S]*never guess a dedicated Tag route/i
     );
     const taskRunConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(
@@ -21316,10 +21347,54 @@ test("settings and local agent token management persist through the versioned AP
         (playbook) => playbook.focus === "sleep_session"
       );
     assert.ok(sleepConversationPlaybook);
+    assert.match(
+      sleepConversationPlaybook.openingQuestion,
+      /adding a night manually[\s\S]*reviewing or correcting one[\s\S]*adding context[\s\S]*deleting it/i
+    );
     assert.ok(
       sleepConversationPlaybook.askSequence.some((step) =>
-        /quality, pattern, context, meaning, or links/i.test(step)
+        /direct manual capture, exact-record review or narrow correction, read-only review, reflective enrichment, and delete/i.test(
+          step
+        )
       )
+    );
+    assert.ok(
+      sleepConversationPlaybook.askSequence.some((step) =>
+        /requires only startedAt and endedAt[\s\S]*derives time in bed[\s\S]*Do not require a quality summary/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      sleepConversationPlaybook.askSequence.some((step) =>
+        /provider-backed[\s\S]*do not rewrite raw timing, stages, source, or metrics/i.test(
+          step
+        )
+      )
+    );
+    assert.ok(
+      sleepConversationPlaybook.askSequence.some((step) =>
+        /deletion is immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit confirmation/i.test(
+          step
+        )
+      )
+    );
+    const sleepEntityGuide = onboardingBody.onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "sleep_session"
+    );
+    assert.ok(sleepEntityGuide);
+    assert.deepEqual(sleepEntityGuide.minimumCreateFields, [
+      "startedAt",
+      "endedAt"
+    ]);
+    assert.ok(
+      sleepEntityGuide.fieldGuide.some(
+        (field) => field.name === "sourceTimezone" && !field.required
+      )
+    );
+    assert.match(
+      sleepEntityGuide.questionFlow?.readinessCheck ?? "",
+      /Direct manual capture[\s\S]*requires only startedAt and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed measurement fields[\s\S]*forge_update_sleep_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
     );
     const workoutConversationPlaybook =
       onboardingBody.onboarding.entityConversationPlaybooks.find(

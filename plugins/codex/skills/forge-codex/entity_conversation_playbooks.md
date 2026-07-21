@@ -1566,23 +1566,49 @@ Preferred opening question:
 
 ## Task
 
-Aim: identify the next concrete one-session work item and place it correctly in the
-issue/task/subtask hierarchy when that hierarchy matters.
+Aim: preserve a direct work item without hierarchy friction, while helping guided
+work fit the right issue, task, or subtask level and close out truthfully.
+
+Choose the lane first:
+
+- direct capture
+- guided breakdown or hierarchy placement
+- exact-record review or narrow update
+- read-only review
+- closeout
 
 Arc:
 
-1. Ask what the next concrete action is.
-2. Ask whether it is an issue, one-session task, or subtask only when the level is
-   not already obvious.
-3. Ask where it belongs in the hierarchy: project for an issue, issue for a task, or
-   parent task for a subtask. Use goal or standalone only when the user is
-   intentionally outside the PM hierarchy.
-4. Capture the execution contract in `aiInstructions` when the work is meant for an
-   AI or agent session.
-5. Ask for due date, priority, owner, human/bot assignees, acceptance criteria, or
-   one line of context only when that detail changes execution, accountability, or
-   verification; otherwise save the one-session work item once the action and
-   placement are clear.
+1. For direct capture, reflect the supplied title, search normalized titles for a
+   duplicate, and ask one accuracy or consent question. Forge requires only `title`.
+   When `level` is omitted it defaults to `task`, and an ordinary task may remain in
+   the inbox without a parent. Do not demand a rewritten action, hierarchy choice,
+   goal, project, parent, description, status, priority, owner, assignees, due date,
+   `aiInstructions`, execution mode, acceptance criteria, blockers, scheduling,
+   tags, points, notes, or completion evidence.
+2. For review or narrow update, search for and read the exact existing work item
+   first. Answer read-only questions before proposing a write. Preserve accepted
+   level, hierarchy, wording, status, ownership, execution contract, blockers,
+   scheduling, tags, git refs, and completion state, then patch only what is newly
+   true or inaccurate. Never force a sparse existing task through full create
+   intake.
+3. For guided breakdown, ask what one concrete outcome should become true. Ask
+   whether it is an issue, one-session task, or lightweight subtask only when level
+   changes the work. In hierarchy-aware work, an issue requires a project, a task
+   parent must be an issue, and a subtask parent must be a task. Keep intentional
+   inbox or legacy placement available for an ordinary task.
+4. Capture the execution contract in `aiInstructions` only when the work is meant
+   for an AI or agent session. Ask for AFK or HITL execution mode, acceptance
+   criteria, blockers, due date, priority, owner, human/bot assignees, or context
+   only when that detail changes execution, accountability, or verification.
+5. For closeout, read the exact work item and current status first. Record only
+   factual `workSummary`, `modifiedFiles`, and `linkedGitRefIds` supported by the
+   user or execution evidence. Leave arrays empty when none apply and never invent
+   evidence. If the user asks only for a status change, honor that narrow update and
+   allow closeout to remain deferred instead of reopening intake.
+6. Use shared batch CRUD for Task search, create, update, soft delete, and restore.
+   Starting, focusing, heartbeating, completing, or releasing a `task_run` uses the
+   dedicated Task Run action tools and must not be guessed as Task CRUD.
 
 Level-specific handling:
 
@@ -1611,14 +1637,21 @@ Helpful follow-up lanes:
 
 Ready to save when:
 
-- the task is phrased as an actionable move
-- the level is clear enough: issue, task, or subtask
-- placement is clear enough: project, issue, parent task, or intentional inbox
-- any crucial timing, acceptance criteria, or execution instruction is captured
+- direct capture has an accepted title, normalized-title duplicate search, and one
+  accuracy or consent check; omitted level may default to an inbox task
+- review or narrow update has read the exact work item and isolated the smallest
+  accepted change without backfilling sparse fields
+- guided hierarchy work has the concrete outcome plus required placement: project
+  for an issue, issue parent for a hierarchical task, or task parent for a subtask
+- closeout has read the exact item and records only factual evidence; a status-only
+  request may leave the completion report deferred
+- Task records use shared batch CRUD and Task Run lifecycle actions use their
+  published dedicated tools
 
 Preferred opening question:
 
-- "What is the next concrete move here?"
+- "Are you saving a work item you already understand, breaking work down, reviewing
+  one, or closing it out?"
 
 ## Habit
 
@@ -1686,31 +1719,63 @@ Preferred opening question:
 
 ## Tag
 
-Aim: create a label that helps future retrieval or grouping, not just another vague
-bucket.
+Aim: preserve a clear reusable label quickly when the user already knows it, and
+help shape a taxonomy only when that would improve retrieval.
+
+Choose the lane first:
+
+- direct capture
+- guided taxonomy
+- exact-record review or narrow update
+- read-only review
 
 Arc:
 
-1. Ask what the tag should help the user notice, group, or find later.
-2. Ask what kinds of records should belong under it.
-3. Offer a concise label if the meaning is clearer than the wording.
-4. Ask about color, kind, or parent grouping only if that changes how it will be used.
+1. For direct capture, search existing Tags by the supplied name. Reflect the
+   accepted name once and ask only one accuracy or consent question. Forge requires
+   only `name`; `kind` defaults to `category`, `color` to `#71717a`, and
+   `description` to an empty string.
+2. Do not require a purpose, inside-versus-outside boundary, kind, color,
+   description, owner, parent grouping, or attachment target for direct capture.
+3. For review or narrow update, search for and read the exact existing Tag first.
+   Answer read-only questions before proposing a write. Preserve accepted sparse
+   name, kind, color, description, and ownership; ask only what is newly true or
+   inaccurate and patch only that accepted change.
+4. For guided taxonomy, ask what the label should help the user notice or retrieve
+   and what nearby label it must remain distinct from only when the wording is
+   ambiguous, a near-duplicate exists, or the user wants help designing a reusable
+   system. Offer one concise name and check whether it fits.
+5. Ask about kind, color, or description only when the user says it changes grouping
+   or recognition. Forge has no parent-tag field; do not invent one.
+6. Keep Tag creation separate from attachment. Creating a Tag does not apply it to
+   another record. Read the exact target before updating a supported `tagIds`
+   field; Note and Wiki records use their own free-text tag labels rather than a
+   stored Tag id.
+7. Use shared batch CRUD for Tag search, create, update, soft delete, and restore.
+   Do not guess a dedicated Tag route.
 
 Helpful follow-up lanes:
 
-- what the tag is for later
-- what should count as inside versus outside the label
-- whether the user already has nearby tags that this should stay distinct from
+- the supplied name and any case-insensitive exact duplicate
+- the retrieval purpose only when the wording is ambiguous
+- the nearest existing Tag only when a distinction matters
+- kind, color, or description only when it changes later recognition
 
 Ready to save when:
 
-- the tag has a stable label
-- the grouping meaning is clear enough to reuse later
-- any important distinction from nearby tags is clear
+- direct capture has an accepted `name`, a duplicate search, and one accuracy or
+  consent check
+- review or narrow update has read the exact Tag and isolated the smallest accepted
+  change without backfilling optional metadata
+- guided taxonomy has a clear retrieval purpose and accepted distinction only when
+  that lane is actually needed
+- attachment remains a separate exact-target update rather than a prerequisite for
+  creating the Tag
+- every Tag lifecycle write stays on shared batch CRUD
 
 Preferred opening question:
 
-- "What do you want this tag to help you notice or find again later?"
+- "Are you saving a label you already chose, shaping a reusable category, or reviewing an existing tag?"
 
 ## Person
 
@@ -2459,30 +2524,76 @@ Preferred opening question:
 
 ## Sleep Session
 
-Aim: enrich one night's record with reflective context instead of treating it like a
-generic note.
+Aim: capture or correct one night with minimal timing questions, preserve imported
+evidence, and add reflective context only when the user wants it.
+
+Choose the lane first:
+
+- direct manual capture
+- exact-record review or narrow correction
+- read-only review
+- reflective enrichment
+- delete
 
 Arc:
 
-1. Ask what about this night feels worth capturing.
-2. Ask whether the main point is quality, pattern, context, meaning, or links.
-3. Ask what goal, project, task, habit, or Psyche record it should stay connected to.
-4. Ask about tags only if they will help later review.
+1. For direct manual capture, resolve the user's sleep start and wake time into
+   offset-bearing `startedAt` and `endedAt`, ensure the end is after the start, and
+   search the overlapping interval or local wake date for a duplicate. Reflect the
+   interval once and ask one accuracy or consent question.
+2. Forge requires only `startedAt` and `endedAt`. It defaults source fields for a
+   manual record and derives time in bed, asleep time, awake time, score, and
+   `localDateKey`. Do not require quality, stages, metrics, notes, tags, links,
+   source details, or owner when already clear.
+3. Ask for an IANA timezone only when local clock wording, daylight-saving
+   ambiguity, or the local wake date would otherwise change the stored instants.
+   When `localDateKey` is omitted, Forge derives it from `endedAt` in
+   `sourceTimezone`, so the canonical night is the local wake date. Do not make the
+   user format ISO timestamps or calculate that key.
+4. For review or narrow correction, search for and read the exact existing Sleep
+   Session first. Answer the read-only question before proposing a write. Preserve
+   accepted sparse timing, source, provenance, stage, metric, annotation, tag, and
+   link data; patch only what is newly true or inaccurate.
+5. If the record is provider-backed, keep imported evidence separate from the
+   user's correction. Do not rewrite raw timing, stages, source, or metrics merely
+   to add context.
+6. For reflective enrichment, read the exact night first. Briefly reflect the one
+   quality, pattern, context, or meaning the user wants preserved, and ask only for
+   a link or tag when it changes later review. Use `forge_update_sleep_session` for
+   `qualitySummary`, notes, tags, or links so imported measurement fields remain
+   untouched.
+7. For delete, read and identify the exact night, explain that deletion is
+   immediate, non-restorable, and bypasses the settings bin, then obtain explicit
+   confirmation before `forge_delete_entities`.
+
+Helpful follow-up lanes:
+
+- the sleep start, wake time, and timezone only when needed to resolve the instants
+- the canonical local wake date only when it disambiguates nearby records
+- the smallest factual correction after an exact read
+- one reflective quality, pattern, context, meaning, link, or tag when requested
 
 Route note:
 
-- For ordinary create, update, delete, or search work on `sleep_session`, stay on the
-  shared batch CRUD routes. Use the reflective review helper only when enriching one
-  already-known night after review.
+- Use shared batch CRUD for ordinary Sleep Session search, manual create, narrow
+  correction, and delete. Use `forge_update_sleep_session` only for post-review
+  reflective enrichment. Sleep Session deletion has no restore lane.
 
-Ready to update when:
+Ready to act when:
 
-- the reflective takeaway is clear
-- the relevant links or tags are clear when needed
+- direct capture has an accepted start and end with end after start, a duplicate
+  search, and one accuracy or consent check
+- read-only review has read the exact night and does not manufacture a write
+- narrow correction has isolated the smallest accepted change without replacing
+  provider-backed evidence with inference
+- reflective enrichment has read the exact night and accepted only the reflection,
+  tags, or links that should be preserved
+- delete has an exact target and explicit acknowledgement that it is immediate and
+  non-restorable
 
 Preferred opening question:
 
-- "What about this night feels important enough to remember or connect?"
+- "Are you adding a night manually, reviewing or correcting one, adding context to it, or deleting it?"
 
 ## Workout Session
 

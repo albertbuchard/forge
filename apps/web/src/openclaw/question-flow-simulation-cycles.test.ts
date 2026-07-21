@@ -437,7 +437,7 @@ describe("question flow simulation cycles", () => {
     "Operator Context": ["review", "navigate", "interpret", "follow-up"],
     "Today Priority": ["decide", "continue", "pause", "review-evidence"],
     "Self Observation": ["observe", "review", "link", "route"],
-    "Sleep Session": ["add", "update", "review", "enrich"],
+    "Sleep Session": ["add", "update", "review", "enrich", "delete"],
     "Workout Session": ["add", "update", "review", "enrich"],
     "Sleep Overview": ["review", "navigate", "interpret", "follow-up"],
     "Sports Overview": ["review", "navigate", "interpret", "follow-up"],
@@ -901,10 +901,10 @@ describe("question flow simulation cycles", () => {
       /Do not ask for separate user-story references/i
     );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
-      /issue, one-session task, or subtask/i
+      /issue, one-session task, or lightweight subtask/i
     );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
-      /project for an issue, issue for a task, or\s+parent task for a subtask/i
+      /issue requires a project[\s\S]*task\s+parent must be an issue[\s\S]*subtask parent must be a task/i
     );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
       /Level-specific handling:[\s\S]*For `issue`[\s\S]*vertical slice[\s\S]*AFK or HITL/i
@@ -923,7 +923,7 @@ describe("question flow simulation cycles", () => {
     );
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(/aiInstructions/);
     expect(getSectionSlice(entityPlaybook, "Task")).toMatch(
-      /due date, priority, owner, human\/bot assignees, acceptance criteria[\s\S]*only when that detail changes execution, accountability, or\s+verification[\s\S]*save the one-session work item once the action and\s+placement are clear/i
+      /AFK or HITL execution mode[\s\S]*acceptance[\s\S]*criteria[\s\S]*due date[\s\S]*human\/bot assignees[\s\S]*only when that detail changes execution, accountability, or\s+verification/i
     );
     expect(getSectionSlice(entityPlaybook, "Task")).not.toMatch(
       /Ask what would make it easier to do/i
@@ -2640,6 +2640,128 @@ describe("question flow simulation cycles", () => {
     );
     expect(note?.questionFlow.readinessCheck).toMatch(
       /Direct capture[\s\S]*accepted contentMarkdown[\s\S]*links default to an empty array[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*expectedRevisionHash[\s\S]*revision conflict[\s\S]*standalone note never depends on reclassification[\s\S]*shared batch CRUD/i
+    );
+  });
+
+  it("2026-07-21 cycle 1 retest: Task adapts direct capture, hierarchy, review, and closeout", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Task");
+    const onboarding = await loadOnboardingPayload();
+    const task = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "task"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided breakdown or hierarchy placement[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*closeout/i
+    );
+    expect(compact).toMatch(
+      /supplied title[\s\S]*normalized titles[\s\S]*one accuracy or consent question[\s\S]*requires only `title`[\s\S]*defaults to `task`[\s\S]*inbox without a parent/i
+    );
+    expect(compact).toMatch(
+      /Do not demand a rewritten action[\s\S]*hierarchy choice[\s\S]*`aiInstructions`[\s\S]*completion evidence/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing work item[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly[\s\S]*true or inaccurate[\s\S]*Never force a sparse existing task through full create[\s\S]*intake/i
+    );
+    expect(compact).toMatch(
+      /issue requires a project[\s\S]*task[\s\S]*parent must be an issue[\s\S]*subtask parent must be a task[\s\S]*inbox or legacy placement/i
+    );
+    expect(compact).toMatch(
+      /For closeout[\s\S]*factual `workSummary`, `modifiedFiles`, and `linkedGitRefIds`[\s\S]*never invent[\s\S]*status change[\s\S]*closeout to remain deferred/i
+    );
+    expect(compact).toMatch(
+      /shared batch CRUD for Task[\s\S]*`task_run`[\s\S]*dedicated Task Run action tools/i
+    );
+    expect(task?.minimumCreateFields).toEqual(["title"]);
+    expect(task?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*requires only title[\s\S]*defaults an omitted level to task[\s\S]*inbox without a parent[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*preserving sparse[\s\S]*Guided breakdown[\s\S]*issue requires a project[\s\S]*task parent must be an issue[\s\S]*subtask parent must be a task[\s\S]*Closeout[\s\S]*factual workSummary, modifiedFiles, and linkedGitRefIds[\s\S]*closeout to remain deferred[\s\S]*shared batch CRUD[\s\S]*task_run lifecycle actions use their published dedicated tools/i
+    );
+  });
+
+  it("2026-07-21 cycle 2 retest: Tag adapts direct capture, taxonomy, review, and attachment", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Tag");
+    const onboarding = await loadOnboardingPayload();
+    const tag = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "tag"
+    );
+
+    expect(compact).toMatch(
+      /direct capture[\s\S]*guided taxonomy[\s\S]*exact-record review or narrow update[\s\S]*read-only review/i
+    );
+    expect(compact).toMatch(
+      /search existing Tags by the supplied name[\s\S]*one accuracy or consent question[\s\S]*requires[\s\S]*only `name`[\s\S]*`kind` defaults to `category`[\s\S]*`color` to `#71717a`/i
+    );
+    expect(compact).toMatch(
+      /Do not require a purpose[\s\S]*inside-versus-outside boundary[\s\S]*parent grouping[\s\S]*attachment target/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing Tag first[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only that accepted change/i
+    );
+    expect(compact).toMatch(
+      /guided taxonomy[\s\S]*only when the wording is[\s\S]*ambiguous, a near-duplicate exists, or the user wants help/i
+    );
+    expect(compact).toMatch(
+      /no parent-tag field[\s\S]*Creating a Tag does not apply it[\s\S]*supported `tagIds`[\s\S]*Note and Wiki[\s\S]*free-text tag labels/i
+    );
+    expect(compact).toMatch(
+      /shared batch CRUD for Tag search, create, update, soft delete, and restore[\s\S]*Do not guess a dedicated Tag route/i
+    );
+    expect(tag?.minimumCreateFields).toEqual(["name"]);
+    expect(tag?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "name", required: true })
+      ])
+    );
+    expect(tag?.questionFlow.readinessCheck).toMatch(
+      /Direct capture[\s\S]*agent payload field is name[\s\S]*requires only name[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*Creating a Tag never applies it[\s\S]*shared batch CRUD[\s\S]*never guess a dedicated Tag route/i
+    );
+  });
+
+  it("2026-07-21 cycle 3 retest: Sleep Session adapts capture, correction, reflection, and delete", async () => {
+    const compact = getSectionSlice(entityPlaybook, "Sleep Session");
+    const onboarding = await loadOnboardingPayload();
+    const sleep = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "sleep_session"
+    );
+
+    expect(compact).toMatch(
+      /direct manual capture[\s\S]*exact-record review or narrow correction[\s\S]*read-only review[\s\S]*reflective enrichment[\s\S]*delete/i
+    );
+    expect(compact).toMatch(
+      /offset-bearing `startedAt` and `endedAt`[\s\S]*end is after the start[\s\S]*overlapping interval or local wake date[\s\S]*one accuracy or consent question/i
+    );
+    expect(compact).toMatch(
+      /requires only `startedAt` and `endedAt`[\s\S]*defaults source fields[\s\S]*derives time in bed[\s\S]*Do not require quality, stages, metrics, notes, tags, links/i
+    );
+    expect(compact).toMatch(
+      /IANA timezone only when[\s\S]*daylight-saving[\s\S]*`localDateKey`[\s\S]*`endedAt` in[\s\S]*`sourceTimezone`[\s\S]*local wake date/i
+    );
+    expect(compact).toMatch(
+      /read the exact existing Sleep[\s\S]*Session first[\s\S]*Answer the read-only question before proposing a write[\s\S]*patch only what is newly true or inaccurate/i
+    );
+    expect(compact).toMatch(
+      /provider-backed[\s\S]*Do not rewrite raw timing, stages, source, or metrics merely[\s\S]*to add context/i
+    );
+    expect(compact).toMatch(
+      /`forge_update_sleep_session`[\s\S]*`qualitySummary`, notes, tags, or links[\s\S]*imported measurement fields remain[\s\S]*untouched/i
+    );
+    expect(compact).toMatch(
+      /deletion is[\s\S]*immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit[\s\S]*confirmation[\s\S]*`forge_delete_entities`/i
+    );
+    expect(compact).toMatch(
+      /shared batch CRUD for ordinary Sleep Session search, manual create, narrow[\s\S]*correction, and delete[\s\S]*reflective enrichment[\s\S]*no restore lane/i
+    );
+    expect(sleep?.minimumCreateFields).toEqual(["startedAt", "endedAt"]);
+    expect(sleep?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "sourceTimezone",
+          required: false,
+          defaultValue: "UTC"
+        })
+      ])
+    );
+    expect(sleep?.questionFlow.readinessCheck).toMatch(
+      /Direct manual capture[\s\S]*requires only startedAt and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed measurement fields[\s\S]*forge_update_sleep_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
     );
   });
 

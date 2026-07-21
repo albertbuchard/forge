@@ -46,13 +46,21 @@ describe("question flow quality coverage", () => {
         /shaping this strategy, reviewing how execution is going/i,
         /execution contract/i
       ],
-      ["Task", /next concrete move here/i, /one-session work item/i],
+      [
+        "Task",
+        /saving a work item[\s\S]*closing it out/i,
+        /direct work item[\s\S]*close out truthfully/i
+      ],
       [
         "Habit",
         /defining a recurring move[\s\S]*recording what happened today/i,
         /check-in or outcome correction/i
       ],
-      ["Tag", /help you notice or find again later/i, /inside versus outside/i],
+      [
+        "Tag",
+        /saving a label[\s\S]*reviewing an existing tag/i,
+        /direct capture[\s\S]*guided taxonomy/i
+      ],
       [
         "Note",
         /saving wording[\s\S]*reviewing an existing note/i,
@@ -111,8 +119,8 @@ describe("question flow quality coverage", () => {
       ],
       [
         "Sleep Session",
-        /important enough to remember or connect/i,
-        /reflective takeaway/i
+        /adding a night manually[\s\S]*deleting it/i,
+        /direct manual capture[\s\S]*reflective enrichment[\s\S]*delete/i
       ],
       [
         "Workout Session",
@@ -314,6 +322,90 @@ describe("question flow quality coverage", () => {
     );
     expect(projectSection).toMatch(
       /lifecycle `status`[\s\S]*board `workflowStatus`[\s\S]*shared batch CRUD[\s\S]*Do not invent a dedicated Project route/i
+    );
+  });
+
+  it("keeps Task capture minimal while preserving hierarchy, review, and closeout truth", () => {
+    const taskSection = getSectionSlice(entityPlaybook, "Task");
+
+    expect(taskSection).toMatch(
+      /direct capture[\s\S]*guided breakdown or hierarchy placement[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*closeout/i
+    );
+    expect(taskSection).toMatch(
+      /supplied title[\s\S]*normalized titles[\s\S]*one accuracy or consent question[\s\S]*requires only `title`[\s\S]*defaults to `task`[\s\S]*inbox without a parent/i
+    );
+    expect(taskSection).toMatch(
+      /Do not demand a rewritten action[\s\S]*hierarchy choice[\s\S]*`aiInstructions`[\s\S]*completion evidence/i
+    );
+    expect(taskSection).toMatch(
+      /read the exact existing work item[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only what is newly[\s\S]*true or inaccurate[\s\S]*Never force a sparse existing task through full create[\s\S]*intake/i
+    );
+    expect(taskSection).toMatch(
+      /issue requires a project[\s\S]*task[\s\S]*parent must be an issue[\s\S]*subtask parent must be a task[\s\S]*inbox or legacy placement/i
+    );
+    expect(taskSection).toMatch(
+      /For closeout[\s\S]*read the exact work item[\s\S]*factual `workSummary`, `modifiedFiles`, and `linkedGitRefIds`[\s\S]*never invent[\s\S]*status change[\s\S]*closeout to remain deferred/i
+    );
+    expect(taskSection).toMatch(
+      /shared batch CRUD for Task[\s\S]*`task_run`[\s\S]*dedicated Task Run action tools[\s\S]*must not be guessed as Task CRUD/i
+    );
+  });
+
+  it("keeps Tag capture minimal while making taxonomy and attachment conditional", () => {
+    const tagSection = getSectionSlice(entityPlaybook, "Tag");
+
+    expect(tagSection).toMatch(
+      /direct capture[\s\S]*guided taxonomy[\s\S]*exact-record review or narrow update[\s\S]*read-only review/i
+    );
+    expect(tagSection).toMatch(
+      /search existing Tags by the supplied name[\s\S]*one accuracy or consent question[\s\S]*requires\s+only `name`[\s\S]*`kind` defaults to `category`[\s\S]*`color` to `#71717a`[\s\S]*`description` to an empty string/i
+    );
+    expect(tagSection).toMatch(
+      /Do not require a purpose[\s\S]*inside-versus-outside boundary[\s\S]*kind, color,[\s\S]*description[\s\S]*parent grouping[\s\S]*attachment target/i
+    );
+    expect(tagSection).toMatch(
+      /read the exact existing Tag first[\s\S]*Answer read-only questions before proposing a write[\s\S]*patch only that accepted change/i
+    );
+    expect(tagSection).toMatch(
+      /guided taxonomy[\s\S]*only when the wording is[\s\S]*ambiguous, a near-duplicate exists, or the user wants help/i
+    );
+    expect(tagSection).toMatch(
+      /no parent-tag field[\s\S]*Creating a Tag does not apply it[\s\S]*supported `tagIds`[\s\S]*Note and Wiki[\s\S]*free-text tag labels/i
+    );
+    expect(tagSection).toMatch(
+      /shared batch CRUD for Tag search, create, update, soft delete, and restore[\s\S]*Do not guess a dedicated Tag route/i
+    );
+  });
+
+  it("keeps Sleep Session capture minimal while preserving imported evidence and delete truth", () => {
+    const sleepSection = getSectionSlice(entityPlaybook, "Sleep Session");
+
+    expect(sleepSection).toMatch(
+      /direct manual capture[\s\S]*exact-record review or narrow correction[\s\S]*read-only review[\s\S]*reflective enrichment[\s\S]*delete/i
+    );
+    expect(sleepSection).toMatch(
+      /offset-bearing `startedAt` and `endedAt`[\s\S]*end is after the start[\s\S]*overlapping interval or local wake date[\s\S]*one accuracy or consent question/i
+    );
+    expect(sleepSection).toMatch(
+      /requires only `startedAt` and `endedAt`[\s\S]*defaults source fields[\s\S]*derives time in bed[\s\S]*Do not require quality, stages, metrics, notes, tags, links/i
+    );
+    expect(sleepSection).toMatch(
+      /IANA timezone only when[\s\S]*daylight-saving[\s\S]*`localDateKey`[\s\S]*`endedAt` in[\s\S]*`sourceTimezone`[\s\S]*local wake date/i
+    );
+    expect(sleepSection).toMatch(
+      /read the exact existing Sleep[\s\S]*Session first[\s\S]*Answer the read-only question before proposing a write[\s\S]*patch only what is newly true or inaccurate/i
+    );
+    expect(sleepSection).toMatch(
+      /provider-backed[\s\S]*Do not rewrite raw timing, stages, source, or metrics merely[\s\S]*to add context/i
+    );
+    expect(sleepSection).toMatch(
+      /`forge_update_sleep_session`[\s\S]*`qualitySummary`, notes, tags, or links[\s\S]*imported measurement fields remain[\s\S]*untouched/i
+    );
+    expect(sleepSection).toMatch(
+      /deletion is[\s\S]*immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit[\s\S]*confirmation[\s\S]*`forge_delete_entities`/i
+    );
+    expect(sleepSection).toMatch(
+      /shared batch CRUD for ordinary Sleep Session search, manual create, narrow[\s\S]*correction, and delete[\s\S]*reflective enrichment[\s\S]*no restore lane/i
     );
   });
 

@@ -507,7 +507,7 @@ describe("forge onboarding contract", () => {
       /owner[\s\S]*assigneeUserIds/i
     );
     expect(taskCatalog?.questionFlow.askSequence.join(" ")).toMatch(
-      /due date, priority, owner, human\/bot assignees, acceptance criteria[\s\S]*only when that detail changes execution, accountability, or verification[\s\S]*save the one-session work item once the action and placement are clear/i
+      /AFK or HITL execution mode[\s\S]*acceptance criteria[\s\S]*due date[\s\S]*human\/bot assignees[\s\S]*only when the detail changes execution, accountability, or verification/i
     );
     expect(taskCatalog?.questionFlow.askSequence.join(" ")).not.toMatch(
       /Ask what would make it easier to do/i
@@ -1976,13 +1976,112 @@ describe("forge onboarding contract", () => {
     expect(playbookByFocus.get("task")).toEqual(
       expect.objectContaining({
         routePosture: "batch_crud_entity",
-        coachingGoal: expect.stringMatching(/one-session work item/i),
+        coachingGoal: expect.stringMatching(
+          /direct work item[\s\S]*issue, task, or subtask[\s\S]*close out truthfully/i
+        ),
         askSequence: expect.arrayContaining([
-          expect.stringMatching(/issue, one-session task, or subtask/i),
-          expect.stringMatching(/project for an issue, issue for a task/i),
-          expect.stringMatching(/aiInstructions/i)
+          expect.stringMatching(
+            /direct capture[\s\S]*guided breakdown or hierarchy placement[\s\S]*exact-record review or narrow update[\s\S]*read-only review[\s\S]*closeout/i
+          ),
+          expect.stringMatching(
+            /requires only title[\s\S]*defaults to task[\s\S]*inbox without a parent/i
+          ),
+          expect.stringMatching(/read the exact existing work item first/i),
+          expect.stringMatching(
+            /issue requires a project[\s\S]*task parent must be an issue[\s\S]*subtask parent must be a task/i
+          ),
+          expect.stringMatching(
+            /factual workSummary, modifiedFiles, and linkedGitRefIds[\s\S]*closeout to remain deferred/i
+          ),
+          expect.stringMatching(
+            /shared batch CRUD[\s\S]*task_run[\s\S]*dedicated Task Run action tools/i
+          )
         ])
       })
+    );
+    const taskQuestionFlow = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "task"
+    )?.questionFlow;
+    expect(taskQuestionFlow?.readinessCheck).toMatch(
+      /Direct capture[\s\S]*requires only title[\s\S]*defaults an omitted level to task[\s\S]*inbox without a parent[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Narrow update[\s\S]*preserving sparse[\s\S]*Guided breakdown[\s\S]*issue requires a project[\s\S]*task parent must be an issue[\s\S]*subtask parent must be a task[\s\S]*Closeout[\s\S]*factual workSummary, modifiedFiles, and linkedGitRefIds[\s\S]*closeout to remain deferred[\s\S]*Task record writes remain on shared batch CRUD[\s\S]*task_run lifecycle actions use their published dedicated tools/i
+    );
+    const tagGuide = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "tag"
+    );
+    expect(tagGuide?.minimumCreateFields).toEqual(["name"]);
+    expect(tagGuide?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "name", required: true })
+      ])
+    );
+    expect(playbookByFocus.get("tag")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        openingQuestion: expect.stringMatching(
+          /saving a label[\s\S]*shaping a reusable category[\s\S]*reviewing an existing tag/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct capture, guided taxonomy, exact-record review or narrow update, and read-only review/i
+          ),
+          expect.stringMatching(
+            /requires only name[\s\S]*kind defaults to category[\s\S]*Do not require a purpose/i
+          ),
+          expect.stringMatching(
+            /Creating a Tag does not apply it[\s\S]*supported tagIds[\s\S]*Note and Wiki records use their own free-text tag labels/i
+          ),
+          expect.stringMatching(
+            /shared batch CRUD[\s\S]*Do not guess a dedicated Tag route/i
+          )
+        ])
+      })
+    );
+    expect(tagGuide?.questionFlow.readinessCheck).toMatch(
+      /agent payload field is name[\s\S]*requires only name[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*Creating a Tag never applies it[\s\S]*Note and Wiki tags remain their own free-text labels[\s\S]*shared batch CRUD[\s\S]*never guess a dedicated Tag route/i
+    );
+    const sleepGuide = onboarding.entityCatalog.find(
+      (entry) => entry.entityType === "sleep_session"
+    );
+    expect(sleepGuide?.minimumCreateFields).toEqual([
+      "startedAt",
+      "endedAt"
+    ]);
+    expect(sleepGuide?.fieldGuide).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "sourceTimezone",
+          required: false,
+          defaultValue: "UTC"
+        })
+      ])
+    );
+    expect(playbookByFocus.get("sleep_session")).toEqual(
+      expect.objectContaining({
+        routePosture: "batch_crud_entity",
+        openingQuestion: expect.stringMatching(
+          /adding a night manually[\s\S]*reviewing or correcting one[\s\S]*adding context[\s\S]*deleting it/i
+        ),
+        askSequence: expect.arrayContaining([
+          expect.stringMatching(
+            /direct manual capture, exact-record review or narrow correction, read-only review, reflective enrichment, and delete/i
+          ),
+          expect.stringMatching(
+            /requires only startedAt and endedAt[\s\S]*derives time in bed[\s\S]*Do not require a quality summary/i
+          ),
+          expect.stringMatching(
+            /provider-backed[\s\S]*do not rewrite raw timing, stages, source, or metrics/i
+          ),
+          expect.stringMatching(
+            /forge_update_sleep_session[\s\S]*imported measurement fields remain untouched/i
+          ),
+          expect.stringMatching(
+            /immediate, non-restorable, and bypasses the settings bin[\s\S]*explicit confirmation/i
+          )
+        ])
+      })
+    );
+    expect(sleepGuide?.questionFlow.readinessCheck).toMatch(
+      /Direct manual capture[\s\S]*requires only startedAt and endedAt[\s\S]*Read-only review[\s\S]*must not manufacture a write[\s\S]*provider-backed measurement fields[\s\S]*forge_update_sleep_session[\s\S]*immediate, non-restorable[\s\S]*no restore lane/i
     );
     expect(playbookByFocus.get("self_observation")).toEqual(
       expect.objectContaining({
